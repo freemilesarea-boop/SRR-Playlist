@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #0a0a0a;
+    color: #f5f5f5;
+    overscroll-behavior-y: none;
+  }
+
+  /* iOS safe area */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-black hover:bg-accent/90;
+  }
+  .btn-ghost {
+    @apply btn bg-bg-card text-ink hover:bg-bg-hover;
+  }
+  .input {
+    @apply w-full rounded-xl bg-bg-card px-4 py-3 text-ink placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-accent/60;
+  }
+  .card {
+    @apply rounded-2xl bg-bg-card transition hover:bg-bg-hover;
+  }
+}
+
+/* range input - seekbar */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #333;
+  border-radius: 9999px;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: #f5f5f5;
+  margin-top: -4.5px;
+  transition: transform 0.15s;
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+  background: #a78bfa;
+}
+input[type='range']::-moz-range-track {
+  height: 3px;
+  background: #333;
+  border-radius: 9999px;
+}
+input[type='range']::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: #f5f5f5;
+  border: none;
+}
+
+/* hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
