@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import FeaturedHero from '@/components/FeaturedHero';
+import HomeChartSection from '@/components/HomeChartSection';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 
 export default function HomePage() {
@@ -137,6 +138,9 @@ export default function HomePage() {
           />
         </section>
       )}
+
+      {/* Today's chart */}
+      <HomeChartSection />
 
       {/* Recent */}
       {recents.length > 0 && (

@@ -1,0 +1,273 @@
+import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, Sparkles, TrendingUp } from 'lucide-react';
+import {
+  fetchTrackChart,
+  fetchTrackChartByGenre,
+  fetchGenres,
+  chartTrackToTrackRow,
+  type ChartTrack,
+  type ChartPeriod,
+  type GenreSummary,
+} from '@/lib/chartsApi';
+import { usePlayerStore } from '@/store/playerStore';
+import { isPlayableUrl } from '@/lib/audio';
+import { toast } from '@/store/toastStore';
+import ChartRow from '@/components/charts/ChartRow';
+
+type Tab = 'daily' | 'weekly' | 'monthly' | 'top100' | 'genre';
+
+const TABS: Array<{ key: Tab; label: string; subtitle: string; icon: React.ReactNode }> = [
+  { key: 'daily', label: '일간', subtitle: '오늘 인기곡', icon: <TrendingUp size={12} /> },
+  { key: 'weekly', label: '주간', subtitle: '7일', icon: <TrendingUp size={12} /> },
+  { key: 'monthly', label: '월간', subtitle: '30일', icon: <TrendingUp size={12} /> },
+  { key: 'top100', label: 'TOP100', subtitle: '전체', icon: <Sparkles size={12} /> },
+  { key: 'genre', label: '장르별', subtitle: 'by Genre', icon: <BarChart3 size={12} /> },
+];
+
+const TAB_TO_PERIOD: Record<Exclude<Tab, 'genre'>, ChartPeriod> = {
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+  top100: 'all',
+};
+
+const TAB_LIMIT: Record<Exclude<Tab, 'genre'>, number> = {
+  daily: 50,
+  weekly: 50,
+  monthly: 50,
+  top100: 100,
+};
+
+export default function ChartPage() {
+  const [tab, setTab] = useState<Tab>('daily');
+  const [tracks, setTracks] = useState<ChartTrack[]>([]);
+  const [isFallback, setIsFallback] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [genres, setGenres] = useState<GenreSummary[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id);
+
+  // 일/주/월/Top100 차트
+  useEffect(() => {
+    if (tab === 'genre') return;
+    let alive = true;
+    setLoading(true);
+    fetchTrackChart(TAB_TO_PERIOD[tab], TAB_LIMIT[tab])
+      .then((res) => {
+        if (!alive) return;
+        setTracks(res.tracks);
+        setIsFallback(res.isFallback);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
+
+  // 장르 목록 (genre 탭 진입 시)
+  useEffect(() => {
+    if (tab !== 'genre') return;
+    fetchGenres().then((list) => {
+      setGenres(list);
+      if (!selectedGenre && list.length > 0) {
+        setSelectedGenre(list[0].genre);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // 장르 선택 → 해당 장르 차트
+  useEffect(() => {
+    if (tab !== 'genre' || !selectedGenre) return;
+    let alive = true;
+    setLoading(true);
+    fetchTrackChartByGenre(selectedGenre, 'weekly', 50)
+      .then((res) => {
+        if (!alive) return;
+        setTracks(res.tracks);
+        setIsFallback(res.isFallback);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab, selectedGenre]);
+
+  const totalPlays = useMemo(
+    () => tracks.reduce((s, t) => s + Number(t.play_count || 0), 0),
+    [tracks],
+  );
+
+  function handlePlay(idx: number) {
+    if (tracks.length === 0) return;
+    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    if (playable.length === 0) {
+      toast.info('아직 재생 가능한 음원이 없어요.');
+      return;
+    }
+    // 차트 전체를 큐로
+    const trackRows = tracks.map(chartTrackToTrackRow);
+    // 클릭한 트랙이 재생 불가면 첫 재생 가능 트랙으로 이동
+    const startIndex = isPlayableUrl(tracks[idx].audio_url)
+      ? idx
+      : trackRows.findIndex((t) => isPlayableUrl(t.audio_url));
+
+    setQueue(trackRows, Math.max(0, startIndex), null);
+    // 차트 재생은 특정 플레이리스트에 묶이지 않으므로 recent_plays 기록 생략
+  }
+
+  const currentTab = TABS.find((t) => t.key === tab)!;
+
+  return (
+    <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
+      {/* Hero */}
+      <header className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft text-black shadow-lg">
+            <BarChart3 size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-accent">차트</p>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">스르륵 차트</h1>
+          </div>
+        </div>
+        <p className="text-sm text-ink-mute">
+          {currentTab.label} · {currentTab.subtitle} 기준 인기곡
+          {totalPlays > 0 && (
+            <>
+              <span className="mx-1.5 text-ink-dim">·</span>
+              누적 재생 <span className="font-bold text-ink">{totalPlays.toLocaleString()}회</span>
+            </>
+          )}
+        </p>
+      </header>
+
+      {/* 탭 */}
+      <nav className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+        <div className="flex gap-1.5 pb-1 no-scrollbar">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => {
+                setTab(t.key);
+                setSelectedGenre(null);
+              }}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition ${
+                tab === t.key
+                  ? 'bg-accent text-black'
+                  : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* 장르 칩 (genre 탭일 때만) */}
+      {tab === 'genre' && (
+        <section className="space-y-2">
+          {genres.length === 0 ? (
+            <p className="text-sm text-ink-mute">불러오는 중…</p>
+          ) : (
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:flex-wrap sm:overflow-visible sm:px-6">
+              {genres.map((g) => (
+                <button
+                  key={g.genre}
+                  onClick={() => setSelectedGenre(g.genre)}
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    selectedGenre === g.genre
+                      ? 'bg-accent text-black'
+                      : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
+                  }`}
+                >
+                  <span>{g.genre}</span>
+                  <span className="opacity-70">·</span>
+                  <span className="text-[10px] opacity-80">
+                    {g.track_count}곡
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 차트 리스트 */}
+      <section className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
+        {/* 데스크탑 헤더 */}
+        <header className="hidden border-b border-white/5 bg-bg-soft/40 px-3 py-2 text-[10px] uppercase tracking-wider text-ink-dim md:flex">
+          <span className="w-7 text-right">#</span>
+          <span className="ml-3 w-12">커버</span>
+          <span className="ml-3 flex-1">곡</span>
+          <span className="w-24 text-right">재생</span>
+        </header>
+
+        {loading ? (
+          <SkeletonList />
+        ) : tracks.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <>
+            {isFallback && <FallbackBanner />}
+            <ul className="divide-y divide-white/5">
+              {tracks.map((t, i) => (
+                <li key={t.track_id}>
+                  <ChartRow
+                    track={t}
+                    index={i}
+                    isCurrent={currentTrackId === t.track_id}
+                    onPlay={() => handlePlay(i)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <ul className="divide-y divide-white/5">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <li key={i} className="flex animate-pulse items-center gap-3 px-3 py-2.5">
+          <div className="h-4 w-6 rounded bg-bg-hover" />
+          <div className="h-12 w-12 rounded-lg bg-bg-hover" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-2/3 rounded bg-bg-hover" />
+            <div className="h-2 w-1/3 rounded bg-bg-hover" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="space-y-2 px-6 py-12 text-center">
+      <BarChart3 size={28} className="mx-auto text-ink-dim" />
+      <p className="text-sm font-semibold text-ink">아직 차트 데이터가 부족해요</p>
+      <p className="text-xs text-ink-mute">곡을 재생하면 차트가 자동으로 생성돼요.</p>
+    </div>
+  );
+}
+
+function FallbackBanner() {
+  return (
+    <div className="flex items-start gap-2 border-b border-white/5 bg-yellow-500/5 px-4 py-2.5 text-[11px] text-ink-mute">
+      <Sparkles size={12} className="mt-0.5 shrink-0 text-yellow-300" />
+      <span>
+        아직 충분한 재생 기록이 없어서 <span className="text-yellow-200">추천 트랙</span>을 먼저
+        보여드려요. 곡을 30초 이상 들으면 차트에 반영됩니다.
+      </span>
+    </div>
+  );
+}

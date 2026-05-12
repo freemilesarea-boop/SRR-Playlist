@@ -20,6 +20,7 @@ const LibraryPage = lazy(() => import('@/pages/LibraryPage'));
 const SubscriptionPage = lazy(() => import('@/pages/SubscriptionPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const ChartPage = lazy(() => import('@/pages/ChartPage'));
 
 function RouteFallback() {
   return (
@@ -94,6 +95,7 @@ export default function App() {
             }
           >
             <Route index element={<HomePage />} />
+            <Route path="/charts" element={<ChartPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/business" element={<BusinessPage />} />
             <Route path="/library" element={<LibraryPage />} />
