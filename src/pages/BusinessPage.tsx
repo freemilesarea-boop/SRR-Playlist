@@ -20,6 +20,7 @@ import PlaylistRow_ from '@/components/PlaylistRow';
 import PlaylistCard from '@/components/PlaylistCard';
 import AutoCover from '@/components/AutoCover';
 import BusinessQRSection from '@/components/BusinessQRSection';
+import BusinessScheduler from '@/components/BusinessScheduler';
 import { gradientStyle } from '@/lib/cover';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { useInstallPrompt, wakeLockSupported, isStandalone } from '@/hooks/useInstallPrompt';
@@ -290,6 +291,9 @@ export default function BusinessPage() {
           />
         )}
       </div>
+
+      {/* 자동 스케줄러 */}
+      <BusinessScheduler />
 
       {/* 매장 QR */}
       <BusinessQRSection playlists={filtered} />
