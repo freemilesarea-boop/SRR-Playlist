@@ -6,6 +6,7 @@ import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useThemeStore } from '@/store/themeStore';
+import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
@@ -74,9 +75,12 @@ export default function App() {
   const businessMode = useBusinessStore((s) => s.businessMode);
   const playing = usePlayerStore((s) => s.playing);
 
+  const initPlayback = usePlaybackSettingsStore((s) => s.init);
+
   useEffect(() => {
     initTheme();
-  }, [initTheme]);
+    initPlayback();
+  }, [initTheme, initPlayback]);
 
   // 1분마다 KST 시간대 체크 (자정/06시/12시/18시/21시 경계 통과 시 자동 전환)
   useEffect(() => {

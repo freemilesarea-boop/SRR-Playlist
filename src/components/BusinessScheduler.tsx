@@ -35,6 +35,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
+import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { fetchPlaylists, fetchPlaylistTracks } from '@/lib/api';
 import { isPlayableTrack } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
@@ -204,13 +205,15 @@ export default function BusinessScheduler() {
     }
   }
 
+  const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
+
   async function startBusinessMode() {
     if (!current?.playlist_id) {
       toast.info('지금 시간대에 활성화된 스케줄이 없어요.');
       return;
     }
+    enableForBusinessMode(); // 5초 crossfade 기본 (사용자 override 있으면 존중)
     setBusinessMode(true);
-    // useEffect 가 큐 자동 등록
     setLastSwitchedScheduleId(null); // 다시 시작 → started 이벤트 기록
   }
 

@@ -12,11 +12,18 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useThemeStore } from '@/store/themeStore';
+import {
+  usePlaybackSettingsStore,
+  CROSSFADE_OPTIONS,
+  type CrossfadeSeconds,
+} from '@/store/playbackSettingsStore';
 import { getTimeSlotLabel, type ThemeMode } from '@/lib/timeTheme';
 
 export default function ProfilePage() {
   const { profile, user, signOut } = useAuthStore();
   const { mode, resolvedMode, timeSlot, setMode } = useThemeStore();
+  const crossfadeSeconds = usePlaybackSettingsStore((s) => s.crossfadeSeconds);
+  const setCrossfadeSeconds = usePlaybackSettingsStore((s) => s.setCrossfadeSeconds);
 
   const planLabel =
     profile?.subscription_type === 'business'
@@ -77,6 +84,37 @@ export default function ProfilePage() {
         <p className="px-1 text-[11px] text-ink-dim">
           시간대가 바뀌면 같은 모드 안에서 컬러가 자연스럽게 변해요.
         </p>
+      </section>
+
+      {/* 재생 설정 */}
+      <section className="space-y-2">
+        <div className="flex items-end justify-between px-1">
+          <h2 className="text-sm font-bold tracking-tight">재생 설정</h2>
+          <p className="text-[11px] text-ink-mute">크로스페이드</p>
+        </div>
+        <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
+          <div className="grid grid-cols-5 gap-1.5">
+            {CROSSFADE_OPTIONS.map((s) => {
+              const active = crossfadeSeconds === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setCrossfadeSeconds(s as CrossfadeSeconds)}
+                  className={`rounded-xl py-2 text-xs font-semibold transition ${
+                    active
+                      ? 'bg-accent text-bg shadow'
+                      : 'bg-bg-soft text-ink-mute hover:text-ink'
+                  }`}
+                >
+                  {s === 0 ? '끄기' : `${s}초`}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2.5 px-1 text-[11px] leading-relaxed text-ink-mute">
+            곡 사이를 자연스럽게 이어줍니다. 매장 모드에서는 5초 크로스페이드를 추천해요.
+          </p>
+        </div>
       </section>
 
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
