@@ -20,7 +20,13 @@ import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
 import { trackStream } from '@/lib/analytics';
+import {
+  pushRecentlyPlayed,
+  saveContinueListening,
+  clearContinueListening,
+} from '@/lib/libraryApi';
 import AutoCover from '@/components/AutoCover';
+import TrackLikeButton from '@/components/TrackLikeButton';
 import { toast } from '@/store/toastStore';
 
 export default function Player() {
@@ -99,6 +105,29 @@ export default function Player() {
       });
     }
   }, [currentTime, current, userId, playlist?.id]);
+
+  // 15초 도달 시 최근 재생에 push (한 곡 당 1회)
+  const recentSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!current) return;
+    if (recentSentRef.current === current.id) return;
+    if (currentTime >= 15) {
+      recentSentRef.current = current.id;
+      void pushRecentlyPlayed(current.id, userId, Math.floor(currentTime));
+    }
+  }, [currentTime, current, userId]);
+
+  // 10초 throttle: continue_listening 저장 (libraryApi 내부에서 throttle)
+  useEffect(() => {
+    if (!current || !playable || !playing) return;
+    if (currentTime < 5) return; // 너무 빨리 저장 X
+    void saveContinueListening(
+      current.id,
+      currentTime,
+      Number.isFinite(duration) ? duration : null,
+      userId,
+    );
+  }, [currentTime, current, playable, playing, duration, userId]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -200,6 +229,8 @@ export default function Player() {
         completed: true,
         event_type: 'complete',
       });
+      // 곡 끝났으므로 이어듣기 제거
+      void clearContinueListening(current.id, userId);
     }
     next();
   }
@@ -353,11 +384,16 @@ export default function Player() {
                 {current.title}
               </h2>
               <p className="mt-1 text-sm text-white/70">{current.artist ?? '—'}</p>
-              {!playable && (
-                <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
-                  <AlertCircle size={11} /> 음원 준비중 — 관리자 페이지에서 업로드
-                </p>
-              )}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <span className="rounded-full bg-white/10 ring-1 ring-white/15 backdrop-blur">
+                  <TrackLikeButton trackId={current.id} size={16} stopPropagation={false} />
+                </span>
+                {!playable && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
+                    <AlertCircle size={11} /> 음원 준비중
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="w-full max-w-xs space-y-1.5">

@@ -6,6 +6,7 @@ import PlaylistRow_ from '@/components/PlaylistRow';
 import FeaturedHero from '@/components/FeaturedHero';
 import HomeChartSection from '@/components/HomeChartSection';
 import HomeSearchBar from '@/components/HomeSearchBar';
+import HomeLibrarySections from '@/components/HomeLibrarySections';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 
 export default function HomePage() {
@@ -142,6 +143,9 @@ export default function HomePage() {
           />
         </section>
       )}
+
+      {/* 이어듣기 + 최근 들은 음악 */}
+      <HomeLibrarySections />
 
       {/* Today's chart */}
       <HomeChartSection />

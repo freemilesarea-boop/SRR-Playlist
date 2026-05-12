@@ -3,6 +3,7 @@ import type { ChartTrack } from '@/lib/chartsApi';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import AutoCover from '@/components/AutoCover';
+import TrackLikeButton from '@/components/TrackLikeButton';
 
 const NUM = (n: number) => n.toLocaleString('ko-KR');
 
@@ -65,6 +66,11 @@ export default function ChartRow({
           )}
         </p>
       </div>
+
+      {/* 좋아요 버튼 — 호버 시 진하게 표시, 좋아요한 상태면 항상 표시 */}
+      <span className="shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
+        <TrackLikeButton trackId={track.track_id} size={14} />
+      </span>
 
       {/* 재생 수 (모바일 짧게, 데스크탑 자세히) */}
       <div className="hidden shrink-0 text-right md:block">
