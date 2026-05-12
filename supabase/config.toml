@@ -6,7 +6,7 @@
 project_id = "srr-playlist"
 
 [db]
-major_version = 15
+major_version = 17
 
 [api]
 schemas = ["public", "storage", "graphql_public"]
