@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!api/).*)", "destination": "/" }
   ],
   "headers": [
     {
@@ -28,6 +28,12 @@
         { "key": "Content-Type", "value": "application/manifest+json" },
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-metrics",
+      "schedule": "0 1 * * *"
     }
   ]
 }

@@ -1,0 +1,222 @@
+import { useEffect, useState } from 'react';
+import { X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet } from 'lucide-react';
+import { fetchMemberDetail, type MemberDetail as MemberDetailType } from '@/lib/adminApi';
+import { toast } from '@/store/toastStore';
+
+const PLAN_LABEL: Record<string, string> = {
+  free: '무료', personal: '일반', business: '사업자',
+};
+
+function fmtTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}시간 ${m % 60}분`;
+  return `${m}분`;
+}
+
+function fmtDateTime(s: string): string {
+  return new Date(s).toLocaleString('ko-KR');
+}
+
+export default function MemberDetail({
+  userId,
+  onClose,
+}: {
+  userId: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<MemberDetailType | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    fetchMemberDetail(userId)
+      .then((d) => {
+        if (alive) setData(d);
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-white/10 sm:rounded-3xl animate-slide-up"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-bg-soft/95 px-5 py-3 backdrop-blur">
+          <h2 className="text-base font-bold">회원 상세</h2>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/5"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {loading || !data ? (
+          <div className="p-8 text-center text-sm text-ink-mute">불러오는 중…</div>
+        ) : (
+          <div className="space-y-5 p-5">
+            {/* 기본 정보 */}
+            <section className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-lg font-bold text-black">
+                  {(data.user.nickname || data.user.email || '?').slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">{data.user.nickname || '이름없음'}</h3>
+                  <p className="flex items-center gap-1 text-xs text-ink-mute">
+                    <Mail size={11} /> {data.user.email}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <KV label="권한" value={data.user.role} />
+                <KV label="플랜" value={PLAN_LABEL[data.user.subscription_type] ?? data.user.subscription_type} />
+                <KV label="가입일" value={new Date(data.user.created_at).toLocaleDateString('ko-KR')} />
+                <KV label="최근방문" value={data.last_seen_at ? new Date(data.last_seen_at).toLocaleDateString('ko-KR') : '—'} />
+              </div>
+            </section>
+
+            {/* 활동 요약 */}
+            <section className="grid grid-cols-2 gap-2">
+              <Stat icon={<Headphones size={14} />} label="총 스트리밍" value={data.total_streams.toLocaleString()} />
+              <Stat icon={<Clock size={14} />} label="누적 청취" value={fmtTime(data.total_listened_seconds)} />
+            </section>
+
+            {/* 최근 재생 */}
+            <ListSection icon={<Headphones size={14} />} title={`최근 재생 (${data.recent_plays.length})`}>
+              {data.recent_plays.length === 0 ? (
+                <Empty>아직 재생 기록이 없어요</Empty>
+              ) : (
+                data.recent_plays.map((r, i) => (
+                  <Row key={i}>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{r.track_title}</p>
+                      <p className="truncate text-xs text-ink-mute">{r.playlist_title}</p>
+                    </div>
+                    <span className="shrink-0 text-xs text-ink-dim">
+                      {fmtDateTime(r.created_at)}
+                    </span>
+                  </Row>
+                ))
+              )}
+            </ListSection>
+
+            {/* 최근 방문 */}
+            <ListSection icon={<UserIcon size={14} />} title={`최근 방문 (${data.recent_visits.length})`}>
+              {data.recent_visits.length === 0 ? (
+                <Empty>방문 기록이 없어요</Empty>
+              ) : (
+                data.recent_visits.map((v, i) => (
+                  <Row key={i}>
+                    <code className="truncate font-mono text-xs">{v.path}</code>
+                    <span className="text-xs text-ink-dim">{fmtDateTime(v.created_at)}</span>
+                  </Row>
+                ))
+              )}
+            </ListSection>
+
+            {/* 결제 */}
+            <ListSection icon={<Wallet size={14} />} title={`결제/매출 (${data.revenue.length})`}>
+              {data.revenue.length === 0 ? (
+                <Empty>결제 기록이 없어요</Empty>
+              ) : (
+                data.revenue.map((r, i) => (
+                  <Row key={i}>
+                    <div>
+                      <p className="text-sm font-semibold">₩{r.amount.toLocaleString()}</p>
+                      <p className="text-xs text-ink-mute">
+                        {PLAN_LABEL[r.subscription_type] ?? r.subscription_type} · {r.status}
+                      </p>
+                    </div>
+                    <span className="text-xs text-ink-dim">
+                      {new Date(r.paid_at).toLocaleDateString('ko-KR')}
+                    </span>
+                  </Row>
+                ))
+              )}
+            </ListSection>
+
+            {/* 구독 신청 */}
+            <ListSection icon={<Calendar size={14} />} title={`구독 신청 (${data.subscription_requests.length})`}>
+              {data.subscription_requests.length === 0 ? (
+                <Empty>신청 내역이 없어요</Empty>
+              ) : (
+                data.subscription_requests.map((s, i) => (
+                  <Row key={i}>
+                    <div>
+                      <p className="text-sm">{PLAN_LABEL[s.requested_plan] ?? s.requested_plan}</p>
+                      <p className="text-xs text-ink-mute">{s.status}</p>
+                    </div>
+                    <span className="text-xs text-ink-dim">
+                      {new Date(s.created_at).toLocaleDateString('ko-KR')}
+                    </span>
+                  </Row>
+                ))
+              )}
+            </ListSection>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KV({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-bg-card px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-bg-card px-3 py-2.5">
+      <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+        {icon} {label}
+      </p>
+      <p className="mt-1 text-base font-extrabold">{value}</p>
+    </div>
+  );
+}
+
+function ListSection({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+        {icon} {title}
+      </h4>
+      <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-white/5">{children}</div>
+    </section>
+  );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-white/5 px-3 py-2 text-sm first:border-t-0">
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="px-3 py-4 text-center text-xs text-ink-dim">{children}</p>;
+}

@@ -1,0 +1,214 @@
+import { supabase } from './supabase';
+
+export interface DashboardStats {
+  today_visitors: number;
+  today_unique_visitors: number;
+  today_streams: number;
+  today_new_users: number;
+  today_revenue: number;
+  week_revenue: number;
+  month_revenue: number;
+  total_revenue: number;
+  active_subscribers: number;
+  free_users: number;
+  personal_users: number;
+  business_users: number;
+  total_users: number;
+  pending_subscriptions: number;
+}
+
+export interface DailySeriesPoint {
+  d: string;
+  visitors: number;
+  unique_visitors: number;
+  streams: number;
+  revenue: number;
+}
+
+export interface TopTrack {
+  track_id: string;
+  title: string;
+  artist: string | null;
+  plays: number;
+  completes: number;
+  avg_seconds: number;
+}
+
+export interface TopPlaylist {
+  playlist_id: string;
+  title: string;
+  category: string;
+  plays: number;
+}
+
+export interface MemberRow {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+  role: 'user' | 'admin';
+  subscription_type: 'free' | 'personal' | 'business';
+  created_at: string;
+  last_seen_at: string | null;
+  total_streams: number;
+  total_listened_seconds: number;
+}
+
+export interface MemberDetail {
+  user: {
+    id: string;
+    email: string | null;
+    nickname: string | null;
+    role: string;
+    subscription_type: string;
+    business_category: string | null;
+    created_at: string;
+  };
+  total_streams: number;
+  total_listened_seconds: number;
+  last_seen_at: string | null;
+  recent_visits: Array<{ path: string; created_at: string }>;
+  recent_plays: Array<{
+    track_title: string;
+    playlist_title: string;
+    completed: boolean;
+    created_at: string;
+  }>;
+  revenue: Array<{
+    amount: number;
+    subscription_type: string;
+    status: string;
+    paid_at: string;
+  }>;
+  subscription_requests: Array<{
+    requested_plan: string;
+    status: string;
+    created_at: string;
+  }>;
+}
+
+export interface TrackAnalytics {
+  track_id: string;
+  title: string;
+  artist: string | null;
+  plays: number;
+  completes: number;
+  avg_seconds: number;
+  last_played_at: string | null;
+}
+
+export interface RevenueSummary {
+  today: number;
+  week: number;
+  month: number;
+  total: number;
+  by_plan: Record<string, number>;
+  by_status: Record<string, number>;
+  recent: Array<{
+    id: number;
+    email: string | null;
+    nickname: string | null;
+    subscription_type: string;
+    amount: number;
+    status: string;
+    payment_provider: string | null;
+    note: string | null;
+    paid_at: string;
+  }>;
+}
+
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+  const { data, error } = await supabase.rpc('admin_dashboard_stats');
+  if (error) throw error;
+  return data as DashboardStats;
+}
+
+export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
+  const { data, error } = await supabase.rpc('admin_daily_series', { days });
+  if (error) throw error;
+  return (data ?? []) as DailySeriesPoint[];
+}
+
+export async function fetchTopTracks(limit = 10): Promise<TopTrack[]> {
+  const { data, error } = await supabase.rpc('admin_top_tracks', { limit_n: limit });
+  if (error) throw error;
+  return (data ?? []) as TopTrack[];
+}
+
+export async function fetchTopPlaylists(limit = 10): Promise<TopPlaylist[]> {
+  const { data, error } = await supabase.rpc('admin_top_playlists', { limit_n: limit });
+  if (error) throw error;
+  return (data ?? []) as TopPlaylist[];
+}
+
+export async function fetchMemberList(opts: {
+  search?: string;
+  plan?: string;
+  role?: string;
+  limit?: number;
+} = {}): Promise<MemberRow[]> {
+  const { data, error } = await supabase.rpc('admin_member_list', {
+    search: opts.search ?? null,
+    plan_filter: opts.plan ?? null,
+    role_filter: opts.role ?? null,
+    limit_n: opts.limit ?? 100,
+  });
+  if (error) throw error;
+  return (data ?? []) as MemberRow[];
+}
+
+export async function fetchMemberDetail(userId: string): Promise<MemberDetail | null> {
+  const { data, error } = await supabase.rpc('admin_member_detail', {
+    target_user_id: userId,
+  });
+  if (error) throw error;
+  return data as MemberDetail;
+}
+
+export async function fetchTrackAnalytics(days = 30): Promise<TrackAnalytics[]> {
+  const { data, error } = await supabase.rpc('admin_track_analytics', { days });
+  if (error) throw error;
+  return (data ?? []) as TrackAnalytics[];
+}
+
+export async function fetchRevenueSummary(): Promise<RevenueSummary> {
+  const { data, error } = await supabase.rpc('admin_revenue_summary');
+  if (error) throw error;
+  return data as RevenueSummary;
+}
+
+export async function recomputeDailyMetrics(date?: string) {
+  const { data, error } = await supabase.rpc('admin_compute_daily_metrics', {
+    target_date: date ?? new Date().toISOString().slice(0, 10),
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function updateUserRole(userId: string, role: 'user' | 'admin') {
+  const { error } = await supabase.from('users').update({ role }).eq('id', userId);
+  if (error) throw error;
+}
+
+export async function updateUserPlan(
+  userId: string,
+  plan: 'free' | 'personal' | 'business',
+) {
+  const { error } = await supabase.from('users').update({ subscription_type: plan }).eq('id', userId);
+  if (error) throw error;
+}
+
+export async function insertRevenue(payload: {
+  user_id: string;
+  subscription_type: 'personal' | 'business';
+  amount: number;
+  status: 'paid' | 'refunded' | 'pending' | 'failed';
+  payment_provider?: string;
+  note?: string;
+  paid_at?: string;
+}) {
+  const { error } = await supabase.from('revenue_events').insert({
+    ...payload,
+    paid_at: payload.paid_at ?? new Date().toISOString(),
+  });
+  if (error) throw error;
+}

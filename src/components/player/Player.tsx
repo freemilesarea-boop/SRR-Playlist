@@ -15,9 +15,11 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
+import { useAuthStore } from '@/store/authStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
+import { trackStream } from '@/lib/analytics';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
 
@@ -60,6 +62,43 @@ export default function Player() {
   useEffect(() => {
     setErrored(false);
   }, [current?.id]);
+
+  // ----- analytics: start / 30s milestone / complete -----
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const startedTrackIdRef = useRef<string | null>(null);
+  const milestoneSentRef = useRef(false);
+
+  // 트랙이 바뀌고 재생 시도가 시작되면 'start' 1회
+  useEffect(() => {
+    if (!current || !playable || !playing) return;
+    if (startedTrackIdRef.current === current.id) return;
+    startedTrackIdRef.current = current.id;
+    milestoneSentRef.current = false;
+    void trackStream({
+      user_id: userId,
+      track_id: current.id,
+      playlist_id: playlist?.id ?? null,
+      listened_seconds: 0,
+      completed: false,
+      event_type: 'start',
+    });
+  }, [current?.id, playable, playing, userId, playlist?.id, current]);
+
+  // 30초 도달 시 milestone_30s
+  useEffect(() => {
+    if (!current || milestoneSentRef.current) return;
+    if (currentTime >= 30) {
+      milestoneSentRef.current = true;
+      void trackStream({
+        user_id: userId,
+        track_id: current.id,
+        playlist_id: playlist?.id ?? null,
+        listened_seconds: Math.floor(currentTime),
+        completed: false,
+        event_type: 'milestone_30s',
+      });
+    }
+  }, [currentTime, current, userId, playlist?.id]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -152,6 +191,16 @@ export default function Player() {
     setCurrentTime(v);
   }
   function onEnded() {
+    if (current) {
+      void trackStream({
+        user_id: userId,
+        track_id: current.id,
+        playlist_id: playlist?.id ?? null,
+        listened_seconds: Math.floor(duration || currentTime || 0),
+        completed: true,
+        event_type: 'complete',
+      });
+    }
     next();
   }
   function onError() {

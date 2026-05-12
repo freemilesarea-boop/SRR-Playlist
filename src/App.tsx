@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
+import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -72,6 +73,7 @@ export default function App() {
   }, [init]);
 
   useWakeLock(businessMode && playing);
+  useTrackVisit();
 
   if (!isSupabaseConfigured) {
     return <ConfigMissingScreen />;

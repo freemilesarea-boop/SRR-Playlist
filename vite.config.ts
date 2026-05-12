@@ -74,6 +74,7 @@ export default defineConfig({
           supabase: ['@supabase/supabase-js'],
           dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           icons: ['lucide-react'],
+          recharts: ['recharts'],
         },
       },
     },
