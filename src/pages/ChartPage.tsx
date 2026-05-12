@@ -13,6 +13,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
 import ChartRow from '@/components/charts/ChartRow';
+import ChartPodium from '@/components/charts/ChartPodium';
 
 type Tab = 'daily' | 'weekly' | 'monthly' | 'top100' | 'genre';
 
@@ -197,7 +198,19 @@ export default function ChartPage() {
         </section>
       )}
 
-      {/* 차트 리스트 */}
+      {/* Top 1~3 포디움 (트랙 4개 이상일 때만) */}
+      {!loading && tracks.length >= 4 && (
+        <section className="space-y-3">
+          {isFallback && <FallbackBanner standalone />}
+          <ChartPodium
+            tracks={tracks}
+            currentTrackId={currentTrackId}
+            onPlay={handlePlay}
+          />
+        </section>
+      )}
+
+      {/* 차트 리스트 (4위부터, 또는 트랙이 4개 미만이면 1위부터) */}
       <section className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
         {/* 데스크탑 헤더 */}
         <header className="hidden border-b border-white/5 bg-bg-soft/40 px-3 py-2 text-[10px] uppercase tracking-wider text-ink-dim md:flex">
@@ -213,18 +226,22 @@ export default function ChartPage() {
           <EmptyState />
         ) : (
           <>
-            {isFallback && <FallbackBanner />}
+            {/* 트랙 4개 미만이면 fallback 배너를 여기서 표시 */}
+            {tracks.length < 4 && isFallback && <FallbackBanner />}
             <ul className="divide-y divide-white/5">
-              {tracks.map((t, i) => (
-                <li key={t.track_id}>
-                  <ChartRow
-                    track={t}
-                    index={i}
-                    isCurrent={currentTrackId === t.track_id}
-                    onPlay={() => handlePlay(i)}
-                  />
-                </li>
-              ))}
+              {(tracks.length >= 4 ? tracks.slice(3) : tracks).map((t, i) => {
+                const actualIndex = tracks.length >= 4 ? i + 3 : i;
+                return (
+                  <li key={t.track_id}>
+                    <ChartRow
+                      track={t}
+                      index={actualIndex}
+                      isCurrent={currentTrackId === t.track_id}
+                      onPlay={() => handlePlay(actualIndex)}
+                    />
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
@@ -260,14 +277,28 @@ function EmptyState() {
   );
 }
 
-function FallbackBanner() {
-  return (
-    <div className="flex items-start gap-2 border-b border-white/5 bg-yellow-500/5 px-4 py-2.5 text-[11px] text-ink-mute">
+function FallbackBanner({ standalone = false }: { standalone?: boolean }) {
+  const base =
+    'flex items-start gap-2 text-[11px] text-ink-mute';
+  const inner = (
+    <>
       <Sparkles size={12} className="mt-0.5 shrink-0 text-yellow-300" />
       <span>
         아직 충분한 재생 기록이 없어서 <span className="text-yellow-200">추천 트랙</span>을 먼저
         보여드려요. 곡을 30초 이상 들으면 차트에 반영됩니다.
       </span>
+    </>
+  );
+  if (standalone) {
+    return (
+      <div className={`${base} rounded-xl bg-yellow-500/5 px-3 py-2.5 ring-1 ring-yellow-400/20`}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <div className={`${base} border-b border-white/5 bg-yellow-500/5 px-4 py-2.5`}>
+      {inner}
     </div>
   );
 }
