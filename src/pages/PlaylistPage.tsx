@@ -8,8 +8,10 @@ import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
+import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import ShareButton from '@/components/ShareButton';
 import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
@@ -197,6 +199,14 @@ export default function PlaylistPage() {
         >
           <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
         </button>
+        <ShareButton
+          title={`스르륵 플리 — ${playlist.title}`}
+          text={playlist.description ?? `${playlist.category} 플레이리스트`}
+          url={playlistShareUrl(playlist.id)}
+          targetType="playlist"
+          targetId={playlist.id}
+          variant="pill"
+        />
       </div>
 
       {/* Track list */}

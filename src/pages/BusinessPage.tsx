@@ -19,6 +19,7 @@ import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import PlaylistCard from '@/components/PlaylistCard';
 import AutoCover from '@/components/AutoCover';
+import BusinessQRSection from '@/components/BusinessQRSection';
 import { gradientStyle } from '@/lib/cover';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { useInstallPrompt, wakeLockSupported, isStandalone } from '@/hooks/useInstallPrompt';
@@ -289,6 +290,9 @@ export default function BusinessPage() {
           />
         )}
       </div>
+
+      {/* 매장 QR */}
+      <BusinessQRSection playlists={filtered} />
 
       {/* 업종 선택 */}
       <section className="space-y-3">
