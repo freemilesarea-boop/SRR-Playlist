@@ -39,11 +39,17 @@
 ```bash
 git clone <repo>
 cd SRR-Playlist
-npm install
 cp .env.example .env
 # .env 안 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 입력
+npm run setup         # install + .env / Supabase 연결 점검
 npm run dev
 ```
+
+`npm run setup` 은 다음을 한 번에 처리합니다:
+- 의존성 설치
+- `.env` 파일 존재 / 값 형식 검증
+- Supabase REST 엔드포인트 헬스체크
+- 다음에 할 일 안내 출력
 
 기본 포트 `http://localhost:5173`. 모바일에서 확인하려면 같은 LAN 에서
 `http://<PC_IP>:5173` 으로 접속하면 됩니다.
@@ -74,11 +80,21 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi.....
 
 ### 2-3. 스키마 실행
 
-**SQL Editor** → New query → 아래 파일 내용을 붙여넣고 **Run**.
+두 가지 방법 중 하나:
 
-```text
-supabase/schema.sql
+**A. GUI** — Supabase Dashboard → **SQL Editor** → New query →
+`supabase/schema.sql` 내용을 붙여넣고 **Run**.
+
+**B. Supabase CLI (한 줄)** — 로컬에 [Supabase CLI](https://supabase.com/docs/guides/cli) 가 있다면:
+
+```bash
+supabase link --project-ref <your-ref>
+supabase db push          # supabase/migrations/0001_init.sql 적용
+supabase db seed --file supabase/seed.sql   # (선택) 시드
 ```
+
+`supabase/config.toml` 에 audio/covers 버킷 정의도 포함되어 있어, CLI 가
+버킷 생성까지 자동으로 처리합니다.
 
 내용:
 - 테이블: `users`, `tracks`, `playlists`, `playlist_tracks`, `likes`, `recent_plays`, `subscription_requests`

@@ -1,0 +1,36 @@
+# supabase/config.toml — Supabase CLI 프로젝트 메타
+# 실행: supabase link --project-ref <ref> --password '<db-password>'
+#       supabase db push          (migrations/ 적용)
+#       supabase db seed --file supabase/seed.sql  (선택)
+
+project_id = "srr-playlist"
+
+[db]
+major_version = 15
+
+[api]
+schemas = ["public", "storage", "graphql_public"]
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.buckets.audio]
+public = true
+file_size_limit = "50MiB"
+allowed_mime_types = ["audio/*"]
+
+[storage.buckets.covers]
+public = true
+file_size_limit = "5MiB"
+allowed_mime_types = ["image/*"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
