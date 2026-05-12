@@ -4,6 +4,9 @@ import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import ConfigMissingScreen from '@/components/ConfigMissingScreen';
+import Toaster from '@/components/Toaster';
 import AppShell from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 import HomePage from '@/pages/HomePage';
@@ -26,9 +29,26 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { profile, loading } = useAuthStore();
-  if (loading) return null;
-  if (profile?.role !== 'admin') return <Navigate to="/" replace />;
+  const { profile, user, loading } = useAuthStore();
+  // 로딩 중 또는 프로필이 아직 안 채워졌으면 대기 (auth 후 profile 비동기)
+  if (loading || (user && !profile)) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center text-ink-mute">
+        권한 확인 중…
+      </div>
+    );
+  }
+  if (profile?.role !== 'admin') {
+    return (
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="text-sm text-ink-mute">관리자 권한이 필요해요.</p>
+        <p className="text-xs text-ink-dim">
+          관리자 계정 설정 방법은 README.md 의 ‘관리자 계정 설정’ 섹션을 확인하세요.
+        </p>
+        <Navigate to="/" replace />
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 
@@ -44,8 +64,14 @@ export default function App() {
   // 사업자 모드 && 재생 중일 때만 화면 꺼짐 방지
   useWakeLock(businessMode && playing);
 
+  if (!isSupabaseConfigured) {
+    return <ConfigMissingScreen />;
+  }
+
   return (
-    <Routes>
+    <>
+      <Toaster />
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         element={
@@ -70,6 +96,7 @@ export default function App() {
         />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

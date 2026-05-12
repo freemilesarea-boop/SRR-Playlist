@@ -6,6 +6,7 @@ import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
+import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,10 +42,14 @@ export default function PlaylistPage() {
   }, [id, user]);
 
   function handlePlay(startIndex = 0, shuffle = false) {
-    if (tracks.length === 0 || !playlist) return;
+    if (!playlist) return;
+    if (tracks.length === 0) {
+      toast.info('이 플레이리스트에는 아직 곡이 없어요.');
+      return;
+    }
     setShuffle(shuffle);
     setQueue(tracks, startIndex, playlist);
-    if (user) void logRecentPlay(user.id, playlist.id);
+    if (user) void logRecentPlay(user.id, playlist.id).catch(() => {});
   }
 
   async function handleLike() {
@@ -131,13 +136,14 @@ export default function PlaylistPage() {
         )}
         {tracks.map((t, idx) => {
           const isCurrent = currentTrackId === t.id && currentPlaylistId === playlist.id;
+          const noAudio = !t.audio_url || t.audio_url.trim() === '';
           return (
             <li
               key={t.id}
               onClick={() => handlePlay(idx, false)}
               className={`flex cursor-pointer items-center gap-3 py-3 transition hover:bg-white/5 ${
                 isCurrent ? 'text-accent' : ''
-              }`}
+              } ${noAudio ? 'opacity-60' : ''}`}
             >
               <div className="w-6 text-right text-xs text-ink-dim">
                 {isCurrent && playing ? <span className="text-accent">♪</span> : idx + 1}
@@ -153,7 +159,9 @@ export default function PlaylistPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{t.title}</p>
-                <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
+                <p className="truncate text-xs text-ink-mute">
+                  {noAudio ? '샘플 음원 없음' : (t.artist ?? '—')}
+                </p>
               </div>
               <div className="text-xs text-ink-dim">{t.duration ? formatTime(t.duration) : ''}</div>
             </li>

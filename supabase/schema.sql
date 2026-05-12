@@ -168,7 +168,67 @@ drop policy if exists "recent_plays_insert_self" on public.recent_plays;
 create policy "recent_plays_insert_self" on public.recent_plays for insert with check (auth.uid() = user_id);
 
 -- ============================================
--- Storage buckets (Supabase Dashboard에서 생성)
--- - audio: public read
--- - covers: public read
+-- Subscription requests (PayApp 연동 전 단계의 신청 큐)
 -- ============================================
+create table if not exists public.subscription_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  requested_plan text not null check (requested_plan in ('personal', 'business')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_sub_req_user on public.subscription_requests(user_id, created_at desc);
+
+alter table public.subscription_requests enable row level security;
+
+drop policy if exists "sub_req_select_self_or_admin" on public.subscription_requests;
+create policy "sub_req_select_self_or_admin" on public.subscription_requests for select using (
+  auth.uid() = user_id
+  or exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+drop policy if exists "sub_req_insert_self" on public.subscription_requests;
+create policy "sub_req_insert_self" on public.subscription_requests for insert with check (auth.uid() = user_id);
+
+drop policy if exists "sub_req_admin_update" on public.subscription_requests;
+create policy "sub_req_admin_update" on public.subscription_requests for update using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+-- ============================================
+-- Storage buckets + 정책
+-- (대시보드에서 audio, covers 두 버킷을 Public 으로 만든 뒤 아래 정책을 적용)
+-- ============================================
+
+-- public read (둘 다 익명 read 가능)
+drop policy if exists "audio_public_read" on storage.objects;
+create policy "audio_public_read" on storage.objects for select using (bucket_id = 'audio');
+
+drop policy if exists "covers_public_read" on storage.objects;
+create policy "covers_public_read" on storage.objects for select using (bucket_id = 'covers');
+
+-- 인증 사용자만 업로드 (관리자 페이지에서 업로드)
+drop policy if exists "audio_authed_write" on storage.objects;
+create policy "audio_authed_write" on storage.objects for insert with check (
+  bucket_id = 'audio' and auth.role() = 'authenticated'
+);
+
+drop policy if exists "covers_authed_write" on storage.objects;
+create policy "covers_authed_write" on storage.objects for insert with check (
+  bucket_id = 'covers' and auth.role() = 'authenticated'
+);
+
+-- 관리자만 삭제
+drop policy if exists "audio_admin_delete" on storage.objects;
+create policy "audio_admin_delete" on storage.objects for delete using (
+  bucket_id = 'audio'
+  and exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+drop policy if exists "covers_admin_delete" on storage.objects;
+create policy "covers_admin_delete" on storage.objects for delete using (
+  bucket_id = 'covers'
+  and exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { UserRow } from '@/types/db';
 
 interface AuthState {
@@ -24,20 +24,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   init: async () => {
     set({ loading: true });
-    const { data } = await supabase.auth.getSession();
-    set({ session: data.session, user: data.session?.user ?? null });
-    if (data.session?.user) {
-      await get().refreshProfile();
+    if (!isSupabaseConfigured) {
+      // 미설정 시 더미 호출이 영원히 멈출 수 있으므로 즉시 종료
+      set({ session: null, user: null, profile: null, loading: false });
+      return;
     }
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      set({ session, user: session?.user ?? null });
-      if (session?.user) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      set({ session: data.session, user: data.session?.user ?? null });
+      if (data.session?.user) {
         await get().refreshProfile();
-      } else {
-        set({ profile: null });
       }
-    });
-    set({ loading: false });
+      supabase.auth.onAuthStateChange(async (_event, session) => {
+        set({ session, user: session?.user ?? null });
+        if (session?.user) {
+          await get().refreshProfile();
+        } else {
+          set({ profile: null });
+        }
+      });
+    } catch {
+      // 네트워크 실패 등 — 로그인 페이지로 폴백
+      set({ session: null, user: null, profile: null });
+    } finally {
+      set({ loading: false });
+    }
   },
 
   refreshProfile: async () => {

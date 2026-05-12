@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
+import { toast } from '@/store/toastStore';
 
 interface Props {
   playlistId: string;
@@ -58,10 +59,11 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
       order_index: maxOrder,
     });
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
     setTracks((prev) => [...prev, track]);
+    toast.success(`추가됨: ${track.title}`);
   }
 
   async function removeTrack(trackId: string) {
@@ -70,7 +72,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
       .delete()
       .match({ playlist_id: playlistId, track_id: trackId });
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
     setTracks((prev) => prev.filter((t) => t.id !== trackId));
@@ -85,35 +87,52 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
     const next = arrayMove(tracks, oldIdx, newIdx);
     setTracks(next);
 
-    // persist new order_index values
     const updates = next.map((t, idx) =>
       supabase
         .from('playlist_tracks')
         .update({ order_index: idx })
         .match({ playlist_id: playlistId, track_id: t.id }),
     );
-    await Promise.all(updates);
+    const results = await Promise.all(updates);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      toast.error(`순서 저장 실패: ${failed.error.message}`);
+      // 실패 시 서버 상태로 롤백
+      void reload();
+    } else {
+      toast.success('순서를 저장했어요.');
+    }
   }
 
   async function uploadThumb(file: File) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('이미지 파일만 업로드할 수 있어요.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('썸네일은 5MB 이하 이미지만 가능해요.');
+      return;
+    }
     setThumbBusy(true);
     try {
-      const ext = file.name.split('.').pop() ?? 'jpg';
+      const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase();
       const path = `${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('covers').upload(path, file, {
         cacheControl: '31536000',
         upsert: false,
+        contentType: file.type || undefined,
       });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(`업로드 실패: ${upErr.message}`);
       const { data } = supabase.storage.from('covers').getPublicUrl(path);
       const { error } = await supabase
         .from('playlists')
         .update({ thumbnail_url: data.publicUrl })
         .eq('id', playlistId);
-      if (error) throw error;
+      if (error) throw new Error(`저장 실패: ${error.message}`);
       await reload();
+      toast.success('썸네일을 변경했어요.');
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setThumbBusy(false);
     }

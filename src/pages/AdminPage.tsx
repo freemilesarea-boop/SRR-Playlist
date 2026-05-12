@@ -5,6 +5,7 @@ import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
+import { toast } from '@/store/toastStore';
 
 type Tab = 'playlists' | 'tracks';
 
@@ -34,22 +35,31 @@ export default function AdminPage() {
     business_category: string | null;
     time_slot: string | null;
   }) {
+    if (!form.title.trim()) {
+      toast.error('플레이리스트 제목은 필수예요.');
+      return;
+    }
+    if (!form.category.trim()) {
+      toast.error('카테고리는 필수예요.');
+      return;
+    }
     const { data, error } = await supabase
       .from('playlists')
       .insert({
-        title: form.title,
-        category: form.category,
-        description: form.description,
+        title: form.title.trim(),
+        category: form.category.trim(),
+        description: form.description.trim() || null,
         is_business_only: form.is_business_only,
-        business_category: form.business_category,
+        business_category: form.business_category?.trim() || null,
         time_slot: (form.time_slot as PlaylistRow['time_slot']) || null,
       })
       .select('*')
       .single();
     if (error) {
-      alert(`생성 실패: ${error.message}`);
+      toast.error(`생성 실패: ${error.message}`);
       return;
     }
+    toast.success('플레이리스트를 만들었어요. 트랙을 추가해보세요.');
     await refresh();
     setCreatingPlaylist(false);
     if (data) setEditingPlaylistId(data.id);
@@ -59,9 +69,10 @@ export default function AdminPage() {
     if (!confirm('정말 삭제하시겠어요?')) return;
     const { error } = await supabase.from('playlists').delete().eq('id', id);
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
+    toast.success('플레이리스트를 삭제했어요.');
     await refresh();
   }
 
@@ -69,9 +80,10 @@ export default function AdminPage() {
     if (!confirm('이 트랙을 삭제하시겠어요?')) return;
     const { error } = await supabase.from('tracks').delete().eq('id', id);
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
+    toast.success('트랙을 삭제했어요.');
     await refresh();
   }
 

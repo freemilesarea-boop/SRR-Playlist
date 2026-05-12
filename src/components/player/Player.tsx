@@ -12,9 +12,22 @@ import {
   Music,
   ChevronUp,
   ChevronDown,
+  AlertCircle,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
+import { toast } from '@/store/toastStore';
+
+function isPlayableUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.trim().length === 0) return false;
+  try {
+    const u = new URL(url, window.location.origin);
+    return ['http:', 'https:', 'blob:', 'data:'].includes(u.protocol);
+  } catch {
+    return false;
+  }
+}
 
 export default function Player() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -41,24 +54,64 @@ export default function Player() {
   } = usePlayerStore();
 
   const current = queue[index];
+  const playable = isPlayableUrl(current?.audio_url);
   const [expanded, setExpanded] = useState(false);
+  const [errored, setErrored] = useState(false);
 
-  // Sync play/pause to audio element
+  // 모두 재생 불가일 때 무한 next() 루프 방지
+  const skipChainRef = useRef(0);
+  useEffect(() => {
+    if (playable) skipChainRef.current = 0;
+  }, [current?.id, playable]);
+
+  // 새 트랙으로 바뀌면 에러 상태 리셋
+  useEffect(() => {
+    setErrored(false);
+  }, [current?.id]);
+
+  // play/pause 동기화 — 재생 불가 트랙은 자동으로 다음 곡으로
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !current) return;
+
+    if (!playable) {
+      // 재생 불가 트랙: 한 번만 안내 후 자동 스킵 시도
+      if (playing) {
+        skipChainRef.current += 1;
+        if (skipChainRef.current >= queue.length) {
+          // 큐 전체가 재생 불가 — 멈추고 안내
+          pause();
+          toast.error('재생 가능한 음원이 없어요. 관리자 페이지에서 음원을 업로드해주세요.');
+          skipChainRef.current = 0;
+          return;
+        }
+        toast.info(`샘플 음원이 없어 다음 곡으로 넘어갑니다: ${current.title}`);
+        const t = window.setTimeout(() => next(), 600);
+        return () => window.clearTimeout(t);
+      }
+      return;
+    }
+
     if (playing) {
       const p = audio.play();
       if (p && typeof p.catch === 'function') {
-        p.catch(() => {
-          // 모바일 자동재생 정책 등 - 일시정지로 폴백
-          pause();
+        p.catch((err: DOMException) => {
+          // NotAllowedError = 자동재생 차단 (사용자 제스처 필요)
+          if (err?.name === 'NotAllowedError') {
+            pause();
+            toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
+          } else {
+            setErrored(true);
+            pause();
+            toast.error('이 곡을 재생할 수 없어요. 다음 곡으로 넘어갈게요.');
+            window.setTimeout(() => next(), 800);
+          }
         });
       }
     } else {
       audio.pause();
     }
-  }, [playing, current?.id, pause]);
+  }, [playing, current?.id, playable, queue.length, next, pause, current]);
 
   // Reset time when track changes
   useEffect(() => {
@@ -74,23 +127,25 @@ export default function Player() {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  // Media Session API (백그라운드 컨트롤)
+  // Media Session API (백그라운드 컨트롤) — 일부 브라우저는 미지원
   useEffect(() => {
     if (!('mediaSession' in navigator) || !current) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: current.title,
-      artist: current.artist ?? '',
-      album: playlist?.title ?? '',
-      artwork: current.cover_url
-        ? [
-            { src: current.cover_url, sizes: '512x512', type: 'image/png' },
-          ]
-        : undefined,
-    });
-    navigator.mediaSession.setActionHandler('play', play);
-    navigator.mediaSession.setActionHandler('pause', pause);
-    navigator.mediaSession.setActionHandler('previoustrack', prev);
-    navigator.mediaSession.setActionHandler('nexttrack', next);
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title,
+        artist: current.artist ?? '',
+        album: playlist?.title ?? '',
+        artwork: current.cover_url
+          ? [{ src: current.cover_url, sizes: '512x512', type: 'image/png' }]
+          : undefined,
+      });
+      navigator.mediaSession.setActionHandler('play', play);
+      navigator.mediaSession.setActionHandler('pause', pause);
+      navigator.mediaSession.setActionHandler('previoustrack', prev);
+      navigator.mediaSession.setActionHandler('nexttrack', next);
+    } catch {
+      /* 무시 */
+    }
   }, [current, playlist, play, pause, prev, next]);
 
   if (!current) return null;
@@ -101,15 +156,25 @@ export default function Player() {
   }
   function onLoadedMetadata() {
     if (!audioRef.current) return;
-    setDuration(audioRef.current.duration);
+    const d = audioRef.current.duration;
+    if (Number.isFinite(d)) setDuration(d);
   }
   function onSeek(e: React.ChangeEvent<HTMLInputElement>) {
     const v = Number(e.target.value);
-    if (audioRef.current) audioRef.current.currentTime = v;
+    if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
+      audioRef.current.currentTime = v;
+    }
     setCurrentTime(v);
   }
   function onEnded() {
     next();
+  }
+  function onError() {
+    if (!playable) return; // 이미 처리
+    setErrored(true);
+    pause();
+    toast.error('재생 중 오류가 발생했어요. 다음 곡으로 넘어갑니다.');
+    window.setTimeout(() => next(), 600);
   }
   function cycleRepeat() {
     setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off');
@@ -117,18 +182,22 @@ export default function Player() {
 
   return (
     <>
-      <audio
-        ref={audioRef}
-        src={current.audio_url}
-        preload="auto"
-        onTimeUpdate={onTimeUpdate}
-        onLoadedMetadata={onLoadedMetadata}
-        onEnded={onEnded}
-        playsInline
-      />
+      {/* 재생 가능한 URL 일 때만 audio element 마운트 */}
+      {playable && (
+        <audio
+          ref={audioRef}
+          src={current.audio_url}
+          preload="auto"
+          onTimeUpdate={onTimeUpdate}
+          onLoadedMetadata={onLoadedMetadata}
+          onEnded={onEnded}
+          onError={onError}
+          playsInline
+        />
+      )}
 
       {/* Mini player */}
-      <div className="fixed inset-x-0 bottom-14 z-20 mx-auto max-w-md px-2 pb-1 sm:bottom-16">
+      <div className="fixed inset-x-0 bottom-14 z-20 mx-auto max-w-3xl px-2 pb-1 sm:bottom-16">
         <button
           onClick={() => setExpanded(true)}
           className="flex w-full items-center gap-3 rounded-xl bg-bg-card/95 p-2.5 shadow-2xl backdrop-blur-xl ring-1 ring-white/5"
@@ -143,16 +212,27 @@ export default function Player() {
             )}
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <p className="truncate text-sm font-medium">{current.title}</p>
-            <p className="truncate text-xs text-ink-mute">{current.artist ?? '—'}</p>
+            <p className="flex items-center gap-1 truncate text-sm font-medium">
+              {!playable && <AlertCircle size={11} className="shrink-0 text-yellow-300" />}
+              {current.title}
+            </p>
+            <p className="truncate text-xs text-ink-mute">
+              {!playable ? '샘플 음원 없음' : (current.artist ?? '—')}
+            </p>
           </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
+              if (!playable) {
+                toast.info('이 트랙은 음원이 등록되지 않았어요.');
+                next();
+                return;
+              }
               toggle();
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-black"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-black disabled:opacity-50"
             aria-label={playing ? '일시정지' : '재생'}
+            disabled={errored}
           >
             {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
           </button>
@@ -210,6 +290,11 @@ export default function Player() {
             <div className="w-full max-w-xs text-center">
               <h2 className="text-xl font-bold">{current.title}</h2>
               <p className="mt-1 text-sm text-ink-mute">{current.artist ?? '—'}</p>
+              {!playable && (
+                <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] text-yellow-200">
+                  <AlertCircle size={11} /> 샘플 음원 없음 — 관리자 페이지에서 업로드하세요
+                </p>
+              )}
             </div>
 
             <div className="w-full max-w-xs space-y-2">
@@ -221,6 +306,7 @@ export default function Player() {
                 onChange={onSeek}
                 step={0.1}
                 aria-label="재생 위치"
+                disabled={!playable || !duration}
               />
               <div className="flex justify-between text-[11px] text-ink-mute">
                 <span>{formatTime(currentTime)}</span>
@@ -240,9 +326,17 @@ export default function Player() {
                 <SkipBack size={26} fill="currentColor" />
               </button>
               <button
-                onClick={toggle}
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-black"
+                onClick={() => {
+                  if (!playable) {
+                    toast.info('이 트랙은 음원이 등록되지 않았어요.');
+                    next();
+                    return;
+                  }
+                  toggle();
+                }}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-black disabled:opacity-50"
                 aria-label={playing ? '일시정지' : '재생'}
+                disabled={errored}
               >
                 {playing ? (
                   <Pause size={22} fill="currentColor" />
