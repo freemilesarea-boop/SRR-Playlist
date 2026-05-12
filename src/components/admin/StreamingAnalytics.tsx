@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Headphones, Play, CheckCircle, Clock } from 'lucide-react';
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
-import { toast } from '@/store/toastStore';
+import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import AdminErrorState from './AdminErrorState';
 
 const RANGES = [
   { key: 1, label: '오늘' },
@@ -27,14 +28,18 @@ export default function StreamingAnalytics() {
   const [days, setDays] = useState(7);
   const [rows, setRows] = useState<TrackAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<AdminError | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     fetchTrackAnalytics(days)
       .then(setRows)
-      .catch((e) => toast.error(e.message))
+      .catch((e) => setError(classifyAdminError(e)))
       .finally(() => setLoading(false));
   }, [days]);
+
+  if (error) return <AdminErrorState error={error} />;
 
   const totalPlays = rows.reduce((s, r) => s + Number(r.plays), 0);
   const totalCompletes = rows.reduce((s, r) => s + Number(r.completes), 0);

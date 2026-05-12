@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Clock, Mail, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
+import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import AdminErrorState from './AdminErrorState';
 
 type Status = 'pending' | 'contacted' | 'approved' | 'rejected' | 'cancelled';
 
@@ -38,21 +40,24 @@ export default function SubscriptionRequests() {
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [error, setError] = useState<AdminError | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.rpc('list_subscription_requests');
-      if (error) throw error;
+      const { data, error: rpcErr } = await supabase.rpc('list_subscription_requests');
+      if (rpcErr) throw rpcErr;
       setRows((data as RequestRow[]) ?? []);
     } catch (e) {
-      // RPC가 아직 배포 안 됐을 수 있음 — fallback
+      // RPC가 admin 권한 거부로 raise 한 경우 PostgREST 는 400 으로 응답함.
+      // fallback: 직접 테이블 조회 (RLS 가 admin 이면 허용)
       try {
-        const { data, error } = await supabase
+        const { data, error: tblErr } = await supabase
           .from('subscription_requests')
           .select('id, user_id, requested_plan, status, note, created_at')
           .order('created_at', { ascending: false });
-        if (error) throw error;
+        if (tblErr) throw tblErr;
         setRows(
           ((data as Omit<RequestRow, 'email' | 'nickname'>[]) ?? []).map((r) => ({
             ...r,
@@ -60,10 +65,14 @@ export default function SubscriptionRequests() {
             nickname: null,
           })),
         );
-        toast.info('이메일/닉네임 조회용 RPC 가 없어요. schema.sql 을 최신으로 다시 실행해주세요.');
+        if (data && data.length === 0) {
+          // 빈 결과면 RPC 미적용 가능성 알림
+          toast.info(
+            '이메일/닉네임을 보려면 schema.sql 의 list_subscription_requests RPC 적용이 필요해요.',
+          );
+        }
       } catch (e2) {
-        toast.error(e2 instanceof Error ? e2.message : String(e2));
-        setRows([]);
+        setError(classifyAdminError(e2));
       }
     } finally {
       setLoading(false);
@@ -106,6 +115,8 @@ export default function SubscriptionRequests() {
 
   const pending = rows.filter((r) => r.status === 'pending');
   const others = rows.filter((r) => r.status !== 'pending');
+
+  if (error) return <AdminErrorState error={error} />;
 
   return (
     <div className="space-y-4">

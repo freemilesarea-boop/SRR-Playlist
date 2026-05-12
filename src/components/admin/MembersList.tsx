@@ -6,6 +6,8 @@ import {
   updateUserPlan,
   type MemberRow,
 } from '@/lib/adminApi';
+import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
 import MemberDetail from './MemberDetail';
 
@@ -38,9 +40,11 @@ export default function MembersList() {
   const [plan, setPlan] = useState<string>('');
   const [role, setRole] = useState<string>('');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [error, setError] = useState<AdminError | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       const data = await fetchMemberList({
         search: search || undefined,
@@ -49,7 +53,7 @@ export default function MembersList() {
       });
       setRows(data);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '회원 목록 로드 실패');
+      setError(classifyAdminError(e));
     } finally {
       setLoading(false);
     }
@@ -88,6 +92,8 @@ export default function MembersList() {
       toast.error(e instanceof Error ? e.message : '변경 실패');
     }
   }
+
+  if (error) return <AdminErrorState error={error} />;
 
   return (
     <div className="space-y-4">

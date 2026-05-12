@@ -7,6 +7,8 @@ import {
   type RevenueSummary,
   type MemberRow,
 } from '@/lib/adminApi';
+import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
 
 const KRW = (n: number) => `₩${(n ?? 0).toLocaleString('ko-KR')}`;
@@ -23,15 +25,17 @@ export default function RevenueManagement() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [error, setError] = useState<AdminError | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       const [s, m] = await Promise.all([fetchRevenueSummary(), fetchMemberList({ limit: 200 })]);
       setData(s);
       setMembers(m);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '매출 데이터 로드 실패');
+      setError(classifyAdminError(e));
     } finally {
       setLoading(false);
     }
@@ -41,6 +45,7 @@ export default function RevenueManagement() {
     void load();
   }, []);
 
+  if (error) return <AdminErrorState error={error} />;
   if (loading || !data) return <div className="p-6 text-sm text-ink-mute">불러오는 중…</div>;
 
   return (

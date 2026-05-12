@@ -33,6 +33,8 @@ import {
   type TopTrack,
   type TopPlaylist,
 } from '@/lib/adminApi';
+import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
 
 const KRW = (n: number) => `₩${n.toLocaleString('ko-KR')}`;
@@ -45,9 +47,11 @@ export default function Dashboard() {
   const [topPlaylists, setTopPlaylists] = useState<TopPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<AdminError | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       const [s, ser, tt, tp] = await Promise.all([
         fetchDashboardStats(),
@@ -60,7 +64,7 @@ export default function Dashboard() {
       setTopTracks(tt);
       setTopPlaylists(tp);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '대시보드 데이터 로드 실패');
+      setError(classifyAdminError(e));
     } finally {
       setLoading(false);
     }
@@ -83,6 +87,7 @@ export default function Dashboard() {
     }
   }
 
+  if (error) return <AdminErrorState error={error} />;
   if (loading || !stats) {
     return <div className="p-6 text-sm text-ink-mute">대시보드 불러오는 중…</div>;
   }
