@@ -9,86 +9,95 @@
 -- 효과:
 --   - 30개 더미 트랙 각각에 무작위 분포로 stream_events 추가
 --   - 일간/주간/월간 차트 모두에 데이터가 채워짐
+--
+-- 정리:
+--   delete from public.stream_events where session_id like 'dev-seed-%';
 -- ============================================
 
-begin;
-
--- 안전장치: 이미 생성된 dev 이벤트가 있으면 먼저 제거 (선택적)
+-- 1) 기존 dev seed 이벤트 정리 (재실행 안전)
 delete from public.stream_events
 where session_id like 'dev-seed-%';
 
-do $$
-declare
-  t record;
-  rank int;
-  base_plays int;
-  daily_plays int;
-  weekly_plays int;
-  monthly_plays int;
-  i int;
-begin
-  rank := 0;
-  for t in
-    select id, duration from public.tracks order by created_at desc limit 30
-  loop
-    rank := rank + 1;
-    -- 상위 트랙일수록 더 많은 재생
-    base_plays   := greatest(1, 35 - rank);
-    daily_plays  := base_plays;
-    weekly_plays := base_plays * 3;
-    monthly_plays:= base_plays * 7;
+-- 2) 일간 이벤트 (오늘 안, 상위 트랙일수록 많이)
+with ranked as (
+  select id, duration,
+    row_number() over (order by created_at desc) as rn
+  from public.tracks
+  limit 30
+)
+insert into public.stream_events
+  (user_id, track_id, session_id, listened_seconds, completed, event_type, created_at)
+select
+  null,
+  r.id,
+  'dev-seed-' || gen_random_uuid()::text,
+  coalesce(r.duration, 180),
+  false,
+  'milestone_30s',
+  now() - (random() * interval '20 hours')
+from ranked r
+cross join generate_series(1, greatest(1, 35 - r.rn::int)::int) g;
 
-    -- 오늘 재생 (milestone_30s)
-    for i in 1..daily_plays loop
-      insert into public.stream_events(
-        user_id, track_id, playlist_id, session_id,
-        listened_seconds, completed, event_type, created_at
-      ) values (
-        null, t.id, null, 'dev-seed-' || gen_random_uuid()::text,
-        coalesce(t.duration, 180), false, 'milestone_30s',
-        now() - (random() * interval '20 hours')
-      );
-    end loop;
+-- 3) 주간 이벤트 (최근 7일)
+with ranked as (
+  select id, duration,
+    row_number() over (order by created_at desc) as rn
+  from public.tracks
+  limit 30
+)
+insert into public.stream_events
+  (user_id, track_id, session_id, listened_seconds, completed, event_type, created_at)
+select
+  null,
+  r.id,
+  'dev-seed-' || gen_random_uuid()::text,
+  coalesce(r.duration, 180),
+  (g % 3 = 0),
+  'milestone_30s',
+  now() - (random() * interval '6 days') - interval '1 day'
+from ranked r
+cross join generate_series(1, greatest(3, (35 - r.rn::int) * 3)::int) g;
 
-    -- 최근 7일 추가
-    for i in 1..weekly_plays loop
-      insert into public.stream_events(
-        user_id, track_id, playlist_id, session_id,
-        listened_seconds, completed, event_type, created_at
-      ) values (
-        null, t.id, null, 'dev-seed-' || gen_random_uuid()::text,
-        coalesce(t.duration, 180), (i % 3 = 0), 'milestone_30s',
-        now() - (random() * interval '6 days' + interval '1 day')
-      );
-    end loop;
+-- 4) 월간 이벤트 (최근 30일)
+with ranked as (
+  select id, duration,
+    row_number() over (order by created_at desc) as rn
+  from public.tracks
+  limit 30
+)
+insert into public.stream_events
+  (user_id, track_id, session_id, listened_seconds, completed, event_type, created_at)
+select
+  null,
+  r.id,
+  'dev-seed-' || gen_random_uuid()::text,
+  coalesce(r.duration, 180),
+  (g % 4 = 0),
+  'milestone_30s',
+  now() - (random() * interval '25 days') - interval '5 days'
+from ranked r
+cross join generate_series(1, greatest(5, (35 - r.rn::int) * 7)::int) g;
 
-    -- 최근 30일 추가
-    for i in 1..monthly_plays loop
-      insert into public.stream_events(
-        user_id, track_id, playlist_id, session_id,
-        listened_seconds, completed, event_type, created_at
-      ) values (
-        null, t.id, null, 'dev-seed-' || gen_random_uuid()::text,
-        coalesce(t.duration, 180), (i % 4 = 0), 'milestone_30s',
-        now() - (random() * interval '25 days' + interval '6 days')
-      );
-    end loop;
+-- 5) complete 이벤트 일부
+with ranked as (
+  select id, duration,
+    row_number() over (order by created_at desc) as rn
+  from public.tracks
+  limit 30
+)
+insert into public.stream_events
+  (user_id, track_id, session_id, listened_seconds, completed, event_type, created_at)
+select
+  null,
+  r.id,
+  'dev-seed-' || gen_random_uuid()::text,
+  coalesce(r.duration, 180),
+  true,
+  'complete',
+  now() - (random() * interval '30 days')
+from ranked r
+cross join generate_series(1, greatest(1, (35 - r.rn::int)::int / 2)) g;
 
-    -- complete 이벤트도 일부
-    for i in 1..(monthly_plays / 4) loop
-      insert into public.stream_events(
-        user_id, track_id, playlist_id, session_id,
-        listened_seconds, completed, event_type, created_at
-      ) values (
-        null, t.id, null, 'dev-seed-' || gen_random_uuid()::text,
-        coalesce(t.duration, 180), true, 'complete',
-        now() - (random() * interval '30 days')
-      );
-    end loop;
-  end loop;
-end $$;
-
-commit;
-
--- 확인용 — 상위 10곡
-select rank, title, artist, play_count from public.get_track_chart('daily', 10);
+-- 6) 확인 — 상위 10곡
+select rank, title, artist, play_count
+from public.get_track_chart('daily', 10);
