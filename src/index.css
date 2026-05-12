@@ -18,7 +18,15 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv09', 'cv10', 'cv11', 'ss01';
-    transition: background-color 0.5s ease, color 0.5s ease;
+    transition:
+      background-color 0.6s var(--ease-out-expo),
+      color 0.4s var(--ease-out-expo);
+  }
+
+  /* 타이포 폴리시 */
+  h1, h2, h3, h4 {
+    letter-spacing: -0.022em;
+    line-height: 1.15;
   }
 
   ::selection {
@@ -26,32 +34,36 @@
     color: rgb(var(--color-ink));
   }
 
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .pt-safe {
-    padding-top: env(safe-area-inset-top);
-  }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold tracking-tight transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold tracking-tight transition-[transform,opacity,background-color] duration-smooth ease-emphasized active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-accent text-bg hover:opacity-90;
+    @apply btn bg-accent text-bg shadow-card hover:opacity-95 hover:-translate-y-0.5;
   }
   .btn-ghost {
     @apply btn bg-bg-card text-ink hover:bg-bg-hover;
   }
   .input {
-    @apply w-full rounded-xl bg-bg-card px-4 py-3 text-ink placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-accent/60;
+    @apply w-full rounded-xl bg-bg-card px-4 py-3 text-ink placeholder:text-ink-dim ring-1 ring-line/10 focus:outline-none focus:ring-2 focus:ring-accent/40 transition;
   }
+  /* 표준 카드 */
   .card {
-    @apply rounded-2xl bg-bg-card transition hover:bg-bg-hover;
+    @apply rounded-3xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized;
   }
+  .card-hover {
+    @apply hover:-translate-y-0.5 hover:shadow-lift;
+  }
+  /* 글래스 (블러 + 반투명) */
   .glass {
-    @apply bg-bg-card/80 backdrop-blur-xl;
+    @apply bg-bg-card/70 backdrop-blur-2xl ring-1 ring-line/10;
+  }
+  .glass-strong {
+    @apply bg-bg-card/80 backdrop-blur-2xl ring-1 ring-line/15 shadow-dock;
   }
 }
 
@@ -63,8 +75,8 @@ input[type='range'] {
   width: 100%;
 }
 input[type='range']::-webkit-slider-runnable-track {
-  height: 4px;
-  background: rgb(var(--color-ink) / 0.15);
+  height: 5px;
+  background: rgb(var(--color-ink) / 0.12);
   border-radius: 9999px;
 }
 input[type='range']::-webkit-slider-thumb {
@@ -74,16 +86,16 @@ input[type='range']::-webkit-slider-thumb {
   width: 14px;
   border-radius: 9999px;
   background: rgb(var(--color-ink));
-  margin-top: -5px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  transition: transform 0.15s;
+  margin-top: -4.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s var(--ease-out-expo);
 }
 input[type='range']:hover::-webkit-slider-thumb {
   transform: scale(1.2);
 }
 input[type='range']::-moz-range-track {
-  height: 4px;
-  background: rgb(var(--color-ink) / 0.15);
+  height: 5px;
+  background: rgb(var(--color-ink) / 0.12);
   border-radius: 9999px;
 }
 input[type='range']::-moz-range-thumb {
@@ -92,14 +104,14 @@ input[type='range']::-moz-range-thumb {
   border-radius: 9999px;
   background: rgb(var(--color-ink));
   border: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* 보이는 스크롤바 (데스크탑) */
+/* 일반 스크롤바 (데스크탑) */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -108,4 +120,15 @@ input[type='range']::-moz-range-thumb {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--color-ink) / 0.16);
+}
+
+/* 카드 호버 미세 lift (전역 utility) */
+.lift-on-hover {
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    box-shadow var(--dur-base) var(--ease-out-expo);
+}
+.lift-on-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
 }

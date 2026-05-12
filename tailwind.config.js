@@ -5,7 +5,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // RGB triplet CSS 변수 — Tailwind alpha-value 지원
         bg: {
           DEFAULT: 'rgb(var(--color-bg) / <alpha-value>)',
           soft: 'rgb(var(--color-bg-soft) / <alpha-value>)',
@@ -33,9 +32,23 @@ export default {
           'sans-serif',
         ],
       },
+      boxShadow: {
+        soft: 'var(--shadow-sm)',
+        card: 'var(--shadow-md)',
+        lift: 'var(--shadow-lg)',
+        elevated: 'var(--shadow-xl)',
+        dock: 'var(--shadow-dock)',
+      },
+      transitionTimingFunction: {
+        emphasized: 'var(--ease-out-expo)',
+      },
+      transitionDuration: {
+        smooth: 'var(--dur-base)',
+      },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.4s ease-out',
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+        'glow-pulse': 'glowPulse 2.4s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -43,8 +56,12 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '0%': { transform: 'translateY(24px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        glowPulse: {
+          '0%, 100%': { opacity: '0.6' },
+          '50%': { opacity: '0.9' },
         },
       },
     },

@@ -237,11 +237,11 @@ export default function Player() {
         />
       )}
 
-      {/* Mini player */}
-      <div className="fixed inset-x-0 bottom-14 z-20 mx-auto max-w-3xl px-2 pb-1 sm:bottom-16">
+      {/* Mini player — BottomNav floating dock 위에 살짝 떠 있게 */}
+      <div className="fixed inset-x-0 bottom-[5.25rem] z-20 mx-auto max-w-3xl px-3 sm:bottom-[5.5rem] sm:px-4">
         <button
           onClick={() => setExpanded(true)}
-          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-bg-card/90 p-2.5 shadow-2xl ring-1 ring-line/15 backdrop-blur-2xl transition hover:bg-bg-card"
+          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl glass-strong p-2.5 transition duration-smooth ease-emphasized hover:-translate-y-0.5"
         >
           {/* 미세한 그라데이션 배경 */}
           <div
@@ -289,11 +289,12 @@ export default function Player() {
           <ChevronUp size={18} className="relative mr-1 text-ink-dim sm:hidden" />
         </button>
         {/* 진행 바 */}
-        <div className="mx-2 mt-1 h-0.5 overflow-hidden rounded-full bg-ink/10">
+        <div className="mx-2 mt-1.5 h-1 overflow-hidden rounded-full bg-ink/10">
           <div
-            className="h-full bg-accent transition-[width] duration-200"
+            className="h-full rounded-full bg-accent transition-[width] duration-200"
             style={{
               width: duration ? `${Math.min(100, (currentTime / duration) * 100)}%` : '0%',
+              boxShadow: '0 0 12px rgb(var(--color-accent) / 0.5)',
             }}
           />
         </div>
@@ -330,14 +331,21 @@ export default function Player() {
           </div>
 
           <div className="relative flex flex-1 flex-col items-center justify-center gap-6 px-8">
-            {/* 큰 커버 */}
-            <div className="aspect-square w-full max-w-xs overflow-hidden rounded-3xl shadow-2xl ring-1 ring-line/15">
-              <AutoCover
-                title={current.title}
-                category={playlist?.category}
-                imageUrl={current.cover_url}
-                size="xl"
+            {/* 큰 커버 + album glow */}
+            <div className="relative aspect-square w-full max-w-xs">
+              <div
+                className="pointer-events-none absolute inset-0 -z-0 scale-105 rounded-3xl opacity-70 blur-3xl"
+                style={gradientStyle(playlist?.category || current.title)}
+                aria-hidden
               />
+              <div className="relative overflow-hidden rounded-3xl shadow-elevated ring-1 ring-line/15 h-full w-full">
+                <AutoCover
+                  title={current.title}
+                  category={playlist?.category}
+                  imageUrl={current.cover_url}
+                  size="xl"
+                />
+              </div>
             </div>
 
             <div className="w-full max-w-xs text-center">

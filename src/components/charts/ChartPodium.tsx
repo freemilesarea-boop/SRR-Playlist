@@ -7,28 +7,28 @@ const NUM = (n: number) => n.toLocaleString('ko-KR');
 
 const PODIUM_STYLES = {
   1: {
-    ring: 'ring-yellow-300/50',
-    gradient: 'from-yellow-400/40 via-amber-500/20 to-transparent',
-    rankBg: 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black',
+    ring: 'ring-amber-300/35',
+    gradient: 'from-amber-400/22 via-yellow-500/8 to-transparent',
+    rankBg: 'bg-gradient-to-br from-amber-300 to-amber-500 text-black',
     icon: <Crown size={11} fill="currentColor" />,
     badge: '1',
-    glow: 'shadow-[0_0_40px_rgba(251,191,36,0.25)]',
+    glow: 'shadow-card',
   },
   2: {
-    ring: 'ring-slate-300/40',
-    gradient: 'from-slate-300/30 via-slate-400/10 to-transparent',
+    ring: 'ring-slate-300/25',
+    gradient: 'from-slate-200/18 via-slate-400/6 to-transparent',
     rankBg: 'bg-gradient-to-br from-slate-200 to-slate-400 text-black',
     icon: <Medal size={10} />,
     badge: '2',
-    glow: 'shadow-[0_0_30px_rgba(203,213,225,0.15)]',
+    glow: 'shadow-card',
   },
   3: {
-    ring: 'ring-orange-400/40',
-    gradient: 'from-orange-500/30 via-orange-600/10 to-transparent',
+    ring: 'ring-orange-400/25',
+    gradient: 'from-orange-500/18 via-orange-600/6 to-transparent',
     rankBg: 'bg-gradient-to-br from-orange-300 to-orange-600 text-black',
     icon: <Medal size={10} />,
     badge: '3',
-    glow: 'shadow-[0_0_30px_rgba(251,146,60,0.15)]',
+    glow: 'shadow-card',
   },
 } as const;
 

@@ -1,205 +1,214 @@
 /* ============================================
- * 스르륵 플리 — 테마 팔레트
+ * 스르륵 플리 — 테마 팔레트 v2 (Polish)
  *
- * 적용 방식:
- *   <html data-theme="dark" data-timeslot="night">
- *
- * 값은 모두 RGB triplet ("R G B") — Tailwind alpha-value 와 호환되도록.
- * 예: bg-bg/80 → rgb(var(--color-bg) / 0.8)
+ * 방향:
+ *   - 다크: charcoal/navy 통일, 갈색 톤 제거
+ *   - 라이트: warm cream tint (병원 느낌 제거)
+ *   - 시간대는 accent 만 변화 (base 톤은 거의 일정)
+ *   - accent 채도 약 20% 감소 (은은한 프리미엄)
  * ============================================ */
 
 /* ---------- 기본값 (다크 · 밤) ---------- */
 :root {
-  --color-bg:           15 20 32;
-  --color-bg-soft:      11 16 25;
-  --color-surface:      23 29 43;
-  --color-surface-soft: 33 41 56;
-  --color-accent:       96 165 250;
-  --color-accent-soft:  37 99 235;
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      23 26 33;
+  --color-surface-soft: 35 39 52;
+  --color-accent:       74 143 224;
+  --color-accent-soft:  37 88 204;
   --color-ink:          239 246 255;
-  --color-ink-mute:     148 163 184;
-  --color-ink-dim:      100 116 139;
+  --color-ink-mute:     150 162 184;
+  --color-ink-dim:      100 112 132;
   --color-border:       255 255 255;
 }
 
 /* ============================================
- * DARK MODE
+ * DARK MODE — 통일된 charcoal 베이스
  * ============================================ */
 
-/* 다크 · 새벽 */
 [data-theme='dark'][data-timeslot='dawn'] {
-  --color-bg:           17 16 26;
-  --color-bg-soft:      13 12 20;
-  --color-surface:      26 24 36;
-  --color-surface-soft: 36 33 48;
-  --color-accent:       139 124 246;
-  --color-accent-soft:  109 106 239;
-  --color-ink:          244 240 255;
-  --color-ink-mute:     176 168 198;
-  --color-ink-dim:      120 112 140;
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      24 26 35;
+  --color-surface-soft: 36 39 52;
+  --color-accent:       139 124 230;
+  --color-accent-soft:  98 87 199;
+  --color-ink:          238 235 252;
+  --color-ink-mute:     156 158 188;
+  --color-ink-dim:      108 110 138;
   --color-border:       255 255 255;
 }
 
-/* 다크 · 아침 */
 [data-theme='dark'][data-timeslot='morning'] {
-  --color-bg:           23 19 12;
-  --color-bg-soft:      18 15 10;
-  --color-surface:      33 26 16;
-  --color-surface-soft: 47 37 24;
-  --color-accent:       223 169 58;
-  --color-accent-soft:  183 121 31;
-  --color-ink:          255 247 232;
-  --color-ink-mute:     201 184 152;
-  --color-ink-dim:      143 128 104;
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      26 26 32;
+  --color-surface-soft: 38 38 48;
+  --color-accent:       201 155 48;
+  --color-accent-soft:  164 116 25;
+  --color-ink:          245 240 230;
+  --color-ink-mute:     180 168 152;
+  --color-ink-dim:      125 116 102;
+  --color-border:       255 250 240;
+}
+
+[data-theme='dark'][data-timeslot='afternoon'] {
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      22 28 30;
+  --color-surface-soft: 33 41 45;
+  --color-accent:       43 179 137;
+  --color-accent-soft:  28 154 110;
+  --color-ink:          235 245 240;
+  --color-ink-mute:     150 175 165;
+  --color-ink-dim:      105 124 115;
+  --color-border:       240 255 245;
+}
+
+[data-theme='dark'][data-timeslot='evening'] {
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      28 24 26;
+  --color-surface-soft: 40 34 36;
+  --color-accent:       224 122 42;
+  --color-accent-soft:  189 96 24;
+  --color-ink:          247 240 232;
+  --color-ink-mute:     192 168 152;
+  --color-ink-dim:      138 122 110;
   --color-border:       255 240 220;
 }
 
-/* 다크 · 점심 (afternoon) */
-[data-theme='dark'][data-timeslot='afternoon'] {
-  --color-bg:           14 24 19;
-  --color-bg-soft:      10 18 14;
-  --color-surface:      20 35 27;
-  --color-surface-soft: 30 50 38;
-  --color-accent:       52 211 153;
-  --color-accent-soft:  34 197 94;
-  --color-ink:          236 253 245;
-  --color-ink-mute:     156 196 173;
-  --color-ink-dim:      100 132 116;
-  --color-border:       220 255 240;
-}
-
-/* 다크 · 저녁 */
-[data-theme='dark'][data-timeslot='evening'] {
-  --color-bg:           27 18 14;
-  --color-bg-soft:      21 14 10;
-  --color-surface:      37 24 18;
-  --color-surface-soft: 52 35 27;
-  --color-accent:       251 146 60;
-  --color-accent-soft:  234 88 12;
-  --color-ink:          255 241 232;
-  --color-ink-mute:     208 178 156;
-  --color-ink-dim:      148 122 102;
-  --color-border:       255 220 200;
-}
-
-/* 다크 · 밤 (기본값과 동일하지만 명시) */
 [data-theme='dark'][data-timeslot='night'] {
-  --color-bg:           15 20 32;
-  --color-bg-soft:      11 16 25;
-  --color-surface:      23 29 43;
-  --color-surface-soft: 33 41 56;
-  --color-accent:       96 165 250;
-  --color-accent-soft:  37 99 235;
+  --color-bg:           15 17 21;
+  --color-bg-soft:      11 13 17;
+  --color-surface:      23 26 33;
+  --color-surface-soft: 35 39 52;
+  --color-accent:       74 143 224;
+  --color-accent-soft:  37 88 204;
   --color-ink:          239 246 255;
-  --color-ink-mute:     148 163 184;
-  --color-ink-dim:      100 116 139;
+  --color-ink-mute:     150 162 184;
+  --color-ink-dim:      100 112 132;
   --color-border:       255 255 255;
 }
 
 /* ============================================
- * LIGHT MODE
+ * LIGHT MODE — warm cream tint
  * ============================================ */
 
-/* 라이트 · 새벽 */
 [data-theme='light'][data-timeslot='dawn'] {
-  --color-bg:           247 245 255;
-  --color-bg-soft:      237 234 252;
+  --color-bg:           247 244 245;
+  --color-bg-soft:      237 232 234;
   --color-surface:      255 255 255;
-  --color-surface-soft: 244 241 254;
-  --color-accent:       124 110 230;
-  --color-accent-soft:  165 180 252;
-  --color-ink:          23 21 31;
-  --color-ink-mute:     85 80 110;
-  --color-ink-dim:      140 134 168;
-  --color-border:       30 25 60;
+  --color-surface-soft: 248 244 250;
+  --color-accent:       111 97 224;
+  --color-accent-soft:  92 80 197;
+  --color-ink:          26 23 35;
+  --color-ink-mute:     95 90 116;
+  --color-ink-dim:      150 145 172;
+  --color-border:       0 0 0;
 }
 
-/* 라이트 · 아침 */
 [data-theme='light'][data-timeslot='morning'] {
-  --color-bg:           255 249 236;
-  --color-bg-soft:      251 243 222;
+  --color-bg:           247 244 241;
+  --color-bg-soft:      239 231 225;
   --color-surface:      255 255 255;
-  --color-surface-soft: 253 247 232;
-  --color-accent:       217 119 6;
-  --color-accent-soft:  252 211 77;
-  --color-ink:          31 26 18;
-  --color-ink-mute:     115 89 53;
-  --color-ink-dim:      168 144 105;
-  --color-border:       80 50 10;
+  --color-surface-soft: 250 244 237;
+  --color-accent:       200 144 32;
+  --color-accent-soft:  168 116 16;
+  --color-ink:          33 27 19;
+  --color-ink-mute:     108 90 65;
+  --color-ink-dim:      162 144 118;
+  --color-border:       0 0 0;
 }
 
-/* 라이트 · 점심 */
 [data-theme='light'][data-timeslot='afternoon'] {
-  --color-bg:           242 255 248;
-  --color-bg-soft:      228 250 236;
+  --color-bg:           245 247 244;
+  --color-bg-soft:      232 240 232;
   --color-surface:      255 255 255;
-  --color-surface-soft: 238 252 244;
-  --color-accent:       5 150 105;
-  --color-accent-soft:  134 239 172;
-  --color-ink:          16 32 24;
-  --color-ink-mute:     65 110 88;
-  --color-ink-dim:      125 158 138;
-  --color-border:       10 60 30;
+  --color-surface-soft: 246 251 246;
+  --color-accent:       7 154 110;
+  --color-accent-soft:  6 130 92;
+  --color-ink:          22 32 26;
+  --color-ink-mute:     85 110 95;
+  --color-ink-dim:      140 158 148;
+  --color-border:       0 0 0;
 }
 
-/* 라이트 · 저녁 */
 [data-theme='light'][data-timeslot='evening'] {
-  --color-bg:           255 244 239;
-  --color-bg-soft:      252 234 222;
+  --color-bg:           248 244 240;
+  --color-bg-soft:      241 232 222;
   --color-surface:      255 255 255;
-  --color-surface-soft: 254 240 230;
-  --color-accent:       234 88 12;
-  --color-accent-soft:  253 186 116;
-  --color-ink:          34 22 15;
-  --color-ink-mute:     117 78 50;
-  --color-ink-dim:      170 134 102;
-  --color-border:       80 40 10;
+  --color-surface-soft: 252 244 235;
+  --color-accent:       218 91 18;
+  --color-accent-soft:  189 76 12;
+  --color-ink:          37 25 18;
+  --color-ink-mute:     130 96 70;
+  --color-ink-dim:      178 148 122;
+  --color-border:       0 0 0;
 }
 
-/* 라이트 · 밤 */
 [data-theme='light'][data-timeslot='night'] {
-  --color-bg:           243 247 255;
-  --color-bg-soft:      230 238 252;
+  --color-bg:           245 246 250;
+  --color-bg-soft:      234 238 245;
   --color-surface:      255 255 255;
-  --color-surface-soft: 238 245 255;
-  --color-accent:       37 99 235;
-  --color-accent-soft:  147 197 253;
-  --color-ink:          17 24 39;
-  --color-ink-mute:     71 85 105;
-  --color-ink-dim:      130 144 166;
-  --color-border:       10 30 80;
+  --color-surface-soft: 244 247 252;
+  --color-accent:       32 88 204;
+  --color-accent-soft:  22 70 175;
+  --color-ink:          18 24 38;
+  --color-ink-mute:     78 92 116;
+  --color-ink-dim:      140 152 172;
+  --color-border:       0 0 0;
 }
 
 /* ============================================
- * 라이트 모드 전용 보정
+ * 라이트 모드 보정
  * ============================================ */
-
-/* 라이트 모드에서 'bg-black/X', 'text-white' 같이 하드코딩된
- * 색이 깨지지 않도록, hero/그라데이션 위 텍스트만 흰색 유지하고
- * 나머지는 토큰을 통해 자동 적응. */
-[data-theme='light'] {
-  /* selection 색을 라이트 모드용으로 */
-  color-scheme: light;
-}
+[data-theme='light'] { color-scheme: light; }
 [data-theme='light'] ::selection {
-  background: rgb(var(--color-accent) / 0.25);
+  background: rgb(var(--color-accent) / 0.18);
   color: rgb(var(--color-ink));
 }
-
-/* 스크롤바 - 라이트 모드용 */
 [data-theme='light'] ::-webkit-scrollbar-thumb {
-  background: rgb(0 0 0 / 0.12);
+  background: rgb(0 0 0 / 0.1);
 }
 [data-theme='light'] ::-webkit-scrollbar-thumb:hover {
-  background: rgb(0 0 0 / 0.24);
+  background: rgb(0 0 0 / 0.22);
 }
-
-/* 라이트 모드에서 input thumb 색 */
 [data-theme='light'] input[type='range']::-webkit-slider-thumb,
 [data-theme='light'] input[type='range']::-moz-range-thumb {
   background: rgb(var(--color-ink));
 }
 [data-theme='light'] input[type='range']::-webkit-slider-runnable-track,
 [data-theme='light'] input[type='range']::-moz-range-track {
-  background: rgb(0 0 0 / 0.12);
+  background: rgb(0 0 0 / 0.1);
+}
+
+/* ============================================
+ * 그림자 시스템 (라이트/다크 자동 분기)
+ * ============================================ */
+:root {
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 10px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+[data-theme='dark'] {
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.4), 0 3px 12px rgba(0, 0, 0, 0.25);
+  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.3);
+  --shadow-dock: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+ * Motion 토큰 (transition 통일)
+ * ============================================ */
+:root {
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 180ms;
+  --dur-base: 240ms;
+  --dur-slow: 320ms;
 }

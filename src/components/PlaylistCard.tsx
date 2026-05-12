@@ -26,7 +26,7 @@ export default function PlaylistCard({
   return (
     <Link to={`/playlist/${playlist.id}`} className="group block">
       <div className="space-y-2.5">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-line/10 transition-transform duration-200 group-hover:scale-[1.02] group-hover:shadow-2xl">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
           <AutoCover
             title={playlist.title}
             category={playlist.category}
@@ -34,8 +34,17 @@ export default function PlaylistCard({
             size={coverSize}
           />
 
+          {/* 내부 light highlight */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-smooth group-hover:opacity-100"
+            style={{
+              background:
+                'radial-gradient(110% 70% at 30% 0%, rgba(255,255,255,0.15), transparent 55%)',
+            }}
+          />
+
           {/* hover 시 재생 아이콘 */}
-          <div className="pointer-events-none absolute right-2 bottom-2 flex h-9 w-9 translate-y-2 items-center justify-center rounded-full bg-accent text-black opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+          <div className="pointer-events-none absolute bottom-2 right-2 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-accent text-bg shadow-lift opacity-0 transition-all duration-smooth ease-emphasized group-hover:translate-y-0 group-hover:opacity-100">
             <Play size={14} fill="currentColor" />
           </div>
 
