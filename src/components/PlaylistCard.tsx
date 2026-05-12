@@ -26,7 +26,7 @@ export default function PlaylistCard({
   return (
     <Link to={`/playlist/${playlist.id}`} className="group block">
       <div className="space-y-2.5">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-white/5 transition-transform duration-200 group-hover:scale-[1.02] group-hover:shadow-2xl">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-line/10 transition-transform duration-200 group-hover:scale-[1.02] group-hover:shadow-2xl">
           <AutoCover
             title={playlist.title}
             category={playlist.category}

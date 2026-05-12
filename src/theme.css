@@ -1,0 +1,205 @@
+/* ============================================
+ * 스르륵 플리 — 테마 팔레트
+ *
+ * 적용 방식:
+ *   <html data-theme="dark" data-timeslot="night">
+ *
+ * 값은 모두 RGB triplet ("R G B") — Tailwind alpha-value 와 호환되도록.
+ * 예: bg-bg/80 → rgb(var(--color-bg) / 0.8)
+ * ============================================ */
+
+/* ---------- 기본값 (다크 · 밤) ---------- */
+:root {
+  --color-bg:           15 20 32;
+  --color-bg-soft:      11 16 25;
+  --color-surface:      23 29 43;
+  --color-surface-soft: 33 41 56;
+  --color-accent:       96 165 250;
+  --color-accent-soft:  37 99 235;
+  --color-ink:          239 246 255;
+  --color-ink-mute:     148 163 184;
+  --color-ink-dim:      100 116 139;
+  --color-border:       255 255 255;
+}
+
+/* ============================================
+ * DARK MODE
+ * ============================================ */
+
+/* 다크 · 새벽 */
+[data-theme='dark'][data-timeslot='dawn'] {
+  --color-bg:           17 16 26;
+  --color-bg-soft:      13 12 20;
+  --color-surface:      26 24 36;
+  --color-surface-soft: 36 33 48;
+  --color-accent:       139 124 246;
+  --color-accent-soft:  109 106 239;
+  --color-ink:          244 240 255;
+  --color-ink-mute:     176 168 198;
+  --color-ink-dim:      120 112 140;
+  --color-border:       255 255 255;
+}
+
+/* 다크 · 아침 */
+[data-theme='dark'][data-timeslot='morning'] {
+  --color-bg:           23 19 12;
+  --color-bg-soft:      18 15 10;
+  --color-surface:      33 26 16;
+  --color-surface-soft: 47 37 24;
+  --color-accent:       223 169 58;
+  --color-accent-soft:  183 121 31;
+  --color-ink:          255 247 232;
+  --color-ink-mute:     201 184 152;
+  --color-ink-dim:      143 128 104;
+  --color-border:       255 240 220;
+}
+
+/* 다크 · 점심 (afternoon) */
+[data-theme='dark'][data-timeslot='afternoon'] {
+  --color-bg:           14 24 19;
+  --color-bg-soft:      10 18 14;
+  --color-surface:      20 35 27;
+  --color-surface-soft: 30 50 38;
+  --color-accent:       52 211 153;
+  --color-accent-soft:  34 197 94;
+  --color-ink:          236 253 245;
+  --color-ink-mute:     156 196 173;
+  --color-ink-dim:      100 132 116;
+  --color-border:       220 255 240;
+}
+
+/* 다크 · 저녁 */
+[data-theme='dark'][data-timeslot='evening'] {
+  --color-bg:           27 18 14;
+  --color-bg-soft:      21 14 10;
+  --color-surface:      37 24 18;
+  --color-surface-soft: 52 35 27;
+  --color-accent:       251 146 60;
+  --color-accent-soft:  234 88 12;
+  --color-ink:          255 241 232;
+  --color-ink-mute:     208 178 156;
+  --color-ink-dim:      148 122 102;
+  --color-border:       255 220 200;
+}
+
+/* 다크 · 밤 (기본값과 동일하지만 명시) */
+[data-theme='dark'][data-timeslot='night'] {
+  --color-bg:           15 20 32;
+  --color-bg-soft:      11 16 25;
+  --color-surface:      23 29 43;
+  --color-surface-soft: 33 41 56;
+  --color-accent:       96 165 250;
+  --color-accent-soft:  37 99 235;
+  --color-ink:          239 246 255;
+  --color-ink-mute:     148 163 184;
+  --color-ink-dim:      100 116 139;
+  --color-border:       255 255 255;
+}
+
+/* ============================================
+ * LIGHT MODE
+ * ============================================ */
+
+/* 라이트 · 새벽 */
+[data-theme='light'][data-timeslot='dawn'] {
+  --color-bg:           247 245 255;
+  --color-bg-soft:      237 234 252;
+  --color-surface:      255 255 255;
+  --color-surface-soft: 244 241 254;
+  --color-accent:       124 110 230;
+  --color-accent-soft:  165 180 252;
+  --color-ink:          23 21 31;
+  --color-ink-mute:     85 80 110;
+  --color-ink-dim:      140 134 168;
+  --color-border:       30 25 60;
+}
+
+/* 라이트 · 아침 */
+[data-theme='light'][data-timeslot='morning'] {
+  --color-bg:           255 249 236;
+  --color-bg-soft:      251 243 222;
+  --color-surface:      255 255 255;
+  --color-surface-soft: 253 247 232;
+  --color-accent:       217 119 6;
+  --color-accent-soft:  252 211 77;
+  --color-ink:          31 26 18;
+  --color-ink-mute:     115 89 53;
+  --color-ink-dim:      168 144 105;
+  --color-border:       80 50 10;
+}
+
+/* 라이트 · 점심 */
+[data-theme='light'][data-timeslot='afternoon'] {
+  --color-bg:           242 255 248;
+  --color-bg-soft:      228 250 236;
+  --color-surface:      255 255 255;
+  --color-surface-soft: 238 252 244;
+  --color-accent:       5 150 105;
+  --color-accent-soft:  134 239 172;
+  --color-ink:          16 32 24;
+  --color-ink-mute:     65 110 88;
+  --color-ink-dim:      125 158 138;
+  --color-border:       10 60 30;
+}
+
+/* 라이트 · 저녁 */
+[data-theme='light'][data-timeslot='evening'] {
+  --color-bg:           255 244 239;
+  --color-bg-soft:      252 234 222;
+  --color-surface:      255 255 255;
+  --color-surface-soft: 254 240 230;
+  --color-accent:       234 88 12;
+  --color-accent-soft:  253 186 116;
+  --color-ink:          34 22 15;
+  --color-ink-mute:     117 78 50;
+  --color-ink-dim:      170 134 102;
+  --color-border:       80 40 10;
+}
+
+/* 라이트 · 밤 */
+[data-theme='light'][data-timeslot='night'] {
+  --color-bg:           243 247 255;
+  --color-bg-soft:      230 238 252;
+  --color-surface:      255 255 255;
+  --color-surface-soft: 238 245 255;
+  --color-accent:       37 99 235;
+  --color-accent-soft:  147 197 253;
+  --color-ink:          17 24 39;
+  --color-ink-mute:     71 85 105;
+  --color-ink-dim:      130 144 166;
+  --color-border:       10 30 80;
+}
+
+/* ============================================
+ * 라이트 모드 전용 보정
+ * ============================================ */
+
+/* 라이트 모드에서 'bg-black/X', 'text-white' 같이 하드코딩된
+ * 색이 깨지지 않도록, hero/그라데이션 위 텍스트만 흰색 유지하고
+ * 나머지는 토큰을 통해 자동 적응. */
+[data-theme='light'] {
+  /* selection 색을 라이트 모드용으로 */
+  color-scheme: light;
+}
+[data-theme='light'] ::selection {
+  background: rgb(var(--color-accent) / 0.25);
+  color: rgb(var(--color-ink));
+}
+
+/* 스크롤바 - 라이트 모드용 */
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 0.12);
+}
+[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(0 0 0 / 0.24);
+}
+
+/* 라이트 모드에서 input thumb 색 */
+[data-theme='light'] input[type='range']::-webkit-slider-thumb,
+[data-theme='light'] input[type='range']::-moz-range-thumb {
+  background: rgb(var(--color-ink));
+}
+[data-theme='light'] input[type='range']::-webkit-slider-runnable-track,
+[data-theme='light'] input[type='range']::-moz-range-track {
+  background: rgb(0 0 0 / 0.12);
+}

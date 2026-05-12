@@ -2,7 +2,7 @@ import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import { useToastStore } from '@/store/toastStore';
 
 const styles: Record<string, string> = {
-  info: 'bg-bg-card text-ink ring-white/10',
+  info: 'bg-bg-card text-ink ring-line/15',
   success: 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/30',
   error: 'bg-red-500/15 text-red-100 ring-red-400/30',
 };

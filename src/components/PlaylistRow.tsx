@@ -29,7 +29,7 @@ export default function PlaylistRow({
           <h2 className="text-lg font-bold tracking-tight sm:text-xl">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs text-ink-mute">{subtitle}</p>}
         </div>
-        <div className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-white/5">
+        <div className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-line/10">
           {emptyText ?? '아직 플레이리스트가 없어요.'}
         </div>
       </section>

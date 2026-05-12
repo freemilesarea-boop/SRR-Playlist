@@ -1,9 +1,22 @@
 import { Link } from 'react-router-dom';
-import { CreditCard, Settings, LogOut, ChevronRight, Shield } from 'lucide-react';
+import {
+  CreditCard,
+  Settings,
+  LogOut,
+  ChevronRight,
+  Shield,
+  Sun,
+  Moon,
+  Monitor,
+  Clock,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useThemeStore } from '@/store/themeStore';
+import { getTimeSlotLabel, type ThemeMode } from '@/lib/timeTheme';
 
 export default function ProfilePage() {
   const { profile, user, signOut } = useAuthStore();
+  const { mode, resolvedMode, timeSlot, setMode } = useThemeStore();
 
   const planLabel =
     profile?.subscription_type === 'business'
@@ -12,10 +25,16 @@ export default function ProfilePage() {
         ? '일반 플랜'
         : '무료 플랜';
 
+  const themeOptions: Array<{ key: ThemeMode; label: string; icon: React.ReactNode }> = [
+    { key: 'system', label: '시스템', icon: <Monitor size={14} /> },
+    { key: 'light', label: '라이트', icon: <Sun size={14} /> },
+    { key: 'dark', label: '다크', icon: <Moon size={14} /> },
+  ];
+
   return (
     <div className="space-y-8 px-4 pb-8 pt-6 sm:px-6">
       <header className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-2xl font-bold text-black">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-2xl font-bold text-bg">
           {(profile?.nickname ?? user?.email ?? '?').slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0">
@@ -27,7 +46,40 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      <div className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-bg-card">
+      {/* 테마 설정 */}
+      <section className="space-y-2">
+        <div className="flex items-end justify-between px-1">
+          <h2 className="text-sm font-bold tracking-tight">화면 모드</h2>
+          <p className="flex items-center gap-1 text-[11px] text-ink-mute">
+            <Clock size={11} /> KST {getTimeSlotLabel(timeSlot)} ·
+            <span className="text-ink">{resolvedMode === 'dark' ? '다크' : '라이트'}</span>
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-bg-card p-1.5 ring-1 ring-line/10">
+          {themeOptions.map((opt) => {
+            const active = mode === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setMode(opt.key)}
+                className={`flex flex-col items-center gap-1 rounded-xl px-3 py-3 text-xs font-semibold transition ${
+                  active
+                    ? 'bg-accent text-bg shadow'
+                    : 'text-ink-mute hover:bg-bg-hover hover:text-ink'
+                }`}
+              >
+                {opt.icon}
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="px-1 text-[11px] text-ink-dim">
+          시간대가 바뀌면 같은 모드 안에서 컬러가 자연스럽게 변해요.
+        </p>
+      </section>
+
+      <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
         {profile?.role === 'admin' && (
           <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />
@@ -35,7 +87,10 @@ export default function ProfilePage() {
         <Row to="/business" icon={<Settings size={18} />} label="사업자 모드 설정" />
       </div>
 
-      <button onClick={signOut} className="flex w-full items-center justify-center gap-2 text-sm text-ink-mute hover:text-red-300">
+      <button
+        onClick={signOut}
+        className="flex w-full items-center justify-center gap-2 text-sm text-ink-mute hover:text-red-400"
+      >
         <LogOut size={16} /> 로그아웃
       </button>
 

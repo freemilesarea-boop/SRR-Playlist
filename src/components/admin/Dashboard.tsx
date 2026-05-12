@@ -295,7 +295,7 @@ export default function Dashboard() {
             topTracks.map((t, i) => (
               <div
                 key={t.track_id}
-                className="flex items-center justify-between gap-3 border-t border-white/5 px-3 py-2 first:border-t-0"
+                className="flex items-center justify-between gap-3 border-t border-line/10 px-3 py-2 first:border-t-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="w-6 text-right text-xs text-ink-dim">{i + 1}</span>
@@ -320,7 +320,7 @@ export default function Dashboard() {
             topPlaylists.map((p, i) => (
               <div
                 key={p.playlist_id}
-                className="flex items-center justify-between gap-3 border-t border-white/5 px-3 py-2 first:border-t-0"
+                className="flex items-center justify-between gap-3 border-t border-line/10 px-3 py-2 first:border-t-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="w-6 text-right text-xs text-ink-dim">{i + 1}</span>
@@ -376,7 +376,7 @@ function MetricCard({
 
 function ChartPanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-white/5">
+    <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
       <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-mute">{title}</h3>
       {children}
     </div>
@@ -385,8 +385,8 @@ function ChartPanel({ title, children }: { title: string; children: React.ReactN
 
 function TopTable({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
-      <header className="border-b border-white/5 px-4 py-3">
+    <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+      <header className="border-b border-line/10 px-4 py-3">
         <h3 className="text-sm font-bold">{title}</h3>
       </header>
       <div className="max-h-96 overflow-y-auto">{children}</div>

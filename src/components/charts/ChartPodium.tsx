@@ -67,7 +67,7 @@ export default function ChartPodium({
 
             <div className="relative flex items-center gap-3">
               {/* 커버 + 순위 뱃지 */}
-              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-line/15">
                 <AutoCover
                   title={track.title}
                   category={track.genre}

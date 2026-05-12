@@ -107,7 +107,7 @@ export default function PlaylistPage() {
             <ArrowLeft size={18} />
           </Link>
 
-          <div className="aspect-square w-40 shrink-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10 sm:w-52">
+          <div className="aspect-square w-40 shrink-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-line/15 sm:w-52">
             <AutoCover
               title={playlist.title}
               category={playlist.category}
@@ -199,7 +199,7 @@ export default function PlaylistPage() {
       </div>
 
       {/* Track list */}
-      <ul className="divide-y divide-white/5 px-4 sm:px-6">
+      <ul className="divide-y divide-line/10 px-4 sm:px-6">
         {tracks.length === 0 && (
           <li className="py-10 text-center text-sm text-ink-mute">
             트랙이 없어요. 관리자 페이지에서 트랙을 추가해주세요.
@@ -212,7 +212,7 @@ export default function PlaylistPage() {
             <li
               key={t.id}
               onClick={() => handlePlay(idx, false)}
-              className={`flex cursor-pointer items-center gap-3 py-3 transition hover:bg-white/5 ${
+              className={`flex cursor-pointer items-center gap-3 py-3 transition hover:bg-ink/5 ${
                 isCurrent ? 'text-accent' : ''
               } ${!playable ? 'opacity-60' : ''}`}
             >

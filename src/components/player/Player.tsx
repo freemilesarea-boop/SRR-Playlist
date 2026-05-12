@@ -241,14 +241,14 @@ export default function Player() {
       <div className="fixed inset-x-0 bottom-14 z-20 mx-auto max-w-3xl px-2 pb-1 sm:bottom-16">
         <button
           onClick={() => setExpanded(true)}
-          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-bg-card/90 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition hover:bg-bg-card"
+          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-bg-card/90 p-2.5 shadow-2xl ring-1 ring-line/15 backdrop-blur-2xl transition hover:bg-bg-card"
         >
           {/* 미세한 그라데이션 배경 */}
           <div
             className="pointer-events-none absolute inset-0 opacity-30"
             style={gradientStyle(playlist?.category || current.title)}
           />
-          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-white/10">
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/15">
             <AutoCover
               title={current.title}
               category={playlist?.category}
@@ -289,7 +289,7 @@ export default function Player() {
           <ChevronUp size={18} className="relative mr-1 text-ink-dim sm:hidden" />
         </button>
         {/* 진행 바 */}
-        <div className="mx-2 mt-1 h-0.5 overflow-hidden rounded-full bg-white/10">
+        <div className="mx-2 mt-1 h-0.5 overflow-hidden rounded-full bg-ink/10">
           <div
             className="h-full bg-accent transition-[width] duration-200"
             style={{
@@ -312,7 +312,7 @@ export default function Player() {
           <div className="relative flex items-center justify-between px-5 py-3">
             <button
               onClick={() => setExpanded(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 backdrop-blur"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5 backdrop-blur"
               aria-label="닫기"
             >
               <ChevronDown size={20} />
@@ -322,7 +322,7 @@ export default function Player() {
             </div>
             <button
               onClick={() => setShowQueue(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 backdrop-blur"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5 backdrop-blur"
               aria-label="대기열"
             >
               <ListMusic size={18} />
@@ -331,7 +331,7 @@ export default function Player() {
 
           <div className="relative flex flex-1 flex-col items-center justify-center gap-6 px-8">
             {/* 큰 커버 */}
-            <div className="aspect-square w-full max-w-xs overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10">
+            <div className="aspect-square w-full max-w-xs overflow-hidden rounded-3xl shadow-2xl ring-1 ring-line/15">
               <AutoCover
                 title={current.title}
                 category={playlist?.category}
@@ -423,20 +423,20 @@ export default function Player() {
           {/* Queue drawer */}
           {showQueue && (
             <div className="absolute inset-0 z-10 flex flex-col bg-bg/95 backdrop-blur-2xl pt-safe pb-safe animate-slide-up">
-              <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+              <div className="flex items-center justify-between border-b border-line/10 px-5 py-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-white/60">재생 중</p>
                   <h3 className="text-base font-semibold">{playlist?.title ?? '대기열'}</h3>
                 </div>
                 <button
                   onClick={() => setShowQueue(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/5"
                   aria-label="닫기"
                 >
                   <ChevronDown size={20} />
                 </button>
               </div>
-              <ul className="flex-1 overflow-y-auto divide-y divide-white/5 px-3 py-2">
+              <ul className="flex-1 overflow-y-auto divide-y divide-line/10 px-3 py-2">
                 {queue.map((t, i) => {
                   const tPlayable = isPlayableUrl(t.audio_url);
                   const isCurrent = i === index;
@@ -448,7 +448,7 @@ export default function Player() {
                         setShowQueue(false);
                       }}
                       className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition ${
-                        isCurrent ? 'bg-accent/15 text-accent' : 'hover:bg-white/5'
+                        isCurrent ? 'bg-accent/15 text-accent' : 'hover:bg-ink/5'
                       } ${!tPlayable ? 'opacity-60' : ''}`}
                     >
                       <div className="w-6 text-right text-xs text-ink-dim">

@@ -1,25 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
+        // RGB triplet CSS 변수 — Tailwind alpha-value 지원
         bg: {
-          DEFAULT: '#0a0a0a',
-          soft: '#121212',
-          card: '#181818',
-          hover: '#1f1f1f',
+          DEFAULT: 'rgb(var(--color-bg) / <alpha-value>)',
+          soft: 'rgb(var(--color-bg-soft) / <alpha-value>)',
+          card: 'rgb(var(--color-surface) / <alpha-value>)',
+          hover: 'rgb(var(--color-surface-soft) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: '#a78bfa',
-          soft: '#7c3aed',
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          soft: 'rgb(var(--color-accent-soft) / <alpha-value>)',
         },
         ink: {
-          DEFAULT: '#f5f5f5',
-          mute: '#a3a3a3',
-          dim: '#737373',
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          mute: 'rgb(var(--color-ink-mute) / <alpha-value>)',
+          dim: 'rgb(var(--color-ink-dim) / <alpha-value>)',
         },
+        line: 'rgb(var(--color-border) / <alpha-value>)',
       },
       fontFamily: {
         sans: [

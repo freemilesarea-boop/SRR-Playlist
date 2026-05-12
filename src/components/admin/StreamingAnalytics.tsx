@@ -79,11 +79,11 @@ export default function StreamingAnalytics() {
       </div>
 
       {/* 곡별 테이블 */}
-      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-ink-dim">
+              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
                 <th className="px-3 py-2.5 text-left font-semibold">곡 제목</th>
                 <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
                 <th className="px-3 py-2.5 text-right font-semibold">재생</th>
@@ -110,7 +110,7 @@ export default function StreamingAnalytics() {
               {rows
                 .filter((r) => r.plays > 0)
                 .map((t) => (
-                  <tr key={t.track_id} className="border-b border-white/5 hover:bg-bg-hover">
+                  <tr key={t.track_id} className="border-b border-line/10 hover:bg-bg-hover">
                     <td className="px-3 py-2.5 text-sm font-medium">{t.title}</td>
                     <td className="px-3 py-2.5 text-xs text-ink-mute">{t.artist ?? '—'}</td>
                     <td className="px-3 py-2.5 text-right text-sm tabular-nums">{Number(t.plays).toLocaleString()}</td>
@@ -135,7 +135,7 @@ export default function StreamingAnalytics() {
 
 function Summary({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-bg-card p-3 ring-1 ring-white/5">
+    <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
       <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
         {icon} {label}
       </div>

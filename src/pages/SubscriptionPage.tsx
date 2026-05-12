@@ -244,7 +244,7 @@ export default function SubscriptionPage() {
                   ? 'bg-gradient-to-br from-accent-soft/40 to-bg-card ring-1 ring-accent/40 shadow-2xl'
                   : isCurrent
                     ? 'bg-bg-card ring-1 ring-accent/60'
-                    : 'bg-bg-card ring-1 ring-white/5'
+                    : 'bg-bg-card ring-1 ring-line/10'
               }`}
             >
               {p.highlight && !isCurrent && (
@@ -258,7 +258,7 @@ export default function SubscriptionPage() {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-ink">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink/10 text-ink">
                   {p.icon}
                 </div>
                 <div>
@@ -279,7 +279,7 @@ export default function SubscriptionPage() {
                 className={`w-full rounded-xl py-3 text-sm font-bold transition active:scale-[0.99] disabled:opacity-50 ${
                   p.highlight && !isCurrent
                     ? 'bg-accent text-black hover:opacity-90'
-                    : 'bg-white/10 text-ink hover:bg-white/15'
+                    : 'bg-ink/10 text-ink hover:bg-ink/15'
                 }`}
               >
                 {isBusy
@@ -296,8 +296,8 @@ export default function SubscriptionPage() {
       </div>
 
       {/* 비교표 */}
-      <section className="overflow-hidden rounded-3xl bg-bg-card ring-1 ring-white/5">
-        <header className="border-b border-white/5 px-5 py-4">
+      <section className="overflow-hidden rounded-3xl bg-bg-card ring-1 ring-line/10">
+        <header className="border-b border-line/10 px-5 py-4">
           <h2 className="text-base font-bold">기능 비교</h2>
           <p className="mt-0.5 text-xs text-ink-mute">한눈에 보세요.</p>
         </header>
@@ -305,7 +305,7 @@ export default function SubscriptionPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-ink-dim">
+              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
                 <th className="px-4 py-3 text-left font-semibold">기능</th>
                 {PLANS.map((p) => (
                   <th
@@ -331,7 +331,7 @@ export default function SubscriptionPage() {
                     </td>
                   </tr>
                   {FEATURES.filter((f) => f.group === g).map((f) => (
-                    <tr key={`${f.group}-${f.label}`} className="border-b border-white/5">
+                    <tr key={`${f.group}-${f.label}`} className="border-b border-line/10">
                       <td className="px-4 py-3 text-ink">{f.label}</td>
                       {PLANS.map((p) => {
                         const v = f.values[p.key];
@@ -365,7 +365,7 @@ export default function SubscriptionPage() {
         </div>
       </section>
 
-      <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-white/5">
+      <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <h3 className="text-sm font-bold">결제 안내</h3>
         <p className="text-xs leading-relaxed text-ink-mute">
           MVP 단계에서는 정기결제 모듈(PayApp) 연동 전이라 구독 신청 → 운영진 확인 → 결제 안내

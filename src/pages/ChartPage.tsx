@@ -211,9 +211,9 @@ export default function ChartPage() {
       )}
 
       {/* 차트 리스트 (4위부터, 또는 트랙이 4개 미만이면 1위부터) */}
-      <section className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
+      <section className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         {/* 데스크탑 헤더 */}
-        <header className="hidden border-b border-white/5 bg-bg-soft/40 px-3 py-2 text-[10px] uppercase tracking-wider text-ink-dim md:flex">
+        <header className="hidden border-b border-line/10 bg-bg-soft/40 px-3 py-2 text-[10px] uppercase tracking-wider text-ink-dim md:flex">
           <span className="w-7 text-right">#</span>
           <span className="ml-3 w-12">커버</span>
           <span className="ml-3 flex-1">곡</span>
@@ -228,7 +228,7 @@ export default function ChartPage() {
           <>
             {/* 트랙 4개 미만이면 fallback 배너를 여기서 표시 */}
             {tracks.length < 4 && isFallback && <FallbackBanner />}
-            <ul className="divide-y divide-white/5">
+            <ul className="divide-y divide-line/10">
               {(tracks.length >= 4 ? tracks.slice(3) : tracks).map((t, i) => {
                 const actualIndex = tracks.length >= 4 ? i + 3 : i;
                 return (
@@ -252,7 +252,7 @@ export default function ChartPage() {
 
 function SkeletonList() {
   return (
-    <ul className="divide-y divide-white/5">
+    <ul className="divide-y divide-line/10">
       {Array.from({ length: 10 }).map((_, i) => (
         <li key={i} className="flex animate-pulse items-center gap-3 px-3 py-2.5">
           <div className="h-4 w-6 rounded bg-bg-hover" />
@@ -297,7 +297,7 @@ function FallbackBanner({ standalone = false }: { standalone?: boolean }) {
     );
   }
   return (
-    <div className={`${base} border-b border-white/5 bg-yellow-500/5 px-4 py-2.5`}>
+    <div className={`${base} border-b border-line/10 bg-yellow-500/5 px-4 py-2.5`}>
       {inner}
     </div>
   );

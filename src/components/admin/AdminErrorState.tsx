@@ -43,7 +43,7 @@ function MigrationMissing({ message }: { message: string }) {
               setTimeout(() => setCopied(false), 1500);
             });
           }}
-          className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-bg-hover px-2 py-1 text-[11px] hover:bg-white/10"
+          className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-bg-hover px-2 py-1 text-[11px] hover:bg-ink/10"
         >
           {copied ? <Check size={11} /> : <Copy size={11} />}
           {copied ? '복사됨' : '복사'}
@@ -89,7 +89,7 @@ function PermissionError({ message }: { message: string }) {
 
 function NetworkError({ message }: { message: string }) {
   return (
-    <div className="space-y-2 rounded-2xl bg-bg-card p-6 ring-1 ring-white/10">
+    <div className="space-y-2 rounded-2xl bg-bg-card p-6 ring-1 ring-line/15">
       <div className="flex items-start gap-3">
         <WifiOff size={20} className="mt-0.5 shrink-0 text-ink-mute" />
         <div>
@@ -109,7 +109,7 @@ function NetworkError({ message }: { message: string }) {
 
 function UnknownError({ message }: { message: string }) {
   return (
-    <div className="space-y-2 rounded-2xl bg-bg-card p-6 ring-1 ring-white/10">
+    <div className="space-y-2 rounded-2xl bg-bg-card p-6 ring-1 ring-line/15">
       <div className="flex items-start gap-3">
         <AlertTriangle size={20} className="mt-0.5 shrink-0 text-yellow-300" />
         <div>

@@ -23,7 +23,7 @@ export default function ChartRow({
   return (
     <button
       onClick={onPlay}
-      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/5 ${
+      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-ink/5 ${
         isCurrent ? 'bg-accent/10' : ''
       } ${!playable ? 'opacity-60' : ''}`}
     >
@@ -35,7 +35,7 @@ export default function ChartRow({
       </div>
 
       {/* 커버 */}
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-white/5">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
         <AutoCover
           title={track.title}
           category={track.genre}

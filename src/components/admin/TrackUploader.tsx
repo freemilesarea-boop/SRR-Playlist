@@ -185,7 +185,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
           type="file"
           accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac"
           onChange={(e) => pickAudio(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-white/10"
+          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10"
         />
         {audioFile && (
           <span className="text-[11px] text-ink-dim">
@@ -200,7 +200,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
           type="file"
           accept="image/*"
           onChange={(e) => pickCover(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-white/10"
+          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10"
         />
         {coverFile && (
           <span className="text-[11px] text-ink-dim">

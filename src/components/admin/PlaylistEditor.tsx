@@ -211,13 +211,13 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
       {picker && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center">
           <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-bg-soft sm:rounded-2xl">
-            <div className="flex items-center justify-between border-b border-white/5 p-4">
+            <div className="flex items-center justify-between border-b border-line/10 p-4">
               <h3 className="text-sm font-semibold">트랙 선택</h3>
               <button onClick={() => setPicker(false)} aria-label="닫기">
                 <X size={18} />
               </button>
             </div>
-            <ul className="max-h-[60vh] divide-y divide-white/5 overflow-y-auto">
+            <ul className="max-h-[60vh] divide-y divide-line/10 overflow-y-auto">
               {candidates.map((t) => (
                 <li
                   key={t.id}
@@ -260,7 +260,7 @@ function SortableTrack({ track, onRemove }: { track: TrackRow; onRemove: () => v
     <li
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 border-b border-white/5 p-3 last:border-b-0"
+      className="flex items-center gap-3 border-b border-line/10 p-3 last:border-b-0"
     >
       <button
         {...attributes}

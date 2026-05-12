@@ -47,14 +47,14 @@ export default function MemberDetail({
       onClick={onClose}
     >
       <div
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-white/10 sm:rounded-3xl animate-slide-up"
+        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-bg-soft/95 px-5 py-3 backdrop-blur">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-soft/95 px-5 py-3 backdrop-blur">
           <h2 className="text-base font-bold">회원 상세</h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/5"
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5"
           >
             <X size={16} />
           </button>
@@ -204,14 +204,14 @@ function ListSection({
       <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
         {icon} {title}
       </h4>
-      <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-white/5">{children}</div>
+      <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">{children}</div>
     </section>
   );
 }
 
 function Row({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-white/5 px-3 py-2 text-sm first:border-t-0">
+    <div className="flex items-center justify-between gap-3 border-t border-line/10 px-3 py-2 text-sm first:border-t-0">
       {children}
     </div>
   );

@@ -121,7 +121,7 @@ export default function ContentManagement() {
             </button>
           )}
 
-          <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-bg-card">
+          <ul className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
             {playlists.map((p) => (
               <li key={p.id} className="flex items-center gap-3 p-3 hover:bg-bg-hover">
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-accent-soft/40 to-black">
@@ -143,7 +143,7 @@ export default function ContentManagement() {
                 </div>
                 <button
                   onClick={() => setEditingPlaylistId(p.id)}
-                  className="rounded-md px-3 py-1.5 text-xs hover:bg-white/10"
+                  className="rounded-md px-3 py-1.5 text-xs hover:bg-ink/10"
                 >
                   편집
                 </button>
@@ -180,7 +180,7 @@ export default function ContentManagement() {
             </button>
           )}
 
-          <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-bg-card">
+          <ul className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
             {tracks.map((t) => {
               const playable = t.audio_url && t.audio_url.trim().length > 0;
               return (

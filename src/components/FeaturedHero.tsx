@@ -17,18 +17,19 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
   return (
     <Link
       to={`/playlist/${playlist.id}`}
-      className="group relative block overflow-hidden rounded-3xl ring-1 ring-white/5"
+      className="group relative block overflow-hidden rounded-3xl ring-1 ring-line/10"
     >
-      {/* 백그라운드 그라데이션 (블러된 커버) */}
+      {/* 백그라운드 그라데이션 (블러된 커버) — 라이트 모드에선 옅게 */}
       <div
-        className="absolute inset-0 scale-110 opacity-80 blur-2xl"
+        className="absolute inset-0 scale-110 opacity-60 blur-2xl dark:opacity-80"
         style={gradientStyle(playlist.category || playlist.title)}
       />
-      <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-transparent to-black/60" />
+      {/* hero 내부 텍스트 가독성 보장용 다크 오버레이 (어두운 그라데이션 위에 흰 텍스트) */}
+      <div className="absolute inset-0 bg-gradient-to-br from-black/20 via-black/30 to-black/60" />
 
       <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:gap-6 sm:p-7">
         {/* 작은 커버 */}
-        <div className="aspect-square w-32 shrink-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-[1.03] sm:w-44">
+        <div className="aspect-square w-32 shrink-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-line/15 transition-transform duration-300 group-hover:scale-[1.03] sm:w-44">
           <AutoCover
             title={playlist.title}
             category={playlist.category}
@@ -40,7 +41,7 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
         {/* 텍스트 */}
         <div className="flex flex-1 flex-col gap-2">
           {badge && (
-            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur">
+            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-ink/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur">
               <Sparkles size={10} /> {badge}
             </span>
           )}

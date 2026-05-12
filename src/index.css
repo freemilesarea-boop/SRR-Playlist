@@ -1,3 +1,4 @@
+@import './theme.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,21 +12,20 @@
   }
 
   body {
-    background-color: #0a0a0a;
-    color: #f5f5f5;
+    background-color: rgb(var(--color-bg));
+    color: rgb(var(--color-ink));
     overscroll-behavior-y: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv09', 'cv10', 'cv11', 'ss01';
+    transition: background-color 0.5s ease, color 0.5s ease;
   }
 
-  /* selection 색 */
   ::selection {
-    background: rgba(167, 139, 250, 0.3);
-    color: #fff;
+    background: rgb(var(--color-accent) / 0.3);
+    color: rgb(var(--color-ink));
   }
 
-  /* iOS safe area */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -39,7 +39,7 @@
     @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold tracking-tight transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-accent text-black hover:opacity-90;
+    @apply btn bg-accent text-bg hover:opacity-90;
   }
   .btn-ghost {
     @apply btn bg-bg-card text-ink hover:bg-bg-hover;
@@ -50,13 +50,12 @@
   .card {
     @apply rounded-2xl bg-bg-card transition hover:bg-bg-hover;
   }
-  /* 글래스 카드 */
   .glass {
-    @apply bg-bg-card/70 backdrop-blur-xl ring-1 ring-white/10;
+    @apply bg-bg-card/80 backdrop-blur-xl;
   }
 }
 
-/* range input — seekbar */
+/* range input */
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -65,7 +64,7 @@ input[type='range'] {
 }
 input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(var(--color-ink) / 0.15);
   border-radius: 9999px;
 }
 input[type='range']::-webkit-slider-thumb {
@@ -74,9 +73,9 @@ input[type='range']::-webkit-slider-thumb {
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: #fff;
+  background: rgb(var(--color-ink));
   margin-top: -5px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   transition: transform 0.15s;
 }
 input[type='range']:hover::-webkit-slider-thumb {
@@ -84,39 +83,29 @@ input[type='range']:hover::-webkit-slider-thumb {
 }
 input[type='range']::-moz-range-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(var(--color-ink) / 0.15);
   border-radius: 9999px;
 }
 input[type='range']::-moz-range-thumb {
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: #fff;
+  background: rgb(var(--color-ink));
   border: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 /* hide scrollbar utility */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* 보이는 스크롤바 (데스크탑) */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--color-ink) / 0.08);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--color-ink) / 0.16);
 }

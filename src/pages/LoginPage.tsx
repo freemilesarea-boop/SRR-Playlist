@@ -102,9 +102,9 @@ export default function LoginPage() {
         </form>
 
         <div className="relative flex items-center gap-3 text-xs text-ink-dim">
-          <div className="h-px flex-1 bg-white/10" />
+          <div className="h-px flex-1 bg-ink/10" />
           <span>또는</span>
-          <div className="h-px flex-1 bg-white/10" />
+          <div className="h-px flex-1 bg-ink/10" />
         </div>
 
         <button

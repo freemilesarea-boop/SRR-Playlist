@@ -179,7 +179,7 @@ export default function BusinessPage() {
 
       {/* CTA — 매장 모드 시작 카드 */}
       {featured && (
-        <section className="relative overflow-hidden rounded-3xl ring-1 ring-white/10">
+        <section className="relative overflow-hidden rounded-3xl ring-1 ring-line/15">
           {/* 배경 그라데이션 */}
           <div
             className="absolute inset-0 opacity-90"
@@ -198,7 +198,7 @@ export default function BusinessPage() {
             </div>
 
             <div className="flex items-end gap-4">
-              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-white/15 sm:w-24">
+              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-line/20 sm:w-24">
                 <AutoCover
                   title={featured.title}
                   category={featured.category}
@@ -240,7 +240,7 @@ export default function BusinessPage() {
                 className={`rounded-2xl px-4 py-4 text-sm font-semibold backdrop-blur ring-1 transition ${
                   businessMode
                     ? 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/40'
-                    : 'bg-white/10 text-white/80 ring-white/20 hover:bg-white/15'
+                    : 'bg-ink/10 text-white/80 ring-white/20 hover:bg-ink/15'
                 }`}
               >
                 {businessMode ? '모드 ON' : '모드 OFF'}
@@ -360,7 +360,7 @@ function Stat({
   return (
     <div
       className={`rounded-2xl bg-bg-card/80 p-3 ring-1 ${
-        accent ? 'ring-accent/30 bg-accent/10' : 'ring-white/5'
+        accent ? 'ring-accent/30 bg-accent/10' : 'ring-line/10'
       }`}
     >
       <p className="text-[10px] font-medium uppercase tracking-wider text-ink-dim">{label}</p>
@@ -419,7 +419,7 @@ function Notice({
       ? 'ring-yellow-500/30 bg-yellow-500/5'
       : tone === 'accent'
         ? 'ring-accent/30 bg-accent/5'
-        : 'ring-white/10 bg-bg-card';
+        : 'ring-line/15 bg-bg-card';
   return (
     <div className={`flex items-start gap-2 rounded-2xl p-3 text-xs ring-1 ${ring}`}>
       <span className="mt-0.5 shrink-0">{icon}</span>
@@ -430,7 +430,7 @@ function Notice({
       {actionLabel && onAction && (
         <button
           onClick={onAction}
-          className="shrink-0 rounded-md bg-bg-hover px-2.5 py-1 text-[11px] hover:bg-white/10"
+          className="shrink-0 rounded-md bg-bg-hover px-2.5 py-1 text-[11px] hover:bg-ink/10"
         >
           {actionLabel}
         </button>

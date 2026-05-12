@@ -137,11 +137,11 @@ export default function MembersList() {
       </div>
 
       {/* 테이블 */}
-      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-ink-dim">
+              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
                 <th className="px-3 py-2.5 text-left font-semibold">회원</th>
                 <th className="px-3 py-2.5 text-left font-semibold">권한</th>
                 <th className="px-3 py-2.5 text-left font-semibold">플랜</th>
@@ -169,7 +169,7 @@ export default function MembersList() {
               {rows.map((m) => (
                 <tr
                   key={m.id}
-                  className="cursor-pointer border-b border-white/5 hover:bg-bg-hover"
+                  className="cursor-pointer border-b border-line/10 hover:bg-bg-hover"
                   onClick={() => setDetailId(m.id)}
                 >
                   <td className="px-3 py-2.5">

@@ -67,8 +67,8 @@ export default function HomeChartSection() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
-        <ul className="divide-y divide-white/5">
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+        <ul className="divide-y divide-line/10">
           {tracks.map((t, i) => (
             <li key={t.track_id}>
               <ChartRow

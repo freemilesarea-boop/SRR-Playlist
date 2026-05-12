@@ -5,6 +5,7 @@ import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
+import { useThemeStore } from '@/store/themeStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
@@ -66,8 +67,20 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const init = useAuthStore((s) => s.init);
+  const initTheme = useThemeStore((s) => s.init);
+  const refreshTimeSlot = useThemeStore((s) => s.refreshTimeSlot);
   const businessMode = useBusinessStore((s) => s.businessMode);
   const playing = usePlayerStore((s) => s.playing);
+
+  useEffect(() => {
+    initTheme();
+  }, [initTheme]);
+
+  // 1분마다 KST 시간대 체크 (자정/06시/12시/18시/21시 경계 통과 시 자동 전환)
+  useEffect(() => {
+    const id = window.setInterval(refreshTimeSlot, 60_000);
+    return () => window.clearInterval(id);
+  }, [refreshTimeSlot]);
 
   useEffect(() => {
     void init();

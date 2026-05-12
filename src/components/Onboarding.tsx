@@ -63,7 +63,7 @@ export default function Onboarding() {
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-md overflow-hidden rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-white/10 sm:rounded-3xl animate-slide-up">
+      <div className="relative w-full max-w-md overflow-hidden rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl animate-slide-up">
         {/* 그라데이션 배경 */}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-accent/20 via-transparent to-transparent" />
 
@@ -73,7 +73,7 @@ export default function Onboarding() {
           </p>
           <button
             onClick={close}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-mute hover:bg-white/5 hover:text-ink"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-mute hover:bg-ink/5 hover:text-ink"
             aria-label="닫기"
           >
             <X size={16} />
@@ -197,12 +197,12 @@ function ModeOption({
       className={`flex w-full items-center gap-3 rounded-2xl p-4 text-left transition ${
         accent
           ? 'bg-gradient-to-br from-accent-soft/30 to-bg-card ring-1 ring-accent/30 hover:from-accent-soft/40'
-          : 'bg-bg-card ring-1 ring-white/5 hover:bg-bg-hover'
+          : 'bg-bg-card ring-1 ring-line/10 hover:bg-bg-hover'
       }`}
     >
       <div
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-          accent ? 'bg-accent text-black' : 'bg-white/10 text-ink'
+          accent ? 'bg-accent text-black' : 'bg-ink/10 text-ink'
         }`}
       >
         {icon}

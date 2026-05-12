@@ -190,7 +190,7 @@ function RequestTable({
   onChange: (id: string, next: Status) => void;
 }) {
   return (
-    <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-bg-card">
+    <ul className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
       {rows.map((r) => (
         <li key={r.id} className="space-y-2 p-3 sm:flex sm:items-center sm:gap-3 sm:space-y-0">
           <div className="min-w-0 flex-1 space-y-0.5">
@@ -223,7 +223,7 @@ function RequestTable({
                   key={s}
                   onClick={() => onChange(r.id, s)}
                   disabled={updatingId === r.id}
-                  className="rounded-md bg-bg-hover px-2 py-1 text-[11px] hover:bg-white/10 disabled:opacity-50"
+                  className="rounded-md bg-bg-hover px-2 py-1 text-[11px] hover:bg-ink/10 disabled:opacity-50"
                 >
                   {STATUS_LABEL[s]}
                 </button>

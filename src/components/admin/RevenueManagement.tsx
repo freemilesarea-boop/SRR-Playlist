@@ -91,14 +91,14 @@ export default function RevenueManagement() {
       </div>
 
       {/* 최근 결제 */}
-      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
-        <header className="border-b border-white/5 px-4 py-3">
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+        <header className="border-b border-line/10 px-4 py-3">
           <h3 className="text-sm font-bold">최근 결제 ({data.recent.length})</h3>
         </header>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-ink-dim">
+              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
                 <th className="px-3 py-2.5 text-left">회원</th>
                 <th className="px-3 py-2.5 text-left">플랜</th>
                 <th className="px-3 py-2.5 text-right">금액</th>
@@ -116,7 +116,7 @@ export default function RevenueManagement() {
                 </tr>
               ) : (
                 data.recent.map((r) => (
-                  <tr key={r.id} className="border-b border-white/5">
+                  <tr key={r.id} className="border-b border-line/10">
                     <td className="px-3 py-2.5">
                       <p className="font-medium">{r.nickname || '—'}</p>
                       <p className="text-xs text-ink-mute">{r.email ?? '—'}</p>
@@ -176,7 +176,7 @@ function Card({
       className={`rounded-2xl p-3 ring-1 ${
         highlight
           ? 'bg-gradient-to-br from-accent-soft/30 to-bg-card ring-accent/30'
-          : 'bg-bg-card ring-white/5'
+          : 'bg-bg-card ring-line/10'
       }`}
     >
       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
@@ -189,8 +189,8 @@ function Card({
 
 function BreakdownCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-white/5">
-      <header className="border-b border-white/5 px-4 py-2.5">
+    <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+      <header className="border-b border-line/10 px-4 py-2.5">
         <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">{title}</h3>
       </header>
       <div>{children}</div>
@@ -200,7 +200,7 @@ function BreakdownCard({ title, children }: { title: string; children: React.Rea
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-t border-white/5 px-4 py-2.5 text-sm first:border-t-0">
+    <div className="flex items-center justify-between border-t border-line/10 px-4 py-2.5 text-sm first:border-t-0">
       <span className="text-ink-mute">{label}</span>
       <span className="font-bold tabular-nums">{value}</span>
     </div>
@@ -262,14 +262,14 @@ function AddModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-white/10 sm:rounded-3xl animate-slide-up"
+        className="relative w-full max-w-md overflow-hidden rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/5 p-4">
+        <div className="flex items-center justify-between border-b border-line/10 p-4">
           <h3 className="flex items-center gap-2 text-base font-bold">
             <Wallet size={16} /> 매출 수동 등록
           </h3>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/5">
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
             <X size={16} />
           </button>
         </div>

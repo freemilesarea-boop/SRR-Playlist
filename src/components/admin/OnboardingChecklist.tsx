@@ -91,7 +91,7 @@ export default function OnboardingChecklist({ tracks, playlists }: Props) {
 
   return (
     <details
-      className="group rounded-2xl bg-bg-card ring-1 ring-white/5"
+      className="group rounded-2xl bg-bg-card ring-1 ring-line/10"
       open={!allDone}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
@@ -112,7 +112,7 @@ export default function OnboardingChecklist({ tracks, playlists }: Props) {
           <span className="hidden text-[11px] text-ink-dim group-open:inline">접기</span>
         </div>
       </summary>
-      <ul className="divide-y divide-white/5 border-t border-white/5">
+      <ul className="divide-y divide-line/10 border-t border-line/10">
         {items.map((item) => (
           <li key={item.key} className="flex items-start gap-3 px-4 py-3">
             {item.done ? (
@@ -132,7 +132,7 @@ export default function OnboardingChecklist({ tracks, playlists }: Props) {
           </li>
         ))}
       </ul>
-      <div className="border-t border-white/5 p-3 text-[11px] text-ink-dim">
+      <div className="border-t border-line/10 p-3 text-[11px] text-ink-dim">
         자세한 절차는 README.md 의 ‘베타 운영’ 섹션을 확인하세요.
         <a
           href="https://supabase.com/dashboard"
