@@ -1,55 +1,84 @@
 import { Link } from 'react-router-dom';
-import { Music, Sparkles } from 'lucide-react';
+import { Sparkles, Play } from 'lucide-react';
 import type { PlaylistRow } from '@/types/db';
+import AutoCover from './AutoCover';
+import { timeSlotLabel } from '@/lib/format';
 
 interface Props {
   playlist: PlaylistRow;
-  /** 재생 가능한 트랙 수 (0이면 배지로 “음원 없음” 표시) */
+  /** 재생 가능한 트랙 수 (0이면 “음원 준비중”) */
   playableCount?: number;
-  /** 트랙 총합 */
   totalCount?: number;
+  /** 카드 크기: sm(가로 스크롤), md(그리드 기본), lg(피처드) */
+  variant?: 'sm' | 'md' | 'lg';
 }
 
-export default function PlaylistCard({ playlist, playableCount, totalCount }: Props) {
+export default function PlaylistCard({
+  playlist,
+  playableCount,
+  totalCount,
+  variant = 'md',
+}: Props) {
   const showCount = typeof totalCount === 'number';
   const noAudio = showCount && (playableCount ?? 0) === 0;
+  const coverSize = variant === 'lg' ? 'xl' : variant === 'sm' ? 'md' : 'lg';
 
   return (
     <Link to={`/playlist/${playlist.id}`} className="group block">
-      <div className="card overflow-hidden p-3">
-        <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-gradient-to-br from-accent-soft/60 via-bg-hover to-black">
-          {playlist.thumbnail_url ? (
-            <img
-              src={playlist.thumbnail_url}
-              alt={playlist.title}
-              loading="lazy"
-              className="h-full w-full object-cover transition group-hover:scale-105"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-ink-mute">
-              <Music size={32} />
-            </div>
-          )}
+      <div className="space-y-2.5">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-white/5 transition-transform duration-200 group-hover:scale-[1.02] group-hover:shadow-2xl">
+          <AutoCover
+            title={playlist.title}
+            category={playlist.category}
+            imageUrl={playlist.thumbnail_url}
+            size={coverSize}
+          />
 
+          {/* hover 시 재생 아이콘 */}
+          <div className="pointer-events-none absolute right-2 bottom-2 flex h-9 w-9 translate-y-2 items-center justify-center rounded-full bg-accent text-black opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+            <Play size={14} fill="currentColor" />
+          </div>
+
+          {/* 재생가능 배지 */}
           {showCount && (
-            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium backdrop-blur">
+            <div
+              className={`absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur-md ${
+                noAudio
+                  ? 'bg-yellow-500/30 text-yellow-50 ring-1 ring-yellow-300/40'
+                  : 'bg-black/40 text-white'
+              }`}
+            >
               {noAudio ? (
                 <>
-                  <Sparkles size={10} className="text-yellow-300" />
-                  <span className="text-yellow-200">음원 준비중</span>
+                  <Sparkles size={10} />
+                  <span>음원 준비중</span>
                 </>
               ) : (
-                <span className="text-ink">
-                  {playableCount}/{totalCount} 재생가능
+                <span>
+                  {playableCount}/{totalCount}곡
                 </span>
               )}
             </div>
           )}
+
+          {/* 시간대 태그 */}
+          {playlist.time_slot && (
+            <div className="absolute right-2 top-2 rounded-full bg-black/40 px-2 py-0.5 text-[10px] text-white backdrop-blur-md">
+              {timeSlotLabel(playlist.time_slot)}
+            </div>
+          )}
         </div>
-        <div className="mt-3 space-y-1">
-          <h3 className="line-clamp-1 text-sm font-semibold">{playlist.title}</h3>
-          {playlist.description && (
-            <p className="line-clamp-2 text-xs text-ink-mute">{playlist.description}</p>
+        <div className="space-y-0.5 px-0.5">
+          <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">
+            {playlist.title}
+          </h3>
+          {playlist.description && variant !== 'sm' && (
+            <p className="line-clamp-2 text-xs leading-relaxed text-ink-mute">
+              {playlist.description}
+            </p>
+          )}
+          {variant === 'sm' && (
+            <p className="line-clamp-1 text-xs text-ink-mute">{playlist.category}</p>
           )}
         </div>
       </div>

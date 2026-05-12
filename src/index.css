@@ -14,6 +14,15 @@
     background-color: #0a0a0a;
     color: #f5f5f5;
     overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv09', 'cv10', 'cv11', 'ss01';
+  }
+
+  /* selection 색 */
+  ::selection {
+    background: rgba(167, 139, 250, 0.3);
+    color: #fff;
   }
 
   /* iOS safe area */
@@ -27,10 +36,10 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold tracking-tight transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-accent text-black hover:bg-accent/90;
+    @apply btn bg-accent text-black hover:opacity-90;
   }
   .btn-ghost {
     @apply btn bg-bg-card text-ink hover:bg-bg-hover;
@@ -41,9 +50,13 @@
   .card {
     @apply rounded-2xl bg-bg-card transition hover:bg-bg-hover;
   }
+  /* 글래스 카드 */
+  .glass {
+    @apply bg-bg-card/70 backdrop-blur-xl ring-1 ring-white/10;
+  }
 }
 
-/* range input - seekbar */
+/* range input — seekbar */
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -51,35 +64,36 @@ input[type='range'] {
   width: 100%;
 }
 input[type='range']::-webkit-slider-runnable-track {
-  height: 3px;
-  background: #333;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 12px;
-  width: 12px;
+  height: 14px;
+  width: 14px;
   border-radius: 9999px;
-  background: #f5f5f5;
-  margin-top: -4.5px;
+  background: #fff;
+  margin-top: -5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   transition: transform 0.15s;
 }
 input[type='range']:hover::-webkit-slider-thumb {
   transform: scale(1.2);
-  background: #a78bfa;
 }
 input[type='range']::-moz-range-track {
-  height: 3px;
-  background: #333;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 input[type='range']::-moz-range-thumb {
-  height: 12px;
-  width: 12px;
+  height: 14px;
+  width: 14px;
   border-radius: 9999px;
-  background: #f5f5f5;
+  background: #fff;
   border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 /* hide scrollbar utility */
@@ -89,4 +103,20 @@ input[type='range']::-moz-range-thumb {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* 보이는 스크롤바 (데스크탑) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
 }

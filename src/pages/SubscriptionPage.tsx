@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Check, ArrowLeft, X, Mail, CreditCard, Clock } from 'lucide-react';
+import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
@@ -10,9 +9,108 @@ import type { SubscriptionType } from '@/types/db';
 interface PendingRequest {
   id: string;
   requested_plan: SubscriptionType;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: 'pending' | 'contacted' | 'approved' | 'rejected' | 'cancelled';
   created_at: string;
 }
+
+interface PlanCfg {
+  key: SubscriptionType;
+  name: string;
+  tagline: string;
+  price: number;
+  cta: string;
+  highlight?: boolean;
+  icon: React.ReactNode;
+}
+
+const PLANS: PlanCfg[] = [
+  {
+    key: 'free',
+    name: '무료',
+    tagline: '가볍게 시작',
+    price: 0,
+    cta: '무료로 시작',
+    icon: <Music size={18} />,
+  },
+  {
+    key: 'personal',
+    name: '일반',
+    tagline: '내 일상에',
+    price: 4900,
+    cta: '광고 없이 감성 음악 듣기',
+    icon: <Sparkles size={18} />,
+  },
+  {
+    key: 'business',
+    name: '사업자',
+    tagline: '매장에서 그대로',
+    price: 6900,
+    cta: '우리 매장 음악 자동 운영하기',
+    highlight: true,
+    icon: <Store size={18} />,
+  },
+];
+
+interface FeatureRow {
+  group: string;
+  label: string;
+  values: Record<SubscriptionType, boolean | string>;
+}
+
+const FEATURES: FeatureRow[] = [
+  // 음악 감상
+  {
+    group: '음악 감상',
+    label: '플레이리스트 감상',
+    values: { free: '일부', personal: '무제한', business: '무제한' },
+  },
+  {
+    group: '음악 감상',
+    label: '광고 없음',
+    values: { free: false, personal: true, business: true },
+  },
+  {
+    group: '음악 감상',
+    label: '좋아요 / 보관함',
+    values: { free: false, personal: true, business: true },
+  },
+  {
+    group: '음악 감상',
+    label: '프리미엄 감성 플리',
+    values: { free: false, personal: true, business: true },
+  },
+  // 매장 운영
+  {
+    group: '매장 운영',
+    label: '매장 모드 (셔플 + 무한반복)',
+    values: { free: false, personal: false, business: true },
+  },
+  {
+    group: '매장 운영',
+    label: '화면 꺼짐 방지 (WakeLock)',
+    values: { free: false, personal: false, business: true },
+  },
+  {
+    group: '매장 운영',
+    label: '시간대 자동 추천',
+    values: { free: false, personal: false, business: true },
+  },
+  {
+    group: '매장 운영',
+    label: '업종별 추천 (카페·PT·필라테스 등)',
+    values: { free: false, personal: false, business: true },
+  },
+  {
+    group: '매장 운영',
+    label: '장시간 재생 최적화',
+    values: { free: false, personal: false, business: true },
+  },
+  {
+    group: '매장 운영',
+    label: '직원 공유 (예정)',
+    values: { free: false, personal: false, business: '예정' },
+  },
+];
 
 export default function SubscriptionPage() {
   const { profile, user, refreshProfile } = useAuthStore();
@@ -39,10 +137,8 @@ export default function SubscriptionPage() {
   }, [user?.id]);
 
   async function requestPlan(plan: SubscriptionType) {
-    if (!user) return;
-    if (plan === current) return;
+    if (!user || plan === current) return;
     if (plan === 'free') {
-      // 무료 다운그레이드는 즉시
       setBusy(plan);
       const { error } = await supabase
         .from('users')
@@ -89,6 +185,9 @@ export default function SubscriptionPage() {
     toast.info('신청이 취소됐어요.');
   }
 
+  // 그룹별로 features 묶기
+  const groups = Array.from(new Set(FEATURES.map((f) => f.group)));
+
   return (
     <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
       <header className="flex items-center gap-3">
@@ -100,20 +199,19 @@ export default function SubscriptionPage() {
           <ArrowLeft size={18} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">구독</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">구독</h1>
           <p className="text-xs text-ink-mute">필요한 만큼만, 가볍게.</p>
         </div>
       </header>
 
       {pending && (
         <div className="space-y-2 rounded-2xl bg-accent/10 p-4 ring-1 ring-accent/30">
-          <div className="flex items-center gap-2 text-sm font-medium text-accent">
+          <div className="flex items-center gap-2 text-sm font-bold text-accent">
             <Clock size={14} />
             {pending.requested_plan === 'business' ? '사업자' : '일반'} 플랜 신청 대기 중
           </div>
           <p className="text-xs leading-relaxed text-ink-mute">
-            운영자가 확인 후 결제 안내를 이메일/카카오톡으로 전달드려요.
-            평균 1영업일 이내 처리됩니다.
+            운영자가 확인 후 결제 안내를 이메일/카카오톡으로 전달드려요. 평균 1영업일 이내.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <a
@@ -121,14 +219,6 @@ export default function SubscriptionPage() {
               className="inline-flex items-center gap-1 rounded-md bg-bg-card px-3 py-1.5 text-xs hover:bg-bg-hover"
             >
               <Mail size={12} /> 이메일 문의
-            </a>
-            <a
-              href="https://pf.kakao.com/_xxxxx"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-md bg-yellow-400/90 px-3 py-1.5 text-xs text-black hover:bg-yellow-300"
-            >
-              💬 카카오톡 채널
             </a>
             <button
               onClick={cancelPending}
@@ -140,77 +230,143 @@ export default function SubscriptionPage() {
         </div>
       )}
 
+      {/* 플랜 카드 (요약) */}
       <div className="grid gap-3 md:grid-cols-3">
-        {SUBSCRIPTION_PLANS.map((p) => {
+        {PLANS.map((p) => {
           const isCurrent = current === p.key;
           const isPending = pending?.requested_plan === p.key;
           const isBusy = busy === p.key;
           return (
             <div
               key={p.key}
-              className={`relative space-y-3 rounded-2xl p-5 transition ${
-                isCurrent
-                  ? 'bg-gradient-to-br from-accent-soft/40 to-bg-card ring-1 ring-accent/60'
-                  : 'bg-bg-card'
+              className={`relative space-y-3 rounded-3xl p-5 transition ${
+                p.highlight
+                  ? 'bg-gradient-to-br from-accent-soft/40 to-bg-card ring-1 ring-accent/40 shadow-2xl'
+                  : isCurrent
+                    ? 'bg-bg-card ring-1 ring-accent/60'
+                    : 'bg-bg-card ring-1 ring-white/5'
               }`}
             >
-              {isCurrent && (
-                <div className="absolute right-3 top-3 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-black">
-                  현재 플랜
+              {p.highlight && !isCurrent && (
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold text-black shadow-lg">
+                  추천
                 </div>
               )}
-              <div className="space-y-1">
-                <p className="text-[11px] uppercase tracking-wider text-ink-dim">
-                  {p.tagline}
-                </p>
-                <h2 className="text-lg font-bold">{p.name}</h2>
-                <p className="text-2xl font-extrabold tracking-tight">
-                  {p.price === 0 ? '0원' : `${p.price.toLocaleString()}원`}
-                  <span className="ml-1 text-xs font-normal text-ink-mute">/월</span>
-                </p>
+              {isCurrent && (
+                <div className="absolute right-3 top-3 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-black">
+                  이용 중
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-ink">
+                  {p.icon}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                    {p.tagline}
+                  </p>
+                  <h2 className="text-lg font-bold leading-tight">{p.name}</h2>
+                </div>
               </div>
-              <ul className="space-y-1.5 text-xs">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2">
-                    <Check size={13} className="mt-0.5 shrink-0 text-accent" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-                {p.excluded.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-ink-dim">
-                    <X size={13} className="mt-0.5 shrink-0" />
-                    <span className="line-through">{f}</span>
-                  </li>
-                ))}
-              </ul>
+              <p className="text-3xl font-black tracking-tight">
+                {p.price === 0 ? '0원' : `${p.price.toLocaleString()}원`}
+                <span className="ml-1 text-xs font-medium text-ink-mute">/월</span>
+              </p>
+
               <button
                 onClick={() => requestPlan(p.key)}
                 disabled={isCurrent || isBusy || isPending}
-                className={isCurrent ? 'btn-ghost w-full' : 'btn-primary w-full'}
+                className={`w-full rounded-xl py-3 text-sm font-bold transition active:scale-[0.99] disabled:opacity-50 ${
+                  p.highlight && !isCurrent
+                    ? 'bg-accent text-black hover:opacity-90'
+                    : 'bg-white/10 text-ink hover:bg-white/15'
+                }`}
               >
-                {isBusy ? (
-                  '처리 중…'
-                ) : isCurrent ? (
-                  '이용 중'
-                ) : isPending ? (
-                  <>
-                    <Clock size={14} /> 신청 대기 중
-                  </>
-                ) : p.key === 'free' ? (
-                  '무료로 변경'
-                ) : (
-                  <>
-                    <CreditCard size={14} /> 구독 신청하기
-                  </>
-                )}
+                {isBusy
+                  ? '처리 중…'
+                  : isCurrent
+                    ? '이용 중'
+                    : isPending
+                      ? '신청 대기 중'
+                      : p.cta}
               </button>
             </div>
           );
         })}
       </div>
 
-      <div className="space-y-2 rounded-2xl bg-bg-card p-4">
-        <h3 className="text-sm font-semibold">결제 안내</h3>
+      {/* 비교표 */}
+      <section className="overflow-hidden rounded-3xl bg-bg-card ring-1 ring-white/5">
+        <header className="border-b border-white/5 px-5 py-4">
+          <h2 className="text-base font-bold">기능 비교</h2>
+          <p className="mt-0.5 text-xs text-ink-mute">한눈에 보세요.</p>
+        </header>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-ink-dim">
+                <th className="px-4 py-3 text-left font-semibold">기능</th>
+                {PLANS.map((p) => (
+                  <th
+                    key={p.key}
+                    className={`px-3 py-3 text-center font-semibold ${
+                      p.highlight ? 'text-accent' : ''
+                    }`}
+                  >
+                    {p.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <>
+                  <tr key={`g-${g}`} className="bg-bg-soft/40">
+                    <td
+                      colSpan={4}
+                      className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-mute"
+                    >
+                      {g}
+                    </td>
+                  </tr>
+                  {FEATURES.filter((f) => f.group === g).map((f) => (
+                    <tr key={`${f.group}-${f.label}`} className="border-b border-white/5">
+                      <td className="px-4 py-3 text-ink">{f.label}</td>
+                      {PLANS.map((p) => {
+                        const v = f.values[p.key];
+                        return (
+                          <td key={p.key} className="px-3 py-3 text-center">
+                            {v === true && (
+                              <Check
+                                size={16}
+                                className={`mx-auto ${p.highlight ? 'text-accent' : 'text-emerald-400'}`}
+                              />
+                            )}
+                            {v === false && <X size={16} className="mx-auto text-ink-dim" />}
+                            {typeof v === 'string' && (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  p.highlight ? 'text-accent' : 'text-ink'
+                                }`}
+                              >
+                                {v}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-white/5">
+        <h3 className="text-sm font-bold">결제 안내</h3>
         <p className="text-xs leading-relaxed text-ink-mute">
           MVP 단계에서는 정기결제 모듈(PayApp) 연동 전이라 구독 신청 → 운영진 확인 → 결제 안내
           순서로 진행해요. 신청은 언제든 취소할 수 있어요.

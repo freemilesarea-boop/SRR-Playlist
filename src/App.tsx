@@ -7,6 +7,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
+import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
 
 // 홈/로그인은 즉시 로드, 나머지는 라우트 단위로 코드 스플리팅
@@ -79,6 +80,7 @@ export default function App() {
   return (
     <>
       <Toaster />
+      <Onboarding />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

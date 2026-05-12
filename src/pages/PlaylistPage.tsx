@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Play, Shuffle, Music, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Heart, Play, Shuffle, AlertCircle, CheckCircle2, Music } from 'lucide-react';
 import { fetchPlaylist, fetchPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
+import { gradientStyle } from '@/lib/cover';
+import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
@@ -90,46 +92,58 @@ export default function PlaylistPage() {
   return (
     <div className="pb-8">
       {/* Hero */}
-      <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-accent-soft/40 via-bg-soft to-black sm:aspect-[2/1]">
-        {playlist.thumbnail_url ? (
-          <img
-            src={playlist.thumbnail_url}
-            alt={playlist.title}
-            className="h-full w-full object-cover opacity-70"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-ink-mute">
-            <Music size={64} />
+      <div className="relative overflow-hidden">
+        <div
+          className="absolute inset-0 scale-110 opacity-90 blur-3xl"
+          style={gradientStyle(playlist.category || playlist.title)}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-bg/60 to-bg" />
+
+        <div className="relative flex flex-col gap-5 p-5 pt-12 sm:flex-row sm:items-end sm:gap-6 sm:p-7 sm:pt-16">
+          <Link
+            to="/"
+            className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 backdrop-blur"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+
+          <div className="aspect-square w-40 shrink-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10 sm:w-52">
+            <AutoCover
+              title={playlist.title}
+              category={playlist.category}
+              imageUrl={playlist.thumbnail_url}
+              size="xl"
+            />
           </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/60 to-transparent" />
-        <Link
-          to="/"
-          className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 backdrop-blur"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="absolute inset-x-0 bottom-0 space-y-2 p-5">
-          <p className="text-xs text-ink-mute">{playlist.category}</p>
-          <h1 className="text-2xl font-bold sm:text-3xl">{playlist.title}</h1>
-          {playlist.description && (
-            <p className="text-sm text-ink-mute line-clamp-2">{playlist.description}</p>
-          )}
-          {totalCount > 0 && (
-            <p className="flex items-center gap-1 text-xs text-ink-mute">
-              {hasAnyPlayable ? (
-                <>
-                  <CheckCircle2 size={12} className="text-emerald-400" />
-                  {playableCount}/{totalCount}곡 재생 가능
-                </>
-              ) : (
-                <>
-                  <AlertCircle size={12} className="text-yellow-300" />
-                  음원 준비 중 (0/{totalCount}곡)
-                </>
-              )}
+
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+              {playlist.category}
             </p>
-          )}
+            <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-4xl">
+              {playlist.title}
+            </h1>
+            {playlist.description && (
+              <p className="max-w-xl text-sm leading-relaxed text-white/80">
+                {playlist.description}
+              </p>
+            )}
+            {totalCount > 0 && (
+              <p className="flex items-center gap-1 text-xs text-white/70">
+                {hasAnyPlayable ? (
+                  <>
+                    <CheckCircle2 size={12} className="text-emerald-300" />
+                    {playableCount}/{totalCount}곡 재생 가능
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={12} className="text-yellow-300" />
+                    음원 준비 중 (0/{totalCount}곡)
+                  </>
+                )}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

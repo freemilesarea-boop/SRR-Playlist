@@ -9,14 +9,16 @@ import {
   Repeat1,
   Volume2,
   VolumeX,
-  Music,
   ChevronUp,
   ChevronDown,
+  ListMusic,
   AlertCircle,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
+import { gradientStyle } from '@/lib/cover';
+import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
 
 export default function Player() {
@@ -36,6 +38,7 @@ export default function Player() {
     toggle,
     next,
     prev,
+    jumpTo,
     setShuffle,
     setRepeat,
     setVolume,
@@ -46,36 +49,32 @@ export default function Player() {
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
   const [expanded, setExpanded] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
 
-  // 모두 재생 불가일 때 무한 next() 루프 방지
   const skipChainRef = useRef(0);
   useEffect(() => {
     if (playable) skipChainRef.current = 0;
   }, [current?.id, playable]);
 
-  // 새 트랙으로 바뀌면 에러 상태 리셋
   useEffect(() => {
     setErrored(false);
   }, [current?.id]);
 
-  // play/pause 동기화 — 재생 불가 트랙은 자동으로 다음 곡으로
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !current) return;
 
     if (!playable) {
-      // 재생 불가 트랙: 한 번만 안내 후 자동 스킵 시도
       if (playing) {
         skipChainRef.current += 1;
         if (skipChainRef.current >= queue.length) {
-          // 큐 전체가 재생 불가 — 멈추고 안내
           pause();
           toast.error('재생 가능한 음원이 없어요. 관리자 페이지에서 음원을 업로드해주세요.');
           skipChainRef.current = 0;
           return;
         }
-        toast.info(`샘플 음원이 없어 다음 곡으로 넘어갑니다: ${current.title}`);
+        toast.info(`샘플 음원 없음 — 다음 곡으로 넘어갑니다`);
         const t = window.setTimeout(() => next(), 600);
         return () => window.clearTimeout(t);
       }
@@ -86,7 +85,6 @@ export default function Player() {
       const p = audio.play();
       if (p && typeof p.catch === 'function') {
         p.catch((err: DOMException) => {
-          // NotAllowedError = 자동재생 차단 (사용자 제스처 필요)
           if (err?.name === 'NotAllowedError') {
             pause();
             toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
@@ -103,7 +101,6 @@ export default function Player() {
     }
   }, [playing, current?.id, playable, queue.length, next, pause, current]);
 
-  // Reset time when track changes
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -112,12 +109,10 @@ export default function Player() {
     setDuration(0);
   }, [current?.id, setCurrentTime, setDuration]);
 
-  // Volume sync
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  // Media Session API (백그라운드 컨트롤) — 일부 브라우저는 미지원
   useEffect(() => {
     if (!('mediaSession' in navigator) || !current) return;
     try {
@@ -160,7 +155,7 @@ export default function Player() {
     next();
   }
   function onError() {
-    if (!playable) return; // 이미 처리
+    if (!playable) return;
     setErrored(true);
     pause();
     toast.error('재생 중 오류가 발생했어요. 다음 곡으로 넘어갑니다.');
@@ -169,10 +164,17 @@ export default function Player() {
   function cycleRepeat() {
     setRepeat(repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off');
   }
+  function handlePlayBtn() {
+    if (!playable) {
+      toast.info('이 트랙은 음원이 등록되지 않았어요.');
+      next();
+      return;
+    }
+    toggle();
+  }
 
   return (
     <>
-      {/* 재생 가능한 URL 일 때만 audio element 마운트 */}
       {playable && (
         <audio
           ref={audioRef}
@@ -190,37 +192,36 @@ export default function Player() {
       <div className="fixed inset-x-0 bottom-14 z-20 mx-auto max-w-3xl px-2 pb-1 sm:bottom-16">
         <button
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center gap-3 rounded-xl bg-bg-card/95 p-2.5 shadow-2xl backdrop-blur-xl ring-1 ring-white/5"
+          className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-bg-card/90 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition hover:bg-bg-card"
         >
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-hover">
-            {current.cover_url ? (
-              <img src={current.cover_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-ink-dim">
-                <Music size={14} />
-              </div>
-            )}
+          {/* 미세한 그라데이션 배경 */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={gradientStyle(playlist?.category || current.title)}
+          />
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-white/10">
+            <AutoCover
+              title={current.title}
+              category={playlist?.category}
+              imageUrl={current.cover_url}
+              size="sm"
+            />
           </div>
-          <div className="min-w-0 flex-1 text-left">
-            <p className="flex items-center gap-1 truncate text-sm font-medium">
+          <div className="relative min-w-0 flex-1 text-left">
+            <p className="flex items-center gap-1 truncate text-sm font-semibold">
               {!playable && <AlertCircle size={11} className="shrink-0 text-yellow-300" />}
               {current.title}
             </p>
             <p className="truncate text-xs text-ink-mute">
-              {!playable ? '샘플 음원 없음' : (current.artist ?? '—')}
+              {!playable ? '음원 준비중' : (current.artist ?? '—')}
             </p>
           </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (!playable) {
-                toast.info('이 트랙은 음원이 등록되지 않았어요.');
-                next();
-                return;
-              }
-              toggle();
+              handlePlayBtn();
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-black disabled:opacity-50"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:scale-105 disabled:opacity-50"
             aria-label={playing ? '일시정지' : '재생'}
             disabled={errored}
           >
@@ -231,15 +232,15 @@ export default function Player() {
               e.stopPropagation();
               next();
             }}
-            className="hidden h-9 w-9 items-center justify-center text-ink-mute hover:text-ink sm:flex"
+            className="relative hidden h-10 w-10 items-center justify-center text-ink-mute hover:text-ink sm:flex"
             aria-label="다음 곡"
           >
             <SkipForward size={18} />
           </button>
-          <ChevronUp size={18} className="mr-1 text-ink-dim sm:hidden" />
+          <ChevronUp size={18} className="relative mr-1 text-ink-dim sm:hidden" />
         </button>
-        {/* Tiny progress under mini player */}
-        <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-white/10">
+        {/* 진행 바 */}
+        <div className="mx-2 mt-1 h-0.5 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full bg-accent transition-[width] duration-200"
             style={{
@@ -252,42 +253,57 @@ export default function Player() {
       {/* Expanded player overlay */}
       {expanded && (
         <div className="fixed inset-0 z-40 flex flex-col bg-bg pt-safe pb-safe animate-slide-up">
-          <div className="flex items-center justify-between px-5 py-3">
+          {/* 백그라운드 그라데이션 */}
+          <div
+            className="pointer-events-none absolute inset-0 scale-110 opacity-60 blur-3xl"
+            style={gradientStyle(playlist?.category || current.title)}
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-bg/40 to-bg" />
+
+          <div className="relative flex items-center justify-between px-5 py-3">
             <button
               onClick={() => setExpanded(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 backdrop-blur"
               aria-label="닫기"
             >
               <ChevronDown size={20} />
             </button>
-            <div className="text-center text-xs text-ink-mute">
+            <div className="text-center text-[11px] uppercase tracking-wider text-white/60">
               {playlist?.title ?? '재생 중'}
             </div>
-            <div className="w-9" />
+            <button
+              onClick={() => setShowQueue(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 backdrop-blur"
+              aria-label="대기열"
+            >
+              <ListMusic size={18} />
+            </button>
           </div>
 
-          <div className="flex flex-1 flex-col items-center justify-center gap-6 px-8">
-            <div className="aspect-square w-full max-w-xs overflow-hidden rounded-2xl bg-bg-card shadow-2xl">
-              {current.cover_url ? (
-                <img src={current.cover_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-ink-dim">
-                  <Music size={48} />
-                </div>
-              )}
+          <div className="relative flex flex-1 flex-col items-center justify-center gap-6 px-8">
+            {/* 큰 커버 */}
+            <div className="aspect-square w-full max-w-xs overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10">
+              <AutoCover
+                title={current.title}
+                category={playlist?.category}
+                imageUrl={current.cover_url}
+                size="xl"
+              />
             </div>
 
             <div className="w-full max-w-xs text-center">
-              <h2 className="text-xl font-bold">{current.title}</h2>
-              <p className="mt-1 text-sm text-ink-mute">{current.artist ?? '—'}</p>
+              <h2 className="text-2xl font-extrabold tracking-tight text-white">
+                {current.title}
+              </h2>
+              <p className="mt-1 text-sm text-white/70">{current.artist ?? '—'}</p>
               {!playable && (
-                <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] text-yellow-200">
-                  <AlertCircle size={11} /> 샘플 음원 없음 — 관리자 페이지에서 업로드하세요
+                <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
+                  <AlertCircle size={11} /> 음원 준비중 — 관리자 페이지에서 업로드
                 </p>
               )}
             </div>
 
-            <div className="w-full max-w-xs space-y-2">
+            <div className="w-full max-w-xs space-y-1.5">
               <input
                 type="range"
                 min={0}
@@ -298,55 +314,48 @@ export default function Player() {
                 aria-label="재생 위치"
                 disabled={!playable || !duration}
               />
-              <div className="flex justify-between text-[11px] text-ink-mute">
+              <div className="flex justify-between text-[11px] text-white/60">
                 <span>{formatTime(currentTime)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-6">
               <button
                 onClick={() => setShuffle(!shuffle)}
-                className={`p-2 ${shuffle ? 'text-accent' : 'text-ink-mute'}`}
+                className={`p-2 transition ${shuffle ? 'text-accent' : 'text-white/60 hover:text-white'}`}
                 aria-label="셔플"
               >
                 <Shuffle size={20} />
               </button>
-              <button onClick={prev} className="p-2 text-ink" aria-label="이전 곡">
-                <SkipBack size={26} fill="currentColor" />
+              <button onClick={prev} className="p-2 text-white" aria-label="이전 곡">
+                <SkipBack size={28} fill="currentColor" />
               </button>
               <button
-                onClick={() => {
-                  if (!playable) {
-                    toast.info('이 트랙은 음원이 등록되지 않았어요.');
-                    next();
-                    return;
-                  }
-                  toggle();
-                }}
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-black disabled:opacity-50"
+                onClick={handlePlayBtn}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-2xl transition hover:scale-105 disabled:opacity-50"
                 aria-label={playing ? '일시정지' : '재생'}
                 disabled={errored}
               >
                 {playing ? (
-                  <Pause size={22} fill="currentColor" />
+                  <Pause size={26} fill="currentColor" />
                 ) : (
-                  <Play size={22} fill="currentColor" />
+                  <Play size={26} fill="currentColor" className="ml-0.5" />
                 )}
               </button>
-              <button onClick={next} className="p-2 text-ink" aria-label="다음 곡">
-                <SkipForward size={26} fill="currentColor" />
+              <button onClick={next} className="p-2 text-white" aria-label="다음 곡">
+                <SkipForward size={28} fill="currentColor" />
               </button>
               <button
                 onClick={cycleRepeat}
-                className={`p-2 ${repeat !== 'off' ? 'text-accent' : 'text-ink-mute'}`}
+                className={`p-2 transition ${repeat !== 'off' ? 'text-accent' : 'text-white/60 hover:text-white'}`}
                 aria-label="반복"
               >
                 {repeat === 'one' ? <Repeat1 size={20} /> : <Repeat size={20} />}
               </button>
             </div>
 
-            <div className="flex w-full max-w-xs items-center gap-2 text-ink-mute">
+            <div className="flex w-full max-w-xs items-center gap-2 text-white/60">
               <button onClick={() => setVolume(volume > 0 ? 0 : 1)} aria-label="음소거">
                 {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
@@ -361,6 +370,69 @@ export default function Player() {
               />
             </div>
           </div>
+
+          {/* Queue drawer */}
+          {showQueue && (
+            <div className="absolute inset-0 z-10 flex flex-col bg-bg/95 backdrop-blur-2xl pt-safe pb-safe animate-slide-up">
+              <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-white/60">재생 중</p>
+                  <h3 className="text-base font-semibold">{playlist?.title ?? '대기열'}</h3>
+                </div>
+                <button
+                  onClick={() => setShowQueue(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5"
+                  aria-label="닫기"
+                >
+                  <ChevronDown size={20} />
+                </button>
+              </div>
+              <ul className="flex-1 overflow-y-auto divide-y divide-white/5 px-3 py-2">
+                {queue.map((t, i) => {
+                  const tPlayable = isPlayableUrl(t.audio_url);
+                  const isCurrent = i === index;
+                  return (
+                    <li
+                      key={t.id}
+                      onClick={() => {
+                        jumpTo(i);
+                        setShowQueue(false);
+                      }}
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition ${
+                        isCurrent ? 'bg-accent/15 text-accent' : 'hover:bg-white/5'
+                      } ${!tPlayable ? 'opacity-60' : ''}`}
+                    >
+                      <div className="w-6 text-right text-xs text-ink-dim">
+                        {isCurrent ? (
+                          <span className="text-accent">♪</span>
+                        ) : (
+                          i + 1
+                        )}
+                      </div>
+                      <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md">
+                        <AutoCover
+                          title={t.title}
+                          category={playlist?.category}
+                          imageUrl={t.cover_url}
+                          size="sm"
+                          showInitial={false}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{t.title}</p>
+                        <p className="truncate text-xs text-ink-mute">
+                          {!tPlayable ? '음원 준비중' : (t.artist ?? '—')}
+                        </p>
+                      </div>
+                      {t.duration && (
+                        <span className="text-xs text-ink-dim">{formatTime(t.duration)}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </>
