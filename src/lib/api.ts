@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { applyDemoMode } from './demoMode';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 
 export interface PlaylistWithCount extends PlaylistRow {
@@ -28,10 +29,38 @@ export async function fetchPlaylistTracks(playlistId: string): Promise<TrackRow[
     .eq('playlist_id', playlistId)
     .order('order_index', { ascending: true });
   if (error) throw error;
-  // supabase returns embedded record; flatten
-  return ((data ?? []) as unknown as Array<{ order_index: number; tracks: TrackRow }>)
+  const tracks = ((data ?? []) as unknown as Array<{ order_index: number; tracks: TrackRow }>)
     .map((row) => row.tracks)
     .filter(Boolean);
+  return applyDemoMode(tracks);
+}
+
+/** 플레이리스트별 (총 트랙 수, 재생 가능한 트랙 수) 를 한 번에 가져옵니다. */
+export async function fetchPlaylistCounts(): Promise<
+  Map<string, { total: number; playable: number }>
+> {
+  const { data, error } = await supabase
+    .from('playlist_tracks')
+    .select('playlist_id, tracks(audio_url)');
+  if (error) throw error;
+
+  const map = new Map<string, { total: number; playable: number }>();
+  const rows = (data ?? []) as unknown as Array<{
+    playlist_id: string;
+    tracks: { audio_url: string | null } | null;
+  }>;
+  // 데모 모드가 켜져 있으면 빈 audio_url 도 재생 가능으로 카운트
+  const enrichedTracks = applyDemoMode(
+    rows.map((r) => ({ audio_url: r.tracks?.audio_url ?? '' })),
+  );
+  rows.forEach((r, i) => {
+    const url = enrichedTracks[i]?.audio_url?.trim() ?? '';
+    const entry = map.get(r.playlist_id) ?? { total: 0, playable: 0 };
+    entry.total += 1;
+    if (url.length > 0) entry.playable += 1;
+    map.set(r.playlist_id, entry);
+  });
+  return map;
 }
 
 export async function fetchTracks(): Promise<TrackRow[]> {

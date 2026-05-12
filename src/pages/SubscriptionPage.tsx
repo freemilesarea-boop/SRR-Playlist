@@ -111,15 +111,24 @@ export default function SubscriptionPage() {
             <Clock size={14} />
             {pending.requested_plan === 'business' ? '사업자' : '일반'} 플랜 신청 대기 중
           </div>
-          <p className="text-xs text-ink-mute">
-            결제 안내가 준비되면 이메일/카카오톡으로 전달드려요. 평균 1영업일 소요.
+          <p className="text-xs leading-relaxed text-ink-mute">
+            운영자가 확인 후 결제 안내를 이메일/카카오톡으로 전달드려요.
+            평균 1영업일 이내 처리됩니다.
           </p>
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <a
               href="mailto:hello@srr-playlist.app?subject=스르륵 플리 구독 문의"
               className="inline-flex items-center gap-1 rounded-md bg-bg-card px-3 py-1.5 text-xs hover:bg-bg-hover"
             >
-              <Mail size={12} /> 운영진에 문의
+              <Mail size={12} /> 이메일 문의
+            </a>
+            <a
+              href="https://pf.kakao.com/_xxxxx"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md bg-yellow-400/90 px-3 py-1.5 text-xs text-black hover:bg-yellow-300"
+            >
+              💬 카카오톡 채널
             </a>
             <button
               onClick={cancelPending}

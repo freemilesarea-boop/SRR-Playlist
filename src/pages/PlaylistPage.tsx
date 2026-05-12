@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Play, Shuffle, Music } from 'lucide-react';
+import { ArrowLeft, Heart, Play, Shuffle, Music, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { fetchPlaylist, fetchPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
+import { isPlayableTrack, countPlayable } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id);
@@ -41,14 +42,28 @@ export default function PlaylistPage() {
     };
   }, [id, user]);
 
+  const playableCount = useMemo(() => countPlayable(tracks), [tracks]);
+  const hasAnyPlayable = playableCount > 0;
+  const totalCount = tracks.length;
+
   function handlePlay(startIndex = 0, shuffle = false) {
     if (!playlist) return;
     if (tracks.length === 0) {
       toast.info('이 플레이리스트에는 아직 곡이 없어요.');
       return;
     }
+    if (!hasAnyPlayable) {
+      toast.info('아직 재생할 수 있는 음원이 없어요. 관리자 페이지에서 업로드해주세요.');
+      return;
+    }
+    // 재생 가능한 첫 트랙으로 진입 보정
+    let resolvedStart = startIndex;
+    if (!isPlayableTrack(tracks[resolvedStart])) {
+      const nextPlayable = tracks.findIndex(isPlayableTrack);
+      if (nextPlayable >= 0) resolvedStart = nextPlayable;
+    }
     setShuffle(shuffle);
-    setQueue(tracks, startIndex, playlist);
+    setQueue(tracks, resolvedStart, playlist);
     if (user) void logRecentPlay(user.id, playlist.id).catch(() => {});
   }
 
@@ -69,6 +84,8 @@ export default function PlaylistPage() {
   if (!playlist) {
     return <div className="p-6 text-ink-mute">플레이리스트를 찾을 수 없어요.</div>;
   }
+
+  const isAdmin = profile?.role === 'admin';
 
   return (
     <div className="pb-8">
@@ -98,23 +115,63 @@ export default function PlaylistPage() {
           {playlist.description && (
             <p className="text-sm text-ink-mute line-clamp-2">{playlist.description}</p>
           )}
+          {totalCount > 0 && (
+            <p className="flex items-center gap-1 text-xs text-ink-mute">
+              {hasAnyPlayable ? (
+                <>
+                  <CheckCircle2 size={12} className="text-emerald-400" />
+                  {playableCount}/{totalCount}곡 재생 가능
+                </>
+              ) : (
+                <>
+                  <AlertCircle size={12} className="text-yellow-300" />
+                  음원 준비 중 (0/{totalCount}곡)
+                </>
+              )}
+            </p>
+          )}
         </div>
       </div>
+
+      {/* No-audio banner */}
+      {totalCount > 0 && !hasAnyPlayable && (
+        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl bg-yellow-500/10 p-3 text-xs ring-1 ring-yellow-500/30 sm:mx-6">
+          <AlertCircle size={14} className="mt-0.5 shrink-0 text-yellow-300" />
+          <div className="flex-1 leading-relaxed text-ink-mute">
+            <p className="text-yellow-200">아직 재생할 수 있는 음원이 없어요</p>
+            <p className="mt-0.5">
+              {isAdmin
+                ? '관리자 페이지 → 트랙 업로드 후 이 플레이리스트에 연결하면 바로 재생할 수 있어요.'
+                : '운영자가 음원을 업로드하면 재생됩니다. 잠시만 기다려주세요.'}
+            </p>
+          </div>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="shrink-0 rounded-md bg-bg-card px-2.5 py-1 text-[11px] hover:bg-bg-hover"
+            >
+              관리자 →
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="sticky top-0 z-10 flex items-center gap-3 bg-bg/90 px-4 py-3 backdrop-blur sm:px-6">
         <button
           onClick={() => handlePlay(0, false)}
-          disabled={tracks.length === 0}
+          disabled={!hasAnyPlayable}
           className="btn-primary px-5 py-2.5"
+          title={!hasAnyPlayable ? '재생 가능한 음원이 없어요' : '재생'}
         >
           <Play size={16} fill="currentColor" /> 재생
         </button>
         <button
           onClick={() => handlePlay(0, true)}
-          disabled={tracks.length === 0}
+          disabled={!hasAnyPlayable}
           className="btn-ghost px-3 py-2.5"
           aria-label="셔플 재생"
+          title={!hasAnyPlayable ? '재생 가능한 음원이 없어요' : '셔플 재생'}
         >
           <Shuffle size={16} />
         </button>
@@ -136,14 +193,14 @@ export default function PlaylistPage() {
         )}
         {tracks.map((t, idx) => {
           const isCurrent = currentTrackId === t.id && currentPlaylistId === playlist.id;
-          const noAudio = !t.audio_url || t.audio_url.trim() === '';
+          const playable = isPlayableTrack(t);
           return (
             <li
               key={t.id}
               onClick={() => handlePlay(idx, false)}
               className={`flex cursor-pointer items-center gap-3 py-3 transition hover:bg-white/5 ${
                 isCurrent ? 'text-accent' : ''
-              } ${noAudio ? 'opacity-60' : ''}`}
+              } ${!playable ? 'opacity-60' : ''}`}
             >
               <div className="w-6 text-right text-xs text-ink-dim">
                 {isCurrent && playing ? <span className="text-accent">♪</span> : idx + 1}
@@ -158,9 +215,12 @@ export default function PlaylistPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{t.title}</p>
+                <p className="flex items-center gap-1 truncate text-sm font-medium">
+                  {!playable && <AlertCircle size={10} className="shrink-0 text-yellow-300" />}
+                  {t.title}
+                </p>
                 <p className="truncate text-xs text-ink-mute">
-                  {noAudio ? '샘플 음원 없음' : (t.artist ?? '—')}
+                  {!playable ? '샘플 음원 없음' : (t.artist ?? '—')}
                 </p>
               </div>
               <div className="text-xs text-ink-dim">{t.duration ? formatTime(t.duration) : ''}</div>

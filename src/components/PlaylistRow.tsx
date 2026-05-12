@@ -6,9 +6,10 @@ interface Props {
   subtitle?: string;
   playlists: PlaylistRowType[];
   emptyText?: string;
+  counts?: Map<string, { total: number; playable: number }>;
 }
 
-export default function PlaylistRow({ title, subtitle, playlists, emptyText }: Props) {
+export default function PlaylistRow({ title, subtitle, playlists, emptyText, counts }: Props) {
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between">
@@ -23,11 +24,18 @@ export default function PlaylistRow({ title, subtitle, playlists, emptyText }: P
         </div>
       ) : (
         <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:px-0 md:grid-cols-4">
-          {playlists.map((p) => (
-            <div key={p.id} className="w-40 shrink-0 sm:w-auto">
-              <PlaylistCard playlist={p} />
-            </div>
-          ))}
+          {playlists.map((p) => {
+            const c = counts?.get(p.id);
+            return (
+              <div key={p.id} className="w-40 shrink-0 sm:w-auto">
+                <PlaylistCard
+                  playlist={p}
+                  playableCount={c?.playable}
+                  totalCount={c?.total}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

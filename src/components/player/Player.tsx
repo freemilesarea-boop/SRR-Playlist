@@ -16,18 +16,8 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
+import { isPlayableUrl } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
-
-function isPlayableUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  if (url.trim().length === 0) return false;
-  try {
-    const u = new URL(url, window.location.origin);
-    return ['http:', 'https:', 'blob:', 'data:'].includes(u.protocol);
-  } catch {
-    return false;
-  }
-}
 
 export default function Player() {
   const audioRef = useRef<HTMLAudioElement>(null);

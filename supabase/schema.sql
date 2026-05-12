@@ -174,7 +174,7 @@ create table if not exists public.subscription_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   requested_plan text not null check (requested_plan in ('personal', 'business')),
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  status text not null default 'pending' check (status in ('pending', 'contacted', 'approved', 'rejected', 'cancelled')),
   note text,
   created_at timestamptz not null default now()
 );
@@ -196,6 +196,47 @@ drop policy if exists "sub_req_admin_update" on public.subscription_requests;
 create policy "sub_req_admin_update" on public.subscription_requests for update using (
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
+
+-- 관리자 페이지에서 신청자의 이메일/닉네임을 함께 조회하기 위한 RPC
+-- (auth.users는 직접 read 불가하므로 security definer 함수로 우회)
+create or replace function public.list_subscription_requests()
+returns table (
+  id uuid,
+  user_id uuid,
+  email text,
+  nickname text,
+  requested_plan text,
+  status text,
+  note text,
+  created_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.users where id = auth.uid() and role = 'admin') then
+    raise exception 'admin only';
+  end if;
+
+  return query
+  select
+    sr.id,
+    sr.user_id,
+    au.email::text,
+    pu.nickname,
+    sr.requested_plan,
+    sr.status,
+    sr.note,
+    sr.created_at
+  from public.subscription_requests sr
+  left join auth.users au on au.id = sr.user_id
+  left join public.users pu on pu.id = sr.user_id
+  order by sr.created_at desc;
+end;
+$$;
+
+grant execute on function public.list_subscription_requests() to authenticated;
 
 -- ============================================
 -- Storage buckets + 정책

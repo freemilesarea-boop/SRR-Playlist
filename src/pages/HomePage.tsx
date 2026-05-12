@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PERSONAL_CATEGORIES } from '@/lib/constants';
-import { fetchPlaylists, fetchRecentPlaylists } from '@/lib/api';
+import { fetchPlaylists, fetchRecentPlaylists, fetchPlaylistCounts } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
@@ -10,6 +10,7 @@ export default function HomePage() {
   const { profile, user } = useAuthStore();
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [recents, setRecents] = useState<PlaylistRow[]>([]);
+  const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,10 +23,12 @@ export default function HomePage() {
         return [];
       }),
       user ? fetchRecentPlaylists(user.id).catch(() => []) : Promise.resolve([]),
-    ]).then(([all, recent]) => {
+      fetchPlaylistCounts().catch(() => new Map()),
+    ]).then(([all, recent, cnt]) => {
       if (!alive) return;
       setPlaylists(all);
       setRecents(recent);
+      setCounts(cnt);
       setLoading(false);
     });
     return () => {
@@ -55,7 +58,11 @@ export default function HomePage() {
       )}
 
       {recents.length > 0 && (
-        <PlaylistRow_ title="최근 들은 플레이리스트" playlists={recents.slice(0, 6)} />
+        <PlaylistRow_
+          title="최근 들은 플레이리스트"
+          playlists={recents.slice(0, 6)}
+          counts={counts}
+        />
       )}
 
       {loading ? (
@@ -69,6 +76,7 @@ export default function HomePage() {
               key={cat.key}
               title={`${cat.emoji} ${cat.key}`}
               playlists={items}
+              counts={counts}
             />
           );
         })

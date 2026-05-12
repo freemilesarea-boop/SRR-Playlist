@@ -200,12 +200,96 @@ public/              favicon · PWA 아이콘
 
 ```bash
 npm install
-npm run lint     # tsc --noEmit
+npm run lint     # tsc --noEmit -p tsconfig.app.json
 npx tsc -b
 npm run build    # tsc -b && vite build (PWA 매니페스트/SW 생성)
+npm run preview  # 로컬에서 production 빌드 확인
 ```
 
 모두 exit 0 이면 OK.
+
+---
+
+## 7-A. 베타 운영 (Phase 3)
+
+### 베타 시연 전 체크리스트
+
+`/admin` 접속 시 상단에 **MVP 운영 체크리스트** 가 자동으로 떠요.
+거기서 실시간 충족 여부를 확인할 수 있어요. 핵심 항목:
+
+| # | 항목 | 어디서 확인 |
+| - | --- | --- |
+| 1 | 환경변수 (URL/anon) | `.env` 또는 Vercel Project Settings |
+| 2 | Storage 버킷 (audio · covers · Public) | Supabase Dashboard → Storage |
+| 3 | 샘플 mp3 3~5개 업로드 | `/admin` → 트랙 |
+| 4 | 커버 이미지 (선택) | 업로드 시 함께 첨부 |
+| 5 | 플리에 트랙 연결 | `/admin` → 플레이리스트 → 편집 |
+| 6 | 사업자 전용 플리 ≥ 1 | 플리 생성 시 ‘사업자 전용’ 체크 |
+| 7 | Vercel 배포 + env | Vercel Dashboard |
+| 8 | 폰에서 PWA 설치 테스트 | 모바일 브라우저 → 홈 화면에 추가 |
+
+### 첫 음원 업로드 순서 (1분 가이드)
+
+1. `/admin` → **트랙** 탭 → **트랙 업로드**
+2. 곡 제목 + mp3 (≤ 50MB) + 커버(선택, ≤ 5MB) → 업로드
+3. 업로드 후 **재생가능** 배지가 뜨면 성공
+4. **플레이리스트** 탭 → 원하는 플리 **편집**
+5. **트랙 추가** → 방금 업로드한 곡 클릭 → 드래그로 순서 정렬
+
+### 첫 플레이리스트 생성 순서
+
+1. `/admin` → **플레이리스트** 탭 → **새 플레이리스트**
+2. 제목 + 카테고리 (예: ‘카페 음악’) 입력
+3. 사업자 전용이면 **사업자 전용** 체크 + 업종(카페 / 와인바 / PT샵 등) 입력
+4. 시간대 추천에 띄우려면 `morning / afternoon / evening / night` 중 선택
+5. 만들기 → 곧바로 편집 화면 → 트랙 추가 + 썸네일 변경
+
+### 사업자 시연 방법
+
+1. **사장님 폰**으로 배포된 URL 접속 → 회원가입(아무 이메일)
+2. 하단 **매장** 탭으로 이동
+3. **매장 모드 시작** 버튼 → 자동으로 셔플 + 무한 반복 재생 시작
+4. 브라우저 메뉴 → **홈 화면에 추가** (앱처럼 실행됨)
+5. 시간대가 바뀌면 추천 카드도 자연스럽게 바뀜
+
+### 구독 신청 확인 방법
+
+1. 사장님이 `/subscription` 에서 **구독 신청하기** 클릭
+2. `subscription_requests` 테이블에 `status='pending'` 으로 저장
+3. 운영자가 `/admin` → **구독 신청** 탭에서 확인
+4. 신청자 이메일 / 플랜 / 신청일 확인 → 상태 변경:
+   - `연락함` — 카카오톡/메일로 결제 안내 발송 후
+   - `승인` — 결제 확인 완료 → users.subscription_type 자동 업데이트
+   - `거절` — 사유와 함께 메일 회신
+5. 사용자 페이지에선 신청 카드가 자동 갱신됨
+
+### 데모 모드 (음원 없이 시연)
+
+저작권 안전을 위해 저장소에 음원 파일을 포함하지 않습니다.
+**직접 권리를 확보한 음원**(예: Creative Commons / Royalty-Free / 본인 작곡)의
+공개 URL을 .env 에 등록하면 빈 트랙 자리에 자동으로 채워져 시연이 가능합니다.
+
+```env
+VITE_ENABLE_DEMO_MODE=true
+VITE_DEMO_AUDIO_URLS=https://your-cdn.com/track1.mp3,https://your-cdn.com/track2.mp3
+```
+
+- 빈 `audio_url` 트랙만 영향받고, 실제 업로드된 트랙은 그대로 재생됨
+- **프로덕션 기본값은 false** — 운영 트래픽에서는 꺼두세요
+- 라이센스 위반 음원 URL을 넣지 마세요
+
+### 자주 터지는 문제와 해결법
+
+| 증상 | 원인 / 해결 |
+| --- | --- |
+| 로그인 직후 무한 로딩 | env 미설정 → ConfigMissingScreen 이 뜨도록 가드되어 있어요. 그래도 안 되면 Supabase URL 오타 확인 |
+| 업로드 후 재생 안 됨 | `audio` 버킷이 **Public** 이 아님 → Storage 설정 변경 |
+| `/admin` 접근 시 ‘권한 필요’ | `users.role = 'admin'` 으로 업데이트 안 됨 → SQL Editor 에서 확인 |
+| Google 로그인 후 redirect 무한 루프 | Authentication → URL Configuration 에 배포 도메인이 빠짐 |
+| 모바일 Safari 에서 재생 버튼 무반응 | 자동재생 정책 — **사용자가 직접 한 번 탭** 해야 시작. 토스트 안내가 자동으로 떠요 |
+| 매장 모드 인데 화면이 꺼짐 | Safari < 16.4 또는 인앱 브라우저 → 시스템 자동잠금을 ‘없음’으로 |
+| 트랙은 있는데 재생 안 되고 자동 스킵 | `audio_url` 이 빈 문자열이거나 잘못된 URL → 관리자 페이지 트랙 탭에서 ‘음원 없음’ 배지 확인 후 재업로드 |
+| 구독 신청 탭에 이메일이 안 보임 | `list_subscription_requests` RPC 가 배포되지 않음 → schema.sql 을 최신본으로 다시 실행 |
 
 ---
 

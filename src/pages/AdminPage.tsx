@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Plus, Music, ListMusic, Upload } from 'lucide-react';
+import { Plus, Music, ListMusic, Upload, CreditCard } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
+import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
+import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
 import { toast } from '@/store/toastStore';
 
-type Tab = 'playlists' | 'tracks';
+type Tab = 'playlists' | 'tracks' | 'subscriptions';
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('playlists');
@@ -104,15 +106,24 @@ export default function AdminPage() {
     <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">관리자</h1>
-        <p className="text-xs text-ink-mute">음원 업로드, 플레이리스트 편성</p>
+        <p className="text-xs text-ink-mute">음원 업로드, 플레이리스트 편성, 구독 신청 관리</p>
       </header>
 
-      <div className="flex gap-2">
+      <OnboardingChecklist tracks={tracks} playlists={playlists} />
+
+      <div className="flex flex-wrap gap-2">
         <TabBtn active={tab === 'playlists'} onClick={() => setTab('playlists')} icon={<ListMusic size={14} />}>
           플레이리스트 ({playlists.length})
         </TabBtn>
         <TabBtn active={tab === 'tracks'} onClick={() => setTab('tracks')} icon={<Music size={14} />}>
           트랙 ({tracks.length})
+        </TabBtn>
+        <TabBtn
+          active={tab === 'subscriptions'}
+          onClick={() => setTab('subscriptions')}
+          icon={<CreditCard size={14} />}
+        >
+          구독 신청
         </TabBtn>
       </div>
 
@@ -189,29 +200,39 @@ export default function AdminPage() {
           )}
 
           <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-bg-card">
-            {tracks.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 p-3 hover:bg-bg-hover">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-hover">
-                  {t.cover_url ? (
-                    <img src={t.cover_url} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-ink-dim">
-                      <Music size={14} />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{t.title}</p>
-                  <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
-                </div>
-                <button
-                  onClick={() => deleteTrack(t.id)}
-                  className="rounded-md px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
-                >
-                  삭제
-                </button>
-              </li>
-            ))}
+            {tracks.map((t) => {
+              const playable = t.audio_url && t.audio_url.trim().length > 0;
+              return (
+                <li key={t.id} className="flex items-center gap-3 p-3 hover:bg-bg-hover">
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-hover">
+                    {t.cover_url ? (
+                      <img src={t.cover_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-ink-dim">
+                        <Music size={14} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{t.title}</p>
+                    <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
+                  </div>
+                  <span
+                    className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${
+                      playable ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'
+                    }`}
+                  >
+                    {playable ? '재생가능' : '음원 없음'}
+                  </span>
+                  <button
+                    onClick={() => deleteTrack(t.id)}
+                    className="rounded-md px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                  >
+                    삭제
+                  </button>
+                </li>
+              );
+            })}
             {tracks.length === 0 && (
               <li className="p-6 text-center text-sm text-ink-mute">
                 업로드된 트랙이 없어요.
@@ -220,6 +241,8 @@ export default function AdminPage() {
           </ul>
         </div>
       )}
+
+      {tab === 'subscriptions' && <SubscriptionRequests />}
     </div>
   );
 }

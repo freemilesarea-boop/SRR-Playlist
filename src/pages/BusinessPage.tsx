@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store, Sparkles, Play, Smartphone, ShieldAlert, Clock } from 'lucide-react';
+import {
+  Store,
+  Sparkles,
+  Play,
+  Smartphone,
+  ShieldAlert,
+  Clock,
+  Radio,
+  AlertCircle,
+} from 'lucide-react';
 import { BUSINESS_CATEGORIES } from '@/lib/constants';
-import { fetchPlaylists, fetchPlaylistTracks, logRecentPlay } from '@/lib/api';
+import { fetchPlaylists, fetchPlaylistTracks, fetchPlaylistCounts, logRecentPlay } from '@/lib/api';
 import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -11,6 +20,7 @@ import PlaylistRow_ from '@/components/PlaylistRow';
 import PlaylistCard from '@/components/PlaylistCard';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { useInstallPrompt, wakeLockSupported, isStandalone } from '@/hooks/useInstallPrompt';
+import { isPlayableTrack } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
 
 const TIME_COPY: Record<string, string> = {
@@ -27,16 +37,22 @@ export default function BusinessPage() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const playing = usePlayerStore((s) => s.playing);
+  const currentPlaylistId = usePlayerStore((s) => s.playlist?.id);
+
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
+  const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const { canInstall, installed, prompt } = useInstallPrompt();
 
   useEffect(() => {
     let alive = true;
-    fetchPlaylists()
-      .then((all) => {
-        if (alive) setPlaylists(all.filter((p) => p.is_business_only));
+    Promise.all([fetchPlaylists(), fetchPlaylistCounts().catch(() => new Map())])
+      .then(([all, cnt]) => {
+        if (!alive) return;
+        setPlaylists(all.filter((p) => p.is_business_only));
+        setCounts(cnt);
       })
       .finally(() => alive && setLoading(false));
     return () => {
@@ -48,20 +64,43 @@ export default function BusinessPage() {
   const slotLabel = timeSlotLabel(slot);
   const slotCopy = TIME_COPY[slot];
 
+  // 재생 가능한 플레이리스트를 우선 정렬
+  function playableOrder(a: PlaylistRow, b: PlaylistRow) {
+    const ca = counts.get(a.id)?.playable ?? 0;
+    const cb = counts.get(b.id)?.playable ?? 0;
+    if (ca === cb) return a.sort_order - b.sort_order;
+    return cb - ca;
+  }
+
   const filtered = useMemo(() => {
-    if (!selectedCategory) return playlists;
-    return playlists.filter(
-      (p) => p.business_category === selectedCategory || p.category === selectedCategory,
-    );
-  }, [playlists, selectedCategory]);
+    const list = selectedCategory
+      ? playlists.filter(
+          (p) => p.business_category === selectedCategory || p.category === selectedCategory,
+        )
+      : playlists;
+    return [...list].sort(playableOrder);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlists, selectedCategory, counts]);
 
   const timeRecommended = useMemo(
     () => filtered.filter((p) => p.time_slot === slot),
     [filtered, slot],
   );
 
-  const featured = timeRecommended[0] ?? filtered[0] ?? null;
+  // featured = 시간대 추천 중 재생 가능한 첫 번째, 없으면 전체 중 재생 가능한 첫 번째
+  const featured = useMemo(() => {
+    const fromTime = timeRecommended.find((p) => (counts.get(p.id)?.playable ?? 0) > 0);
+    if (fromTime) return fromTime;
+    const fromAny = filtered.find((p) => (counts.get(p.id)?.playable ?? 0) > 0);
+    if (fromAny) return fromAny;
+    return timeRecommended[0] ?? filtered[0] ?? null;
+  }, [timeRecommended, filtered, counts]);
+
+  const featuredCount = featured ? counts.get(featured.id) : undefined;
+  const featuredPlayable = (featuredCount?.playable ?? 0) > 0;
+
   const isBusinessPlan = profile?.subscription_type === 'business';
+  const playingNow = businessMode && playing && currentPlaylistId === featured?.id;
 
   async function startMatchedPlaylist(p: PlaylistRow) {
     setStarting(true);
@@ -71,10 +110,17 @@ export default function BusinessPage() {
         toast.info('이 플레이리스트에는 아직 곡이 없어요.');
         return;
       }
+      const playable = tracks.filter(isPlayableTrack);
+      if (playable.length === 0) {
+        toast.error(
+          '재생 가능한 음원이 없어요. 관리자 페이지에서 시연용 mp3 를 업로드해주세요.',
+        );
+        return;
+      }
       setBusinessMode(true);
-      setRepeat('all'); // 매장은 끊김 없이
+      setRepeat('all');
       setShuffle(true);
-      setQueue(tracks, 0, p);
+      setQueue(tracks, tracks.indexOf(playable[0]), p);
       if (user) void logRecentPlay(user.id, p.id).catch(() => {});
       toast.success('매장 모드로 재생을 시작했어요. 오랫동안 안정적으로 흘러갑니다.');
     } catch (e) {
@@ -90,9 +136,18 @@ export default function BusinessPage() {
         <div className="flex items-center gap-2">
           <Store size={22} className="text-accent" />
           <h1 className="text-2xl font-bold sm:text-3xl">사업자 모드</h1>
+          {playingNow && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+              <Radio size={10} className="animate-pulse" /> ON AIR
+            </span>
+          )}
         </div>
-        <p className="text-sm text-ink-mute">
-          매장 분위기에 맞춰 자동으로 흘러가요. 화면이 꺼져도 안정적으로 재생됩니다.
+        <h2 className="text-base font-medium leading-snug text-ink">
+          우리 매장 분위기를 자동으로 운영하세요
+        </h2>
+        <p className="text-sm leading-relaxed text-ink-mute">
+          시간대별 추천으로 음악 고르는 시간을 줄이고, 매장 단말에 띄워두기만 하면
+          끊김 없이 흘러갑니다. 홈 화면에 추가하면 앱처럼 사용할 수 있어요.
         </p>
       </header>
 
@@ -100,17 +155,34 @@ export default function BusinessPage() {
       <section className="rounded-3xl bg-gradient-to-br from-accent-soft/40 via-bg-card to-bg-soft p-5 ring-1 ring-accent/20">
         <div className="flex items-center gap-2 text-xs text-accent">
           <Clock size={12} /> 지금 {slotLabel}
+          {playingNow && (
+            <span className="ml-auto inline-flex items-center gap-1 text-emerald-300">
+              <Radio size={10} className="animate-pulse" /> 재생 중
+            </span>
+          )}
         </div>
         <h2 className="mt-1 text-xl font-bold leading-tight">
           {featured ? featured.title : '추천 플레이리스트 준비 중'}
         </h2>
         <p className="mt-1 text-xs text-ink-mute">{slotCopy}</p>
 
+        {featured && !featuredPlayable && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-2.5 text-[11px] ring-1 ring-yellow-500/30">
+            <AlertCircle size={12} className="mt-0.5 shrink-0 text-yellow-300" />
+            <span className="text-ink-mute">
+              이 플레이리스트는 아직 음원이 없어요.
+              {profile?.role === 'admin'
+                ? ' 관리자 페이지에서 시연용 mp3를 업로드해주세요.'
+                : ' 운영자가 곧 음원을 업로드할 예정이에요.'}
+            </span>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button
             onClick={() => featured && startMatchedPlaylist(featured)}
-            disabled={!featured || starting}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-4 text-base font-bold text-black active:scale-[0.99] disabled:opacity-50"
+            disabled={!featured || starting || !featuredPlayable}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-4 text-base font-bold text-black active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play size={20} fill="currentColor" />
             {starting ? '시작 중…' : '매장 모드 시작'}
@@ -199,9 +271,17 @@ export default function BusinessPage() {
                 <p className="text-xs text-ink-mute">시간대 자동 추천</p>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {timeRecommended.map((p) => (
-                  <PlaylistCard key={p.id} playlist={p} />
-                ))}
+                {timeRecommended.map((p) => {
+                  const c = counts.get(p.id);
+                  return (
+                    <PlaylistCard
+                      key={p.id}
+                      playlist={p}
+                      playableCount={c?.playable}
+                      totalCount={c?.total}
+                    />
+                  );
+                })}
               </div>
             </section>
           )}
@@ -209,6 +289,7 @@ export default function BusinessPage() {
           <PlaylistRow_
             title={selectedCategory ? `${selectedCategory} 추천` : '전체 사업자 플레이리스트'}
             playlists={filtered}
+            counts={counts}
             emptyText="해당 업종의 플레이리스트가 아직 없어요."
           />
         </>
