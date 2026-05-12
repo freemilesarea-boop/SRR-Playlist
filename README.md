@@ -5,6 +5,8 @@
 “음악 자체보다 분위기 / 큐레이션” 에 집중한 1주일 MVP.
 유튜브보다 편하게, 카페·필라테스·와인바에서 ‘틀어두기만 해도 되는’ 경험을 목표로 합니다.
 
+**🚀 처음 배포하세요?** → [**DEPLOY.md**](./DEPLOY.md) 를 위에서 아래로 따라가시면 10~15분 안에 시연 가능합니다.
+
 ## 스택
 
 - **Frontend** — React 18 · Vite · TypeScript · TailwindCSS · Zustand · @dnd-kit
