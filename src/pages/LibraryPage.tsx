@@ -16,6 +16,7 @@ import {
   type LibraryOverview,
 } from '@/lib/libraryApi';
 import { useAuthStore } from '@/store/authStore';
+import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
@@ -63,10 +64,13 @@ export default function LibraryPage() {
     }
   }
 
+  // 좋아요 store 의 ids 가 바뀌면 (= 다른 화면에서 토글 후 진입)
+  // 라이브러리도 다시 로드
+  const likedIds = useLikedTracksStore((s) => s.ids);
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, likedIds]);
 
   const cont = data?.continue ?? null;
   const liked = data?.liked_tracks ?? [];

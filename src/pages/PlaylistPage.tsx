@@ -9,6 +9,7 @@ import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
+import TrackLikeButton from '@/components/TrackLikeButton';
 import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
@@ -237,6 +238,9 @@ export default function PlaylistPage() {
                   {!playable ? '샘플 음원 없음' : (t.artist ?? '—')}
                 </p>
               </div>
+              <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
+                <TrackLikeButton trackId={t.id} track={t} size={14} />
+              </span>
               <div className="text-xs text-ink-dim">{t.duration ? formatTime(t.duration) : ''}</div>
             </li>
           );

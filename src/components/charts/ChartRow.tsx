@@ -1,5 +1,6 @@
 import { Play, AlertCircle } from 'lucide-react';
 import type { ChartTrack } from '@/lib/chartsApi';
+import { chartTrackToTrackRow } from '@/lib/chartsApi';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import AutoCover from '@/components/AutoCover';
@@ -68,8 +69,12 @@ export default function ChartRow({
       </div>
 
       {/* 좋아요 버튼 — 호버 시 진하게 표시, 좋아요한 상태면 항상 표시 */}
-      <span className="shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
-        <TrackLikeButton trackId={track.track_id} size={14} />
+      <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
+        <TrackLikeButton
+          trackId={track.track_id}
+          track={chartTrackToTrackRow(track)}
+          size={14}
+        />
       </span>
 
       {/* 재생 수 (모바일 짧게, 데스크탑 자세히) */}

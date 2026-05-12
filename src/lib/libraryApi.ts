@@ -12,91 +12,223 @@ const RECENT_MAX = 50;
  * 좋아요한 곡
  * ============================================ */
 
-function readLikedLocal(): Set<string> {
+/**
+ * localStorage 좋아요 데이터 — 단순 ID 가 아니라 track snapshot 까지 저장.
+ * 비로그인 사용자도 보관함에서 곡 정보를 정상 표시 가능.
+ */
+interface LikedSnapshot {
+  id: string;
+  title: string;
+  artist: string | null;
+  genre: string | null;
+  mood: string | null;
+  cover_url: string | null;
+  audio_url: string;
+  duration: number | null;
+  liked_at: string;
+}
+
+function readLikedLocal(): LikedSnapshot[] {
   try {
     const raw = localStorage.getItem(LS_LIKED);
-    return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // 구버전 (string[]) 호환
+    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+      return (parsed as string[]).map((id) => ({
+        id,
+        title: '(불러올 수 없음)',
+        artist: null,
+        genre: null,
+        mood: null,
+        cover_url: null,
+        audio_url: '',
+        duration: null,
+        liked_at: new Date().toISOString(),
+      }));
+    }
+    return Array.isArray(parsed) ? (parsed as LikedSnapshot[]) : [];
   } catch {
-    return new Set();
+    return [];
   }
 }
-function writeLikedLocal(s: Set<string>) {
+
+function writeLikedLocal(rows: LikedSnapshot[]) {
   try {
-    localStorage.setItem(LS_LIKED, JSON.stringify([...s]));
+    localStorage.setItem(LS_LIKED, JSON.stringify(rows));
   } catch {
     /* noop */
   }
 }
 
+function trackToSnapshot(t: TrackRow): LikedSnapshot {
+  return {
+    id: t.id,
+    title: t.title,
+    artist: t.artist,
+    genre: t.genre,
+    mood: t.mood,
+    cover_url: t.cover_url,
+    audio_url: t.audio_url,
+    duration: t.duration,
+    liked_at: new Date().toISOString(),
+  };
+}
+
+function snapshotToTrack(s: LikedSnapshot): TrackRow {
+  return {
+    id: s.id,
+    title: s.title,
+    artist: s.artist,
+    genre: s.genre,
+    mood: s.mood,
+    audio_url: s.audio_url,
+    cover_url: s.cover_url,
+    duration: s.duration,
+    created_at: s.liked_at,
+  };
+}
+
+/** 좋아요 ID 집합 — DB + localStorage union */
 export async function fetchLikedTrackIds(userId: string | null): Promise<Set<string>> {
-  if (!userId) return readLikedLocal();
+  const localIds = new Set(readLikedLocal().map((s) => s.id));
+  if (!userId) return localIds;
   try {
     const { data, error } = await supabase
       .from('liked_tracks')
       .select('track_id')
       .eq('user_id', userId);
-    if (error) throw error;
-    return new Set((data ?? []).map((r) => (r as { track_id: string }).track_id));
+    if (error) return localIds; // RLS/마이그레이션 실패 → 로컬만
+    for (const row of data ?? []) localIds.add((row as { track_id: string }).track_id);
+    return localIds;
   } catch {
-    // 테이블 없거나 RLS 실패 — localStorage fallback
-    return readLikedLocal();
+    return localIds;
   }
 }
 
+/** 좋아요한 곡 목록 — DB + localStorage union, snapshot fallback 가능 */
 export async function fetchLikedTracks(userId: string | null): Promise<TrackRow[]> {
+  const local = readLikedLocal();
+  // 비로그인: snapshot 그대로
   if (!userId) {
-    const ids = [...readLikedLocal()];
-    if (ids.length === 0) return [];
-    const { data } = await supabase.from('tracks').select('*').in('id', ids);
-    return applyDemoMode((data ?? []) as TrackRow[]);
+    return applyDemoMode(local.map(snapshotToTrack));
   }
+
+  // 로그인: DB + 로컬 union
+  let dbTracks: TrackRow[] = [];
   try {
     const { data, error } = await supabase
       .from('liked_tracks')
       .select('created_at, tracks(*)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) throw error;
-    const rows = (data ?? []) as unknown as Array<{ created_at: string; tracks: TrackRow }>;
-    return applyDemoMode(rows.map((r) => r.tracks).filter(Boolean));
+    if (!error) {
+      const rows = (data ?? []) as unknown as Array<{ created_at: string; tracks: TrackRow }>;
+      dbTracks = rows.map((r) => r.tracks).filter(Boolean);
+    }
   } catch {
-    return [];
+    /* fall through */
   }
+
+  // DB 가 비어있고 로컬에 있다면 → 로컬 snapshot 사용 (마이그레이션 미적용 케이스)
+  if (dbTracks.length === 0 && local.length > 0) {
+    return applyDemoMode(local.map(snapshotToTrack));
+  }
+
+  // 둘 다 있을 땐 DB 기준 + 로컬에만 있는 것 추가
+  const dbIds = new Set(dbTracks.map((t) => t.id));
+  const onlyLocal = local.filter((s) => !dbIds.has(s.id)).map(snapshotToTrack);
+  return applyDemoMode([...dbTracks, ...onlyLocal]);
 }
 
-export async function likeTrack(trackId: string, userId: string | null): Promise<void> {
-  if (!userId) {
-    const s = readLikedLocal();
-    s.add(trackId);
-    writeLikedLocal(s);
-    return;
-  }
-  try {
-    await supabase.from('liked_tracks').insert({ user_id: userId, track_id: trackId });
-  } catch {
-    const s = readLikedLocal();
-    s.add(trackId);
-    writeLikedLocal(s);
-  }
+/** 동기 isLiked — store 사용을 권장하지만 단발성 체크용 */
+export function isTrackLiked(trackId: string): boolean {
+  return readLikedLocal().some((s) => s.id === trackId);
 }
 
-export async function unlikeTrack(trackId: string, userId: string | null): Promise<void> {
-  if (!userId) {
-    const s = readLikedLocal();
-    s.delete(trackId);
-    writeLikedLocal(s);
-    return;
+/** 결과 객체로 명확히 반환 */
+export interface LikeResult {
+  ok: boolean;
+  source: 'db' | 'local' | 'both';
+  warning?: string;
+}
+
+export async function likeTrack(
+  track: TrackRow | { id: string },
+  userId: string | null,
+): Promise<LikeResult> {
+  const trackId = track.id;
+
+  // localStorage 는 항상 같이 저장 (offline 안전망)
+  const local = readLikedLocal();
+  if (!local.some((s) => s.id === trackId)) {
+    const snap: LikedSnapshot =
+      'title' in track
+        ? trackToSnapshot(track as TrackRow)
+        : {
+            id: trackId,
+            title: '(제목 없음)',
+            artist: null,
+            genre: null,
+            mood: null,
+            cover_url: null,
+            audio_url: '',
+            duration: null,
+            liked_at: new Date().toISOString(),
+          };
+    local.unshift(snap);
+    writeLikedLocal(local.slice(0, 200));
   }
-  try {
-    await supabase
-      .from('liked_tracks')
-      .delete()
-      .match({ user_id: userId, track_id: trackId });
-  } catch {
-    const s = readLikedLocal();
-    s.delete(trackId);
-    writeLikedLocal(s);
+
+  if (!userId) return { ok: true, source: 'local' };
+
+  // Supabase insert — error 를 명시적으로 체크
+  const { error } = await supabase
+    .from('liked_tracks')
+    .insert({ user_id: userId, track_id: trackId });
+  if (error) {
+    // 23505 = unique violation (이미 좋아요) → 정상 처리
+    if (error.code === '23505') return { ok: true, source: 'db' };
+    // 그 외 (테이블 없음 / RLS 거부 등) → 로컬에만 유지
+    return {
+      ok: true,
+      source: 'local',
+      warning: `좋아요 DB 저장 실패 (${error.code ?? '?'}): ${error.message}`,
+    };
   }
+  return { ok: true, source: 'both' };
+}
+
+export async function unlikeTrack(
+  trackId: string,
+  userId: string | null,
+): Promise<LikeResult> {
+  const local = readLikedLocal().filter((s) => s.id !== trackId);
+  writeLikedLocal(local);
+
+  if (!userId) return { ok: true, source: 'local' };
+  const { error } = await supabase
+    .from('liked_tracks')
+    .delete()
+    .match({ user_id: userId, track_id: trackId });
+  if (error) {
+    return {
+      ok: true,
+      source: 'local',
+      warning: `좋아요 DB 삭제 실패: ${error.message}`,
+    };
+  }
+  return { ok: true, source: 'both' };
+}
+
+/** toggle helper */
+export async function toggleTrackLike(
+  track: TrackRow | { id: string },
+  nextLiked: boolean,
+  userId: string | null,
+): Promise<LikeResult> {
+  if (nextLiked) return likeTrack(track, userId);
+  return unlikeTrack(track.id, userId);
 }
 
 /* ============================================
@@ -126,29 +258,25 @@ function writeRecentLocal(rows: LocalRecent[]) {
   }
 }
 
-/** 15초 이상 들었을 때 최근 재생에 push (재생 시작 시점에는 X) */
 export async function pushRecentlyPlayed(
   trackId: string,
   userId: string | null,
   durationSec = 0,
 ): Promise<void> {
   const now = new Date().toISOString();
-  // localStorage 도 항상 업데이트 (로그인/비로그인 모두)
   const arr = readRecentLocal().filter((r) => r.track_id !== trackId);
   arr.unshift({ track_id: trackId, played_at: now, play_duration_sec: durationSec });
   writeRecentLocal(arr);
 
   if (!userId) return;
-  try {
-    await supabase.from('recently_played_tracks').insert({
-      user_id: userId,
-      session_id: getSessionId(),
-      track_id: trackId,
-      play_duration_sec: durationSec,
-    });
-  } catch {
-    /* noop — localStorage 만 유지 */
-  }
+  const { error } = await supabase.from('recently_played_tracks').insert({
+    user_id: userId,
+    session_id: getSessionId(),
+    track_id: trackId,
+    play_duration_sec: durationSec,
+  });
+  // 에러는 무시 (테이블 미적용일 수 있음)
+  void error;
 }
 
 export async function fetchRecentlyPlayedTracks(
@@ -174,10 +302,9 @@ export async function fetchRecentlyPlayedTracks(
       .select('played_at, tracks(*)')
       .eq('user_id', userId)
       .order('played_at', { ascending: false })
-      .limit(limit * 3); // distinct 보정용
+      .limit(limit * 3);
     if (error) throw error;
     const rows = (data ?? []) as unknown as Array<{ played_at: string; tracks: TrackRow }>;
-    // distinct by track id, keep order
     const seen = new Set<string>();
     const out: TrackRow[] = [];
     for (const r of rows) {
@@ -186,14 +313,18 @@ export async function fetchRecentlyPlayedTracks(
       out.push(r.tracks);
       if (out.length >= limit) break;
     }
+    if (out.length === 0) {
+      // DB 비어있으면 로컬 fallback
+      return fetchRecentlyPlayedTracks(null, limit);
+    }
     return applyDemoMode(out);
   } catch {
-    return [];
+    return fetchRecentlyPlayedTracks(null, limit);
   }
 }
 
 /* ============================================
- * 이어듣기 (continue_listening)
+ * 이어듣기
  * ============================================ */
 
 export interface ContinueListening {
@@ -222,7 +353,6 @@ function writeContinueLocal(c: ContinueListening | null) {
 }
 
 let lastSavedAt = 0;
-/** 10초마다만 저장 (throttle) */
 export async function saveContinueListening(
   trackId: string,
   positionSec: number,
@@ -242,20 +372,17 @@ export async function saveContinueListening(
   writeContinueLocal(payload);
 
   if (!userId) return;
-  try {
-    await supabase.from('continue_listening').upsert(
-      {
-        user_id: userId,
-        track_id: trackId,
-        position_sec: Math.floor(positionSec),
-        duration_sec: durationSec,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,track_id' },
-    );
-  } catch {
-    /* noop */
-  }
+  const { error } = await supabase.from('continue_listening').upsert(
+    {
+      user_id: userId,
+      track_id: trackId,
+      position_sec: Math.floor(positionSec),
+      duration_sec: durationSec,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,track_id' },
+  );
+  void error;
 }
 
 export async function clearContinueListening(
@@ -264,14 +391,11 @@ export async function clearContinueListening(
 ): Promise<void> {
   writeContinueLocal(null);
   if (!userId) return;
-  try {
-    await supabase
-      .from('continue_listening')
-      .delete()
-      .match({ user_id: userId, track_id: trackId });
-  } catch {
-    /* noop */
-  }
+  const { error } = await supabase
+    .from('continue_listening')
+    .delete()
+    .match({ user_id: userId, track_id: trackId });
+  void error;
 }
 
 export async function fetchContinueListening(
@@ -292,7 +416,7 @@ export async function fetchContinueListening(
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    if (!data) return null;
+    if (!data) return readContinueLocal();
     const row = data as unknown as ContinueListening & { tracks: TrackRow | null };
     return {
       track_id: row.track_id,
@@ -307,7 +431,7 @@ export async function fetchContinueListening(
 }
 
 /* ============================================
- * 라이브러리 전체 한 번에 + 추천
+ * 라이브러리 한 번에 + 추천
  * ============================================ */
 
 export interface LibraryOverview {
@@ -320,53 +444,32 @@ export interface LibraryOverview {
 export async function fetchLibraryOverview(
   userId: string | null,
 ): Promise<LibraryOverview> {
-  // 비로그인은 RPC 가 빈 결과만 주므로 직접 fetch
-  if (!userId) {
-    const [liked, recent, cont] = await Promise.all([
-      fetchLikedTracks(null),
-      fetchRecentlyPlayedTracks(null, 20),
-      fetchContinueListening(null),
-    ]);
-    return {
-      liked_tracks: liked,
-      recently_played: recent,
-      continue: cont,
-      recommended_playlists: [],
-    };
+  // 항상 RPC + 개별 fetch 결과를 union 해서 가장 풍부한 데이터 반환
+  const [liked, recent, cont] = await Promise.all([
+    fetchLikedTracks(userId),
+    fetchRecentlyPlayedTracks(userId, 20),
+    fetchContinueListening(userId),
+  ]);
+
+  let recommended: PlaylistRow[] = [];
+  if (userId) {
+    try {
+      const { data } = await supabase.rpc('get_library_overview', {
+        limit_recent: 1,
+      });
+      const r = (data ?? {}) as { recommended_playlists?: PlaylistRow[] };
+      recommended = r.recommended_playlists ?? [];
+    } catch {
+      /* noop */
+    }
   }
-  try {
-    const { data, error } = await supabase.rpc('get_library_overview', {
-      limit_recent: 20,
-    });
-    if (error) throw error;
-    const r = (data ?? {}) as {
-      liked_tracks: TrackRow[];
-      recently_played: TrackRow[];
-      continue: ContinueListening | null;
-      recommended_playlists: PlaylistRow[];
-    };
-    return {
-      liked_tracks: applyDemoMode(r.liked_tracks ?? []),
-      recently_played: applyDemoMode(r.recently_played ?? []),
-      continue: r.continue
-        ? { ...r.continue, track: r.continue.track ? applyDemoMode([r.continue.track])[0] : undefined }
-        : null,
-      recommended_playlists: r.recommended_playlists ?? [],
-    };
-  } catch {
-    // fallback — 개별 fetch
-    const [liked, recent, cont] = await Promise.all([
-      fetchLikedTracks(userId),
-      fetchRecentlyPlayedTracks(userId, 20),
-      fetchContinueListening(userId),
-    ]);
-    return {
-      liked_tracks: liked,
-      recently_played: recent,
-      continue: cont,
-      recommended_playlists: [],
-    };
-  }
+
+  return {
+    liked_tracks: liked,
+    recently_played: recent,
+    continue: cont,
+    recommended_playlists: recommended,
+  };
 }
 
 /* ============================================
@@ -374,33 +477,26 @@ export async function fetchLibraryOverview(
  * ============================================ */
 
 export async function mergeLocalToDb(userId: string): Promise<void> {
-  // 좋아요
-  const localLiked = [...readLikedLocal()];
-  if (localLiked.length > 0) {
-    try {
-      const payload = localLiked.map((id) => ({ user_id: userId, track_id: id }));
-      // ignore conflicts via upsert
-      await supabase.from('liked_tracks').upsert(payload, { onConflict: 'user_id,track_id' });
-    } catch {
-      /* noop */
-    }
+  const local = readLikedLocal();
+  if (local.length > 0) {
+    const payload = local.map((s) => ({ user_id: userId, track_id: s.id }));
+    const { error } = await supabase
+      .from('liked_tracks')
+      .upsert(payload, { onConflict: 'user_id,track_id' });
+    void error;
   }
-  // continue
   const cont = readContinueLocal();
   if (cont) {
-    try {
-      await supabase.from('continue_listening').upsert(
-        {
-          user_id: userId,
-          track_id: cont.track_id,
-          position_sec: cont.position_sec,
-          duration_sec: cont.duration_sec ?? null,
-          updated_at: cont.updated_at,
-        },
-        { onConflict: 'user_id,track_id' },
-      );
-    } catch {
-      /* noop */
-    }
+    const { error } = await supabase.from('continue_listening').upsert(
+      {
+        user_id: userId,
+        track_id: cont.track_id,
+        position_sec: cont.position_sec,
+        duration_sec: cont.duration_sec ?? null,
+        updated_at: cont.updated_at,
+      },
+      { onConflict: 'user_id,track_id' },
+    );
+    void error;
   }
 }

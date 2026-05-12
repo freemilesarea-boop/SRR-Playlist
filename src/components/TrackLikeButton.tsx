@@ -2,18 +2,23 @@ import { useEffect, useState } from 'react';
 import { Heart } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
-import { likeTrack, unlikeTrack } from '@/lib/libraryApi';
+import { toggleTrackLike } from '@/lib/libraryApi';
+import { toast } from '@/store/toastStore';
+import type { TrackRow } from '@/types/db';
 
 interface Props {
+  /** 최소: trackId. 가능하면 track 전체 (snapshot 저장용) */
   trackId: string;
+  track?: TrackRow | null;
   size?: number;
   className?: string;
-  /** 부모 onClick 막기 (테이블 행 안에서 사용 시) */
+  /** 부모 onClick 막기 (행 안에서 사용 시) */
   stopPropagation?: boolean;
 }
 
 export default function TrackLikeButton({
   trackId,
+  track,
   size = 16,
   className = '',
   stopPropagation = true,
@@ -22,8 +27,8 @@ export default function TrackLikeButton({
   const { isLiked, set, init } = useLikedTracksStore();
   const liked = isLiked(trackId);
   const [bumping, setBumping] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  // 초기 1회 로드
   useEffect(() => {
     void init(userId);
   }, [userId, init]);
@@ -33,16 +38,30 @@ export default function TrackLikeButton({
       e.preventDefault();
       e.stopPropagation();
     }
+    if (busy) return;
+    setBusy(true);
     const next = !liked;
     set(trackId, next); // optimistic
     setBumping(true);
     setTimeout(() => setBumping(false), 280);
+
     try {
-      if (next) await likeTrack(trackId, userId);
-      else await unlikeTrack(trackId, userId);
+      const target: TrackRow | { id: string } = track ?? { id: trackId };
+      const res = await toggleTrackLike(target, next, userId);
+      if (res.warning) {
+        // DB 실패했지만 localStorage 에 저장됨 — 한 번만 안내
+        toast.info(
+          '좋아요는 보관함에 저장됐어요. (DB 마이그레이션 0005 미적용 — 기기간 동기화는 안 됨)',
+        );
+      } else if (next) {
+        // 너무 시끄럽지 않게 토스트는 첫 좋아요시에만 — 일단 생략
+      }
     } catch {
-      // 롤백
+      // 정말 의외의 에러 — 롤백
       set(trackId, !next);
+      toast.error('좋아요 저장에 실패했어요.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -51,7 +70,7 @@ export default function TrackLikeButton({
       onClick={toggle}
       aria-label={liked ? '좋아요 취소' : '좋아요'}
       title={liked ? '좋아요 취소' : '좋아요'}
-      className={`group/heart inline-flex shrink-0 items-center justify-center rounded-full p-1.5 transition ${
+      className={`inline-flex shrink-0 items-center justify-center rounded-full p-1.5 transition ${
         liked ? 'text-rose-400' : 'text-ink-mute hover:text-ink'
       } ${className}`}
     >

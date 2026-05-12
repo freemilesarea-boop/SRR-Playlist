@@ -386,7 +386,12 @@ export default function Player() {
               <p className="mt-1 text-sm text-white/70">{current.artist ?? '—'}</p>
               <div className="mt-3 flex items-center justify-center gap-2">
                 <span className="rounded-full bg-white/10 ring-1 ring-white/15 backdrop-blur">
-                  <TrackLikeButton trackId={current.id} size={16} stopPropagation={false} />
+                  <TrackLikeButton
+                    trackId={current.id}
+                    track={current}
+                    size={16}
+                    stopPropagation={false}
+                  />
                 </span>
                 {!playable && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">

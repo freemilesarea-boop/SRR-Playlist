@@ -30,6 +30,7 @@ import { useAuthStore } from '@/store/authStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
 import AutoCover from '@/components/AutoCover';
+import TrackLikeButton from '@/components/TrackLikeButton';
 
 export default function SearchPage() {
   const navigate = useNavigate();
@@ -434,6 +435,25 @@ function TrackResultRow({
       {item.play_count != null && Number(item.play_count) > 0 && (
         <span className="shrink-0 text-[11px] text-ink-dim tabular-nums">
           {Number(item.play_count).toLocaleString()}회
+        </span>
+      )}
+      {item.id && (
+        <span className="shrink-0 opacity-70 group-hover:opacity-100">
+          <TrackLikeButton
+            trackId={item.id}
+            track={{
+              id: item.id,
+              title: item.title,
+              artist: item.subtitle,
+              genre: item.genre,
+              mood: item.mood,
+              cover_url: item.image_url,
+              audio_url: item.audio_url ?? '',
+              duration: null,
+              created_at: new Date().toISOString(),
+            }}
+            size={14}
+          />
         </span>
       )}
     </button>
