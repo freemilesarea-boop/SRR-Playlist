@@ -5,6 +5,7 @@ import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import FeaturedHero from '@/components/FeaturedHero';
 import HomeChartSection from '@/components/HomeChartSection';
+import HomeSearchBar from '@/components/HomeSearchBar';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 
 export default function HomePage() {
@@ -107,14 +108,17 @@ export default function HomePage() {
   return (
     <div className="space-y-8 px-4 pb-12 pt-6 sm:space-y-10 sm:px-6 sm:pt-8">
       {/* Greeting */}
-      <header className="space-y-1">
-        <p className="text-xs font-medium tracking-wide text-accent">{slotLabel} · 지금 어울리는 음악</p>
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
-          {greetingPrefix}, {nick}님
-        </h1>
-        <p className="text-sm text-ink-mute">
-          오늘은 어떤 분위기로 흘려볼까요?
-        </p>
+      <header className="space-y-3">
+        <div className="space-y-1">
+          <p className="text-xs font-medium tracking-wide text-accent">{slotLabel} · 지금 어울리는 음악</p>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+            {greetingPrefix}, {nick}님
+          </h1>
+          <p className="text-sm text-ink-mute">
+            오늘은 어떤 분위기로 흘려볼까요?
+          </p>
+        </div>
+        <HomeSearchBar />
       </header>
 
       {error && (

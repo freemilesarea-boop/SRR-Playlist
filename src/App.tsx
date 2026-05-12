@@ -22,6 +22,7 @@ const SubscriptionPage = lazy(() => import('@/pages/SubscriptionPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const ChartPage = lazy(() => import('@/pages/ChartPage'));
+const SearchPage = lazy(() => import('@/pages/SearchPage'));
 
 function RouteFallback() {
   return (
@@ -109,6 +110,7 @@ export default function App() {
           >
             <Route index element={<HomePage />} />
             <Route path="/charts" element={<ChartPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/business" element={<BusinessPage />} />
             <Route path="/library" element={<LibraryPage />} />
