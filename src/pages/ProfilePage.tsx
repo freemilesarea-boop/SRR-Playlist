@@ -24,6 +24,8 @@ export default function ProfilePage() {
   const { mode, resolvedMode, timeSlot, setMode } = useThemeStore();
   const crossfadeSeconds = usePlaybackSettingsStore((s) => s.crossfadeSeconds);
   const setCrossfadeSeconds = usePlaybackSettingsStore((s) => s.setCrossfadeSeconds);
+  const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
+  const setAutoplayRecommendations = usePlaybackSettingsStore((s) => s.setAutoplayRecommendations);
 
   const planLabel =
     profile?.subscription_type === 'business'
@@ -115,6 +117,29 @@ export default function ProfilePage() {
             곡 사이를 자연스럽게 이어줍니다. 매장 모드에서는 5초 크로스페이드를 추천해요.
           </p>
         </div>
+
+        <button
+          onClick={() => setAutoplayRecommendations(!autoplayRecommendations)}
+          className="flex w-full items-center justify-between rounded-2xl bg-bg-card p-3 ring-1 ring-line/10 hover:bg-bg-hover"
+        >
+          <div className="text-left">
+            <p className="text-sm font-semibold">자동 이어추천</p>
+            <p className="mt-0.5 text-[11px] text-ink-mute">
+              큐 끝났을 때 비슷한 분위기의 곡을 자동으로 이어 재생해요.
+            </p>
+          </div>
+          <span
+            className={`relative h-7 w-12 rounded-full transition ${
+              autoplayRecommendations ? 'bg-accent' : 'bg-bg-hover'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
+                autoplayRecommendations ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </span>
+        </button>
       </section>
 
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">

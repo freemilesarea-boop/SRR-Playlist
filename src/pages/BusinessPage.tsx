@@ -21,11 +21,26 @@ import PlaylistCard from '@/components/PlaylistCard';
 import AutoCover from '@/components/AutoCover';
 import BusinessQRSection from '@/components/BusinessQRSection';
 import BusinessScheduler from '@/components/BusinessScheduler';
+import HomeRecommendation from '@/components/HomeRecommendation';
 import { gradientStyle } from '@/lib/cover';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { useInstallPrompt, wakeLockSupported, isStandalone } from '@/hooks/useInstallPrompt';
 import { isPlayableTrack } from '@/lib/audio';
 import { toast } from '@/store/toastStore';
+
+/** 한글 카테고리 → 영문 business_tag */
+const BUSINESS_TAG_MAP: Record<string, string> = {
+  '카페': 'cafe',
+  'PT샵': 'pt',
+  '필라테스': 'pilates',
+  '와인바': 'winebar',
+  '네일샵': 'nailshop',
+  '편집샵': 'boutique',
+};
+function mapToBusinessTag(category: string | null): string | null {
+  if (!category) return null;
+  return BUSINESS_TAG_MAP[category] ?? null;
+}
 
 const TIME_COPY: Record<string, string> = {
   morning: '오픈 직후, 손님을 부드럽게 맞이하는 시간이에요.',
@@ -313,6 +328,9 @@ export default function BusinessPage() {
           ))}
         </div>
       </section>
+
+      {/* 추천 — 업종/시간대 컨텍스트 */}
+      <HomeRecommendation businessType={mapToBusinessTag(selectedCategory)} />
 
       {loading ? (
         <p className="text-sm text-ink-mute">불러오는 중…</p>

@@ -6,6 +6,7 @@ import {
   Wallet,
   CreditCard,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
@@ -16,6 +17,7 @@ import StreamingAnalytics from '@/components/admin/StreamingAnalytics';
 import RevenueManagement from '@/components/admin/RevenueManagement';
 import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
 import ContentManagement from '@/components/admin/ContentManagement';
+import RecommendationTester from '@/components/admin/RecommendationTester';
 
 type Tab =
   | 'dashboard'
@@ -23,7 +25,8 @@ type Tab =
   | 'streaming'
   | 'revenue'
   | 'subscriptions'
-  | 'content';
+  | 'content'
+  | 'recommendation';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -32,6 +35,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
+  { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
 ];
 
 export default function AdminPage() {
@@ -85,6 +89,7 @@ export default function AdminPage() {
       {tab === 'revenue' && <RevenueManagement />}
       {tab === 'subscriptions' && <SubscriptionRequests />}
       {tab === 'content' && <ContentManagement />}
+      {tab === 'recommendation' && <RecommendationTester />}
     </div>
   );
 }

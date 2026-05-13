@@ -27,6 +27,7 @@ import {
   saveContinueListening,
   clearContinueListening,
 } from '@/lib/libraryApi';
+import { recommendSimilarTracks } from '@/lib/recommendationApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
@@ -84,7 +85,7 @@ export default function Player() {
     setDuration,
   } = usePlayerStore();
 
-  const { crossfadeEnabled, crossfadeSeconds } = usePlaybackSettingsStore();
+  const { crossfadeEnabled, crossfadeSeconds, autoplayRecommendations } = usePlaybackSettingsStore();
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
@@ -401,6 +402,33 @@ export default function Player() {
     cancelCrossfade();
   }
 
+  async function maybeAutoplayRecommendations() {
+    if (!autoplayRecommendations) return false;
+    if (!current) return false;
+    if (repeat !== 'off') return false; // repeat 면 무한 루프 막힘
+    // queue 의 마지막이면 → 유사곡 추천 큐 추가
+    const isLast =
+      shuffle && shuffleOrder.length === queue.length
+        ? shuffleOrder.indexOf(index) === shuffleOrder.length - 1
+        : index === queue.length - 1;
+    if (!isLast) return false;
+    const recs = await recommendSimilarTracks(current.id, 10);
+    if (recs.length === 0) return false;
+    const playable = recs.filter((r) => isPlayableUrl(r.audio_url));
+    if (playable.length === 0) return false;
+    // 기존 큐에 이어 붙임 + 첫 추천곡으로 점프
+    const newQueue = [...queue, ...playable];
+    usePlayerStore.setState({
+      queue: newQueue,
+      index: queue.length,
+      playing: true,
+      currentTime: 0,
+      shuffleOrder: shuffle ? [...shuffleOrder, ...playable.map((_, i) => queue.length + i)] : [],
+    });
+    toast.success('비슷한 분위기의 곡을 이어서 추천했어요');
+    return true;
+  }
+
   function onEnded(e: React.SyntheticEvent<HTMLAudioElement>) {
     // active 가 ended 인 경우만 next 호출 (next audio 가 끝난건 무시)
     if (e.currentTarget !== activeRef()) return;
@@ -417,7 +445,10 @@ export default function Player() {
       });
       void clearContinueListening(current.id, userId);
     }
-    next();
+    // 자동 이어추천이 큐를 늘렸으면 next() 가 자연스럽게 동작 (마지막 → 새 곡)
+    void maybeAutoplayRecommendations().then((added) => {
+      if (!added) next();
+    });
   }
 
   function onError(e: React.SyntheticEvent<HTMLAudioElement>) {

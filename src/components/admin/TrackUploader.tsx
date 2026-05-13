@@ -1,7 +1,25 @@
-import { useState } from 'react';
-import { Upload, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Upload, X, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
+import {
+  MAIN_GENRES,
+  SUB_GENRES_BY_MAIN,
+  LYRIC_TYPES,
+  LANGUAGES,
+  MOOD_TAGS,
+  MOOD_TAG_LABELS,
+  SITUATION_TAGS,
+  SITUATION_TAG_LABELS,
+  TIME_SLOT_TAGS,
+  TIME_SLOT_TAG_LABELS,
+  SEASON_TAGS,
+  SEASON_TAG_LABELS,
+  BUSINESS_TAGS,
+  BUSINESS_TAG_LABELS,
+  VISIBILITY_OPTIONS,
+  COPYRIGHT_OPTIONS,
+} from '@/lib/recommendationTaxonomy';
 
 interface Props {
   onUploaded: () => Promise<void> | void;
@@ -9,8 +27,8 @@ interface Props {
 }
 
 const ALLOWED_AUDIO_EXT = ['mp3', 'm4a', 'wav', 'ogg', 'aac', 'flac'];
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024; // 50MB
-const MAX_COVER_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
 function isAudioFile(file: File): boolean {
   if (file.type && file.type.startsWith('audio/')) return true;
@@ -31,36 +49,50 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string>('');
+  const [advancedOpen, setAdvancedOpen] = useState(true);
+
+  // 메타데이터 (확장)
+  const [mainGenre, setMainGenre] = useState<string>('');
+  const [subGenre, setSubGenre] = useState<string>('');
+  const [language, setLanguage] = useState<string>('');
+  const [lyricType, setLyricType] = useState<string>('');
+  const [bpm, setBpm] = useState<string>('');
+  const [energy, setEnergy] = useState<number>(3);
+  const [brightness, setBrightness] = useState<number>(3);
+  const [emotional, setEmotional] = useState<number>(3);
+  const [vocal, setVocal] = useState<number>(3);
+  const [moodTags, setMoodTags] = useState<string[]>([]);
+  const [situationTags, setSituationTags] = useState<string[]>([]);
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [seasonTags, setSeasonTags] = useState<string[]>([]);
+  const [businessTags, setBusinessTags] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<string>('public');
+  const [recPriority, setRecPriority] = useState<string>('0');
+  const [copyrightStatus, setCopyrightStatus] = useState<string>('unknown');
+  const [isRecommendable, setIsRecommendable] = useState<boolean>(true);
+
+  const subGenres = useMemo(
+    () => (mainGenre ? SUB_GENRES_BY_MAIN[mainGenre] ?? [] : []),
+    [mainGenre],
+  );
+
+  function toggle(arr: string[], v: string): string[] {
+    return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+  }
 
   function pickAudio(file: File | null) {
-    if (!file) {
-      setAudioFile(null);
-      return;
-    }
-    if (!isAudioFile(file)) {
-      toast.error('음원 파일만 업로드할 수 있어요. (mp3 / m4a / wav 등)');
-      return;
-    }
+    if (!file) { setAudioFile(null); return; }
+    if (!isAudioFile(file)) { toast.error('음원 파일만 업로드할 수 있어요.'); return; }
     if (file.size > MAX_AUDIO_BYTES) {
-      toast.error(`파일이 너무 커요. 50MB 이하로 올려주세요. (현재 ${Math.round(file.size / 1024 / 1024)}MB)`);
+      toast.error(`파일이 너무 커요. 50MB 이하로 (현재 ${Math.round(file.size / 1024 / 1024)}MB)`);
       return;
     }
     setAudioFile(file);
   }
-
   function pickCover(file: File | null) {
-    if (!file) {
-      setCoverFile(null);
-      return;
-    }
-    if (!isImageFile(file)) {
-      toast.error('이미지 파일만 업로드할 수 있어요.');
-      return;
-    }
-    if (file.size > MAX_COVER_BYTES) {
-      toast.error('커버는 5MB 이하 이미지만 업로드할 수 있어요.');
-      return;
-    }
+    if (!file) { setCoverFile(null); return; }
+    if (!isImageFile(file)) { toast.error('이미지 파일만 업로드할 수 있어요.'); return; }
+    if (file.size > MAX_COVER_BYTES) { toast.error('커버는 5MB 이하 이미지만 가능해요.'); return; }
     setCoverFile(file);
   }
 
@@ -68,15 +100,11 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
     const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
     const path = `${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: '31536000',
-      upsert: false,
-      contentType: file.type || undefined,
+      cacheControl: '31536000', upsert: false, contentType: file.type || undefined,
     });
     if (error) throw new Error(`스토리지 업로드 실패 (${bucket}): ${error.message}`);
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    if (!data?.publicUrl) {
-      throw new Error('Storage public URL 생성 실패. 버킷 Public 설정을 확인해주세요.');
-    }
+    if (!data?.publicUrl) throw new Error('Storage public URL 생성 실패');
     return data.publicUrl;
   }
 
@@ -87,28 +115,18 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
       const url = URL.createObjectURL(file);
       const cleanup = () => URL.revokeObjectURL(url);
       audio.onloadedmetadata = () => {
-        const d = Number.isFinite(audio.duration) ? Math.round(audio.duration) : null;
+        resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration) : null);
         cleanup();
-        resolve(d);
       };
-      audio.onerror = () => {
-        cleanup();
-        resolve(null);
-      };
+      audio.onerror = () => { cleanup(); resolve(null); };
       audio.src = url;
     });
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!audioFile) {
-      toast.error('음원 파일을 선택해주세요.');
-      return;
-    }
-    if (!title.trim()) {
-      toast.error('곡 제목을 입력해주세요.');
-      return;
-    }
+    if (!audioFile) { toast.error('음원 파일을 선택해주세요.'); return; }
+    if (!title.trim()) { toast.error('곡 제목을 입력해주세요.'); return; }
     setBusy(true);
     try {
       setProgress('길이 분석…');
@@ -121,15 +139,34 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
         coverUrl = await uploadToBucket('covers', coverFile);
       }
       setProgress('저장 중…');
-      const { error } = await supabase.from('tracks').insert({
+      const insertPayload: Record<string, unknown> = {
         title: title.trim(),
         artist: artist.trim() || null,
-        genre: genre.trim() || null,
-        mood: mood.trim() || null,
+        genre: genre.trim() || mainGenre || null,
+        mood: mood.trim() || moodTags[0] || null,
         audio_url: audioUrl,
         cover_url: coverUrl,
         duration,
-      });
+        main_genre: mainGenre || null,
+        sub_genre: subGenre || null,
+        language: language || null,
+        lyric_type: lyricType || null,
+        bpm: bpm ? Number(bpm) : null,
+        energy_level: energy,
+        brightness_level: brightness,
+        emotional_intensity: emotional,
+        vocal_presence: vocal,
+        mood_tags: moodTags,
+        situation_tags: situationTags,
+        time_slots: timeSlots,
+        season_tags: seasonTags,
+        business_tags: businessTags,
+        visibility,
+        recommendation_priority: Number(recPriority) || 0,
+        copyright_status: copyrightStatus,
+        is_recommendable: isRecommendable,
+      };
+      const { error } = await supabase.from('tracks').insert(insertPayload);
       if (error) throw new Error(`DB 저장 실패: ${error.message}`);
       toast.success(`업로드 완료: ${title}`);
       await onUploaded();
@@ -145,79 +182,169 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
     <form onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">트랙 업로드</h3>
-        <button type="button" onClick={onCancel} aria-label="닫기">
-          <X size={16} />
-        </button>
+        <button type="button" onClick={onCancel} aria-label="닫기"><X size={16} /></button>
       </div>
 
-      <input
-        required
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="곡 제목 *"
-        className="input"
-      />
+      <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="곡 제목 *" className="input" />
       <div className="grid grid-cols-2 gap-2">
-        <input
-          value={artist}
-          onChange={(e) => setArtist(e.target.value)}
-          placeholder="아티스트"
-          className="input"
-        />
-        <input
-          value={genre}
-          onChange={(e) => setGenre(e.target.value)}
-          placeholder="장르"
-          className="input"
-        />
+        <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="아티스트" className="input" />
+        <input value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="장르 (free text, 자동: main_genre)" className="input" />
       </div>
-      <input
-        value={mood}
-        onChange={(e) => setMood(e.target.value)}
-        placeholder="무드 (예: chill, energetic)"
-        className="input"
-      />
+      <input value={mood} onChange={(e) => setMood(e.target.value)} placeholder="무드 (단일, 자동: 첫 mood_tag)" className="input" />
 
       <label className="block space-y-1">
         <span className="text-xs text-ink-mute">음원 파일 * (mp3 / m4a / wav, ≤ 50MB)</span>
-        <input
-          required
-          type="file"
-          accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac"
+        <input required type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac"
           onChange={(e) => pickAudio(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10"
-        />
-        {audioFile && (
-          <span className="text-[11px] text-ink-dim">
-            {audioFile.name} · {(audioFile.size / 1024 / 1024).toFixed(1)}MB
-          </span>
-        )}
+          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10" />
+        {audioFile && <span className="text-[11px] text-ink-dim">{audioFile.name} · {(audioFile.size / 1024 / 1024).toFixed(1)}MB</span>}
       </label>
 
       <label className="block space-y-1">
         <span className="text-xs text-ink-mute">커버 이미지 (선택, ≤ 5MB)</span>
-        <input
-          type="file"
-          accept="image/*"
+        <input type="file" accept="image/*"
           onChange={(e) => pickCover(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10"
-        />
-        {coverFile && (
-          <span className="text-[11px] text-ink-dim">
-            {coverFile.name} · {(coverFile.size / 1024).toFixed(0)}KB
-          </span>
-        )}
+          className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10" />
+        {coverFile && <span className="text-[11px] text-ink-dim">{coverFile.name} · {(coverFile.size / 1024).toFixed(0)}KB</span>}
       </label>
+
+      {/* 메타데이터 (collapsible) */}
+      <details open={advancedOpen} onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)} className="rounded-xl bg-bg-soft ring-1 ring-line/10">
+        <summary className="flex cursor-pointer list-none items-center justify-between p-3 text-xs font-bold uppercase tracking-wider text-ink-mute">
+          <span>추천 메타데이터</span>
+          <ChevronDown size={14} className={`transition ${advancedOpen ? 'rotate-180' : ''}`} />
+        </summary>
+
+        <div className="space-y-4 p-3 pt-1">
+          {/* A. 기본 */}
+          <Section title="기본 정보">
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={mainGenre} onChange={setMainGenre} placeholder="메인 장르">
+                {MAIN_GENRES.map((g) => <option key={g} value={g}>{g}</option>)}
+              </Select>
+              <Select value={subGenre} onChange={setSubGenre} placeholder="서브 장르">
+                {subGenres.map((g) => <option key={g} value={g}>{g}</option>)}
+              </Select>
+              <Select value={language} onChange={setLanguage} placeholder="언어">
+                {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </Select>
+              <Select value={lyricType} onChange={setLyricType} placeholder="가사 유무">
+                {LYRIC_TYPES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </Select>
+            </div>
+          </Section>
+
+          {/* B. 음악 성향 */}
+          <Section title="음악 성향">
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" placeholder="BPM" value={bpm} onChange={(e) => setBpm(e.target.value)} className="input text-sm" />
+              <Range label="에너지" value={energy} onChange={setEnergy} />
+              <Range label="밝기" value={brightness} onChange={setBrightness} />
+              <Range label="감성 강도" value={emotional} onChange={setEmotional} />
+              <Range label="보컬 존재감" value={vocal} onChange={setVocal} />
+            </div>
+          </Section>
+
+          {/* C. 태그 */}
+          <Section title="무드 태그">
+            <Chips options={MOOD_TAGS} labels={MOOD_TAG_LABELS} selected={moodTags} onToggle={(v) => setMoodTags((a) => toggle(a, v))} />
+          </Section>
+          <Section title="상황 태그">
+            <Chips options={SITUATION_TAGS} labels={SITUATION_TAG_LABELS} selected={situationTags} onToggle={(v) => setSituationTags((a) => toggle(a, v))} />
+          </Section>
+          <Section title="시간대 태그">
+            <Chips options={TIME_SLOT_TAGS} labels={TIME_SLOT_TAG_LABELS} selected={timeSlots} onToggle={(v) => setTimeSlots((a) => toggle(a, v))} />
+          </Section>
+          <Section title="계절 태그">
+            <Chips options={SEASON_TAGS} labels={SEASON_TAG_LABELS} selected={seasonTags} onToggle={(v) => setSeasonTags((a) => toggle(a, v))} />
+          </Section>
+          <Section title="업종 태그">
+            <Chips options={BUSINESS_TAGS} labels={BUSINESS_TAG_LABELS} selected={businessTags} onToggle={(v) => setBusinessTags((a) => toggle(a, v))} />
+          </Section>
+
+          {/* D. 운영 */}
+          <Section title="운영 정보">
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={visibility} onChange={setVisibility} placeholder="공개 범위">
+                {VISIBILITY_OPTIONS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </Select>
+              <Select value={copyrightStatus} onChange={setCopyrightStatus} placeholder="저작권 상태">
+                {COPYRIGHT_OPTIONS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </Select>
+              <input type="number" placeholder="추천 우선순위 (0~100)" value={recPriority} onChange={(e) => setRecPriority(e.target.value)} className="input text-sm" />
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={isRecommendable} onChange={(e) => setIsRecommendable(e.target.checked)} />
+                추천에 노출
+              </label>
+            </div>
+          </Section>
+        </div>
+      </details>
 
       <div className="flex items-center gap-2">
         <button type="submit" disabled={busy} className="btn-primary flex-1">
           <Upload size={14} />
           {busy ? progress || '업로드 중…' : '업로드'}
         </button>
-        <button type="button" onClick={onCancel} className="btn-ghost">
-          취소
-        </button>
+        <button type="button" onClick={onCancel} className="btn-ghost">취소</button>
       </div>
     </form>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function Select({ value, onChange, placeholder, children }: {
+  value: string; onChange: (v: string) => void; placeholder: string; children: React.ReactNode;
+}) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="input text-sm">
+      <option value="">{placeholder}</option>
+      {children}
+    </select>
+  );
+}
+
+function Range({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="flex items-center gap-2 rounded-lg bg-bg-card px-3 py-2 text-xs">
+      <span className="w-16 shrink-0 text-ink-mute">{label}</span>
+      <input type="range" min={1} max={5} value={value} onChange={(e) => onChange(Number(e.target.value))} className="flex-1" />
+      <span className="w-6 text-right font-bold tabular-nums">{value}</span>
+    </label>
+  );
+}
+
+function Chips({
+  options, labels, selected, onToggle,
+}: {
+  options: readonly string[];
+  labels: Record<string, string>;
+  selected: string[];
+  onToggle: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((v) => {
+        const on = selected.includes(v);
+        return (
+          <button
+            key={v} type="button" onClick={() => onToggle(v)}
+            className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+              on ? 'bg-accent text-bg ring-1 ring-accent' : 'bg-bg-card text-ink-mute hover:text-ink ring-1 ring-line/10'
+            }`}
+          >
+            {labels[v] ?? v}
+          </button>
+        );
+      })}
+    </div>
   );
 }

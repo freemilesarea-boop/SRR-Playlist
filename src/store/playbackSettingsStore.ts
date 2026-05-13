@@ -8,9 +8,11 @@ interface PlaybackSettingsState {
   crossfadeSeconds: CrossfadeSeconds;
   /** 사용자가 명시적으로 설정했는지. true 면 매장 모드가 덮어쓰지 않음. */
   userOverride: boolean;
+  autoplayRecommendations: boolean;
 
   setCrossfadeEnabled: (v: boolean, fromUser?: boolean) => void;
   setCrossfadeSeconds: (s: CrossfadeSeconds, fromUser?: boolean) => void;
+  setAutoplayRecommendations: (v: boolean) => void;
   enableForBusinessMode: () => void;
   init: () => void;
 }
@@ -21,6 +23,7 @@ interface StoredSettings {
   crossfadeEnabled: boolean;
   crossfadeSeconds: CrossfadeSeconds;
   userOverride: boolean;
+  autoplayRecommendations: boolean;
 }
 
 function readStored(): StoredSettings | null {
@@ -34,6 +37,7 @@ function readStored(): StoredSettings | null {
         ? (parsed.crossfadeSeconds as CrossfadeSeconds)
         : 0),
       userOverride: !!parsed.userOverride,
+      autoplayRecommendations: parsed.autoplayRecommendations !== false,
     };
   } catch {
     return null;
@@ -52,6 +56,18 @@ export const usePlaybackSettingsStore = create<PlaybackSettingsState>((set, get)
   crossfadeEnabled: false,
   crossfadeSeconds: 0,
   userOverride: false,
+  autoplayRecommendations: true,
+
+  setAutoplayRecommendations: (v) => {
+    const next = {
+      crossfadeEnabled: get().crossfadeEnabled,
+      crossfadeSeconds: get().crossfadeSeconds,
+      userOverride: get().userOverride,
+      autoplayRecommendations: v,
+    };
+    set({ autoplayRecommendations: v });
+    write(next);
+  },
 
   init: () => {
     const stored = readStored();
@@ -65,6 +81,7 @@ export const usePlaybackSettingsStore = create<PlaybackSettingsState>((set, get)
       crossfadeEnabled: v,
       crossfadeSeconds: v && get().crossfadeSeconds === 0 ? 3 : get().crossfadeSeconds,
       userOverride: fromUser || get().userOverride,
+      autoplayRecommendations: get().autoplayRecommendations,
     };
     set(next as PlaybackSettingsState);
     write(next);
@@ -75,6 +92,7 @@ export const usePlaybackSettingsStore = create<PlaybackSettingsState>((set, get)
       crossfadeEnabled: s > 0,
       crossfadeSeconds: s,
       userOverride: fromUser || get().userOverride,
+      autoplayRecommendations: get().autoplayRecommendations,
     };
     set(next as PlaybackSettingsState);
     write(next);
@@ -87,6 +105,7 @@ export const usePlaybackSettingsStore = create<PlaybackSettingsState>((set, get)
       crossfadeEnabled: true,
       crossfadeSeconds: 5 as CrossfadeSeconds,
       userOverride: false,
+      autoplayRecommendations: get().autoplayRecommendations,
     };
     set(next as PlaybackSettingsState);
     write(next);
