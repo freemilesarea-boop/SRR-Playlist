@@ -25,6 +25,7 @@ const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const ChartPage = lazy(() => import('@/pages/ChartPage'));
 const SearchPage = lazy(() => import('@/pages/SearchPage'));
 const TrackSharePage = lazy(() => import('@/pages/TrackSharePage'));
+const CuratorProfilePage = lazy(() => import('@/pages/CuratorProfilePage'));
 
 function RouteFallback() {
   return (
@@ -118,6 +119,7 @@ export default function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/track/:id" element={<TrackSharePage />} />
+            <Route path="/curator/:handle" element={<CuratorProfilePage />} />
             <Route path="/business" element={<BusinessPage />} />
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />

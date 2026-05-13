@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPlaylists, fetchRecentPlaylists, fetchPlaylistCounts } from '@/lib/api';
 import { fetchPopularPlaylistsByFollows, type PopularPlaylist } from '@/lib/playlistFollowApi';
+import { fetchFeaturedCurators, type FeaturedCurator } from '@/lib/curatorApi';
+import { Link } from 'react-router-dom';
+import { CheckCircle2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
@@ -17,6 +20,7 @@ export default function HomePage() {
   const [recents, setRecents] = useState<PlaylistRow[]>([]);
   const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
   const [popularByFollows, setPopularByFollows] = useState<PopularPlaylist[]>([]);
+  const [featuredCurators, setFeaturedCurators] = useState<FeaturedCurator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +29,17 @@ export default function HomePage() {
     let alive = true;
     void fetchPopularPlaylistsByFollows(10).then((rows) => {
       if (alive) setPopularByFollows(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 인기 큐레이터 (0013 미적용 시 빈 배열 → 섹션 숨김)
+  useEffect(() => {
+    let alive = true;
+    void fetchFeaturedCurators(12).then((rows) => {
+      if (alive) setFeaturedCurators(rows);
     });
     return () => {
       alive = false;
@@ -205,6 +220,50 @@ export default function HomePage() {
           playlists={popularByFollows}
           counts={counts}
         />
+      )}
+
+      {/* 인기 큐레이터 — 0013 적용 후 데이터 있을 때만 */}
+      {featuredCurators.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-end justify-between px-0.5">
+            <div>
+              <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight sm:text-xl">
+                <Sparkles size={16} className="text-accent" /> 인기 큐레이터
+              </h2>
+              <p className="mt-0.5 text-xs text-ink-mute">플레이리스트를 만드는 사람들</p>
+            </div>
+          </div>
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
+            {featuredCurators.map((c) => (
+              <Link
+                key={c.user_id}
+                to={`/curator/${c.handle}`}
+                className="group w-32 shrink-0 space-y-1.5 text-center sm:w-36"
+              >
+                <div className="mx-auto aspect-square w-24 overflow-hidden rounded-full bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5 sm:w-28">
+                  {c.profile_image_url ? (
+                    <img
+                      src={c.profile_image_url}
+                      alt={c.display_name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-ink/70">
+                      {c.display_name.slice(0, 1)}
+                    </div>
+                  )}
+                </div>
+                <p className="flex items-center justify-center gap-1 truncate px-0.5 text-xs font-bold">
+                  {c.display_name}
+                  {c.is_verified && <CheckCircle2 size={11} className="text-sky-400" />}
+                </p>
+                <p className="truncate px-0.5 text-[10px] text-ink-mute">
+                  플리 {c.playlist_count} · {c.total_streams.toLocaleString()} 재생
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Business / store */}

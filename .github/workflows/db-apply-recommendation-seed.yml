@@ -130,6 +130,14 @@ jobs:
             psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0012_playlist_follow.sql
           fi
 
+      - name: 1f) 0013 (curator profiles) 마이그레이션 적용
+        run: |
+          set -e
+          HAS_CURATOR=$(psql ${PSQL_CONN:+"$PSQL_CONN"} -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name='curator_profiles';")
+          echo "curator_profiles table count: $HAS_CURATOR"
+          # 멱등 — playlists.created_by_user_id 도 IF NOT EXISTS, 테이블/RPC 도 IF NOT EXISTS / CREATE OR REPLACE
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0013_curator_profiles.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

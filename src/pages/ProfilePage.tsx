@@ -11,6 +11,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import { useThemeStore } from '@/store/themeStore';
 import {
   usePlaybackSettingsStore,
@@ -141,6 +142,13 @@ export default function ProfilePage() {
           </span>
         </button>
       </section>
+
+      {/* 큐레이터 프로필 — 로그인 사용자만 (0013 미적용 환경에선 저장 시 에러 안내) */}
+      {user?.id && (
+        <section className="space-y-2">
+          <CuratorProfileEditor userId={user.id} />
+        </section>
+      )}
 
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />

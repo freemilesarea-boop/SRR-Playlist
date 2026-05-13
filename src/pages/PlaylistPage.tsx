@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Heart, Play, Shuffle, AlertCircle, CheckCircle2, Music } from 'lucide-react';
+import { fetchPlaylistCurator } from '@/lib/curatorApi';
 import { fetchPlaylist, fetchPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
@@ -32,6 +33,19 @@ export default function PlaylistPage() {
   const [liked, setLiked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState<number>(0);
+  const [curator, setCurator] = useState<Awaited<ReturnType<typeof fetchPlaylistCurator>>>(null);
+
+  // 큐레이터 조회 (0013 미적용 / 작성자 없음 시 null)
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void fetchPlaylistCurator(id).then((c) => {
+      if (alive) setCurator(c);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   // 팔로워 수 조회 (RPC, 0012 미적용 시 빈 맵 → 0 으로 표시)
   useEffect(() => {
@@ -238,6 +252,35 @@ export default function PlaylistPage() {
           onChanged={(now) => setFollowerCount((c) => Math.max(0, c + (now ? 1 : -1)))}
         />
       </div>
+
+      {/* Curator card (0013 적용 + 플리에 created_by 가 있을 때만 노출) */}
+      {curator && (
+        <Link
+          to={`/curator/${curator.handle}`}
+          className="mx-4 mb-4 mt-2 flex items-center gap-3 rounded-2xl bg-bg-card p-3 ring-1 ring-line/10 transition hover:-translate-y-0.5 sm:mx-6"
+        >
+          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full ring-1 ring-line/15">
+            {curator.profile_image_url ? (
+              <img src={curator.profile_image_url} alt={curator.display_name} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-ink/5 text-sm font-bold">
+                {curator.display_name.slice(0, 1)}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">큐레이터</p>
+            <p className="flex items-center gap-1 truncate text-sm font-bold">
+              {curator.display_name}
+              {curator.is_verified && <CheckCircle2 size={12} className="text-sky-400" />}
+            </p>
+            {curator.bio && <p className="truncate text-xs text-ink-mute">{curator.bio}</p>}
+          </div>
+          <span className="shrink-0 rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent">
+            프로필 보기
+          </span>
+        </Link>
+      )}
 
       {/* Track list */}
       <ul className="divide-y divide-line/10 px-4 sm:px-6">
