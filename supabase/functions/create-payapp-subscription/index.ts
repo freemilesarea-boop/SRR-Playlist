@@ -16,7 +16,13 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
-const APP_BASE_URL = Deno.env.get('APP_BASE_URL') ?? '';
+// feedbackurl 은 반드시 Supabase Functions URL (인증 없이 외부 호출).
+// returnurl/failurl 은 프론트 도메인 URL.
+// APP_BASE_URL 은 legacy fallback — 둘 다 같은 호스트 쓰는 환경 호환용.
+const LEGACY_BASE = Deno.env.get('APP_BASE_URL') ?? '';
+const PAYAPP_FEEDBACK_BASE_URL =
+  Deno.env.get('PAYAPP_FEEDBACK_BASE_URL') || LEGACY_BASE || SUPABASE_URL;
+const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || LEGACY_BASE;
 const PAYAPP_REBILL_EXPIRE = Deno.env.get('PAYAPP_REBILL_EXPIRE') ?? '2099-12-31';
 
 const corsHeaders = {
@@ -142,9 +148,9 @@ serve(async (req) => {
   params.set('rebillCycleType', 'Month');
   params.set('rebillCycleMonth', rebillDayFromToday());
   params.set('rebillExpire', PAYAPP_REBILL_EXPIRE);
-  params.set('feedbackurl', `${APP_BASE_URL}/functions/v1/payapp-feedback`);
-  params.set('returnurl', `${APP_BASE_URL}/payment/success?order_no=${orderNo}`);
-  params.set('failurl', `${APP_BASE_URL}/payment/fail?order_no=${orderNo}`);
+  params.set('feedbackurl', `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`);
+  params.set('returnurl', `${PUBLIC_APP_URL}/payment/success?order_no=${orderNo}`);
+  params.set('failurl', `${PUBLIC_APP_URL}/payment/fail?order_no=${orderNo}`);
   params.set('var1', orderNo);
   params.set('var2', user.id);
   params.set('smsuse', 'n');

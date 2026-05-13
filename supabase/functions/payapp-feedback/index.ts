@@ -1,11 +1,28 @@
 // supabase/functions/payapp-feedback/index.ts
 //
-// PayApp feedbackurl 웹훅 처리기.
-// - linkval 검증 (PAYAPP_LINKVAL 일치)
-// - mul_no + rebill_no + pay_state + price 기준 멱등 처리
-// - pay_state 별 status/권한 갱신
-// - 가격 위변조 (PayApp price ≠ plan price) 시 권한 부여 금지
-// - 최종 응답: HTTP 200 + 'SUCCESS' (PayApp 재시도 방지)
+// PayApp feedbackurl 웹훅 처리기 (2차 보강판).
+//
+// 검증 4중:
+//   - userid  === PAYAPP_USERID      (가맹점 식별)
+//   - linkval === PAYAPP_LINKVAL     (콜백 검증 토큰)
+//   - linkkey === PAYAPP_LINKKEY     (payload 에 포함될 때만)
+//   - price   === payment_orders.amount  (가격 위변조 차단)
+// → 하나라도 불일치하면 권한 부여 금지. PayApp 재시도 폭주 방지 위해 응답은 항상 SUCCESS.
+//
+// pay_state 별 처리:
+//   1            결제 요청 수신 (완료 아님) → requested/pending 유지
+//   4            결제 완료 → paid/active + period 갱신 + membership_tier 부여
+//   10           가상계좌 대기 → waiting/payment_waiting
+//   8, 32        요청 취소 → canceled
+//   9, 64, 70, 71 승인 취소/부분 취소 → canceled + free 다운그레이드
+//   그 외        이벤트만 기록
+//
+// 자동 정기결제 (2회차+) 대응:
+//   같은 order_no 로 새 mul_no 가 오면 renewal payment_orders 생성
+//   order_no = `${original}_renewal_${mul_no}`
+//   subscriptions 의 last_paid_at / current_period_* 갱신.
+//
+// 멱등성: payapp_webhook_events.event_key UNIQUE → 같은 payload 두 번 와도 1회 처리.
 //
 // deno-lint-ignore-file no-explicit-any
 
@@ -14,11 +31,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
+const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_LINKVAL = Deno.env.get('PAYAPP_LINKVAL') ?? '';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
-const SUCCESS = () => new Response('SUCCESS', { headers: { 'content-type': 'text/plain' }, status: 200 });
+const SUCCESS = () =>
+  new Response('SUCCESS', { headers: { 'content-type': 'text/plain' }, status: 200 });
 
 function payloadFromForm(form: URLSearchParams): Record<string, string> {
   const obj: Record<string, string> = {};
@@ -35,7 +55,6 @@ async function readPayload(req: Request): Promise<Record<string, string>> {
       return {};
     }
   }
-  // application/x-www-form-urlencoded 또는 multipart/form-data
   const text = await req.text();
   return payloadFromForm(new URLSearchParams(text));
 }
@@ -46,23 +65,72 @@ function buildEventKey(p: Record<string, string>): string {
   const state = p.pay_state ?? p.paystate ?? '';
   const price = p.price ?? '';
   if (mul || rebill) return `payapp:${mul}:${rebill}:${state}:${price}`;
-  // mul_no 없으면 raw hash
+  // mul_no 없으면 raw payload hash fallback
   const raw = JSON.stringify(p);
   let h = 0;
   for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) | 0;
   return `payapp:raw:${state}:${price}:${h}`;
 }
 
+interface Verification {
+  ok: boolean;
+  userid_ok: boolean;
+  linkval_ok: boolean;
+  /** linkkey 가 payload 에 있을 때만 검증. 없으면 'absent'. */
+  linkkey_ok: 'ok' | 'fail' | 'absent';
+  price_ok: boolean;
+  price_observed: number | null;
+  price_expected: number | null;
+  reasons: string[];
+}
+
+function verifyHeaders(
+  p: Record<string, string>,
+  expectedAmount: number | null,
+): Verification {
+  const userid = p.userid ?? '';
+  const linkval = p.linkval ?? '';
+  const linkkey = p.linkkey ?? '';
+  const priceNum = Number(p.price ?? 0) || null;
+
+  const userid_ok = !!PAYAPP_USERID && userid === PAYAPP_USERID;
+  const linkval_ok = !!PAYAPP_LINKVAL && linkval === PAYAPP_LINKVAL;
+  const linkkey_ok: 'ok' | 'fail' | 'absent' =
+    linkkey === ''
+      ? 'absent'
+      : !!PAYAPP_LINKKEY && linkkey === PAYAPP_LINKKEY
+        ? 'ok'
+        : 'fail';
+  const price_ok =
+    expectedAmount != null && priceNum != null && priceNum === expectedAmount;
+
+  const reasons: string[] = [];
+  if (!userid_ok) reasons.push(`userid_mismatch (got=${userid})`);
+  if (!linkval_ok) reasons.push('linkval_mismatch');
+  if (linkkey_ok === 'fail') reasons.push('linkkey_mismatch');
+  if (expectedAmount == null) reasons.push('expected_amount_unknown');
+  else if (!price_ok) reasons.push(`price_mismatch (got=${priceNum}, expect=${expectedAmount})`);
+
+  // ok = userid/linkval/price 통과 + (linkkey 가 'fail' 이 아닐 것)
+  const ok = userid_ok && linkval_ok && price_ok && linkkey_ok !== 'fail';
+  return { ok, userid_ok, linkval_ok, linkkey_ok, price_ok, price_observed: priceNum, price_expected: expectedAmount, reasons };
+}
+
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function isoOneMonthFromNow(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString();
+}
+
 serve(async (req) => {
-  if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
-  }
+  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const payload = await readPayload(req);
   const eventKey = buildEventKey(payload);
-  const linkval = payload.linkval ?? '';
-  const linkvalOk = !!PAYAPP_LINKVAL && linkval === PAYAPP_LINKVAL;
-
   const orderNo = payload.var1 || null;
   const userIdRaw = payload.var2 || null;
   const mulNo = payload.mul_no || payload.mulno || null;
@@ -70,7 +138,29 @@ serve(async (req) => {
   const payState = Number(payload.pay_state ?? payload.paystate ?? 0) || null;
   const priceNum = Number(payload.price ?? 0) || null;
 
-  // 1) webhook 멱등 insert. 이미 처리된 키면 SUCCESS 즉시.
+  // --- order 조회 (검증에 필요한 expected amount) ---
+  let order:
+    | {
+        id: string;
+        user_id: string;
+        subscription_id: string | null;
+        plan_type: string;
+        amount: number;
+        payapp_mul_no: string | null;
+      }
+    | null = null;
+  if (orderNo) {
+    const { data } = await sb
+      .from('payment_orders')
+      .select('id, user_id, subscription_id, plan_type, amount, payapp_mul_no')
+      .eq('order_no', orderNo)
+      .maybeSingle();
+    order = (data as typeof order) ?? null;
+  }
+
+  const verification = verifyHeaders(payload, order?.amount ?? null);
+
+  // --- webhook 이벤트 멱등 INSERT ---
   const { data: insertedEvent, error: insertErr } = await sb
     .from('payapp_webhook_events')
     .insert({
@@ -81,92 +171,87 @@ serve(async (req) => {
       payapp_rebill_no: rebillNo,
       pay_state: payState,
       price: priceNum,
-      linkval_verified: linkvalOk,
-      raw_payload: payload,
+      linkval_verified: verification.ok,
+      raw_payload: { ...payload, _verification: verification },
     })
     .select('id, processed_at')
     .maybeSingle();
 
   if (insertErr) {
-    // unique 위반 = 이미 처리됨
-    if (insertErr.code === '23505') {
-      return SUCCESS();
-    }
-    // 그 외 DB 에러 — 그래도 PayApp 에는 SUCCESS (재시도 무한루프 방지). 모니터링 별도.
+    if (insertErr.code === '23505') return SUCCESS(); // 이미 처리됨
     console.error('[payapp-feedback] insert error:', insertErr);
-    return SUCCESS();
+    return SUCCESS(); // PayApp 재시도 폭주 방지
   }
 
-  // 2) linkval 검증 실패 — 저장만 하고 처리 안 함
-  if (!linkvalOk) {
-    console.warn('[payapp-feedback] linkval mismatch — saved but not processed');
-    return SUCCESS();
-  }
-
-  // 3) order_no 없으면 raw만 저장하고 SUCCESS
-  if (!orderNo) {
+  // --- 검증 실패 → 저장만 하고 처리 안 함 ---
+  if (!verification.ok) {
+    console.warn('[payapp-feedback] verification failed:', verification.reasons);
     await sb
       .from('payapp_webhook_events')
-      .update({ processed_at: new Date().toISOString() })
+      .update({ processed_at: isoNow() })
       .eq('id', insertedEvent?.id);
     return SUCCESS();
   }
 
-  // 4) order 조회
-  const { data: order } = await sb
-    .from('payment_orders')
-    .select('id, user_id, subscription_id, plan_type, amount')
-    .eq('order_no', orderNo)
-    .maybeSingle();
-
+  // --- order_no 없으면 raw 만 저장 ---
   if (!order) {
     await sb
       .from('payapp_webhook_events')
-      .update({ processed_at: new Date().toISOString() })
+      .update({ processed_at: isoNow() })
       .eq('id', insertedEvent?.id);
     return SUCCESS();
   }
 
-  // 5) 가격 위변조 검증 — plan price 와 일치해야 함
-  const { data: plan } = await sb
-    .from('subscription_plans')
-    .select('price, plan_type')
-    .eq('plan_type', order.plan_type)
-    .maybeSingle();
-
-  const priceTrusted =
-    !!plan && priceNum != null && plan.price === priceNum && order.amount === plan.price;
-
-  if (!priceTrusted) {
-    console.warn(
-      '[payapp-feedback] price mismatch — refusing to activate',
-      { orderNo, payappPrice: priceNum, planPrice: plan?.price, orderAmount: order.amount },
-    );
-    await sb
-      .from('payapp_webhook_events')
-      .update({ processed_at: new Date().toISOString() })
-      .eq('id', insertedEvent?.id);
-    return SUCCESS();
-  }
-
-  // 6) pay_state 처리
-  const now = new Date();
-  const periodEnd = new Date(now);
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
-  const periodEndIso = periodEnd.toISOString();
-
-  if (payState === 4) {
-    // 결제 완료
+  // --- pay_state 별 처리 ---
+  if (payState === 1) {
+    // 결제 요청 수신 — 완료 아님. 기존 status 유지.
+    // 명시적으로 requested/pending 보장.
     await sb
       .from('payment_orders')
-      .update({
+      .update({ status: 'requested', raw_response: payload })
+      .eq('id', order.id);
+    if (order.subscription_id) {
+      await sb
+        .from('subscriptions')
+        .update({ status: 'pending', payapp_pay_state: payState })
+        .eq('id', order.subscription_id);
+    }
+  } else if (payState === 4) {
+    // 결제 완료
+    const isFirstPaymentForThisOrder =
+      !order.payapp_mul_no || order.payapp_mul_no === mulNo;
+
+    if (isFirstPaymentForThisOrder) {
+      // 첫 결제 — 기존 order 를 paid 로 갱신
+      await sb
+        .from('payment_orders')
+        .update({
+          status: 'paid',
+          payapp_rebill_no: rebillNo,
+          payapp_mul_no: mulNo,
+          raw_response: payload,
+        })
+        .eq('id', order.id);
+    } else {
+      // 2회차+ 자동 결제 — 새 renewal order 행 생성 (멱등: order_no UNIQUE)
+      const renewalOrderNo = `${orderNo}_renewal_${mulNo ?? Date.now()}`;
+      const { error: renewErr } = await sb.from('payment_orders').insert({
+        user_id: order.user_id,
+        subscription_id: order.subscription_id,
+        order_no: renewalOrderNo,
+        plan_type: order.plan_type,
+        amount: order.amount,
         status: 'paid',
         payapp_rebill_no: rebillNo,
         payapp_mul_no: mulNo,
         raw_response: payload,
-      })
-      .eq('id', order.id);
+      });
+      if (renewErr && renewErr.code !== '23505') {
+        console.warn('[payapp-feedback] renewal order insert failed:', renewErr.message);
+      }
+    }
 
+    // subscription 갱신 (첫 결제든 재결제든 last_paid_at + period 갱신)
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
@@ -175,9 +260,9 @@ serve(async (req) => {
           payapp_rebill_no: rebillNo,
           payapp_mul_no: mulNo,
           payapp_pay_state: payState,
-          last_paid_at: now.toISOString(),
-          current_period_start: now.toISOString(),
-          current_period_end: periodEndIso,
+          last_paid_at: isoNow(),
+          current_period_start: isoNow(),
+          current_period_end: isoOneMonthFromNow(),
         })
         .eq('id', order.subscription_id);
     }
@@ -188,8 +273,8 @@ serve(async (req) => {
       .update({ membership_tier: order.plan_type, subscription_type: order.plan_type })
       .eq('id', order.user_id);
   } else if (payState === 10) {
-    // 가상계좌 결제대기
-    await sb.from('payment_orders').update({ status: 'waiting' }).eq('id', order.id);
+    // 가상계좌 결제 대기
+    await sb.from('payment_orders').update({ status: 'waiting', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
@@ -197,27 +282,27 @@ serve(async (req) => {
         .eq('id', order.subscription_id);
     }
   } else if (payState === 8 || payState === 32) {
-    // 요청 취소
-    await sb.from('payment_orders').update({ status: 'canceled' }).eq('id', order.id);
+    // 요청 취소 — 결제 완료 전이므로 권한 변경 없음
+    await sb.from('payment_orders').update({ status: 'canceled', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
         .update({
           status: 'canceled',
-          canceled_at: now.toISOString(),
+          canceled_at: isoNow(),
           payapp_pay_state: payState,
         })
         .eq('id', order.subscription_id);
     }
   } else if ([9, 64, 70, 71].includes(payState ?? -1)) {
-    // 승인 취소 / 부분 취소 — 권한 제거
-    await sb.from('payment_orders').update({ status: 'canceled' }).eq('id', order.id);
+    // 승인 취소 / 부분 취소 → 권한 제거
+    await sb.from('payment_orders').update({ status: 'canceled', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
         .update({
           status: 'canceled',
-          canceled_at: now.toISOString(),
+          canceled_at: isoNow(),
           payapp_pay_state: payState,
         })
         .eq('id', order.subscription_id);
@@ -227,11 +312,11 @@ serve(async (req) => {
       .update({ membership_tier: 'free', subscription_type: 'free' })
       .eq('id', order.user_id);
   }
-  // 그 외 pay_state: 이벤트만 저장하고 상태 변경 X
+  // 그 외 pay_state — 이벤트만 기록
 
   await sb
     .from('payapp_webhook_events')
-    .update({ processed_at: new Date().toISOString() })
+    .update({ processed_at: isoNow() })
     .eq('id', insertedEvent?.id);
 
   return SUCCESS();

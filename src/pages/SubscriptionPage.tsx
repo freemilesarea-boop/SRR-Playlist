@@ -382,7 +382,11 @@ export default function SubscriptionPage() {
         <h3 className="text-sm font-bold">결제 안내</h3>
         <p className="text-xs leading-relaxed text-ink-mute">
           PayApp 정기결제로 매월 자동 결제됩니다. 결제 완료/구독 활성화는 PayApp 결제 확인 후
-          자동 반영되며, 마이페이지에서 언제든 해지할 수 있어요.
+          자동 반영돼요.
+        </p>
+        <p className="text-xs leading-relaxed text-yellow-200/90">
+          <strong>해지 정책:</strong> 해지 즉시 이용권이 종료되며 무료 플랜으로 다운그레이드됩니다.
+          남은 기간에 대한 환불은 자동 처리되지 않으니 고객센터로 문의해주세요.
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=스르륵 플리 매장 구독 문의"
