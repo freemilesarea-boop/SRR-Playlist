@@ -34,6 +34,8 @@ export interface PlaylistRow {
   time_slot: TimeSlot | null;
   sort_order: number;
   created_at: string;
+  /** 큐레이터(작성자) user_id — 0013 마이그레이션 이후 추가. 기존 seed/admin 플리는 null 가능. */
+  created_by_user_id?: string | null;
 }
 
 export interface PlaylistTrackRow {

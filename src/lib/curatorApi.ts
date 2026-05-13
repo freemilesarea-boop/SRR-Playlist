@@ -58,6 +58,14 @@ export interface CuratorSearchResult {
   is_verified: boolean;
 }
 
+/** 어드민 콘텐츠 관리 — 큐레이터 선택 드롭다운용 */
+export interface CuratorListItem {
+  user_id: string;
+  display_name: string;
+  handle: string;
+  is_verified: boolean;
+}
+
 export interface CuratorProfilePayload {
   display_name: string;
   handle: string;
@@ -105,6 +113,41 @@ export async function fetchFeaturedCurators(limit = 12): Promise<FeaturedCurator
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * 모든 큐레이터 프로필 — 관리자 플리 편집의 큐레이터 선택용.
+ * RLS: curator_profiles 는 public select 라 누구나 호출 가능.
+ */
+export async function fetchAllCurators(): Promise<CuratorListItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from('curator_profiles')
+      .select('user_id, display_name, handle, is_verified')
+      .order('is_verified', { ascending: false })
+      .order('display_name', { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as CuratorListItem[];
+  } catch {
+    return [];
+  }
+}
+
+/** 단일 플레이리스트의 큐레이터 변경 (admin 또는 본인) */
+export async function setPlaylistCurator(
+  playlistId: string,
+  curatorUserId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('playlists')
+      .update({ created_by_user_id: curatorUserId })
+      .eq('id', playlistId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
   }
 }
 

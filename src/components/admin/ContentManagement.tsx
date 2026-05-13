@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Plus, Music, ListMusic, Upload } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
+import { fetchAllCurators, fetchMyCuratorProfile, type CuratorListItem } from '@/lib/curatorApi';
+import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
@@ -34,6 +36,7 @@ export default function ContentManagement() {
     is_business_only: boolean;
     business_category: string | null;
     time_slot: string | null;
+    created_by_user_id: string | null;
   }) {
     if (!form.title.trim()) {
       toast.error('플레이리스트 제목은 필수예요.');
@@ -52,6 +55,7 @@ export default function ContentManagement() {
         is_business_only: form.is_business_only,
         business_category: form.business_category?.trim() || null,
         time_slot: (form.time_slot as PlaylistRow['time_slot']) || null,
+        created_by_user_id: form.created_by_user_id,
       })
       .select('*')
       .single();
@@ -259,16 +263,40 @@ function CreatePlaylistForm({
     is_business_only: boolean;
     business_category: string | null;
     time_slot: string | null;
+    created_by_user_id: string | null;
   }) => Promise<void>;
   onCancel: () => void;
 }) {
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('카페 음악');
   const [description, setDescription] = useState('');
   const [businessOnly, setBusinessOnly] = useState(false);
   const [businessCategory, setBusinessCategory] = useState('');
   const [timeSlot, setTimeSlot] = useState('');
+  const [curators, setCurators] = useState<CuratorListItem[]>([]);
+  const [createdBy, setCreatedBy] = useState<string>('');
   const [busy, setBusy] = useState(false);
+
+  // 큐레이터 목록 + 기본값 (로그인 사용자가 큐레이터 프로필 있으면 본인)
+  useEffect(() => {
+    let alive = true;
+    void fetchAllCurators().then(async (list) => {
+      if (!alive) return;
+      setCurators(list);
+      if (userId) {
+        const mine = await fetchMyCuratorProfile(userId);
+        if (alive && mine) {
+          // 본인 user_id 가 목록에 있으면 자동 선택
+          const me = list.find((c) => c.user_id === userId);
+          if (me) setCreatedBy(userId);
+        }
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
 
   return (
     <form
@@ -282,6 +310,7 @@ function CreatePlaylistForm({
           is_business_only: businessOnly,
           business_category: businessOnly ? businessCategory || null : null,
           time_slot: timeSlot || null,
+          created_by_user_id: createdBy || null,
         });
         setBusy(false);
       }}
@@ -290,6 +319,28 @@ function CreatePlaylistForm({
       <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="플레이리스트 제목" className="input" />
       <input required value={category} onChange={(e) => setCategory(e.target.value)} placeholder="카테고리 (예: 카페 음악)" className="input" />
       <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명 (선택)" className="input min-h-[80px]" />
+
+      <label className="block space-y-1">
+        <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-mute">큐레이터</span>
+        <select
+          value={createdBy}
+          onChange={(e) => setCreatedBy(e.target.value)}
+          className="input"
+        >
+          <option value="">— 큐레이터 없음 —</option>
+          {curators.map((c) => (
+            <option key={c.user_id} value={c.user_id}>
+              {c.display_name} (@{c.handle}){c.is_verified ? ' ✓' : ''}
+            </option>
+          ))}
+        </select>
+        {curators.length === 0 && (
+          <span className="block text-[11px] text-ink-dim">
+            아직 큐레이터 프로필이 없어요. 프로필 페이지에서 본인 큐레이터 프로필을 먼저 만들어주세요.
+          </span>
+        )}
+      </label>
+
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={businessOnly} onChange={(e) => setBusinessOnly(e.target.checked)} />
         사업자 전용

@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
+import { fetchAllCurators, setPlaylistCurator, type CuratorListItem } from '@/lib/curatorApi';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
@@ -33,6 +34,31 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
   const [loading, setLoading] = useState(true);
   const [picker, setPicker] = useState(false);
   const [thumbBusy, setThumbBusy] = useState(false);
+  const [curators, setCurators] = useState<CuratorListItem[]>([]);
+  const [savingCurator, setSavingCurator] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchAllCurators().then((list) => {
+      if (alive) setCurators(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function onCuratorChange(nextId: string) {
+    if (!playlist) return;
+    setSavingCurator(true);
+    const res = await setPlaylistCurator(playlistId, nextId || null);
+    setSavingCurator(false);
+    if (!res.ok) {
+      toast.error(res.error ?? '큐레이터 변경 실패');
+      return;
+    }
+    setPlaylist({ ...playlist, created_by_user_id: nextId || null });
+    toast.success(nextId ? '큐레이터를 연결했어요' : '큐레이터 연결을 해제했어요');
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -184,6 +210,24 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
             }}
           />
         </label>
+      </div>
+
+      {/* 큐레이터 연결 */}
+      <div className="flex items-center gap-3 rounded-2xl bg-bg-card p-3">
+        <div className="flex-1 text-xs text-ink-mute">큐레이터</div>
+        <select
+          value={playlist.created_by_user_id ?? ''}
+          onChange={(e) => void onCuratorChange(e.target.value)}
+          disabled={savingCurator}
+          className="rounded-lg bg-bg-deep px-3 py-2 text-sm ring-1 ring-line/15 focus:outline-none focus:ring-accent/60"
+        >
+          <option value="">— 없음 —</option>
+          {curators.map((c) => (
+            <option key={c.user_id} value={c.user_id}>
+              {c.display_name} (@{c.handle}){c.is_verified ? ' ✓' : ''}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex items-center justify-between">
