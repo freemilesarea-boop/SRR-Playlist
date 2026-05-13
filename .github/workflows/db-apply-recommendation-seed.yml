@@ -1,0 +1,68 @@
+name: DB · 추천 메타데이터 시드 적용
+
+# 수동 실행 전용. Actions 탭 → 좌측 이 워크플로우 선택 → "Run workflow" 버튼 클릭.
+# 사전 준비: Repo Settings → Secrets and variables → Actions →
+#   "SUPABASE_DB_URL" 시크릿 등록
+#   값 예: postgresql://postgres.nsoesrvwkxqifjcxzvol:[YOUR-PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+on:
+  workflow_dispatch:
+
+jobs:
+  apply-seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: 0) 연결 확인
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL 시크릿이 비어 있어요. Repo Settings → Secrets and variables → Actions 에서 등록해 주세요."
+            exit 1
+          fi
+          psql "$SUPABASE_DB_URL" -c "select now() as server_time;"
+
+      - name: 1) 0008 마이그레이션 적용 여부 확인 + 필요시 적용
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -e
+          HAS_COL=$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from information_schema.columns where table_schema='public' and table_name='tracks' and column_name='main_genre';")
+          echo "main_genre column count: $HAS_COL"
+          if [ "$HAS_COL" != "1" ]; then
+            echo "→ 0008_recommendation_metadata.sql 적용 중…"
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_recommendation_metadata.sql
+          else
+            echo "→ 이미 적용되어 있음. 건너뜀."
+          fi
+
+      - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
+
+      - name: 3) 검증 - 메타데이터가 채워진 트랙 수
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -c "select count(*) as filled_tracks from public.tracks where main_genre is not null;"
+
+      - name: 4) 검증 - 샘플 10개
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -c "select title, main_genre, mood_tags, time_slots, business_tags from public.tracks where main_genre is not null order by title limit 10;"
+
+      - name: 5) 추천 RPC smoke test (recommend_tracks_by_context)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -c "select id, title, score, score_reasons from public.recommend_tracks_by_context(p_time_slot:='evening', p_situation:=null, p_business_type:='winebar', p_mood:=null, p_limit:=5);"
