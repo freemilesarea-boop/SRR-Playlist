@@ -51,6 +51,12 @@ export interface MemberRow {
   last_seen_at: string | null;
   total_streams: number;
   total_listened_seconds: number;
+  // 0014 — 회원가입 강화. 0014 미적용 환경에선 RPC 가 안 돌려줄 수 있어 optional.
+  account_type?: 'individual' | 'business';
+  signup_completed?: boolean;
+  identity_verified?: boolean;
+  business_verified?: boolean;
+  business_number?: string | null;
 }
 
 export interface MemberDetail {

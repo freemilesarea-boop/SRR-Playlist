@@ -143,25 +143,26 @@ export default function MembersList() {
             <thead>
               <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
                 <th className="px-3 py-2.5 text-left font-semibold">회원</th>
+                <th className="px-3 py-2.5 text-left font-semibold">유형</th>
                 <th className="px-3 py-2.5 text-left font-semibold">권한</th>
                 <th className="px-3 py-2.5 text-left font-semibold">플랜</th>
+                <th className="px-3 py-2.5 text-left font-semibold">인증</th>
                 <th className="px-3 py-2.5 text-right font-semibold">스트리밍</th>
                 <th className="px-3 py-2.5 text-right font-semibold">청취</th>
                 <th className="px-3 py-2.5 text-right font-semibold">가입일</th>
-                <th className="px-3 py-2.5 text-right font-semibold">최근방문</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={8} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={8} className="px-3 py-8 text-center text-xs text-ink-mute">
                     회원이 없어요.
                   </td>
                 </tr>
@@ -175,6 +176,16 @@ export default function MembersList() {
                   <td className="px-3 py-2.5">
                     <p className="font-medium">{m.nickname || '—'}</p>
                     <p className="text-xs text-ink-mute">{m.email ?? m.id.slice(0, 8)}</p>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-semibold ring-1 ring-line/10">
+                      {(m.account_type ?? 'individual') === 'business' ? '🏪 사업자' : '👤 일반'}
+                    </span>
+                    {m.signup_completed === false && (
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] text-yellow-200">
+                        미완료
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <select
@@ -199,6 +210,19 @@ export default function MembersList() {
                       <option value="business">{PLAN_LABEL.business}</option>
                     </select>
                   </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-wrap gap-1 text-[10px]">
+                      {m.identity_verified && (
+                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">본인 ✓</span>
+                      )}
+                      {m.business_verified && (
+                        <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-sky-300">사업자 ✓</span>
+                      )}
+                      {!m.identity_verified && !m.business_verified && (
+                        <span className="text-ink-dim">—</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5 text-right text-xs tabular-nums">
                     {m.total_streams}
                   </td>
@@ -207,9 +231,6 @@ export default function MembersList() {
                   </td>
                   <td className="px-3 py-2.5 text-right text-xs text-ink-mute">
                     {fmtDate(m.created_at)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs text-ink-mute">
-                    {fmtDate(m.last_seen_at)}
                   </td>
                 </tr>
               ))}

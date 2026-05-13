@@ -138,6 +138,15 @@ jobs:
           # 멱등 — playlists.created_by_user_id 도 IF NOT EXISTS, 테이블/RPC 도 IF NOT EXISTS / CREATE OR REPLACE
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0013_curator_profiles.sql
 
+      - name: 1g) 0014 (signup profiles — 본인/사업자 인증) 마이그레이션 적용
+        run: |
+          set -e
+          # users.account_type 컬럼 존재 여부로 적용 판단
+          HAS_AT=$(psql ${PSQL_CONN:+"$PSQL_CONN"} -tA -c "select count(*) from information_schema.columns where table_schema='public' and table_name='users' and column_name='account_type';")
+          echo "users.account_type column count: $HAS_AT"
+          # 멱등 (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS / CREATE OR REPLACE)
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0014_signup_profiles.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
