@@ -19,7 +19,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
-import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
+import TrackStateBadge from '@/components/TrackStateBadge';
 import { toast } from '@/store/toastStore';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
@@ -141,31 +142,41 @@ export default function LibraryPage() {
           <Empty>아직 들은 곡이 없어요. 홈에서 첫 재생을 해보세요.</Empty>
         ) : (
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
-            {recent.map((t, i) => (
-              <button
-                key={t.id}
-                onClick={() => playTracks(recent, i)}
-                className="group w-32 shrink-0 space-y-2 text-left sm:w-36"
-              >
-                <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
-                  <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Play size={20} fill="currentColor" className="text-white" />
+            {recent.map((t, i) => {
+              const state = getTrackPlaybackState(t);
+              const playable = state === 'ready';
+              return (
+                <button
+                  key={t.id}
+                  onClick={playable ? () => playTracks(recent, i) : undefined}
+                  aria-disabled={!playable}
+                  title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+                  className={`group w-32 shrink-0 space-y-2 text-left sm:w-36 ${
+                    playable ? '' : 'cursor-not-allowed opacity-[0.55]'
+                  }`}
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
+                    <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
+                    {playable && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Play size={20} fill="currentColor" className="text-white" />
+                      </div>
+                    )}
+                    {!playable && (
+                      <span className="absolute left-1.5 top-1.5">
+                        <TrackStateBadge state={state} variant="pill" />
+                      </span>
+                    )}
                   </div>
-                  {!isPlayableUrl(t.audio_url) && (
-                    <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-full bg-yellow-500/30 px-1.5 py-0.5 text-[10px] text-yellow-50 backdrop-blur">
-                      <AlertCircle size={9} />
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-0.5 px-0.5">
-                  <p className={`truncate text-sm font-semibold ${currentTrackId === t.id ? 'text-accent' : ''}`}>
-                    {t.title}
-                  </p>
-                  <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
-                </div>
-              </button>
-            ))}
+                  <div className="space-y-0.5 px-0.5">
+                    <p className={`truncate text-sm font-semibold ${currentTrackId === t.id ? 'text-accent' : ''}`}>
+                      {t.title}
+                    </p>
+                    <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -312,28 +323,33 @@ function LikedTrackRow({
   isCurrent?: boolean;
   onPlay: () => void;
 }) {
-  const playable = isPlayableUrl(track.audio_url);
+  const state = getTrackPlaybackState(track);
+  const playable = state === 'ready';
   return (
     <button
-      onClick={onPlay}
-      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-ink/5 ${
-        isCurrent ? 'bg-accent/10' : ''
-      } ${!playable ? 'opacity-60' : ''}`}
+      onClick={playable ? onPlay : undefined}
+      aria-disabled={!playable}
+      title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
+        playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
+      } ${isCurrent ? 'bg-accent/10' : ''}`}
     >
       <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
         <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="sm" />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-          <Play size={14} fill="currentColor" className="text-white" />
-        </div>
+        {playable && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+            <Play size={14} fill="currentColor" className="text-white" />
+          </div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p
-          className={`flex items-center gap-1 truncate text-sm font-semibold ${
+          className={`flex items-center gap-1.5 truncate text-sm font-semibold ${
             isCurrent ? 'text-accent' : ''
           }`}
         >
-          {!playable && <AlertCircle size={10} className="shrink-0 text-yellow-300" />}
-          {track.title}
+          <span className="truncate">{track.title}</span>
+          {!playable && <TrackStateBadge state={state} variant="pill" className="shrink-0" />}
         </p>
         <p className="truncate text-xs text-ink-mute">{track.artist ?? '—'}</p>
       </div>

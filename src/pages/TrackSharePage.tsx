@@ -4,7 +4,8 @@ import { Play, ChevronLeft, AlertCircle, Music } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { applyDemoMode } from '@/lib/demoMode';
 import { isPlayableUrl } from '@/lib/audio';
-import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
+import TrackStateBadge from '@/components/TrackStateBadge';
 import { usePlayerStore } from '@/store/playerStore';
 import { gradientStyle } from '@/lib/cover';
 import { trackShareUrl } from '@/lib/shareApi';
@@ -163,22 +164,41 @@ export default function TrackSharePage() {
         <section className="space-y-3 px-4 pt-6 sm:px-6">
           <h2 className="text-lg font-bold tracking-tight">같은 장르 추천</h2>
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
-            {related.map((t, i) => (
-              <button
-                key={t.id}
-                onClick={() => play([t, ...related.filter((x) => x.id !== t.id)], 0)}
-                className="group w-32 shrink-0 space-y-1.5 text-left sm:w-36"
-              >
-                <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
-                  <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Play size={18} fill="currentColor" className="text-white" />
+            {related.map((t) => {
+              const state = getTrackPlaybackState(t);
+              const playable = state === 'ready';
+              return (
+                <button
+                  key={t.id}
+                  onClick={
+                    playable
+                      ? () => play([t, ...related.filter((x) => x.id !== t.id)], 0)
+                      : undefined
+                  }
+                  aria-disabled={!playable}
+                  title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+                  className={`group w-32 shrink-0 space-y-1.5 text-left sm:w-36 ${
+                    playable ? '' : 'cursor-not-allowed opacity-[0.55]'
+                  }`}
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
+                    <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
+                    {playable && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Play size={18} fill="currentColor" className="text-white" />
+                      </div>
+                    )}
+                    {!playable && (
+                      <span className="absolute left-1.5 top-1.5">
+                        <TrackStateBadge state={state} variant="pill" />
+                      </span>
+                    )}
                   </div>
-                </div>
-                <p className="truncate px-0.5 text-xs font-semibold">{t.title}</p>
-                <p className="truncate px-0.5 text-[10px] text-ink-mute">{t.artist ?? '—'}</p>
-              </button>
-            ))}
+                  <p className="truncate px-0.5 text-xs font-semibold">{t.title}</p>
+                  <p className="truncate px-0.5 text-[10px] text-ink-mute">{t.artist ?? '—'}</p>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}

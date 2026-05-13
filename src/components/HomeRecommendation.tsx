@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Play, Sparkles, AlertCircle } from 'lucide-react';
+import { Play, Sparkles } from 'lucide-react';
 import {
   recommendTracksByContext,
   type RecommendedTrack,
@@ -7,8 +7,10 @@ import {
 import { getKstTimeSlot, getTimeSlotLabel } from '@/lib/timeTheme';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import TrackStateBadge from '@/components/TrackStateBadge';
 import { toast } from '@/store/toastStore';
 
 interface Props {
@@ -66,15 +68,16 @@ export default function HomeRecommendation({
 
   function play(idx: number) {
     if (tracks.length === 0) return;
-    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    // 클릭된 트랙이 재생 불가면 변경 없음 (카드 onClick 에서도 막혀 있지만 이중 방어)
+    if (!isPlayableUrl(tracks[idx]?.audio_url)) return;
+    const { playable } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
       toast.info('재생 가능한 음원이 없어요.');
       return;
     }
-    const start = isPlayableUrl(tracks[idx]?.audio_url)
-      ? idx
-      : tracks.findIndex((t) => isPlayableUrl(t.audio_url));
-    setQueue(tracks, Math.max(0, start), null);
+    const targetId = tracks[idx].id;
+    const start = Math.max(0, playable.findIndex((t) => t.id === targetId));
+    setQueue(playable, start < 0 ? 0 : start, null);
   }
 
   if (loading) return null;
@@ -91,40 +94,55 @@ export default function HomeRecommendation({
       </div>
 
       <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
-        {tracks.map((t, i) => (
-          <button
-            key={t.id}
-            onClick={() => play(i)}
-            className="group w-32 shrink-0 space-y-1.5 text-left sm:w-36"
-          >
-            <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
-              <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                <Play size={18} fill="currentColor" className="text-white" />
+        {tracks.map((t, i) => {
+          const state = getTrackPlaybackState(t);
+          const playable = state === 'ready';
+          return (
+            <button
+              key={t.id}
+              onClick={playable ? () => play(i) : undefined}
+              aria-disabled={!playable}
+              title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+              className={`group w-32 shrink-0 space-y-1.5 text-left sm:w-36 ${
+                playable ? '' : 'cursor-not-allowed opacity-[0.55]'
+              }`}
+            >
+              <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
+                <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
+                {/* 재생버튼 hover overlay 는 playable 일 때만 */}
+                {playable && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Play size={18} fill="currentColor" className="text-white" />
+                  </div>
+                )}
+                {!playable && (
+                  <span className="absolute left-1.5 top-1.5">
+                    <TrackStateBadge state={state} variant="pill" />
+                  </span>
+                )}
+                {playable && (
+                  <span className="absolute right-1.5 top-1.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
+                    +{t.score}
+                  </span>
+                )}
               </div>
-              {!isPlayableUrl(t.audio_url) && (
-                <AlertCircle size={11} className="absolute left-1.5 top-1.5 text-yellow-300" />
-              )}
-              <span className="absolute right-1.5 top-1.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
-                +{t.score}
-              </span>
-            </div>
-            <div className="space-y-0.5 px-0.5">
-              <p
-                className={`truncate text-xs font-semibold ${
-                  currentTrackId === t.id ? 'text-accent' : ''
-                }`}
-              >
-                {t.title}
-              </p>
-              <p className="truncate text-[10px] text-ink-mute">{t.artist ?? '—'}</p>
-            </div>
-            {/* 좋아요는 hover 시만 */}
-            <div className="hidden">
-              <TrackLikeButton trackId={t.id} track={t} size={12} />
-            </div>
-          </button>
-        ))}
+              <div className="space-y-0.5 px-0.5">
+                <p
+                  className={`truncate text-xs font-semibold ${
+                    currentTrackId === t.id ? 'text-accent' : ''
+                  }`}
+                >
+                  {t.title}
+                </p>
+                <p className="truncate text-[10px] text-ink-mute">{t.artist ?? '—'}</p>
+              </div>
+              {/* 좋아요는 hover 시만 */}
+              <div className="hidden">
+                <TrackLikeButton trackId={t.id} track={t} size={12} />
+              </div>
+            </button>
+          );
+        })}
       </div>
     </section>
   );

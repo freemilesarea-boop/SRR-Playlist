@@ -28,9 +28,11 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import TrackStateBadge from '@/components/TrackStateBadge';
 
 export default function SearchPage() {
   const navigate = useNavigate();
@@ -109,22 +111,18 @@ export default function SearchPage() {
 
   function handlePlayTrack(t: SearchResult) {
     if (!groups) return;
-    const playableTracks = groups.tracks
+    // 클릭된 트랙 자체가 unplayable 이면 큐 변경 없이 무시
+    if (!isPlayableUrl(t.audio_url)) return;
+    const allRows = groups.tracks
       .map(searchTrackToTrackRow)
       .filter((x): x is NonNullable<typeof x> => !!x);
-    if (playableTracks.length === 0) return;
-    const idx = playableTracks.findIndex((x) => x.id === t.id);
-    if (idx === -1) return;
-
-    const hasPlayable = playableTracks.some((x) => isPlayableUrl(x.audio_url));
-    if (!hasPlayable) {
+    const { playable } = filterPlayableTracks(allRows);
+    if (playable.length === 0) {
       toast.info('샘플 음원이 아직 없습니다.');
       return;
     }
-    const startIdx = isPlayableUrl(playableTracks[idx].audio_url)
-      ? idx
-      : playableTracks.findIndex((x) => isPlayableUrl(x.audio_url));
-    setQueue(playableTracks, Math.max(0, startIdx), null);
+    const startIdx = Math.max(0, playable.findIndex((x) => x.id === t.id));
+    setQueue(playable, startIdx < 0 ? 0 : startIdx, null);
   }
 
   function handleRemoveRecent(q: string) {
@@ -399,13 +397,16 @@ function TrackResultRow({
   isCurrent?: boolean;
   onPlay: () => void;
 }) {
-  const playable = isPlayableUrl(item.audio_url);
+  const state = getTrackPlaybackState({ audio_url: item.audio_url ?? '' });
+  const playable = state === 'ready';
   return (
     <button
-      onClick={onPlay}
-      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-ink/5 ${
-        isCurrent ? 'bg-accent/10' : ''
-      } ${!playable ? 'opacity-60' : ''}`}
+      onClick={playable ? onPlay : undefined}
+      aria-disabled={!playable}
+      title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
+        playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
+      } ${isCurrent ? 'bg-accent/10' : ''}`}
     >
       <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
         <AutoCover
@@ -414,18 +415,20 @@ function TrackResultRow({
           imageUrl={item.image_url}
           size="sm"
         />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-          <Play size={14} fill="currentColor" className="text-white" />
-        </div>
+        {playable && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+            <Play size={14} fill="currentColor" className="text-white" />
+          </div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p
-          className={`flex items-center gap-1 truncate text-sm font-semibold ${
+          className={`flex items-center gap-1.5 truncate text-sm font-semibold ${
             isCurrent ? 'text-accent' : ''
           }`}
         >
-          {!playable && <AlertCircle size={10} className="shrink-0 text-yellow-300" />}
-          {item.title}
+          <span className="truncate">{item.title}</span>
+          {!playable && <TrackStateBadge state={state} variant="pill" className="shrink-0" />}
         </p>
         <p className="truncate text-xs text-ink-mute">
           {item.subtitle ?? '—'}

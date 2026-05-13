@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, AlertCircle, ChevronRight } from 'lucide-react';
+import { Play, ChevronRight } from 'lucide-react';
 import {
   fetchContinueListening,
   fetchRecentlyPlayedTracks,
@@ -10,7 +10,8 @@ import { loadPlayerSession } from '@/lib/playerSession';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
-import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
+import TrackStateBadge from '@/components/TrackStateBadge';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
@@ -155,30 +156,42 @@ export default function HomeLibrarySections() {
             </Link>
           </div>
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
-            {recent.map((t, i) => (
-              <button
-                key={t.id}
-                onClick={() => play(recent, i)}
-                className="group w-28 shrink-0 space-y-1.5 text-left sm:w-32"
-              >
-                <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
-                  <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Play size={16} fill="currentColor" className="text-white" />
-                  </div>
-                  {!isPlayableUrl(t.audio_url) && (
-                    <AlertCircle size={11} className="absolute left-1.5 top-1.5 text-yellow-300" />
-                  )}
-                </div>
-                <p
-                  className={`truncate px-0.5 text-xs font-semibold ${
-                    currentTrackId === t.id ? 'text-accent' : ''
+            {recent.map((t, i) => {
+              const state = getTrackPlaybackState(t);
+              const playable = state === 'ready';
+              return (
+                <button
+                  key={t.id}
+                  onClick={playable ? () => play(recent, i) : undefined}
+                  aria-disabled={!playable}
+                  title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+                  className={`group w-28 shrink-0 space-y-1.5 text-left sm:w-32 ${
+                    playable ? '' : 'cursor-not-allowed opacity-[0.55]'
                   }`}
                 >
-                  {t.title}
-                </p>
-              </button>
-            ))}
+                  <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
+                    <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
+                    {playable && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Play size={16} fill="currentColor" className="text-white" />
+                      </div>
+                    )}
+                    {!playable && (
+                      <span className="absolute left-1.5 top-1.5">
+                        <TrackStateBadge state={state} variant="pill" />
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    className={`truncate px-0.5 text-xs font-semibold ${
+                      currentTrackId === t.id ? 'text-accent' : ''
+                    }`}
+                  >
+                    {t.title}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}

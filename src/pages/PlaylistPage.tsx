@@ -7,7 +7,8 @@ import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
-import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
+import TrackStateBadge from '@/components/TrackStateBadge';
 import { gradientStyle } from '@/lib/cover';
 import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
@@ -225,14 +226,17 @@ export default function PlaylistPage() {
         )}
         {tracks.map((t, idx) => {
           const isCurrent = currentTrackId === t.id && currentPlaylistId === playlist.id;
-          const playable = isPlayableTrack(t);
+          const state = getTrackPlaybackState(t);
+          const playable = state === 'ready';
           return (
             <li
               key={t.id}
-              onClick={() => handlePlay(idx, false)}
-              className={`flex cursor-pointer items-center gap-3 py-3 transition hover:bg-ink/5 ${
-                isCurrent ? 'text-accent' : ''
-              } ${!playable ? 'opacity-60' : ''}`}
+              onClick={playable ? () => handlePlay(idx, false) : undefined}
+              aria-disabled={!playable}
+              title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+              className={`flex items-center gap-3 py-3 transition ${
+                playable ? 'cursor-pointer hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
+              } ${isCurrent ? 'text-accent' : ''}`}
             >
               <div className="w-6 text-right text-xs text-ink-dim">
                 {isCurrent && playing ? <span className="text-accent">♪</span> : idx + 1}
@@ -247,13 +251,11 @@ export default function PlaylistPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1 truncate text-sm font-medium">
-                  {!playable && <AlertCircle size={10} className="shrink-0 text-yellow-300" />}
-                  {t.title}
+                <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                  <span className="truncate">{t.title}</span>
+                  {!playable && <TrackStateBadge state={state} variant="pill" className="shrink-0" />}
                 </p>
-                <p className="truncate text-xs text-ink-mute">
-                  {!playable ? '샘플 음원 없음' : (t.artist ?? '—')}
-                </p>
+                <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
               </div>
               <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
                 <TrackLikeButton trackId={t.id} track={t} size={14} />

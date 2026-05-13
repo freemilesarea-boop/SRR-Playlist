@@ -1,10 +1,11 @@
-import { Play, AlertCircle } from 'lucide-react';
+import { Play } from 'lucide-react';
 import type { ChartTrack } from '@/lib/chartsApi';
 import { chartTrackToTrackRow } from '@/lib/chartsApi';
 import { formatTime } from '@/lib/format';
-import { isPlayableUrl } from '@/lib/audio';
+import { getTrackPlaybackState } from '@/lib/trackPlayability';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import TrackStateBadge from '@/components/TrackStateBadge';
 
 const NUM = (n: number) => n.toLocaleString('ko-KR');
 
@@ -19,15 +20,23 @@ export default function ChartRow({
   isCurrent?: boolean;
   onPlay: () => void;
 }) {
-  const playable = isPlayableUrl(track.audio_url);
+  const state = getTrackPlaybackState(track);
+  const playable = state === 'ready';
   const rank = track.rank || index + 1;
+
+  function handleClick() {
+    if (!playable) return; // 재생 불가 행은 클릭 무시
+    onPlay();
+  }
 
   return (
     <button
-      onClick={onPlay}
-      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-ink/5 ${
-        isCurrent ? 'bg-accent/10' : ''
-      } ${!playable ? 'opacity-60' : ''}`}
+      onClick={handleClick}
+      aria-disabled={!playable}
+      title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
+      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
+        playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
+      } ${isCurrent ? 'bg-accent/10' : ''}`}
     >
       {/* 순위 */}
       <div className="w-7 shrink-0 text-right text-sm font-bold tabular-nums">
@@ -44,18 +53,20 @@ export default function ChartRow({
           imageUrl={track.cover_url}
           size="sm"
         />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-          <Play size={16} fill="currentColor" className="text-white" />
-        </div>
+        {playable && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+            <Play size={16} fill="currentColor" className="text-white" />
+          </div>
+        )}
       </div>
 
       {/* 정보 */}
       <div className="min-w-0 flex-1">
-        <p className={`flex items-center gap-1 truncate text-sm font-semibold ${
+        <p className={`flex items-center gap-1.5 truncate text-sm font-semibold ${
           isCurrent ? 'text-accent' : ''
         }`}>
-          {!playable && <AlertCircle size={10} className="shrink-0 text-yellow-300" />}
-          {track.title}
+          <span className="truncate">{track.title}</span>
+          {!playable && <TrackStateBadge state={state} variant="pill" className="shrink-0" />}
         </p>
         <p className="truncate text-xs text-ink-mute">
           {track.artist ?? '—'}

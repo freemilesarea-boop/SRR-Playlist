@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BarChart3, ChevronRight } from 'lucide-react';
 import { fetchTrackChart, chartTrackToTrackRow, type ChartTrack } from '@/lib/chartsApi';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import ChartRow from './charts/ChartRow';
@@ -31,16 +32,16 @@ export default function HomeChartSection() {
 
   function handlePlay(idx: number) {
     if (tracks.length === 0) return;
-    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    if (!isPlayableUrl(tracks[idx]?.audio_url)) return; // 재생 불가 행은 변경 없음
+    const rows = tracks.map(chartTrackToTrackRow);
+    const { playable } = filterPlayableTracks(rows);
     if (playable.length === 0) {
       toast.info('아직 재생 가능한 음원이 없어요.');
       return;
     }
-    const rows = tracks.map(chartTrackToTrackRow);
-    const startIndex = isPlayableUrl(tracks[idx].audio_url)
-      ? idx
-      : rows.findIndex((t) => isPlayableUrl(t.audio_url));
-    setQueue(rows, Math.max(0, startIndex), null);
+    const targetId = tracks[idx].track_id;
+    const startIndex = Math.max(0, playable.findIndex((t) => t.id === targetId));
+    setQueue(playable, startIndex < 0 ? 0 : startIndex, null);
   }
 
   if (loading) return null;

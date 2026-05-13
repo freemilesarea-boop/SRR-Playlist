@@ -11,6 +11,7 @@ import {
 } from '@/lib/chartsApi';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 import ChartRow from '@/components/charts/ChartRow';
 import ChartPodium from '@/components/charts/ChartPodium';
@@ -105,20 +106,20 @@ export default function ChartPage() {
 
   function handlePlay(idx: number) {
     if (tracks.length === 0) return;
-    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    // 클릭된 행이 재생 불가면 아무 변경 없이 무시 (UI 1차 차단 + ChartRow disabled 와 이중 방어)
+    if (!isPlayableUrl(tracks[idx]?.audio_url)) {
+      return;
+    }
+    const trackRows = tracks.map(chartTrackToTrackRow);
+    const { playable } = filterPlayableTracks(trackRows);
     if (playable.length === 0) {
       toast.info('아직 재생 가능한 음원이 없어요.');
       return;
     }
-    // 차트 전체를 큐로
-    const trackRows = tracks.map(chartTrackToTrackRow);
-    // 클릭한 트랙이 재생 불가면 첫 재생 가능 트랙으로 이동
-    const startIndex = isPlayableUrl(tracks[idx].audio_url)
-      ? idx
-      : trackRows.findIndex((t) => isPlayableUrl(t.audio_url));
-
-    setQueue(trackRows, Math.max(0, startIndex), null);
-    // 차트 재생은 특정 플레이리스트에 묶이지 않으므로 recent_plays 기록 생략
+    // 클릭된 트랙을 playable 인덱스로 매핑
+    const targetId = tracks[idx].track_id;
+    const startIndex = Math.max(0, playable.findIndex((t) => t.id === targetId));
+    setQueue(playable, startIndex < 0 ? 0 : startIndex, null);
   }
 
   const currentTab = TABS.find((t) => t.key === tab)!;
