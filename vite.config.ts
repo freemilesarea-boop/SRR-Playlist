@@ -79,6 +79,11 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // ffmpeg.wasm 은 dynamic import + CDN 로드. Vite 가 미리 번들 처리하면
+    // worker/wasm 로딩이 깨지므로 제외.
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   server: {
     host: true,
     port: 5173,

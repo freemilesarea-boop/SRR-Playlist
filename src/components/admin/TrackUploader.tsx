@@ -225,16 +225,83 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
     if (!title.trim()) { toast.error('곡 제목을 입력해주세요.'); return; }
     setBusy(true);
     try {
-      setProgress('길이 분석…');
-      const duration = await detectDuration(audioFile);
-      setProgress('음원 업로드…');
-      const audioUrl = await uploadToBucket('audio', audioFile);
+      // ============ 1) 원본 파일 decode smoke test ============
+      setProgress('오디오 분석 중…');
+      const { validateAudioFile, validateAudioUrl } = await import('@/lib/audioValidation');
+      const origCheck = await validateAudioFile(audioFile);
+      if (import.meta.env.DEV) {
+        console.debug('[upload] origCheck', origCheck);
+      }
+
+      // ============ 2) 변환 필요 여부 결정 ============
+      // - 원본 decode 실패 → 무조건 transcode
+      // - mp3 라도 안전성을 위해 wav/m4a/aac/flac/ogg 는 무조건 transcode
+      // - mp3 이고 decode OK 이면 그대로 사용
+      const ext = (audioFile.name.split('.').pop() ?? '').toLowerCase();
+      const isAlreadyMp3 = ext === 'mp3';
+      const needsTranscode = !origCheck.ok || !isAlreadyMp3;
+
+      let uploadFile: File = audioFile;
+      let detectedDuration: number | null = origCheck.duration ?? null;
+
+      if (needsTranscode) {
+        try {
+          setProgress('MP3로 변환 중… (라이브러리 로드)');
+          const { transcodeToStandardMp3 } = await import('@/lib/audioTranscode');
+          const std = await transcodeToStandardMp3(audioFile, {
+            onProgress: (r) => setProgress(`MP3로 변환 중… ${Math.round(r * 100)}%`),
+            onLog: (m) => {
+              if (import.meta.env.DEV) console.debug('[ffmpeg]', m);
+            },
+          });
+          uploadFile = std;
+          // 변환된 파일 재검증
+          setProgress('변환 결과 검증 중…');
+          const stdCheck = await validateAudioFile(std);
+          if (import.meta.env.DEV) console.debug('[upload] transcodedCheck', stdCheck);
+          if (!stdCheck.ok) {
+            throw new Error(
+              `변환된 mp3 의 디코드 검증 실패: ${stdCheck.error ?? 'unknown'}`,
+            );
+          }
+          detectedDuration = stdCheck.duration ?? detectedDuration;
+        } catch (e) {
+          throw new Error(
+            `브라우저에서 이 오디오를 변환하지 못했습니다 (${e instanceof Error ? e.message : 'unknown'}). ` +
+              'WAV 또는 표준 MP3 파일로 다시 시도해주세요.',
+          );
+        }
+      } else if (detectedDuration == null) {
+        // 정상 mp3 인데 duration 미감지 → 한 번 더 시도
+        const d = await detectDuration(audioFile);
+        detectedDuration = d;
+      }
+
+      // ============ 3) Storage 업로드 ============
+      setProgress('업로드 중…');
+      const audioUrl = await uploadToBucket('audio', uploadFile);
+
+      // ============ 4) 공개 URL 실제 재생 검증 ============
+      setProgress('재생 검증 중…');
+      const urlCheck = await validateAudioUrl(audioUrl);
+      if (import.meta.env.DEV) console.debug('[upload] urlCheck', urlCheck);
+      if (!urlCheck.ok) {
+        throw new Error(
+          `업로드된 파일을 브라우저가 재생하지 못했어요 (${urlCheck.error ?? 'unknown'}). ` +
+            `Content-Type=${urlCheck.contentType ?? '?'}, status=${urlCheck.status ?? '?'}`,
+        );
+      }
+
+      // ============ 5) 커버 업로드 (옵션) ============
       let coverUrl: string | null = null;
       if (coverFile) {
-        setProgress('커버 업로드…');
+        setProgress('커버 업로드 중…');
         coverUrl = await uploadToBucket('covers', coverFile);
       }
+
       setProgress('저장 중…');
+      // detectDuration 으로 한 번 더 보강
+      const duration = detectedDuration ?? (await detectDuration(uploadFile));
       const insertPayload: Record<string, unknown> = {
         title: title.trim(),
         artist: artist.trim() || null,

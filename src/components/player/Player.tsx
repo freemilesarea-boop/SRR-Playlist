@@ -45,6 +45,14 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
   4: 'SRC_NOT_SUPPORTED',
 };
 
+/**
+ * 세션당 1회만 실패 처리되는 트랙 id 집합.
+ * 모듈 스코프라 페이지 이동/컴포넌트 언마운트해도 유지 (브라우저 탭 단위).
+ * SRC_NOT_SUPPORTED / DECODE 등 "재생 불가" 가 확정된 트랙을 같은 세션에서
+ * 자동 next 무한 루프로 다시 시도하지 않게 한다.
+ */
+const sessionFailedTrackIds = new Set<string>();
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -118,6 +126,7 @@ export default function Player() {
 
   /* ---------- analytics: start / 15s / 30s / complete ---------- */
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const profile = useAuthStore((s) => s.profile);
   const startedTrackIdRef = useRef<string | null>(null);
   const milestoneSentRef = useRef(false);
   const recentSentRef = useRef<string | null>(null);
@@ -180,6 +189,20 @@ export default function Player() {
   useEffect(() => {
     const audio = activeRef();
     if (!audio || !current) return;
+
+    // 세션 내 이미 SRC_NOT_SUPPORTED / DECODE 로 실패한 트랙 → 즉시 스킵
+    if (playing && sessionFailedTrackIds.has(current.id)) {
+      skipChainRef.current += 1;
+      const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
+      if (skipChainRef.current >= cap) {
+        pause();
+        toast.error('재생 가능한 음원이 없어요. 관리자에서 재업로드가 필요합니다.');
+        skipChainRef.current = 0;
+        return;
+      }
+      const t = window.setTimeout(() => next(), 300);
+      return () => window.clearTimeout(t);
+    }
 
     if (!playable) {
       if (playing) {
@@ -567,9 +590,28 @@ export default function Player() {
         src: target.src,
       });
     }
+
+    // 디코딩/포맷 문제로 확정된 트랙은 세션 동안 재시도 금지
+    const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
+    if (current && isPermanent) {
+      sessionFailedTrackIds.add(current.id);
+    }
+
     setErrored(true);
     pause();
-    toast.error(`재생 실패 (${codeName}). 다음 곡으로 넘어갑니다.`);
+
+    if (isPermanent) {
+      const isAdmin = profile?.role === 'admin';
+      toast.error(
+        isAdmin
+          ? `이 음원은 브라우저에서 재생할 수 없어요 (${codeName}). 관리자에서 표준 MP3로 재업로드하세요.`
+          : `이 음원은 브라우저에서 재생할 수 없어요 (${codeName}). 관리자에서 재업로드가 필요합니다.`,
+      );
+    } else {
+      toast.error(`재생 실패 (${codeName}). 다음 곡으로 넘어갑니다.`);
+    }
+
+    // 자동 next — 단 다음 트랙도 sessionFailedTrackIds 에 있으면 추가 스킵 (Player 메인 effect 가 처리)
     window.setTimeout(() => next(), 600);
   }
 
