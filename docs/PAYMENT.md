@@ -13,28 +13,37 @@ SWK MVP 의 PayApp 정기결제(rebill) 통합 운영 가이드. 실제 운영 �
 
 ## 필요한 환경변수
 
-### Supabase Edge Function secrets
+### Supabase Edge Function secrets (운영 기준)
+
+⚠️ **실제 값은 절대 git 에 커밋하지 마세요.** 아래는 형식 예시.
 
 ```bash
-# 가맹점 식별 & 인증
-supabase secrets set PAYAPP_USERID=실제값
-supabase secrets set PAYAPP_LINKKEY=실제값
-supabase secrets set PAYAPP_LINKVAL=실제값
+# 가맹점 식별 & 인증 (PayApp 콘솔에서 발급)
+supabase secrets set PAYAPP_USERID=swk_pay_userid_value
+supabase secrets set PAYAPP_LINKKEY=secret_linkkey_value
+supabase secrets set PAYAPP_LINKVAL=secret_linkval_value
 supabase secrets set PAYAPP_API_URL=https://api.payapp.kr/oapi/apiLoad.html
 supabase secrets set PAYAPP_REBILL_EXPIRE=2099-12-31
 
-# URL 분리 (중요)
-supabase secrets set PAYAPP_FEEDBACK_BASE_URL=https://YOUR-PROJECT.supabase.co
+# URL 분리 (필수 — 운영 배포 전 반드시 명시)
+supabase secrets set PAYAPP_FEEDBACK_BASE_URL=https://nsoesrvwkxqifjcxzvol.supabase.co
 supabase secrets set PUBLIC_APP_URL=https://srr-playlist.vercel.app
 ```
 
-| 변수 | 용도 |
-|---|---|
-| `PAYAPP_FEEDBACK_BASE_URL` | feedbackurl 의 host (Supabase Functions URL) |
-| `PUBLIC_APP_URL` | returnurl / failurl 의 host (프론트 도메인) |
-| `APP_BASE_URL` | legacy fallback — 둘 다 같으면 이거 하나로 OK |
+| 변수 | 용도 | 운영 예시값 |
+|---|---|---|
+| `PAYAPP_USERID` | PayApp 가맹점 ID | (PayApp 콘솔) |
+| `PAYAPP_LINKKEY` | 결제 요청용 시크릿 | (PayApp 콘솔) |
+| `PAYAPP_LINKVAL` | webhook 검증 토큰 | (PayApp 콘솔, feedbackurl 등록 시 설정) |
+| `PAYAPP_API_URL` | REST endpoint | `https://api.payapp.kr/oapi/apiLoad.html` |
+| `PAYAPP_REBILL_EXPIRE` | 정기결제 만료일 | `2099-12-31` |
+| `PAYAPP_FEEDBACK_BASE_URL` | feedbackurl host | `https://<project>.supabase.co` |
+| `PUBLIC_APP_URL` | return/fail host | `https://srr-playlist.vercel.app` |
+| `APP_BASE_URL` | legacy fallback | 사용 권장 X — 두 URL 명시되면 자동 무시 |
 
 > `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` 는 Supabase 자동 주입.
+
+**Env 누락 가드**: `PAYAPP_USERID` / `PAYAPP_LINKKEY` / `PUBLIC_APP_URL` 중 하나라도 비어 있으면 `create-payapp-subscription` 가 즉시 HTTP 500 + 명확한 에러 반환 (실제 PayApp API 호출 안 함).
 
 ### Vercel (프론트)
 ```
@@ -206,6 +215,48 @@ select status, canceled_at from public.subscriptions where user_id='USER_UUID';
 select membership_tier from public.users where id='USER_UUID';
 -- 'free'
 ```
+
+## 실제 PayApp webhook payload 캡처 (배포 후 1회 필수)
+
+배포 직후 첫 테스트 결제를 1건 수행하고 **반드시** 아래 SQL 로 실제 payload 의 키 이름을 확인하세요.
+
+```sql
+-- 1) 가장 최근 webhook 의 raw payload 전체 확인
+select created_at, raw_payload
+from public.payapp_webhook_events
+order by created_at desc limit 1;
+
+-- 2) 키 이름 일관성 점검 (코드는 mul_no/mulno, pay_state/paystate, rebill_no/rebillno 별칭 처리 중)
+select jsonb_object_keys(raw_payload) as key, count(*) as n
+from public.payapp_webhook_events
+group by 1 order by n desc;
+
+-- 3) linkkey 가 PayApp 으로부터 실제 들어오는지 확인
+select
+  (raw_payload ? 'linkkey') as has_linkkey,
+  (raw_payload->>'linkkey') as linkkey_value,
+  count(*)
+from public.payapp_webhook_events
+group by 1, 2;
+```
+
+**기대 키 (코드가 읽는 이름)**:
+- `userid`, `linkval`, `linkkey` (있을 때만), `price`
+- `var1` = `order_no`, `var2` = `user_id`
+- `pay_state` / `mul_no` / `rebill_no` (또는 대체형 `paystate` / `mulno` / `rebillno`)
+
+**다르면**: `supabase/functions/payapp-feedback/index.ts` 의 `payloadFromForm` 직후 키 매핑 추가. (현재 코드는 흔한 대체형은 모두 처리.)
+
+## 중복 방지 (DB 레벨 2중 보호)
+
+1. `payapp_webhook_events.event_key` UNIQUE — 같은 (mul_no, rebill_no, pay_state, price) 조합 webhook 2회 호출 차단.
+2. `payment_orders.payapp_mul_no` partial UNIQUE INDEX (0016) — 같은 mul_no 가 두 개 order 행에 들어가는 것 차단:
+   ```sql
+   create unique index uniq_payment_orders_mul_no
+     on public.payment_orders(payapp_mul_no)
+     where payapp_mul_no is not null;
+   ```
+   pay_state=1 등 mul_no 가 채워지지 않은 단계에선 제약 없음. pay_state=4 첫 결제 시점 이후 적용.
 
 ## 운영 모니터링 SQL
 

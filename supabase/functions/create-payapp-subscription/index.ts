@@ -16,14 +16,15 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
-// feedbackurl 은 반드시 Supabase Functions URL (인증 없이 외부 호출).
-// returnurl/failurl 은 프론트 도메인 URL.
-// APP_BASE_URL 은 legacy fallback — 둘 다 같은 호스트 쓰는 환경 호환용.
-const LEGACY_BASE = Deno.env.get('APP_BASE_URL') ?? '';
-const PAYAPP_FEEDBACK_BASE_URL =
-  Deno.env.get('PAYAPP_FEEDBACK_BASE_URL') || LEGACY_BASE || SUPABASE_URL;
-const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || LEGACY_BASE;
 const PAYAPP_REBILL_EXPIRE = Deno.env.get('PAYAPP_REBILL_EXPIRE') ?? '2099-12-31';
+// URL 분리:
+//   PAYAPP_FEEDBACK_BASE_URL = Supabase Functions URL (webhook 수신 endpoint host)
+//   PUBLIC_APP_URL           = 프론트 도메인 (return/fail 페이지 host)
+// 우선순위: 명시된 신규 env → APP_BASE_URL legacy → 마지막 폴백 (SUPABASE_URL/빈문자열)
+const APP_BASE_LEGACY = Deno.env.get('APP_BASE_URL') ?? '';
+const PAYAPP_FEEDBACK_BASE_URL =
+  Deno.env.get('PAYAPP_FEEDBACK_BASE_URL') || APP_BASE_LEGACY || SUPABASE_URL;
+const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || APP_BASE_LEGACY;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +54,16 @@ function rebillDayFromToday(): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  // env guard — 운영 배포 전 누락되면 결제창이 깨진 URL 로 진입하므로 명확히 실패시킴
+  if (!PAYAPP_USERID || !PAYAPP_LINKKEY) {
+    console.error('[create-payapp] PAYAPP_USERID / PAYAPP_LINKKEY 시크릿 누락');
+    return json({ error: 'server misconfigured: payapp credentials missing' }, 500);
+  }
+  if (!PUBLIC_APP_URL) {
+    console.error('[create-payapp] PUBLIC_APP_URL 또는 APP_BASE_URL 시크릿 누락');
+    return json({ error: 'server misconfigured: PUBLIC_APP_URL missing' }, 500);
+  }
 
   // 로그인 사용자 검증
   const authHeader = req.headers.get('authorization') ?? '';
