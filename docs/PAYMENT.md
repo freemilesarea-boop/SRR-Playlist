@@ -25,6 +25,10 @@ supabase secrets set PAYAPP_LINKVAL=secret_linkval_value
 supabase secrets set PAYAPP_API_URL=https://api.payapp.kr/oapi/apiLoad.html
 supabase secrets set PAYAPP_REBILL_EXPIRE=2099-12-31
 
+# 브랜딩 / 고객센터
+supabase secrets set PAYAPP_PAYMENT_MEMO="SRR Playlist 정기결제"
+supabase secrets set SUPPORT_PHONE=02-0000-0000   # ⚠️ 개인 휴대폰 금지. 070/대표번호/업무용만.
+
 # URL 분리 (필수 — 운영 배포 전 반드시 명시)
 supabase secrets set PAYAPP_FEEDBACK_BASE_URL=https://nsoesrvwkxqifjcxzvol.supabase.co
 supabase secrets set PUBLIC_APP_URL=https://srr-playlist.vercel.app
@@ -37,6 +41,8 @@ supabase secrets set PUBLIC_APP_URL=https://srr-playlist.vercel.app
 | `PAYAPP_LINKVAL` | webhook 검증 토큰 | (PayApp 콘솔, feedbackurl 등록 시 설정) |
 | `PAYAPP_API_URL` | REST endpoint | `https://api.payapp.kr/oapi/apiLoad.html` |
 | `PAYAPP_REBILL_EXPIRE` | 정기결제 만료일 | `2099-12-31` |
+| `PAYAPP_PAYMENT_MEMO` | 결제창 판매자 메모 (브랜딩) | `SRR Playlist 정기결제` |
+| `SUPPORT_PHONE` | 고객센터 연락처 (판매자 노출) | `02-0000-0000` (⚠️ 개인 휴대폰 금지) |
 | `PAYAPP_FEEDBACK_BASE_URL` | feedbackurl host | `https://<project>.supabase.co` |
 | `PUBLIC_APP_URL` | return/fail host | `https://srr-playlist.vercel.app` |
 | `APP_BASE_URL` | legacy fallback | 사용 권장 X — 두 URL 명시되면 자동 무시 |
@@ -44,6 +50,35 @@ supabase secrets set PUBLIC_APP_URL=https://srr-playlist.vercel.app
 > `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` 는 Supabase 자동 주입.
 
 **Env 누락 가드**: `PAYAPP_USERID` / `PAYAPP_LINKKEY` / `PUBLIC_APP_URL` 중 하나라도 비어 있으면 `create-payapp-subscription` 가 즉시 HTTP 500 + 명확한 에러 반환 (실제 PayApp API 호출 안 함).
+
+## 판매자 정보 정책 (중요)
+
+### 결제창 메모 (브랜딩)
+- 환경변수 `PAYAPP_PAYMENT_MEMO` 로 제어. 기본값 `SRR Playlist 정기결제`.
+- 영문 브랜딩 옵션: `SRR Playlist Premium Membership`.
+- 사용자에게 노출되는 결제창의 "메모" 영역에 표시됨.
+
+### 판매자 연락처 (개인 휴대폰 금지)
+PayApp 결제창 / 알림 / 영수증에 노출되는 **판매자(가맹점) 연락처**는 다음 정책을 따릅니다:
+
+| 채널 | 노출 경로 | 설정 위치 |
+|---|---|---|
+| 결제창 안내 | PayApp 가맹점 정보 | **PayApp 콘솔의 가맹점 설정** |
+| 영수증 / 카드사 매출전표 | PayApp 가맹점 정보 | **PayApp 콘솔의 가맹점 설정** |
+| 코드 측 첨부 (가능 시 sellerphone) | rebillRegist 파라미터 | `SUPPORT_PHONE` env |
+
+**금지**: 대표/개발자의 **개인 휴대폰 번호** 사용 금지. 다음 중 택일:
+- `02-XXXX-XXXX` (대표번호)
+- `070-XXXX-XXXX` (인터넷 전화)
+- `1588/1644/1670` (대표 고객센터)
+- 업무용 휴대폰
+
+**운영 절차**:
+1. SUPPORT_PHONE 시크릿에 등록
+2. PayApp 콘솔의 **가맹점 정보 → 대표 연락처** 도 같은 번호로 동기화
+3. 영수증 미리보기에서 개인 번호가 더 이상 노출되지 않는지 확인
+
+> ⚠️ `rebillRegist` API 명세에 별도 `sellerphone` 파라미터가 없으면 코드의 attach 는 무시됨. PayApp 콘솔 설정이 단일 진실의 원천.
 
 ### Vercel (프론트)
 ```
