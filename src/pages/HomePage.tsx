@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPlaylists, fetchRecentPlaylists, fetchPlaylistCounts } from '@/lib/api';
+import { fetchPopularPlaylistsByFollows, type PopularPlaylist } from '@/lib/playlistFollowApi';
 import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
@@ -15,8 +16,20 @@ export default function HomePage() {
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [recents, setRecents] = useState<PlaylistRow[]>([]);
   const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
+  const [popularByFollows, setPopularByFollows] = useState<PopularPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 팔로워 기준 인기 플리 (0012 미적용 시 빈 배열 → 섹션 숨김)
+  useEffect(() => {
+    let alive = true;
+    void fetchPopularPlaylistsByFollows(10).then((rows) => {
+      if (alive) setPopularByFollows(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -180,6 +193,16 @@ export default function HomePage() {
           title="인기 플레이리스트"
           subtitle="많이 듣고 있어요"
           playlists={popular}
+          counts={counts}
+        />
+      )}
+
+      {/* 많이 팔로우한 플레이리스트 — 0012 적용 후 데이터 있을 때만 노출 */}
+      {popularByFollows.length > 0 && (
+        <PlaylistRow_
+          title="많이 팔로우한 플레이리스트"
+          subtitle="구독자 수 기준 급상승"
+          playlists={popularByFollows}
           counts={counts}
         />
       )}

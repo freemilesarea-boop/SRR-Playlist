@@ -15,6 +15,7 @@ import {
   fetchLibraryOverview,
   type LibraryOverview,
 } from '@/lib/libraryApi';
+import { fetchFollowedPlaylists } from '@/lib/playlistFollowApi';
 import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -35,13 +36,14 @@ export default function LibraryPage() {
 
   const [data, setData] = useState<LibraryOverview | null>(null);
   const [likedPlaylists, setLikedPlaylists] = useState<PlaylistRow[]>([]);
+  const [followedPlaylists, setFollowedPlaylists] = useState<PlaylistRow[]>([]);
   const [recentPlaylists, setRecentPlaylists] = useState<PlaylistRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
     try {
-      const [overview, lp, rp] = await Promise.all([
+      const [overview, lp, fp, rp] = await Promise.all([
         fetchLibraryOverview(userId),
         userId
           ? supabase
@@ -54,10 +56,12 @@ export default function LibraryPage() {
                 return rows.map((r) => r.playlists).filter(Boolean);
               })
           : Promise.resolve([] as PlaylistRow[]),
+        fetchFollowedPlaylists(userId),
         userId ? fetchRecentPlaylists(userId, 12) : Promise.resolve([] as PlaylistRow[]),
       ]);
       setData(overview);
       setLikedPlaylists(lp);
+      setFollowedPlaylists(fp);
       setRecentPlaylists(rp);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '보관함 로드 실패');
@@ -224,7 +228,15 @@ export default function LibraryPage() {
         )}
       </section>
 
-      {/* 좋아요한 플레이리스트 */}
+      {/* 팔로우한 플레이리스트 (업데이트 구독) */}
+      <PlaylistRow_
+        title="팔로우한 플레이리스트"
+        subtitle="새 곡이 추가되면 가장 먼저"
+        playlists={followedPlaylists}
+        emptyText="아직 팔로우한 플레이리스트가 없어요."
+      />
+
+      {/* 좋아요한 플레이리스트 (임시 저장) */}
       <PlaylistRow_
         title="좋아요한 플레이리스트"
         playlists={likedPlaylists}

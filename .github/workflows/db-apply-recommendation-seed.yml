@@ -116,6 +116,20 @@ jobs:
             echo "→ 이미 적용되어 있음. 건너뜀."
           fi
 
+      - name: 1e) 0012 (playlist follow) 마이그레이션 적용
+        run: |
+          set -e
+          HAS_FOLLOW=$(psql ${PSQL_CONN:+"$PSQL_CONN"} -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name='playlist_follows';")
+          echo "playlist_follows table count: $HAS_FOLLOW"
+          if [ "$HAS_FOLLOW" != "1" ]; then
+            echo "→ 0012_playlist_follow.sql 적용 중…"
+            psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0012_playlist_follow.sql
+          else
+            # RPC 들은 CREATE OR REPLACE 라 멱등 — 매번 갱신해도 안전
+            echo "→ 테이블 이미 존재. RPC 만 재정의…"
+            psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0012_playlist_follow.sql
+          fi
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

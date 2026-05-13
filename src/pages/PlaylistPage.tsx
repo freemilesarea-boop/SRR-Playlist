@@ -13,6 +13,8 @@ import { gradientStyle } from '@/lib/cover';
 import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import PlaylistFollowButton from '@/components/PlaylistFollowButton';
+import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
 import { toast } from '@/store/toastStore';
 
@@ -29,6 +31,19 @@ export default function PlaylistPage() {
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [liked, setLiked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [followerCount, setFollowerCount] = useState<number>(0);
+
+  // 팔로워 수 조회 (RPC, 0012 미적용 시 빈 맵 → 0 으로 표시)
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void fetchPlaylistFollowCounts([id]).then((m) => {
+      if (alive) setFollowerCount(m.get(id) ?? 0);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -214,6 +229,13 @@ export default function PlaylistPage() {
           targetType="playlist"
           targetId={playlist.id}
           variant="pill"
+        />
+        <PlaylistFollowButton
+          playlist={playlist}
+          variant="pill"
+          followerCount={followerCount}
+          stopPropagation={false}
+          onChanged={(now) => setFollowerCount((c) => Math.max(0, c + (now ? 1 : -1)))}
         />
       </div>
 
