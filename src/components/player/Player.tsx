@@ -72,6 +72,7 @@ export default function Player() {
     currentTime,
     duration,
     shuffleOrder,
+    pendingSeekSec,
     play,
     pause,
     toggle,
@@ -83,6 +84,7 @@ export default function Player() {
     setVolume,
     setCurrentTime,
     setDuration,
+    setPendingSeek,
   } = usePlayerStore();
 
   const { crossfadeEnabled, crossfadeSeconds, autoplayRecommendations } = usePlaybackSettingsStore();
@@ -388,6 +390,21 @@ export default function Player() {
     if (target !== activeRef()) return;
     const d = target.duration;
     if (Number.isFinite(d)) setDuration(d);
+    // 세션 복원 직후 한 번만 seek (queue/index 유지된 새로고침 케이스)
+    if (
+      pendingSeekSec != null &&
+      pendingSeekSec > 1 &&
+      Number.isFinite(d) &&
+      pendingSeekSec < d - 0.5
+    ) {
+      try {
+        target.currentTime = pendingSeekSec;
+        setCurrentTime(pendingSeekSec);
+      } catch {
+        /* iOS Safari 가끔 거부 — 무시 */
+      }
+    }
+    setPendingSeek(null);
   }
 
   function onSeek(e: React.ChangeEvent<HTMLInputElement>) {

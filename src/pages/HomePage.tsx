@@ -129,6 +129,9 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 이어듣기 + 최근 들은 음악 (상단 노출 — Continue Listening) */}
+      <HomeLibrarySections />
+
       {/* Featured */}
       {featured && (
         <section className="space-y-3">
@@ -144,9 +147,6 @@ export default function HomePage() {
           />
         </section>
       )}
-
-      {/* 이어듣기 + 최근 들은 음악 */}
-      <HomeLibrarySections />
 
       {/* 시간대 기반 추천 */}
       <HomeRecommendation />

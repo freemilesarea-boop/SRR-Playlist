@@ -14,6 +14,8 @@ interface PlayerState {
   duration: number;
   volume: number;
   shuffleOrder: number[];
+  /** 세션 복원 직후 audio 가 loadedmetadata 될 때 적용할 seek 위치 (초). 한 번 소비 후 null. */
+  pendingSeekSec: number | null;
 
   setQueue: (tracks: TrackRow[], startIndex?: number, playlist?: PlaylistRow | null) => void;
   play: () => void;
@@ -27,6 +29,7 @@ interface PlayerState {
   setVolume: (v: number) => void;
   setCurrentTime: (t: number) => void;
   setDuration: (d: number) => void;
+  setPendingSeek: (sec: number | null) => void;
 }
 
 function buildShuffleOrder(len: number, startIndex: number): number[] {
@@ -49,6 +52,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   duration: 0,
   volume: 1,
   shuffleOrder: [],
+  pendingSeekSec: null,
 
   setQueue: (tracks, startIndex = 0, playlist = null) => {
     const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
@@ -59,6 +63,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playing: tracks.length > 0,
       currentTime: 0,
       duration: 0,
+      pendingSeekSec: null,
       shuffleOrder: get().shuffle ? buildShuffleOrder(tracks.length, idx) : [],
     });
   },
@@ -71,7 +76,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, index, shuffle, shuffleOrder, repeat } = get();
     if (queue.length === 0) return;
     if (repeat === 'one') {
-      set({ currentTime: 0 });
+      set({ currentTime: 0, pendingSeekSec: null });
       return;
     }
     if (shuffle && shuffleOrder.length === queue.length) {
@@ -79,24 +84,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextPos = pos + 1;
       if (nextPos >= shuffleOrder.length) {
         if (repeat === 'all') {
-          set({ index: shuffleOrder[0], currentTime: 0, playing: true });
+          set({ index: shuffleOrder[0], currentTime: 0, playing: true, pendingSeekSec: null });
         } else {
-          set({ playing: false, currentTime: 0 });
+          set({ playing: false, currentTime: 0, pendingSeekSec: null });
         }
         return;
       }
-      set({ index: shuffleOrder[nextPos], currentTime: 0, playing: true });
+      set({ index: shuffleOrder[nextPos], currentTime: 0, playing: true, pendingSeekSec: null });
       return;
     }
     if (index + 1 >= queue.length) {
       if (repeat === 'all') {
-        set({ index: 0, currentTime: 0, playing: true });
+        set({ index: 0, currentTime: 0, playing: true, pendingSeekSec: null });
       } else {
-        set({ playing: false, currentTime: 0 });
+        set({ playing: false, currentTime: 0, pendingSeekSec: null });
       }
       return;
     }
-    set({ index: index + 1, currentTime: 0, playing: true });
+    set({ index: index + 1, currentTime: 0, playing: true, pendingSeekSec: null });
   },
 
   prev: () => {
@@ -104,22 +109,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (queue.length === 0) return;
     // 3초 이내면 이전 곡, 아니면 처음으로
     if (currentTime > 3) {
-      set({ currentTime: 0 });
+      set({ currentTime: 0, pendingSeekSec: null });
       return;
     }
     if (shuffle && shuffleOrder.length === queue.length) {
       const pos = shuffleOrder.indexOf(index);
       const prevPos = Math.max(0, pos - 1);
-      set({ index: shuffleOrder[prevPos], currentTime: 0, playing: true });
+      set({ index: shuffleOrder[prevPos], currentTime: 0, playing: true, pendingSeekSec: null });
       return;
     }
-    set({ index: Math.max(0, index - 1), currentTime: 0, playing: true });
+    set({ index: Math.max(0, index - 1), currentTime: 0, playing: true, pendingSeekSec: null });
   },
 
   jumpTo: (i) => {
     const { queue } = get();
     if (i < 0 || i >= queue.length) return;
-    set({ index: i, currentTime: 0, playing: true });
+    set({ index: i, currentTime: 0, playing: true, pendingSeekSec: null });
   },
 
   setShuffle: (v) => {
@@ -134,4 +139,5 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)) }),
   setCurrentTime: (t) => set({ currentTime: t }),
   setDuration: (d) => set({ duration: d }),
+  setPendingSeek: (sec) => set({ pendingSeekSec: sec }),
 }));

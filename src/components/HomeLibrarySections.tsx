@@ -6,6 +6,7 @@ import {
   fetchRecentlyPlayedTracks,
   type ContinueListening,
 } from '@/lib/libraryApi';
+import { loadPlayerSession } from '@/lib/playerSession';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
@@ -51,6 +52,46 @@ export default function HomeLibrarySections() {
     setQueue(tracks, Math.max(0, start), null);
   }
 
+  /**
+   * "이어듣기" 클릭 핸들러.
+   * localStorage 세션 스냅샷이 같은 트랙으로 있으면 → 큐 통째로 복원 + seek.
+   * 없으면 → 단일 트랙만 재생 (기존 동작).
+   */
+  function continuePlay(c: ContinueListening) {
+    if (!c.track) return;
+    const snap = loadPlayerSession();
+    const hasMatchingSnapshot =
+      snap &&
+      snap.queue.length > 0 &&
+      snap.track_id === c.track.id &&
+      isPlayableUrl(snap.queue[snap.current_index]?.audio_url ?? '');
+
+    if (hasMatchingSnapshot) {
+      // 큐 전체 + index + seek 복원
+      usePlayerStore.setState({
+        queue: snap.queue,
+        index: Math.max(0, Math.min(snap.current_index, snap.queue.length - 1)),
+        playlist: snap.playlist ?? null,
+        playing: true,
+        shuffle: snap.shuffle,
+        repeat: snap.repeat,
+        currentTime: snap.current_time,
+        duration: snap.duration,
+        pendingSeekSec: snap.current_time > 1 ? snap.current_time : null,
+        shuffleOrder: [],
+      });
+      if (snap.shuffle) usePlayerStore.getState().setShuffle(true);
+      return;
+    }
+
+    // fallback: 단일 트랙
+    play([c.track], 0);
+    // DB 기록된 위치로 seek
+    if (c.position_sec > 1) {
+      usePlayerStore.setState({ pendingSeekSec: c.position_sec });
+    }
+  }
+
   if (loading) return null;
   if (!cont?.track && recent.length === 0) return null;
 
@@ -63,7 +104,7 @@ export default function HomeLibrarySections() {
             이어듣기
           </h2>
           <button
-            onClick={() => play([cont.track!], 0)}
+            onClick={() => continuePlay(cont)}
             className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-bg-card p-3 shadow-card ring-1 ring-line/10 transition hover:-translate-y-0.5"
           >
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-line/10">
