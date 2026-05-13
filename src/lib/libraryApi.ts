@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { applyDemoMode } from './demoMode';
 import { getSessionId } from './analytics';
 import type { TrackRow, PlaylistRow } from '@/types/db';
+import type { RepeatMode } from '@/store/playerStore';
 
 const LS_LIKED = 'srr-liked-tracks';
 const LS_RECENT = 'srr-recently-played';
@@ -262,6 +263,7 @@ export async function pushRecentlyPlayed(
   trackId: string,
   userId: string | null,
   durationSec = 0,
+  playlistId: string | null = null,
 ): Promise<void> {
   const now = new Date().toISOString();
   const arr = readRecentLocal().filter((r) => r.track_id !== trackId);
@@ -269,14 +271,25 @@ export async function pushRecentlyPlayed(
   writeRecentLocal(arr);
 
   if (!userId) return;
-  const { error } = await supabase.from('recently_played_tracks').insert({
-    user_id: userId,
-    session_id: getSessionId(),
-    track_id: trackId,
-    play_duration_sec: durationSec,
-  });
-  // 에러는 무시 (테이블 미적용일 수 있음)
-  void error;
+  try {
+    // 0011 적용 환경: (user_id, track_id) 유니크 → upsert 로 played_at 갱신
+    const { error } = await supabase.from('recently_played_tracks').upsert(
+      {
+        user_id: userId,
+        session_id: getSessionId(),
+        track_id: trackId,
+        playlist_id: playlistId,
+        play_duration_sec: durationSec,
+        played_at: now,
+      },
+      { onConflict: 'user_id,track_id', ignoreDuplicates: false },
+    );
+    if (error && import.meta.env.DEV) {
+      console.debug('[recently_played] upsert 실패:', error.message);
+    }
+  } catch {
+    /* noop — localStorage 만 신뢰 */
+  }
 }
 
 export async function fetchRecentlyPlayedTracks(
@@ -327,11 +340,25 @@ export async function fetchRecentlyPlayedTracks(
  * 이어듣기
  * ============================================ */
 
+/**
+ * Continue Listening — full state (큐 + 상태 + 위치).
+ * 0011 마이그레이션 이후 user 당 1행. DB 미적용 환경에선 localStorage 만 사용.
+ */
 export interface ContinueListening {
   track_id: string;
+  playlist_id?: string | null;
   position_sec: number;
   duration_sec: number | null;
   updated_at: string;
+  // 신규 (0011) — full session
+  queue?: TrackRow[];
+  current_index?: number;
+  volume?: number;
+  shuffle?: boolean;
+  repeat_mode?: RepeatMode;
+  business_mode?: boolean;
+  playlist?: PlaylistRow | null;
+  // join 결과
   track?: TrackRow;
 }
 
@@ -352,6 +379,7 @@ function writeContinueLocal(c: ContinueListening | null) {
   }
 }
 
+/** 단일 트랙 단순 저장 — 기존 호환용 (Player 의 10초 throttle 경로) */
 let lastSavedAt = 0;
 export async function saveContinueListening(
   trackId: string,
@@ -360,10 +388,12 @@ export async function saveContinueListening(
   userId: string | null,
 ): Promise<void> {
   const now = Date.now();
-  if (now - lastSavedAt < 10_000) return;
+  if (now - lastSavedAt < 5_000) return;
   lastSavedAt = now;
 
+  const local = readContinueLocal() ?? ({} as Partial<ContinueListening>);
   const payload: ContinueListening = {
+    ...local,
     track_id: trackId,
     position_sec: Math.floor(positionSec),
     duration_sec: durationSec,
@@ -372,30 +402,90 @@ export async function saveContinueListening(
   writeContinueLocal(payload);
 
   if (!userId) return;
-  const { error } = await supabase.from('continue_listening').upsert(
-    {
-      user_id: userId,
-      track_id: trackId,
-      position_sec: Math.floor(positionSec),
-      duration_sec: durationSec,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,track_id' },
-  );
-  void error;
+  // DB 업서트 (full-state 컬럼이 있으면 채워 보냄, 없으면 기본값)
+  await upsertContinueListeningDb(userId, payload);
+}
+
+/**
+ * Full-state 저장 — playerSession 의 5초 디바운스 flush 에서 호출.
+ * queue 전체와 옵션 상태를 한 번에 user 당 1행으로 저장.
+ */
+export interface ContinueListeningFullPayload {
+  track_id: string;
+  playlist_id: string | null;
+  queue: TrackRow[];
+  current_index: number;
+  position_sec: number;
+  duration_sec: number;
+  volume: number;
+  shuffle: boolean;
+  repeat_mode: RepeatMode;
+  business_mode: boolean;
+  playlist?: PlaylistRow | null;
+}
+
+export async function saveContinueListeningFull(
+  payload: ContinueListeningFullPayload,
+  userId: string | null,
+): Promise<void> {
+  // localStorage 우선 — 미로그인 / DB 미적용 환경에서도 동작
+  const local: ContinueListening = {
+    ...payload,
+    duration_sec: payload.duration_sec || null,
+    updated_at: new Date().toISOString(),
+  };
+  writeContinueLocal(local);
+
+  if (!userId) return;
+  await upsertContinueListeningDb(userId, local);
+}
+
+async function upsertContinueListeningDb(
+  userId: string,
+  c: ContinueListening,
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('continue_listening').upsert(
+      {
+        user_id: userId,
+        track_id: c.track_id,
+        playlist_id: c.playlist_id ?? null,
+        queue: c.queue ?? [],
+        current_index: c.current_index ?? 0,
+        position_sec: Math.floor(c.position_sec),
+        duration_sec: Math.floor(c.duration_sec ?? 0),
+        volume: c.volume ?? 0.8,
+        shuffle: c.shuffle ?? false,
+        repeat_mode: c.repeat_mode ?? 'off',
+        business_mode: c.business_mode ?? false,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    );
+    if (error && import.meta.env.DEV) {
+      console.debug('[continue_listening] upsert 실패 (마이그레이션 미적용 가능):', error.message);
+    }
+  } catch {
+    /* network / RLS 등 — localStorage 만 신뢰 */
+  }
 }
 
 export async function clearContinueListening(
-  trackId: string,
+  _trackId: string | null,
   userId: string | null,
 ): Promise<void> {
   writeContinueLocal(null);
   if (!userId) return;
-  const { error } = await supabase
-    .from('continue_listening')
-    .delete()
-    .match({ user_id: userId, track_id: trackId });
-  void error;
+  // user 당 1행 — track_id 무관하게 user_id 로 삭제
+  try {
+    const { error } = await supabase
+      .from('continue_listening')
+      .delete()
+      .eq('user_id', userId);
+    void error;
+  } catch {
+    /* noop */
+  }
 }
 
 export async function fetchContinueListening(
@@ -410,22 +500,44 @@ export async function fetchContinueListening(
   try {
     const { data, error } = await supabase
       .from('continue_listening')
-      .select('track_id, position_sec, duration_sec, updated_at, tracks(*)')
+      .select(
+        'track_id, playlist_id, queue, current_index, position_sec, duration_sec, ' +
+          'volume, shuffle, repeat_mode, business_mode, updated_at, tracks(*)',
+      )
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
       .maybeSingle();
     if (error) throw error;
     if (!data) return readContinueLocal();
-    const row = data as unknown as ContinueListening & { tracks: TrackRow | null };
+    const row = data as unknown as {
+      track_id: string;
+      playlist_id: string | null;
+      queue: TrackRow[] | null;
+      current_index: number;
+      position_sec: number;
+      duration_sec: number;
+      volume: number;
+      shuffle: boolean;
+      repeat_mode: RepeatMode;
+      business_mode: boolean;
+      updated_at: string;
+      tracks: TrackRow | null;
+    };
     return {
       track_id: row.track_id,
+      playlist_id: row.playlist_id,
+      queue: Array.isArray(row.queue) ? row.queue : [],
+      current_index: row.current_index ?? 0,
       position_sec: row.position_sec,
       duration_sec: row.duration_sec,
+      volume: row.volume,
+      shuffle: row.shuffle,
+      repeat_mode: row.repeat_mode,
+      business_mode: row.business_mode,
       updated_at: row.updated_at,
       track: row.tracks ? applyDemoMode([row.tracks])[0] : undefined,
     };
   } catch {
+    // 0011 미적용 / RLS 거부 / 네트워크 실패 → localStorage 만 사용 (조용히)
     return readContinueLocal();
   }
 }
@@ -487,16 +599,26 @@ export async function mergeLocalToDb(userId: string): Promise<void> {
   }
   const cont = readContinueLocal();
   if (cont) {
-    const { error } = await supabase.from('continue_listening').upsert(
-      {
+    await upsertContinueListeningDb(userId, cont);
+  }
+
+  // 최근 재생 — localStorage 의 최근 50개를 DB 로 머지 (best-effort)
+  const recents = readRecentLocal();
+  if (recents.length > 0) {
+    try {
+      const rows = recents.slice(0, 50).map((r) => ({
         user_id: userId,
-        track_id: cont.track_id,
-        position_sec: cont.position_sec,
-        duration_sec: cont.duration_sec ?? null,
-        updated_at: cont.updated_at,
-      },
-      { onConflict: 'user_id,track_id' },
-    );
-    void error;
+        session_id: getSessionId(),
+        track_id: r.track_id,
+        play_duration_sec: r.play_duration_sec,
+        played_at: r.played_at,
+      }));
+      const { error } = await supabase
+        .from('recently_played_tracks')
+        .upsert(rows, { onConflict: 'user_id,track_id', ignoreDuplicates: false });
+      void error;
+    } catch {
+      /* noop */
+    }
   }
 }

@@ -2,6 +2,8 @@ import type { TrackRow, PlaylistRow } from '@/types/db';
 import type { RepeatMode } from '@/store/playerStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessStore } from '@/store/businessStore';
+import { useAuthStore } from '@/store/authStore';
+import { saveContinueListeningFull } from '@/lib/libraryApi';
 
 /**
  * Continue Listening Phase 2 — full session snapshot.
@@ -159,6 +161,34 @@ export function installPlayerSessionPersistence(): () => void {
     const snap = snapshotFromState();
     if (!snap) return;
     savePlayerSession(snap);
+    // 로그인 사용자: DB continue_listening 에도 best-effort 업서트
+    // queue / currentIndex / position 등이 5초 이상 의미 있는 위치일 때만
+    if (
+      snap.track_id &&
+      snap.queue.length > 0 &&
+      snap.current_time > 5 &&
+      Number.isFinite(snap.duration)
+    ) {
+      const userId = useAuthStore.getState().user?.id ?? null;
+      if (userId) {
+        void saveContinueListeningFull(
+          {
+            track_id: snap.track_id,
+            playlist_id: snap.playlist_id ?? null,
+            queue: snap.queue,
+            current_index: snap.current_index,
+            position_sec: Math.floor(snap.current_time),
+            duration_sec: Math.floor(snap.duration),
+            volume: snap.volume,
+            shuffle: snap.shuffle,
+            repeat_mode: snap.repeat,
+            business_mode: snap.business_mode,
+            playlist: snap.playlist ?? null,
+          },
+          userId,
+        );
+      }
+    }
   }
 
   const unsubPlayer = usePlayerStore.subscribe((state, prev) => {

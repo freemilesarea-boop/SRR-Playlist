@@ -39,6 +39,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ session, user: session?.user ?? null });
         if (session?.user) {
           await get().refreshProfile();
+          // 비로그인 동안 localStorage 에 쌓인 좋아요/최근/이어듣기를 DB 로 머지 (best-effort)
+          void (async () => {
+            try {
+              const { mergePersonalLibrary } = await import('@/lib/personalLibraryApi');
+              await mergePersonalLibrary(session.user.id);
+            } catch {
+              /* 마이그레이션 미적용 등 — 조용히 폴백 */
+            }
+          })();
         } else {
           set({ profile: null });
         }
