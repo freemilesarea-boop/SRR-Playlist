@@ -161,7 +161,11 @@ export default function Player() {
     );
   }, [currentTime, current, playable, playing, duration, userId]);
 
-  /* ---------- 자동 스킵 / play 동기화 (active audio 기준) ---------- */
+  /* ---------- track sync + play/pause 통합 ---------- */
+  // 한 번에 처리해서 src 중복 재할당 / play() AbortError 캐스케이드 방지.
+  // - 트랙 변경: pause → src = url → load() → canplay 이벤트에서 자동 play (playing=true 면)
+  // - 같은 트랙 + playing 토글: play() or pause() 만
+  const lastTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
     const audio = activeRef();
     if (!audio || !current) return;
@@ -182,63 +186,72 @@ export default function Player() {
       return;
     }
 
-    // src 가 안 맞으면 동기화 (트랙 변경 직후)
-    if (audio.src !== current.audio_url) {
+    const trackChanged = lastTrackIdRef.current !== current.id;
+    if (trackChanged) {
+      if (import.meta.env.DEV) {
+        console.debug('[Player] track change', {
+          from: lastTrackIdRef.current,
+          to: current.id,
+          url: current.audio_url,
+          activeIdx,
+        });
+      }
+      lastTrackIdRef.current = current.id;
+      cancelCrossfade();
+      setCurrentTime(0);
+      setDuration(0);
+
+      // 1) 이전 src 의 play 프로미스 abort
+      audio.pause();
+      // 2) 새 src 적용
       audio.src = current.audio_url;
+      // 3) 명시적 load (모바일 Safari + 일부 브라우저 호환)
+      try {
+        audio.load();
+      } catch {
+        /* noop */
+      }
       audio.currentTime = 0;
       audio.volume = volume;
+
+      // 다른(next-preload) audio 는 정지 + src 해제
+      const other = nextRef();
+      if (other) {
+        other.pause();
+        other.removeAttribute('src');
+      }
+
+      // playing=true 면 canplay 이벤트에서 자동 play 호출됨 (onCanPlay)
+      return;
     }
 
+    // 같은 트랙 — playing 토글만 동기화
     if (playing) {
-      const p = audio.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch((err: DOMException) => {
-          if (err?.name === 'NotAllowedError') {
+      if (audio.paused) {
+        if (import.meta.env.DEV) console.debug('[Player] play() resume', { id: current.id });
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch((err: DOMException) => {
+            if (err?.name === 'AbortError') return; // src 변경 등 — 무시
+            if (err?.name === 'NotAllowedError') {
+              pause();
+              toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
+              return;
+            }
+            if (import.meta.env.DEV) console.debug('[Player] play() rejected', err?.name, err?.message);
+            // 상태 꼬임 방지: pause 만 호출, auto-next 는 onError 에 위임
             pause();
-            toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
-          } else {
-            setErrored(true);
-            pause();
-            toast.error('이 곡을 재생할 수 없어요. 다음 곡으로 넘어갈게요.');
-            window.setTimeout(() => next(), 800);
-          }
-        });
+            toast.error('재생 중 오류가 발생했어요.');
+          });
+        }
       }
     } else {
       audio.pause();
-      // 크로스페이드 중에 pause 면 둘 다 정지
       const other = nextRef();
       if (other && !other.paused) other.pause();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, current?.id, playable, queue.length, activeIdx]);
-
-  /* ---------- 트랙 변경 시 active audio 리셋 + crossfade 상태 청소 ---------- */
-  const lastTrackIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!current) return;
-    if (lastTrackIdRef.current === current.id) return;
-    lastTrackIdRef.current = current.id;
-
-    cancelCrossfade();
-    setCurrentTime(0);
-    setDuration(0);
-
-    const audio = activeRef();
-    if (!audio) return;
-    if (playable) {
-      audio.src = current.audio_url;
-      audio.currentTime = 0;
-      audio.volume = volume;
-    }
-    // 다른 audio 는 정지
-    const other = nextRef();
-    if (other) {
-      other.pause();
-      other.removeAttribute('src');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id]);
+  }, [current?.id, playable, playing, queue.length, activeIdx]);
 
   /* ---------- 볼륨 동기화 ---------- */
   useEffect(() => {
@@ -290,16 +303,32 @@ export default function Player() {
 
   /** 트랙 종료 X초 전 도달 시 crossfade 시작 */
   const startCrossfade = useCallback(() => {
+    // 가드 — 모든 조건 충족할 때만 진행
     if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
+    if (!playing) return;
     if (crossfading) return;
-    if (!current || !Number.isFinite(duration) || duration <= 0) return;
     if (repeat === 'one') return;
+    if (!current || !current.audio_url) return;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (duration <= crossfadeSeconds + 5) return; // 곡이 너무 짧으면 X
+    if (currentTime <= 10) return; // 시작 10초 안에는 절대 금지 (초기 튐 방지)
+    if (currentTime < duration - crossfadeSeconds) return; // 아직 fade 시점 아님
     if (triggeredAtTrackIdRef.current === current.id) return;
 
     const nextIdx = computeNextIndex(queue.length, index, shuffle, shuffleOrder, repeat);
     if (nextIdx === null) return;
     const nextTrack = queue[nextIdx];
-    if (!nextTrack || !isPlayableUrl(nextTrack.audio_url)) return;
+    if (!nextTrack || !nextTrack.audio_url || !isPlayableUrl(nextTrack.audio_url)) return;
+
+    if (import.meta.env.DEV) {
+      console.debug('[Player] crossfade start', {
+        id: current.id,
+        duration,
+        currentTime,
+        crossfadeSeconds,
+        nextId: nextTrack.id,
+      });
+    }
 
     const nextAudio = nextRef();
     const activeAudio = activeRef();
@@ -348,8 +377,10 @@ export default function Player() {
     crossfadeEnabled,
     crossfadeSeconds,
     crossfading,
+    playing,
     current,
     duration,
+    currentTime,
     repeat,
     queue,
     index,
@@ -360,16 +391,20 @@ export default function Player() {
     jumpTo,
   ]);
 
-  // duration - crossfadeSeconds 도달 감지
+  // duration - crossfadeSeconds 도달 감지 (강화된 가드)
   useEffect(() => {
     if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
+    if (!playing) return;
+    if (crossfading) return;
+    if (repeat === 'one') return;
     if (!Number.isFinite(duration) || duration <= 0) return;
-    if (duration < crossfadeSeconds + 0.5) return; // 너무 짧은 곡은 crossfade X
+    if (duration <= crossfadeSeconds + 5) return; // 곡이 너무 짧으면 X (3초 튐 방지)
+    if (currentTime <= 10) return; // 시작 10초 안에는 절대 금지
     const remaining = duration - currentTime;
-    if (remaining <= crossfadeSeconds && remaining > 0.2 && !crossfading) {
+    if (remaining <= crossfadeSeconds && remaining > 0.2) {
       startCrossfade();
     }
-  }, [currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, startCrossfade]);
+  }, [currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, playing, repeat, startCrossfade]);
 
   // 사용자 next/prev 시 fade 취소
   useEffect(() => {
@@ -405,6 +440,26 @@ export default function Player() {
       }
     }
     setPendingSeek(null);
+  }
+
+  function onCanPlay(e: React.SyntheticEvent<HTMLAudioElement>) {
+    if (e.currentTarget !== activeRef()) return;
+    if (!playing) return;
+    const audio = e.currentTarget;
+    if (!audio.paused) return;
+    if (import.meta.env.DEV) console.debug('[Player] canplay → auto-play', { id: current?.id });
+    const p = audio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch((err: DOMException) => {
+        if (err?.name === 'AbortError') return;
+        if (err?.name === 'NotAllowedError') {
+          pause();
+          toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
+          return;
+        }
+        if (import.meta.env.DEV) console.debug('[Player] onCanPlay play() rejected', err?.name, err?.message);
+      });
+    }
   }
 
   function onSeek(e: React.ChangeEvent<HTMLInputElement>) {
@@ -507,6 +562,7 @@ export default function Player() {
         preload="auto"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
+        onCanPlay={onCanPlay}
         onEnded={onEnded}
         onError={onError}
         playsInline
@@ -516,6 +572,7 @@ export default function Player() {
         preload="auto"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
+        onCanPlay={onCanPlay}
         onEnded={onEnded}
         onError={onError}
         playsInline
