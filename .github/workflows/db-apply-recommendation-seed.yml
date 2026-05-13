@@ -1,15 +1,34 @@
 name: DB · 추천 메타데이터 시드 적용
 
-# 수동 실행 전용. Actions 탭 → 좌측 이 워크플로우 선택 → "Run workflow" 버튼 클릭.
-# 사전 준비: Repo Settings → Secrets and variables → Actions →
-#   "SUPABASE_DB_URL" 시크릿 등록
-#   값 예: postgresql://postgres.nsoesrvwkxqifjcxzvol:[YOUR-PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+# 수동 실행 전용. Actions 탭 → "Run workflow" 클릭.
+#
+# 시크릿 등록 방법 두 가지 — 둘 중 하나만 등록하면 됩니다.
+#
+# [방법 A · 권장] 개별 시크릿 (URL 파싱 문제 0)
+#   Repo Settings → Secrets and variables → Actions → New repository secret
+#   - SUPABASE_DB_HOST       예) aws-0-ap-southeast-1.pooler.supabase.com
+#   - SUPABASE_DB_USER       예) postgres.nsoesrvwkxqifjcxzvol
+#   - SUPABASE_DB_PASSWORD   DB 비밀번호 (날것, 인코딩 X, 특수문자 OK)
+#   - (선택) SUPABASE_DB_PORT  기본 5432
+#   - (선택) SUPABASE_DB_NAME  기본 postgres
+#
+# [방법 B] 단일 URL 시크릿
+#   - SUPABASE_DB_URL  Supabase Connect 모달 → "Session pooler" 탭의 URI 통째.
+#                      비밀번호의 @ : / ? # % 등 특수문자는 URL-encode 필요.
 on:
   workflow_dispatch:
 
 jobs:
   apply-seed:
     runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
+      PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PGPORT: ${{ secrets.SUPABASE_DB_PORT }}
+      PGDATABASE: ${{ secrets.SUPABASE_DB_NAME }}
+      PGSSLMODE: require
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,50 +38,67 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client
 
-      - name: 0) 연결 확인
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Resolve connection mode
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::SUPABASE_DB_URL 시크릿이 비어 있어요. Repo Settings → Secrets and variables → Actions 에서 등록해 주세요."
+          if [ -n "$PGHOST" ] && [ -n "$PGUSER" ] && [ -n "$PGPASSWORD" ]; then
+            echo "✅ MODE: 개별 시크릿 (권장)"
+            echo "   host: $PGHOST"
+            echo "   user: $PGUSER"
+            echo "   port: ${PGPORT:-5432}"
+            echo "   db:   ${PGDATABASE:-postgres}"
+            {
+              echo "PGPORT=${PGPORT:-5432}"
+              echo "PGDATABASE=${PGDATABASE:-postgres}"
+              echo "PSQL_CONN="
+            } >> "$GITHUB_ENV"
+          elif [ -n "$SUPABASE_DB_URL" ]; then
+            echo "✅ MODE: URL 시크릿"
+            MASKED=$(printf '%s' "$SUPABASE_DB_URL" | sed -E 's#(://[^:]+:)[^@]+@#\1***@#')
+            echo "   url (masked): $MASKED"
+            {
+              echo "PSQL_CONN=$SUPABASE_DB_URL"
+              echo "PGHOST="
+              echo "PGUSER="
+              echo "PGPASSWORD="
+              echo "PGPORT="
+              echo "PGDATABASE="
+            } >> "$GITHUB_ENV"
+          else
+            echo "::error::시크릿이 비어 있어요. 아래 둘 중 하나를 Repo Settings → Secrets and variables → Actions 에 등록해 주세요."
+            echo "::error::"
+            echo "::error::방법 A (권장):"
+            echo "::error::  SUPABASE_DB_HOST      예) aws-0-ap-southeast-1.pooler.supabase.com"
+            echo "::error::  SUPABASE_DB_USER      예) postgres.nsoesrvwkxqifjcxzvol"
+            echo "::error::  SUPABASE_DB_PASSWORD  DB 비밀번호 날것"
+            echo "::error::"
+            echo "::error::방법 B:"
+            echo "::error::  SUPABASE_DB_URL       Supabase Connect → Session pooler URI 통째"
             exit 1
           fi
-          psql "$SUPABASE_DB_URL" -c "select now() as server_time;"
+
+      - name: 0) 연결 확인
+        run: psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select now() as server_time;"
 
       - name: 1) 0008 마이그레이션 적용 여부 확인 + 필요시 적용
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -e
-          HAS_COL=$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from information_schema.columns where table_schema='public' and table_name='tracks' and column_name='main_genre';")
+          HAS_COL=$(psql ${PSQL_CONN:+"$PSQL_CONN"} -tA -c "select count(*) from information_schema.columns where table_schema='public' and table_name='tracks' and column_name='main_genre';")
           echo "main_genre column count: $HAS_COL"
           if [ "$HAS_COL" != "1" ]; then
             echo "→ 0008_recommendation_metadata.sql 적용 중…"
-            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_recommendation_metadata.sql
+            psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0008_recommendation_metadata.sql
           else
             echo "→ 이미 적용되어 있음. 건너뜀."
           fi
 
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
+        run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
       - name: 3) 검증 - 메타데이터가 채워진 트랙 수
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          psql "$SUPABASE_DB_URL" -c "select count(*) as filled_tracks from public.tracks where main_genre is not null;"
+        run: psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select count(*) as filled_tracks from public.tracks where main_genre is not null;"
 
       - name: 4) 검증 - 샘플 10개
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          psql "$SUPABASE_DB_URL" -c "select title, main_genre, mood_tags, time_slots, business_tags from public.tracks where main_genre is not null order by title limit 10;"
+        run: psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select title, main_genre, mood_tags, time_slots, business_tags from public.tracks where main_genre is not null order by title limit 10;"
 
       - name: 5) 추천 RPC smoke test (recommend_tracks_by_context)
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          psql "$SUPABASE_DB_URL" -c "select id, title, score, score_reasons from public.recommend_tracks_by_context(p_time_slot:='evening', p_situation:=null, p_business_type:='winebar', p_mood:=null, p_limit:=5);"
+        run: psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select id, title, score, score_reasons from public.recommend_tracks_by_context(p_time_slot:='evening', p_situation:=null, p_business_type:='winebar', p_mood:=null, p_limit:=5);"
