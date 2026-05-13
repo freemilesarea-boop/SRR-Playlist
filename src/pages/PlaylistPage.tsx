@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { gradientStyle } from '@/lib/cover';
 import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
@@ -57,18 +58,24 @@ export default function PlaylistPage() {
       toast.info('이 플레이리스트에는 아직 곡이 없어요.');
       return;
     }
-    if (!hasAnyPlayable) {
+    // 재생 가능 트랙만 큐에 — 무한 next() 캐스케이드 차단
+    const { playable, dropped } = filterPlayableTracks(tracks);
+    if (playable.length === 0) {
       toast.info('아직 재생할 수 있는 음원이 없어요. 관리자 페이지에서 업로드해주세요.');
       return;
     }
-    // 재생 가능한 첫 트랙으로 진입 보정
-    let resolvedStart = startIndex;
-    if (!isPlayableTrack(tracks[resolvedStart])) {
-      const nextPlayable = tracks.findIndex(isPlayableTrack);
-      if (nextPlayable >= 0) resolvedStart = nextPlayable;
+    // 원본 시작 트랙이 살아남았는지 확인 → 새 인덱스로 매핑
+    const originalStart = tracks[startIndex];
+    let resolvedStart = 0;
+    if (originalStart) {
+      const found = playable.findIndex((t) => t.id === originalStart.id);
+      resolvedStart = found >= 0 ? found : 0;
+    }
+    if (dropped.length > 0) {
+      toast.info(`재생 불가 ${dropped.length}곡은 제외하고 재생할게요`);
     }
     setShuffle(shuffle);
-    setQueue(tracks, resolvedStart, playlist);
+    setQueue(playable, resolvedStart, playlist);
     if (user) void logRecentPlay(user.id, playlist.id).catch(() => {});
   }
 

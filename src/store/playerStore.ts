@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { TrackRow, PlaylistRow } from '@/types/db';
+import { isPlayableTrack } from '@/lib/audio';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -55,16 +56,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   pendingSeekSec: null,
 
   setQueue: (tracks, startIndex = 0, playlist = null) => {
-    const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    // 안전장치: 재생 불가(audio_url null/빈문자열/형식이상) 트랙은 큐에서 제외.
+    // 호출 측에서 이미 filterPlayableTracks 를 호출했으면 이 단계는 no-op.
+    // 호출 측이 잊었어도 무한 next() 캐스케이드를 차단한다.
+    const target = tracks[Math.max(0, Math.min(startIndex, tracks.length - 1))];
+    const filtered = tracks.filter(isPlayableTrack);
+    const dropped = tracks.length - filtered.length;
+    if (dropped > 0 && import.meta.env.DEV) {
+      console.warn(
+        `[playerStore] setQueue: ${dropped}곡이 재생 불가(audio_url 없음/형식이상)여서 큐에서 제외됨. ` +
+          '호출 측에서 filterPlayableTracks() 로 미리 거르는 것을 권장.',
+      );
+    }
+    if (filtered.length === 0) {
+      // 전부 재생 불가 — 큐 변경 없이 정지
+      set({ playing: false });
+      return;
+    }
+    // 원본의 target 트랙이 살아남았으면 그 위치를, 아니면 0
+    const idx = target ? Math.max(0, filtered.findIndex((t) => t.id === target.id)) : 0;
+    const safeIdx = idx < 0 ? 0 : idx;
     set({
-      queue: tracks,
-      index: idx,
+      queue: filtered,
+      index: safeIdx,
       playlist,
-      playing: tracks.length > 0,
+      playing: true,
       currentTime: 0,
       duration: 0,
       pendingSeekSec: null,
-      shuffleOrder: get().shuffle ? buildShuffleOrder(tracks.length, idx) : [],
+      shuffleOrder: get().shuffle ? buildShuffleOrder(filtered.length, safeIdx) : [],
     });
   },
 

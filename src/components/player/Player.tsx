@@ -34,6 +34,9 @@ import ShareButton from '@/components/ShareButton';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 
+/** 재생 불가 트랙 연속 스킵 상한 — 이 횟수 초과 시 강제 정지하고 안내. */
+const MAX_SKIP_ATTEMPTS = 5;
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -173,13 +176,18 @@ export default function Player() {
     if (!playable) {
       if (playing) {
         skipChainRef.current += 1;
-        if (skipChainRef.current >= queue.length) {
+        // 무한 스킵 방지: queue.length 와 MAX_SKIP_ATTEMPTS 중 작은 값에서 정지
+        const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
+        if (skipChainRef.current >= cap) {
           pause();
           toast.error('재생 가능한 음원이 없어요. 관리자 페이지에서 음원을 업로드해주세요.');
           skipChainRef.current = 0;
           return;
         }
-        toast.info(`샘플 음원 없음 — 다음 곡으로 넘어갑니다`);
+        // 첫 번째 스킵만 toast — 폭주 방지
+        if (skipChainRef.current === 1) {
+          toast.info('재생 불가 트랙은 건너뛸게요');
+        }
         const t = window.setTimeout(() => next(), 600);
         return () => window.clearTimeout(t);
       }

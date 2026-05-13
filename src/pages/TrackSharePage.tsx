@@ -4,6 +4,7 @@ import { Play, ChevronLeft, AlertCircle, Music } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { applyDemoMode } from '@/lib/demoMode';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { usePlayerStore } from '@/store/playerStore';
 import { gradientStyle } from '@/lib/cover';
 import { trackShareUrl } from '@/lib/shareApi';
@@ -58,15 +59,17 @@ export default function TrackSharePage() {
   }, [id]);
 
   function play(tracks: TrackRow[], idx = 0) {
-    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
       toast.info('샘플 음원이 아직 없습니다.');
       return;
     }
-    const start = isPlayableUrl(tracks[idx]?.audio_url)
-      ? idx
-      : tracks.findIndex((t) => isPlayableUrl(t.audio_url));
-    setQueue(tracks, Math.max(0, start), null);
+    const origStart = tracks[idx];
+    const start = origStart ? Math.max(0, playable.findIndex((t) => t.id === origStart.id)) : 0;
+    if (dropped.length > 0) {
+      toast.info(`재생 불가 ${dropped.length}곡은 제외하고 재생할게요`);
+    }
+    setQueue(playable, start < 0 ? 0 : start, null);
   }
 
   if (loading) {

@@ -38,6 +38,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { fetchPlaylists, fetchPlaylistTracks } from '@/lib/api';
 import { isPlayableTrack } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 import type { PlaylistRow } from '@/types/db';
 
@@ -107,10 +108,11 @@ export default function BusinessScheduler() {
     (async () => {
       try {
         const tracks = await fetchPlaylistTracks(current.playlist_id!);
-        const playable = tracks.filter(isPlayableTrack);
+        const { playable } = filterPlayableTracks(tracks);
         if (playable.length === 0) return;
         const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
-        setQueue(tracks, tracks.indexOf(playable[0]), playlist);
+        // 재생 가능한 트랙만 큐에 (무한 next() 캐스케이드 차단)
+        setQueue(playable, 0, playlist);
         setRepeat('all');
         setShuffle(true);
         const isInitial = lastSwitchedScheduleId === null;

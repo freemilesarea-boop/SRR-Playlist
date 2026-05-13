@@ -91,6 +91,12 @@ jobs:
             echo "→ 이미 적용되어 있음. 건너뜀."
           fi
 
+      - name: 1b) 0009 (audio_url 가드) 마이그레이션 적용 — 멱등
+        run: |
+          set -e
+          echo "→ 0009_filter_unplayable_tracks.sql 적용 중 (CREATE OR REPLACE 라 멱등)…"
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0009_filter_unplayable_tracks.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

@@ -19,6 +19,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
@@ -87,15 +88,17 @@ export default function LibraryPage() {
 
   function playTracks(tracks: TrackRow[], startIndex = 0) {
     if (tracks.length === 0) return;
-    const playable = tracks.filter((t) => isPlayableUrl(t.audio_url));
+    const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
       toast.info('재생 가능한 음원이 없어요.');
       return;
     }
-    const startIdx = isPlayableUrl(tracks[startIndex]?.audio_url)
-      ? startIndex
-      : tracks.findIndex((t) => isPlayableUrl(t.audio_url));
-    setQueue(tracks, Math.max(0, startIdx), null);
+    const origStart = tracks[startIndex];
+    const startIdx = origStart ? Math.max(0, playable.findIndex((t) => t.id === origStart.id)) : 0;
+    if (dropped.length > 0) {
+      toast.info(`재생 불가 ${dropped.length}곡은 제외하고 재생할게요`);
+    }
+    setQueue(playable, startIdx < 0 ? 0 : startIdx, null);
   }
 
   return (

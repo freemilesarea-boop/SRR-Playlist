@@ -26,6 +26,7 @@ import { gradientStyle } from '@/lib/cover';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { useInstallPrompt, wakeLockSupported, isStandalone } from '@/hooks/useInstallPrompt';
 import { isPlayableTrack } from '@/lib/audio';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 
 /** 한글 카테고리 → 영문 business_tag */
@@ -137,17 +138,21 @@ export default function BusinessPage() {
         toast.info('이 플레이리스트에는 아직 곡이 없어요.');
         return;
       }
-      const playable = tracks.filter(isPlayableTrack);
+      const { playable, dropped } = filterPlayableTracks(tracks);
       if (playable.length === 0) {
         toast.error(
           '재생 가능한 음원이 없어요. 관리자 페이지에서 시연용 mp3 를 업로드해주세요.',
         );
         return;
       }
+      if (dropped.length > 0) {
+        toast.info(`재생 불가 ${dropped.length}곡은 제외하고 매장 모드로 재생합니다`);
+      }
       setBusinessMode(true);
       setRepeat('all');
       setShuffle(true);
-      setQueue(tracks, tracks.indexOf(playable[0]), p);
+      // 재생 가능한 트랙만 큐에 — 무한 next() 캐스케이드 차단
+      setQueue(playable, 0, p);
       if (user) void logRecentPlay(user.id, p.id).catch(() => {});
       toast.success('매장 모드로 재생을 시작했어요. 오랫동안 안정적으로 흘러갑니다.');
     } catch (e) {
