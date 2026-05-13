@@ -301,14 +301,19 @@ export async function logScheduleEvent(
   eventType: 'started' | 'switched' | 'stopped',
 ): Promise<void> {
   try {
-    await supabase.from('business_schedule_events').insert({
+    const { error } = await supabase.from('business_schedule_events').insert({
       user_id: userId,
       schedule_id: scheduleId,
       playlist_id: playlistId,
       event_type: eventType,
     });
-  } catch {
-    /* noop */
+    if (error && import.meta.env.DEV) {
+      console.debug('[business] logScheduleEvent 실패 (마이그레이션 미적용 가능):', error.message);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.debug('[business] logScheduleEvent 네트워크 실패:', e);
+    }
   }
 }
 

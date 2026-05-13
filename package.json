@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit -p tsconfig.app.json",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "check-env": "node scripts/check-env.mjs",
+    "audit": "node scripts/audit.mjs",
     "setup": "npm install && node scripts/check-env.mjs"
   },
   "dependencies": {
