@@ -3,6 +3,7 @@ import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music } from 'lucide
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import { createPayappSubscription } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import type { SubscriptionType } from '@/types/db';
 
@@ -116,7 +117,29 @@ export default function SubscriptionPage() {
   const { profile, user, refreshProfile } = useAuthStore();
   const [busy, setBusy] = useState<SubscriptionType | null>(null);
   const [pending, setPending] = useState<PendingRequest | null>(null);
+  const [phoneModal, setPhoneModal] = useState<{ plan: 'personal' | 'business'; phone: string } | null>(null);
   const current = profile?.subscription_type ?? 'free';
+
+  async function startPayappCheckout(planUi: 'personal' | 'business', phone: string) {
+    if (!user) return;
+    setBusy(planUi);
+    try {
+      // SubscriptionType 'personal' ↔ PayApp 'individual' 매핑
+      const planType: 'individual' | 'business' = planUi === 'personal' ? 'individual' : 'business';
+      const res = await createPayappSubscription({ plan_type: planType, recvphone: phone });
+      if (res.ok && res.payurl) {
+        // PayApp 결제창으로 이동. 권한 부여는 절대 여기서 X — feedbackurl 웹훅에서만.
+        window.location.href = res.payurl;
+        return;
+      }
+      toast.error(res.error ?? 'PayApp 결제 생성 실패');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'PayApp 결제 생성 실패');
+    } finally {
+      setBusy(null);
+      setPhoneModal(null);
+    }
+  }
 
   async function loadPending() {
     if (!user) return;
@@ -154,20 +177,10 @@ export default function SubscriptionPage() {
       return;
     }
 
-    setBusy(plan);
-    try {
-      const { error } = await supabase.from('subscription_requests').insert({
-        user_id: user.id,
-        requested_plan: plan,
-        status: 'pending',
-      });
-      if (error) throw error;
-      toast.success('구독 신청이 접수됐어요. 결제 안내를 곧 보내드릴게요.');
-      await loadPending();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '신청 중 오류가 발생했어요.');
-    } finally {
-      setBusy(null);
+    // PayApp 결제 플로우 — 전화번호 입력 모달
+    if (plan === 'personal' || plan === 'business') {
+      setPhoneModal({ plan, phone: '' });
+      return;
     }
   }
 
@@ -368,15 +381,71 @@ export default function SubscriptionPage() {
       <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <h3 className="text-sm font-bold">결제 안내</h3>
         <p className="text-xs leading-relaxed text-ink-mute">
-          MVP 단계에서는 정기결제 모듈(PayApp) 연동 전이라 구독 신청 → 운영진 확인 → 결제 안내
-          순서로 진행해요. 신청은 언제든 취소할 수 있어요.
+          PayApp 정기결제로 매월 자동 결제됩니다. 결제 완료/구독 활성화는 PayApp 결제 확인 후
+          자동 반영되며, 마이페이지에서 언제든 해지할 수 있어요.
         </p>
         <a
-          href="mailto:hello@srr-playlist.app?subject=스르륵 플리 매장 구독 문의"
+          href="mailto:freemilesarea@gmail.com?subject=스르륵 플리 매장 구독 문의"
           className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
         >
           <Mail size={12} /> 매장 일괄 도입 문의
         </a>
+      </div>
+
+      {phoneModal && (
+        <PhoneModal
+          plan={phoneModal.plan}
+          busy={busy === phoneModal.plan}
+          onCancel={() => setPhoneModal(null)}
+          onConfirm={(p) => startPayappCheckout(phoneModal.plan, p)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PhoneModal({
+  plan,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  plan: 'personal' | 'business';
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (phone: string) => void;
+}) {
+  const [phone, setPhone] = useState('');
+  const valid = phone.replace(/\D/g, '').length >= 9;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
+      <div className="w-full max-w-sm space-y-3 rounded-2xl bg-bg-card p-5 ring-1 ring-line/10">
+        <h3 className="text-base font-bold">
+          {plan === 'business' ? 'SWK 사업자 이용권' : 'SWK 일반 이용권'} 결제
+        </h3>
+        <p className="text-xs text-ink-mute">
+          결제 알림을 받을 휴대폰 번호를 입력해주세요. PayApp 결제창으로 이동합니다.
+        </p>
+        <input
+          type="tel"
+          autoFocus
+          placeholder="010-0000-0000"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className="input"
+        />
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onCancel} className="btn-ghost px-3 py-2 text-xs">
+            취소
+          </button>
+          <button
+            onClick={() => onConfirm(phone)}
+            disabled={!valid || busy}
+            className="btn-primary px-4 py-2 text-xs"
+          >
+            {busy ? '결제창 준비중…' : 'PayApp 결제하기'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,207 @@
+// supabase/functions/create-payapp-subscription/index.ts
+//
+// PayApp 정기결제 등록(rebillRegist) 요청.
+// - 로그인 사용자 검증
+// - plan 가격은 DB seed 만 신뢰
+// - subscriptions(pending) + payment_orders(requested) 생성
+// - PayApp REST 호출 후 payurl 반환
+//
+// deno-lint-ignore-file no-explicit-any
+
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
+const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
+const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
+const APP_BASE_URL = Deno.env.get('APP_BASE_URL') ?? '';
+const PAYAPP_REBILL_EXPIRE = Deno.env.get('PAYAPP_REBILL_EXPIRE') ?? '2099-12-31';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...corsHeaders },
+  });
+}
+
+function generateOrderNo(userId: string): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `swk_${userId.slice(0, 8)}_${ts}_${rand}`;
+}
+
+/** 결제 요청일의 day. 29~31 이면 90(말일 처리). */
+function rebillDayFromToday(): string {
+  const d = new Date().getDate();
+  return d >= 29 ? '90' : String(d);
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  // 로그인 사용자 검증
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return json({ error: 'unauthorized' }, 401);
+
+  const sbUser = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: userRes, error: userErr } = await sbUser.auth.getUser();
+  if (userErr || !userRes?.user) return json({ error: 'unauthorized' }, 401);
+  const user = userRes.user;
+
+  // 입력 파싱
+  let body: { plan_type?: string; recvphone?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: 'invalid body' }, 400);
+  }
+  const planType = body.plan_type;
+  const recvphone = (body.recvphone ?? '').replace(/\D/g, '');
+  if (planType !== 'individual' && planType !== 'business') {
+    return json({ error: 'invalid plan_type' }, 400);
+  }
+  if (recvphone.length < 9) return json({ error: 'invalid phone' }, 400);
+
+  // service role 으로 DB 작업
+  const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+
+  // 가격은 서버 DB 만 신뢰
+  const { data: plan, error: planErr } = await sb
+    .from('subscription_plans')
+    .select('plan_type, name, price, is_active')
+    .eq('plan_type', planType)
+    .maybeSingle();
+  if (planErr || !plan || !plan.is_active) {
+    return json({ error: 'plan not found' }, 404);
+  }
+
+  const orderNo = generateOrderNo(user.id);
+
+  // 기존 pending 구독이 있으면 그걸 갱신, 없으면 신규
+  const { data: existing } = await sb
+    .from('subscriptions')
+    .select('id, status')
+    .eq('user_id', user.id)
+    .in('status', ['pending', 'payment_waiting'])
+    .maybeSingle();
+
+  let subscriptionId: string;
+  if (existing) {
+    subscriptionId = existing.id;
+    await sb
+      .from('subscriptions')
+      .update({ plan_type: plan.plan_type, price: plan.price, status: 'pending' })
+      .eq('id', subscriptionId);
+  } else {
+    const { data: created, error: createErr } = await sb
+      .from('subscriptions')
+      .insert({
+        user_id: user.id,
+        plan_type: plan.plan_type,
+        price: plan.price,
+        status: 'pending',
+      })
+      .select('id')
+      .single();
+    if (createErr || !created) return json({ error: 'subscription create failed' }, 500);
+    subscriptionId = created.id;
+  }
+
+  // payment_orders 생성
+  await sb.from('payment_orders').insert({
+    user_id: user.id,
+    subscription_id: subscriptionId,
+    order_no: orderNo,
+    plan_type: plan.plan_type,
+    amount: plan.price,
+    status: 'requested',
+  });
+
+  // PayApp rebillRegist 호출
+  const params = new URLSearchParams();
+  params.set('cmd', 'rebillRegist');
+  params.set('userid', PAYAPP_USERID);
+  params.set('goodname', plan.name);
+  params.set('goodprice', String(plan.price));
+  params.set('recvphone', recvphone);
+  params.set('recvemail', user.email ?? '');
+  params.set('memo', 'SWK monthly subscription');
+  params.set('rebillCycleType', 'Month');
+  params.set('rebillCycleMonth', rebillDayFromToday());
+  params.set('rebillExpire', PAYAPP_REBILL_EXPIRE);
+  params.set('feedbackurl', `${APP_BASE_URL}/functions/v1/payapp-feedback`);
+  params.set('returnurl', `${APP_BASE_URL}/payment/success?order_no=${orderNo}`);
+  params.set('failurl', `${APP_BASE_URL}/payment/fail?order_no=${orderNo}`);
+  params.set('var1', orderNo);
+  params.set('var2', user.id);
+  params.set('smsuse', 'n');
+  params.set('openpaytype', 'card');
+  params.set('linkkey', PAYAPP_LINKKEY);
+
+  let payappResp: Record<string, string> = {};
+  let respText = '';
+  try {
+    const resp = await fetch(PAYAPP_API_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    respText = await resp.text();
+    payappResp = Object.fromEntries(new URLSearchParams(respText).entries());
+  } catch (e) {
+    await sb
+      .from('payment_orders')
+      .update({ status: 'failed', raw_response: { error: String(e) } })
+      .eq('order_no', orderNo);
+    return json({ error: 'payapp request failed' }, 502);
+  }
+
+  const state = payappResp.state ?? '';
+  if (state === '1') {
+    await sb
+      .from('payment_orders')
+      .update({
+        payapp_rebill_no: payappResp.rebill_no ?? null,
+        payapp_payurl: payappResp.payurl ?? null,
+        raw_request: Object.fromEntries(params.entries()),
+        raw_response: payappResp,
+      })
+      .eq('order_no', orderNo);
+    await sb
+      .from('subscriptions')
+      .update({ payapp_rebill_no: payappResp.rebill_no ?? null })
+      .eq('id', subscriptionId);
+
+    return json({ ok: true, payurl: payappResp.payurl, order_no: orderNo });
+  }
+
+  // state != 1 → 실패
+  await sb
+    .from('payment_orders')
+    .update({
+      status: 'failed',
+      raw_request: Object.fromEntries(params.entries()),
+      raw_response: payappResp,
+    })
+    .eq('order_no', orderNo);
+  return json(
+    {
+      ok: false,
+      error: payappResp.errorMessage ?? payappResp.errormessage ?? respText ?? 'unknown error',
+    },
+    400,
+  );
+});
