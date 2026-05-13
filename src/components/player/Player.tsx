@@ -37,6 +37,14 @@ import { toast } from '@/store/toastStore';
 /** 재생 불가 트랙 연속 스킵 상한 — 이 횟수 초과 시 강제 정지하고 안내. */
 const MAX_SKIP_ATTEMPTS = 5;
 
+/** HTMLMediaElement.error.code → 사람 읽기용 이름 */
+const MEDIA_ERROR_CODES: Record<number, string> = {
+  1: 'ABORTED',
+  2: 'NETWORK',
+  3: 'DECODE',
+  4: 'SRC_NOT_SUPPORTED',
+};
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -197,6 +205,14 @@ export default function Player() {
     const trackChanged = lastTrackIdRef.current !== current.id;
     if (trackChanged) {
       if (import.meta.env.DEV) {
+        // 진단용 공식 포맷 ([audio] = 재생 직전 상태 스냅샷)
+        // eslint-disable-next-line no-console
+        console.log('[audio]', {
+          id: current.id,
+          title: current.title,
+          audio_url: current.audio_url,
+          playable,
+        });
         console.debug('[Player] track change', {
           from: lastTrackIdRef.current,
           to: current.id,
@@ -534,9 +550,26 @@ export default function Player() {
   function onError(e: React.SyntheticEvent<HTMLAudioElement>) {
     if (e.currentTarget !== activeRef()) return;
     if (!playable) return;
+    const target = e.currentTarget;
+    const err = target.error;
+    const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.error('[audio] error', {
+        id: current?.id,
+        title: current?.title,
+        audio_url: current?.audio_url,
+        code: err?.code,
+        codeName,
+        message: err?.message,
+        networkState: target.networkState,
+        readyState: target.readyState,
+        src: target.src,
+      });
+    }
     setErrored(true);
     pause();
-    toast.error('재생 중 오류가 발생했어요. 다음 곡으로 넘어갑니다.');
+    toast.error(`재생 실패 (${codeName}). 다음 곡으로 넘어갑니다.`);
     window.setTimeout(() => next(), 600);
   }
 

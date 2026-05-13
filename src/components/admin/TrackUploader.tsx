@@ -30,6 +30,46 @@ const ALLOWED_AUDIO_EXT = ['mp3', 'm4a', 'wav', 'ogg', 'aac', 'flac'];
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
+/**
+ * 확장자 → 정규 audio MIME 매핑.
+ * 브라우저가 file.type 을 비워두거나 'application/octet-stream' 으로 채우는
+ * 경우 Supabase Storage 의 Content-Type 도 잘못 저장되어 재생이 거부됨.
+ * 업로드 시 항상 이 함수로 강제 지정.
+ */
+const AUDIO_MIME_MAP: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  opus: 'audio/opus',
+  webm: 'audio/webm',
+};
+
+function audioContentType(filename: string, fallback?: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  if (AUDIO_MIME_MAP[ext]) return AUDIO_MIME_MAP[ext];
+  if (fallback && fallback.startsWith('audio/')) return fallback;
+  return 'application/octet-stream';
+}
+
+/** 업로드 직후 public URL 접근성 검증 (HEAD) */
+async function verifyPublicUrl(
+  url: string,
+): Promise<{ ok: boolean; status?: number; contentType?: string; error?: string }> {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    return {
+      ok: res.ok,
+      status: res.status,
+      contentType: res.headers.get('content-type') ?? undefined,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'fetch failed' };
+  }
+}
+
 function isAudioFile(file: File): boolean {
   if (file.type && file.type.startsWith('audio/')) return true;
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -99,13 +139,69 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
   async function uploadToBucket(bucket: 'audio' | 'covers', file: File): Promise<string> {
     const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
     const path = `${crypto.randomUUID()}.${ext}`;
+    // contentType 강제 — mp3 가 'application/octet-stream' 으로 저장되면 재생 X
+    const contentType =
+      bucket === 'audio'
+        ? audioContentType(file.name, file.type)
+        : file.type || undefined;
+
+    if (import.meta.env.DEV) {
+      console.debug('[upload] start', {
+        bucket,
+        path,
+        fileType: file.type,
+        forcedContentType: contentType,
+        size: file.size,
+      });
+    }
+
     const { error } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: '31536000', upsert: false, contentType: file.type || undefined,
+      cacheControl: '31536000',
+      upsert: false,
+      contentType,
     });
     if (error) throw new Error(`스토리지 업로드 실패 (${bucket}): ${error.message}`);
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     if (!data?.publicUrl) throw new Error('Storage public URL 생성 실패');
-    return data.publicUrl;
+    const publicUrl = data.publicUrl;
+
+    // public URL 패턴 검증 — signed/token URL 금지
+    if (publicUrl.includes('/object/sign/') || /[?&]token=/.test(publicUrl)) {
+      throw new Error(
+        `잘못된 URL 형식 (signed URL). 버킷이 public 인지 확인하세요: ${publicUrl}`,
+      );
+    }
+    if (!publicUrl.includes('/object/public/')) {
+      throw new Error(
+        `public URL 패턴이 아님. 버킷 '${bucket}' 의 public 설정을 확인하세요: ${publicUrl}`,
+      );
+    }
+
+    // HEAD 검증 — 실제로 200 이 떨어지는지
+    const verify = await verifyPublicUrl(publicUrl);
+    if (import.meta.env.DEV) {
+      console.debug('[upload] verify', { url: publicUrl, ...verify });
+    }
+    if (!verify.ok) {
+      // 업로드된 객체 정리 (best-effort)
+      try {
+        await supabase.storage.from(bucket).remove([path]);
+      } catch {
+        /* noop */
+      }
+      throw new Error(
+        `업로드 후 URL 접근 불가 (status=${verify.status ?? 'network error'}). ` +
+          `버킷 '${bucket}' 이 public 인지, Storage RLS 가 SELECT 를 허용하는지 확인하세요.`,
+      );
+    }
+    if (bucket === 'audio' && verify.contentType && !verify.contentType.startsWith('audio/')) {
+      console.warn(
+        `[upload] content-type 이 audio/* 가 아님 (${verify.contentType}). ` +
+          '브라우저가 재생을 거부할 수 있어요.',
+      );
+    }
+
+    return publicUrl;
   }
 
   async function detectDuration(file: File): Promise<number | null> {
