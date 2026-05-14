@@ -331,6 +331,34 @@ jobs:
                 then 'YES' else 'NO' end);
           SQL
 
+      - name: 1u) 0028 (PayApp 진단 테이블 + phone 매칭 + webhook 조회 RPC) 적용
+        run: |
+          set -e
+          echo "== 0028 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0028_payapp_diagnostics.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'sync_attempts_table=' ||
+              (case when exists (select 1 from information_schema.tables
+                where table_schema='public' and table_name='payapp_api_sync_attempts')
+                then 'YES' else 'NO' end);
+            select 'list_webhook_events_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='list_recent_webhook_events')
+                then 'YES' else 'NO' end);
+            select 'list_sync_attempts_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='list_recent_sync_attempts')
+                then 'YES' else 'NO' end);
+            -- admin_sync 가 phone 매칭 5단계 포함하는지 확인
+            select 'phone_match_present=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%public.users u%regexp_replace%phone%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='admin_sync_payapp_payment')
+                    then 'YES' else 'NO' end);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

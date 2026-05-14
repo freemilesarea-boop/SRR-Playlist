@@ -46,6 +46,30 @@ function payloadFromForm(form: URLSearchParams): Record<string, string> {
   return obj;
 }
 
+// 다양한 PayApp payload 필드명 후보를 한 번에 매칭.
+function pickField(p: Record<string, string>, keys: string[]): string | null {
+  for (const k of keys) {
+    if (p[k] != null && String(p[k]).trim() !== '') return String(p[k]).trim();
+  }
+  return null;
+}
+
+// '결제완료' / 'paid' / '4' / 'complete' 등을 모두 '4' 로 normalize.
+function normalizePayState(raw: string | null | undefined): number | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s === '') return null;
+  if (/^(4|paid|complete|completed|결제완료|완료)$/i.test(s)) return 4;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function planFromAmount(amount: number | null): 'individual' | 'business' | null {
+  if (amount === 4900) return 'individual';
+  if (amount === 6900) return 'business';
+  return null;
+}
+
 async function readPayload(req: Request): Promise<Record<string, string>> {
   const ct = req.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
@@ -131,12 +155,17 @@ serve(async (req) => {
 
   const payload = await readPayload(req);
   const eventKey = buildEventKey(payload);
-  const orderNo = payload.var1 || null;
-  const userIdRaw = payload.var2 || null;
-  const mulNo = payload.mul_no || payload.mulno || null;
-  const rebillNo = payload.rebill_no || payload.rebillno || null;
-  const payState = Number(payload.pay_state ?? payload.paystate ?? 0) || null;
-  const priceNum = Number(payload.price ?? 0) || null;
+  // PayApp payload 필드명은 가맹점 설정/통보 채널마다 미세하게 다를 수 있어 후보 확장.
+  const orderNo = pickField(payload, ['var1', 'order_no', 'orderno']);
+  const userIdRaw = pickField(payload, ['var2', 'user_id', 'userid_local']);
+  const mulNo = pickField(payload, ['mul_no', 'mulno', 'payapp_mul_no', 'reqno', 'req_no', 'request_no']);
+  const rebillNo = pickField(payload, ['rebill_no', 'rebillno']);
+  const payState = normalizePayState(pickField(payload, ['pay_state', 'paystate', 'state', 'status']));
+  const priceNum = (() => {
+    const s = pickField(payload, ['price', 'amount', 'goodprice']);
+    const n = s ? Number(s) : null;
+    return Number.isFinite(n) ? n : null;
+  })();
 
   // --- order 조회 (검증에 필요한 expected amount) ---
   let order:
@@ -183,18 +212,65 @@ serve(async (req) => {
     return SUCCESS(); // PayApp 재시도 폭주 방지
   }
 
-  // --- 검증 실패 → 저장만 하고 처리 안 함 ---
+  // --- 검증 실패 처리 ---
+  //   order 가 있는데 검증 실패 → 저장만 하고 종료 (price 위변조 의심)
+  //   order 가 없는데 검증 실패 → 부분 검증(userid+linkval 만) 으로 fallback,
+  //   결제완료 + mul_no 가 있으면 manual_imports 에 enqueue (관리자가 처리)
+  const partialVerifyOk = verification.userid_ok && verification.linkval_ok && verification.linkkey_ok !== 'fail';
   if (!verification.ok) {
-    console.warn('[payapp-feedback] verification failed:', verification.reasons);
-    await sb
-      .from('payapp_webhook_events')
-      .update({ processed_at: isoNow() })
-      .eq('id', insertedEvent?.id);
-    return SUCCESS();
+    if (!order && partialVerifyOk && payState === 4 && mulNo) {
+      // fall through — 아래 !order 블록에서 enqueue
+    } else {
+      console.warn('[payapp-feedback] verification failed:', verification.reasons);
+      await sb
+        .from('payapp_webhook_events')
+        .update({ processed_at: isoNow() })
+        .eq('id', insertedEvent?.id);
+      return SUCCESS();
+    }
   }
 
-  // --- order_no 없으면 raw 만 저장 ---
+  // --- order_no 매칭 실패 또는 var1 자체가 없는 경우 ---
+  //     결제 완료(payState=4) 이고 mul_no 가 있으면 manual_imports 로 enqueue.
+  //     자동 동기화/관리자 UI 에서 사용자 연결 가능.
   if (!order) {
+    if (payState === 4 && mulNo) {
+      const buyerEmail = pickField(payload, ['recvemail', 'buyer_email', 'email']);
+      const buyerPhone = pickField(payload, ['recvphone', 'buyer_phone', 'phone']);
+      const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
+      const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no']);
+      const paidAtRaw = pickField(payload, ['paid_at', 'pay_date', 'paydate', 'completedate']);
+      const paidAt = paidAtRaw
+        ? new Date(paidAtRaw.replace(' ', 'T') + (paidAtRaw.includes('+') ? '' : '+09:00')).toISOString()
+        : isoNow();
+      const planType = planFromAmount(priceNum);
+      if (planType && priceNum) {
+        // 직접 admin_sync_payapp_payment RPC 호출은 admin 검사 때문에 실패.
+        // 대신 imports 테이블에 unmatched 로 직접 INSERT → admin UI 에서 처리.
+        // (자동 매칭 RPC 와 동일한 멱등성 보장 위해 ON CONFLICT 처리)
+        const { error: importErr } = await sb
+          .from('payapp_manual_payment_imports')
+          .upsert(
+            {
+              payapp_mul_no: mulNo,
+              approval_no: approvalNo,
+              buyer_email: buyerEmail,
+              buyer_phone: buyerPhone,
+              amount: priceNum,
+              plan_type: planType,
+              goodname,
+              paid_at: paidAt,
+              status: 'unmatched',
+              raw_payload: { ...payload, _source: 'webhook_no_order' },
+              created_by: null,
+            },
+            { onConflict: 'payapp_mul_no' },
+          );
+        if (importErr) {
+          console.warn('[payapp-feedback] enqueue manual import failed:', importErr.message);
+        }
+      }
+    }
     await sb
       .from('payapp_webhook_events')
       .update({ processed_at: isoNow() })

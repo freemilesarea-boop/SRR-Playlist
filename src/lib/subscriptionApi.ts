@@ -147,10 +147,21 @@ export async function listManualPaymentImports(limit = 50): Promise<ManualPaymen
 
 // ---------- ADMIN: 자동 동기화 + 미매칭 연결 (0027) ----------
 
+export interface SyncAttemptPreview {
+  cmd: string;
+  http_status: number | null;
+  parsed_count: number;
+  success: boolean;
+  error: string | null;
+  raw_preview: string;
+}
+
 export interface AutoSyncSummary {
   ok: boolean;
   date_from?: string;
   date_to?: string;
+  success_cmd?: string | null;
+  attempts?: SyncAttemptPreview[];
   fetched?: number;
   matched?: number;
   unmatched?: number;
@@ -219,5 +230,63 @@ export async function linkUnmatchedImport(
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
+// ---------- ADMIN: diagnostics (0028) ----------
+
+export interface SyncAttemptRow {
+  id: string;
+  requested_cmd: string;
+  date_from: string | null;
+  date_to: string | null;
+  http_status: number | null;
+  parsed_count: number;
+  success: boolean;
+  error_message: string | null;
+  raw_preview: string | null;
+  created_at: string;
+}
+
+export async function listRecentSyncAttempts(limit = 20): Promise<SyncAttemptRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('list_recent_sync_attempts', { p_limit: limit });
+    if (error) return [];
+    return (data ?? []) as SyncAttemptRow[];
+  } catch {
+    return [];
+  }
+}
+
+export interface WebhookEventRow {
+  id: string;
+  event_key: string;
+  order_no: string | null;
+  user_id: string | null;
+  payapp_mul_no: string | null;
+  payapp_rebill_no: string | null;
+  pay_state: number | null;
+  price: number | null;
+  linkval_verified: boolean;
+  processed_at: string | null;
+  reasons: string | null;
+  created_at: string;
+}
+
+export async function listRecentWebhookEvents(payload: {
+  search?: string;
+  minutes?: number;
+  limit?: number;
+}): Promise<WebhookEventRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('list_recent_webhook_events', {
+      p_search: payload.search ?? null,
+      p_minutes: payload.minutes ?? 60,
+      p_limit: payload.limit ?? 50,
+    });
+    if (error) return [];
+    return (data ?? []) as WebhookEventRow[];
+  } catch {
+    return [];
   }
 }

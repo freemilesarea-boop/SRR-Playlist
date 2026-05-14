@@ -1,17 +1,16 @@
 // supabase/functions/sync-payapp-payments/index.ts
 //
-// 관리자가 호출하는 PayApp 결제내역 자동 동기화.
-// - admin 전용
-// - PayApp REST API (cmd=paymentList, 기본) 호출하여 paid 결제 목록 조회
-// - 각 결제건에 대해 admin_sync_payapp_payment RPC 호출 (멱등)
-// - 결과 집계 + 미매칭 리스트 반환
+// PayApp 결제내역 자동 동기화 (admin only).
 //
-// 보안:
-//   - 클라이언트 JWT → admin role 확인 후 service_role 로 RPC 호출
-//   - PAYAPP_USERID / PAYAPP_LINKKEY 는 Edge Function 시크릿 — 프론트 노출 금지
-//
-// deno-lint-ignore-file no-explicit-any
+// 동작:
+//   1) admin 검증
+//   2) PayApp list API 를 후보 cmd 순차 시도 (env PAYAPP_LIST_CMD 가 있으면 그것만 사용)
+//   3) 각 시도 raw response 를 payapp_api_sync_attempts 에 저장 (운영 진단용)
+//   4) 첫 번째 parsed_count > 0 인 cmd 로 records 채택
+//   5) 각 record 별 admin_sync_payapp_payment RPC 호출 (멱등)
+//   6) 결과 + attempts 요약 반환
 
+// deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -21,10 +20,11 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
-// 결제내역 조회 cmd — PayApp 콘솔/문서 기준 변경 가능하도록 env 노출.
-//   기본: paymentList (PayApp REST 결제내역 조회 명령)
-//   대안: getReqList / req_search 등 환경마다 다를 수 있음 — env 로 override.
-const PAYAPP_LIST_CMD = Deno.env.get('PAYAPP_LIST_CMD') ?? 'paymentList';
+// 명시적 override 가 있으면 그 cmd 만 사용. 없으면 후보 5개를 순차 시도.
+const PAYAPP_LIST_CMD = Deno.env.get('PAYAPP_LIST_CMD') ?? '';
+
+// 후보 cmd 목록 — PayApp 콘솔/문서마다 명칭이 다를 수 있어 순차 시도.
+const CANDIDATE_CMDS = ['paymentList', 'getReqList', 'req_search', 'paylist', 'payment_list'];
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +39,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// PayApp 응답 파서 — JSON / URL-encoded / multi-index 모두 지원
 function parsePayappList(text: string): Array<Record<string, string>> {
   // JSON 시도
   try {
@@ -48,16 +47,12 @@ function parsePayappList(text: string): Array<Record<string, string>> {
     if (Array.isArray(parsed?.list)) return parsed.list;
     if (Array.isArray(parsed?.data)) return parsed.data;
     if (Array.isArray(parsed?.payments)) return parsed.payments;
-    if (parsed && typeof parsed === 'object' && parsed.mul_no) return [parsed as any];
+    if (parsed && typeof parsed === 'object' && (parsed.mul_no || parsed.mulno)) return [parsed as any];
   } catch {
-    // not JSON — fall through
+    /* not JSON */
   }
 
-  // URL-encoded multi-record:
-  //   field_N=value (예: mul_no_0=..., mul_no_1=...)
-  //   field[N]=value
-  //   field:N=value
-  // 단일 record 일 경우엔 그대로 사용.
+  // URL-encoded multi-record
   const params = new URLSearchParams(text);
   const records = new Map<string, Record<string, string>>();
   const singleton: Record<string, string> = {};
@@ -77,7 +72,6 @@ function parsePayappList(text: string): Array<Record<string, string>> {
   }
 
   if (multiDetected) return Array.from(records.values());
-  // singleton — mul_no 가 있을 때만 1건으로 간주
   if (singleton.mul_no || singleton.mulno) return [singleton];
   return [];
 }
@@ -95,8 +89,14 @@ function planFromAmount(amount: number): 'individual' | 'business' | null {
   return null;
 }
 
-// 'YYYY-MM-DD HH:MM:SS' (KST 가정) → ISO with +09:00.
-// PayApp 가 ISO 로 주면 그대로 사용.
+function normalizePayState(raw: string | null): string {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  // 완료 후보: '4', 'paid', 'complete', 'completed', '결제완료', '완료'
+  if (/^(4|paid|complete|completed|결제완료|완료)$/i.test(s)) return '4';
+  return s;
+}
+
 function toIsoKst(raw: string): string {
   if (!raw) return new Date().toISOString();
   if (raw.includes('T') || raw.includes('+') || raw.endsWith('Z')) {
@@ -108,13 +108,42 @@ function toIsoKst(raw: string): string {
 }
 
 function ymdKst(d: Date): string {
-  // KST 캘린더 'YYYY-MM-DD'
   const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' });
   return f.format(d);
 }
-
 function daysAgoKst(days: number): string {
   return ymdKst(new Date(Date.now() - days * 24 * 3600 * 1000));
+}
+
+interface AttemptResult {
+  cmd: string;
+  http_status: number | null;
+  records: Array<Record<string, string>>;
+  raw_response: string;
+  error: string | null;
+}
+
+async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promise<AttemptResult> {
+  const params = new URLSearchParams();
+  params.set('cmd', cmd);
+  params.set('userid', PAYAPP_USERID);
+  params.set('linkkey', PAYAPP_LINKKEY);
+  params.set('sdate', sdate);
+  params.set('edate', edate);
+  params.set('pay_state', '4');
+
+  try {
+    const resp = await fetch(PAYAPP_API_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const text = await resp.text();
+    const records = parsePayappList(text);
+    return { cmd, http_status: resp.status, records, raw_response: text, error: null };
+  } catch (e) {
+    return { cmd, http_status: null, records: [], raw_response: '', error: String(e) };
+  }
 }
 
 serve(async (req) => {
@@ -138,7 +167,6 @@ serve(async (req) => {
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
-  // admin 검증
   const { data: me } = await sb
     .from('users')
     .select('role')
@@ -146,38 +174,71 @@ serve(async (req) => {
     .maybeSingle();
   if (!me || me.role !== 'admin') return json({ error: 'admin only' }, 403);
 
-  // 입력
   let body: { date_from?: string; date_to?: string; plan_type?: string } = {};
   try {
     body = await req.json();
   } catch {
-    /* empty body — ok, defaults will apply */
+    /* defaults */
   }
   const dateFrom = body.date_from || daysAgoKst(30);
   const dateTo = body.date_to || daysAgoKst(0);
 
-  // PayApp API 호출
-  const params = new URLSearchParams();
-  params.set('cmd', PAYAPP_LIST_CMD);
-  params.set('userid', PAYAPP_USERID);
-  params.set('linkkey', PAYAPP_LINKKEY);
-  params.set('sdate', dateFrom);
-  params.set('edate', dateTo);
-  params.set('pay_state', '4'); // 결제완료만
+  // 디버그 preview (민감값 제외)
+  console.log('[sync-payapp] request preview:', {
+    cmd_override: PAYAPP_LIST_CMD || null,
+    candidate_cmds: PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS,
+    date_from: dateFrom,
+    date_to: dateTo,
+    userid_present: PAYAPP_USERID.length > 0,
+    api_url: PAYAPP_API_URL,
+    plan_filter: body.plan_type ?? null,
+  });
 
-  let respText = '';
-  try {
-    const resp = await fetch(PAYAPP_API_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+  // 후보 cmd 순차 시도. 각 시도 결과 DB 에 영구 기록.
+  const cmdsToTry = PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS;
+  const attempts: Array<{
+    cmd: string;
+    http_status: number | null;
+    parsed_count: number;
+    success: boolean;
+    error: string | null;
+    raw_preview: string;
+  }> = [];
+  let records: Array<Record<string, string>> = [];
+  let successCmd: string | null = null;
+
+  for (const cmd of cmdsToTry) {
+    const r = await tryFetchPayApp(cmd, dateFrom, dateTo);
+    const success = r.records.length > 0;
+
+    // DB 영구 기록 (raw_response 일부만 — 4000자 cap)
+    await sb.from('payapp_api_sync_attempts').insert({
+      requested_cmd: cmd,
+      date_from: dateFrom,
+      date_to: dateTo,
+      http_status: r.http_status,
+      raw_response: r.raw_response.slice(0, 4000),
+      parsed_count: r.records.length,
+      success,
+      error_message: r.error,
+      created_by: userRes.user.id,
     });
-    respText = await resp.text();
-  } catch (e) {
-    return json({ error: 'payapp api request failed: ' + String(e) }, 502);
-  }
 
-  const records = parsePayappList(respText);
+    attempts.push({
+      cmd,
+      http_status: r.http_status,
+      parsed_count: r.records.length,
+      success,
+      error: r.error,
+      raw_preview: r.raw_response.slice(0, 2000),
+    });
+
+    if (success) {
+      records = r.records;
+      successCmd = cmd;
+      break;
+    }
+  }
 
   let matched = 0;
   let unmatched = 0;
@@ -192,12 +253,11 @@ serve(async (req) => {
   }> = [];
 
   for (const rec of records) {
-    const mul_no = getField(rec, ['mul_no', 'mulno', 'tno', 'payapp_mul_no', 'no']);
+    const mul_no = getField(rec, ['mul_no', 'mulno', 'tno', 'payapp_mul_no', 'reqno', 'req_no', 'request_no', 'no']);
     const priceRaw = getField(rec, ['price', 'amount', 'goodprice']);
     const price = priceRaw ? Number(priceRaw) : 0;
-    const pay_state = getField(rec, ['pay_state', 'paystate', 'state']) ?? '';
+    const pay_state = normalizePayState(getField(rec, ['pay_state', 'paystate', 'state', 'status']));
 
-    // pay_state 가 4(완료) 가 아니면 스킵. 일부 응답에는 pay_state 가 없을 수 있어서 빈 문자열은 통과시킴.
     if (pay_state && pay_state !== '4') continue;
     if (!mul_no || !price) continue;
 
@@ -212,7 +272,7 @@ serve(async (req) => {
 
     const buyer_email = getField(rec, ['recvemail', 'buyer_email', 'email', 'useremail']);
     const buyer_phone = getField(rec, ['recvphone', 'buyer_phone', 'phone', 'userphone']);
-    const goodname = getField(rec, ['goodname', 'pname', 'item_name']);
+    const goodname = getField(rec, ['goodname', 'goodsname', 'pname', 'item_name']);
     const approval_no = getField(rec, ['approval_no', 'apv_no', 'card_apv_no', 'cardno']);
     const paid_at_raw = getField(rec, ['paid_at', 'pay_date', 'paydate', 'completedate', 'pdate']);
     const paid_at = paid_at_raw ? toIsoKst(paid_at_raw) : new Date().toISOString();
@@ -254,12 +314,12 @@ serve(async (req) => {
     }
   }
 
-  // 미매칭 행은 payapp_manual_payment_imports 에 이미 저장됨 → 클라이언트는 list RPC 로 조회
-
   return json({
     ok: true,
     date_from: dateFrom,
     date_to: dateTo,
+    success_cmd: successCmd,
+    attempts,
     fetched: records.length,
     matched,
     unmatched,
@@ -267,7 +327,5 @@ serve(async (req) => {
     failed,
     errors,
     processed,
-    // 파싱 결과가 0건이면 PayApp 응답을 일부 공개해 운영자가 cmd/필드명 확인할 수 있도록 함.
-    raw_response_preview: records.length === 0 ? respText.slice(0, 500) : undefined,
   });
 });

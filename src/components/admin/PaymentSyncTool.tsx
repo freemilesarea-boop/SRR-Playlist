@@ -16,10 +16,14 @@ import {
   syncPayappPaymentsAuto,
   searchUsersForLink,
   linkUnmatchedImport,
+  listRecentSyncAttempts,
+  listRecentWebhookEvents,
   type AdminSyncPaymentResult,
   type AutoSyncSummary,
   type ManualPaymentImportRow,
   type UserSearchRow,
+  type SyncAttemptRow,
+  type WebhookEventRow,
 } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 
@@ -58,15 +62,40 @@ export default function PaymentSyncTool() {
   const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
   const [autoResult, setAutoResult] = useState<AutoSyncSummary | null>(null);
 
+  // 진단: 최근 sync attempts + webhook events
+  const [attempts, setAttempts] = useState<SyncAttemptRow[]>([]);
+  const [webhookRows, setWebhookRows] = useState<WebhookEventRow[]>([]);
+  const [webhookSearch, setWebhookSearch] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await listManualPaymentImports(100));
+      const [imports, attemptsList, webhooks] = await Promise.all([
+        listManualPaymentImports(100),
+        listRecentSyncAttempts(20),
+        listRecentWebhookEvents({ minutes: 1440, limit: 30 }),
+      ]);
+      setRows(imports);
+      setAttempts(attemptsList);
+      setWebhookRows(webhooks);
     } finally {
       setLoading(false);
     }
   }, []);
   useFreshFetch(load, []);
+
+  async function onSearchWebhook() {
+    if (webhookSearch.trim().length < 3) {
+      toast.error('3글자 이상 입력해주세요 (mul_no / order_no / 일부 텍스트)');
+      return;
+    }
+    const res = await listRecentWebhookEvents({
+      search: webhookSearch.trim(),
+      minutes: 60 * 24 * 7,
+      limit: 30,
+    });
+    setWebhookRows(res);
+  }
 
   async function onAutoSync() {
     if (!window.confirm('PayApp 결제내역을 자동으로 조회하고 동기화합니다. 진행할까요?')) return;
@@ -158,6 +187,9 @@ export default function PaymentSyncTool() {
               <>
                 <p className="mb-2 text-[11px] text-ink-mute">
                   기간: {autoResult.date_from} ~ {autoResult.date_to}
+                  {autoResult.success_cmd && (
+                    <> · 성공한 cmd: <span className="font-mono text-emerald-300">{autoResult.success_cmd}</span></>
+                  )}
                 </p>
                 <div className="grid grid-cols-5 gap-1.5">
                   <Stat label="조회" value={autoResult.fetched ?? 0} tone="text-ink" />
@@ -176,17 +208,39 @@ export default function PaymentSyncTool() {
                     </ul>
                   </details>
                 )}
-                {autoResult.fetched === 0 && autoResult.raw_response_preview && (
-                  <details className="mt-3 text-[11px]">
-                    <summary className="cursor-pointer text-yellow-300">
-                      조회 0건 — PayApp 응답 미리보기
+                {/* 시도된 cmd 별 raw 응답 — 조회 0건이면 자동 펼침 */}
+                {(autoResult.attempts?.length ?? 0) > 0 && (
+                  <details className="mt-3 text-[11px]" open={(autoResult.fetched ?? 0) === 0}>
+                    <summary className="cursor-pointer text-ink-mute">
+                      PayApp API 시도 {autoResult.attempts!.length}회 — raw 응답 보기
                     </summary>
-                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-bg-deep/80 p-2 font-mono text-[10px] text-ink-mute">
-                      {autoResult.raw_response_preview}
-                    </pre>
-                    <p className="mt-1 text-ink-dim">
-                      필드명이 다를 수 있어요. PAYAPP_LIST_CMD 시크릿 또는 응답 필드 매핑 확인 필요.
-                    </p>
+                    {(autoResult.fetched ?? 0) === 0 && (
+                      <p className="mt-2 rounded-md bg-yellow-500/10 p-2 text-yellow-200">
+                        ⚠️ PayApp API 조회 명령이 맞지 않거나 응답 필드가 다릅니다. 아래 raw 응답을
+                        확인하고 PAYAPP_LIST_CMD 시크릿 또는 응답 파서를 조정하세요.
+                      </p>
+                    )}
+                    <div className="mt-2 space-y-2">
+                      {autoResult.attempts!.map((a, i) => (
+                        <div key={i} className="rounded-md bg-bg-deep/60 p-2 ring-1 ring-line/10">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="font-mono font-semibold text-ink">{a.cmd}</span>
+                            <span className="text-ink-dim">HTTP {a.http_status ?? '—'}</span>
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                a.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ink/10 text-ink-mute'
+                              }`}
+                            >
+                              {a.parsed_count}건 파싱
+                            </span>
+                            {a.error && <span className="text-red-300">{a.error}</span>}
+                          </div>
+                          <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-ink-mute">
+                            {a.raw_preview || '(empty)'}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
                   </details>
                 )}
               </>
@@ -196,6 +250,120 @@ export default function PaymentSyncTool() {
           </div>
         )}
       </section>
+
+      {/* === Webhook 수신 진단 === */}
+      <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold tracking-tight">PayApp Webhook 수신 진단</h3>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              value={webhookSearch}
+              onChange={(e) => setWebhookSearch(e.target.value)}
+              placeholder="mul_no 또는 텍스트"
+              className="input h-7 text-[11px]"
+            />
+            <button
+              onClick={onSearchWebhook}
+              className="rounded-md bg-bg-deep px-2 text-[11px] font-semibold ring-1 ring-line/15 hover:bg-bg-hover"
+            >
+              검색
+            </button>
+          </div>
+        </div>
+        {webhookRows.length === 0 ? (
+          <p className="rounded-md bg-bg-deep/40 p-3 text-[11px] text-ink-mute">
+            최근 24시간 내 수신된 webhook 이벤트가 없어요. PayApp 콘솔의 feedbackurl 설정과 함수
+            배포 상태를 확인하세요.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-[11px]">
+              <thead className="text-ink-dim">
+                <tr className="border-b border-line/10">
+                  <th className="px-2 py-1.5 text-left font-semibold">time</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">mul_no</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">order_no</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">state</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">price</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">검증</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">처리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {webhookRows.map((w) => (
+                  <tr key={w.id} className="border-b border-line/10 last:border-b-0">
+                    <td className="px-2 py-1.5 text-ink-mute">
+                      {new Date(w.created_at).toLocaleTimeString('ko-KR')}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono">{w.payapp_mul_no ?? '—'}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-mute">{w.order_no ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right">{w.pay_state ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{w.price ?? '—'}</td>
+                    <td className="px-2 py-1.5">
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                          w.linkval_verified
+                            ? 'bg-emerald-500/15 text-emerald-300'
+                            : 'bg-red-500/15 text-red-300'
+                        }`}
+                      >
+                        {w.linkval_verified ? 'OK' : 'FAIL'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-ink-mute">
+                      {w.processed_at ? '✓' : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* === API 시도 이력 === */}
+      {attempts.length > 0 && (
+        <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+          <h3 className="text-sm font-bold tracking-tight">PayApp API 시도 이력 ({attempts.length})</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-[11px]">
+              <thead className="text-ink-dim">
+                <tr className="border-b border-line/10">
+                  <th className="px-2 py-1.5 text-left font-semibold">time</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">cmd</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">HTTP</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">parsed</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">성공</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">오류</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attempts.map((a) => (
+                  <tr key={a.id} className="border-b border-line/10 last:border-b-0">
+                    <td className="px-2 py-1.5 text-ink-mute">
+                      {new Date(a.created_at).toLocaleTimeString('ko-KR')}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono">{a.requested_cmd}</td>
+                    <td className="px-2 py-1.5 text-right">{a.http_status ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{a.parsed_count}</td>
+                    <td className="px-2 py-1.5">
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                          a.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ink/10 text-ink-mute'
+                        }`}
+                      >
+                        {a.success ? 'OK' : '-'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-red-300">{a.error_message ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* === 미매칭 결제 목록 === */}
       <section className="space-y-2">
