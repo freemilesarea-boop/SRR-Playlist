@@ -216,9 +216,83 @@ select * from public.get_artist_streaming_summary();
 
 자정 직후 KST 09:00 UTC 시점에 `today_streams` 가 0 으로 리셋되는지가 핵심 검증 포인트.
 
+## 0022 — 트리거 적용 여부 / 동작 진단
+
+신규 가입 아티스트가 관리자 목록에 안 보일 때 **가장 먼저 의심할 것은 0021 마이그레이션 미적용**입니다. 0022 가 가시화 도구를 추가합니다.
+
+### 추가 (0022_signup_trigger_debug.sql)
+- `signup_debug_events` 테이블 (admin select only)
+  - 회원가입마다 트리거가 본 metadata / 결과 / 에러 메시지 자동 기록
+- `handle_new_user` 함수 강화:
+  - `raise log` 로 Postgres 로그에 시작/완료 + 에러 기록
+  - users 또는 artist_profiles INSERT 실패 시 BEGIN/EXCEPTION 으로 잡아 디버그 행에 error_message 저장 (가입 자체는 막지 않음)
+- 마이그레이션 끝에 **자체 검증 SELECT 4종** (함수 본문에 `artist_profiles` 있는지 / 트리거 enabled 여부 / 디버그 테이블 존재 / 최근 7일 가입 수)
+
+### 진단 절차 (운영자 직접 수행)
+
+**1) 워크플로우 1o 스텝 출력 확인**
+GitHub Actions "DB · 추천 메타데이터 시드 적용" 의 `1o) 0022 적용 + 자체 검증` 단계에서 다음 3줄이 모두 `YES` 인지:
+```
+fn_body_artist_profiles=YES
+trigger_enabled=YES
+debug_table_exists=YES
+```
+하나라도 `NO` 면 마이그레이션이 실제로는 적용되지 않은 상태.
+
+**2) Supabase 대시보드 → SQL Editor 에서 진단 스크립트 실행**
+```sql
+-- supabase/diagnose_signup_trigger.sql 의 내용을 SQL Editor 에 붙여넣어 실행
+```
+또는 로컬 psql:
+```bash
+psql "$SUPABASE_DB_URL" -f supabase/diagnose_signup_trigger.sql
+```
+8단계 진단 출력:
+- 함수 본문 상태 (OK / PARTIAL / OLD)
+- 트리거 enabled 상태
+- 최근 auth.users 의 metadata (account_type/artist_name)
+- 최근 public.users (account_type/artist_approval_status)
+- 최근 artist_profiles
+- signup_debug_events 의 트리거 결과 + 에러 메시지
+- auth ↔ public ↔ artist_profiles 카운트 비교
+
+**3) 신규 가입 1건 테스트 후 즉시 디버그 확인**
+```sql
+select created_at, email, account_type, artist_name,
+       users_upserted, artist_profile_upserted, error_message
+from public.signup_debug_events
+order by created_at desc limit 5;
+```
+- `users_upserted=false` → users 테이블 INSERT 실패. error_message 확인.
+- `artist_profile_upserted=false` & account_type='artist' → artist_profiles INSERT 실패. metadata 에 artist_name 누락 또는 RLS/제약 위반.
+- `account_type='individual'` 인데 아티스트 가입한 경우 → ArtistSignupForm 이 metadata 를 안 보냈거나 signup payload 가 잘못됨.
+
+**4) 만약 함수 본문이 OLD 라면**
+- GitHub Actions 워크플로우 재실행 → `1n` / `1o` 단계가 자동 적용
+- 또는 로컬 psql 로 직접 실행:
+  ```bash
+  psql "$SUPABASE_DB_URL" -f supabase/migrations/0021_signup_metadata_trigger.sql
+  psql "$SUPABASE_DB_URL" -f supabase/migrations/0022_signup_trigger_debug.sql
+  ```
+
+**5) Postgres 서버 로그 (선택)**
+Supabase 대시보드 → Database → Logs → Postgres logs 에서 `[handle_new_user]` 검색. 트리거 매 실행마다 `start`/`done` + 에러 시 `FAILED` 메시지가 기록됩니다.
+
+### 자주 발생하는 케이스
+
+| 증상 | 진단 키 | 조치 |
+|---|---|---|
+| 함수 본문에 `artist_profiles` 없음 | `fn_body_artist_profiles=NO` | 0021 미적용. 워크플로우 재실행 |
+| 디버그 테이블 없음 | `debug_table_exists=NO` | 0022 미적용. 워크플로우 재실행 |
+| 트리거 disabled | `trigger_enabled=NO` | `alter table auth.users enable trigger on_auth_user_created;` |
+| public.users 만 있고 artist_profiles 없음 | `signup_debug_events.artist_profile_upserted=false` | metadata 에 artist_name 누락. ArtistSignupForm 점검 |
+| account_type='individual' 로 저장됨 | auth.users.raw_user_meta_data 에 account_type 없음 | ArtistSignupForm 의 signUpWithPassword 호출 점검 |
+| 둘 다 빈 상태 + 트리거 enabled | 트리거가 발화 안 됨 | Supabase 의 auth.users 트리거 권한 / 함수 권한 점검 |
+
 ## 남은 follow-up
 
 - 아티스트 음원에 가사/외부 유통 링크 컬럼 추가 (현재 tracks 스키마에 없음)
 - 승인/거절 시 사용자에게 이메일/푸시 알림 (현재 admin UI 에서만 확인)
 - 검수 통과율 / 평균 검수 시간 등 admin 대시보드 통계
 - 거절된 곡 재심사 요청 플로우
+- signup_debug_events 는 안정화 후 제거 가능 (admin select only 라 사용자 노출 없음)
