@@ -144,3 +144,80 @@ export async function listManualPaymentImports(limit = 50): Promise<ManualPaymen
     return [];
   }
 }
+
+// ---------- ADMIN: 자동 동기화 + 미매칭 연결 (0027) ----------
+
+export interface AutoSyncSummary {
+  ok: boolean;
+  date_from?: string;
+  date_to?: string;
+  fetched?: number;
+  matched?: number;
+  unmatched?: number;
+  already_synced?: number;
+  failed?: number;
+  errors?: Array<{ mul_no: string; message: string }>;
+  processed?: Array<{ mul_no: string; status: string; amount: number; plan_type: string | null }>;
+  raw_response_preview?: string;
+  error?: string;
+}
+
+export async function syncPayappPaymentsAuto(payload: {
+  date_from?: string;
+  date_to?: string;
+  plan_type?: 'individual' | 'business';
+}): Promise<AutoSyncSummary> {
+  try {
+    const { data, error } = await supabase.functions.invoke('sync-payapp-payments', {
+      body: payload,
+    });
+    if (error) return { ok: false, error: error.message };
+    return data as AutoSyncSummary;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
+export interface UserSearchRow {
+  user_id: string;
+  email: string | null;
+  nickname: string | null;
+}
+
+export async function searchUsersForLink(query: string, limit = 10): Promise<UserSearchRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('admin_search_users_for_link', {
+      p_query: query,
+      p_limit: limit,
+    });
+    if (error) return [];
+    return (data ?? []) as UserSearchRow[];
+  } catch {
+    return [];
+  }
+}
+
+export interface LinkUnmatchedResult {
+  status: 'matched';
+  user_id: string;
+  order_id: string;
+  subscription_id: string;
+  message: string;
+}
+
+export async function linkUnmatchedImport(
+  importId: string,
+  userId: string,
+): Promise<{ ok: boolean; result?: LinkUnmatchedResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_link_unmatched_import', {
+      p_import_id: importId,
+      p_user_id: userId,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as LinkUnmatchedResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
