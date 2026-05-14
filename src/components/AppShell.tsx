@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
+import Footer from './common/Footer';
 import {
   restorePlayerSessionToStore,
   installPlayerSessionPersistence,
@@ -25,9 +26,15 @@ export default function AppShell() {
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 pb-44 sm:pb-44">
+      <main className="mx-auto w-full max-w-5xl flex-1">
         <Outlet />
       </main>
+      {/* 풀폭 Footer — main 밖에 두어 max-w-5xl 제약 받지 않음.
+          Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한
+          padding-bottom 으로 마지막 줄이 가려지지 않게. */}
+      <div className="pb-44">
+        <Footer />
+      </div>
       <Player />
       <BottomNav />
     </div>
