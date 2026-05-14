@@ -29,7 +29,7 @@ export default function TermsPage() {
         <LegalList
           items={[
             '결제 수단: PayApp 정기결제(rebill) 모듈 사용',
-            '요금제: SWK 일반 이용권(월 4,900원) / SWK 사업자 이용권(월 6,900원)',
+            '요금제: SRR Playlist 정기이용권(월 4,900원) / SRR Playlist 사업자 정기이용권(월 6,900원)',
             '결제 주기: 매월 자동 청구',
             '결제 영수증/세금계산서: PayApp 가맹점 정보 기반 발행',
             '결제 실패 시 회사는 자동으로 다음 사이클에 재시도하거나 권한을 일시 정지할 수 있습니다.',

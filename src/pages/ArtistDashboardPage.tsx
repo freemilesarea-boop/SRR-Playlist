@@ -325,7 +325,7 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-bold">음원 업로드 — 월 4,900원 요금제 결제</h2>
           <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
-            아티스트 음원 업로드는 SWK 일반 이용권(월 4,900원) 결제 후 이용할 수 있어요.
+            아티스트 음원 업로드는 SRR Playlist 정기이용권(월 4,900원) 결제 후 이용할 수 있어요.
             결제 완료 후 자동으로 업로드 권한이 활성화됩니다.
           </p>
         </div>

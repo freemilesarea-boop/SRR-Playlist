@@ -287,6 +287,32 @@ jobs:
                     then 'YES' else 'NO' end);
           SQL
 
+      - name: 1s) 0026 (관리자 수동 결제 동기화 + 상품명 변경) 적용
+        run: |
+          set -e
+          echo "== 0026 적용 (subscription_plans 이름 변경 + manual_payment_imports + sync RPC) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0026_admin_payment_sync.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'plan_individual_renamed=' ||
+              (case when exists (select 1 from public.subscription_plans
+                where plan_type='individual' and name='SRR Playlist 정기이용권')
+                then 'YES' else 'NO' end);
+            select 'plan_business_renamed=' ||
+              (case when exists (select 1 from public.subscription_plans
+                where plan_type='business' and name='SRR Playlist 사업자 정기이용권')
+                then 'YES' else 'NO' end);
+            select 'manual_imports_table=' ||
+              (case when exists (select 1 from information_schema.tables
+                where table_schema='public' and table_name='payapp_manual_payment_imports')
+                then 'YES' else 'NO' end);
+            select 'sync_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_sync_payapp_payment')
+                then 'YES' else 'NO' end);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

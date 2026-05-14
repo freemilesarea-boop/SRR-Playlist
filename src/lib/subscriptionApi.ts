@@ -75,3 +75,72 @@ export async function fetchMySubscription(): Promise<MySubscriptionResult> {
   if (error) return { subscription: null, cancelable: false };
   return (data ?? { subscription: null, cancelable: false }) as MySubscriptionResult;
 }
+
+// ---------- ADMIN: manual payment sync (0026) ----------
+
+export interface AdminSyncPaymentResult {
+  status: 'matched' | 'unmatched' | 'failed';
+  user_id: string | null;
+  order_id: string | null;
+  subscription_id: string | null;
+  import_id: string | null;
+  message: string;
+}
+
+export async function adminSyncPayappPayment(payload: {
+  payapp_mul_no: string;
+  amount: number;
+  plan_type: 'individual' | 'business';
+  approval_no?: string;
+  buyer_email?: string;
+  buyer_phone?: string;
+  paid_at?: string;
+  goodname?: string;
+}): Promise<{ ok: boolean; result?: AdminSyncPaymentResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_sync_payapp_payment', {
+      p_payapp_mul_no: payload.payapp_mul_no,
+      p_amount: payload.amount,
+      p_plan_type: payload.plan_type,
+      p_approval_no: payload.approval_no ?? null,
+      p_buyer_email: payload.buyer_email ?? null,
+      p_buyer_phone: payload.buyer_phone ?? null,
+      p_paid_at: payload.paid_at ?? new Date().toISOString(),
+      p_goodname: payload.goodname ?? null,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as AdminSyncPaymentResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
+export interface ManualPaymentImportRow {
+  id: string;
+  payapp_mul_no: string;
+  approval_no: string | null;
+  buyer_email: string | null;
+  buyer_phone: string | null;
+  amount: number;
+  plan_type: 'individual' | 'business';
+  goodname: string | null;
+  paid_at: string;
+  matched_user_id: string | null;
+  matched_user_email: string | null;
+  matched_order_id: string | null;
+  matched_subscription_id: string | null;
+  status: 'matched' | 'unmatched' | 'failed';
+  error_message: string | null;
+  created_at: string;
+}
+
+export async function listManualPaymentImports(limit = 50): Promise<ManualPaymentImportRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('list_manual_payment_imports', { p_limit: limit });
+    if (error) return [];
+    return (data ?? []) as ManualPaymentImportRow[];
+  } catch {
+    return [];
+  }
+}

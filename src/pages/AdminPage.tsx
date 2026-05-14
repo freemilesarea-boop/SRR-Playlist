@@ -12,6 +12,7 @@ import {
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import TrackReviewList from '@/components/admin/TrackReviewList';
 import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
+import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -29,6 +30,7 @@ type Tab =
   | 'streaming'
   | 'revenue'
   | 'subscriptions'
+  | 'payment-sync'
   | 'content'
   | 'artists'
   | 'payout-verification'
@@ -41,6 +43,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
+  { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
@@ -98,6 +101,7 @@ export default function AdminPage() {
       {tab === 'streaming' && <StreamingAnalytics />}
       {tab === 'revenue' && <RevenueManagement />}
       {tab === 'subscriptions' && <SubscriptionRequests />}
+      {tab === 'payment-sync' && <PaymentSyncTool />}
       {tab === 'content' && <ContentManagement />}
       {tab === 'artists' && <ArtistApprovalList />}
       {tab === 'payout-verification' && <PayoutVerificationList />}

@@ -425,7 +425,7 @@ function PhoneModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
       <div className="w-full max-w-sm space-y-3 rounded-2xl bg-bg-card p-5 ring-1 ring-line/10">
         <h3 className="text-base font-bold">
-          {plan === 'business' ? 'SWK 사업자 이용권' : 'SWK 일반 이용권'} 결제
+          {plan === 'business' ? 'SRR Playlist 사업자 정기이용권' : 'SRR Playlist 정기이용권'} 결제
         </h3>
         <p className="text-xs text-ink-mute">
           결제 알림을 받을 휴대폰 번호를 입력해주세요. PayApp 결제창으로 이동합니다.

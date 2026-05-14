@@ -54,7 +54,7 @@ export default function PaymentSuccessPage() {
               <h1 className="text-lg font-bold">결제가 완료됐어요</h1>
             </div>
             <p className="mt-2 text-sm text-ink-mute">
-              {sub?.plan_type === 'business' ? 'SWK 사업자 이용권' : 'SWK 일반 이용권'} ·{' '}
+              {sub?.plan_type === 'business' ? 'SRR Playlist 사업자 정기이용권' : 'SRR Playlist 정기이용권'} ·{' '}
               {sub?.price?.toLocaleString()}원/월
             </p>
             {sub?.current_period_end && (

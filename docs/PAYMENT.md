@@ -1,13 +1,13 @@
 # PayApp 정기결제 운영 가이드 (2차 검수판)
 
-SWK MVP 의 PayApp 정기결제(rebill) 통합 운영 가이드. 실제 운영 전 반드시 정독.
+SRR Playlist MVP 의 PayApp 정기결제(rebill) 통합 운영 가이드. 실제 운영 전 반드시 정독.
 
 ## 요금제
 
 | plan_type | 상품명 | 가격 | 주기 |
 |---|---|---|---|
-| individual | SWK 일반 이용권 | 4,900원 | monthly |
-| business | SWK 사업자 이용권 | 6,900원 | monthly |
+| individual | SRR Playlist 정기이용권 | 4,900원 | monthly |
+| business | SRR Playlist 사업자 정기이용권 | 6,900원 | monthly |
 
 **가격은 항상 `subscription_plans.price` 만 신뢰합니다.** 프론트엔드/요청 body 의 가격은 무시.
 
