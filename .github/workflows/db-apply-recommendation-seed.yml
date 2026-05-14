@@ -409,6 +409,27 @@ jobs:
                     then 'YES' else 'NO' end);
           SQL
 
+      - name: 1x) 0031 (admin RPC SQL Editor / service_role 우회) 적용
+        run: |
+          set -e
+          echo "== 0031 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0031_admin_check_bypass.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'helper_fn=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='_internal_is_admin_caller')
+                then 'YES' else 'NO' end);
+            select 'admin_replay_uses_helper=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%_internal_is_admin_caller%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='admin_replay_webhook_by_mul_no')
+                    then 'YES' else 'NO' end);
+            select 'postgres_bypass_works=' ||
+              case when public._internal_is_admin_caller() then 'YES' else 'NO' end;
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
