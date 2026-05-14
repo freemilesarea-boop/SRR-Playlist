@@ -62,10 +62,11 @@ export default function PaymentSyncTool() {
   const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
   const [autoResult, setAutoResult] = useState<AutoSyncSummary | null>(null);
 
-  // 진단: 최근 sync attempts + webhook events
+  // 진단: 최근 sync attempts + webhook events + RPC 에러
   const [attempts, setAttempts] = useState<SyncAttemptRow[]>([]);
   const [webhookRows, setWebhookRows] = useState<WebhookEventRow[]>([]);
   const [webhookSearch, setWebhookSearch] = useState('');
+  const [rpcErrors, setRpcErrors] = useState<Array<{ name: string; message: string }>>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,9 +76,14 @@ export default function PaymentSyncTool() {
         listRecentSyncAttempts(20),
         listRecentWebhookEvents({ minutes: 1440, limit: 30 }),
       ]);
-      setRows(imports);
-      setAttempts(attemptsList);
-      setWebhookRows(webhooks);
+      setRows(imports.rows);
+      setAttempts(attemptsList.rows);
+      setWebhookRows(webhooks.rows);
+      const errs: Array<{ name: string; message: string }> = [];
+      if (imports.error) errs.push({ name: 'list_manual_payment_imports', message: imports.error });
+      if (attemptsList.error) errs.push({ name: 'list_recent_sync_attempts', message: attemptsList.error });
+      if (webhooks.error) errs.push({ name: 'list_recent_webhook_events', message: webhooks.error });
+      setRpcErrors(errs);
     } finally {
       setLoading(false);
     }
@@ -94,7 +100,8 @@ export default function PaymentSyncTool() {
       minutes: 60 * 24 * 7,
       limit: 30,
     });
-    setWebhookRows(res);
+    setWebhookRows(res.rows);
+    if (res.error) toast.error('검색 실패: ' + res.error);
   }
 
   async function onAutoSync() {
@@ -130,6 +137,26 @@ export default function PaymentSyncTool() {
           PayApp 결제내역을 자동 조회하고 매칭. webhook 누락 시 보완 용도.
         </p>
       </div>
+
+      {/* RPC 호출 실패 배너 — 마이그레이션 누락 진단용 */}
+      {rpcErrors.length > 0 && (
+        <div className="rounded-2xl bg-red-500/10 p-3 ring-1 ring-red-500/30">
+          <p className="text-xs font-bold text-red-200">
+            ⚠️ 진단용 RPC 가 실패했어요 ({rpcErrors.length}건)
+          </p>
+          <p className="mt-1 text-[11px] text-red-100/85">
+            DB 마이그레이션(0026/0027/0028) 이 운영 DB 에 적용되지 않았을 수 있습니다. GitHub Actions
+            의 "DB · 추천 메타데이터 시드 적용" 워크플로를 실행해주세요.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-[11px] text-red-100/85">
+            {rpcErrors.map((e, i) => (
+              <li key={i} className="font-mono">
+                {e.name}: {e.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* === 자동 동기화 === */}
       <section className="space-y-3 rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
@@ -198,6 +225,11 @@ export default function PaymentSyncTool() {
                   <Stat label="기존 동기화" value={autoResult.already_synced ?? 0} tone="text-ink-mute" />
                   <Stat label="실패" value={autoResult.failed ?? 0} tone="text-red-300" />
                 </div>
+                {autoResult.hint && (
+                  <p className="mt-2 rounded bg-yellow-500/10 px-2 py-1.5 text-[11px] text-yellow-200">
+                    💡 {autoResult.hint}
+                  </p>
+                )}
                 {(autoResult.errors?.length ?? 0) > 0 && (
                   <details className="mt-3 text-[11px]">
                     <summary className="cursor-pointer text-red-300">오류 {autoResult.errors!.length}건 보기</summary>
@@ -245,7 +277,37 @@ export default function PaymentSyncTool() {
                 )}
               </>
             ) : (
-              <p className="text-xs text-red-300">{autoResult.error}</p>
+              <div className="space-y-2 text-xs">
+                <p className="font-bold text-red-200">자동 동기화 실패</p>
+                <p className="font-mono text-red-300">{autoResult.error}</p>
+                {autoResult.missing_env && autoResult.missing_env.length > 0 && (
+                  <div className="rounded-md bg-bg-deep/60 p-2">
+                    <p className="font-semibold text-red-200">누락된 환경변수:</p>
+                    <ul className="mt-1 space-y-0.5 font-mono text-red-300">
+                      {autoResult.missing_env.map((e) => (
+                        <li key={e}>· {e}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[11px] text-ink-mute">
+                      해결: <code>supabase secrets set {'<NAME>'}=...</code> 후{' '}
+                      <code>supabase functions deploy sync-payapp-payments</code>
+                    </p>
+                  </div>
+                )}
+                {autoResult.details && (
+                  <p className="rounded bg-bg-deep/60 p-2 font-mono text-red-300">
+                    details: {autoResult.details}
+                  </p>
+                )}
+                {autoResult.hint && (
+                  <p className="rounded bg-yellow-500/10 p-2 text-yellow-200">
+                    💡 {autoResult.hint}
+                  </p>
+                )}
+                {autoResult.user_id && (
+                  <p className="text-ink-mute">user_id: {autoResult.user_id}</p>
+                )}
+              </div>
             )}
           </div>
         )}

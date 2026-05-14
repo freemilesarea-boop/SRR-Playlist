@@ -148,42 +148,74 @@ async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promis
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+  if (req.method !== 'POST') return json({ ok: false, error: 'method not allowed' }, 405);
 
-  if (!PAYAPP_USERID || !PAYAPP_LINKKEY) {
-    return json({ error: 'server misconfigured: PAYAPP_USERID / PAYAPP_LINKKEY missing' }, 500);
+  // env check — 어떤 env 가 비었는지 명확히 알려준다
+  const missingEnv: string[] = [];
+  if (!SUPABASE_URL) missingEnv.push('SUPABASE_URL');
+  if (!SERVICE_ROLE) missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (!PAYAPP_USERID) missingEnv.push('PAYAPP_USERID');
+  if (!PAYAPP_LINKKEY) missingEnv.push('PAYAPP_LINKKEY');
+  if (missingEnv.length > 0) {
+    return json(
+      {
+        ok: false,
+        error: 'server misconfigured',
+        missing_env: missingEnv,
+        hint: 'Edge Function secrets 가 비어 있어요. supabase secrets set <NAME>=... 로 등록 후 함수 재배포 필요.',
+      },
+      500,
+    );
   }
 
+  // 인증
   const authHeader = req.headers.get('authorization') ?? '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return json({ error: 'unauthorized' }, 401);
+  if (!token) return json({ ok: false, error: 'unauthorized', hint: 'Authorization header 누락' }, 401);
 
   const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false },
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
   const { data: userRes, error: userErr } = await sbUser.auth.getUser();
-  if (userErr || !userRes?.user) return json({ error: 'unauthorized' }, 401);
+  if (userErr || !userRes?.user) {
+    return json(
+      { ok: false, error: 'unauthorized', hint: 'JWT 검증 실패: ' + (userErr?.message ?? 'no user') },
+      401,
+    );
+  }
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
-  const { data: me } = await sb
+  // admin 검증
+  const { data: me, error: meErr } = await sb
     .from('users')
     .select('role')
     .eq('id', userRes.user.id)
     .maybeSingle();
-  if (!me || me.role !== 'admin') return json({ error: 'admin only' }, 403);
+  if (meErr) {
+    return json(
+      { ok: false, error: 'admin lookup failed', details: meErr.message },
+      500,
+    );
+  }
+  if (!me || me.role !== 'admin') {
+    return json({ ok: false, error: 'admin only', user_id: userRes.user.id }, 403);
+  }
 
+  // 입력 (body 비어 있으면 기본값 — 최근 7일)
   let body: { date_from?: string; date_to?: string; plan_type?: string } = {};
   try {
-    body = await req.json();
+    const text = await req.text();
+    if (text && text.trim().length > 0) {
+      body = JSON.parse(text);
+    }
   } catch {
-    /* defaults */
+    // 잘못된 JSON 도 무시하고 기본값 진행. 절대 400 으로 죽지 않게.
   }
-  const dateFrom = body.date_from || daysAgoKst(30);
+  const dateFrom = body.date_from || daysAgoKst(7);
   const dateTo = body.date_to || daysAgoKst(0);
 
-  // 디버그 preview (민감값 제외)
   console.log('[sync-payapp] request preview:', {
     cmd_override: PAYAPP_LIST_CMD || null,
     candidate_cmds: PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS,
@@ -194,7 +226,7 @@ serve(async (req) => {
     plan_filter: body.plan_type ?? null,
   });
 
-  // 후보 cmd 순차 시도. 각 시도 결과 DB 에 영구 기록.
+  // 후보 cmd 순차 시도
   const cmdsToTry = PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS;
   const attempts: Array<{
     cmd: string;
@@ -206,23 +238,33 @@ serve(async (req) => {
   }> = [];
   let records: Array<Record<string, string>> = [];
   let successCmd: string | null = null;
+  let logFailures = 0;
 
   for (const cmd of cmdsToTry) {
     const r = await tryFetchPayApp(cmd, dateFrom, dateTo);
     const success = r.records.length > 0;
 
-    // DB 영구 기록 (raw_response 일부만 — 4000자 cap)
-    await sb.from('payapp_api_sync_attempts').insert({
-      requested_cmd: cmd,
-      date_from: dateFrom,
-      date_to: dateTo,
-      http_status: r.http_status,
-      raw_response: r.raw_response.slice(0, 4000),
-      parsed_count: r.records.length,
-      success,
-      error_message: r.error,
-      created_by: userRes.user.id,
-    });
+    // payapp_api_sync_attempts 에 기록 — 테이블이 없으면(0028 미적용) 조용히 무시
+    try {
+      const { error: insertErr } = await sb.from('payapp_api_sync_attempts').insert({
+        requested_cmd: cmd,
+        date_from: dateFrom,
+        date_to: dateTo,
+        http_status: r.http_status,
+        raw_response: r.raw_response.slice(0, 4000),
+        parsed_count: r.records.length,
+        success,
+        error_message: r.error,
+        created_by: userRes.user.id,
+      });
+      if (insertErr) {
+        logFailures++;
+        console.warn('[sync-payapp] attempt log insert failed:', insertErr.message);
+      }
+    } catch (e) {
+      logFailures++;
+      console.warn('[sync-payapp] attempt log threw:', String(e));
+    }
 
     attempts.push({
       cmd,
@@ -327,5 +369,15 @@ serve(async (req) => {
     failed,
     errors,
     processed,
+    log_failures: logFailures,
+    // 진단용: 0건이고 attempts 도 비었으면 PayApp 호출 자체에 실패
+    hint:
+      records.length === 0
+        ? logFailures > 0
+          ? 'payapp_api_sync_attempts 테이블이 없거나 RLS 차단. 0028 마이그레이션 적용 필요.'
+          : successCmd
+            ? `${successCmd} 가 0건 반환했어요. 기간/필터 또는 PayApp 응답 필드명 확인.`
+            : 'PayApp API 가 모든 cmd 에서 0건 또는 에러 반환. attempts.raw_preview 확인.'
+        : undefined,
   });
 });

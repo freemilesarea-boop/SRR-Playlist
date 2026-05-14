@@ -135,13 +135,23 @@ export interface ManualPaymentImportRow {
   created_at: string;
 }
 
-export async function listManualPaymentImports(limit = 50): Promise<ManualPaymentImportRow[]> {
+export interface RpcListResult<T> {
+  rows: T[];
+  error: string | null;
+}
+
+export async function listManualPaymentImports(
+  limit = 50,
+): Promise<RpcListResult<ManualPaymentImportRow>> {
   try {
     const { data, error } = await supabase.rpc('list_manual_payment_imports', { p_limit: limit });
-    if (error) return [];
-    return (data ?? []) as ManualPaymentImportRow[];
-  } catch {
-    return [];
+    if (error) {
+      if (import.meta.env.DEV) console.error('[listManualPaymentImports]', error);
+      return { rows: [], error: error.message };
+    }
+    return { rows: (data ?? []) as ManualPaymentImportRow[], error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
   }
 }
 
@@ -170,6 +180,11 @@ export interface AutoSyncSummary {
   errors?: Array<{ mul_no: string; message: string }>;
   processed?: Array<{ mul_no: string; status: string; amount: number; plan_type: string | null }>;
   raw_response_preview?: string;
+  log_failures?: number;
+  hint?: string;
+  missing_env?: string[];
+  details?: string;
+  user_id?: string;
   error?: string;
 }
 
@@ -182,7 +197,25 @@ export async function syncPayappPaymentsAuto(payload: {
     const { data, error } = await supabase.functions.invoke('sync-payapp-payments', {
       body: payload,
     });
-    if (error) return { ok: false, error: error.message };
+    // 2xx → data 가 우리 JSON. non-2xx → error 가 채워지지만 data 에도 body 가 들어올 수 있음.
+    if (error) {
+      // supabase-js 는 non-2xx 에서 error 의 context 에 response body 를 담음
+      // (FunctionsHttpError.context 에 Response 객체)
+      let bodyJson: Partial<AutoSyncSummary> = {};
+      try {
+        const errAny = error as unknown as { context?: Response };
+        if (errAny.context && typeof errAny.context.json === 'function') {
+          bodyJson = (await errAny.context.json()) as Partial<AutoSyncSummary>;
+        }
+      } catch {
+        /* parse 실패 무시 */
+      }
+      return {
+        ok: false,
+        error: error.message,
+        ...bodyJson,
+      };
+    }
     return data as AutoSyncSummary;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
@@ -248,13 +281,18 @@ export interface SyncAttemptRow {
   created_at: string;
 }
 
-export async function listRecentSyncAttempts(limit = 20): Promise<SyncAttemptRow[]> {
+export async function listRecentSyncAttempts(
+  limit = 20,
+): Promise<RpcListResult<SyncAttemptRow>> {
   try {
     const { data, error } = await supabase.rpc('list_recent_sync_attempts', { p_limit: limit });
-    if (error) return [];
-    return (data ?? []) as SyncAttemptRow[];
-  } catch {
-    return [];
+    if (error) {
+      if (import.meta.env.DEV) console.error('[listRecentSyncAttempts]', error);
+      return { rows: [], error: error.message };
+    }
+    return { rows: (data ?? []) as SyncAttemptRow[], error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
   }
 }
 
@@ -277,16 +315,19 @@ export async function listRecentWebhookEvents(payload: {
   search?: string;
   minutes?: number;
   limit?: number;
-}): Promise<WebhookEventRow[]> {
+}): Promise<RpcListResult<WebhookEventRow>> {
   try {
     const { data, error } = await supabase.rpc('list_recent_webhook_events', {
       p_search: payload.search ?? null,
       p_minutes: payload.minutes ?? 60,
       p_limit: payload.limit ?? 50,
     });
-    if (error) return [];
-    return (data ?? []) as WebhookEventRow[];
-  } catch {
-    return [];
+    if (error) {
+      if (import.meta.env.DEV) console.error('[listRecentWebhookEvents]', error);
+      return { rows: [], error: error.message };
+    }
+    return { rows: (data ?? []) as WebhookEventRow[], error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
   }
 }

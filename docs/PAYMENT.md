@@ -171,6 +171,62 @@ event_key = `payapp:${mul_no}:${rebill_no}:${pay_state}:${price}`
 | 정기결제(rebill) 기능 | 활성화 |
 | 결제 알림 응답 | HTTP 200 + plain `SUCCESS` 확인 |
 
+## 운영 진단 (결제 미반영 시)
+
+신규 결제가 앱에 반영 안 될 때, Supabase SQL Editor 에서 아래 쿼리 순서로 확인:
+
+```sql
+-- 1) Webhook 수신 여부 (최근 2시간)
+select
+  created_at,
+  payapp_mul_no,
+  payapp_rebill_no,
+  pay_state,
+  linkval_verified,
+  processed_at,
+  raw_payload
+from public.payapp_webhook_events
+where created_at > now() - interval '2 hours'
+order by created_at desc;
+```
+
+- 해당 결제의 `mul_no` 가 안 보이면 → **PayApp feedbackurl 미호출**. PayApp 콘솔의
+  "공통 통보 URL" 확인 + `supabase functions deploy payapp-feedback --no-verify-jwt` 재배포.
+- 보이는데 `linkval_verified=false` 면 → `PAYAPP_LINKVAL` 시크릿 불일치.
+- 보이는데 `processed_at` 이 NULL 이면 → 함수 내부 처리 실패 (Supabase Functions 로그 확인).
+
+```sql
+-- 2) 자동 동기화 시도 이력 (최근 5건)
+select created_at, requested_cmd, http_status, parsed_count, success,
+       left(raw_response, 500) as raw_preview
+from public.payapp_api_sync_attempts
+order by created_at desc
+limit 5;
+```
+
+- 모든 cmd 가 `parsed_count=0` 이면 → PayApp API cmd 명/필드명 불일치. `raw_preview` 확인.
+- `success=true` 인 cmd 가 있으면 → `PAYAPP_LIST_CMD` 시크릿에 그 cmd 명 set 후 함수 재배포.
+
+```sql
+-- 3) 수동 동기화 import 큐 (미매칭 결제)
+select payapp_mul_no, approval_no, buyer_email, buyer_phone, amount,
+       plan_type, status, matched_user_id, created_at
+from public.payapp_manual_payment_imports
+order by created_at desc
+limit 20;
+```
+
+- 결제건이 여기 `unmatched` 로 들어와 있으면 → `/admin → 결제 동기화 → 미매칭 결제` 에서 1-클릭 연결.
+
+```sql
+-- 4) subscription / membership 적용 결과 (특정 사용자)
+select u.id, u.nickname, u.phone, u.membership_tier,
+       s.status as sub_status, s.last_paid_at, s.current_period_end
+from public.users u
+left join public.subscriptions s on s.user_id = u.id
+where u.id = '<USER_UUID>';
+```
+
 ## 배포 순서
 
 ```bash
