@@ -221,6 +221,22 @@ jobs:
                 ) then 'YES' else 'NO' end);
           SQL
 
+      - name: 1p) 0023 (기존 아티스트 가입자 백필 RPC + 초기 1회 실행)
+        run: |
+          set -e
+          echo "== 0023 적용 (initial backfill 자동 실행 포함 — 0022 의 signup_debug_events 도 함께 기록) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0023_backfill_artist_signups.sql
+          echo ""
+          echo "== 백필 후 상태 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'artist_users_total=' ||
+              (select count(*)::text from public.users where account_type = 'artist');
+            select 'artist_profiles_total=' ||
+              (select count(*)::text from public.artist_profiles);
+            select 'pending_artists=' ||
+              (select count(*)::text from public.artist_profiles where approval_status='pending');
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

@@ -292,6 +292,41 @@ export async function fetchArtistStreamingSummary(): Promise<ArtistStreamingSumm
   }
 }
 
+export interface RepairArtistSignupsResult {
+  ok: boolean;
+  scanned?: number;
+  users_updated?: number;
+  profiles_created?: number;
+  skipped?: number;
+  error?: string;
+}
+
+/**
+ * 기존 가입자 중 artist_profiles 가 누락된 행을 일괄 보정 (admin only).
+ * 멱등 — 여러 번 실행해도 중복/덮어쓰기 없음.
+ */
+export async function repairArtistSignups(): Promise<RepairArtistSignupsResult> {
+  try {
+    const { data, error } = await supabase.rpc('repair_artist_signups');
+    if (error) {
+      if (import.meta.env.DEV) console.error('[repairArtistSignups]', error);
+      return { ok: false, error: error.message };
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { scanned: number; users_updated: number; profiles_created: number; skipped: number }
+      | undefined;
+    return {
+      ok: true,
+      scanned: Number(row?.scanned ?? 0),
+      users_updated: Number(row?.users_updated ?? 0),
+      profiles_created: Number(row?.profiles_created ?? 0),
+      skipped: Number(row?.skipped ?? 0),
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
 export async function fetchArtistDailyStreams(days = 30): Promise<ArtistDailyStreamRow[]> {
   try {
     const { data, error } = await supabase.rpc('get_artist_daily_streams', { p_days: days });
