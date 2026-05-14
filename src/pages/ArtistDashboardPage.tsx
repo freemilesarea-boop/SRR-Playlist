@@ -116,6 +116,7 @@ export default function ArtistDashboardPage() {
         <UploadGate
           eligibility={eligibility}
           payout={payout}
+          membershipTier={profile?.membership_tier ?? null}
           userEmail={user?.email ?? ''}
           onUploaded={load}
           onPayoutSubmitted={load}
@@ -217,12 +218,14 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
 function UploadGate({
   eligibility,
   payout,
+  membershipTier,
   userEmail,
   onUploaded,
   onPayoutSubmitted,
 }: {
   eligibility: UploadEligibility | null;
   payout: PayoutAccount | null;
+  membershipTier: 'free' | 'individual' | 'business' | null;
   userEmail: string;
   onUploaded: () => void | Promise<void>;
   onPayoutSubmitted: () => void | Promise<void>;
@@ -230,21 +233,62 @@ function UploadGate({
   if (!eligibility) {
     return <div className="h-24 animate-pulse rounded-2xl bg-bg-card" />;
   }
-  const reasons = eligibility.reasons;
-  const needPayment = reasons.includes('no_paid_membership');
-  const needPayout =
-    reasons.includes('no_payout_account') || reasons.includes('payout_not_verified');
 
-  // 결제 미완료 게이트 (가장 먼저)
-  if (needPayment) {
+  // 결제 확인:
+  //   - RPC 가 살아있으면 eligibility.has_paid_membership 신뢰 (subscriptions 까지 검사)
+  //   - RPC 가 실패해도 profile.membership_tier 로 보강
+  // (0025 미적용 환경에서도 동작하도록 보강)
+  const isPaid =
+    eligibility.has_paid_membership ||
+    membershipTier === 'individual' ||
+    membershipTier === 'business';
+
+  if (!isPaid) {
     return <PaymentRequiredCard userEmail={userEmail} />;
   }
-  // 계좌 미완료 게이트
-  if (needPayout) {
+
+  // 결제 완료 — 정산 계좌가 verified 가 아니면 무조건 등록/대기 섹션을 보여준다.
+  // payout 상태가 단일 진실의 원천 (RPC 실패에 영향받지 않음).
+  const isPayoutVerified = payout?.verification_status === 'verified';
+  if (!isPayoutVerified) {
     return <PayoutAccountSection payout={payout} onSubmitted={onPayoutSubmitted} />;
   }
-  // 모두 OK — 업로드 폼
-  return <ArtistUploadForm onUploaded={onUploaded} />;
+
+  // 모두 OK — 업로드 폼 + (참고용) 계좌 요약 카드
+  return (
+    <>
+      <VerifiedPayoutSummary payout={payout} />
+      <ArtistUploadForm onUploaded={onUploaded} />
+    </>
+  );
+}
+
+function VerifiedPayoutSummary({ payout }: { payout: PayoutAccount | null }) {
+  if (!payout) return null;
+  const masked = maskAccountNumber(payout.account_number);
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/30">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+        <Wallet size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-emerald-200">정산 계좌 확인 완료</p>
+        <p className="truncate text-[11px] text-emerald-100/80">
+          {payout.bank_name} · {masked} · {payout.account_holder}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function maskAccountNumber(num: string): string {
+  if (!num) return '';
+  const cleaned = num.replace(/\s+/g, '');
+  if (cleaned.length <= 6) return cleaned;
+  const head = cleaned.slice(0, 3);
+  const tail = cleaned.slice(-3);
+  const middle = '*'.repeat(Math.max(cleaned.length - 6, 1));
+  return `${head}${middle}${tail}`;
 }
 
 function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
@@ -315,11 +359,23 @@ function PayoutAccountSection({
   const [accountNumber, setAccountNumber] = useState(payout?.account_number ?? '');
   const [accountHolder, setAccountHolder] = useState(payout?.account_holder ?? '');
   const [busy, setBusy] = useState(false);
-  const editable = !payout || payout.verification_status !== 'verified';
+  const [error, setError] = useState<string | null>(null);
+
+  // 폼 노출/입력 가능 조건
+  //   - payout 없음                       → 폼 표시 (신규 등록)
+  //   - verification_status='pending'    → 폼 숨김 (대기 중 정보만 표시)
+  //   - verification_status='rejected'   → 폼 표시 (재등록)
+  //   - verification_status='verified'   → 폼 숨김 (이 컴포넌트는 호출되지 않음)
+  const status = payout?.verification_status;
+  const showForm = !payout || status === 'rejected';
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editable) return;
+    setError(null);
+    if (!bankName.trim() || !accountNumber.trim() || !accountHolder.trim()) {
+      setError('은행명 / 계좌번호 / 예금주를 모두 입력해주세요');
+      return;
+    }
     setBusy(true);
     try {
       const res = await submitArtistPayoutAccount({
@@ -328,24 +384,41 @@ function PayoutAccountSection({
         account_holder: accountHolder,
       });
       if (!res.ok) {
+        setError(res.error ?? '계좌 등록 실패');
         toast.error(res.error ?? '계좌 등록 실패');
         return;
       }
       toast.success('계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
       await onSubmitted();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '계좌 등록 실패';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
   }
 
+  const title =
+    status === 'pending'
+      ? '관리자 계좌 확인 대기 중입니다'
+      : status === 'rejected'
+        ? '계좌 확인이 반려되었습니다'
+        : '정산 계좌를 등록해주세요';
+
+  const description =
+    status === 'pending'
+      ? '등록하신 계좌가 관리자 확인 중입니다. 평균 1영업일 이내 처리됩니다.'
+      : status === 'rejected'
+        ? '아래 사유를 확인하고 정확한 정보로 다시 등록해주세요.'
+        : '아티스트 음원 업로드 전, 정산받을 본인 명의 계좌를 등록해주세요. (MVP 는 관리자 수동 확인)';
+
   const statusBadge =
-    payout?.verification_status === 'verified'
-      ? { label: '확인 완료', tone: 'bg-emerald-500/15 text-emerald-300' }
-      : payout?.verification_status === 'rejected'
-        ? { label: '거절됨', tone: 'bg-red-500/15 text-red-300' }
-        : payout
-          ? { label: '확인 대기 중', tone: 'bg-yellow-500/15 text-yellow-200' }
-          : null;
+    status === 'rejected'
+      ? { label: '반려됨', tone: 'bg-red-500/15 text-red-300' }
+      : status === 'pending'
+        ? { label: '확인 대기 중', tone: 'bg-yellow-500/15 text-yellow-200' }
+        : null;
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
@@ -354,71 +427,96 @@ function PayoutAccountSection({
           <Wallet size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold">정산 계좌</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-bold">{title}</h2>
             {statusBadge && (
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.tone}`}>
                 {statusBadge.label}
               </span>
             )}
           </div>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
-            업로드 전에 정산 계좌를 등록하고 관리자 확인을 받아야 합니다. (MVP 는 관리자 수동 확인)
-          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{description}</p>
           {payout?.rejected_reason && (
-            <p className="mt-1 text-[11px] text-red-300">거절 사유: {payout.rejected_reason}</p>
+            <p className="mt-1.5 rounded-md bg-red-500/10 px-2 py-1 text-[11px] text-red-300">
+              반려 사유: {payout.rejected_reason}
+            </p>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="은행명 *">
-          <input
-            type="text"
-            required
-            disabled={!editable}
-            value={bankName}
-            onChange={(e) => setBankName(e.target.value)}
-            placeholder="예: 신한은행"
-            className="input disabled:opacity-60"
-          />
-        </Field>
-        <Field label="예금주명 *">
-          <input
-            type="text"
-            required
-            disabled={!editable}
-            value={accountHolder}
-            onChange={(e) => setAccountHolder(e.target.value)}
-            placeholder="이름"
-            className="input disabled:opacity-60"
-          />
-        </Field>
-      </div>
-      <Field label="계좌번호 *">
-        <input
-          type="text"
-          required
-          disabled={!editable}
-          value={accountNumber}
-          onChange={(e) => setAccountNumber(e.target.value)}
-          placeholder="숫자만 또는 하이픈 포함"
-          className="input disabled:opacity-60"
-          inputMode="numeric"
-        />
-      </Field>
-
-      {editable && (
-        <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
-          {busy ? '등록 중…' : payout ? '계좌 재제출' : '계좌 등록'}
-        </button>
+      {/* pending 상태: 등록된 정보를 마스킹하여 표시 (재등록은 불가 — 관리자 처리 대기) */}
+      {status === 'pending' && payout && (
+        <div className="space-y-1 rounded-lg bg-bg-deep/50 p-3 text-[12px] ring-1 ring-line/10">
+          <Row2 label="은행" value={payout.bank_name} />
+          <Row2 label="계좌번호" value={maskAccountNumber(payout.account_number)} />
+          <Row2 label="예금주" value={payout.account_holder} />
+          <p className="pt-1 text-[11px] text-ink-dim">
+            관리자 확인이 완료되면 이 화면 대신 업로드 폼이 표시됩니다.
+          </p>
+        </div>
       )}
-      {payout?.verification_status === 'verified' && (
-        <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
-          ✓ 정산 계좌 확인 완료 — 이제 음원을 업로드할 수 있어요.
-        </p>
+
+      {/* 신규 등록 / 반려 후 재등록 */}
+      {showForm && (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="은행명 *">
+              <input
+                type="text"
+                required
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="예: 신한은행"
+                className="input"
+              />
+            </Field>
+            <Field label="예금주명 *">
+              <input
+                type="text"
+                required
+                value={accountHolder}
+                onChange={(e) => setAccountHolder(e.target.value)}
+                placeholder="이름 (본인 명의)"
+                className="input"
+              />
+            </Field>
+          </div>
+          <Field label="계좌번호 *">
+            <input
+              type="text"
+              required
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder="숫자만 또는 하이픈 포함"
+              className="input"
+              inputMode="numeric"
+            />
+          </Field>
+
+          {error && (
+            <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
+            {busy ? '등록 중…' : status === 'rejected' ? '계좌 다시 등록' : '계좌 등록'}
+          </button>
+          <p className="text-[11px] text-ink-dim">
+            등록 후 관리자 확인까지 평균 1영업일이 소요됩니다.
+          </p>
+        </>
       )}
     </form>
+  );
+}
+
+function Row2({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</span>
+      <span className="truncate font-mono text-ink">{value}</span>
+    </div>
   );
 }
 

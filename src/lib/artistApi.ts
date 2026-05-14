@@ -424,41 +424,28 @@ export interface UploadEligibility {
 }
 
 export async function fetchArtistUploadEligibility(): Promise<UploadEligibility> {
+  // RPC 실패 시 fallback 은 항상 can_upload=false 로 가드. UI 는 이 외에도
+  // payout 상태를 직접 봐서 결정하므로, reasons 빈 배열이 곧 통과로 해석되지 않게 한다.
+  const errFallback = (): UploadEligibility => ({
+    can_upload: false,
+    is_artist: false,
+    approval_status: 'unknown',
+    has_paid_membership: false,
+    payout_status: 'unknown',
+    payout_account_id: null,
+    reasons: [],
+  });
   try {
     const { data, error } = await supabase.rpc('get_artist_upload_eligibility');
     if (error) {
-      return {
-        can_upload: false,
-        is_artist: false,
-        approval_status: 'unknown',
-        has_paid_membership: false,
-        payout_status: 'unknown',
-        payout_account_id: null,
-        reasons: ['login_required'],
-      };
+      if (import.meta.env.DEV) console.error('[eligibility] rpc error:', error);
+      return errFallback();
     }
     const row = (Array.isArray(data) ? data[0] : data) as UploadEligibility | undefined;
-    return (
-      row ?? {
-        can_upload: false,
-        is_artist: false,
-        approval_status: 'unknown',
-        has_paid_membership: false,
-        payout_status: 'unknown',
-        payout_account_id: null,
-        reasons: [],
-      }
-    );
-  } catch {
-    return {
-      can_upload: false,
-      is_artist: false,
-      approval_status: 'unknown',
-      has_paid_membership: false,
-      payout_status: 'unknown',
-      payout_account_id: null,
-      reasons: [],
-    };
+    return row ?? errFallback();
+  } catch (e) {
+    if (import.meta.env.DEV) console.error('[eligibility] throw:', e);
+    return errFallback();
   }
 }
 
