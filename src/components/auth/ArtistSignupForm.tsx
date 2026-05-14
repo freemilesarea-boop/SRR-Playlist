@@ -49,47 +49,91 @@ export default function ArtistSignupForm({ onDone }: Props) {
     }
     setBusy(true);
     try {
-      await signUpWithPassword(email.trim(), password, artistName.trim());
-
-      const pendingProfile = {
-        account_type: 'artist' as const,
+      // 0021 트리거가 user_metadata 를 읽어 public.users + artist_profiles 자동 생성.
+      // 이메일 인증 ON / OFF 무관하게 atomic 처리됨.
+      await signUpWithPassword(email.trim(), password, artistName.trim(), {
+        account_type: 'artist',
         full_name: realName.trim(),
         birth_date: birthDate,
         phone: phone.trim(),
         address: address.trim(),
-        signup_completed: true,
-        artist_approval_status: 'pending' as const,
-      };
-      const pendingArtist = {
-        real_name: realName.trim(),
-        birth_date: birthDate,
         artist_name: artistName.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        email: email.trim(),
-        approval_status: 'pending' as const,
-      };
+      });
+
+      // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용
       try {
         localStorage.setItem(
-          'srr-pending-artist-signup',
-          JSON.stringify({ profile: pendingProfile, artist: pendingArtist }),
+          'srr-pending-signup',
+          JSON.stringify({
+            type: 'artist',
+            email: email.trim(),
+            profile: {
+              account_type: 'artist',
+              full_name: realName.trim(),
+              birth_date: birthDate,
+              phone: phone.trim(),
+              address: address.trim(),
+              signup_completed: true,
+              artist_approval_status: 'pending',
+            },
+            artist: {
+              real_name: realName.trim(),
+              birth_date: birthDate,
+              artist_name: artistName.trim(),
+              phone: phone.trim(),
+              address: address.trim(),
+              email: email.trim(),
+              approval_status: 'pending',
+            },
+          }),
         );
       } catch {
         /* noop */
       }
 
+      // 즉시 로그인된 환경(이메일 인증 OFF)이면 정합성 강화를 위해 한 번 더 upsert
       const { data: sess } = await supabase.auth.getSession();
       if (sess.session?.user?.id) {
         const uid = sess.session.user.id;
-        await supabase.from('users').update(pendingProfile).eq('id', uid);
-        await supabase
-          .from('artist_profiles')
-          .upsert({ user_id: uid, ...pendingArtist }, { onConflict: 'user_id' });
+        const { error: uErr } = await supabase
+          .from('users')
+          .update({
+            account_type: 'artist',
+            full_name: realName.trim(),
+            birth_date: birthDate,
+            phone: phone.trim(),
+            address: address.trim(),
+            signup_completed: true,
+            artist_approval_status: 'pending',
+          })
+          .eq('id', uid);
+        if (uErr && import.meta.env.DEV) {
+          console.error('[artist-signup] users.update failed:', uErr);
+        }
+        const { error: aErr } = await supabase.from('artist_profiles').upsert(
+          {
+            user_id: uid,
+            real_name: realName.trim(),
+            birth_date: birthDate,
+            artist_name: artistName.trim(),
+            phone: phone.trim(),
+            address: address.trim(),
+            email: email.trim(),
+            approval_status: 'pending',
+          },
+          { onConflict: 'user_id' },
+        );
+        if (aErr && import.meta.env.DEV) {
+          console.error('[artist-signup] artist_profiles.upsert failed:', aErr);
+        }
+      } else if (import.meta.env.DEV) {
+        console.debug('[artist-signup] no session after signup — trigger + apply-on-login 으로 처리됨');
       }
 
       toast.success('아티스트 회원가입 신청이 완료됐어요. 관리자 승인 후 음원 등록이 가능합니다.');
       onDone();
     } catch (err) {
+      if (import.meta.env.DEV) console.error('[artist-signup] failed:', err);
       setError(err instanceof Error ? err.message : '가입에 실패했어요');
     } finally {
       setBusy(false);

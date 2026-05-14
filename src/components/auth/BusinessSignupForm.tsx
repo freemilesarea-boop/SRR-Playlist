@@ -94,7 +94,14 @@ export default function BusinessSignupForm({ onDone }: Props) {
     }
     setBusy(true);
     try {
-      await signUpWithPassword(email.trim(), password, fullName.trim());
+      // 0021 트리거가 user_metadata 를 읽어 public.users 자동 채움
+      await signUpWithPassword(email.trim(), password, fullName.trim(), {
+        account_type: 'business',
+        full_name: fullName.trim(),
+        birth_date: birthDate,
+        phone: phone.trim(),
+        address: address.trim(),
+      });
 
       const fmt = validateBusinessNumberFormat(businessNumber);
       const pendingProfile = {

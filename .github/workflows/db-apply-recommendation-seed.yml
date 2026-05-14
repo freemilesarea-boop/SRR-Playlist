@@ -185,6 +185,12 @@ jobs:
           # 두 RPC 의 일자 / today 경계를 Asia/Seoul 기준으로 재정의 (CREATE OR REPLACE)
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0020_artist_streaming_kst.sql
 
+      - name: 1n) 0021 (handle_new_user 트리거가 user_metadata 읽어 자동 생성) 적용
+        run: |
+          set -e
+          # 회원가입 시 account_type / artist_profiles 자동 생성 (CREATE OR REPLACE 멱등)
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0021_signup_metadata_trigger.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

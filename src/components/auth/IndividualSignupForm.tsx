@@ -61,7 +61,14 @@ export default function IndividualSignupForm({ onDone }: Props) {
     setBusy(true);
     try {
       // 1) Supabase Auth 가입 (이메일/비밀번호)
-      await signUpWithPassword(email.trim(), password, fullName.trim());
+      // user_metadata 를 함께 보내 0021 트리거가 public.users 자동 채움
+      await signUpWithPassword(email.trim(), password, fullName.trim(), {
+        account_type: 'individual',
+        full_name: fullName.trim(),
+        birth_date: birthDate,
+        phone: phone.trim(),
+        address: address.trim(),
+      });
       // 2) auth.users 가 생성된 후, public.users 가 trigger 로 자동 생성되거나
       //    이메일 인증 메일 발송. 이메일 인증 후 로그인 시점에 본인 정보 업데이트.
       //    여기선 일단 localStorage 에 입력값 저장 → 이메일 인증 후 자동 적용 가능하도록.

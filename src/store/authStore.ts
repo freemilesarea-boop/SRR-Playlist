@@ -10,7 +10,12 @@ interface AuthState {
   loading: boolean;
   init: () => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
-  signUpWithPassword: (email: string, password: string, nickname?: string) => Promise<void>;
+  signUpWithPassword: (
+    email: string,
+    password: string,
+    nickname?: string,
+    metadata?: Record<string, string | null | undefined>,
+  ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -39,7 +44,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ session, user: session?.user ?? null });
         if (session?.user) {
           await get().refreshProfile();
-          // 비로그인 동안 localStorage 에 쌓인 좋아요/최근/이어듣기/팔로우를 DB 로 머지
+          // 1) 가입 직후 pending signup 캐시 적용 — 0021 트리거 미적용 환경 / 이메일 인증
+          //    ON 환경에서 첫 로그인 시 가입 정보 DB 적용 보장.
+          void (async () => {
+            try {
+              const { applyPendingSignupOnLogin } = await import('@/lib/pendingSignup');
+              const r = await applyPendingSignupOnLogin(session.user.id);
+              if (r.ok && r.type) {
+                // 적용 후 profile 다시 불러옴 (account_type / artist_approval_status 등 반영)
+                await get().refreshProfile();
+              }
+            } catch (e) {
+              if (import.meta.env.DEV) console.error('[auth] applyPendingSignup error:', e);
+            }
+          })();
+          // 2) 비로그인 동안 localStorage 에 쌓인 좋아요/최근/이어듣기/팔로우를 DB 로 머지
           void (async () => {
             try {
               const { mergePersonalLibrary } = await import('@/lib/personalLibraryApi');
@@ -81,15 +100,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) throw error;
   },
 
-  signUpWithPassword: async (email, password, nickname) => {
+  signUpWithPassword: async (email, password, nickname, metadata) => {
+    // user_metadata 는 0021 handle_new_user 트리거가 읽어서 public.users +
+    // artist_profiles 자동 생성에 사용. 이메일 인증 ON 환경에서도 동작.
+    const data: Record<string, string | null | undefined> = {
+      nickname: nickname || email.split('@')[0],
+      ...(metadata ?? {}),
+    };
+    if (import.meta.env.DEV) {
+      console.debug('[auth] signUp metadata:', data);
+    }
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { nickname: nickname || email.split('@')[0] },
-      },
+      options: { data },
     });
-    if (error) throw error;
+    if (error) {
+      console.error('[auth] signUp failed:', error);
+      throw error;
+    }
   },
 
   signInWithGoogle: async () => {
