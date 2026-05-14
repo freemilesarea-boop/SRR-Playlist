@@ -17,8 +17,16 @@ const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
 const PAYAPP_REBILL_EXPIRE = Deno.env.get('PAYAPP_REBILL_EXPIRE') ?? '2099-12-31';
-// 결제창에 노출되는 판매자 메모 / 상품 설명. 브랜딩에 맞게 변경.
-const PAYAPP_PAYMENT_MEMO = Deno.env.get('PAYAPP_PAYMENT_MEMO') ?? 'SRR Playlist 정기결제';
+// 결제창에 노출되는 판매자 메모 / 상품 설명. PayApp 의 'memo' 파라미터로 전송됨.
+//   - 운영 secret 미설정이거나 빈 문자열이면 아래 fallback 적용.
+//   - 운영 secret 에 옛 값('SWK monthly subscription' 등)이 그대로 남아 있으면 fallback 이
+//     무력화되므로 반드시 `supabase secrets set PAYAPP_PAYMENT_MEMO="SRR Playlist 정기결제"`
+//     로 갱신 후 `supabase functions deploy create-payapp-subscription` 재배포 필요.
+const PAYAPP_PAYMENT_MEMO_RAW = Deno.env.get('PAYAPP_PAYMENT_MEMO') ?? '';
+const PAYAPP_PAYMENT_MEMO =
+  PAYAPP_PAYMENT_MEMO_RAW.trim().length > 0
+    ? PAYAPP_PAYMENT_MEMO_RAW.trim()
+    : 'SRR Playlist 정기결제';
 // 고객센터/지원 연락처 — 개인 휴대폰 사용 금지. 070/대표번호/업무용 번호만.
 // PayApp REST 의 rebillRegist 자체에는 seller_phone 파라미터가 없으나, 일부 응답/대응 채널
 // (returnurl 안내 페이지 등) 또는 cmd 종류에 따라 사용될 수 있도록 환경변수만 노출.
@@ -177,6 +185,20 @@ serve(async (req) => {
   params.set('smsuse', 'n');
   params.set('openpaytype', 'card');
   params.set('linkkey', PAYAPP_LINKKEY);
+
+  // 디버그 로그 — 민감정보(linkkey/linkval/recvphone/recvemail/userid 값) 제외.
+  // 브랜딩 문구 확인용. 운영자가 결제창에 표시되는 memo / goodname 을 검증 가능.
+  console.log('[create-payapp] request preview:', {
+    goodname: plan.name,
+    goodprice: plan.price,
+    memo: PAYAPP_PAYMENT_MEMO,
+    userid_present: PAYAPP_USERID.length > 0,
+    feedbackurl: `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`,
+    returnurl: `${PUBLIC_APP_URL}/payment/success?order_no=${orderNo}`,
+    failurl: `${PUBLIC_APP_URL}/payment/fail?order_no=${orderNo}`,
+    order_no: orderNo,
+    plan_type: plan.plan_type,
+  });
 
   let payappResp: Record<string, string> = {};
   let respText = '';

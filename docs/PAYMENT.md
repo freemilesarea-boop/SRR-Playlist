@@ -26,7 +26,16 @@ supabase secrets set PAYAPP_API_URL=https://api.payapp.kr/oapi/apiLoad.html
 supabase secrets set PAYAPP_REBILL_EXPIRE=2099-12-31
 
 # 브랜딩 / 고객센터
+#
+# ⚠️ 브랜드 변경 시 반드시 secret 갱신 + 함수 재배포 필요:
+#    1) supabase secrets set PAYAPP_PAYMENT_MEMO="SRR Playlist 정기결제"
+#    2) supabase functions deploy create-payapp-subscription
+#
+#    secret 값이 옛 문구('SWK monthly subscription' 등) 그대로면 코드 fallback 과
+#    무관하게 PayApp 결제창의 판매자 메모가 옛 값으로 표시됩니다.
+#    상품명은 subscription_plans.name (DB) 에서 자동 적용되지만, memo 는 env-only.
 supabase secrets set PAYAPP_PAYMENT_MEMO="SRR Playlist 정기결제"
+supabase functions deploy create-payapp-subscription
 supabase secrets set SUPPORT_PHONE=02-0000-0000   # ⚠️ 개인 휴대폰 금지. 070/대표번호/업무용만.
 
 # URL 분리 (필수 — 운영 배포 전 반드시 명시)
