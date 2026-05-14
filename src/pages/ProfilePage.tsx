@@ -9,6 +9,9 @@ import {
   Moon,
   Monitor,
   Clock,
+  Mic2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
@@ -143,6 +146,11 @@ export default function ProfilePage() {
         </button>
       </section>
 
+      {/* 아티스트 관리 카드 — account_type='artist' 일 때만 노출 */}
+      {profile?.account_type === 'artist' && (
+        <ArtistManagementCard approvalStatus={profile?.artist_approval_status ?? 'pending'} />
+      )}
+
       {/* 큐레이터 프로필 — 로그인 사용자만 (0013 미적용 환경에선 저장 시 에러 안내) */}
       {user?.id && (
         <section className="space-y-2">
@@ -177,5 +185,62 @@ function Row({ to, icon, label }: { to: string; icon: React.ReactNode; label: st
       <span className="flex-1 text-sm">{label}</span>
       <ChevronRight size={16} className="text-ink-dim" />
     </Link>
+  );
+}
+
+function ArtistManagementCard({
+  approvalStatus,
+}: {
+  approvalStatus: 'pending' | 'approved' | 'rejected' | null | undefined;
+}) {
+  const status: { label: string; tone: string; icon: React.ReactNode; cta: string } =
+    approvalStatus === 'approved'
+      ? {
+          label: '승인 완료',
+          tone: 'bg-emerald-500/15 text-emerald-300',
+          icon: <CheckCircle2 size={11} />,
+          cta: '아티스트 관리',
+        }
+      : approvalStatus === 'rejected'
+        ? {
+            label: '승인 거절됨',
+            tone: 'bg-red-500/15 text-red-300',
+            icon: <XCircle size={11} />,
+            cta: '거절 사유 확인',
+          }
+        : {
+            label: '승인 대기 중',
+            tone: 'bg-yellow-500/15 text-yellow-200',
+            icon: <Clock size={11} />,
+            cta: '진행 상태 보기',
+          };
+
+  return (
+    <section className="rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+          <Mic2 size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-bold tracking-tight">아티스트 관리</h2>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.tone}`}>
+              {status.icon}
+              {status.label}
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+            내 음원 업로드, 정산 계좌, 스트리밍 현황을 관리해요.
+          </p>
+        </div>
+      </div>
+      <Link
+        to="/artist"
+        className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-accent py-2.5 text-sm font-bold text-bg shadow-sm hover:opacity-90"
+      >
+        {status.cta}
+        <ChevronRight size={14} />
+      </Link>
+    </section>
   );
 }
