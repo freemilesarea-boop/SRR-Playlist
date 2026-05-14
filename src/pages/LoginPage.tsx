@@ -6,8 +6,9 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
+import ArtistSignupForm from '@/components/auth/ArtistSignupForm';
 
-type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business';
+type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
 
 export default function LoginPage() {
   const { session, signInWithPassword, signInWithGoogle } = useAuthStore();
@@ -34,7 +35,9 @@ export default function LoginPage() {
   }
 
   function onTypeSelect(t: AccountType) {
-    setMode(t === 'individual' ? 'signup-individual' : 'signup-business');
+    if (t === 'individual') setMode('signup-individual');
+    else if (t === 'business') setMode('signup-business');
+    else setMode('signup-artist');
   }
 
   const showBackButton = mode !== 'signin';
@@ -140,6 +143,10 @@ export default function LoginPage() {
 
             {mode === 'signup-business' && (
               <BusinessSignupForm onDone={() => setSignupDone(true)} />
+            )}
+
+            {mode === 'signup-artist' && (
+              <ArtistSignupForm onDone={() => setSignupDone(true)} />
             )}
 
             {mode === 'signin' && (

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { Link } from 'react-router-dom';
 import {
   Play,
@@ -70,13 +71,10 @@ export default function LibraryPage() {
     }
   }
 
-  // 좋아요 store 의 ids 가 바뀌면 (= 다른 화면에서 토글 후 진입)
-  // 라이브러리도 다시 로드
+  // 좋아요 store 의 ids 가 바뀌면 (= 다른 화면에서 토글 후 진입) 또는
+  // 재로그인/탭 복귀 시에도 최신 데이터를 가져오도록 useFreshFetch 사용.
   const likedIds = useLikedTracksStore((s) => s.ids);
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, likedIds]);
+  useFreshFetch(load, [userId, likedIds]);
 
   const cont = data?.continue ?? null;
   const liked = data?.liked_tracks ?? [];

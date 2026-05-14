@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import { fetchAllCurators, fetchMyCuratorProfile, type CuratorListItem } from '@/lib/curatorApi';
 import { useAuthStore } from '@/store/authStore';
+import { useFreshFetch } from '@/hooks/useFreshFetch';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
@@ -25,9 +26,8 @@ export default function ContentManagement() {
     setTracks(trs);
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  // 재로그인 / 새로고침 / 탭 복귀 시 항상 DB 에서 최신 fetch
+  useFreshFetch(refresh, []);
 
   async function createPlaylist(form: {
     title: string;
