@@ -255,3 +255,52 @@ export async function hideArtistTrack(trackId: string): Promise<{ ok: boolean; e
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+// ---------- STREAMING ANALYTICS (0019) ----------
+
+export interface ArtistStreamingSummaryRow {
+  track_id: string;
+  title: string;
+  visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
+  total_streams: number;
+  today_streams: number;
+  last_7d_streams: number;
+  last_30d_streams: number;
+  last_played_at: string | null;
+}
+
+export interface ArtistDailyStreamRow {
+  day: string;
+  track_id: string;
+  title: string;
+  daily_streams: number;
+}
+
+export async function fetchArtistStreamingSummary(): Promise<ArtistStreamingSummaryRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_artist_streaming_summary');
+    if (error) return [];
+    return ((data ?? []) as ArtistStreamingSummaryRow[]).map((r) => ({
+      ...r,
+      total_streams: Number(r.total_streams ?? 0),
+      today_streams: Number(r.today_streams ?? 0),
+      last_7d_streams: Number(r.last_7d_streams ?? 0),
+      last_30d_streams: Number(r.last_30d_streams ?? 0),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchArtistDailyStreams(days = 30): Promise<ArtistDailyStreamRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_artist_daily_streams', { p_days: days });
+    if (error) return [];
+    return ((data ?? []) as ArtistDailyStreamRow[]).map((r) => ({
+      ...r,
+      daily_streams: Number(r.daily_streams ?? 0),
+    }));
+  } catch {
+    return [];
+  }
+}

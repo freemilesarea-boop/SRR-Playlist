@@ -19,9 +19,15 @@ import {
   uploadArtistTrack,
   deleteMyArtistTrack,
   validateArtistAudioFile,
+  fetchArtistStreamingSummary,
+  fetchArtistDailyStreams,
   type ArtistProfile,
   type MyArtistTrackRow,
+  type ArtistStreamingSummaryRow,
+  type ArtistDailyStreamRow,
 } from '@/lib/artistApi';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 
 import type { LucideIcon } from 'lucide-react';
@@ -37,15 +43,24 @@ export default function ArtistDashboardPage() {
   const { user, profile, loading: authLoading } = useAuthStore();
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [tracks, setTracks] = useState<MyArtistTrackRow[]>([]);
+  const [summary, setSummary] = useState<ArtistStreamingSummaryRow[]>([]);
+  const [daily, setDaily] = useState<ArtistDailyStreamRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts] = await Promise.all([fetchMyArtistProfile(user.id), fetchMyArtistTracks()]);
+      const [ap, ts, sm, dl] = await Promise.all([
+        fetchMyArtistProfile(user.id),
+        fetchMyArtistTracks(),
+        fetchArtistStreamingSummary(),
+        fetchArtistDailyStreams(30),
+      ]);
       setArtist(ap);
       setTracks(ts);
+      setSummary(sm);
+      setDaily(dl);
     } finally {
       setLoading(false);
     }
@@ -93,6 +108,11 @@ export default function ArtistDashboardPage() {
             관리자 승인 후 음원 업로드가 가능합니다.
           </p>
         </div>
+      )}
+
+      {/* 스트리밍 분석 (승인된 곡이 1개 이상 + 데이터 있을 때만 의미) */}
+      {tracks.length > 0 && (
+        <StreamingAnalyticsSection summary={summary} daily={daily} loading={loading} />
       )}
 
       {/* 내 음원 목록 */}
@@ -334,6 +354,188 @@ function MyTrackRow({ track, onChanged }: { track: MyArtistTrackRow; onChanged: 
         )}
       </div>
     </li>
+  );
+}
+
+function StreamingAnalyticsSection({
+  summary,
+  daily,
+  loading,
+}: {
+  summary: ArtistStreamingSummaryRow[];
+  daily: ArtistDailyStreamRow[];
+  loading: boolean;
+}) {
+  // 일자별 합계 — 모든 트랙 합산해서 차트 그리기
+  // daily 는 (day, track_id, ...) 행이므로 day 단위로 sum.
+  const chartData = (() => {
+    const map = new Map<string, number>();
+    for (const r of daily) {
+      map.set(r.day, (map.get(r.day) ?? 0) + r.daily_streams);
+    }
+    // 최근 30일 전체 채우기 (0 으로 시각화)
+    const out: { day: string; streams: number; label: string }[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      out.push({
+        day: key,
+        streams: map.get(key) ?? 0,
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+      });
+    }
+    return out;
+  })();
+
+  // 전체 합계 KPI
+  const totals = summary.reduce(
+    (acc, r) => {
+      acc.total += r.total_streams;
+      acc.today += r.today_streams;
+      acc.last_7d += r.last_7d_streams;
+      acc.last_30d += r.last_30d_streams;
+      return acc;
+    },
+    { total: 0, today: 0, last_7d: 0, last_30d: 0 },
+  );
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
+          <BarChart3 size={16} className="text-accent" /> 스트리밍 분석
+        </h2>
+        <span className="text-xs text-ink-mute">최근 30일</span>
+      </div>
+
+      {/* KPI 4종 */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Kpi label="누적" value={totals.total} />
+        <Kpi label="오늘" value={totals.today} />
+        <Kpi label="최근 7일" value={totals.last_7d} />
+        <Kpi label="최근 30일" value={totals.last_30d} />
+      </div>
+
+      {/* 일별 라인차트 */}
+      <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink-mute">
+          <TrendingUp size={12} /> 일별 스트리밍 (milestone_30s 기준)
+        </p>
+        {loading ? (
+          <div className="h-[180px] animate-pulse rounded-md bg-bg-hover" />
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.5)' }}
+                interval={Math.max(1, Math.floor(chartData.length / 6))}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.5)' }}
+                allowDecimals={false}
+                width={28}
+              />
+              <Tooltip
+                contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', fontSize: 11 }}
+                labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="streams"
+                stroke="rgb(var(--color-accent))"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* 곡별 표 */}
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
+                <th className="px-3 py-2.5 text-left font-semibold">곡</th>
+                <th className="px-3 py-2.5 text-right font-semibold">누적</th>
+                <th className="px-3 py-2.5 text-right font-semibold">오늘</th>
+                <th className="px-3 py-2.5 text-right font-semibold">7일</th>
+                <th className="px-3 py-2.5 text-right font-semibold">30일</th>
+                <th className="px-3 py-2.5 text-right font-semibold">마지막 재생</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-xs text-ink-mute">
+                    불러오는 중…
+                  </td>
+                </tr>
+              )}
+              {!loading && summary.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-xs text-ink-mute">
+                    아직 스트리밍 데이터가 없어요.
+                  </td>
+                </tr>
+              )}
+              {summary.map((r) => (
+                <tr key={r.track_id} className="border-b border-line/10 last:border-b-0">
+                  <td className="px-3 py-2 text-sm">
+                    <p className="truncate font-medium">{r.title}</p>
+                    <p className="text-[10px] text-ink-dim">
+                      {r.visibility_status === 'approved'
+                        ? '✓ 공개'
+                        : r.visibility_status === 'pending_review'
+                          ? '심사 대기'
+                          : r.visibility_status === 'rejected'
+                            ? '거절됨'
+                            : '숨김'}
+                    </p>
+                  </td>
+                  <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums">
+                    {r.total_streams.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs tabular-nums">
+                    {r.today_streams.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs tabular-nums">
+                    {r.last_7d_streams.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs tabular-nums">
+                    {r.last_30d_streams.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[11px] text-ink-mute">
+                    {r.last_played_at
+                      ? new Date(r.last_played_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })
+                      : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-ink-dim">
+        집계 기준: <code className="font-mono">stream_events.event_type='milestone_30s'</code> (트랙당 세션당 1회). 일자는 UTC 기준.
+      </p>
+    </section>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">{label}</p>
+      <p className="mt-0.5 text-xl font-extrabold tabular-nums">{value.toLocaleString()}</p>
+    </div>
   );
 }
 

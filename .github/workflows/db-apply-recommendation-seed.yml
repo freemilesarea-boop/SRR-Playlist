@@ -173,6 +173,12 @@ jobs:
           # tracks.rejected_reason + 아티스트 INSERT/UPDATE/DELETE RLS + 4개 RPC
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0018_artist_track_review.sql
 
+      - name: 1l) 0019 (아티스트 스트리밍 분석 RPC) 마이그레이션 적용
+        run: |
+          set -e
+          # get_artist_daily_streams + get_artist_streaming_summary (CREATE OR REPLACE 멱등)
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0019_artist_streaming_analytics.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
