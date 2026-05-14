@@ -363,6 +363,26 @@ jobs:
           set -e
           echo "== 0029 적용 =="
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0029_webhook_apply_internal.sql
+
+      - name: 1w) 0030 (phone candidate 확장 + artist_profiles 매칭 + non-null error) 적용
+        run: |
+          set -e
+          echo "== 0030 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0030_webhook_phone_match_fix.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'internal_explicit_regex=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%[^0-9]%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='_internal_apply_payapp_paid_event')
+                    then 'YES' else 'NO' end);
+            select 'replay_phone_keys_expanded=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%cellphone%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='admin_replay_webhook_event')
+                    then 'YES' else 'NO' end);
+          SQL
           echo ""
           echo "== 검증 =="
           psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'

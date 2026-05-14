@@ -250,10 +250,18 @@ serve(async (req) => {
       return SUCCESS();
     }
 
-    const buyerEmail = pickField(payload, ['recvemail', 'buyer_email', 'email']);
-    const buyerPhone = pickField(payload, ['recvphone', 'buyer_phone', 'phone']);
+    const buyerEmail = pickField(payload, [
+      'recvemail', 'buyer_email', 'email', 'recv_email', 'useremail', 'reqemail',
+      '구매자이메일',
+    ]);
+    const buyerPhone = pickField(payload, [
+      'recvphone', 'phone', 'buyer_phone', 'recv_phone', 'reqphone',
+      'hp', 'cellphone', 'tel', 'mobile',
+      'receiver_phone', 'receiverphone',
+      '구매자번호', '구매자전화번호',
+    ]);
     const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
-    const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no']);
+    const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no', '승인번호']);
     const paidAtRaw = pickField(payload, ['paid_at', 'pay_date', 'paydate', 'completedate']);
     const paidAt = paidAtRaw
       ? new Date(paidAtRaw.replace(' ', 'T') + (paidAtRaw.includes('+') ? '' : '+09:00')).toISOString()
