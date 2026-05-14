@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Headphones, Play, CheckCircle, Clock } from 'lucide-react';
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
@@ -30,16 +30,23 @@ export default function StreamingAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AdminError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    fetchTrackAnalytics(days)
-      .then(setRows)
-      .catch((e) => setError(classifyAdminError(e)))
-      .finally(() => setLoading(false));
+    try {
+      setRows(await fetchTrackAnalytics(days));
+    } catch (e) {
+      setError(classifyAdminError(e));
+    } finally {
+      setLoading(false);
+    }
   }, [days]);
 
-  if (error) return <AdminErrorState error={error} />;
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (error) return <AdminErrorState error={error} onRetry={load} />;
 
   const totalPlays = rows.reduce((s, r) => s + Number(r.plays), 0);
   const totalCompletes = rows.reduce((s, r) => s + Number(r.completes), 0);

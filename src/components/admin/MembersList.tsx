@@ -93,7 +93,7 @@ export default function MembersList() {
     }
   }
 
-  if (error) return <AdminErrorState error={error} />;
+  if (error) return <AdminErrorState error={error} onRetry={load} />;
 
   return (
     <div className="space-y-4">

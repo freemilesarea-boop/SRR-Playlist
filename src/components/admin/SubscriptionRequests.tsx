@@ -116,7 +116,7 @@ export default function SubscriptionRequests() {
   const pending = rows.filter((r) => r.status === 'pending');
   const others = rows.filter((r) => r.status !== 'pending');
 
-  if (error) return <AdminErrorState error={error} />;
+  if (error) return <AdminErrorState error={error} onRetry={load} />;
 
   return (
     <div className="space-y-4">

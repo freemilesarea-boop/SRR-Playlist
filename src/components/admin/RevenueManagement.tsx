@@ -45,7 +45,7 @@ export default function RevenueManagement() {
     void load();
   }, []);
 
-  if (error) return <AdminErrorState error={error} />;
+  if (error) return <AdminErrorState error={error} onRetry={load} />;
   if (loading || !data) return <div className="p-6 text-sm text-ink-mute">불러오는 중…</div>;
 
   return (

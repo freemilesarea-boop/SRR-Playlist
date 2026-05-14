@@ -87,7 +87,7 @@ export default function Dashboard() {
     }
   }
 
-  if (error) return <AdminErrorState error={error} />;
+  if (error) return <AdminErrorState error={error} onRetry={load} />;
   if (loading || !stats) {
     return <div className="p-6 text-sm text-ink-mute">대시보드 불러오는 중…</div>;
   }

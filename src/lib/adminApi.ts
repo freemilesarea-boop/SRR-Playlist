@@ -218,3 +218,42 @@ export async function insertRevenue(payload: {
   });
   if (error) throw error;
 }
+
+// ---------- analytics DB 자동 적용 (0002_analytics.sql) ----------
+
+export interface ApplyAnalyticsResult {
+  ok: boolean;
+  before?: { tables: string[]; functions: string[] };
+  after?: { tables: string[]; functions: string[] };
+  created_tables?: string[];
+  created_functions?: string[];
+  skipped?: { tables: number; functions: number };
+  message?: string;
+  error?: string;
+  details?: string;
+  hint?: string;
+}
+
+export async function applyAnalyticsDb(): Promise<ApplyAnalyticsResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-apply-analytics-db', {
+      body: {},
+    });
+    if (error) {
+      // FunctionsHttpError.context 안의 JSON body 추출 시도
+      let bodyJson: Partial<ApplyAnalyticsResult> = {};
+      try {
+        const errAny = error as unknown as { context?: Response };
+        if (errAny.context && typeof errAny.context.json === 'function') {
+          bodyJson = (await errAny.context.json()) as Partial<ApplyAnalyticsResult>;
+        }
+      } catch {
+        /* noop */
+      }
+      return { ok: false, error: error.message, ...bodyJson };
+    }
+    return data as ApplyAnalyticsResult;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
