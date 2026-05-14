@@ -13,10 +13,13 @@
 // 보안:
 //   - admin 검증 통과한 경우에만 SQL 실행
 //   - 실행되는 SQL 은 ANALYTICS_SQL 상수 1개 — 요청 body 의 SQL 은 절대 실행 안 함
-//   - DB 연결문자열 (SUPABASE_DB_URL) 은 Edge Function 시크릿. 프론트 노출 X
+//   - DB 연결문자열 (ANALYTICS_DB_URL) 은 Edge Function 시크릿. 프론트 노출 X
 //
 // 시크릿 (운영자 1회 등록):
-//   supabase secrets set SUPABASE_DB_URL=postgresql://postgres:PW@host:5432/postgres
+//   supabase secrets set ANALYTICS_DB_URL=postgresql://postgres:PW@host:5432/postgres
+//
+//   ⚠️ Supabase CLI 는 SUPABASE_ prefix 의 secret 등록을 차단하므로
+//      env 이름은 반드시 ANALYTICS_DB_URL (또는 POSTGRES_URL / DATABASE_URL) 사용.
 
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -26,8 +29,8 @@ import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-const SUPABASE_DB_URL =
-  Deno.env.get('SUPABASE_DB_URL') ??
+const ANALYTICS_DB_URL =
+  Deno.env.get('ANALYTICS_DB_URL') ??
   Deno.env.get('POSTGRES_URL') ??
   Deno.env.get('DATABASE_URL') ??
   '';
@@ -441,12 +444,12 @@ serve(async (req) => {
       500,
     );
   }
-  if (!SUPABASE_DB_URL) {
+  if (!ANALYTICS_DB_URL) {
     return json(
       {
         ok: false,
-        error: 'server misconfigured: SUPABASE_DB_URL 시크릿 누락',
-        hint: 'supabase secrets set SUPABASE_DB_URL=postgresql://postgres:PW@host:5432/postgres 후 함수 재배포',
+        error: 'server misconfigured: ANALYTICS_DB_URL 시크릿 누락',
+        hint: 'supabase secrets set ANALYTICS_DB_URL=postgresql://postgres:PW@host:5432/postgres 후 함수 재배포',
       },
       500,
     );
@@ -475,7 +478,7 @@ serve(async (req) => {
   // 2) PG 직접 연결 + 적용
   let pg: PgClient | null = null;
   try {
-    pg = new PgClient(SUPABASE_DB_URL);
+    pg = new PgClient(ANALYTICS_DB_URL);
     await pg.connect();
   } catch (e) {
     return json(
@@ -483,7 +486,7 @@ serve(async (req) => {
         ok: false,
         error: 'db connection failed',
         details: String(e),
-        hint: 'SUPABASE_DB_URL 형식 확인: postgresql://postgres:PW@host:5432/postgres',
+        hint: 'ANALYTICS_DB_URL 형식 확인: postgresql://postgres:PW@host:5432/postgres',
       },
       500,
     );
