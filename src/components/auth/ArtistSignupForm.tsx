@@ -91,46 +91,72 @@ export default function ArtistSignupForm({ onDone }: Props) {
         /* noop */
       }
 
-      // 즉시 로그인된 환경(이메일 인증 OFF)이면 정합성 강화를 위해 한 번 더 upsert
+      // 즉시 로그인된 환경(이메일 인증 OFF)이면 명시적 RPC 로 즉시 적용.
+      // 0024 의 submit_artist_signup_profile RPC 는 트리거 동작 여부와 무관하게 본인이
+      // 자신의 artist_profiles 를 생성/보정 가능. 멱등.
       const { data: sess } = await supabase.auth.getSession();
+      let hasSession = false;
       if (sess.session?.user?.id) {
-        const uid = sess.session.user.id;
-        const { error: uErr } = await supabase
-          .from('users')
-          .update({
-            account_type: 'artist',
-            full_name: realName.trim(),
-            birth_date: birthDate,
-            phone: phone.trim(),
-            address: address.trim(),
-            signup_completed: true,
-            artist_approval_status: 'pending',
-          })
-          .eq('id', uid);
-        if (uErr && import.meta.env.DEV) {
-          console.error('[artist-signup] users.update failed:', uErr);
-        }
-        const { error: aErr } = await supabase.from('artist_profiles').upsert(
+        hasSession = true;
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc(
+          'submit_artist_signup_profile',
           {
-            user_id: uid,
-            real_name: realName.trim(),
-            birth_date: birthDate,
-            artist_name: artistName.trim(),
-            phone: phone.trim(),
-            address: address.trim(),
-            email: email.trim(),
-            approval_status: 'pending',
+            p_real_name: realName.trim(),
+            p_birth_date: birthDate,
+            p_artist_name: artistName.trim(),
+            p_phone: phone.trim(),
+            p_address: address.trim(),
+            p_email: email.trim(),
           },
-          { onConflict: 'user_id' },
         );
-        if (aErr && import.meta.env.DEV) {
-          console.error('[artist-signup] artist_profiles.upsert failed:', aErr);
+        // eslint-disable-next-line no-console
+        console.log('[artist-signup] submit RPC:', { rpcRes, rpcErr });
+        if (rpcErr) {
+          // RPC 가 0024 미적용 등으로 없을 수도 있음 — fallback 으로 직접 upsert
+          // eslint-disable-next-line no-console
+          console.warn('[artist-signup] RPC 실패, 직접 upsert fallback:', rpcErr.message);
+          const uid = sess.session.user.id;
+          const { error: uErr } = await supabase
+            .from('users')
+            .update({
+              account_type: 'artist',
+              full_name: realName.trim(),
+              birth_date: birthDate,
+              phone: phone.trim(),
+              address: address.trim(),
+              signup_completed: true,
+              artist_approval_status: 'pending',
+            })
+            .eq('id', uid);
+          if (uErr) console.error('[artist-signup] users.update fallback failed:', uErr);
+          const { error: aErr } = await supabase.from('artist_profiles').upsert(
+            {
+              user_id: uid,
+              real_name: realName.trim(),
+              birth_date: birthDate,
+              artist_name: artistName.trim(),
+              phone: phone.trim(),
+              address: address.trim(),
+              email: email.trim(),
+              approval_status: 'pending',
+            },
+            { onConflict: 'user_id' },
+          );
+          if (aErr) console.error('[artist-signup] artist_profiles.upsert fallback failed:', aErr);
         }
-      } else if (import.meta.env.DEV) {
-        console.debug('[artist-signup] no session after signup — trigger + apply-on-login 으로 처리됨');
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[artist-signup] no session after signup — 이메일 인증 후 첫 로그인 시 자동 적용');
       }
 
-      toast.success('아티스트 회원가입 신청이 완료됐어요. 관리자 승인 후 음원 등록이 가능합니다.');
+      // 세션 유무에 따라 메시지 차별화
+      if (hasSession) {
+        toast.success('아티스트 가입 신청이 접수됐어요. 관리자 승인 후 음원 업로드가 가능합니다.');
+      } else {
+        toast.info(
+          '아티스트 가입 신청이 접수됐어요. 이메일 인증 후 로그인하시면 등록이 완료됩니다.',
+        );
+      }
       onDone();
     } catch (err) {
       if (import.meta.env.DEV) console.error('[artist-signup] failed:', err);

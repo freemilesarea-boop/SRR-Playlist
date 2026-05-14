@@ -107,17 +107,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       nickname: nickname || email.split('@')[0],
       ...(metadata ?? {}),
     };
-    if (import.meta.env.DEV) {
-      console.debug('[auth] signUp metadata:', data);
-    }
-    const { error } = await supabase.auth.signUp({
+    // 항상 출력 (DEV 만 아닌 production 도) — 운영 진단 시 사용자에게 콘솔 캡처 요청 가능
+    // eslint-disable-next-line no-console
+    console.log('[auth] signUp request:', { email, data });
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data },
     });
     if (error) {
-      console.error('[auth] signUp failed:', error);
+      // eslint-disable-next-line no-console
+      console.error('[auth] signUp error:', error);
       throw error;
+    }
+    // 응답 가시화 — user_id / session 존재 여부 / identities length
+    const ids = signUpData.user?.identities;
+    // eslint-disable-next-line no-console
+    console.log('[auth] signUp response:', {
+      user_id: signUpData.user?.id,
+      email_confirmed: signUpData.user?.email_confirmed_at != null,
+      has_session: !!signUpData.session,
+      identities_count: ids?.length ?? 0,
+    });
+    // Supabase quirk: confirm email ON 환경에서 동일 이메일로 재가입 시 error 가 아닌
+    // user.identities=[] 빈 배열 + 정상 응답으로 반환됨 → silent duplicate.
+    if (signUpData.user && (!ids || ids.length === 0)) {
+      throw new Error('이미 가입된 이메일입니다. 로그인해주세요.');
     }
   },
 
