@@ -9,6 +9,10 @@ export interface UserRow {
   subscription_type: SubscriptionType;
   business_category: string | null;
   created_at: string;
+  // 0014 / 0017 — 마이그레이션 적용 이후. legacy 환경에선 undefined.
+  account_type?: 'individual' | 'business' | 'artist';
+  artist_approval_status?: 'pending' | 'approved' | 'rejected' | null;
+  membership_tier?: 'free' | 'individual' | 'business';
 }
 
 export interface TrackRow {

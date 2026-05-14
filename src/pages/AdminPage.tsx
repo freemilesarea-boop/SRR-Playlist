@@ -10,6 +10,7 @@ import {
   Mic2,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
+import TrackReviewList from '@/components/admin/TrackReviewList';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -29,6 +30,7 @@ type Tab =
   | 'subscriptions'
   | 'content'
   | 'artists'
+  | 'track-review'
   | 'recommendation';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
@@ -39,6 +41,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
+  { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
 ];
 
@@ -94,6 +97,7 @@ export default function AdminPage() {
       {tab === 'subscriptions' && <SubscriptionRequests />}
       {tab === 'content' && <ContentManagement />}
       {tab === 'artists' && <ArtistApprovalList />}
+      {tab === 'track-review' && <TrackReviewList />}
       {tab === 'recommendation' && <RecommendationTester />}
     </div>
   );

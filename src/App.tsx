@@ -28,6 +28,7 @@ const TrackSharePage = lazy(() => import('@/pages/TrackSharePage'));
 const CuratorProfilePage = lazy(() => import('@/pages/CuratorProfilePage'));
 const PaymentSuccessPage = lazy(() => import('@/pages/PaymentSuccessPage'));
 const PaymentFailPage = lazy(() => import('@/pages/PaymentFailPage'));
+const ArtistDashboardPage = lazy(() => import('@/pages/ArtistDashboardPage'));
 
 function RouteFallback() {
   return (
@@ -124,6 +125,7 @@ export default function App() {
             <Route path="/curator/:handle" element={<CuratorProfilePage />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/fail" element={<PaymentFailPage />} />
+            <Route path="/artist" element={<ArtistDashboardPage />} />
             <Route path="/business" element={<BusinessPage />} />
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />

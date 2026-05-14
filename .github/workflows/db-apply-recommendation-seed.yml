@@ -167,6 +167,12 @@ jobs:
           # artist_profiles 테이블 + users.artist_approval_status + tracks 컬럼
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0017_artist_signup.sql
 
+      - name: 1k) 0018 (아티스트 업로드 RLS + 검수 RPC) 마이그레이션 적용
+        run: |
+          set -e
+          # tracks.rejected_reason + 아티스트 INSERT/UPDATE/DELETE RLS + 4개 RPC
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0018_artist_track_review.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
