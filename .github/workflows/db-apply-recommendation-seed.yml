@@ -179,6 +179,12 @@ jobs:
           # get_artist_daily_streams + get_artist_streaming_summary (CREATE OR REPLACE 멱등)
           psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0019_artist_streaming_analytics.sql
 
+      - name: 1m) 0020 (아티스트 스트리밍 KST 기준) 마이그레이션 적용
+        run: |
+          set -e
+          # 두 RPC 의 일자 / today 경계를 Asia/Seoul 기준으로 재정의 (CREATE OR REPLACE)
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0020_artist_streaming_kst.sql
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

@@ -180,6 +180,42 @@
 - ✅ 본인 SELECT: `owner_user_id = auth.uid()` (모든 visibility)
 - ✅ admin: 기존 admin ALL 정책 그대로
 
+## 0019 → 0020 - 스트리밍 분석 KST 전환
+
+### 일간 기준: 한국시간(KST, Asia/Seoul)
+
+0019 에서 RPC 가 UTC 기준이었으나, **0020 부터 모든 일자 집계는 Asia/Seoul 기준**으로 변경.
+
+**RPC 변경**
+- `get_artist_daily_streams.day` = `(created_at AT TIME ZONE 'Asia/Seoul')::date`
+- `get_artist_streaming_summary` 의 경계:
+  - `today` = KST 오늘 자정 이후
+  - `last_7d` = KST 6일 전 자정 이후 (오늘 포함 7일)
+  - `last_30d` = KST 29일 전 자정 이후 (오늘 포함 30일)
+- KST 자정 UTC 환산:
+  ```sql
+  date_trunc('day', now() at time zone 'Asia/Seoul') at time zone 'Asia/Seoul'
+  ```
+
+**프론트엔드 변경**
+- `ArtistDashboardPage` 의 30일 라인차트 키를 `Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' })` 로 생성 (YYYY-MM-DD KST 캘린더)
+- 사용자에게 표시되는 안내 문구에 "한국시간(KST)" 명시
+- `total_streams` / `last_played_at` 은 시점 무관 → 변경 없음
+
+**검증 (운영)**
+```sql
+-- 현재 KST 시각 확인
+select now() as utc_now,
+       (now() at time zone 'Asia/Seoul')::timestamp as kst_clock,
+       (date_trunc('day', now() at time zone 'Asia/Seoul') at time zone 'Asia/Seoul') as kst_today_start_utc;
+
+-- 본인 컨텍스트에서 호출
+select * from public.get_artist_daily_streams(7);
+select * from public.get_artist_streaming_summary();
+```
+
+자정 직후 KST 09:00 UTC 시점에 `today_streams` 가 0 으로 리셋되는지가 핵심 검증 포인트.
+
 ## 남은 follow-up
 
 - 아티스트 음원에 가사/외부 유통 링크 컬럼 추가 (현재 tracks 스키마에 없음)

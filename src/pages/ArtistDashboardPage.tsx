@@ -366,24 +366,26 @@ function StreamingAnalyticsSection({
   daily: ArtistDailyStreamRow[];
   loading: boolean;
 }) {
-  // 일자별 합계 — 모든 트랙 합산해서 차트 그리기
-  // daily 는 (day, track_id, ...) 행이므로 day 단위로 sum.
+  // 일자별 합계 — 모든 트랙 합산. KST(Asia/Seoul) 기준 일자.
+  // daily.day 는 RPC 가 'YYYY-MM-DD' (KST 캘린더) 로 반환.
   const chartData = (() => {
     const map = new Map<string, number>();
     for (const r of daily) {
       map.set(r.day, (map.get(r.day) ?? 0) + r.daily_streams);
     }
-    // 최근 30일 전체 채우기 (0 으로 시각화)
+    // 최근 30일 KST 캘린더 키 채우기 (0 으로 시각화)
+    const kstFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }); // YYYY-MM-DD
     const out: { day: string; streams: number; label: string }[] = [];
-    const today = new Date();
+    const now = Date.now();
+    const DAY_MS = 24 * 3600 * 1000;
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(now - i * DAY_MS);
+      const key = kstFmt.format(d); // 'YYYY-MM-DD' in KST
+      const [, mm, dd] = key.split('-');
       out.push({
         day: key,
         streams: map.get(key) ?? 0,
-        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        label: `${mm}/${dd}`,
       });
     }
     return out;
@@ -524,7 +526,8 @@ function StreamingAnalyticsSection({
       </div>
 
       <p className="text-[11px] text-ink-dim">
-        집계 기준: <code className="font-mono">stream_events.event_type='milestone_30s'</code> (트랙당 세션당 1회). 일자는 UTC 기준.
+        집계 기준: <code className="font-mono">stream_events.event_type='milestone_30s'</code> (트랙당 세션당 1회).
+        일간 기준: <strong>한국시간(KST, Asia/Seoul)</strong>.
       </p>
     </section>
   );
