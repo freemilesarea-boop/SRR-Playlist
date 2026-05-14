@@ -75,6 +75,11 @@ create policy "manual_imports_admin_all" on public.payapp_manual_payment_imports
 
 -- ----------------------
 -- 3) RPC: admin_sync_payapp_payment
+--
+-- 모든 SELECT/UPDATE/INSERT 에 테이블 alias 명시 + 컬럼 prefix qualification.
+-- RETURNS TABLE 의 OUT 컬럼 (status, user_id, order_id, subscription_id, import_id,
+-- message) 가 본문의 컬럼 참조와 충돌(ambiguous) 하지 않도록 모든 컬럼은 명시적으로
+-- 테이블 alias 로 qualify 한다.
 -- ----------------------
 create or replace function public.admin_sync_payapp_payment(
   p_payapp_mul_no text,
@@ -112,7 +117,10 @@ declare
   v_payload jsonb;
 begin
   -- (1) admin only
-  select exists(select 1 from public.users where id = auth.uid() and role = 'admin') into v_admin;
+  select exists(
+    select 1 from public.users u
+    where u.id = auth.uid() and u.role = 'admin'
+  ) into v_admin;
   if not v_admin then raise exception 'admin only'; end if;
 
   -- (2) input validation
@@ -124,9 +132,9 @@ begin
   end if;
 
   -- (3) idempotency: existing import row?
-  select * into v_existing
-  from public.payapp_manual_payment_imports
-  where payapp_mul_no = v_mul_no;
+  select mpi.* into v_existing
+  from public.payapp_manual_payment_imports mpi
+  where mpi.payapp_mul_no = v_mul_no;
   if found then
     return query select
       v_existing.status,
@@ -155,17 +163,17 @@ begin
   v_phone_clean := regexp_replace(coalesce(p_buyer_phone, ''), '\D', '', 'g');
 
   -- 4a) existing payment_orders.payapp_mul_no
-  select user_id into v_user_id
-  from public.payment_orders
-  where payapp_mul_no = v_mul_no
+  select po.user_id into v_user_id
+  from public.payment_orders po
+  where po.payapp_mul_no = v_mul_no
   limit 1;
 
   -- 4b) existing payment_orders.raw_response 안의 mul_no
   if v_user_id is null then
-    select user_id into v_user_id
-    from public.payment_orders
-    where raw_response::text ilike '%' || v_mul_no || '%'
-    order by created_at desc
+    select po.user_id into v_user_id
+    from public.payment_orders po
+    where po.raw_response::text ilike '%' || v_mul_no || '%'
+    order by po.created_at desc
     limit 1;
   end if;
 
@@ -180,11 +188,11 @@ begin
 
   -- 4d) 최근 requested/waiting/failed 주문 중 phone 매칭
   if v_user_id is null and v_phone_clean <> '' then
-    select o.user_id into v_user_id
-    from public.payment_orders o
-    where o.status in ('requested','waiting','failed')
-      and o.raw_request::text ilike '%' || v_phone_clean || '%'
-    order by o.created_at desc
+    select po.user_id into v_user_id
+    from public.payment_orders po
+    where po.status in ('requested','waiting','failed')
+      and po.raw_request::text ilike '%' || v_phone_clean || '%'
+    order by po.created_at desc
     limit 1;
   end if;
 
@@ -196,7 +204,7 @@ begin
     values
       (v_mul_no, p_approval_no, p_buyer_email, p_buyer_phone, p_amount, p_plan_type, p_goodname,
        p_paid_at, 'unmatched', v_payload, auth.uid())
-    returning id into v_import_id;
+    returning public.payapp_manual_payment_imports.id into v_import_id;
 
     return query select 'unmatched'::text, null::uuid, null::uuid, null::uuid,
       v_import_id, '매칭되는 사용자를 찾지 못했습니다 — 관리자가 직접 연결 필요'::text;
@@ -205,18 +213,18 @@ begin
 
   -- (6) Found user — order/subscription 매칭 또는 생성
   --   6a) 동일 mul_no 의 기존 주문
-  select id into v_order_id
-  from public.payment_orders
-  where payapp_mul_no = v_mul_no and user_id = v_user_id
+  select po.id into v_order_id
+  from public.payment_orders po
+  where po.payapp_mul_no = v_mul_no and po.user_id = v_user_id
   limit 1;
 
   --   6b) 최신 pending/requested/waiting/failed 주문 재활용
   if v_order_id is null then
-    select id into v_order_id
-    from public.payment_orders
-    where user_id = v_user_id
-      and status in ('requested','waiting','failed')
-    order by created_at desc
+    select po.id into v_order_id
+    from public.payment_orders po
+    where po.user_id = v_user_id
+      and po.status in ('requested','waiting','failed')
+    order by po.created_at desc
     limit 1;
   end if;
 
@@ -226,21 +234,21 @@ begin
       (user_id, order_no, plan_type, amount, status, payapp_mul_no, raw_response)
     values
       (v_user_id, 'manual_' || v_mul_no, p_plan_type, p_amount, 'paid', v_mul_no, v_payload)
-    returning id into v_order_id;
+    returning public.payment_orders.id into v_order_id;
   end if;
 
   -- subscription 매칭 또는 생성 — active > pending > others
-  select id into v_sub_id
-  from public.subscriptions
-  where user_id = v_user_id
+  select s.id into v_sub_id
+  from public.subscriptions s
+  where s.user_id = v_user_id
   order by
-    case status
+    case s.status
       when 'active' then 0
       when 'pending' then 1
       when 'payment_waiting' then 2
       else 3
     end,
-    created_at desc
+    s.created_at desc
   limit 1;
 
   if v_sub_id is null then
@@ -248,30 +256,31 @@ begin
       (user_id, plan_type, price, status)
     values
       (v_user_id, p_plan_type, p_amount, 'active')
-    returning id into v_sub_id;
+    returning public.subscriptions.id into v_sub_id;
   end if;
 
   -- (7) 실제 업데이트
-  update public.payment_orders
+  --     UPDATE 의 SET RHS / WHERE 모두 테이블명 prefix 로 qualify
+  update public.payment_orders as po
   set status = 'paid',
       payapp_mul_no = v_mul_no,
-      subscription_id = coalesce(subscription_id, v_sub_id),
-      raw_response = coalesce(raw_response, '{}'::jsonb) || v_payload
-  where id = v_order_id;
+      subscription_id = coalesce(po.subscription_id, v_sub_id),
+      raw_response = coalesce(po.raw_response, '{}'::jsonb) || v_payload
+  where po.id = v_order_id;
 
-  update public.subscriptions
+  update public.subscriptions as s
   set status = 'active',
       plan_type = p_plan_type,
       price = p_amount,
-      payapp_mul_no = coalesce(payapp_mul_no, v_mul_no),
+      payapp_mul_no = coalesce(s.payapp_mul_no, v_mul_no),
       last_paid_at = p_paid_at,
       current_period_start = p_paid_at,
       current_period_end = p_paid_at + interval '1 month'
-  where id = v_sub_id;
+  where s.id = v_sub_id;
 
-  update public.users
+  update public.users as u
   set membership_tier = p_plan_type
-  where id = v_user_id;
+  where u.id = v_user_id;
 
   -- (8) 감사 로그
   insert into public.payapp_manual_payment_imports
@@ -281,7 +290,7 @@ begin
   values
     (v_mul_no, p_approval_no, p_buyer_email, p_buyer_phone, p_amount, p_plan_type, p_goodname,
      p_paid_at, v_user_id, v_order_id, v_sub_id, 'matched', v_payload, auth.uid())
-  returning id into v_import_id;
+  returning public.payapp_manual_payment_imports.id into v_import_id;
 
   return query select 'matched'::text, v_user_id, v_order_id, v_sub_id, v_import_id,
     'sync ok — membership_tier 활성화 + subscription active'::text;
@@ -292,6 +301,7 @@ grant execute on function public.admin_sync_payapp_payment(text, integer, text, 
 
 -- ----------------------
 -- 4) RPC: list_manual_payment_imports (admin only)
+--    OUT 컬럼들과 본문 컬럼 명이 겹치므로 모든 컬럼에 alias prefix 명시.
 -- ----------------------
 create or replace function public.list_manual_payment_imports(p_limit int default 50)
 returns table(
@@ -317,7 +327,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if not exists (select 1 from public.users where id = auth.uid() and role = 'admin') then
+  if not exists (
+    select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'
+  ) then
     raise exception 'admin only';
   end if;
 
