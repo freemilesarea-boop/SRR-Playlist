@@ -45,6 +45,12 @@ export interface PendingReviewTrackRow {
   track_id: string;
   title: string;
   artist: string | null;
+  album_name: string | null;
+  main_genre: string | null;
+  sub_genre: string | null;
+  mood: string | null;
+  suitable_store: string | null;
+  lyrics: string | null;
   audio_url: string;
   cover_url: string | null;
   duration: number | null;
@@ -54,13 +60,20 @@ export interface PendingReviewTrackRow {
   source_type: string | null;
   visibility_status: string;
   artist_name: string | null;
+  payout_verification_status: 'pending' | 'verified' | 'rejected' | null;
+  payout_bank_name: string | null;
   created_at: string;
 }
 
 export interface UploadInput {
   title: string;
-  genre?: string;
+  album_name?: string;
+  artist?: string;
+  genre?: string;       // 메인 장르 (기존 컬럼)
+  main_genre?: string;
+  sub_genre?: string;
   mood?: string;
+  suitable_store?: string;
   description?: string;
   lyrics?: string;
   external_link?: string;
@@ -185,23 +198,37 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     }
   }
 
-  // 3) tracks INSERT — RLS 검증 통과해야 성공
+  // 3) verified payout account 조회 (RLS 가 검증하지만 클라이언트 측 빠른 가드)
+  const { data: payout } = await supabase
+    .from('artist_payout_accounts')
+    .select('id, verification_status')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!payout || payout.verification_status !== 'verified') {
+    return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
+  }
+
+  // 4) tracks INSERT — RLS 검증 통과해야 성공
   const { data: trackRow, error: trackErr } = await supabase
     .from('tracks')
     .insert({
       title: input.title.trim(),
-      artist: profile.artist_name,
-      genre: input.genre?.trim() || null,
+      artist: (input.artist?.trim() || profile.artist_name),
+      album_name: input.album_name?.trim() || null,
+      genre: input.genre?.trim() || input.main_genre?.trim() || null,
+      main_genre: input.main_genre?.trim() || input.genre?.trim() || null,
+      sub_genre: input.sub_genre?.trim() || null,
       mood: input.mood?.trim() || null,
+      suitable_store: input.suitable_store?.trim() || null,
+      lyrics: input.lyrics?.trim() || null,
       audio_url: audioUrl,
       cover_url: coverUrl,
       owner_user_id: userId,
       artist_profile_id: profile.id,
+      payout_account_id: payout.id,
       uploaded_by_account_type: 'artist',
       source_type: 'artist_upload',
       visibility_status: 'pending_review',
-      // 가사 / 외부 링크 / 설명 은 현재 tracks 스키마에 없어 description 까지만 사용 가능
-      // (lyrics, external_link 는 추후 확장 — 현재 메타에 묶지 않음)
     })
     .select('id')
     .single();
@@ -325,6 +352,157 @@ export async function repairArtistSignups(): Promise<RepairArtistSignupsResult> 
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
   }
+}
+
+// ---------- PAYOUT ACCOUNT (0025) ----------
+
+export interface PayoutAccount {
+  id: string;
+  user_id: string;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  verified_at: string | null;
+  rejected_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchMyPayoutAccount(userId: string): Promise<PayoutAccount | null> {
+  try {
+    const { data, error } = await supabase
+      .from('artist_payout_accounts')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) return null;
+    return (data as unknown as PayoutAccount) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function submitArtistPayoutAccount(payload: {
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+}): Promise<{ ok: boolean; account_id?: string; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('submit_artist_payout_account', {
+      p_bank_name: payload.bank_name,
+      p_account_number: payload.account_number,
+      p_account_holder: payload.account_holder,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = Array.isArray(data) ? data[0] : data;
+    return { ok: true, account_id: row?.account_id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
+// ---------- UPLOAD ELIGIBILITY ----------
+
+export type EligibilityReason =
+  | 'login_required'
+  | 'not_artist'
+  | 'no_artist_profile'
+  | 'artist_not_approved'
+  | 'no_paid_membership'
+  | 'no_payout_account'
+  | 'payout_not_verified';
+
+export interface UploadEligibility {
+  can_upload: boolean;
+  is_artist: boolean;
+  approval_status: string;
+  has_paid_membership: boolean;
+  payout_status: string;
+  payout_account_id: string | null;
+  reasons: EligibilityReason[];
+}
+
+export async function fetchArtistUploadEligibility(): Promise<UploadEligibility> {
+  try {
+    const { data, error } = await supabase.rpc('get_artist_upload_eligibility');
+    if (error) {
+      return {
+        can_upload: false,
+        is_artist: false,
+        approval_status: 'unknown',
+        has_paid_membership: false,
+        payout_status: 'unknown',
+        payout_account_id: null,
+        reasons: ['login_required'],
+      };
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as UploadEligibility | undefined;
+    return (
+      row ?? {
+        can_upload: false,
+        is_artist: false,
+        approval_status: 'unknown',
+        has_paid_membership: false,
+        payout_status: 'unknown',
+        payout_account_id: null,
+        reasons: [],
+      }
+    );
+  } catch {
+    return {
+      can_upload: false,
+      is_artist: false,
+      approval_status: 'unknown',
+      has_paid_membership: false,
+      payout_status: 'unknown',
+      payout_account_id: null,
+      reasons: [],
+    };
+  }
+}
+
+// ---------- ADMIN PAYOUT ----------
+
+export interface AdminPayoutRow {
+  account_id: string;
+  user_id: string;
+  artist_name: string | null;
+  email: string | null;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  rejected_reason: string | null;
+  created_at: string;
+}
+
+export async function listPendingPayoutAccounts(): Promise<AdminPayoutRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('list_pending_payout_accounts', { p_limit: 200 });
+    if (error) return [];
+    return (data ?? []) as AdminPayoutRow[];
+  } catch {
+    return [];
+  }
+}
+
+export async function verifyArtistPayoutAccount(accountId: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('verify_artist_payout_account', { p_account_id: accountId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function rejectArtistPayoutAccount(
+  accountId: string,
+  reason: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('reject_artist_payout_account', {
+    p_account_id: accountId,
+    p_reason: reason,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 export async function fetchArtistDailyStreams(days = 30): Promise<ArtistDailyStreamRow[]> {

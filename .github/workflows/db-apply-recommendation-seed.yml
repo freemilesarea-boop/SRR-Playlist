@@ -252,6 +252,41 @@ jobs:
               ) then 'YES' else 'NO' end);
           SQL
 
+      - name: 1r) 0025 (아티스트 업로드 자격 5단계 게이트 + 정산 계좌) 적용
+        run: |
+          set -e
+          echo "== 0025 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0025_artist_upload_eligibility.sql
+          echo ""
+          echo "== 적용 검증 (테이블/컬럼/RPC 존재 + RLS 강화 여부) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'payout_table=' ||
+              (case when exists (select 1 from information_schema.tables
+                where table_schema='public' and table_name='artist_payout_accounts')
+                then 'YES' else 'NO' end);
+            select 'tracks_album_name=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='tracks' and column_name='album_name')
+                then 'YES' else 'NO' end);
+            select 'tracks_payout_account_id=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='tracks' and column_name='payout_account_id')
+                then 'YES' else 'NO' end);
+            select 'eligibility_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='get_artist_upload_eligibility')
+                then 'YES' else 'NO' end);
+            select 'submit_payout_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='submit_artist_payout_account')
+                then 'YES' else 'NO' end);
+            select 'list_pending_review_extended=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%album_name%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='list_pending_review_tracks')
+                    then 'YES' else 'NO' end);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

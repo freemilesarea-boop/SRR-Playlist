@@ -21,11 +21,18 @@ import {
   validateArtistAudioFile,
   fetchArtistStreamingSummary,
   fetchArtistDailyStreams,
+  fetchArtistUploadEligibility,
+  fetchMyPayoutAccount,
+  submitArtistPayoutAccount,
   type ArtistProfile,
   type MyArtistTrackRow,
   type ArtistStreamingSummaryRow,
   type ArtistDailyStreamRow,
+  type UploadEligibility,
+  type PayoutAccount,
 } from '@/lib/artistApi';
+import { createPayappSubscription } from '@/lib/subscriptionApi';
+import { CreditCard, Wallet } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
@@ -45,22 +52,28 @@ export default function ArtistDashboardPage() {
   const [tracks, setTracks] = useState<MyArtistTrackRow[]>([]);
   const [summary, setSummary] = useState<ArtistStreamingSummaryRow[]>([]);
   const [daily, setDaily] = useState<ArtistDailyStreamRow[]>([]);
+  const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
+  const [payout, setPayout] = useState<PayoutAccount | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts, sm, dl] = await Promise.all([
+      const [ap, ts, sm, dl, el, po] = await Promise.all([
         fetchMyArtistProfile(user.id),
         fetchMyArtistTracks(),
         fetchArtistStreamingSummary(),
         fetchArtistDailyStreams(30),
+        fetchArtistUploadEligibility(),
+        fetchMyPayoutAccount(user.id),
       ]);
       setArtist(ap);
       setTracks(ts);
       setSummary(sm);
       setDaily(dl);
+      setEligibility(el);
+      setPayout(po);
     } finally {
       setLoading(false);
     }
@@ -98,15 +111,20 @@ export default function ArtistDashboardPage() {
         <ApprovalStatusCard artist={artist} />
       )}
 
-      {/* 업로드 폼 — approved 일 때만 활성 */}
-      {isApproved ? (
-        <ArtistUploadForm onUploaded={load} />
-      ) : (
+      {/* 자격 게이트 — eligibility.reasons 에 따라 단계별 UI */}
+      {isApproved && (
+        <UploadGate
+          eligibility={eligibility}
+          payout={payout}
+          userEmail={user?.email ?? ''}
+          onUploaded={load}
+          onPayoutSubmitted={load}
+        />
+      )}
+      {!isApproved && (
         <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
           <h2 className="text-sm font-bold">음원 업로드</h2>
-          <p className="mt-1 text-xs text-ink-mute">
-            관리자 승인 후 음원 업로드가 가능합니다.
-          </p>
+          <p className="mt-1 text-xs text-ink-mute">관리자 승인 후 음원 업로드가 가능합니다.</p>
         </div>
       )}
 
@@ -196,10 +214,227 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   );
 }
 
+function UploadGate({
+  eligibility,
+  payout,
+  userEmail,
+  onUploaded,
+  onPayoutSubmitted,
+}: {
+  eligibility: UploadEligibility | null;
+  payout: PayoutAccount | null;
+  userEmail: string;
+  onUploaded: () => void | Promise<void>;
+  onPayoutSubmitted: () => void | Promise<void>;
+}) {
+  if (!eligibility) {
+    return <div className="h-24 animate-pulse rounded-2xl bg-bg-card" />;
+  }
+  const reasons = eligibility.reasons;
+  const needPayment = reasons.includes('no_paid_membership');
+  const needPayout =
+    reasons.includes('no_payout_account') || reasons.includes('payout_not_verified');
+
+  // 결제 미완료 게이트 (가장 먼저)
+  if (needPayment) {
+    return <PaymentRequiredCard userEmail={userEmail} />;
+  }
+  // 계좌 미완료 게이트
+  if (needPayout) {
+    return <PayoutAccountSection payout={payout} onSubmitted={onPayoutSubmitted} />;
+  }
+  // 모두 OK — 업로드 폼
+  return <ArtistUploadForm onUploaded={onUploaded} />;
+}
+
+function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function onPay() {
+    if (phone.replace(/\D/g, '').length < 9) {
+      toast.error('알림 받을 휴대폰 번호를 입력해주세요');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await createPayappSubscription({
+        plan_type: 'individual',
+        recvphone: phone,
+      });
+      if (res.ok && res.payurl) {
+        window.location.href = res.payurl;
+        return;
+      }
+      toast.error(res.error ?? '결제 생성 실패');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+          <CreditCard size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold">음원 업로드 — 월 4,900원 요금제 결제</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+            아티스트 음원 업로드는 SWK 일반 이용권(월 4,900원) 결제 후 이용할 수 있어요.
+            결제 완료 후 자동으로 업로드 권한이 활성화됩니다.
+          </p>
+        </div>
+      </div>
+      <input
+        type="tel"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="알림 받을 휴대폰 (010-0000-0000)"
+        className="input"
+        autoComplete="tel"
+      />
+      <button onClick={onPay} disabled={busy} className="btn-primary w-full py-2.5">
+        {busy ? '결제창 준비중…' : 'PayApp 으로 4,900원 결제하기'}
+      </button>
+      <p className="text-[11px] text-ink-dim">
+        결제 사용자: {userEmail} · 매월 자동 결제 · 마이페이지에서 즉시 해지 가능
+      </p>
+    </div>
+  );
+}
+
+function PayoutAccountSection({
+  payout,
+  onSubmitted,
+}: {
+  payout: PayoutAccount | null;
+  onSubmitted: () => void | Promise<void>;
+}) {
+  const [bankName, setBankName] = useState(payout?.bank_name ?? '');
+  const [accountNumber, setAccountNumber] = useState(payout?.account_number ?? '');
+  const [accountHolder, setAccountHolder] = useState(payout?.account_holder ?? '');
+  const [busy, setBusy] = useState(false);
+  const editable = !payout || payout.verification_status !== 'verified';
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editable) return;
+    setBusy(true);
+    try {
+      const res = await submitArtistPayoutAccount({
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_holder: accountHolder,
+      });
+      if (!res.ok) {
+        toast.error(res.error ?? '계좌 등록 실패');
+        return;
+      }
+      toast.success('계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
+      await onSubmitted();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const statusBadge =
+    payout?.verification_status === 'verified'
+      ? { label: '확인 완료', tone: 'bg-emerald-500/15 text-emerald-300' }
+      : payout?.verification_status === 'rejected'
+        ? { label: '거절됨', tone: 'bg-red-500/15 text-red-300' }
+        : payout
+          ? { label: '확인 대기 중', tone: 'bg-yellow-500/15 text-yellow-200' }
+          : null;
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+          <Wallet size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold">정산 계좌</h2>
+            {statusBadge && (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.tone}`}>
+                {statusBadge.label}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+            업로드 전에 정산 계좌를 등록하고 관리자 확인을 받아야 합니다. (MVP 는 관리자 수동 확인)
+          </p>
+          {payout?.rejected_reason && (
+            <p className="mt-1 text-[11px] text-red-300">거절 사유: {payout.rejected_reason}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="은행명 *">
+          <input
+            type="text"
+            required
+            disabled={!editable}
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder="예: 신한은행"
+            className="input disabled:opacity-60"
+          />
+        </Field>
+        <Field label="예금주명 *">
+          <input
+            type="text"
+            required
+            disabled={!editable}
+            value={accountHolder}
+            onChange={(e) => setAccountHolder(e.target.value)}
+            placeholder="이름"
+            className="input disabled:opacity-60"
+          />
+        </Field>
+      </div>
+      <Field label="계좌번호 *">
+        <input
+          type="text"
+          required
+          disabled={!editable}
+          value={accountNumber}
+          onChange={(e) => setAccountNumber(e.target.value)}
+          placeholder="숫자만 또는 하이픈 포함"
+          className="input disabled:opacity-60"
+          inputMode="numeric"
+        />
+      </Field>
+
+      {editable && (
+        <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
+          {busy ? '등록 중…' : payout ? '계좌 재제출' : '계좌 등록'}
+        </button>
+      )}
+      {payout?.verification_status === 'verified' && (
+        <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
+          ✓ 정산 계좌 확인 완료 — 이제 음원을 업로드할 수 있어요.
+        </p>
+      )}
+    </form>
+  );
+}
+
+const SUITABLE_STORE_OPTIONS = [
+  '카페', '와인바', '식당', '베이커리', '헬스장', '필라테스', '미용실', '의류매장', '서점', '기타',
+];
+
 function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<void> }) {
   const [title, setTitle] = useState('');
-  const [genre, setGenre] = useState('');
+  const [albumName, setAlbumName] = useState('');
+  const [artistOverride, setArtistOverride] = useState('');
+  const [mainGenre, setMainGenre] = useState('');
+  const [subGenre, setSubGenre] = useState('');
+  const [suitableStore, setSuitableStore] = useState('');
   const [mood, setMood] = useState('');
+  const [lyrics, setLyrics] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -214,19 +449,36 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
     setAudioFile(f);
   }
 
+  function missing(): string | null {
+    if (!audioFile) return '음원 파일을 선택해주세요';
+    if (!title.trim()) return '곡 제목을 입력해주세요';
+    if (!albumName.trim()) return '앨범명을 입력해주세요';
+    if (!mainGenre.trim()) return '메인 장르를 입력해주세요';
+    if (!subGenre.trim()) return '서브 장르를 입력해주세요';
+    if (!suitableStore.trim()) return '어울리는 매장을 선택해주세요';
+    if (!mood.trim()) return '곡 분위기를 입력해주세요';
+    return null;
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!audioFile) {
-      toast.error('오디오 파일을 선택해주세요');
+    const m = missing();
+    if (m) {
+      toast.error(m);
       return;
     }
     setBusy(true);
     try {
       const res = await uploadArtistTrack({
         title,
-        genre: genre || undefined,
-        mood: mood || undefined,
-        audioFile,
+        album_name: albumName,
+        artist: artistOverride || undefined,
+        main_genre: mainGenre,
+        sub_genre: subGenre,
+        suitable_store: suitableStore,
+        mood,
+        lyrics: lyrics || undefined,
+        audioFile: audioFile!,
         coverFile,
       });
       if (!res.ok) {
@@ -235,8 +487,13 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
       }
       toast.success('업로드 완료. 관리자 검수 후 공개됩니다.');
       setTitle('');
-      setGenre('');
+      setAlbumName('');
+      setArtistOverride('');
+      setMainGenre('');
+      setSubGenre('');
+      setSuitableStore('');
       setMood('');
+      setLyrics('');
       setAudioFile(null);
       setCoverFile(null);
       await onUploaded();
@@ -250,18 +507,6 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
       <h2 className="flex items-center gap-1.5 text-sm font-bold">
         <Upload size={14} className="text-accent" /> 새 음원 업로드
       </h2>
-
-      <Field label="곡 제목 *">
-        <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="input" maxLength={120} />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="장르">
-          <input type="text" value={genre} onChange={(e) => setGenre(e.target.value)} className="input" placeholder="예: 발라드, 인디" />
-        </Field>
-        <Field label="분위기">
-          <input type="text" value={mood} onChange={(e) => setMood(e.target.value)} className="input" placeholder="예: chill, dreamy" />
-        </Field>
-      </div>
 
       <Field label="오디오 파일 *" hint="mp3 / wav / m4a / flac · 100MB 이하">
         <input
@@ -277,6 +522,57 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         )}
       </Field>
 
+      <Field label="아티스트명">
+        <input
+          type="text"
+          value={artistOverride}
+          onChange={(e) => setArtistOverride(e.target.value)}
+          placeholder="(비우면 가입 시 입력한 아티스트명 사용)"
+          className="input"
+          maxLength={80}
+        />
+      </Field>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="앨범명 *">
+          <input type="text" required value={albumName} onChange={(e) => setAlbumName(e.target.value)} className="input" maxLength={120} />
+        </Field>
+        <Field label="곡 제목 *">
+          <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="input" maxLength={120} />
+        </Field>
+        <Field label="메인 장르 *">
+          <input type="text" required value={mainGenre} onChange={(e) => setMainGenre(e.target.value)} className="input" placeholder="예: pop, rnb, hiphop, lofi" />
+        </Field>
+        <Field label="서브 장르 *">
+          <input type="text" required value={subGenre} onChange={(e) => setSubGenre(e.target.value)} className="input" placeholder="예: ballad, indie, dance pop" />
+        </Field>
+        <Field label="어울리는 매장 *">
+          <select
+            required
+            value={suitableStore}
+            onChange={(e) => setSuitableStore(e.target.value)}
+            className="input"
+          >
+            <option value="">— 선택 —</option>
+            {SUITABLE_STORE_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="곡 분위기 *">
+          <input type="text" required value={mood} onChange={(e) => setMood(e.target.value)} className="input" placeholder="예: chill, dreamy, upbeat" />
+        </Field>
+      </div>
+
+      <Field label="가사" hint="(선택)">
+        <textarea
+          value={lyrics}
+          onChange={(e) => setLyrics(e.target.value)}
+          rows={4}
+          className="input min-h-[80px]"
+          maxLength={4000}
+        />
+      </Field>
+
       <Field label="커버 이미지" hint="(선택) 정사각형 권장">
         <input
           type="file"
@@ -286,7 +582,7 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         />
       </Field>
 
-      <button type="submit" disabled={busy || !audioFile || !title.trim()} className="btn-primary w-full py-2.5">
+      <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
         {busy ? '업로드 중…' : '업로드 신청'}
       </button>
       <p className="text-[11px] text-ink-dim">
