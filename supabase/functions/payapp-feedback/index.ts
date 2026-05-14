@@ -64,6 +64,11 @@ function normalizePayState(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// PayApp 정기결제 / 카드 환경에서 성공 상태로 동작하는 state 집합.
+// 운영자가 PayApp 콘솔 통보 로그에서 4 와 64 가 모두 들어오는 것을 확인 → 둘 다 paid.
+const PAID_STATES = new Set<number>([4, 64]);
+const CANCEL_STATES = new Set<number>([9, 70, 71]);
+
 function planFromAmount(amount: number | null): 'individual' | 'business' | null {
   if (amount === 4900) return 'individual';
   if (amount === 6900) return 'business';
@@ -144,12 +149,6 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
-function isoOneMonthFromNow(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 1);
-  return d.toISOString();
-}
-
 serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
@@ -213,64 +212,128 @@ serve(async (req) => {
   }
 
   // --- 검증 실패 처리 ---
-  //   order 가 있는데 검증 실패 → 저장만 하고 종료 (price 위변조 의심)
-  //   order 가 없는데 검증 실패 → 부분 검증(userid+linkval 만) 으로 fallback,
-  //   결제완료 + mul_no 가 있으면 manual_imports 에 enqueue (관리자가 처리)
+  //   order 있고 검증 실패 → price 위변조 의심 → 저장만 하고 종료
+  //   order 없고 paid + mul_no → 부분 검증(userid+linkval) 통과시 진행
   const partialVerifyOk = verification.userid_ok && verification.linkval_ok && verification.linkkey_ok !== 'fail';
+  const isPaidState = payState != null && PAID_STATES.has(payState);
   if (!verification.ok) {
-    if (!order && partialVerifyOk && payState === 4 && mulNo) {
-      // fall through — 아래 !order 블록에서 enqueue
+    if (!order && partialVerifyOk && isPaidState && mulNo) {
+      // fall through
     } else {
       console.warn('[payapp-feedback] verification failed:', verification.reasons);
       await sb
         .from('payapp_webhook_events')
-        .update({ processed_at: isoNow() })
+        .update({ processed_at: isoNow(), processing_error: 'verification_failed: ' + verification.reasons.join(',') })
         .eq('id', insertedEvent?.id);
       return SUCCESS();
     }
   }
 
-  // --- order_no 매칭 실패 또는 var1 자체가 없는 경우 ---
-  //     결제 완료(payState=4) 이고 mul_no 가 있으면 manual_imports 로 enqueue.
-  //     자동 동기화/관리자 UI 에서 사용자 연결 가능.
-  if (!order) {
-    if (payState === 4 && mulNo) {
-      const buyerEmail = pickField(payload, ['recvemail', 'buyer_email', 'email']);
-      const buyerPhone = pickField(payload, ['recvphone', 'buyer_phone', 'phone']);
-      const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
-      const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no']);
-      const paidAtRaw = pickField(payload, ['paid_at', 'pay_date', 'paydate', 'completedate']);
-      const paidAt = paidAtRaw
-        ? new Date(paidAtRaw.replace(' ', 'T') + (paidAtRaw.includes('+') ? '' : '+09:00')).toISOString()
-        : isoNow();
-      const planType = planFromAmount(priceNum);
-      if (planType && priceNum) {
-        // 직접 admin_sync_payapp_payment RPC 호출은 admin 검사 때문에 실패.
-        // 대신 imports 테이블에 unmatched 로 직접 INSERT → admin UI 에서 처리.
-        // (자동 매칭 RPC 와 동일한 멱등성 보장 위해 ON CONFLICT 처리)
-        const { error: importErr } = await sb
-          .from('payapp_manual_payment_imports')
-          .upsert(
-            {
-              payapp_mul_no: mulNo,
-              approval_no: approvalNo,
-              buyer_email: buyerEmail,
-              buyer_phone: buyerPhone,
-              amount: priceNum,
-              plan_type: planType,
-              goodname,
-              paid_at: paidAt,
-              status: 'unmatched',
-              raw_payload: { ...payload, _source: 'webhook_no_order' },
-              created_by: null,
-            },
-            { onConflict: 'payapp_mul_no' },
-          );
-        if (importErr) {
-          console.warn('[payapp-feedback] enqueue manual import failed:', importErr.message);
-        }
-      }
+  // ─────────────────────────────────────────────────────────────
+  // paid state (4 또는 64) 처리:
+  //   _internal_apply_payapp_paid_event RPC 호출.
+  //   order_no 있으면 1순위로 사용. 없어도 mul_no/email/phone 순으로 매칭.
+  //   매칭 성공 → membership_tier 적용. 실패 → manual_imports 로 enqueue.
+  //   결과를 webhook event row 에 writeback.
+  // ─────────────────────────────────────────────────────────────
+  if (isPaidState && mulNo) {
+    const planType = planFromAmount(priceNum) ?? (order?.plan_type as 'individual' | 'business' | undefined);
+    const amount = priceNum ?? order?.amount ?? null;
+    if (!planType || !amount) {
+      await sb
+        .from('payapp_webhook_events')
+        .update({
+          processed_at: isoNow(),
+          processing_error: `unsupported amount ${amount} or plan ${planType}`,
+        })
+        .eq('id', insertedEvent?.id);
+      return SUCCESS();
     }
+
+    const buyerEmail = pickField(payload, ['recvemail', 'buyer_email', 'email']);
+    const buyerPhone = pickField(payload, ['recvphone', 'buyer_phone', 'phone']);
+    const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
+    const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no']);
+    const paidAtRaw = pickField(payload, ['paid_at', 'pay_date', 'paydate', 'completedate']);
+    const paidAt = paidAtRaw
+      ? new Date(paidAtRaw.replace(' ', 'T') + (paidAtRaw.includes('+') ? '' : '+09:00')).toISOString()
+      : isoNow();
+
+    const { data: applyData, error: applyErr } = await sb.rpc('_internal_apply_payapp_paid_event', {
+      p_payapp_mul_no: mulNo,
+      p_amount: amount,
+      p_plan_type: planType,
+      p_buyer_email: buyerEmail,
+      p_buyer_phone: buyerPhone,
+      p_paid_at: paidAt,
+      p_approval_no: approvalNo,
+      p_goodname: goodname,
+      p_order_no: orderNo,
+      p_source: 'webhook',
+    });
+
+    const row = (Array.isArray(applyData) ? applyData[0] : applyData) as
+      | {
+          matched_user_id: string | null;
+          matched_order_id: string | null;
+          matched_subscription_id: string | null;
+          membership_updated: boolean;
+          final_membership_tier: string | null;
+          message: string;
+        }
+      | undefined;
+
+    if (applyErr || !row) {
+      console.warn('[payapp-feedback] _internal apply failed:', applyErr?.message);
+      await sb
+        .from('payapp_webhook_events')
+        .update({
+          processed_at: isoNow(),
+          processing_error: applyErr?.message ?? 'internal apply returned empty',
+        })
+        .eq('id', insertedEvent?.id);
+      return SUCCESS();
+    }
+
+    // 매칭 실패 → manual_imports 로 enqueue (UI 에서 1-클릭 연결)
+    if (!row.matched_user_id) {
+      await sb.from('payapp_manual_payment_imports').upsert(
+        {
+          payapp_mul_no: mulNo,
+          approval_no: approvalNo,
+          buyer_email: buyerEmail,
+          buyer_phone: buyerPhone,
+          amount,
+          plan_type: planType,
+          goodname,
+          paid_at: paidAt,
+          status: 'unmatched',
+          raw_payload: { ...payload, _source: 'webhook_unmatched' },
+          created_by: null,
+        },
+        { onConflict: 'payapp_mul_no' },
+      );
+    }
+
+    // event row writeback
+    await sb
+      .from('payapp_webhook_events')
+      .update({
+        matched_user_id: row.matched_user_id,
+        matched_order_id: row.matched_order_id,
+        matched_subscription_id: row.matched_subscription_id,
+        membership_updated: row.membership_updated,
+        final_membership_tier: row.final_membership_tier,
+        processing_error: row.membership_updated ? null : row.message,
+        processed_at: isoNow(),
+      })
+      .eq('id', insertedEvent?.id);
+
+    return SUCCESS();
+  }
+
+  // 이하: paid 가 아닌 경우 — order 가 있어야만 기존 per-state 처리
+  if (!order) {
     await sb
       .from('payapp_webhook_events')
       .update({ processed_at: isoNow() })
@@ -278,78 +341,18 @@ serve(async (req) => {
     return SUCCESS();
   }
 
-  // --- pay_state 별 처리 ---
+  // --- paid 가 아닌 state 처리 (order 필수) ---
+  //     paid (4/64) 는 위 isPaidState 블록에서 _internal RPC 로 일괄 처리되었음.
   if (payState === 1) {
-    // 결제 요청 수신 — 완료 아님. 기존 status 유지.
-    // 명시적으로 requested/pending 보장.
-    await sb
-      .from('payment_orders')
-      .update({ status: 'requested', raw_response: payload })
-      .eq('id', order.id);
+    await sb.from('payment_orders').update({ status: 'requested', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
         .update({ status: 'pending', payapp_pay_state: payState })
         .eq('id', order.subscription_id);
     }
-  } else if (payState === 4) {
-    // 결제 완료
-    const isFirstPaymentForThisOrder =
-      !order.payapp_mul_no || order.payapp_mul_no === mulNo;
-
-    if (isFirstPaymentForThisOrder) {
-      // 첫 결제 — 기존 order 를 paid 로 갱신
-      await sb
-        .from('payment_orders')
-        .update({
-          status: 'paid',
-          payapp_rebill_no: rebillNo,
-          payapp_mul_no: mulNo,
-          raw_response: payload,
-        })
-        .eq('id', order.id);
-    } else {
-      // 2회차+ 자동 결제 — 새 renewal order 행 생성 (멱등: order_no UNIQUE)
-      const renewalOrderNo = `${orderNo}_renewal_${mulNo ?? Date.now()}`;
-      const { error: renewErr } = await sb.from('payment_orders').insert({
-        user_id: order.user_id,
-        subscription_id: order.subscription_id,
-        order_no: renewalOrderNo,
-        plan_type: order.plan_type,
-        amount: order.amount,
-        status: 'paid',
-        payapp_rebill_no: rebillNo,
-        payapp_mul_no: mulNo,
-        raw_response: payload,
-      });
-      if (renewErr && renewErr.code !== '23505') {
-        console.warn('[payapp-feedback] renewal order insert failed:', renewErr.message);
-      }
-    }
-
-    // subscription 갱신 (첫 결제든 재결제든 last_paid_at + period 갱신)
-    if (order.subscription_id) {
-      await sb
-        .from('subscriptions')
-        .update({
-          status: 'active',
-          payapp_rebill_no: rebillNo,
-          payapp_mul_no: mulNo,
-          payapp_pay_state: payState,
-          last_paid_at: isoNow(),
-          current_period_start: isoNow(),
-          current_period_end: isoOneMonthFromNow(),
-        })
-        .eq('id', order.subscription_id);
-    }
-
-    // membership_tier 갱신
-    await sb
-      .from('users')
-      .update({ membership_tier: order.plan_type, subscription_type: order.plan_type })
-      .eq('id', order.user_id);
   } else if (payState === 10) {
-    // 가상계좌 결제 대기
+    // 가상계좌 대기
     await sb.from('payment_orders').update({ status: 'waiting', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
@@ -363,24 +366,16 @@ serve(async (req) => {
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
-        .update({
-          status: 'canceled',
-          canceled_at: isoNow(),
-          payapp_pay_state: payState,
-        })
+        .update({ status: 'canceled', canceled_at: isoNow(), payapp_pay_state: payState })
         .eq('id', order.subscription_id);
     }
-  } else if ([9, 64, 70, 71].includes(payState ?? -1)) {
-    // 승인 취소 / 부분 취소 → 권한 제거
+  } else if (payState != null && CANCEL_STATES.has(payState)) {
+    // 승인 취소 / 부분 취소 → 권한 제거 (단, 64 는 paid 로 분류되어 여기 안 옴)
     await sb.from('payment_orders').update({ status: 'canceled', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
-        .update({
-          status: 'canceled',
-          canceled_at: isoNow(),
-          payapp_pay_state: payState,
-        })
+        .update({ status: 'canceled', canceled_at: isoNow(), payapp_pay_state: payState })
         .eq('id', order.subscription_id);
     }
     await sb

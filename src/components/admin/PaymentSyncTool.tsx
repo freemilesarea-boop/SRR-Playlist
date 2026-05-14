@@ -18,6 +18,8 @@ import {
   linkUnmatchedImport,
   listRecentSyncAttempts,
   listRecentWebhookEvents,
+  replayWebhookEvent,
+  replayWebhookByMulNo,
   type AdminSyncPaymentResult,
   type AutoSyncSummary,
   type ManualPaymentImportRow,
@@ -315,9 +317,9 @@ export default function PaymentSyncTool() {
 
       {/* === Webhook 수신 진단 === */}
       <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold tracking-tight">PayApp Webhook 수신 진단</h3>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             <input
               type="text"
               value={webhookSearch}
@@ -331,6 +333,24 @@ export default function PaymentSyncTool() {
             >
               검색
             </button>
+            <button
+              onClick={async () => {
+                const v = window.prompt('재처리할 mul_no 입력');
+                if (!v || !v.trim()) return;
+                const res = await replayWebhookByMulNo(v.trim());
+                if (!res.ok) toast.error(res.error ?? '재처리 실패');
+                else
+                  toast.success(
+                    res.result?.membership_updated
+                      ? `재처리 성공 — tier=${res.result.final_membership_tier}`
+                      : `재처리됨 — ${res.result?.message ?? ''}`,
+                  );
+                await load();
+              }}
+              className="rounded-md bg-accent/15 px-2 text-[11px] font-semibold text-accent hover:bg-accent/25"
+            >
+              mul_no 재처리
+            </button>
           </div>
         </div>
         {webhookRows.length === 0 ? (
@@ -340,43 +360,23 @@ export default function PaymentSyncTool() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-[11px]">
+            <table className="w-full min-w-[900px] text-[11px]">
               <thead className="text-ink-dim">
                 <tr className="border-b border-line/10">
                   <th className="px-2 py-1.5 text-left font-semibold">time</th>
                   <th className="px-2 py-1.5 text-left font-semibold">mul_no</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">order_no</th>
                   <th className="px-2 py-1.5 text-right font-semibold">state</th>
                   <th className="px-2 py-1.5 text-right font-semibold">price</th>
                   <th className="px-2 py-1.5 text-left font-semibold">검증</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">처리</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">매칭 사용자</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">membership</th>
+                  <th className="px-2 py-1.5 text-left font-semibold">처리오류</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">replay</th>
                 </tr>
               </thead>
               <tbody>
                 {webhookRows.map((w) => (
-                  <tr key={w.id} className="border-b border-line/10 last:border-b-0">
-                    <td className="px-2 py-1.5 text-ink-mute">
-                      {new Date(w.created_at).toLocaleTimeString('ko-KR')}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono">{w.payapp_mul_no ?? '—'}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-mute">{w.order_no ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-right">{w.pay_state ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{w.price ?? '—'}</td>
-                    <td className="px-2 py-1.5">
-                      <span
-                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                          w.linkval_verified
-                            ? 'bg-emerald-500/15 text-emerald-300'
-                            : 'bg-red-500/15 text-red-300'
-                        }`}
-                      >
-                        {w.linkval_verified ? 'OK' : 'FAIL'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-ink-mute">
-                      {w.processed_at ? '✓' : '—'}
-                    </td>
-                  </tr>
+                  <WebhookRow key={w.id} row={w} onReplayed={load} />
                 ))}
               </tbody>
             </table>
@@ -530,6 +530,75 @@ export default function PaymentSyncTool() {
         <ManualSyncForm onSynced={load} />
       </details>
     </div>
+  );
+}
+
+function WebhookRow({
+  row,
+  onReplayed,
+}: {
+  row: WebhookEventRow;
+  onReplayed: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function onReplay() {
+    setBusy(true);
+    try {
+      const res = await replayWebhookEvent(row.id);
+      if (!res.ok) {
+        toast.error(res.error ?? '재처리 실패');
+        return;
+      }
+      if (res.result?.membership_updated) {
+        toast.success(`재처리 성공 — tier=${res.result.final_membership_tier ?? '?'}`);
+      } else {
+        toast.info(`재처리됨 — ${res.result?.message ?? ''}`);
+      }
+      await onReplayed();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <tr className="border-b border-line/10 last:border-b-0">
+      <td className="px-2 py-1.5 text-ink-mute">
+        {new Date(row.created_at).toLocaleTimeString('ko-KR')}
+      </td>
+      <td className="px-2 py-1.5 font-mono">{row.payapp_mul_no ?? '—'}</td>
+      <td className="px-2 py-1.5 text-right">{row.pay_state ?? '—'}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{row.price ?? '—'}</td>
+      <td className="px-2 py-1.5">
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            row.linkval_verified
+              ? 'bg-emerald-500/15 text-emerald-300'
+              : 'bg-red-500/15 text-red-300'
+          }`}
+        >
+          {row.linkval_verified ? 'OK' : 'FAIL'}
+        </span>
+      </td>
+      <td className="px-2 py-1.5 text-ink-mute">{row.matched_user_email ?? '—'}</td>
+      <td className="px-2 py-1.5">
+        {row.membership_updated ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+            ✓ {row.final_membership_tier ?? '?'}
+          </span>
+        ) : (
+          <span className="text-ink-dim">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 text-red-300">{row.processing_error ?? '—'}</td>
+      <td className="px-2 py-1.5 text-right">
+        <button
+          onClick={onReplay}
+          disabled={busy}
+          className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
+        >
+          {busy ? '…' : '재처리'}
+        </button>
+      </td>
+    </tr>
   );
 }
 

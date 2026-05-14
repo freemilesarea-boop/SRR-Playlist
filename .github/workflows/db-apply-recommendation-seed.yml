@@ -351,11 +351,41 @@ jobs:
               (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                 where n.nspname='public' and p.proname='list_recent_sync_attempts')
                 then 'YES' else 'NO' end);
-            -- admin_sync 가 phone 매칭 5단계 포함하는지 확인
             select 'phone_match_present=' ||
               (case when (select pg_get_functiondef(p.oid) ilike '%public.users u%regexp_replace%phone%'
                           from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                           where n.nspname='public' and p.proname='admin_sync_payapp_payment')
+                    then 'YES' else 'NO' end);
+          SQL
+
+      - name: 1v) 0029 (webhook 진단 컬럼 + _internal apply + replay RPC) 적용
+        run: |
+          set -e
+          echo "== 0029 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0029_webhook_apply_internal.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'event_matched_user_col=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='payapp_webhook_events' and column_name='matched_user_id')
+                then 'YES' else 'NO' end);
+            select 'internal_apply_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='_internal_apply_payapp_paid_event')
+                then 'YES' else 'NO' end);
+            select 'replay_event_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_replay_webhook_event')
+                then 'YES' else 'NO' end);
+            select 'replay_by_mul_no_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_replay_webhook_by_mul_no')
+                then 'YES' else 'NO' end);
+            select 'subscription_type_individual_allowed=' ||
+              (case when (select pg_get_constraintdef(c.oid) ilike '%individual%'
+                          from pg_constraint c join pg_class t on t.oid=c.conrelid
+                          where t.relname='users' and c.conname='users_subscription_type_check')
                     then 'YES' else 'NO' end);
           SQL
 

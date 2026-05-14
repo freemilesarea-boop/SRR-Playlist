@@ -308,7 +308,53 @@ export interface WebhookEventRow {
   linkval_verified: boolean;
   processed_at: string | null;
   reasons: string | null;
+  matched_user_id: string | null;
+  matched_user_email: string | null;
+  matched_order_id: string | null;
+  matched_subscription_id: string | null;
+  membership_updated: boolean;
+  final_membership_tier: string | null;
+  processing_error: string | null;
   created_at: string;
+}
+
+export interface ReplayResult {
+  matched_user_id: string | null;
+  matched_order_id: string | null;
+  matched_subscription_id: string | null;
+  membership_updated: boolean;
+  final_membership_tier: string | null;
+  message: string;
+}
+
+export async function replayWebhookEvent(
+  eventId: string,
+): Promise<{ ok: boolean; result?: ReplayResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_replay_webhook_event', {
+      p_event_id: eventId,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as ReplayResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
+export async function replayWebhookByMulNo(
+  mulNo: string,
+): Promise<{ ok: boolean; result?: ReplayResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_replay_webhook_by_mul_no', {
+      p_mul_no: mulNo,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as ReplayResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
 }
 
 export async function listRecentWebhookEvents(payload: {

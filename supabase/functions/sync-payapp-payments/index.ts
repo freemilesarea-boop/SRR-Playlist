@@ -39,21 +39,88 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// HTML <table> 파서: <thead>/<th> 또는 첫 <tr> 의 <td> 를 헤더로 사용.
+function parseHtmlTable(text: string): Array<Record<string, string>> {
+  const tableMatch = text.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+  if (!tableMatch) return [];
+  const tableHtml = tableMatch[1];
+  const rows: string[][] = [];
+  const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m;
+  while ((m = trRe.exec(tableHtml)) !== null) {
+    const cellRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    const cells: string[] = [];
+    let c;
+    while ((c = cellRe.exec(m[1])) !== null) {
+      cells.push(c[1].replace(/<[^>]+>/g, '').trim());
+    }
+    if (cells.length > 0) rows.push(cells);
+  }
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((h) => h.replace(/\s+/g, '_').toLowerCase());
+  return rows.slice(1).map((r) => {
+    const obj: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      if (r[i] != null) obj[h] = r[i];
+    });
+    return obj;
+  });
+}
+
+// XML 파서: <item>/<row>/<payment> 같은 wrapper element 안의 child element 추출
+function parseXmlRecords(text: string): Array<Record<string, string>> {
+  // 가장 흔한 wrapper 이름들 — PayApp 가 어느 걸 쓰는지 모르므로 후보 순회
+  const wrappers = ['item', 'row', 'payment', 'record', 'list', 'entry'];
+  for (const w of wrappers) {
+    const re = new RegExp(`<${w}[^>]*>([\\s\\S]*?)<\\/${w}>`, 'gi');
+    const out: Array<Record<string, string>> = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const inner = m[1];
+      const obj: Record<string, string> = {};
+      const fieldRe = /<([a-z_][\w]*?)[^>]*>([\s\S]*?)<\/\1>/gi;
+      let f;
+      while ((f = fieldRe.exec(inner)) !== null) {
+        obj[f[1].toLowerCase()] = f[2].replace(/<[^>]+>/g, '').trim();
+      }
+      if (Object.keys(obj).length > 0) out.push(obj);
+    }
+    if (out.length > 0) return out;
+  }
+  return [];
+}
+
 function parsePayappList(text: string): Array<Record<string, string>> {
-  // JSON 시도
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  // JSON
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(trimmed);
     if (Array.isArray(parsed)) return parsed as any[];
     if (Array.isArray(parsed?.list)) return parsed.list;
     if (Array.isArray(parsed?.data)) return parsed.data;
     if (Array.isArray(parsed?.payments)) return parsed.payments;
+    if (Array.isArray(parsed?.result)) return parsed.result;
     if (parsed && typeof parsed === 'object' && (parsed.mul_no || parsed.mulno)) return [parsed as any];
   } catch {
     /* not JSON */
   }
 
-  // URL-encoded multi-record
-  const params = new URLSearchParams(text);
+  // XML
+  if (trimmed.startsWith('<?xml') || /<(item|row|payment|record|entry)[\s>]/i.test(trimmed)) {
+    const xmlRecs = parseXmlRecords(trimmed);
+    if (xmlRecs.length > 0) return xmlRecs;
+  }
+
+  // HTML <table>
+  if (/<table[\s>]/i.test(trimmed)) {
+    const tableRecs = parseHtmlTable(trimmed);
+    if (tableRecs.length > 0) return tableRecs;
+  }
+
+  // URL-encoded multi-record (field_N / field[N] / field:N)
+  const params = new URLSearchParams(trimmed);
   const records = new Map<string, Record<string, string>>();
   const singleton: Record<string, string> = {};
   let multiDetected = false;
@@ -73,6 +140,16 @@ function parsePayappList(text: string): Array<Record<string, string>> {
 
   if (multiDetected) return Array.from(records.values());
   if (singleton.mul_no || singleton.mulno) return [singleton];
+
+  // 마지막 fallback: 줄바꿈 + key=value (PayApp 일부 응답 포맷)
+  const lines = trimmed.split(/\r?\n/).filter((l) => l.trim() && l.includes('='));
+  const obj: Record<string, string> = {};
+  for (const line of lines) {
+    const [k, ...rest] = line.split('=');
+    obj[k.trim()] = rest.join('=').trim();
+  }
+  if (obj.mul_no || obj.mulno) return [obj];
+
   return [];
 }
 
