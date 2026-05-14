@@ -13,10 +13,10 @@ const ABOUT_LINKS: LinkItem[] = [
 ];
 
 const SERVICE_LINKS: LinkItem[] = [
-  { label: '공지사항', href: '#' },
-  { label: '고객센터', href: 'mailto:freemilesarea@gmail.com?subject=스르륵 플리 고객센터' },
-  { label: '이용약관', href: '#' },
-  { label: '개인정보 처리방침', href: '#' },
+  { label: '공지사항', href: '/notice' },
+  { label: '고객센터', href: '/support' },
+  { label: '이용약관', href: '/terms' },
+  { label: '개인정보 처리방침', href: '/privacy' },
 ];
 
 const COMPANY_INFO: { label: string; value: string }[] = [
