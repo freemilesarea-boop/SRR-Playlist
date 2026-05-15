@@ -445,6 +445,15 @@ jobs:
                     then 'YES' else 'NO' end);
           SQL
 
+      - name: 1z) 0033 (admin_member_list 전체 재작성 + DROP+CREATE) 적용
+        run: |
+          set -e
+          echo "== 0033 적용 (이전 시그니처 DROP + 새 시그니처 CREATE) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0033_admin_member_list_full_rewrite.sql
+          echo ""
+          echo "== smoke test =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select count(*) from public.admin_member_list(5, 0, null, null, null);" || echo "smoke test failed (likely auth.uid()=NULL 환경)"
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

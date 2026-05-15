@@ -46,17 +46,17 @@ export interface MemberRow {
   email: string | null;
   nickname: string | null;
   role: 'user' | 'admin';
-  subscription_type: 'free' | 'personal' | 'business';
+  subscription_type: 'free' | 'personal' | 'business' | 'individual';
+  account_type: 'individual' | 'business' | 'artist';
+  membership_tier: 'free' | 'individual' | 'business';
+  signup_completed: boolean;
+  identity_verified: boolean;
+  business_verified: boolean;
+  business_number: string | null;
   created_at: string;
   last_seen_at: string | null;
   total_streams: number;
   total_listened_seconds: number;
-  // 0014 — 회원가입 강화. 0014 미적용 환경에선 RPC 가 안 돌려줄 수 있어 optional.
-  account_type?: 'individual' | 'business';
-  signup_completed?: boolean;
-  identity_verified?: boolean;
-  business_verified?: boolean;
-  business_number?: string | null;
 }
 
 export interface MemberDetail {
@@ -151,12 +151,15 @@ export async function fetchMemberList(opts: {
   plan?: string;
   role?: string;
   limit?: number;
+  offset?: number;
 } = {}): Promise<MemberRow[]> {
+  // 0033 의 새 시그니처 사용: (p_limit, p_offset, p_search, p_plan, p_role)
   const { data, error } = await supabase.rpc('admin_member_list', {
-    search: opts.search ?? null,
-    plan_filter: opts.plan ?? null,
-    role_filter: opts.role ?? null,
-    limit_n: opts.limit ?? 100,
+    p_limit: opts.limit ?? 100,
+    p_offset: opts.offset ?? 0,
+    p_search: opts.search ?? null,
+    p_plan: opts.plan ?? null,
+    p_role: opts.role ?? null,
   });
   if (error) throw error;
   return (data ?? []) as MemberRow[];
@@ -164,7 +167,7 @@ export async function fetchMemberList(opts: {
 
 export async function fetchMemberDetail(userId: string): Promise<MemberDetail | null> {
   const { data, error } = await supabase.rpc('admin_member_detail', {
-    target_user_id: userId,
+    p_user_id: userId,
   });
   if (error) throw error;
   return data as MemberDetail;
