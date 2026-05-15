@@ -547,6 +547,24 @@ jobs:
                     then 'YES' else 'NO' end);
           SQL
 
+      - name: 1ae) 0038 (paid_candidate + admin RPC hotfix DROP+CREATE) 적용
+        run: |
+          set -e
+          echo "== 0038 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0038_payment_candidate_and_dashboard_admin_hotfix.sql
+          echo ""
+          echo "== 4개 RPC 시그니처 확인 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "
+            select proname, pg_get_function_identity_arguments(oid) as args
+            from pg_proc
+            where proname in (
+              'admin_force_apply_paid_candidate',
+              'admin_force_activate_membership',
+              'admin_revenue_summary',
+              'admin_dashboard_stats'
+            ) order by proname;
+          "
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
