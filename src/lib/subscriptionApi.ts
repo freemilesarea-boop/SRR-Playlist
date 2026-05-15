@@ -108,11 +108,11 @@ export async function adminSyncPayappPayment(payload: {
       p_paid_at: payload.paid_at ?? new Date().toISOString(),
       p_goodname: payload.goodname ?? null,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_sync_payapp_payment', error) };
     const row = (Array.isArray(data) ? data[0] : data) as AdminSyncPaymentResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_sync_payapp_payment', e) };
   }
 }
 
@@ -145,13 +145,10 @@ export async function listManualPaymentImports(
 ): Promise<RpcListResult<ManualPaymentImportRow>> {
   try {
     const { data, error } = await supabase.rpc('list_manual_payment_imports', { p_limit: limit });
-    if (error) {
-      if (import.meta.env.DEV) console.error('[listManualPaymentImports]', error);
-      return { rows: [], error: error.message };
-    }
+    if (error) return { rows: [], error: rpcErrorDetail('list_manual_payment_imports', error) };
     return { rows: (data ?? []) as ManualPaymentImportRow[], error: null };
   } catch (e) {
-    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
+    return { rows: [], error: rpcErrorDetail('list_manual_payment_imports', e) };
   }
 }
 
@@ -258,11 +255,11 @@ export async function linkUnmatchedImport(
       p_import_id: importId,
       p_user_id: userId,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_link_unmatched_import', error) };
     const row = (Array.isArray(data) ? data[0] : data) as LinkUnmatchedResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_link_unmatched_import', e) };
   }
 }
 
@@ -286,13 +283,10 @@ export async function listRecentSyncAttempts(
 ): Promise<RpcListResult<SyncAttemptRow>> {
   try {
     const { data, error } = await supabase.rpc('list_recent_sync_attempts', { p_limit: limit });
-    if (error) {
-      if (import.meta.env.DEV) console.error('[listRecentSyncAttempts]', error);
-      return { rows: [], error: error.message };
-    }
+    if (error) return { rows: [], error: rpcErrorDetail('list_recent_sync_attempts', error) };
     return { rows: (data ?? []) as SyncAttemptRow[], error: null };
   } catch (e) {
-    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
+    return { rows: [], error: rpcErrorDetail('list_recent_sync_attempts', e) };
   }
 }
 
@@ -330,11 +324,11 @@ export async function forceApplyPaidCandidate(
       p_event_id: eventId,
       p_reason: reason ?? null,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_force_apply_paid_candidate', error) };
     const row = (Array.isArray(data) ? data[0] : data) as ForceActivateResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_force_apply_paid_candidate', e) };
   }
 }
 
@@ -345,6 +339,27 @@ export interface ReplayResult {
   membership_updated: boolean;
   final_membership_tier: string | null;
   message: string;
+  // 0036 admin_replay_webhook_by_mul_no 추가 필드 (event-단일 replay 에는 없음, optional)
+  final_status?: string;
+  processed_count?: number;
+  paid_count?: number;
+  refund_count?: number;
+  pending_count?: number;
+  error_count?: number;
+}
+
+// PG/PostgREST 에러를 상세히 포착 — UI 에 어떤 RPC 가 어떤 SQLSTATE/메시지로 실패했는지 표시
+function rpcErrorDetail(name: string, e: unknown): string {
+  const x = (e ?? {}) as { message?: string; code?: string; details?: string; hint?: string; status?: number };
+  const parts: string[] = [name];
+  if (x.code) parts.push(`[${x.code}]`);
+  if (x.status) parts.push(`HTTP ${x.status}`);
+  parts.push(x.message ?? String(e));
+  if (x.details && x.details !== x.message) parts.push(`details: ${x.details}`);
+  if (x.hint) parts.push(`hint: ${x.hint}`);
+  const full = parts.join(' ');
+  if (import.meta.env.DEV) console.error('[RPC failed]', name, e);
+  return full;
 }
 
 export async function replayWebhookEvent(
@@ -354,11 +369,11 @@ export async function replayWebhookEvent(
     const { data, error } = await supabase.rpc('admin_replay_webhook_event', {
       p_event_id: eventId,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_replay_webhook_event', error) };
     const row = (Array.isArray(data) ? data[0] : data) as ReplayResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_replay_webhook_event', e) };
   }
 }
 
@@ -369,11 +384,11 @@ export async function replayWebhookByMulNo(
     const { data, error } = await supabase.rpc('admin_replay_webhook_by_mul_no', {
       p_mul_no: mulNo,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_replay_webhook_by_mul_no', error) };
     const row = (Array.isArray(data) ? data[0] : data) as ReplayResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_replay_webhook_by_mul_no', e) };
   }
 }
 
@@ -401,11 +416,11 @@ export async function forceActivateMembership(payload: {
       p_reason: payload.reason ?? null,
       p_amount: payload.amount ?? null,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: rpcErrorDetail('admin_force_activate_membership', error) };
     const row = (Array.isArray(data) ? data[0] : data) as ForceActivateResult | undefined;
     return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+    return { ok: false, error: rpcErrorDetail('admin_force_activate_membership', e) };
   }
 }
 
@@ -420,12 +435,9 @@ export async function listRecentWebhookEvents(payload: {
       p_minutes: payload.minutes ?? 60,
       p_limit: payload.limit ?? 50,
     });
-    if (error) {
-      if (import.meta.env.DEV) console.error('[listRecentWebhookEvents]', error);
-      return { rows: [], error: error.message };
-    }
+    if (error) return { rows: [], error: rpcErrorDetail('list_recent_webhook_events', error) };
     return { rows: (data ?? []) as WebhookEventRow[], error: null };
   } catch (e) {
-    return { rows: [], error: e instanceof Error ? e.message : 'unknown' };
+    return { rows: [], error: rpcErrorDetail('list_recent_webhook_events', e) };
   }
 }

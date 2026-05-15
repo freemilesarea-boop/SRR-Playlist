@@ -88,6 +88,13 @@ export default function PaymentSyncTool() {
       if (attemptsList.error) errs.push({ name: 'list_recent_sync_attempts', message: attemptsList.error });
       if (webhooks.error) errs.push({ name: 'list_recent_webhook_events', message: webhooks.error });
       setRpcErrors(errs);
+      // 콘솔 + 토스트로 즉시 가시화
+      errs.forEach((e) => {
+        console.error('[admin RPC failed]', e.name, e.message);
+      });
+      if (errs.length > 0) {
+        toast.error(`진단 RPC ${errs.length}건 실패 — ${errs[0].name} : ${errs[0].message.slice(0, 120)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -142,23 +149,34 @@ export default function PaymentSyncTool() {
         </p>
       </div>
 
-      {/* RPC 호출 실패 배너 — 마이그레이션 누락 진단용 */}
+      {/* RPC 호출 실패 배너 — 정확한 실패 RPC 이름 + postgres 에러 메시지 노출 */}
       {rpcErrors.length > 0 && (
-        <div className="rounded-2xl bg-red-500/10 p-3 ring-1 ring-red-500/30">
-          <p className="text-xs font-bold text-red-200">
+        <div className="rounded-2xl bg-red-500/10 p-4 ring-2 ring-red-500/50">
+          <p className="text-sm font-bold text-red-200">
             ⚠️ 진단용 RPC 가 실패했어요 ({rpcErrors.length}건)
           </p>
           <p className="mt-1 text-[11px] text-red-100/85">
-            DB 마이그레이션(0026/0027/0028) 이 운영 DB 에 적용되지 않았을 수 있습니다. GitHub Actions
-            의 "DB · 추천 메타데이터 시드 적용" 워크플로를 실행해주세요.
+            DB 마이그레이션(0026~0039) 이 운영 DB 에 적용되지 않았거나 시그니처가 맞지 않습니다.
+            아래 정확한 RPC 이름과 postgres 에러 메시지를 확인 후 누락된 마이그레이션을 적용하세요.
           </p>
-          <ul className="mt-2 space-y-0.5 text-[11px] text-red-100/85">
+          <ul className="mt-2 space-y-2">
             {rpcErrors.map((e, i) => (
-              <li key={i} className="font-mono">
-                {e.name}: {e.message}
+              <li key={i} className="rounded-md bg-red-500/15 p-2 ring-1 ring-red-500/30">
+                <p className="font-mono text-[11px] font-bold text-red-200">{e.name}</p>
+                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-[10px] text-red-100/85">
+                  {e.message}
+                </pre>
               </li>
             ))}
           </ul>
+          <details className="mt-2 text-[11px] text-red-100/80">
+            <summary className="cursor-pointer">해결 방법</summary>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+              <li>GitHub Actions → 'DB · 추천 메타데이터 시드 적용' 워크플로 실행</li>
+              <li>또는 SQL Editor 에 supabase/payment_hotfix.sql 통째 붙여넣고 Run</li>
+              <li>적용 후 페이지 새로고침</li>
+            </ol>
+          </details>
         </div>
       )}
 

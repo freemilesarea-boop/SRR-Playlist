@@ -565,6 +565,15 @@ jobs:
             ) order by proname;
           "
 
+      - name: 1af) 0039 (admin_daily_series → payment_orders 기반) 적용
+        run: |
+          set -e
+          echo "== 0039 적용 (7일 매출 그래프 payment_orders 기반 재작성) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0039_daily_series_payment_orders.sql
+          echo ""
+          echo "== smoke test =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select d, revenue from public.admin_daily_series(7);" || echo "(skip: auth.uid()=NULL 환경)"
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

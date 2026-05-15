@@ -633,3 +633,49 @@ select
   (public.admin_dashboard_stats()->>'today_revenue')::int as today,
   (public.admin_dashboard_stats()->>'month_revenue')::int as month,
   (public.admin_dashboard_stats()->>'total_revenue')::int as total;
+
+
+-- ============================================
+-- [추가] 0039 — 최근 7일 매출 그래프 payment_orders 기반 재작성
+-- (필요 시 위 0038 적용 후 이 블록도 함께 Run)
+-- ============================================
+drop function if exists public.admin_daily_series(int);
+drop function if exists public.admin_daily_series(integer);
+
+create or replace function public.admin_daily_series(days int default 7)
+returns table(d date, visitors bigint, unique_visitors bigint, streams bigint, revenue bigint)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  begin
+    if not public._internal_is_admin_caller() then raise exception 'admin only'; end if;
+  exception when undefined_function then
+    if not exists (select 1 from public.users as u where u.id = auth.uid() and u.role='admin') then
+      raise exception 'admin only';
+    end if;
+  end;
+
+  return query
+  with day_series as (
+    select ((current_date at time zone 'Asia/Seoul')::date - (offs))::date as d
+    from generate_series(greatest(1, days) - 1, 0, -1) as g(offs)
+  )
+  select ds.d,
+    coalesce((select count(*)::bigint from public.visitor_events as ve
+              where (ve.created_at at time zone 'Asia/Seoul')::date = ds.d), 0),
+    coalesce((select count(distinct ve.session_id)::bigint from public.visitor_events as ve
+              where (ve.created_at at time zone 'Asia/Seoul')::date = ds.d), 0),
+    coalesce((select count(*)::bigint from public.stream_events as se
+              where (se.created_at at time zone 'Asia/Seoul')::date = ds.d
+                and se.event_type='milestone_30s'), 0),
+    coalesce((select sum(po.amount)::bigint from public.payment_orders as po
+              where po.status='paid' and po.refunded_at is null
+                and po.paid_at is not null
+                and (po.paid_at at time zone 'Asia/Seoul')::date = ds.d), 0)
+  from day_series ds order by ds.d asc;
+end;
+$$;
+grant execute on function public.admin_daily_series(int) to authenticated;
+
+-- 검증
+select d, revenue from public.admin_daily_series(7);
