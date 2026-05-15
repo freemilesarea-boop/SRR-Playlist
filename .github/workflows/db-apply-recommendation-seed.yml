@@ -516,6 +516,37 @@ jobs:
                 then 'YES' else 'NO' end);
           SQL
 
+      - name: 1ad) 0037 (paid_candidate trigger + payment_orders 기반 매출) 적용
+        run: |
+          set -e
+          echo "== 0037 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0037_paid_candidate_and_revenue_fix.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'paid_candidate_col=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='payapp_webhook_events' and column_name='paid_candidate')
+                then 'YES' else 'NO' end);
+            select 'approval_no_col=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='payment_orders' and column_name='approval_no')
+                then 'YES' else 'NO' end);
+            select 'compute_trigger=' ||
+              (case when exists (select 1 from pg_trigger
+                where tgname='trg_payapp_webhook_event_compute')
+                then 'YES' else 'NO' end);
+            select 'force_apply_candidate_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_force_apply_paid_candidate')
+                then 'YES' else 'NO' end);
+            select 'revenue_uses_orders=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%payment_orders as po%status%paid%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='admin_revenue_summary')
+                    then 'YES' else 'NO' end);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

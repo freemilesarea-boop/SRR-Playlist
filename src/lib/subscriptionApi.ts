@@ -304,6 +304,7 @@ export interface WebhookEventRow {
   payapp_mul_no: string | null;
   payapp_rebill_no: string | null;
   pay_state: number | null;
+  state_label: string | null;
   price: number | null;
   linkval_verified: boolean;
   processed_at: string | null;
@@ -315,7 +316,26 @@ export interface WebhookEventRow {
   membership_updated: boolean;
   final_membership_tier: string | null;
   processing_error: string | null;
+  paid_candidate: boolean;
+  approval_no: string | null;
   created_at: string;
+}
+
+export async function forceApplyPaidCandidate(
+  eventId: string,
+  reason?: string,
+): Promise<{ ok: boolean; result?: ForceActivateResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_force_apply_paid_candidate', {
+      p_event_id: eventId,
+      p_reason: reason ?? null,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as ForceActivateResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
 }
 
 export interface ReplayResult {
