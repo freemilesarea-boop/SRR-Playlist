@@ -609,8 +609,15 @@ function WebhookRow({
   }
 
   const state = stateBadge(row.pay_state);
+  const isRefundOrCancel =
+    row.pay_state != null && [8, 9, 32, 70, 71].includes(row.pay_state);
+  const rowTone = isRefundOrCancel
+    ? 'bg-red-500/5 hover:bg-red-500/10'
+    : row.pay_state === 64 && row.membership_updated
+      ? 'bg-emerald-500/5'
+      : '';
   return (
-    <tr className="border-b border-line/10 last:border-b-0">
+    <tr className={`border-b border-line/10 last:border-b-0 ${rowTone}`}>
       <td className="px-2 py-1.5 text-ink-mute">
         {new Date(row.created_at).toLocaleTimeString('ko-KR')}
       </td>
@@ -634,9 +641,13 @@ function WebhookRow({
       </td>
       <td className="px-2 py-1.5 text-ink-mute">{row.matched_user_email ?? '—'}</td>
       <td className="px-2 py-1.5">
-        {row.membership_updated ? (
+        {row.membership_updated && row.final_membership_tier && row.final_membership_tier !== 'free' ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-            ✓ {row.final_membership_tier ?? '?'}
+            ✓ {row.final_membership_tier}
+          </span>
+        ) : row.membership_updated && row.final_membership_tier === 'free' ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
+            ⊘ free (회수)
           </span>
         ) : (
           <span className="text-ink-dim">—</span>
@@ -653,16 +664,19 @@ function WebhookRow({
           >
             {busy ? '…' : '재처리'}
           </button>
-          {row.matched_user_id && !row.membership_updated && (
-            <button
-              onClick={onForce}
-              disabled={busy}
-              className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
-              title="state=64 미도착 시 사용. user_id 매칭된 상태에서 강제 승인."
-            >
-              강제승인
-            </button>
-          )}
+          {row.matched_user_id &&
+            !row.membership_updated &&
+            row.pay_state != null &&
+            [1, 4, 10].includes(row.pay_state) && (
+              <button
+                onClick={onForce}
+                disabled={busy}
+                className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
+                title="예외 처리: pending 상태 + PayApp 관리자에서 결제완료 확인된 경우에만 사용"
+              >
+                강제승인
+              </button>
+            )}
         </div>
       </td>
     </tr>

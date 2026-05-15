@@ -73,9 +73,32 @@ function normalizePayState(raw: string | null | undefined): number | null {
 //
 // 주의: 이전 코드는 state=4 도 paid 로 잘못 처리. 실제로는 state=64 만 paid.
 //       state=64 가 안 들어오는 케이스는 admin_force_activate_membership 으로 복구.
-const PAID_STATES = new Set<number>([64]);
-const PENDING_STATES = new Set<number>([1, 4]);
-const CANCEL_STATES = new Set<number>([9, 70, 71]);
+// 상태머신 정식 정의 (0036 운영 확정)
+const PAYAPP_PENDING_STATES = new Set<number>([1, 4, 10]);
+const PAYAPP_PAID_STATES = new Set<number>([64]);
+const PAYAPP_CANCEL_STATES = new Set<number>([8, 32]);
+const PAYAPP_REFUND_STATES = new Set<number>([9, 70, 71]);
+const PAYAPP_ACTIONABLE_STATES = new Set<number>([
+  ...PAYAPP_PAID_STATES,
+  ...PAYAPP_CANCEL_STATES,
+  ...PAYAPP_REFUND_STATES,
+]);
+
+function stateLabel(state: number | null): string {
+  if (state == null) return 'unknown';
+  switch (state) {
+    case 1: return '요청수신';
+    case 4: return '승인대기';
+    case 8: return '요청취소';
+    case 9: return '승인취소';
+    case 10: return '입금대기';
+    case 32: return '요청취소';
+    case 64: return '승인완료';
+    case 70: return '환불';
+    case 71: return '환불';
+    default: return 'unknown';
+  }
+}
 
 function planFromAmount(amount: number | null): 'individual' | 'business' | null {
   if (amount === 4900) return 'individual';
@@ -223,65 +246,71 @@ serve(async (req) => {
   //   order 있고 검증 실패 → price 위변조 의심 → 저장만 하고 종료
   //   order 없고 paid + mul_no → 부분 검증(userid+linkval) 통과시 진행
   const partialVerifyOk = verification.userid_ok && verification.linkval_ok && verification.linkkey_ok !== 'fail';
-  const isPaidState = payState != null && PAID_STATES.has(payState);
+  const isPaidState = payState != null && PAYAPP_PAID_STATES.has(payState);
+  const isRefundState = payState != null && PAYAPP_REFUND_STATES.has(payState);
+  const isCancelState = payState != null && PAYAPP_CANCEL_STATES.has(payState);
+  const isPendingState = payState != null && PAYAPP_PENDING_STATES.has(payState);
+  const isActionable = payState != null && PAYAPP_ACTIONABLE_STATES.has(payState);
+  const label = stateLabel(payState);
+
   if (!verification.ok) {
-    if (!order && partialVerifyOk && isPaidState && mulNo) {
-      // fall through
+    if (!order && partialVerifyOk && isActionable && mulNo) {
+      // fall through to router 처리
     } else {
       console.warn('[payapp-feedback] verification failed:', verification.reasons);
       await sb
         .from('payapp_webhook_events')
-        .update({ processed_at: isoNow(), processing_error: 'verification_failed: ' + verification.reasons.join(',') })
+        .update({
+          processed_at: isoNow(),
+          state_label: label,
+          processing_error: 'verification_failed: ' + verification.reasons.join(','),
+        })
         .eq('id', insertedEvent?.id);
       return SUCCESS();
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // paid state (4 또는 64) 처리:
-  //   _internal_apply_payapp_paid_event RPC 호출.
-  //   order_no 있으면 1순위로 사용. 없어도 mul_no/email/phone 순으로 매칭.
-  //   매칭 성공 → membership_tier 적용. 실패 → manual_imports 로 enqueue.
-  //   결과를 webhook event row 에 writeback.
+  // 상태머신 처리 — _internal_apply_payapp_event(router) RPC 호출.
+  //   paid (64)              → membership 활성화
+  //   refund (9, 70, 71)     → membership 회수
+  //   cancel (8, 32)         → 권한 변경 없음 (이미 결제 전)
+  //   pending (1, 4, 10)     → 권한 변경 없음
   // ─────────────────────────────────────────────────────────────
-  if (isPaidState && mulNo) {
+
+  // 모든 필드 후보 확장 — refund/cancel 전용 키 포함
+  const buyerEmail = pickField(payload, [
+    'recvemail', 'buyer_email', 'email', 'recv_email', 'useremail', 'reqemail',
+    '구매자이메일',
+  ]);
+  const buyerPhone = pickField(payload, [
+    'recvphone', 'phone', 'buyer_phone', 'recv_phone', 'reqphone',
+    'hp', 'cellphone', 'tel', 'mobile',
+    'receiver_phone', 'receiverphone',
+    '구매자번호', '구매자전화번호',
+  ]);
+  const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
+  const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no', '승인번호']);
+  const eventAtRaw = pickField(payload, [
+    'paid_at', 'pay_date', 'paydate', 'completedate',
+    'cancel_at', 'canceldate', 'refunded_at', 'refunddate',
+  ]);
+  const eventAt = eventAtRaw
+    ? new Date(eventAtRaw.replace(' ', 'T') + (eventAtRaw.includes('+') ? '' : '+09:00')).toISOString()
+    : isoNow();
+
+  if (isActionable && mulNo && payState != null) {
     const planType = planFromAmount(priceNum) ?? (order?.plan_type as 'individual' | 'business' | undefined);
     const amount = priceNum ?? order?.amount ?? null;
-    if (!planType || !amount) {
-      await sb
-        .from('payapp_webhook_events')
-        .update({
-          processed_at: isoNow(),
-          processing_error: `unsupported amount ${amount} or plan ${planType}`,
-        })
-        .eq('id', insertedEvent?.id);
-      return SUCCESS();
-    }
 
-    const buyerEmail = pickField(payload, [
-      'recvemail', 'buyer_email', 'email', 'recv_email', 'useremail', 'reqemail',
-      '구매자이메일',
-    ]);
-    const buyerPhone = pickField(payload, [
-      'recvphone', 'phone', 'buyer_phone', 'recv_phone', 'reqphone',
-      'hp', 'cellphone', 'tel', 'mobile',
-      'receiver_phone', 'receiverphone',
-      '구매자번호', '구매자전화번호',
-    ]);
-    const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
-    const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no', '승인번호']);
-    const paidAtRaw = pickField(payload, ['paid_at', 'pay_date', 'paydate', 'completedate']);
-    const paidAt = paidAtRaw
-      ? new Date(paidAtRaw.replace(' ', 'T') + (paidAtRaw.includes('+') ? '' : '+09:00')).toISOString()
-      : isoNow();
-
-    const { data: applyData, error: applyErr } = await sb.rpc('_internal_apply_payapp_paid_event', {
+    const { data: applyData, error: applyErr } = await sb.rpc('_internal_apply_payapp_event', {
       p_payapp_mul_no: mulNo,
+      p_pay_state: payState,
       p_amount: amount,
-      p_plan_type: planType,
+      p_plan_type: planType ?? 'individual',
       p_buyer_email: buyerEmail,
       p_buyer_phone: buyerPhone,
-      p_paid_at: paidAt,
+      p_event_at: eventAt,
       p_approval_no: approvalNo,
       p_goodname: goodname,
       p_order_no: orderNo,
@@ -295,24 +324,26 @@ serve(async (req) => {
           matched_subscription_id: string | null;
           membership_updated: boolean;
           final_membership_tier: string | null;
+          final_status: string;
           message: string;
         }
       | undefined;
 
     if (applyErr || !row) {
-      console.warn('[payapp-feedback] _internal apply failed:', applyErr?.message);
+      console.warn('[payapp-feedback] router apply failed:', applyErr?.message);
       await sb
         .from('payapp_webhook_events')
         .update({
           processed_at: isoNow(),
-          processing_error: applyErr?.message ?? 'internal apply returned empty',
+          state_label: label,
+          processing_error: applyErr?.message ?? 'router returned empty',
         })
         .eq('id', insertedEvent?.id);
       return SUCCESS();
     }
 
-    // 매칭 실패 → manual_imports 로 enqueue (UI 에서 1-클릭 연결)
-    if (!row.matched_user_id) {
+    // paid + 매칭 실패 → manual_imports 큐 (UI 1-클릭 연결)
+    if (isPaidState && !row.matched_user_id && amount && planType) {
       await sb.from('payapp_manual_payment_imports').upsert(
         {
           payapp_mul_no: mulNo,
@@ -322,7 +353,7 @@ serve(async (req) => {
           amount,
           plan_type: planType,
           goodname,
-          paid_at: paidAt,
+          paid_at: eventAt,
           status: 'unmatched',
           raw_payload: { ...payload, _source: 'webhook_unmatched' },
           created_by: null,
@@ -340,6 +371,7 @@ serve(async (req) => {
         matched_subscription_id: row.matched_subscription_id,
         membership_updated: row.membership_updated,
         final_membership_tier: row.final_membership_tier,
+        state_label: label,
         processing_error: row.membership_updated ? null : row.message,
         processed_at: isoNow(),
       })
@@ -348,63 +380,41 @@ serve(async (req) => {
     return SUCCESS();
   }
 
-  // 이하: paid 가 아닌 경우 — order 가 있어야만 기존 per-state 처리
+  // 이하: pending state (1, 4, 10) — order 있으면 status 만 갱신, 권한 변경 없음
   if (!order) {
     await sb
       .from('payapp_webhook_events')
-      .update({ processed_at: isoNow() })
+      .update({ processed_at: isoNow(), state_label: label })
       .eq('id', insertedEvent?.id);
     return SUCCESS();
   }
 
-  // --- paid 가 아닌 state 처리 (order 필수) ---
-  //     paid (64) 는 위 isPaidState 블록에서 _internal RPC 로 일괄 처리되었음.
-  //     state=1/4 는 승인대기 — 권한 변경 없이 order/subscription pending 으로만 표시.
   if (payState === 1 || payState === 4) {
-    await sb.from('payment_orders').update({ status: 'requested', raw_response: payload }).eq('id', order.id);
+    await sb.from('payment_orders')
+      .update({ status: 'requested', raw_response: payload, payapp_state: payState, payapp_state_label: label })
+      .eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
-        .update({ status: 'pending', payapp_pay_state: payState })
+        .update({ status: 'pending', payapp_pay_state: payState, payapp_state_label: label })
         .eq('id', order.subscription_id);
     }
   } else if (payState === 10) {
-    // 가상계좌 대기
-    await sb.from('payment_orders').update({ status: 'waiting', raw_response: payload }).eq('id', order.id);
+    await sb.from('payment_orders')
+      .update({ status: 'waiting', raw_response: payload, payapp_state: 10, payapp_state_label: label })
+      .eq('id', order.id);
     if (order.subscription_id) {
       await sb
         .from('subscriptions')
-        .update({ status: 'payment_waiting', payapp_pay_state: payState })
+        .update({ status: 'payment_waiting', payapp_pay_state: 10, payapp_state_label: label })
         .eq('id', order.subscription_id);
     }
-  } else if (payState === 8 || payState === 32) {
-    // 요청 취소 — 결제 완료 전이므로 권한 변경 없음
-    await sb.from('payment_orders').update({ status: 'canceled', raw_response: payload }).eq('id', order.id);
-    if (order.subscription_id) {
-      await sb
-        .from('subscriptions')
-        .update({ status: 'canceled', canceled_at: isoNow(), payapp_pay_state: payState })
-        .eq('id', order.subscription_id);
-    }
-  } else if (payState != null && CANCEL_STATES.has(payState)) {
-    // 승인 취소 / 부분 취소 → 권한 제거 (단, 64 는 paid 로 분류되어 여기 안 옴)
-    await sb.from('payment_orders').update({ status: 'canceled', raw_response: payload }).eq('id', order.id);
-    if (order.subscription_id) {
-      await sb
-        .from('subscriptions')
-        .update({ status: 'canceled', canceled_at: isoNow(), payapp_pay_state: payState })
-        .eq('id', order.subscription_id);
-    }
-    await sb
-      .from('users')
-      .update({ membership_tier: 'free', subscription_type: 'free' })
-      .eq('id', order.user_id);
   }
-  // 그 외 pay_state — 이벤트만 기록
+  // isActionable 가 false 이고 pending 도 아닌 unknown state → 이벤트만 기록
 
   await sb
     .from('payapp_webhook_events')
-    .update({ processed_at: isoNow() })
+    .update({ processed_at: isoNow(), state_label: label })
     .eq('id', insertedEvent?.id);
 
   return SUCCESS();
