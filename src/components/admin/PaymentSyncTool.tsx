@@ -21,7 +21,6 @@ import {
   replayWebhookEvent,
   replayWebhookByMulNo,
   forceActivateMembership,
-  forceApplyPaidCandidate,
   type AdminSyncPaymentResult,
   type AutoSyncSummary,
   type ManualPaymentImportRow,
@@ -565,8 +564,15 @@ const STATE_LABEL: Record<number, { label: string; tone: string }> = {
   71: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
 };
 
-function stateBadge(state: number | null): { label: string; tone: string } {
+function stateBadge(
+  state: number | null,
+  approval_no?: string | null,
+): { label: string; tone: string } {
   if (state == null) return { label: '—', tone: 'text-ink-dim' };
+  // 정책: state=4 + approval_no → 결제완료 (자동 처리됨)
+  if (state === 4 && approval_no && approval_no.length > 0) {
+    return { label: '결제완료', tone: 'bg-emerald-500/15 text-emerald-300' };
+  }
   return STATE_LABEL[state] ?? { label: String(state), tone: 'bg-ink/10 text-ink-mute' };
 }
 
@@ -627,33 +633,7 @@ function WebhookRow({
     }
   }
 
-  async function onApproveCandidate() {
-    if (
-      !window.confirm(
-        `PayApp 관리자 화면에서 결제완료 확인 후 진행하세요.\n\nmul_no: ${row.payapp_mul_no}\n승인번호: ${row.approval_no ?? '—'}\n금액: ${row.price?.toLocaleString()}원\n\n계속할까요?`,
-      )
-    )
-      return;
-    const reason = window.prompt(
-      '결제완료 확인 사유 (감사 로그):',
-      `state=64 미도착 — PayApp 관리자 확인 완료 (approval_no=${row.approval_no})`,
-    );
-    if (!reason) return;
-    setBusy(true);
-    try {
-      const res = await forceApplyPaidCandidate(row.id, reason);
-      if (!res.ok) {
-        toast.error(res.error ?? '결제 확인 실패');
-        return;
-      }
-      toast.success(`결제 확인 완료 — tier=${res.result?.final_membership_tier ?? '?'}`);
-      await onReplayed();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const state = stateBadge(row.pay_state);
+  const state = stateBadge(row.pay_state, row.approval_no);
   const isRefundOrCancel =
     row.pay_state != null && [8, 9, 32, 70, 71].includes(row.pay_state);
   const rowTone = isRefundOrCancel
@@ -672,12 +652,9 @@ function WebhookRow({
           <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${state.tone}`}>
             {row.pay_state ?? '—'} · {state.label}
           </span>
-          {row.paid_candidate && !row.membership_updated && (
-            <span
-              className="inline-flex rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300"
-              title={`승인번호 ${row.approval_no} 존재 — 결제완료 후보`}
-            >
-              ⭐ 결제완료 후보
+          {row.approval_no && (
+            <span className="text-[9px] font-mono text-ink-dim" title="승인번호">
+              승인 {row.approval_no}
             </span>
           )}
         </div>
@@ -715,36 +692,21 @@ function WebhookRow({
             onClick={onReplay}
             disabled={busy}
             className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
-            title="저장된 webhook payload 로 매칭+적용 재시도"
+            title="저장된 webhook payload 로 라우터 재실행"
           >
             {busy ? '…' : '재처리'}
           </button>
-          {/* 결제완료 후보: state=4 + approval_no 존재 → 1-클릭 승인 */}
-          {row.paid_candidate && !row.membership_updated && (
+          {/* 강제승인 (예외 처리용): matched user 있는데 자동 적용 안 된 케이스 */}
+          {row.matched_user_id && !row.membership_updated && row.pay_state != null && (
             <button
-              onClick={onApproveCandidate}
+              onClick={onForce}
               disabled={busy}
-              className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
-              title="state=4 + approval_no 존재. PayApp 관리자 결제완료 확인 후 클릭."
+              className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
+              title="예외 처리용. 일반 결제는 자동 처리됨 — 자동 처리 실패 시에만 사용."
             >
-              결제완료 확인
+              강제승인
             </button>
           )}
-          {/* 일반 강제승인: paid_candidate 아닌 pending 상태 */}
-          {row.matched_user_id &&
-            !row.membership_updated &&
-            !row.paid_candidate &&
-            row.pay_state != null &&
-            [1, 4, 10].includes(row.pay_state) && (
-              <button
-                onClick={onForce}
-                disabled={busy}
-                className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
-                title="예외 처리: pending 상태 + 외부 확인된 경우만 사용"
-              >
-                강제승인
-              </button>
-            )}
         </div>
       </td>
     </tr>

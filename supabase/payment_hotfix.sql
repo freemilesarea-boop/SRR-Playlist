@@ -679,3 +679,119 @@ grant execute on function public.admin_daily_series(int) to authenticated;
 
 -- 검증
 select d, revenue from public.admin_daily_series(7);
+
+
+-- ============================================
+-- [추가] 0040 — 정책 단순화 (state=4+approval_no 도 자동 paid)
+-- ============================================
+drop function if exists public._internal_apply_payapp_event(text, integer, integer, text, text, text, timestamptz, text, text, text, text);
+
+create or replace function public._internal_apply_payapp_event(
+  p_payapp_mul_no text, p_pay_state integer,
+  p_amount integer default null, p_plan_type text default 'individual',
+  p_buyer_email text default null, p_buyer_phone text default null,
+  p_event_at timestamptz default now(), p_approval_no text default null,
+  p_goodname text default null, p_order_no text default null,
+  p_source text default 'unknown'
+)
+returns table(
+  matched_user_id uuid, matched_order_id uuid, matched_subscription_id uuid,
+  membership_updated boolean, final_membership_tier text,
+  final_status text, message text
+)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_result record;
+  v_is_state_4_paid boolean := (
+    p_pay_state = 4 and p_approval_no is not null
+    and length(btrim(p_approval_no)) > 0 and coalesce(p_amount, 0) > 0
+  );
+begin
+  if p_pay_state = 64 or v_is_state_4_paid then
+    if p_amount is null or p_amount <= 0 then
+      return query select null::uuid, null::uuid, null::uuid, false, null::text, 'paid'::text,
+        'paid event missing/invalid amount'::text;
+      return;
+    end if;
+    select * into v_result from public._internal_apply_payapp_paid_event(
+      p_payapp_mul_no := p_payapp_mul_no, p_amount := p_amount, p_plan_type := p_plan_type,
+      p_buyer_email := p_buyer_email, p_buyer_phone := p_buyer_phone,
+      p_paid_at := p_event_at, p_approval_no := p_approval_no,
+      p_goodname := p_goodname, p_order_no := p_order_no, p_source := p_source
+    );
+    return query select v_result.matched_user_id, v_result.matched_order_id, v_result.matched_subscription_id,
+      v_result.membership_updated, v_result.final_membership_tier, 'paid'::text, v_result.message;
+    return;
+  end if;
+  if p_pay_state in (8, 9, 32, 70, 71) then
+    select * into v_result from public._internal_apply_payapp_refund_event(
+      p_payapp_mul_no := p_payapp_mul_no, p_pay_state := p_pay_state,
+      p_event_at := p_event_at, p_source := p_source
+    );
+    return query select v_result.matched_user_id, v_result.matched_order_id, v_result.matched_subscription_id,
+      v_result.membership_updated, v_result.final_membership_tier,
+      case when p_pay_state in (9,70,71) then 'refunded' else 'canceled' end, v_result.message;
+    return;
+  end if;
+  if p_pay_state in (1, 4, 10) then
+    return query select null::uuid, null::uuid, null::uuid, false, null::text,
+      'pending'::text,
+      ('pending state ' || p_pay_state || ' — no membership change' ||
+       case when p_pay_state = 4 then ' (no approval_no)' else '' end)::text;
+    return;
+  end if;
+  return query select null::uuid, null::uuid, null::uuid, false, null::text,
+    'unknown'::text, ('unknown pay_state ' || p_pay_state)::text;
+end;
+$$;
+revoke execute on function public._internal_apply_payapp_event(text, integer, integer, text, text, text, timestamptz, text, text, text, text) from public;
+grant execute on function public._internal_apply_payapp_event(text, integer, integer, text, text, text, timestamptz, text, text, text, text) to service_role;
+
+-- 백필: state=4 + approval_no + membership 미적용 → 모두 자동 paid 처리
+do $$
+declare v_e record; v_payload jsonb; v_amount int; v_plan text; v_r record;
+begin
+  for v_e in
+    select * from public.payapp_webhook_events
+    where pay_state=4 and approval_no is not null
+      and length(btrim(approval_no)) > 0
+      and coalesce(membership_updated, false) = false
+      and coalesce(price, 0) > 0
+    order by created_at asc
+  loop
+    v_payload := coalesce(v_e.raw_payload, '{}'::jsonb);
+    v_amount := coalesce(v_e.price, nullif(v_payload->>'price','')::int);
+    v_plan := case when v_amount = 6900 then 'business' else 'individual' end;
+    begin
+      select * into v_r from public._internal_apply_payapp_event(
+        p_payapp_mul_no := v_e.payapp_mul_no, p_pay_state := 4,
+        p_amount := v_amount, p_plan_type := v_plan,
+        p_buyer_phone := coalesce(v_payload->>'recvphone', v_payload->>'phone', v_payload->>'hp', ''),
+        p_event_at := coalesce(nullif(v_payload->>'paid_at','')::timestamptz, v_e.created_at, now()),
+        p_approval_no := v_e.approval_no, p_order_no := v_e.order_no,
+        p_source := 'backfill_hotfix_0040'
+      );
+      if v_r.membership_updated then
+        update public.payapp_webhook_events as e
+        set matched_user_id = v_r.matched_user_id,
+            matched_order_id = v_r.matched_order_id,
+            matched_subscription_id = v_r.matched_subscription_id,
+            membership_updated = true,
+            final_membership_tier = v_r.final_membership_tier,
+            paid_candidate = false,
+            processing_error = null,
+            processed_at = coalesce(e.processed_at, now())
+        where e.id = v_e.id;
+        raise notice 'backfilled mul_no=% tier=%', v_e.payapp_mul_no, v_r.final_membership_tier;
+      end if;
+    exception when others then
+      raise notice 'backfill error mul_no=% : %', v_e.payapp_mul_no, sqlerrm;
+    end;
+  end loop;
+end$$;
+
+-- 검증
+select payapp_mul_no, pay_state, approval_no, membership_updated, final_membership_tier
+from public.payapp_webhook_events
+where pay_state in (4, 64) order by created_at desc limit 10;

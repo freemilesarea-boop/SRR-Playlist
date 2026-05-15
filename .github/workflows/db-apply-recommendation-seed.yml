@@ -574,6 +574,24 @@ jobs:
           echo "== smoke test =="
           psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select d, revenue from public.admin_daily_series(7);" || echo "(skip: auth.uid()=NULL 환경)"
 
+      - name: 1ag) 0040 (정책 단순화 — state=4+approval_no 자동 paid + 백필) 적용
+        run: |
+          set -e
+          echo "== 0040 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0040_payment_policy_simplification.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'router_state4_approval_paid=' ||
+              (case when (select pg_get_functiondef(p.oid) ilike '%v_is_state_4_paid%'
+                          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                          where n.nspname='public' and p.proname='_internal_apply_payapp_event')
+                    then 'YES' else 'NO' end);
+            select 'state4_paid_events_after_backfill=' ||
+              (select count(*)::text from public.payapp_webhook_events
+               where pay_state=4 and approval_no is not null and membership_updated=true);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
