@@ -14,6 +14,7 @@ import MemberDetail from './MemberDetail';
 const PLAN_LABEL: Record<string, string> = {
   free: '무료',
   personal: '일반',
+  individual: '일반', // 0040 — 신규 표준 plan_type
   business: '사업자',
 };
 
@@ -96,7 +97,7 @@ export default function MembersList() {
     }
   }
 
-  async function changePlan(id: string, newPlan: 'free' | 'personal' | 'business') {
+  async function changePlan(id: string, newPlan: 'free' | 'personal' | 'individual' | 'business') {
     try {
       await updateUserPlan(id, newPlan);
       setRows((prev) =>
@@ -216,12 +217,15 @@ export default function MembersList() {
                     <select
                       value={m.subscription_type}
                       onChange={(e) =>
-                        changePlan(m.id, e.target.value as 'free' | 'personal' | 'business')
+                        changePlan(
+                          m.id,
+                          e.target.value as 'free' | 'personal' | 'individual' | 'business',
+                        )
                       }
                       className="rounded bg-bg-soft px-2 py-1 text-xs"
                     >
                       <option value="free">{PLAN_LABEL.free}</option>
-                      <option value="personal">{PLAN_LABEL.personal}</option>
+                      <option value="individual">{PLAN_LABEL.individual}</option>
                       <option value="business">{PLAN_LABEL.business}</option>
                     </select>
                   </td>

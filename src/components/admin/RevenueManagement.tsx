@@ -12,7 +12,12 @@ import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
 
 const KRW = (n: number) => `₩${(n ?? 0).toLocaleString('ko-KR')}`;
-const PLAN_LABEL: Record<string, string> = { personal: '일반', business: '사업자' };
+const PLAN_LABEL: Record<string, string> = {
+  free: '무료',
+  personal: '일반',
+  individual: '일반', // 0040 표준 plan_type
+  business: '사업자',
+};
 const STATUS_LABEL: Record<string, string> = {
   paid: '결제완료',
   pending: '대기',

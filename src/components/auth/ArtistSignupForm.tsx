@@ -143,6 +143,13 @@ export default function ArtistSignupForm({ onDone }: Props) {
             { onConflict: 'user_id' },
           );
           if (aErr) console.error('[artist-signup] artist_profiles.upsert fallback failed:', aErr);
+          // 둘 다 실패한 경우엔 사용자에게 인지시키기 (localStorage 캐시가 다음 로그인 시 재적용)
+          if (uErr && aErr) {
+            toast.error(
+              '가입은 완료됐지만 아티스트 프로필 저장이 지연됐어요. ' +
+                '다시 로그인하면 자동 적용됩니다.',
+            );
+          }
         }
       } else {
         // eslint-disable-next-line no-console

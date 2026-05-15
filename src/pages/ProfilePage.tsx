@@ -34,7 +34,7 @@ export default function ProfilePage() {
   const planLabel =
     profile?.subscription_type === 'business'
       ? '사업자 플랜'
-      : profile?.subscription_type === 'personal'
+      : profile?.subscription_type === 'individual' || profile?.subscription_type === 'personal'
         ? '일반 플랜'
         : '무료 플랜';
 

@@ -14,8 +14,12 @@ interface PendingRequest {
   created_at: string;
 }
 
+// SubscriptionType 은 'free'|'personal'|'individual'|'business' 인데 비교표는
+// 3개 컬럼 (free / 일반 / 사업자) 만 표시하므로 narrowed key set 사용.
+type PlanKey = 'free' | 'personal' | 'business';
+
 interface PlanCfg {
-  key: SubscriptionType;
+  key: PlanKey;
   name: string;
   tagline: string;
   price: number;
@@ -55,7 +59,7 @@ const PLANS: PlanCfg[] = [
 interface FeatureRow {
   group: string;
   label: string;
-  values: Record<SubscriptionType, boolean | string>;
+  values: Record<PlanKey, boolean | string>;
 }
 
 const FEATURES: FeatureRow[] = [

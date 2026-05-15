@@ -4,7 +4,10 @@ import { fetchMemberDetail, type MemberDetail as MemberDetailType } from '@/lib/
 import { toast } from '@/store/toastStore';
 
 const PLAN_LABEL: Record<string, string> = {
-  free: '무료', personal: '일반', business: '사업자',
+  free: '무료',
+  personal: '일반',
+  individual: '일반', // 0040 표준 plan_type
+  business: '사업자',
 };
 
 function fmtTime(s: number): string {
@@ -27,15 +30,23 @@ export default function MemberDetail({
 }) {
   const [data, setData] = useState<MemberDetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    setError(null);
     fetchMemberDetail(userId)
       .then((d) => {
         if (alive) setData(d);
       })
-      .catch((e) => toast.error(e.message))
-      .finally(() => alive && setLoading(false));
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (alive) setError(msg);
+        toast.error(msg);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
     return () => {
       alive = false;
     };
@@ -60,8 +71,18 @@ export default function MemberDetail({
           </button>
         </div>
 
-        {loading || !data ? (
+        {loading ? (
           <div className="p-8 text-center text-sm text-ink-mute">불러오는 중…</div>
+        ) : error || !data ? (
+          <div className="space-y-3 p-6">
+            <p className="text-sm font-bold text-red-300">회원 상세 조회 실패</p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-bg-soft p-3 text-[11px] text-ink-mute">
+              {error ?? '데이터를 받지 못했어요.'}
+            </pre>
+            <p className="text-xs text-ink-mute">
+              0033 (admin_member_detail 시그니처 변경) 마이그레이션이 적용되지 않았을 수 있어요.
+            </p>
+          </div>
         ) : (
           <div className="space-y-5 p-5">
             {/* 기본 정보 */}

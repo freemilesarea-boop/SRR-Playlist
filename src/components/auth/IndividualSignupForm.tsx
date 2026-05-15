@@ -92,7 +92,18 @@ export default function IndividualSignupForm({ onDone }: Props) {
       // 3) 즉시 로그인된 세션이 있으면 (이메일 컨펌 OFF 환경) 바로 users 업데이트 시도
       const { data: sess } = await supabase.auth.getSession();
       if (sess.session?.user?.id) {
-        await supabase.from('users').update(pendingProfile).eq('id', sess.session.user.id);
+        const { error: uErr } = await supabase
+          .from('users')
+          .update(pendingProfile)
+          .eq('id', sess.session.user.id);
+        if (uErr) {
+          // 가입 자체는 성공(auth.users 생성됨) — DB 업데이트만 실패. localStorage 캐시가
+          // 다음 로그인 시 재시도하므로 사용자에겐 안내만 하고 onDone 호출.
+          console.error('[individual-signup] users.update failed:', uErr);
+          toast.info('회원가입은 완료됐지만 추가 정보 저장이 지연됐어요. 다시 로그인하면 자동 적용됩니다.');
+          onDone();
+          return;
+        }
       }
 
       toast.success('회원가입이 완료됐어요. 이메일 인증 메일을 확인해주세요.');

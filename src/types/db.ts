@@ -1,4 +1,6 @@
-export type SubscriptionType = 'free' | 'personal' | 'business';
+// 0029 부터 users.subscription_type CHECK 가 'individual' 도 허용 (PayApp paid 처리에서 사용).
+// 'personal' 은 legacy 값으로 일부 기존 row 에 남아있을 수 있음.
+export type SubscriptionType = 'free' | 'personal' | 'individual' | 'business';
 export type UserRole = 'user' | 'admin';
 export type TimeSlot = 'morning' | 'afternoon' | 'evening' | 'night';
 

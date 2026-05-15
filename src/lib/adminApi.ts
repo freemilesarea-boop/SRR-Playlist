@@ -200,9 +200,17 @@ export async function updateUserRole(userId: string, role: 'user' | 'admin') {
 
 export async function updateUserPlan(
   userId: string,
-  plan: 'free' | 'personal' | 'business',
+  plan: 'free' | 'personal' | 'individual' | 'business',
 ) {
-  const { error } = await supabase.from('users').update({ subscription_type: plan }).eq('id', userId);
+  // 0029 이후 users.subscription_type CHECK 가 'individual' 도 허용.
+  // membership_tier 와 subscription_type 둘 다 동기화 — 결제/대시보드 정합성 보장.
+  const { error } = await supabase
+    .from('users')
+    .update({
+      subscription_type: plan,
+      membership_tier: plan === 'personal' ? 'individual' : plan,
+    })
+    .eq('id', userId);
   if (error) throw error;
 }
 
