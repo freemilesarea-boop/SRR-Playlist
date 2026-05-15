@@ -71,6 +71,21 @@ export default function MembersList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
+  // 탭 복귀 / 윈도우 포커스 시 최신 refetch
+  useEffect(() => {
+    const onFocus = () => void load();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function changeRole(id: string, newRole: 'user' | 'admin') {
     try {
       await updateUserRole(id, newRole);
