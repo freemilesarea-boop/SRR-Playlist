@@ -20,6 +20,7 @@ import {
   listRecentWebhookEvents,
   replayWebhookEvent,
   replayWebhookByMulNo,
+  forceActivateMembership,
   type AdminSyncPaymentResult,
   type AutoSyncSummary,
   type ManualPaymentImportRow,
@@ -533,6 +534,23 @@ export default function PaymentSyncTool() {
   );
 }
 
+const STATE_LABEL: Record<number, { label: string; tone: string }> = {
+  1: { label: '요청수신', tone: 'bg-ink/10 text-ink-mute' },
+  4: { label: '승인대기', tone: 'bg-yellow-500/15 text-yellow-200' },
+  8: { label: '요청취소', tone: 'bg-red-500/15 text-red-300' },
+  9: { label: '승인취소', tone: 'bg-red-500/15 text-red-300' },
+  10: { label: '입금대기', tone: 'bg-blue-500/15 text-blue-200' },
+  32: { label: '요청취소', tone: 'bg-red-500/15 text-red-300' },
+  64: { label: '승인완료', tone: 'bg-emerald-500/15 text-emerald-300' },
+  70: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
+  71: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
+};
+
+function stateBadge(state: number | null): { label: string; tone: string } {
+  if (state == null) return { label: '—', tone: 'text-ink-dim' };
+  return STATE_LABEL[state] ?? { label: String(state), tone: 'bg-ink/10 text-ink-mute' };
+}
+
 function WebhookRow({
   row,
   onReplayed,
@@ -559,13 +577,49 @@ function WebhookRow({
       setBusy(false);
     }
   }
+
+  async function onForce() {
+    if (!row.matched_user_id) {
+      toast.error('매칭된 user_id 가 없어요. 먼저 재처리/연결 필요.');
+      return;
+    }
+    const reason = window.prompt(
+      'state=64 미도착 강제 승인 사유 (감사 로그에 기록):',
+      `state=64 webhook missing — mul_no=${row.payapp_mul_no}`,
+    );
+    if (!reason) return;
+    setBusy(true);
+    try {
+      const planType: 'individual' | 'business' = row.price === 6900 ? 'business' : 'individual';
+      const res = await forceActivateMembership({
+        user_id: row.matched_user_id,
+        plan_type: planType,
+        reason,
+        amount: row.price ?? undefined,
+      });
+      if (!res.ok) {
+        toast.error(res.error ?? '강제 승인 실패');
+        return;
+      }
+      toast.success(`강제 승인 완료 — tier=${res.result?.final_membership_tier ?? '?'}`);
+      await onReplayed();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const state = stateBadge(row.pay_state);
   return (
     <tr className="border-b border-line/10 last:border-b-0">
       <td className="px-2 py-1.5 text-ink-mute">
         {new Date(row.created_at).toLocaleTimeString('ko-KR')}
       </td>
       <td className="px-2 py-1.5 font-mono">{row.payapp_mul_no ?? '—'}</td>
-      <td className="px-2 py-1.5 text-right">{row.pay_state ?? '—'}</td>
+      <td className="px-2 py-1.5">
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${state.tone}`}>
+          {row.pay_state ?? '—'} · {state.label}
+        </span>
+      </td>
       <td className="px-2 py-1.5 text-right tabular-nums">{row.price ?? '—'}</td>
       <td className="px-2 py-1.5">
         <span
@@ -589,14 +643,27 @@ function WebhookRow({
         )}
       </td>
       <td className="px-2 py-1.5 text-red-300">{row.processing_error ?? '—'}</td>
-      <td className="px-2 py-1.5 text-right">
-        <button
-          onClick={onReplay}
-          disabled={busy}
-          className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
-        >
-          {busy ? '…' : '재처리'}
-        </button>
+      <td className="px-2 py-1.5">
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={onReplay}
+            disabled={busy}
+            className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
+            title="저장된 webhook payload 로 매칭+적용 재시도"
+          >
+            {busy ? '…' : '재처리'}
+          </button>
+          {row.matched_user_id && !row.membership_updated && (
+            <button
+              onClick={onForce}
+              disabled={busy}
+              className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
+              title="state=64 미도착 시 사용. user_id 매칭된 상태에서 강제 승인."
+            >
+              강제승인
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );

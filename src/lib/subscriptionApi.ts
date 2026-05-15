@@ -357,6 +357,38 @@ export async function replayWebhookByMulNo(
   }
 }
 
+// ---------- 강제 membership 적용 (state=64 webhook 영구 미도착 케이스) ----------
+
+export interface ForceActivateResult {
+  user_id: string;
+  subscription_id: string | null;
+  order_id: string | null;
+  membership_updated: boolean;
+  final_membership_tier: string | null;
+  message: string;
+}
+
+export async function forceActivateMembership(payload: {
+  user_id: string;
+  plan_type?: 'individual' | 'business';
+  reason?: string;
+  amount?: number;
+}): Promise<{ ok: boolean; result?: ForceActivateResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_force_activate_membership', {
+      p_user_id: payload.user_id,
+      p_plan_type: payload.plan_type ?? 'individual',
+      p_reason: payload.reason ?? null,
+      p_amount: payload.amount ?? null,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = (Array.isArray(data) ? data[0] : data) as ForceActivateResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
 export async function listRecentWebhookEvents(payload: {
   search?: string;
   minutes?: number;

@@ -114,16 +114,50 @@ where linkval_verified = false
 order by created_at desc;
 ```
 
-## pay_state 처리
+## pay_state 처리 (운영 진단 결과 확정 — 2026-05 기준)
 
 | pay_state | 의미 | 처리 |
 |---|---|---|
-| 1 | 결제 요청 수신 (완료 아님) | `requested` / `pending` 유지. **권한 부여 X** |
-| 4 | 결제 완료 | `paid` / `active` + period 1개월 + membership_tier 부여 |
-| 10 | 가상계좌 결제 대기 | `waiting` / `payment_waiting` |
+| 1 | 요청 수신 | `requested` / `pending` 유지. **권한 부여 X** |
+| 4 | **승인대기** (카드 인증 단계) | `requested` / `pending` 유지. **권한 부여 X** (이전 코드의 paid 처리는 잘못됨) |
+| 10 | 가상계좌 입금 대기 | `waiting` / `payment_waiting` |
 | 8, 32 | 요청 취소 | `canceled` / `canceled` |
-| 9, 64, 70, 71 | 승인 취소 / 부분 취소 | `canceled` + free 다운그레이드 |
+| **64** | **승인완료** (정산 확정 — 실제 결제 성공) | `paid` / `active` + period 1개월 + **membership_tier 부여** |
+| 9, 70, 71 | 승인 취소 / 부분 취소 | `canceled` + free 다운그레이드 |
 | 그 외 | 이벤트만 기록 | — |
+
+### state=64 미도착 시 진단 / 복구
+
+운영 사례: PayApp 콘솔에서는 결제완료 표시되지만 state=64 webhook 이 영구
+미도착 → membership 미적용. SQL Editor 에서 다음 쿼리로 진단:
+
+```sql
+-- 특정 mul_no 의 모든 webhook event 확인 (state별 도착 여부)
+select pay_state, linkval_verified, matched_user_id, membership_updated,
+       processing_error, created_at
+from public.payapp_webhook_events
+where payapp_mul_no = '115554935'
+order by created_at;
+```
+
+state=4 만 보이고 state=64 행이 없으면:
+1. PayApp 콘솔의 "공통 통보 URL" 설정 확인
+2. `supabase functions deploy payapp-feedback --no-verify-jwt` 재배포 확인
+3. PayApp 측 retry 정책상 영구 미도착일 수 있음 → 아래 복구 절차
+
+**복구 방법 A** — 관리자 UI:
+`/admin → 결제 동기화 → Webhook 진단` 표에서 해당 행의 `강제승인` 버튼 클릭.
+이 버튼은 `matched_user_id` 가 채워진 행 + `membership_updated=false` 일 때만 표시.
+
+**복구 방법 B** — SQL Editor 직접:
+```sql
+select * from public.admin_force_activate_membership(
+  '<matched_user_id>'::uuid,
+  'individual',
+  'state=64 webhook missing — mul_no=115554935',
+  4900
+);
+```
 
 ## 2회차+ 자동 결제 (renewal) 처리
 

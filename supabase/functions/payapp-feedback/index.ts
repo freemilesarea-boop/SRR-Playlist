@@ -64,9 +64,17 @@ function normalizePayState(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// PayApp 정기결제 / 카드 환경에서 성공 상태로 동작하는 state 집합.
-// 운영자가 PayApp 콘솔 통보 로그에서 4 와 64 가 모두 들어오는 것을 확인 → 둘 다 paid.
-const PAID_STATES = new Set<number>([4, 64]);
+// PayApp 의 실제 state 의미 (운영 진단 결과 확정):
+//   1   요청 수신
+//   4   승인대기 — 카드 인증 단계. 아직 정산 미확정 → membership 미적용
+//   64  승인완료 — 정산 확정. 실제 결제 성공 → membership 활성화
+//   8, 32          요청 취소 (결제 완료 전)
+//   9, 70, 71      승인 취소 / 부분 취소 → 권한 제거
+//
+// 주의: 이전 코드는 state=4 도 paid 로 잘못 처리. 실제로는 state=64 만 paid.
+//       state=64 가 안 들어오는 케이스는 admin_force_activate_membership 으로 복구.
+const PAID_STATES = new Set<number>([64]);
+const PENDING_STATES = new Set<number>([1, 4]);
 const CANCEL_STATES = new Set<number>([9, 70, 71]);
 
 function planFromAmount(amount: number | null): 'individual' | 'business' | null {
@@ -350,8 +358,9 @@ serve(async (req) => {
   }
 
   // --- paid 가 아닌 state 처리 (order 필수) ---
-  //     paid (4/64) 는 위 isPaidState 블록에서 _internal RPC 로 일괄 처리되었음.
-  if (payState === 1) {
+  //     paid (64) 는 위 isPaidState 블록에서 _internal RPC 로 일괄 처리되었음.
+  //     state=1/4 는 승인대기 — 권한 변경 없이 order/subscription pending 으로만 표시.
+  if (payState === 1 || payState === 4) {
     await sb.from('payment_orders').update({ status: 'requested', raw_response: payload }).eq('id', order.id);
     if (order.subscription_id) {
       await sb
