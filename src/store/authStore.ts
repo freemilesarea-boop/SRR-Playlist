@@ -3,6 +3,12 @@ import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { UserRow } from '@/types/db';
 
+declare global {
+  interface Window {
+    __srrAuthListenersBound?: boolean;
+  }
+}
+
 interface AuthState {
   session: Session | null;
   user: User | null;
@@ -40,6 +46,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (data.session?.user) {
         await get().refreshProfile();
       }
+      // 페이지 포커스 / 가시성 변화 시 profile 자동 refetch — 결제/환불 webhook
+      // 적용 직후 다른 탭에서 처리된 변경을 빠르게 반영. 한 번만 등록.
+      if (typeof window !== 'undefined' && !window.__srrAuthListenersBound) {
+        window.__srrAuthListenersBound = true;
+        const refreshIfLoggedIn = () => {
+          if (get().user) void get().refreshProfile();
+        };
+        window.addEventListener('focus', refreshIfLoggedIn);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') refreshIfLoggedIn();
+        });
+      }
+
       supabase.auth.onAuthStateChange(async (_event, session) => {
         set({ session, user: session?.user ?? null });
         if (session?.user) {

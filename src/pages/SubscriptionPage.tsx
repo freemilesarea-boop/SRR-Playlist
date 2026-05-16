@@ -18,6 +18,16 @@ interface PendingRequest {
 // 3개 컬럼 (free / 일반 / 사업자) 만 표시하므로 narrowed key set 사용.
 type PlanKey = 'free' | 'personal' | 'business';
 
+// users.membership_tier (단일 진실 원천) → UI plan key 매핑.
+//   tier='individual' → UI 'personal' (구버전 subscription_type 호환)
+//   tier='business'   → UI 'business'
+//   tier='free' / null/unknown → 'free'
+function tierToPlanKey(tier: string | null | undefined): PlanKey {
+  if (tier === 'individual' || tier === 'personal') return 'personal';
+  if (tier === 'business') return 'business';
+  return 'free';
+}
+
 interface PlanCfg {
   key: PlanKey;
   name: string;
@@ -122,7 +132,13 @@ export default function SubscriptionPage() {
   const [busy, setBusy] = useState<SubscriptionType | null>(null);
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [phoneModal, setPhoneModal] = useState<{ plan: 'personal' | 'business'; phone: string } | null>(null);
-  const current = profile?.subscription_type ?? 'free';
+  // 직접 fetch 한 fresh tier — zustand 캐시 stale 일 수 있어 진입/포커스마다 새로 읽음.
+  const [freshTier, setFreshTier] = useState<string | null>(null);
+
+  // 표시 기준: fresh tier 가 있으면 그것, 없으면 profile.membership_tier, 그것도 없으면 free.
+  // membership_tier 는 webhook(state=64/refund 등) 가 직접 set 하는 단일 진실 원천.
+  const tier = freshTier ?? profile?.membership_tier ?? 'free';
+  const current: PlanKey = tierToPlanKey(tier);
 
   async function startPayappCheckout(planUi: 'personal' | 'business', phone: string) {
     if (!user) return;
@@ -158,25 +174,53 @@ export default function SubscriptionPage() {
     setPending((data as PendingRequest) ?? null);
   }
 
+  // 현재 로그인 user 의 membership_tier 를 supabase 에서 직접 fetch — RLS 통과 후
+  // zustand profile 캐시와 별개로 진실값 확보. refreshProfile 도 동시에 트리거.
+  async function reloadFreshTier() {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('users')
+      .select('membership_tier')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!error && data) setFreshTier((data as { membership_tier: string | null }).membership_tier ?? 'free');
+    void refreshProfile();
+  }
+
   useEffect(() => {
     void loadPending();
+    void reloadFreshTier();
+    // 페이지 포커스 / 가시성 변화 시 결제 직후 webhook 적용 반영 위해 refresh.
+    function onFocus() {
+      void reloadFreshTier();
+    }
+    function onVisibility() {
+      if (document.visibilityState === 'visible') void reloadFreshTier();
+    }
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  async function requestPlan(plan: SubscriptionType) {
+  async function requestPlan(plan: PlanKey) {
     if (!user || plan === current) return;
     if (plan === 'free') {
-      setBusy(plan);
+      setBusy('free');
+      // membership_tier 와 subscription_type 둘 다 free 로 정리 (단일 진실 원천 일관성)
       const { error } = await supabase
         .from('users')
-        .update({ subscription_type: 'free' })
+        .update({ subscription_type: 'free', membership_tier: 'free' })
         .eq('id', user.id);
       setBusy(null);
       if (error) {
         toast.error(error.message);
         return;
       }
-      await refreshProfile();
+      await reloadFreshTier();
       toast.success('무료 플랜으로 변경되었어요.');
       return;
     }

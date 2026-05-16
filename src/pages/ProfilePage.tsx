@@ -31,10 +31,12 @@ export default function ProfilePage() {
   const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
   const setAutoplayRecommendations = usePlaybackSettingsStore((s) => s.setAutoplayRecommendations);
 
+  // 단일 진실 원천: users.membership_tier (webhook 이 set). subscription_type 은 호환용.
+  const tier = profile?.membership_tier ?? profile?.subscription_type ?? 'free';
   const planLabel =
-    profile?.subscription_type === 'business'
+    tier === 'business'
       ? '사업자 플랜'
-      : profile?.subscription_type === 'individual' || profile?.subscription_type === 'personal'
+      : tier === 'individual' || tier === 'personal'
         ? '일반 플랜'
         : '무료 플랜';
 
