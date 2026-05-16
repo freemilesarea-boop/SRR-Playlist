@@ -240,6 +240,12 @@ limit 5;
 
 - 모든 cmd 가 `parsed_count=0` 이면 → PayApp API cmd 명/필드명 불일치. `raw_preview` 확인.
 - `success=true` 인 cmd 가 있으면 → `PAYAPP_LIST_CMD` 시크릿에 그 cmd 명 set 후 함수 재배포.
+- 모든 cmd 의 `raw_preview` 에 `errno=70040` ("cmd을 가져오지 못했습니다") 가 보이면 →
+  **cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 문제**. 처방:
+  1. PayApp 가맹점 콘솔 → API 설정 → "조회 API 사용권한" 활성화 확인
+  2. PayApp 콘솔 → API 접근 허용 IP 에 EF outbound IP 등록 (응답의 `remoteaddr=...` 값)
+  3. PayApp 고객센터에 정확한 결제내역조회 cmd 명 문의 후 `PAYAPP_LIST_CMD` 로 지정
+  - webhook 기반 결제 처리는 정상 운영 — 이 도구는 webhook 누락 시 복구/진단용
 
 ```sql
 -- 3) 수동 동기화 import 큐 (미매칭 결제)

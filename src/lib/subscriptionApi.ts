@@ -159,6 +159,7 @@ export interface SyncAttemptPreview {
   http_status: number | null;
   errno?: string | null;
   errmsg?: string | null;
+  remoteaddr?: string | null;
   parsed_count: number;
   success: boolean;
   from_cache?: boolean;
@@ -187,6 +188,10 @@ export interface AutoSyncSummary {
   details?: string;
   user_id?: string;
   error?: string;
+  // PayApp 70040 진단: 모든 후보 cmd 가 errno=70040 일 때 true (cmd 권한/IP 화이트리스트 문제)
+  all_errno_70040?: boolean;
+  // PayApp 응답에서 추출한 EF outbound IP (화이트리스트 등록용)
+  observed_remote_addr?: string | null;
 }
 
 export async function syncPayappPaymentsAuto(payload: {

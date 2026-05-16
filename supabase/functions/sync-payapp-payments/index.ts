@@ -29,7 +29,24 @@ const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/
 const PAYAPP_LIST_CMD = Deno.env.get('PAYAPP_LIST_CMD') ?? '';
 
 // 후보 cmd 목록 — 운영 PayApp API 의 실제 명칭이 다를 수 있어 순차 시도.
-const CANDIDATE_CMDS = ['paymentList', 'payList', 'paylist', 'tradeList', 'list'];
+// PayApp 가맹점센터 API 매뉴얼에 등장하는 조회용 cmd 후보를 모두 포함.
+//   - paymentList / payList / paylist / paymentlist : 결제내역 조회 (계정별 대소문자 케이스)
+//   - tradeList / list                              : 일부 구버전 호환
+//   - paylistcheck / payListCheck                   : 조회 권한 별도 API
+//   - getPaymentList                                : 일부 신버전 API
+//   - paymentInfo                                   : 단건 조회 fallback
+const CANDIDATE_CMDS = [
+  'paymentList',
+  'paymentlist',
+  'payList',
+  'paylist',
+  'paylistcheck',
+  'payListCheck',
+  'getPaymentList',
+  'paymentInfo',
+  'tradeList',
+  'list',
+];
 
 // EF instance 가 warm 상태일 때 직전 성공 cmd 우선 사용 → 70040 응답 횟수 최소화.
 let cachedSuccessCmd: string | null = null;
@@ -207,12 +224,16 @@ interface AttemptResult {
   raw_response: string;
   errno: string | null;
   errmsg: string | null;
+  remoteaddr: string | null;
   error: string | null;
 }
 
-// PayApp 응답에서 errno/errmsg 추출 — JSON / URL-encoded / XML / key=value 다 커버.
-function extractErrno(raw: string): { errno: string | null; errmsg: string | null } {
-  if (!raw) return { errno: null, errmsg: null };
+// PayApp 응답에서 errno/errmsg/remoteaddr 추출 — JSON / URL-encoded / XML / key=value 다 커버.
+// remoteaddr 는 errno=70040 등 권한 거부 케이스에서 PayApp 콘솔 IP 화이트리스트 등록용으로 노출됨.
+function extractErrno(
+  raw: string,
+): { errno: string | null; errmsg: string | null; remoteaddr: string | null } {
+  if (!raw) return { errno: null, errmsg: null, remoteaddr: null };
   const trimmed = raw.trim();
 
   // 1) JSON 시도
@@ -220,9 +241,15 @@ function extractErrno(raw: string): { errno: string | null; errmsg: string | nul
     const j = JSON.parse(trimmed);
     if (j && typeof j === 'object') {
       const errno = j.errno ?? j.errno_code ?? j.error_code ?? j.code ?? null;
-      const errmsg = j.errmsg ?? j.errmessage ?? j.error_message ?? j.message ?? null;
-      if (errno != null || errmsg != null) {
-        return { errno: errno != null ? String(errno) : null, errmsg: errmsg != null ? String(errmsg) : null };
+      const errmsg =
+        j.errmsg ?? j.errmessage ?? j.error_message ?? j.message ?? j.errorMessage ?? null;
+      const remoteaddr = j.remoteaddr ?? j.remote_addr ?? null;
+      if (errno != null || errmsg != null || remoteaddr != null) {
+        return {
+          errno: errno != null ? String(errno) : null,
+          errmsg: errmsg != null ? String(errmsg) : null,
+          remoteaddr: remoteaddr != null ? String(remoteaddr) : null,
+        };
       }
     }
   } catch {
@@ -231,10 +258,15 @@ function extractErrno(raw: string): { errno: string | null; errmsg: string | nul
 
   // 2) URL-encoded / key=value / XML 통합 정규식
   const ernoM = trimmed.match(/(?:^|[&\n\s<>])errno[\s=:>]+["']?([^&\n<"']+)/i);
-  const msgM = trimmed.match(/(?:^|[&\n\s<>])errmsg[\s=:>]+["']?([^&\n<"']+)/i);
+  // PayApp 운영 응답은 errorMessage 키를 사용 (cmd을 가져오지 못했습니다 등).
+  const msgM =
+    trimmed.match(/(?:^|[&\n\s<>])errorMessage[\s=:>]+["']?([^&\n<"']+)/i) ??
+    trimmed.match(/(?:^|[&\n\s<>])errmsg[\s=:>]+["']?([^&\n<"']+)/i);
+  const ipM = trimmed.match(/(?:^|[&\n\s<>])remoteaddr[\s=:>]+["']?([^&\n<"']+)/i);
   return {
     errno: ernoM ? safeDecode(ernoM[1]).trim() : null,
     errmsg: msgM ? safeDecode(msgM[1]).trim() : null,
+    remoteaddr: ipM ? safeDecode(ipM[1]).trim() : null,
   };
 }
 
@@ -263,10 +295,28 @@ async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promis
     });
     const text = await resp.text();
     const records = parsePayappList(text);
-    const { errno, errmsg } = extractErrno(text);
-    return { cmd, http_status: resp.status, records, raw_response: text, errno, errmsg, error: null };
+    const { errno, errmsg, remoteaddr } = extractErrno(text);
+    return {
+      cmd,
+      http_status: resp.status,
+      records,
+      raw_response: text,
+      errno,
+      errmsg,
+      remoteaddr,
+      error: null,
+    };
   } catch (e) {
-    return { cmd, http_status: null, records: [], raw_response: '', errno: null, errmsg: null, error: String(e) };
+    return {
+      cmd,
+      http_status: null,
+      records: [],
+      raw_response: '',
+      errno: null,
+      errmsg: null,
+      remoteaddr: null,
+      error: String(e),
+    };
   }
 }
 
@@ -405,6 +455,7 @@ serve(async (req) => {
     http_status: number | null;
     errno: string | null;
     errmsg: string | null;
+    remoteaddr: string | null;
     parsed_count: number;
     success: boolean;
     from_cache: boolean;
@@ -414,6 +465,7 @@ serve(async (req) => {
   let records: Array<Record<string, string>> = [];
   let successCmd: string | null = null;
   let logFailures = 0;
+  let observedRemoteAddr: string | null = null;
 
   for (const cmd of cmdsToTry) {
     const attemptStart = Date.now();
@@ -474,12 +526,14 @@ serve(async (req) => {
       http_status: r.http_status,
       errno: r.errno,
       errmsg: r.errmsg,
+      remoteaddr: r.remoteaddr,
       parsed_count: r.records.length,
       success,
       from_cache: fromCache,
       error: r.error,
       raw_preview: r.raw_response.slice(0, 2000),
     });
+    if (r.remoteaddr && !observedRemoteAddr) observedRemoteAddr = r.remoteaddr;
 
     if (success) {
       records = r.records;
@@ -488,6 +542,14 @@ serve(async (req) => {
       break;
     }
   }
+
+  // 진단 플래그: 모든 attempts 가 errno=70040 일 때 cmd 권한/IP 문제로 단정.
+  //   70040 = "cmd을 가져오지 못했습니다" — PayApp 가 cmd 를 인식 못 함.
+  //   원인 우선순위: (1) PayApp 콘솔 '조회 API 사용권한' 미활성화
+  //                  (2) PayApp 콘솔 API IP 화이트리스트에 EF outbound IP 미등록
+  //                  (3) 모든 후보 cmd 명이 실제 API 와 불일치
+  const allErrno70040 =
+    attempts.length > 0 && attempts.every((a) => a.errno === '70040');
 
   let matched = 0;
   let unmatched = 0;
@@ -588,6 +650,32 @@ serve(async (req) => {
     error_message: errors.length > 0 ? errors.map((e) => `${e.mul_no}:${e.message}`).join('; ').slice(0, 500) : null,
   });
 
+  // 진단용 hint — 0건/에러 케이스에서 운영자가 즉시 다음 액션을 알 수 있도록 구체화.
+  let hint: string | undefined;
+  if (records.length === 0) {
+    if (logFailures > 0) {
+      hint = 'payapp_api_sync_attempts 테이블이 없거나 RLS 차단. 0028 마이그레이션 적용 필요.';
+    } else if (successCmd) {
+      hint = `${successCmd} 가 0건 반환했어요. 기간/필터 또는 PayApp 응답 필드명 확인.`;
+    } else if (allErrno70040) {
+      // 70040 일색 = PayApp 측이 cmd 자체를 거부. 코드 후보 확장으로는 해결 불가능한
+      // 운영 설정 이슈. 정확한 처방을 안내.
+      const ipPart = observedRemoteAddr
+        ? `EF outbound IP=${observedRemoteAddr}. PayApp 콘솔 → API 설정 → 접근 허용 IP 에 이 IP 등록 필요. `
+        : '';
+      hint =
+        `PayApp 가 모든 후보 cmd 에서 errno=70040 ("cmd을 가져오지 못했습니다") 반환. ` +
+        `이는 cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 화이트리스트 문제일 가능성이 높습니다. ` +
+        `조치 순서: ` +
+        `(1) PayApp 가맹점 콘솔에서 "조회 API 사용권한" 활성화 확인. ` +
+        `(2) ${ipPart}` +
+        `(3) PayApp 고객센터에 정확한 결제내역조회 cmd 명 문의 후 PAYAPP_LIST_CMD secret 으로 지정 (현재 후보: ${CANDIDATE_CMDS.join(', ')}). ` +
+        `webhook 기반 결제 처리는 정상 동작 중이므로 치명 오류 아님 — 이 도구는 webhook 누락 시 복구용입니다.`;
+    } else {
+      hint = 'PayApp API 가 모든 cmd 에서 0건 또는 에러 반환. attempts.raw_preview 확인.';
+    }
+  }
+
   return json({
     ok: true,
     date_from: dateFrom,
@@ -603,14 +691,8 @@ serve(async (req) => {
     errors,
     processed,
     log_failures: logFailures,
-    // 진단용: 0건이고 attempts 도 비었으면 PayApp 호출 자체에 실패
-    hint:
-      records.length === 0
-        ? logFailures > 0
-          ? 'payapp_api_sync_attempts 테이블이 없거나 RLS 차단. 0028 마이그레이션 적용 필요.'
-          : successCmd
-            ? `${successCmd} 가 0건 반환했어요. 기간/필터 또는 PayApp 응답 필드명 확인.`
-            : 'PayApp API 가 모든 cmd 에서 0건 또는 에러 반환. attempts.raw_preview 확인.'
-        : undefined,
+    all_errno_70040: allErrno70040,
+    observed_remote_addr: observedRemoteAddr,
+    hint,
   });
 });

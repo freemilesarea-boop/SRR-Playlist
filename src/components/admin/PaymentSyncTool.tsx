@@ -278,17 +278,56 @@ export default function PaymentSyncTool() {
                     </ul>
                   </details>
                 )}
+                {/* 70040 일색 케이스 — cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 화이트리스트
+                    문제임을 별도 박스로 강하게 노출 */}
+                {autoResult.all_errno_70040 && (
+                  <div className="mt-3 rounded-xl bg-red-500/10 p-3 ring-1 ring-red-500/30">
+                    <p className="text-[11px] font-bold text-red-200">
+                      ⚠️ PayApp 가 모든 후보 cmd 에서 errno=70040 ("cmd을 가져오지 못했습니다") 반환
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-red-100/85">
+                      이 에러는 cmd 명칭 자체가 잘못된 것보다는{' '}
+                      <strong>PayApp 가맹점 계정의 조회 API 권한 또는 IP 화이트리스트 설정</strong>{' '}
+                      문제일 가능성이 높습니다. webhook 기반 결제 처리는 정상 동작 중이라 치명
+                      오류는 아니지만, 이 도구(복구/진단용)를 쓰려면 아래 조치 필요.
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-red-100/85">
+                      <li>
+                        PayApp 가맹점 콘솔 → <strong>API 설정 → 조회 API 사용권한</strong> 활성화 확인
+                      </li>
+                      <li>
+                        PayApp 콘솔 → <strong>API 접근 허용 IP</strong> 에 Edge Function outbound
+                        IP 등록
+                        {autoResult.observed_remote_addr && (
+                          <>
+                            {' '}
+                            (현재 PayApp 가 본 EF IP:{' '}
+                            <code className="rounded bg-bg-deep px-1 font-mono text-red-200">
+                              {autoResult.observed_remote_addr}
+                            </code>
+                            )
+                          </>
+                        )}
+                      </li>
+                      <li>
+                        PayApp 고객센터에서 정확한 결제내역조회 cmd 명을 받은 뒤{' '}
+                        <code className="rounded bg-bg-deep px-1 font-mono">PAYAPP_LIST_CMD</code>{' '}
+                        secret 으로 지정 후 함수 재배포
+                      </li>
+                    </ol>
+                  </div>
+                )}
                 {/* 시도된 cmd 별 raw 응답 — 조회 0건이면 자동 펼침 */}
                 {(autoResult.attempts?.length ?? 0) > 0 && (
                   <details className="mt-3 text-[11px]" open={(autoResult.fetched ?? 0) === 0}>
                     <summary className="cursor-pointer text-ink-mute">
                       PayApp API 시도 {autoResult.attempts!.length}회 — raw 응답 보기
                     </summary>
-                    {(autoResult.fetched ?? 0) === 0 && (
+                    {(autoResult.fetched ?? 0) === 0 && !autoResult.all_errno_70040 && (
                       <p className="mt-2 rounded-md bg-yellow-500/10 p-2 text-yellow-200">
-                        ⚠️ 5개 cmd 후보 모두 0건 또는 errno 응답이에요. webhook 기반 결제는 정상
-                        동작 중이라 치명 오류는 아니지만, 아래 raw 응답으로 PayApp 응답 포맷을
-                        확인하세요. errno=70040 이면 cmd 명칭이 다른 것이고, parsed=0 이면
+                        ⚠️ 후보 cmd 모두 0건 또는 errno 응답이에요. webhook 기반 결제는 정상 동작
+                        중이라 치명 오류는 아니지만, 아래 raw 응답으로 PayApp 응답 포맷을
+                        확인하세요. errno 가 있으면 PayApp 측 거부 (cmd/권한/IP), parsed=0 이면
                         응답 파서가 필드를 못 읽은 것입니다.
                       </p>
                     )}
