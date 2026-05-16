@@ -8,11 +8,13 @@ import {
   Settings,
   Sparkles,
   Mic2,
+  ScrollText,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import TrackReviewList from '@/components/admin/TrackReviewList';
 import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
 import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
+import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -35,6 +37,7 @@ type Tab =
   | 'artists'
   | 'payout-verification'
   | 'track-review'
+  | 'operation-logs'
   | 'recommendation';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
@@ -44,6 +47,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
+  { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
@@ -102,6 +106,7 @@ export default function AdminPage() {
       {tab === 'revenue' && <RevenueManagement />}
       {tab === 'subscriptions' && <SubscriptionRequests />}
       {tab === 'payment-sync' && <PaymentSyncTool />}
+      {tab === 'operation-logs' && <AdminOperationLogs />}
       {tab === 'content' && <ContentManagement />}
       {tab === 'artists' && <ArtistApprovalList />}
       {tab === 'payout-verification' && <PayoutVerificationList />}

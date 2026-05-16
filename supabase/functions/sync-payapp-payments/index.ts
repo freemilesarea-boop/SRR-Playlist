@@ -223,7 +223,41 @@ async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promis
   }
 }
 
+// 운영 로그 기록 — 실패해도 동기화 자체는 계속 진행
+async function logOp(
+  sb: ReturnType<typeof createClient>,
+  payload: {
+    level: 'info' | 'success' | 'warning' | 'error';
+    status: string;
+    message: string;
+    details?: Record<string, unknown>;
+    user_id?: string | null;
+    duration_ms?: number | null;
+    error_code?: string | null;
+    error_message?: string | null;
+  },
+) {
+  try {
+    await sb.rpc('admin_log_operation', {
+      p_source: 'sync-payapp-payments',
+      p_category: 'payment',
+      p_level: payload.level,
+      p_status: payload.status,
+      p_message: payload.message,
+      p_details: payload.details ?? {},
+      p_user_id: payload.user_id ?? null,
+      p_related_id: null,
+      p_duration_ms: payload.duration_ms ?? null,
+      p_error_code: payload.error_code ?? null,
+      p_error_message: payload.error_message ?? null,
+    });
+  } catch (e) {
+    console.warn('[sync-payapp] logOp failed (non-fatal):', e);
+  }
+}
+
 serve(async (req) => {
+  const t0 = Date.now();
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, error: 'method not allowed' }, 405);
 
@@ -432,6 +466,26 @@ serve(async (req) => {
       processed.push({ mul_no, status: 'failed', amount: price, plan_type });
     }
   }
+
+  // 운영 로그 기록
+  const overallLevel: 'success' | 'warning' | 'error' =
+    failed > 0 ? 'error' : records.length === 0 ? 'warning' : 'success';
+  await logOp(sb, {
+    level: overallLevel,
+    status: failed > 0 ? 'failed' : records.length === 0 ? 'skipped' : 'completed',
+    message: `sync ${dateFrom}~${dateTo}: fetched=${records.length} matched=${matched} unmatched=${unmatched} already=${alreadySynced} failed=${failed}` +
+      (successCmd ? ` (cmd=${successCmd})` : ' (no cmd matched)'),
+    details: {
+      date_from: dateFrom, date_to: dateTo,
+      success_cmd: successCmd, fetched: records.length,
+      matched, unmatched, already_synced: alreadySynced, failed,
+      cmd_attempts: attempts.map((a) => ({ cmd: a.cmd, parsed: a.parsed_count, ok: a.success })),
+    },
+    user_id: userRes.user.id,
+    duration_ms: Date.now() - t0,
+    error_code: failed > 0 ? 'PARTIAL_FAILED' : null,
+    error_message: errors.length > 0 ? errors.map((e) => `${e.mul_no}:${e.message}`).join('; ').slice(0, 500) : null,
+  });
 
   return json({
     ok: true,

@@ -180,7 +180,38 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
+// 운영 로그 기록 — 실패해도 webhook 처리 자체는 계속 진행
+async function logOp(payload: {
+  level: 'info' | 'success' | 'warning' | 'error';
+  status: string;
+  message: string;
+  details?: Record<string, unknown>;
+  related_id?: string | null;
+  duration_ms?: number | null;
+  error_code?: string | null;
+  error_message?: string | null;
+}) {
+  try {
+    await sb.rpc('admin_log_operation', {
+      p_source: 'payapp-feedback',
+      p_category: 'webhook',
+      p_level: payload.level,
+      p_status: payload.status,
+      p_message: payload.message,
+      p_details: payload.details ?? {},
+      p_user_id: null,
+      p_related_id: payload.related_id ?? null,
+      p_duration_ms: payload.duration_ms ?? null,
+      p_error_code: payload.error_code ?? null,
+      p_error_message: payload.error_message ?? null,
+    });
+  } catch (e) {
+    console.warn('[payapp-feedback] logOp failed (non-fatal):', e);
+  }
+}
+
 serve(async (req) => {
+  const t0 = Date.now();
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const payload = await readPayload(req);
@@ -237,10 +268,36 @@ serve(async (req) => {
     .maybeSingle();
 
   if (insertErr) {
-    if (insertErr.code === '23505') return SUCCESS(); // 이미 처리됨
+    if (insertErr.code === '23505') {
+      await logOp({
+        level: 'info', status: 'skipped',
+        message: 'duplicate webhook (event_key UNIQUE conflict)',
+        details: { event_key: eventKey },
+        related_id: mulNo,
+        duration_ms: Date.now() - t0,
+      });
+      return SUCCESS(); // 이미 처리됨
+    }
     console.error('[payapp-feedback] insert error:', insertErr);
+    await logOp({
+      level: 'error', status: 'failed',
+      message: 'webhook event insert failed',
+      details: { event_key: eventKey, error: insertErr.message },
+      related_id: mulNo,
+      duration_ms: Date.now() - t0,
+      error_code: insertErr.code,
+      error_message: insertErr.message,
+    });
     return SUCCESS(); // PayApp 재시도 폭주 방지
   }
+
+  // webhook 수신 시작 로그
+  await logOp({
+    level: 'info', status: 'started',
+    message: `webhook received (state=${payState ?? '?'})`,
+    details: { event_key: eventKey, order_no: orderNo, payapp_mul_no: mulNo, price: priceNum, pay_state: payState },
+    related_id: mulNo,
+  });
 
   // --- 검증 실패 처리 ---
   //   order 있고 검증 실패 → price 위변조 의심 → 저장만 하고 종료
@@ -266,6 +323,15 @@ serve(async (req) => {
           processing_error: 'verification_failed: ' + verification.reasons.join(','),
         })
         .eq('id', insertedEvent?.id);
+      await logOp({
+        level: 'warning', status: 'failed',
+        message: 'webhook verification failed',
+        details: { reasons: verification.reasons, pay_state: payState },
+        related_id: mulNo,
+        duration_ms: Date.now() - t0,
+        error_code: 'VERIFY_FAIL',
+        error_message: verification.reasons.join(','),
+      });
       return SUCCESS();
     }
   }
@@ -339,6 +405,15 @@ serve(async (req) => {
           processing_error: applyErr?.message ?? 'router returned empty',
         })
         .eq('id', insertedEvent?.id);
+      await logOp({
+        level: 'error', status: 'failed',
+        message: `router apply failed (state=${payState})`,
+        details: { mul_no: mulNo, amount, plan_type: planType },
+        related_id: mulNo,
+        duration_ms: Date.now() - t0,
+        error_code: 'ROUTER_FAIL',
+        error_message: applyErr?.message ?? 'empty result',
+      });
       return SUCCESS();
     }
 
@@ -377,6 +452,31 @@ serve(async (req) => {
       })
       .eq('id', insertedEvent?.id);
 
+    // 결과 로그 — paid / refunded / cancel / unmatched 분기
+    const finalStatus = row.final_status ?? 'unknown';
+    const logLevel: 'success' | 'warning' | 'error' = row.membership_updated
+      ? 'success'
+      : finalStatus === 'unmatched' || finalStatus === 'pending'
+        ? 'warning'
+        : 'error';
+    await logOp({
+      level: logLevel,
+      status: finalStatus === 'paid'
+        ? 'completed'
+        : finalStatus === 'refunded' || finalStatus === 'canceled'
+          ? 'completed'
+          : 'pending',
+      message: `state=${payState} → ${finalStatus}` +
+        (row.final_membership_tier ? ` (tier=${row.final_membership_tier})` : ''),
+      details: {
+        mul_no: mulNo, amount, plan_type: planType,
+        matched_user_id: row.matched_user_id, final_status: finalStatus,
+        is_paid_state: isPaidState, is_refund_state: isRefundState, is_cancel_state: isCancelState,
+      },
+      related_id: mulNo,
+      duration_ms: Date.now() - t0,
+    });
+
     return SUCCESS();
   }
 
@@ -386,6 +486,13 @@ serve(async (req) => {
       .from('payapp_webhook_events')
       .update({ processed_at: isoNow(), state_label: label })
       .eq('id', insertedEvent?.id);
+    await logOp({
+      level: 'info', status: 'skipped',
+      message: `non-actionable state=${payState} (${label}), no order match`,
+      details: { mul_no: mulNo, pay_state: payState },
+      related_id: mulNo,
+      duration_ms: Date.now() - t0,
+    });
     return SUCCESS();
   }
 

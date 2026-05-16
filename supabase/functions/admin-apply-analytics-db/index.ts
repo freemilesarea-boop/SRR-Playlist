@@ -434,7 +434,41 @@ async function snapshot(pg: PgClient): Promise<Snapshot> {
   };
 }
 
+// 운영 로그 기록 (실패해도 본 작업 진행)
+async function logOp(
+  sb: ReturnType<typeof createClient>,
+  payload: {
+    level: 'info' | 'success' | 'warning' | 'error';
+    status: string;
+    message: string;
+    details?: Record<string, unknown>;
+    user_id?: string | null;
+    duration_ms?: number | null;
+    error_code?: string | null;
+    error_message?: string | null;
+  },
+) {
+  try {
+    await sb.rpc('admin_log_operation', {
+      p_source: 'admin-apply-analytics-db',
+      p_category: 'analytics',
+      p_level: payload.level,
+      p_status: payload.status,
+      p_message: payload.message,
+      p_details: payload.details ?? {},
+      p_user_id: payload.user_id ?? null,
+      p_related_id: null,
+      p_duration_ms: payload.duration_ms ?? null,
+      p_error_code: payload.error_code ?? null,
+      p_error_message: payload.error_message ?? null,
+    });
+  } catch (e) {
+    console.warn('[admin-apply-analytics-db] logOp failed (non-fatal):', e);
+  }
+}
+
 serve(async (req) => {
+  const t0 = Date.now();
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, error: 'method not allowed' }, 405);
 
@@ -495,6 +529,13 @@ serve(async (req) => {
   try {
     const before = await snapshot(pg);
 
+    await logOp(sb, {
+      level: 'info', status: 'started',
+      message: 'analytics DB apply started',
+      details: { before_tables: before.tables.length, before_functions: before.functions.length },
+      user_id: userRes.user.id,
+    });
+
     // 두 SQL 블록 순차 실행. 각각 다중 statement 라 transaction 으로 묶음.
     await pg.queryArray('begin');
     try {
@@ -507,6 +548,15 @@ serve(async (req) => {
       } catch {
         /* noop */
       }
+      await logOp(sb, {
+        level: 'error', status: 'failed',
+        message: 'analytics SQL apply failed (rolled back)',
+        details: { error: String(e) },
+        user_id: userRes.user.id,
+        duration_ms: Date.now() - t0,
+        error_code: 'SQL_APPLY_FAIL',
+        error_message: String(e),
+      });
       return json(
         {
           ok: false,
@@ -521,6 +571,22 @@ serve(async (req) => {
 
     const createdTables = after.tables.filter((t) => !before.tables.includes(t));
     const createdFunctions = after.functions.filter((f) => !before.functions.includes(f));
+
+    const isNoOp = createdTables.length === 0 && createdFunctions.length === 0;
+    await logOp(sb, {
+      level: 'success',
+      status: isNoOp ? 'skipped' : 'completed',
+      message: isNoOp
+        ? '이미 모든 분석 DB 객체가 적용되어 있음 (no-op)'
+        : `생성: 테이블 ${createdTables.length}개, RPC ${createdFunctions.length}개`,
+      details: {
+        created_tables: createdTables,
+        created_functions: createdFunctions,
+        before, after,
+      },
+      user_id: userRes.user.id,
+      duration_ms: Date.now() - t0,
+    });
 
     return json({
       ok: true,

@@ -592,6 +592,32 @@ jobs:
                where pay_state=4 and approval_no is not null and membership_updated=true);
           SQL
 
+      - name: 1ah) 0041 (운영 로그 시스템) 적용
+        run: |
+          set -e
+          echo "== 0041 적용 (admin_operation_logs + 4 RPC) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0041_admin_operation_logs.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'logs_table=' ||
+              (case when exists (select 1 from information_schema.tables
+                where table_schema='public' and table_name='admin_operation_logs')
+                then 'YES' else 'NO' end);
+            select 'log_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_log_operation')
+                then 'YES' else 'NO' end);
+            select 'list_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='list_admin_operation_logs')
+                then 'YES' else 'NO' end);
+            select 'kpi_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_operation_log_kpi')
+                then 'YES' else 'NO' end);
+          SQL
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
