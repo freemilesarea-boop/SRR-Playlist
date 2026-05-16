@@ -3,20 +3,44 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { getMyPaymentStatus, type MyPaymentStatusRow } from '@/lib/subscriptionApi';
 import { useAuthStore } from '@/store/authStore';
+import { supabase } from '@/lib/supabase';
 
 /**
  * 결제 성공 페이지.
  *
- * 핵심 정책 (0046):
- *   - polling 의 단일 판정 기준은 RPC get_my_payment_status(order_no).membership_applied.
- *   - profile.membership_tier 캐시는 보조적으로 refreshProfile 호출만 트리거.
- *   - status='paid' && tier in ('individual','business') && tier==plan_type → 완료.
+ * 핵심 정책 (실시간 강화판):
+ *   - 실시간 신호: Supabase Realtime 으로 payment_orders[order_no] UPDATE 구독.
+ *     webhook 처리되어 status='paid' 가 되는 순간 즉시 trigger.
+ *   - polling 백업: Realtime 미가용/RLS 차단 환경 대비 polling 병행.
+ *     - 첫 10 tick(약 10초): 1초 간격 (실시간 못 받았을 때 빠른 catch)
+ *     - 그 다음 25 tick(약 50초): 2초 간격
+ *     - 총 60초 window.
+ *   - 판정 기준: RPC get_my_payment_status(order_no).membership_applied
+ *     status='paid' && tier in ('individual','business') && tier==plan_type.
  *   - status='refunded' / 'canceled' → 즉시 실패 안내.
- *   - 30초까지 polling, 그 후엔 "동기화 지연" 안내 + 수동 재확인 버튼.
- *   - order_no 없으면 즉시 에러.
+ *   - 60초 후에도 미적용 → "동기화 지연" 안내 + 수동 재확인 버튼.
  */
 
 type Phase = 'polling' | 'done' | 'failed' | 'timeout';
+
+// polling 스케줄: 첫 10번 1초, 그 후 25번 2초 = 총 60초.
+const POLL_FAST_TICKS = 10;
+const POLL_FAST_INTERVAL_MS = 1000;
+const POLL_SLOW_INTERVAL_MS = 2000;
+const POLL_MAX_TICKS = 35; // 10 + 25
+function pollIntervalForTick(tick: number): number {
+  return tick < POLL_FAST_TICKS ? POLL_FAST_INTERVAL_MS : POLL_SLOW_INTERVAL_MS;
+}
+function elapsedAtTick(tick: number): number {
+  if (tick <= POLL_FAST_TICKS) return tick * (POLL_FAST_INTERVAL_MS / 1000);
+  return (
+    POLL_FAST_TICKS * (POLL_FAST_INTERVAL_MS / 1000) +
+    (tick - POLL_FAST_TICKS) * (POLL_SLOW_INTERVAL_MS / 1000)
+  );
+}
+const POLL_WINDOW_SEC =
+  POLL_FAST_TICKS * (POLL_FAST_INTERVAL_MS / 1000) +
+  (POLL_MAX_TICKS - POLL_FAST_TICKS) * (POLL_SLOW_INTERVAL_MS / 1000);
 
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
@@ -28,27 +52,28 @@ export default function PaymentSuccessPage() {
   const [row, setRow] = useState<MyPaymentStatusRow | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const timer = useRef<number | null>(null);
   const stoppedRef = useRef(false);
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   async function pollOnce(tickIndex: number): Promise<boolean> {
     if (!orderNo) return false;
     const res = await getMyPaymentStatus(orderNo);
     if (stoppedRef.current) return true;
 
+    setElapsed(elapsedAtTick(tickIndex));
+
     if (!res.ok) {
       if (res.notFound) {
         // payment_orders row 가 아직 생성되지 않은 초기 구간일 수 있음 — 계속 polling
-        setElapsed(tickIndex * 2);
         return false;
       }
       setLastError(res.error);
-      setElapsed(tickIndex * 2);
       return false;
     }
 
     setRow(res.row);
-    setElapsed(tickIndex * 2);
 
     if (res.row.status === 'refunded' || res.row.status === 'canceled' || res.row.status === 'cancelled') {
       setPhase('failed');
@@ -70,6 +95,27 @@ export default function PaymentSuccessPage() {
     return false;
   }
 
+  /** 실시간 신호 도착 시 즉시 한 번 pollOnce 호출. */
+  async function triggerImmediatePoll(reason: string) {
+    if (stoppedRef.current) return;
+    console.log('[PaymentSuccess] realtime trigger:', reason);
+    // tick=0 으로 force poll — 표시 elapsed 는 건드리지 않음
+    if (!orderNo) return;
+    const res = await getMyPaymentStatus(orderNo);
+    if (stoppedRef.current || !res.ok) return;
+    setRow(res.row);
+    if (res.row.status === 'refunded' || res.row.status === 'canceled' || res.row.status === 'cancelled') {
+      setPhase('failed');
+      stoppedRef.current = true;
+      return;
+    }
+    if (res.row.membership_applied) {
+      void refreshProfile();
+      setPhase('done');
+      stoppedRef.current = true;
+    }
+  }
+
   async function startPolling() {
     stoppedRef.current = false;
     setPhase('polling');
@@ -88,21 +134,60 @@ export default function PaymentSuccessPage() {
       const finished = await pollOnce(tick);
       if (finished || stoppedRef.current) return;
       tick += 1;
-      if (tick >= 15) {
-        // ~30s
+      if (tick >= POLL_MAX_TICKS) {
         setPhase('timeout');
         return;
       }
-      timer.current = window.setTimeout(loop, 2000);
+      timer.current = window.setTimeout(loop, pollIntervalForTick(tick));
     };
     void loop();
   }
 
   useEffect(() => {
     void startPolling();
+
+    // ─────────────────────────────────────────────────────────────
+    // 실시간: payment_orders[order_no] 의 UPDATE 를 구독.
+    // webhook 이 처리되어 status='paid' 가 되는 순간 즉시 triggerImmediatePoll.
+    // Realtime 이 활성화 안 되어 있어도 polling 이 백업으로 동작.
+    // ─────────────────────────────────────────────────────────────
+    if (orderNo) {
+      const channel = supabase
+        .channel(`payment-status:${orderNo}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'payment_orders',
+            filter: `order_no=eq.${orderNo}`,
+          },
+          () => void triggerImmediatePoll('payment_orders.UPDATE'),
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            // users.id 는 클라이언트가 모를 수 있어 filter 없이 구독 —
+            // 본인 row 만 RLS 로 노출되므로 트래픽 최소.
+          },
+          () => void triggerImmediatePoll('users.UPDATE'),
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') setRealtimeConnected(true);
+        });
+      realtimeChannelRef.current = channel;
+    }
+
     return () => {
       stoppedRef.current = true;
       if (timer.current) window.clearTimeout(timer.current);
+      if (realtimeChannelRef.current) {
+        void supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderNo]);
@@ -122,7 +207,9 @@ export default function PaymentSuccessPage() {
         {phase === 'timeout' && (
           <TimeoutView orderNo={orderNo} row={row} onRecheck={onRecheck} />
         )}
-        {phase === 'polling' && <PollingView orderNo={orderNo} elapsed={elapsed} />}
+        {phase === 'polling' && (
+          <PollingView orderNo={orderNo} elapsed={elapsed} realtime={realtimeConnected} />
+        )}
       </div>
 
       <Link to="/profile" className="block text-center text-xs text-ink-mute hover:text-ink">
@@ -265,7 +352,15 @@ function TimeoutView({
   );
 }
 
-function PollingView({ orderNo, elapsed }: { orderNo: string | null; elapsed: number }) {
+function PollingView({
+  orderNo,
+  elapsed,
+  realtime,
+}: {
+  orderNo: string | null;
+  elapsed: number;
+  realtime: boolean;
+}) {
   return (
     <>
       <div className="flex items-center gap-2">
@@ -273,7 +368,11 @@ function PollingView({ orderNo, elapsed }: { orderNo: string | null; elapsed: nu
         <h1 className="text-lg font-bold">결제 확인 중입니다</h1>
       </div>
       <p className="mt-2 text-sm text-ink-mute">
-        결제 정보를 확인하고 있어요. 잠시만 기다려주세요. ({elapsed}s / 30s)
+        결제 정보를 확인하고 있어요. 잠시만 기다려주세요. ({Math.round(elapsed)}s /{' '}
+        {Math.round(POLL_WINDOW_SEC)}s)
+      </p>
+      <p className="mt-1 text-[11px] text-ink-dim">
+        {realtime ? '실시간 동기화 연결됨 — 처리되는 즉시 자동 반영됩니다.' : '실시간 동기화 연결 중…'}
       </p>
       <p className="mt-3 text-[11px] text-ink-dim">주문번호: {orderNo ?? '—'}</p>
     </>

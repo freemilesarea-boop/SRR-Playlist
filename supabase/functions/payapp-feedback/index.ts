@@ -96,25 +96,35 @@ const PAYAPP_ACTIONABLE_STATES = new Set<number>([
 ]);
 
 // PayApp 정기결제 '해지' webhook 감지 — pay_state 와 별개로 raw_payload 신호로 판단.
-// 운영 raw_payload 에서 확인된 후보 키 패턴.
+//
+// ⚠️ 보수적으로 동작 — 모호한 단서(canceldate/cancel_at/stopdate 같은 날짜 필드)는
+//    PayApp 가 정상 paid 응답에도 "다음 회차 만료일/해지 예약일" 의미로 echo 하는
+//    경우가 있어, 이를 cancel 트리거로 쓰면 정상 결제(state=64)도 해지로 잘못
+//    라우팅되어 사용자 membership 이 'free' 로 회수되는 치명 버그가 발생함.
+//    → 명시적 boolean 플래그 또는 명시적 "해지" 상태 라벨만 신호로 사용.
 function isCancelSubscriptionWebhook(p: Record<string, string>): boolean {
   const truthy = (v?: string) =>
     v != null && /^(y|yes|t|true|1)$/i.test(String(v).trim());
   const stop = (v?: string) =>
     v != null && /^(cancel|stop|expire|terminate|해지)/i.test(String(v).trim());
-  if (truthy(p.rebill_cancel) || truthy(p.unsubscribe) || truthy(p.subscription_cancel)) return true;
-  if (stop(p.rebill_status) || stop(p.subscr_status) || stop(p.subscription_status)) return true;
-  if (
-    (p.canceldate && p.canceldate.length > 0) ||
-    (p.cancel_at && p.cancel_at.length > 0) ||
-    (p.stopdate && p.stopdate.length > 0)
-  ) {
-    // 단, refund/cancel state (8/9/32/70/71) 와 동시 발생 시엔 별도 라우터에 위임 (해지 RPC 불필요)
-    const stateNum = Number(p.pay_state ?? p.paystate ?? p.state ?? 0);
-    if (![8, 9, 32, 70, 71].includes(stateNum)) return true;
+
+  // 1) 명시적 cancel boolean
+  if (truthy(p.rebill_cancel) || truthy(p.unsubscribe) || truthy(p.subscription_cancel)) {
+    return true;
   }
-  // 한글 메시지
+  // 2) 명시적 cancel/해지 상태 라벨
+  if (stop(p.rebill_status) || stop(p.subscr_status) || stop(p.subscription_status)) {
+    return true;
+  }
+  // 3) 한글 메시지 명시
   if (p.message && /정기결제\s*해지|구독\s*해지/i.test(p.message)) return true;
+
+  // ⚠️ 의도적으로 제거됨 — 이 분기는 false positive 가 너무 잦음:
+  //    if (p.canceldate || p.cancel_at || p.stopdate) ...
+  //    PayApp paid webhook 에도 미래 해지 예약일/다음 만료일 의미로 들어오므로,
+  //    이걸 신호로 쓰면 정상 결제가 해지로 잘못 라우팅됨.
+  //    명시적 boolean(p.rebill_cancel='y' 등) 또는 명시적 상태(p.rebill_status='cancel')
+  //    가 함께 와야만 트리거.
   return false;
 }
 
@@ -409,10 +419,13 @@ serve(async (req) => {
 
   // ─────────────────────────────────────────────────────────────
   // 정기결제 해지 (subscription cancel) — pay_state 와 별개로 raw_payload 로 판단.
-  // refund/cancel state (라우터) 가 아닐 때만 실행 (중복 적용 방지).
+  //
+  // ⚠️ 절대 paid state(64) 에서 트리거 금지. PayApp 가 paid webhook 에 미래
+  //    해지 예약일 등을 echo 하는 경우 isCancelSubscriptionWebhook 의 잔여 false
+  //    positive 가 있어도 paid 우선 처리 보장.
   // ─────────────────────────────────────────────────────────────
   const isSubCancel =
-    !isCancelState && !isRefundState && isCancelSubscriptionWebhook(payload);
+    !isCancelState && !isRefundState && !isPaidState && isCancelSubscriptionWebhook(payload);
   if (isSubCancel && mulNo) {
     const cancelReason =
       pickField(payload, ['cancel_reason', 'reason', '사유']) ?? 'PayApp 정기결제 해지';
