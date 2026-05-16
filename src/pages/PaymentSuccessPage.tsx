@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
 import { fetchMySubscription, type SubscriptionSnapshot } from '@/lib/subscriptionApi';
+import { useAuthStore } from '@/store/authStore';
 
 /**
  * 결제 성공 페이지.
  * - URL 파라미터(order_no)는 화면 표시용. 절대 활성화 기준 X.
- * - get-my-subscription 을 polling 해서 status='active' 일 때만 성공 처리.
+ * - 단일 진실 원천: users.membership_tier in ('individual','business') 면 활성 완료.
+ *   (subscription.status='active' 가 아니라 webhook 이 set 한 membership_tier 로 판단)
  * - PayApp 웹훅이 도달할 때까지 최대 약 30초 polling. 그 뒤엔 결제확인중 안내.
  */
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const orderNo = params.get('order_no');
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const profileTier = useAuthStore((s) => s.profile?.membership_tier);
   const [sub, setSub] = useState<SubscriptionSnapshot | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
@@ -24,11 +28,14 @@ export default function PaymentSuccessPage() {
 
     async function poll() {
       if (stopped) return;
-      const res = await fetchMySubscription();
+      // subscription snapshot 은 표시용 (플랜/금액/다음 결제일).
+      // 활성화 판정은 refreshProfile 후 membership_tier 로만.
+      const [res] = await Promise.all([fetchMySubscription(), refreshProfile()]);
       if (stopped) return;
       setSub(res.subscription);
       setElapsed(tick * 2);
-      if (res.subscription?.status === 'active') {
+      const tier = useAuthStore.getState().profile?.membership_tier;
+      if (tier === 'individual' || tier === 'business') {
         setDone(true);
         return;
       }
@@ -68,16 +75,6 @@ export default function PaymentSuccessPage() {
             >
               <ArrowRight size={14} /> 홈으로 이동
             </button>
-          </>
-        ) : sub?.status === 'payment_waiting' ? (
-          <>
-            <div className="flex items-center gap-2 text-amber-300">
-              <AlertCircle size={20} />
-              <h1 className="text-lg font-bold">결제 대기 중</h1>
-            </div>
-            <p className="mt-2 text-sm text-ink-mute">
-              가상계좌 입금 등 결제 확정을 기다리고 있어요. 입금 완료 후 자동으로 적용됩니다.
-            </p>
           </>
         ) : (
           <>
