@@ -146,7 +146,9 @@ export default function PaymentSyncTool() {
           <CreditCard size={16} className="text-accent" /> 결제 동기화
         </h2>
         <p className="text-xs text-ink-mute">
-          PayApp 결제내역을 자동 조회하고 매칭. webhook 누락 시 보완 용도.
+          정상 결제는 PayApp <span className="font-semibold text-accent">webhook(state=64)</span>
+          으로 자동 처리됩니다. 이 화면의 자동 동기화는 webhook 누락 시
+          <span className="ml-1 font-semibold text-yellow-300">복구용/진단용</span> 입니다.
         </p>
       </div>
 
@@ -188,10 +190,10 @@ export default function PaymentSyncTool() {
             <Zap size={18} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold">PayApp 결제내역 자동 동기화</h3>
+            <h3 className="text-sm font-bold">PayApp 결제내역 자동 동기화 (복구/진단용)</h3>
             <p className="mt-0.5 text-[11px] leading-relaxed text-ink-mute">
-              PayApp API 로 결제완료 건을 조회 → 우리 DB 와 자동 매칭 → users / subscriptions /
-              payment_orders 적용. 중복 실행해도 멱등.
+              webhook 정상 시 이 버튼 사용 불필요. PayApp 콘솔 점검 등으로 state=64 webhook
+              누락이 의심될 때만 사용. API 로 결제완료 건 조회 → 자동 매칭/멱등 적용.
             </p>
           </div>
         </div>
@@ -405,28 +407,39 @@ export default function PaymentSyncTool() {
             배포 상태를 확인하세요.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-[11px]">
-              <thead className="text-ink-dim">
-                <tr className="border-b border-line/10">
-                  <th className="px-2 py-1.5 text-left font-semibold">time</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">mul_no</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">state</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">price</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">검증</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">매칭 사용자</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">membership</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">처리오류</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">replay</th>
-                </tr>
-              </thead>
-              <tbody>
-                {webhookRows.map((w) => (
-                  <WebhookRow key={w.id} row={w} onReplayed={load} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <p className="text-[11px] text-ink-dim">
+              동일 mul_no 의 이벤트는 그룹으로 묶어, state=64/결제완료 또는 환불/취소 row 를
+              대표로 표시합니다. 승인대기(state=4) row 는 보조 행으로 접혀 있습니다.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-[11px]">
+                <thead className="text-ink-dim">
+                  <tr className="border-b border-line/10">
+                    <th className="px-2 py-1.5 text-left font-semibold">time</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">mul_no</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">state</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">price</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">검증</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">매칭 사용자</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">membership</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">처리오류</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">replay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupWebhooksByMulNo(webhookRows).map(({ primary, secondaries }) => (
+                    <WebhookRow
+                      key={primary.id}
+                      row={primary}
+                      secondaries={secondaries}
+                      onReplayed={load}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
@@ -582,14 +595,22 @@ export default function PaymentSyncTool() {
   );
 }
 
+// 상태 라벨 정책 (확정):
+//   state=1     → 요청수신
+//   state=4     → 승인대기 (실결제 X)
+//   state=8/32  → 결제취소
+//   state=9     → 환불 (구 승인취소)
+//   state=10    → 입금대기
+//   state=64    → 결제완료 (실결제 webhook)
+//   state=70/71 → 환불
 const STATE_LABEL: Record<number, { label: string; tone: string }> = {
   1: { label: '요청수신', tone: 'bg-ink/10 text-ink-mute' },
   4: { label: '승인대기', tone: 'bg-yellow-500/15 text-yellow-200' },
-  8: { label: '요청취소', tone: 'bg-red-500/15 text-red-300' },
-  9: { label: '승인취소', tone: 'bg-red-500/15 text-red-300' },
+  8: { label: '결제취소', tone: 'bg-red-500/15 text-red-300' },
+  9: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
   10: { label: '입금대기', tone: 'bg-blue-500/15 text-blue-200' },
-  32: { label: '요청취소', tone: 'bg-red-500/15 text-red-300' },
-  64: { label: '승인완료', tone: 'bg-emerald-500/15 text-emerald-300' },
+  32: { label: '결제취소', tone: 'bg-red-500/15 text-red-300' },
+  64: { label: '결제완료', tone: 'bg-emerald-500/15 text-emerald-300' },
   70: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
   71: { label: '환불', tone: 'bg-red-500/15 text-red-300' },
 };
@@ -598,22 +619,72 @@ function stateBadge(
   state: number | null,
   approval_no?: string | null,
 ): { label: string; tone: string } {
+  // 정책 확정 (운영 webhook 실측): state=64 가 실 결제완료 webhook.
+  // state=4 는 승인대기 webhook (실결제 X, 동일 mul_no 에 곧 state=64 가 따라옴).
+  // approval_no 유무로 판정하지 않음 — 그룹 단위로 membership_updated 인 row 가 진실.
+  void approval_no;
   if (state == null) return { label: '—', tone: 'text-ink-dim' };
-  // 정책: state=4 + approval_no → 결제완료 (자동 처리됨)
-  if (state === 4 && approval_no && approval_no.length > 0) {
-    return { label: '결제완료', tone: 'bg-emerald-500/15 text-emerald-300' };
-  }
   return STATE_LABEL[state] ?? { label: String(state), tone: 'bg-ink/10 text-ink-mute' };
+}
+
+// 동일 mul_no 의 webhook 이벤트들을 그룹화하고, 그룹별 대표(primary) row 선택.
+//   우선순위: refund/cancel (8/9/32/70/71) > membership_updated=true > state=64
+//             > state=10/입금대기 > state=4/승인대기 > 그 외
+//   같은 우선순위 안에서는 created_at desc — 가장 최신.
+//   secondaries: primary 를 제외한 나머지를 created_at desc.
+// mul_no 가 null 인 row 는 단독 그룹으로.
+function groupWebhooksByMulNo(
+  rows: WebhookEventRow[],
+): Array<{ primary: WebhookEventRow; secondaries: WebhookEventRow[] }> {
+  const buckets = new Map<string, WebhookEventRow[]>();
+  rows.forEach((r) => {
+    const key = r.payapp_mul_no ?? `__solo_${r.id}`;
+    const arr = buckets.get(key) ?? [];
+    arr.push(r);
+    buckets.set(key, arr);
+  });
+
+  function rank(r: WebhookEventRow): number {
+    const s = r.pay_state;
+    if (s != null && [8, 9, 32, 70, 71].includes(s)) return 0; // refund/cancel 최상위
+    if (r.membership_updated) return 1; // 적용된 row
+    if (s === 64) return 2; // 결제완료
+    if (s === 10) return 3; // 입금대기
+    if (s === 4) return 4; // 승인대기
+    return 5;
+  }
+
+  const groups: Array<{ primary: WebhookEventRow; secondaries: WebhookEventRow[] }> = [];
+  buckets.forEach((bucket) => {
+    const sorted = [...bucket].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    const [primary, ...secondaries] = sorted;
+    groups.push({ primary, secondaries });
+  });
+
+  // 그룹 자체는 primary.created_at desc 로 정렬 → 최근 그룹부터 표시.
+  groups.sort(
+    (a, b) =>
+      new Date(b.primary.created_at).getTime() - new Date(a.primary.created_at).getTime(),
+  );
+  return groups;
 }
 
 function WebhookRow({
   row,
+  secondaries = [],
   onReplayed,
 }: {
   row: WebhookEventRow;
+  secondaries?: WebhookEventRow[];
   onReplayed: () => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   async function onReplay() {
     setBusy(true);
     try {
@@ -671,12 +742,28 @@ function WebhookRow({
     : row.pay_state === 64 && row.membership_updated
       ? 'bg-emerald-500/5'
       : '';
+  const hasSecondaries = secondaries.length > 0;
   return (
+    <>
     <tr className={`border-b border-line/10 last:border-b-0 ${rowTone}`}>
       <td className="px-2 py-1.5 text-ink-mute">
         {new Date(row.created_at).toLocaleTimeString('ko-KR')}
       </td>
-      <td className="px-2 py-1.5 font-mono">{row.payapp_mul_no ?? '—'}</td>
+      <td className="px-2 py-1.5 font-mono">
+        <div className="flex items-center gap-1.5">
+          <span>{row.payapp_mul_no ?? '—'}</span>
+          {hasSecondaries && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="rounded-full bg-ink/10 px-1.5 py-0.5 text-[9px] font-semibold text-ink-mute hover:bg-ink/15"
+              title="동일 mul_no 의 보조 webhook 이벤트 보기"
+            >
+              +{secondaries.length} {expanded ? '닫기' : '보조'}
+            </button>
+          )}
+        </div>
+      </td>
       <td className="px-2 py-1.5">
         <div className="flex flex-col gap-1">
           <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${state.tone}`}>
@@ -740,6 +827,44 @@ function WebhookRow({
         </div>
       </td>
     </tr>
+    {expanded &&
+      secondaries.map((sec) => {
+        const secState = stateBadge(sec.pay_state, sec.approval_no);
+        return (
+          <tr key={sec.id} className="border-b border-line/5 bg-bg-deep/30 text-ink-dim">
+            <td className="px-2 py-1 pl-6 text-[10px]">
+              ↳ {new Date(sec.created_at).toLocaleTimeString('ko-KR')}
+            </td>
+            <td className="px-2 py-1 font-mono text-[10px]">{sec.payapp_mul_no ?? '—'}</td>
+            <td className="px-2 py-1">
+              <span
+                className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${secState.tone}`}
+              >
+                {sec.pay_state ?? '—'} · {secState.label}
+              </span>
+            </td>
+            <td className="px-2 py-1 text-right tabular-nums text-[10px]">{sec.price ?? '—'}</td>
+            <td className="px-2 py-1 text-[10px]">
+              {sec.linkval_verified ? (
+                <span className="text-emerald-400/80">OK</span>
+              ) : (
+                <span className="text-red-300">FAIL</span>
+              )}
+            </td>
+            <td className="px-2 py-1 text-[10px]">{sec.matched_user_email ?? '—'}</td>
+            <td className="px-2 py-1 text-[10px]">
+              {sec.membership_updated && sec.final_membership_tier ? (
+                <span className="text-ink-mute">→ {sec.final_membership_tier}</span>
+              ) : (
+                <span className="text-ink-dim">—</span>
+              )}
+            </td>
+            <td className="px-2 py-1 text-[10px] text-red-300/80">{sec.processing_error ?? '—'}</td>
+            <td className="px-2 py-1 text-right text-[10px] text-ink-dim italic">보조</td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
