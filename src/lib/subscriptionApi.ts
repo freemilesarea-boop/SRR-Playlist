@@ -470,3 +470,35 @@ export async function backfillSubscriptionCancels(payload: {
     return { ok: false, error: rpcErrorDetail('admin_backfill_subscription_cancels', e) };
   }
 }
+
+// ---------- /payment/success 결제 적용 확인 (0046) ----------
+
+export interface MyPaymentStatusRow {
+  order_no: string;
+  status: 'requested' | 'pending' | 'paid' | 'canceled' | 'cancelled' | 'failed' | 'waiting' | 'refunded';
+  user_id: string;
+  plan_type: 'individual' | 'business';
+  amount: number;
+  membership_tier: 'free' | 'individual' | 'business' | null;
+  subscription_type: string | null;
+  paid_at: string | null;
+  refunded_at: string | null;
+  membership_applied: boolean;
+}
+
+export type MyPaymentStatusResult =
+  | { ok: true; row: MyPaymentStatusRow }
+  | { ok: false; notFound: true }
+  | { ok: false; notFound: false; error: string };
+
+export async function getMyPaymentStatus(orderNo: string): Promise<MyPaymentStatusResult> {
+  try {
+    const { data, error } = await supabase.rpc('get_my_payment_status', { p_order_no: orderNo });
+    if (error) return { ok: false, notFound: false, error: rpcErrorDetail('get_my_payment_status', error) };
+    const row = (Array.isArray(data) ? data[0] : data) as MyPaymentStatusRow | undefined;
+    if (!row) return { ok: false, notFound: true };
+    return { ok: true, row };
+  } catch (e) {
+    return { ok: false, notFound: false, error: rpcErrorDetail('get_my_payment_status', e) };
+  }
+}
