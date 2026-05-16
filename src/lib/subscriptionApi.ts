@@ -157,8 +157,11 @@ export async function listManualPaymentImports(
 export interface SyncAttemptPreview {
   cmd: string;
   http_status: number | null;
+  errno?: string | null;
+  errmsg?: string | null;
   parsed_count: number;
   success: boolean;
+  from_cache?: boolean;
   error: string | null;
   raw_preview: string;
 }
@@ -168,6 +171,7 @@ export interface AutoSyncSummary {
   date_from?: string;
   date_to?: string;
   success_cmd?: string | null;
+  cached_cmd?: string | null;
   attempts?: SyncAttemptPreview[];
   fetched?: number;
   matched?: number;

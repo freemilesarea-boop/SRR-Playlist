@@ -235,11 +235,23 @@ export default function PaymentSyncTool() {
           >
             {autoResult.ok ? (
               <>
+                {/* 현재 성공 cmd 강조 표시 — EF instance 내 캐시된 cmd 우선 사용 */}
+                {(autoResult.success_cmd || autoResult.cached_cmd) && (
+                  <div className="mb-2 rounded-md bg-emerald-500/10 px-2 py-1.5 ring-1 ring-emerald-500/20">
+                    <p className="text-[11px] text-emerald-200">
+                      <span className="font-semibold">현재 성공 cmd:</span>{' '}
+                      <span className="font-mono text-emerald-300">
+                        {autoResult.success_cmd ?? autoResult.cached_cmd}
+                      </span>
+                      {autoResult.cached_cmd &&
+                        autoResult.cached_cmd === autoResult.success_cmd && (
+                          <span className="ml-1 text-[10px] text-emerald-400/70">(memory cache)</span>
+                        )}
+                    </p>
+                  </div>
+                )}
                 <p className="mb-2 text-[11px] text-ink-mute">
                   기간: {autoResult.date_from} ~ {autoResult.date_to}
-                  {autoResult.success_cmd && (
-                    <> · 성공한 cmd: <span className="font-mono text-emerald-300">{autoResult.success_cmd}</span></>
-                  )}
                 </p>
                 <div className="grid grid-cols-5 gap-1.5">
                   <Stat label="조회" value={autoResult.fetched ?? 0} tone="text-ink" />
@@ -271,16 +283,28 @@ export default function PaymentSyncTool() {
                     </summary>
                     {(autoResult.fetched ?? 0) === 0 && (
                       <p className="mt-2 rounded-md bg-yellow-500/10 p-2 text-yellow-200">
-                        ⚠️ PayApp API 조회 명령이 맞지 않거나 응답 필드가 다릅니다. 아래 raw 응답을
-                        확인하고 PAYAPP_LIST_CMD 시크릿 또는 응답 파서를 조정하세요.
+                        ⚠️ 5개 cmd 후보 모두 0건 또는 errno 응답이에요. webhook 기반 결제는 정상
+                        동작 중이라 치명 오류는 아니지만, 아래 raw 응답으로 PayApp 응답 포맷을
+                        확인하세요. errno=70040 이면 cmd 명칭이 다른 것이고, parsed=0 이면
+                        응답 파서가 필드를 못 읽은 것입니다.
                       </p>
                     )}
                     <div className="mt-2 space-y-2">
                       {autoResult.attempts!.map((a, i) => (
                         <div key={i} className="rounded-md bg-bg-deep/60 p-2 ring-1 ring-line/10">
-                          <div className="mb-1 flex items-center gap-2">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
                             <span className="font-mono font-semibold text-ink">{a.cmd}</span>
+                            {a.from_cache && (
+                              <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-300">
+                                cached
+                              </span>
+                            )}
                             <span className="text-ink-dim">HTTP {a.http_status ?? '—'}</span>
+                            {a.errno && (
+                              <span className="rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-mono text-yellow-300">
+                                errno={a.errno}
+                              </span>
+                            )}
                             <span
                               className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                                 a.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ink/10 text-ink-mute'
@@ -288,6 +312,7 @@ export default function PaymentSyncTool() {
                             >
                               {a.parsed_count}건 파싱
                             </span>
+                            {a.errmsg && <span className="text-[10px] text-yellow-300">{a.errmsg}</span>}
                             {a.error && <span className="text-red-300">{a.error}</span>}
                           </div>
                           <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-ink-mute">

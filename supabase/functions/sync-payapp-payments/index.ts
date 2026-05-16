@@ -4,11 +4,16 @@
 //
 // 동작:
 //   1) admin 검증
-//   2) PayApp list API 를 후보 cmd 순차 시도 (env PAYAPP_LIST_CMD 가 있으면 그것만 사용)
-//   3) 각 시도 raw response 를 payapp_api_sync_attempts 에 저장 (운영 진단용)
-//   4) 첫 번째 parsed_count > 0 인 cmd 로 records 채택
+//   2) PayApp list API 를 후보 cmd 순차 시도
+//      - 같은 EF instance 내 직전 성공 cmd 가 있으면 1순위
+//      - env PAYAPP_LIST_CMD (있으면) 2순위 — 단일 고정 아님, 실패 시 후보로 폴백
+//      - 후보 5개: ['paymentList','payList','paylist','tradeList','list']
+//   3) 각 시도별: cmd / HTTP / errno / parsed_count / raw_preview 를
+//      admin_operation_logs 에 warning 레벨로 기록 (webhook 정상 운영 중이라
+//      조회 API 실패는 치명 오류 아님)
+//   4) 최초 parsed_count > 0 인 cmd 를 채택 + module cache 에 저장
 //   5) 각 record 별 admin_sync_payapp_payment RPC 호출 (멱등)
-//   6) 결과 + attempts 요약 반환
+//   6) 결과 + attempts + success_cmd 반환
 
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -20,11 +25,14 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
-// 명시적 override 가 있으면 그 cmd 만 사용. 없으면 후보 5개를 순차 시도.
+// 명시적 override — 단일 고정 아님. 우선 시도하지만 실패하면 candidates 로 폴백.
 const PAYAPP_LIST_CMD = Deno.env.get('PAYAPP_LIST_CMD') ?? '';
 
-// 후보 cmd 목록 — PayApp 콘솔/문서마다 명칭이 다를 수 있어 순차 시도.
-const CANDIDATE_CMDS = ['paymentList', 'getReqList', 'req_search', 'paylist', 'payment_list'];
+// 후보 cmd 목록 — 운영 PayApp API 의 실제 명칭이 다를 수 있어 순차 시도.
+const CANDIDATE_CMDS = ['paymentList', 'payList', 'paylist', 'tradeList', 'list'];
+
+// EF instance 가 warm 상태일 때 직전 성공 cmd 우선 사용 → 70040 응답 횟수 최소화.
+let cachedSuccessCmd: string | null = null;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -197,7 +205,45 @@ interface AttemptResult {
   http_status: number | null;
   records: Array<Record<string, string>>;
   raw_response: string;
+  errno: string | null;
+  errmsg: string | null;
   error: string | null;
+}
+
+// PayApp 응답에서 errno/errmsg 추출 — JSON / URL-encoded / XML / key=value 다 커버.
+function extractErrno(raw: string): { errno: string | null; errmsg: string | null } {
+  if (!raw) return { errno: null, errmsg: null };
+  const trimmed = raw.trim();
+
+  // 1) JSON 시도
+  try {
+    const j = JSON.parse(trimmed);
+    if (j && typeof j === 'object') {
+      const errno = j.errno ?? j.errno_code ?? j.error_code ?? j.code ?? null;
+      const errmsg = j.errmsg ?? j.errmessage ?? j.error_message ?? j.message ?? null;
+      if (errno != null || errmsg != null) {
+        return { errno: errno != null ? String(errno) : null, errmsg: errmsg != null ? String(errmsg) : null };
+      }
+    }
+  } catch {
+    /* not json */
+  }
+
+  // 2) URL-encoded / key=value / XML 통합 정규식
+  const ernoM = trimmed.match(/(?:^|[&\n\s<>])errno[\s=:>]+["']?([^&\n<"']+)/i);
+  const msgM = trimmed.match(/(?:^|[&\n\s<>])errmsg[\s=:>]+["']?([^&\n<"']+)/i);
+  return {
+    errno: ernoM ? safeDecode(ernoM[1]).trim() : null,
+    errmsg: msgM ? safeDecode(msgM[1]).trim() : null,
+  };
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
 }
 
 async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promise<AttemptResult> {
@@ -217,10 +263,24 @@ async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promis
     });
     const text = await resp.text();
     const records = parsePayappList(text);
-    return { cmd, http_status: resp.status, records, raw_response: text, error: null };
+    const { errno, errmsg } = extractErrno(text);
+    return { cmd, http_status: resp.status, records, raw_response: text, errno, errmsg, error: null };
   } catch (e) {
-    return { cmd, http_status: null, records: [], raw_response: '', error: String(e) };
+    return { cmd, http_status: null, records: [], raw_response: '', errno: null, errmsg: null, error: String(e) };
   }
+}
+
+// 후보 + cache + env override 를 dedupe 해서 시도 순서 결정.
+function buildCmdOrder(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of [cachedSuccessCmd, PAYAPP_LIST_CMD, ...CANDIDATE_CMDS]) {
+    if (!c) continue;
+    if (seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out;
 }
 
 // 운영 로그 기록 — 실패해도 동기화 자체는 계속 진행
@@ -327,9 +387,11 @@ serve(async (req) => {
   const dateFrom = body.date_from || daysAgoKst(7);
   const dateTo = body.date_to || daysAgoKst(0);
 
+  const cmdsToTry = buildCmdOrder();
   console.log('[sync-payapp] request preview:', {
+    cached_cmd: cachedSuccessCmd,
     cmd_override: PAYAPP_LIST_CMD || null,
-    candidate_cmds: PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS,
+    cmds_to_try: cmdsToTry,
     date_from: dateFrom,
     date_to: dateTo,
     userid_present: PAYAPP_USERID.length > 0,
@@ -338,12 +400,14 @@ serve(async (req) => {
   });
 
   // 후보 cmd 순차 시도
-  const cmdsToTry = PAYAPP_LIST_CMD ? [PAYAPP_LIST_CMD] : CANDIDATE_CMDS;
   const attempts: Array<{
     cmd: string;
     http_status: number | null;
+    errno: string | null;
+    errmsg: string | null;
     parsed_count: number;
     success: boolean;
+    from_cache: boolean;
     error: string | null;
     raw_preview: string;
   }> = [];
@@ -352,10 +416,12 @@ serve(async (req) => {
   let logFailures = 0;
 
   for (const cmd of cmdsToTry) {
+    const attemptStart = Date.now();
+    const fromCache = cmd === cachedSuccessCmd;
     const r = await tryFetchPayApp(cmd, dateFrom, dateTo);
     const success = r.records.length > 0;
 
-    // payapp_api_sync_attempts 에 기록 — 테이블이 없으면(0028 미적용) 조용히 무시
+    // payapp_api_sync_attempts (0028) — 운영 진단용 영구 기록
     try {
       const { error: insertErr } = await sb.from('payapp_api_sync_attempts').insert({
         requested_cmd: cmd,
@@ -365,7 +431,7 @@ serve(async (req) => {
         raw_response: r.raw_response.slice(0, 4000),
         parsed_count: r.records.length,
         success,
-        error_message: r.error,
+        error_message: r.error ?? (r.errno ? `errno=${r.errno} ${r.errmsg ?? ''}` : null),
         created_by: userRes.user.id,
       });
       if (insertErr) {
@@ -377,11 +443,40 @@ serve(async (req) => {
       console.warn('[sync-payapp] attempt log threw:', String(e));
     }
 
+    // admin_operation_logs — 각 시도를 warning(미성공)/success(성공) 레벨로 기록.
+    // webhook 기반 결제 시스템은 정상 운영 중이므로 실패해도 error 아님.
+    await logOp(sb, {
+      level: success ? 'success' : 'warning',
+      status: success ? 'completed' : 'attempted',
+      message:
+        `[cmd 탐색] cmd=${cmd}` +
+        (fromCache ? ' (from cache)' : '') +
+        ` http=${r.http_status ?? '—'} errno=${r.errno ?? '—'} parsed=${r.records.length}`,
+      details: {
+        cmd,
+        from_cache: fromCache,
+        http_status: r.http_status,
+        errno: r.errno,
+        errmsg: r.errmsg,
+        parsed_count: r.records.length,
+        raw_preview: r.raw_response.slice(0, 500),
+        date_from: dateFrom,
+        date_to: dateTo,
+      },
+      user_id: userRes.user.id,
+      duration_ms: Date.now() - attemptStart,
+      error_code: !success && r.errno ? `PAYAPP_${r.errno}` : null,
+      error_message: !success ? (r.errmsg ?? r.error ?? null) : null,
+    });
+
     attempts.push({
       cmd,
       http_status: r.http_status,
+      errno: r.errno,
+      errmsg: r.errmsg,
       parsed_count: r.records.length,
       success,
+      from_cache: fromCache,
       error: r.error,
       raw_preview: r.raw_response.slice(0, 2000),
     });
@@ -389,6 +484,7 @@ serve(async (req) => {
     if (success) {
       records = r.records;
       successCmd = cmd;
+      cachedSuccessCmd = cmd; // 다음 invocation 1순위로 사용
       break;
     }
   }
@@ -467,9 +563,10 @@ serve(async (req) => {
     }
   }
 
-  // 운영 로그 기록
-  const overallLevel: 'success' | 'warning' | 'error' =
-    failed > 0 ? 'error' : records.length === 0 ? 'warning' : 'success';
+  // 운영 로그 기록 — 조회 API 또는 RPC sync 실패는 webhook 기반 시스템이
+  // 정상 동작 중이라 모두 warning 으로 downgrade (치명 오류 아님).
+  const overallLevel: 'success' | 'warning' =
+    failed > 0 || records.length === 0 ? 'warning' : 'success';
   await logOp(sb, {
     level: overallLevel,
     status: failed > 0 ? 'failed' : records.length === 0 ? 'skipped' : 'completed',
@@ -477,9 +574,13 @@ serve(async (req) => {
       (successCmd ? ` (cmd=${successCmd})` : ' (no cmd matched)'),
     details: {
       date_from: dateFrom, date_to: dateTo,
-      success_cmd: successCmd, fetched: records.length,
+      success_cmd: successCmd, cached_cmd: cachedSuccessCmd,
+      fetched: records.length,
       matched, unmatched, already_synced: alreadySynced, failed,
-      cmd_attempts: attempts.map((a) => ({ cmd: a.cmd, parsed: a.parsed_count, ok: a.success })),
+      cmd_attempts: attempts.map((a) => ({
+        cmd: a.cmd, parsed: a.parsed_count, ok: a.success,
+        errno: a.errno, http: a.http_status, from_cache: a.from_cache,
+      })),
     },
     user_id: userRes.user.id,
     duration_ms: Date.now() - t0,
@@ -492,6 +593,7 @@ serve(async (req) => {
     date_from: dateFrom,
     date_to: dateTo,
     success_cmd: successCmd,
+    cached_cmd: cachedSuccessCmd,
     attempts,
     fetched: records.length,
     matched,
