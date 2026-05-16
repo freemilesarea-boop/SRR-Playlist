@@ -184,6 +184,9 @@ serve(async (req) => {
   params.set('var2', user.id);
   params.set('smsuse', 'n');
   params.set('openpaytype', 'card');
+  // PayApp 가 feedbackurl 실패 시 재시도 — 우리 EF 는 항상 SUCCESS 반환하므로
+  // 실제 재시도 폭주는 없음. 매뉴얼 권장값.
+  params.set('checkretry', 'y');
   params.set('linkkey', PAYAPP_LINKKEY);
 
   // 디버그 로그 — 민감정보(linkkey/linkval/recvphone/recvemail/userid 값) 제외.

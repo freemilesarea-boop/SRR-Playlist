@@ -216,13 +216,13 @@ function TimeoutView({
       <div className="flex items-center gap-2 text-yellow-300">
         <AlertCircle size={20} />
         <h1 className="text-lg font-bold">
-          {paidButNotApplied ? '결제는 완료됐지만 권한 동기화 중' : '확인이 지연되고 있어요'}
+          {paidButNotApplied ? '결제는 완료됐지만 권한 동기화 중' : '결제 확인 대기 중'}
         </h1>
       </div>
       <p className="mt-2 text-sm text-ink-mute">
         {paidButNotApplied
-          ? '결제는 정상 처리됐고 곧 자동 반영됩니다. 잠시 후 다시 확인해주세요. 계속 안 되면 관리자에게 문의해주세요.'
-          : '결제 처리가 30초 이상 걸리고 있어요. PayApp 응답을 기다리는 중이거나 webhook 도달이 지연된 상태입니다.'}
+          ? '결제는 정상 처리됐고 곧 자동 반영됩니다. 잠시 후 다시 확인해주세요. 계속 안 되면 관리자에게 주문번호를 전달해주세요.'
+          : '결제는 완료됐을 수 있으나 webhook 동기화 대기 중입니다. 관리자에게 주문번호를 전달해주세요.'}
       </p>
       <p className="mt-3 text-[11px] text-ink-dim">
         주문번호: <span className="font-mono">{orderNo ?? '—'}</span>
