@@ -16,7 +16,6 @@ import {
   syncPayappPaymentsAuto,
   searchUsersForLink,
   linkUnmatchedImport,
-  listRecentSyncAttempts,
   listRecentWebhookEvents,
   replayWebhookEvent,
   replayWebhookByMulNo,
@@ -28,7 +27,6 @@ import {
   type AutoSyncSummary,
   type ManualPaymentImportRow,
   type UserSearchRow,
-  type SyncAttemptRow,
   type WebhookEventRow,
 } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
@@ -68,8 +66,9 @@ export default function PaymentSyncTool() {
   const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
   const [autoResult, setAutoResult] = useState<AutoSyncSummary | null>(null);
 
-  // 진단: 최근 sync attempts + webhook events + RPC 에러
-  const [attempts, setAttempts] = useState<SyncAttemptRow[]>([]);
+  // 진단: webhook events + RPC 에러
+  // (구 payapp_api_sync_attempts 는 폐기된 'cmd 탐색 모드' 잔존 데이터라 더 이상
+  // 로드하지 않음.)
   const [webhookRows, setWebhookRows] = useState<WebhookEventRow[]>([]);
   const [webhookSearch, setWebhookSearch] = useState('');
   const [rpcErrors, setRpcErrors] = useState<Array<{ name: string; message: string }>>([]);
@@ -77,20 +76,16 @@ export default function PaymentSyncTool() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [imports, attemptsList, webhooks] = await Promise.all([
+      const [imports, webhooks] = await Promise.all([
         listManualPaymentImports(100),
-        listRecentSyncAttempts(20),
         listRecentWebhookEvents({ minutes: 1440, limit: 30 }),
       ]);
       setRows(imports.rows);
-      setAttempts(attemptsList.rows);
       setWebhookRows(webhooks.rows);
       const errs: Array<{ name: string; message: string }> = [];
       if (imports.error) errs.push({ name: 'list_manual_payment_imports', message: imports.error });
-      if (attemptsList.error) errs.push({ name: 'list_recent_sync_attempts', message: attemptsList.error });
       if (webhooks.error) errs.push({ name: 'list_recent_webhook_events', message: webhooks.error });
       setRpcErrors(errs);
-      // 콘솔 + 토스트로 즉시 가시화
       errs.forEach((e) => {
         console.error('[admin RPC failed]', e.name, e.message);
       });
@@ -268,8 +263,16 @@ export default function PaymentSyncTool() {
                   <Stat label="환불/이미적용" value={autoResult.already_synced ?? 0} tone="text-ink-mute" />
                   <Stat label="실패" value={autoResult.failed ?? 0} tone="text-red-300" />
                 </div>
+                {/* 정상 보류 (state=4 승인대기) 건은 RPC 호출 생략 — 별도 안내 */}
+                {(autoResult.skipped_pending ?? 0) > 0 && (
+                  <p className="mt-2 rounded bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-200">
+                    ℹ️ 정상 보류(승인대기 state=4, approval_no 없음) webhook{' '}
+                    <span className="font-semibold">{autoResult.skipped_pending}건</span>은 처리
+                    대상에서 제외했어요. PayApp 가 결제완료 webhook 을 보내면 자동 활성화됩니다.
+                  </p>
+                )}
                 {typeof autoResult.pending_total === 'number' &&
-                  autoResult.pending_total > (autoResult.scanned ?? 0) && (
+                  autoResult.pending_total > (autoResult.scanned ?? 0) + (autoResult.skipped_pending ?? 0) && (
                     <p className="mt-2 rounded bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-200">
                       ℹ️ 기간 내 미처리 webhook 이 총 {autoResult.pending_total}건이지만 한 번에
                       최대 500건만 처리합니다. 한 번 더 실행하세요.
@@ -452,48 +455,12 @@ export default function PaymentSyncTool() {
         )}
       </section>
 
-      {/* === API 시도 이력 === */}
-      {attempts.length > 0 && (
-        <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-          <h3 className="text-sm font-bold tracking-tight">PayApp API 시도 이력 ({attempts.length})</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[11px]">
-              <thead className="text-ink-dim">
-                <tr className="border-b border-line/10">
-                  <th className="px-2 py-1.5 text-left font-semibold">time</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">cmd</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">HTTP</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">parsed</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">성공</th>
-                  <th className="px-2 py-1.5 text-left font-semibold">오류</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attempts.map((a) => (
-                  <tr key={a.id} className="border-b border-line/10 last:border-b-0">
-                    <td className="px-2 py-1.5 text-ink-mute">
-                      {new Date(a.created_at).toLocaleTimeString('ko-KR')}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono">{a.requested_cmd}</td>
-                    <td className="px-2 py-1.5 text-right">{a.http_status ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.parsed_count}</td>
-                    <td className="px-2 py-1.5">
-                      <span
-                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                          a.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ink/10 text-ink-mute'
-                        }`}
-                      >
-                        {a.success ? 'OK' : '-'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-red-300">{a.error_message ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+      {/*
+        구 'PayApp API 시도 이력' 섹션 제거됨. payapp_api_sync_attempts 테이블은
+        폐기된 'cmd 탐색 모드' 잔존 데이터로, 새 EF (webhook_replay 모드) 는 더
+        이상 쓰지 않음. 옛 errno=70040 행만 표시되어 운영자에게 혼란만 줘서
+        UI 에서 완전 제거. 디버그 필요 시 SQL Editor 에서 직접 조회 가능.
+       */}
 
       {/* === 미매칭 결제 목록 === */}
       <section className="space-y-2">

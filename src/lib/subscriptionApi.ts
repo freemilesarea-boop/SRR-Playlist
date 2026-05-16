@@ -177,6 +177,9 @@ export interface AutoSyncSummary {
   // 신규: webhook replay 결과
   scanned?: number;
   pending_total?: number | null;
+  // 정상 보류 상태(state=4 승인대기, approval_no 없음)로 사전 필터되어 RPC 호출
+  // 생략된 webhook 수. actionable = scanned 와 별개.
+  skipped_pending?: number;
   // 구 필드 유지 (UI 하위 호환). scanned 와 동일 값.
   fetched?: number;
   matched?: number;
