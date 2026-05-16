@@ -643,6 +643,18 @@ jobs:
           echo "== 백필 dry-run (admin 컨텍스트 아니라 skip 가능) =="
           psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select applied, scanned from public.admin_backfill_subscription_cancels(now() - interval '60 days', true);" || echo "(skip)"
 
+      - name: 1aj) 0043 (list_subscription_requests RPC) 적용
+        run: |
+          set -e
+          echo "== 0043 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0043_subscription_requests_list_rpc.sql
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "
+            select 'rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='list_subscription_requests')
+                then 'YES' else 'NO' end);
+          "
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

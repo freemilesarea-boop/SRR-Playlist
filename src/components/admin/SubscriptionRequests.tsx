@@ -12,6 +12,7 @@ interface RequestRow {
   user_id: string;
   email: string | null;
   nickname: string | null;
+  account_type?: string | null;
   requested_plan: 'personal' | 'business';
   status: Status;
   note: string | null;
@@ -46,34 +47,36 @@ export default function SubscriptionRequests() {
     setLoading(true);
     setError(null);
     try {
+      // 0043 list_subscription_requests RPC — admin 권한 검증 + email/nickname/account_type join
       const { data, error: rpcErr } = await supabase.rpc('list_subscription_requests');
-      if (rpcErr) throw rpcErr;
-      setRows((data as RequestRow[]) ?? []);
-    } catch (e) {
-      // RPC가 admin 권한 거부로 raise 한 경우 PostgREST 는 400 으로 응답함.
-      // fallback: 직접 테이블 조회 (RLS 가 admin 이면 허용)
-      try {
-        const { data, error: tblErr } = await supabase
-          .from('subscription_requests')
-          .select('id, user_id, requested_plan, status, note, created_at')
-          .order('created_at', { ascending: false });
-        if (tblErr) throw tblErr;
-        setRows(
-          ((data as Omit<RequestRow, 'email' | 'nickname'>[]) ?? []).map((r) => ({
-            ...r,
-            email: null,
-            nickname: null,
-          })),
-        );
-        if (data && data.length === 0) {
-          // 빈 결과면 RPC 미적용 가능성 알림
-          toast.info(
-            '이메일/닉네임을 보려면 schema.sql 의 list_subscription_requests RPC 적용이 필요해요.',
+      if (rpcErr) {
+        // RPC 가 운영 DB 에 없거나 admin 거부된 경우만 fallback (RLS 직접 조회)
+        const isMissing =
+          rpcErr.code === 'PGRST202' ||
+          rpcErr.code === '42883' ||
+          /could not find/i.test(rpcErr.message);
+        if (isMissing) {
+          const { data: tbl, error: tblErr } = await supabase
+            .from('subscription_requests')
+            .select('id, user_id, requested_plan, status, note, created_at')
+            .order('created_at', { ascending: false });
+          if (tblErr) throw tblErr;
+          setRows(
+            ((tbl as Omit<RequestRow, 'email' | 'nickname'>[]) ?? []).map((r) => ({
+              ...r,
+              email: null,
+              nickname: null,
+            })),
           );
+          toast.info('0043 마이그레이션 미적용 — payment_hotfix.sql 또는 워크플로 실행 필요');
+        } else {
+          throw rpcErr;
         }
-      } catch (e2) {
-        setError(classifyAdminError(e2));
+      } else {
+        setRows((data as RequestRow[]) ?? []);
       }
+    } catch (e) {
+      setError(classifyAdminError(e));
     } finally {
       setLoading(false);
     }
