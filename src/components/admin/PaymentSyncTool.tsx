@@ -118,7 +118,13 @@ export default function PaymentSyncTool() {
   }
 
   async function onAutoSync() {
-    if (!window.confirm('PayApp 결제내역을 자동으로 조회하고 동기화합니다. 진행할까요?')) return;
+    if (
+      !window.confirm(
+        '기간 내 미처리 PayApp webhook event 를 자동 재처리합니다. ' +
+          '(PayApp REST API 는 조회 cmd 가 없어, 저장된 webhook 만으로 매칭 시도) 진행할까요?',
+      )
+    )
+      return;
     setAutoBusy(true);
     setAutoResult(null);
     try {
@@ -128,12 +134,13 @@ export default function PaymentSyncTool() {
       const res = await syncPayappPaymentsAuto({ date_from: dateFrom, date_to: dateTo });
       setAutoResult(res);
       if (res.ok) {
+        const scanned = res.scanned ?? res.fetched ?? 0;
         toast.success(
-          `완료 — 조회 ${res.fetched ?? 0} · 매칭 ${res.matched ?? 0} · 미매칭 ${res.unmatched ?? 0} · 기존 ${res.already_synced ?? 0} · 실패 ${res.failed ?? 0}`,
+          `완료 — 대상 ${scanned} · 매칭 ${res.matched ?? 0} · 미매칭 ${res.unmatched ?? 0} · 환불/이미적용 ${res.already_synced ?? 0} · 실패 ${res.failed ?? 0}`,
         );
         await load();
       } else {
-        toast.error(res.error ?? '자동 동기화 실패');
+        toast.error(res.error ?? 'Webhook 재처리 실패');
       }
     } finally {
       setAutoBusy(false);
@@ -184,17 +191,21 @@ export default function PaymentSyncTool() {
         </div>
       )}
 
-      {/* === 자동 동기화 === */}
+      {/* === Webhook 재처리 (구 "자동 동기화") === */}
       <section className="space-y-3 rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
             <Zap size={18} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold">PayApp 결제내역 자동 동기화 (복구/진단용)</h3>
+            <h3 className="text-sm font-bold">미처리 결제 Webhook 재처리 (복구용)</h3>
             <p className="mt-0.5 text-[11px] leading-relaxed text-ink-mute">
-              webhook 정상 시 이 버튼 사용 불필요. PayApp 콘솔 점검 등으로 state=64 webhook
-              누락이 의심될 때만 사용. API 로 결제완료 건 조회 → 자동 매칭/멱등 적용.
+              PayApp REST API 는 결제내역 일괄 조회 cmd 를 제공하지 않습니다 (공식 매뉴얼:
+              payrequest / paycancel / rebillRegist 등 쓰기 cmd 만 존재). 이 도구는 저장된
+              webhook event 중 매칭/권한부여가 안 된 건을 자동 재처리합니다. webhook 자체가
+              안 온 결제는{' '}
+              <span className="font-semibold text-yellow-300">"order_no 강제완료"</span> 또는{' '}
+              <span className="font-semibold text-yellow-300">"수동 입력 동기화"</span> 사용.
             </p>
           </div>
         </div>
@@ -225,7 +236,7 @@ export default function PaymentSyncTool() {
           disabled={autoBusy}
           className="btn-primary w-full py-3 text-sm font-bold"
         >
-          {autoBusy ? '조회/동기화 중…' : 'PayApp 결제내역 자동 동기화'}
+          {autoBusy ? '재처리 중…' : '미처리 webhook 자동 재처리'}
         </button>
 
         {autoResult && (
@@ -238,31 +249,32 @@ export default function PaymentSyncTool() {
           >
             {autoResult.ok ? (
               <>
-                {/* 현재 성공 cmd 강조 표시 — EF instance 내 캐시된 cmd 우선 사용 */}
-                {(autoResult.success_cmd || autoResult.cached_cmd) && (
-                  <div className="mb-2 rounded-md bg-emerald-500/10 px-2 py-1.5 ring-1 ring-emerald-500/20">
-                    <p className="text-[11px] text-emerald-200">
-                      <span className="font-semibold">현재 성공 cmd:</span>{' '}
-                      <span className="font-mono text-emerald-300">
-                        {autoResult.success_cmd ?? autoResult.cached_cmd}
-                      </span>
-                      {autoResult.cached_cmd &&
-                        autoResult.cached_cmd === autoResult.success_cmd && (
-                          <span className="ml-1 text-[10px] text-emerald-400/70">(memory cache)</span>
-                        )}
-                    </p>
-                  </div>
-                )}
                 <p className="mb-2 text-[11px] text-ink-mute">
                   기간: {autoResult.date_from} ~ {autoResult.date_to}
+                  {autoResult.mode === 'webhook_replay' && (
+                    <span className="ml-2 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-300">
+                      webhook replay
+                    </span>
+                  )}
                 </p>
                 <div className="grid grid-cols-5 gap-1.5">
-                  <Stat label="조회" value={autoResult.fetched ?? 0} tone="text-ink" />
+                  <Stat
+                    label="대상 webhook"
+                    value={autoResult.scanned ?? autoResult.fetched ?? 0}
+                    tone="text-ink"
+                  />
                   <Stat label="신규 매칭" value={autoResult.matched ?? 0} tone="text-emerald-300" />
                   <Stat label="미매칭" value={autoResult.unmatched ?? 0} tone="text-yellow-300" />
-                  <Stat label="기존 동기화" value={autoResult.already_synced ?? 0} tone="text-ink-mute" />
+                  <Stat label="환불/이미적용" value={autoResult.already_synced ?? 0} tone="text-ink-mute" />
                   <Stat label="실패" value={autoResult.failed ?? 0} tone="text-red-300" />
                 </div>
+                {typeof autoResult.pending_total === 'number' &&
+                  autoResult.pending_total > (autoResult.scanned ?? 0) && (
+                    <p className="mt-2 rounded bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-200">
+                      ℹ️ 기간 내 미처리 webhook 이 총 {autoResult.pending_total}건이지만 한 번에
+                      최대 500건만 처리합니다. 한 번 더 실행하세요.
+                    </p>
+                  )}
                 {autoResult.hint && (
                   <p className="mt-2 rounded bg-yellow-500/10 px-2 py-1.5 text-[11px] text-yellow-200">
                     💡 {autoResult.hint}
@@ -278,97 +290,24 @@ export default function PaymentSyncTool() {
                     </ul>
                   </details>
                 )}
-                {/* 70040 일색 케이스 — cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 화이트리스트
-                    문제임을 별도 박스로 강하게 노출 */}
-                {autoResult.all_errno_70040 && (
-                  <div className="mt-3 rounded-xl bg-red-500/10 p-3 ring-1 ring-red-500/30">
-                    <p className="text-[11px] font-bold text-red-200">
-                      ⚠️ PayApp 가 모든 후보 cmd 에서 errno=70040 ("cmd을 가져오지 못했습니다") 반환
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-red-100/85">
-                      이 에러는 cmd 명칭 자체가 잘못된 것보다는{' '}
-                      <strong>PayApp 가맹점 계정의 조회 API 권한 또는 IP 화이트리스트 설정</strong>{' '}
-                      문제일 가능성이 높습니다. webhook 기반 결제 처리는 정상 동작 중이라 치명
-                      오류는 아니지만, 이 도구(복구/진단용)를 쓰려면 아래 조치 필요.
-                    </p>
-                    <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-red-100/85">
-                      <li>
-                        PayApp 가맹점 콘솔 → <strong>API 설정 → 조회 API 사용권한</strong> 활성화 확인
-                      </li>
-                      <li>
-                        PayApp 콘솔 → <strong>API 접근 허용 IP</strong> 에 Edge Function outbound
-                        IP 등록
-                        {autoResult.observed_remote_addr && (
-                          <>
-                            {' '}
-                            (현재 PayApp 가 본 EF IP:{' '}
-                            <code className="rounded bg-bg-deep px-1 font-mono text-red-200">
-                              {autoResult.observed_remote_addr}
-                            </code>
-                            )
-                          </>
-                        )}
-                      </li>
-                      <li>
-                        PayApp 고객센터에서 정확한 결제내역조회 cmd 명을 받은 뒤{' '}
-                        <code className="rounded bg-bg-deep px-1 font-mono">PAYAPP_LIST_CMD</code>{' '}
-                        secret 으로 지정 후 함수 재배포
-                      </li>
-                    </ol>
-                  </div>
-                )}
-                {/* 시도된 cmd 별 raw 응답 — 조회 0건이면 자동 펼침 */}
-                {(autoResult.attempts?.length ?? 0) > 0 && (
-                  <details className="mt-3 text-[11px]" open={(autoResult.fetched ?? 0) === 0}>
+                {(autoResult.processed?.length ?? 0) > 0 && (
+                  <details className="mt-3 text-[11px]">
                     <summary className="cursor-pointer text-ink-mute">
-                      PayApp API 시도 {autoResult.attempts!.length}회 — raw 응답 보기
+                      처리 상세 {autoResult.processed!.length}건
                     </summary>
-                    {(autoResult.fetched ?? 0) === 0 && !autoResult.all_errno_70040 && (
-                      <p className="mt-2 rounded-md bg-yellow-500/10 p-2 text-yellow-200">
-                        ⚠️ 후보 cmd 모두 0건 또는 errno 응답이에요. webhook 기반 결제는 정상 동작
-                        중이라 치명 오류는 아니지만, 아래 raw 응답으로 PayApp 응답 포맷을
-                        확인하세요. errno 가 있으면 PayApp 측 거부 (cmd/권한/IP), parsed=0 이면
-                        응답 파서가 필드를 못 읽은 것입니다.
-                      </p>
-                    )}
-                    <div className="mt-2 space-y-2">
-                      {autoResult.attempts!.map((a, i) => (
-                        <div key={i} className="rounded-md bg-bg-deep/60 p-2 ring-1 ring-line/10">
-                          <div className="mb-1 flex flex-wrap items-center gap-2">
-                            <span className="font-mono font-semibold text-ink">{a.cmd}</span>
-                            {a.from_cache && (
-                              <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-300">
-                                cached
-                              </span>
-                            )}
-                            <span className="text-ink-dim">HTTP {a.http_status ?? '—'}</span>
-                            {a.errno && (
-                              <span className="rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-mono text-yellow-300">
-                                errno={a.errno}
-                              </span>
-                            )}
-                            <span
-                              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                                a.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ink/10 text-ink-mute'
-                              }`}
-                            >
-                              {a.parsed_count}건 파싱
-                            </span>
-                            {a.errmsg && <span className="text-[10px] text-yellow-300">{a.errmsg}</span>}
-                            {a.error && <span className="text-red-300">{a.error}</span>}
-                          </div>
-                          <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-ink-mute">
-                            {a.raw_preview || '(empty)'}
-                          </pre>
-                        </div>
+                    <ul className="mt-1 max-h-60 space-y-0.5 overflow-auto text-ink-mute">
+                      {autoResult.processed!.map((p, i) => (
+                        <li key={i} className="font-mono">
+                          [{p.status}] {p.mul_no} — {p.amount.toLocaleString()}원 ({p.plan_type ?? '?'})
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </details>
                 )}
               </>
             ) : (
               <div className="space-y-2 text-xs">
-                <p className="font-bold text-red-200">자동 동기화 실패</p>
+                <p className="font-bold text-red-200">Webhook 재처리 실패</p>
                 <p className="font-mono text-red-300">{autoResult.error}</p>
                 {autoResult.missing_env && autoResult.missing_env.length > 0 && (
                   <div className="rounded-md bg-bg-deep/60 p-2">

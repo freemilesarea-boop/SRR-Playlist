@@ -169,11 +169,15 @@ export interface SyncAttemptPreview {
 
 export interface AutoSyncSummary {
   ok: boolean;
+  // 'webhook_replay' = 신규 동작 (PayApp REST API 가 list cmd 를 지원하지 않아
+  // 저장된 webhook event 를 재처리하는 모드). 이전 'cmd 탐색' 모드는 폐기됨.
+  mode?: 'webhook_replay' | string;
   date_from?: string;
   date_to?: string;
-  success_cmd?: string | null;
-  cached_cmd?: string | null;
-  attempts?: SyncAttemptPreview[];
+  // 신규: webhook replay 결과
+  scanned?: number;
+  pending_total?: number | null;
+  // 구 필드 유지 (UI 하위 호환). scanned 와 동일 값.
   fetched?: number;
   matched?: number;
   unmatched?: number;
@@ -181,17 +185,20 @@ export interface AutoSyncSummary {
   failed?: number;
   errors?: Array<{ mul_no: string; message: string }>;
   processed?: Array<{ mul_no: string; status: string; amount: number; plan_type: string | null }>;
-  raw_response_preview?: string;
-  log_failures?: number;
   hint?: string;
   missing_env?: string[];
   details?: string;
   user_id?: string;
   error?: string;
-  // PayApp 70040 진단: 모든 후보 cmd 가 errno=70040 일 때 true (cmd 권한/IP 화이트리스트 문제)
+  // 구 'cmd 탐색' 모드 잔여 필드 (서버 응답에 더 이상 포함되지 않지만, 타입
+  // breakage 방지용 optional 로 유지)
+  success_cmd?: string | null;
+  cached_cmd?: string | null;
+  attempts?: SyncAttemptPreview[];
+  log_failures?: number;
   all_errno_70040?: boolean;
-  // PayApp 응답에서 추출한 EF outbound IP (화이트리스트 등록용)
   observed_remote_addr?: string | null;
+  raw_response_preview?: string;
 }
 
 export async function syncPayappPaymentsAuto(payload: {

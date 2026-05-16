@@ -1,19 +1,30 @@
 // supabase/functions/sync-payapp-payments/index.ts
 //
-// PayApp 결제내역 자동 동기화 (admin only).
+// PayApp 결제 webhook 재처리 (admin only).
 //
-// 동작:
+// === 배경 (중요) =========================================================
+// PayApp REST API (`/oapi/apiLoad.html`) 는 결제내역 일괄 조회 cmd 를 제공하지
+// 않습니다. 공식 PayApp 라이브러리(ssut/payapp, BoxbillingPayApp 등) 및 PayApp
+// 매뉴얼 상 해당 endpoint 가 지원하는 cmd 는 다음으로 한정됨:
+//   - payrequest / paycancel / paycancelreq        (결제 요청/취소 계열)
+//   - rebillRegist / rebillPay / rebillStop        (정기결제 계열)
+// `paymentList / payList / tradeList / list` 등 조회용 cmd 는 존재하지 않으며,
+// 이전 구현이 받아온 `errno=70040 "cmd을 가져오지 못했습니다"` 는 PayApp 이
+// 해당 cmd 를 알지 못한다는 정확한 신호였음.
+//
+// === 새 동작 =============================================================
+// 결제 데이터의 유일한 진실 원천은 PayApp webhook(feedbackurl) 으로 들어와
+// `payapp_webhook_events` 에 저장된 raw payload. 따라서 "동기화" 의 진짜 의미는
+// **저장된 webhook event 를 다시 처리해서 누락된 매칭/권한부여를 복구하는 것**.
+//
 //   1) admin 검증
-//   2) PayApp list API 를 후보 cmd 순차 시도
-//      - 같은 EF instance 내 직전 성공 cmd 가 있으면 1순위
-//      - env PAYAPP_LIST_CMD (있으면) 2순위 — 단일 고정 아님, 실패 시 후보로 폴백
-//      - 후보 5개: ['paymentList','payList','paylist','tradeList','list']
-//   3) 각 시도별: cmd / HTTP / errno / parsed_count / raw_preview 를
-//      admin_operation_logs 에 warning 레벨로 기록 (webhook 정상 운영 중이라
-//      조회 API 실패는 치명 오류 아님)
-//   4) 최초 parsed_count > 0 인 cmd 를 채택 + module cache 에 저장
-//   5) 각 record 별 admin_sync_payapp_payment RPC 호출 (멱등)
-//   6) 결과 + attempts + success_cmd 반환
+//   2) 기간 내 webhook events 조회 — 매칭 실패/미처리만:
+//        - pay_state IN (4, 64)  (승인대기 OR 결제완료)
+//        - membership_updated = false  (또는 processed_at IS NULL)
+//        - linkval_verified = true     (위변조 webhook 제외)
+//   3) 각 event 에 대해 admin_replay_webhook_event RPC 호출 (멱등)
+//   4) 결과 집계 + 운영 로그
+// =========================================================================
 
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -22,34 +33,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
-const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
-const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
-// 명시적 override — 단일 고정 아님. 우선 시도하지만 실패하면 candidates 로 폴백.
-const PAYAPP_LIST_CMD = Deno.env.get('PAYAPP_LIST_CMD') ?? '';
-
-// 후보 cmd 목록 — 운영 PayApp API 의 실제 명칭이 다를 수 있어 순차 시도.
-// PayApp 가맹점센터 API 매뉴얼에 등장하는 조회용 cmd 후보를 모두 포함.
-//   - paymentList / payList / paylist / paymentlist : 결제내역 조회 (계정별 대소문자 케이스)
-//   - tradeList / list                              : 일부 구버전 호환
-//   - paylistcheck / payListCheck                   : 조회 권한 별도 API
-//   - getPaymentList                                : 일부 신버전 API
-//   - paymentInfo                                   : 단건 조회 fallback
-const CANDIDATE_CMDS = [
-  'paymentList',
-  'paymentlist',
-  'payList',
-  'paylist',
-  'paylistcheck',
-  'payListCheck',
-  'getPaymentList',
-  'paymentInfo',
-  'tradeList',
-  'list',
-];
-
-// EF instance 가 warm 상태일 때 직전 성공 cmd 우선 사용 → 70040 응답 횟수 최소화.
-let cachedSuccessCmd: string | null = null;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,276 +47,40 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// HTML <table> 파서: <thead>/<th> 또는 첫 <tr> 의 <td> 를 헤더로 사용.
-function parseHtmlTable(text: string): Array<Record<string, string>> {
-  const tableMatch = text.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
-  if (!tableMatch) return [];
-  const tableHtml = tableMatch[1];
-  const rows: string[][] = [];
-  const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let m;
-  while ((m = trRe.exec(tableHtml)) !== null) {
-    const cellRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-    const cells: string[] = [];
-    let c;
-    while ((c = cellRe.exec(m[1])) !== null) {
-      cells.push(c[1].replace(/<[^>]+>/g, '').trim());
-    }
-    if (cells.length > 0) rows.push(cells);
-  }
-  if (rows.length < 2) return [];
-  const headers = rows[0].map((h) => h.replace(/\s+/g, '_').toLowerCase());
-  return rows.slice(1).map((r) => {
-    const obj: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      if (r[i] != null) obj[h] = r[i];
-    });
-    return obj;
-  });
-}
-
-// XML 파서: <item>/<row>/<payment> 같은 wrapper element 안의 child element 추출
-function parseXmlRecords(text: string): Array<Record<string, string>> {
-  // 가장 흔한 wrapper 이름들 — PayApp 가 어느 걸 쓰는지 모르므로 후보 순회
-  const wrappers = ['item', 'row', 'payment', 'record', 'list', 'entry'];
-  for (const w of wrappers) {
-    const re = new RegExp(`<${w}[^>]*>([\\s\\S]*?)<\\/${w}>`, 'gi');
-    const out: Array<Record<string, string>> = [];
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const inner = m[1];
-      const obj: Record<string, string> = {};
-      const fieldRe = /<([a-z_][\w]*?)[^>]*>([\s\S]*?)<\/\1>/gi;
-      let f;
-      while ((f = fieldRe.exec(inner)) !== null) {
-        obj[f[1].toLowerCase()] = f[2].replace(/<[^>]+>/g, '').trim();
-      }
-      if (Object.keys(obj).length > 0) out.push(obj);
-    }
-    if (out.length > 0) return out;
-  }
-  return [];
-}
-
-function parsePayappList(text: string): Array<Record<string, string>> {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  // JSON
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) return parsed as any[];
-    if (Array.isArray(parsed?.list)) return parsed.list;
-    if (Array.isArray(parsed?.data)) return parsed.data;
-    if (Array.isArray(parsed?.payments)) return parsed.payments;
-    if (Array.isArray(parsed?.result)) return parsed.result;
-    if (parsed && typeof parsed === 'object' && (parsed.mul_no || parsed.mulno)) return [parsed as any];
-  } catch {
-    /* not JSON */
-  }
-
-  // XML
-  if (trimmed.startsWith('<?xml') || /<(item|row|payment|record|entry)[\s>]/i.test(trimmed)) {
-    const xmlRecs = parseXmlRecords(trimmed);
-    if (xmlRecs.length > 0) return xmlRecs;
-  }
-
-  // HTML <table>
-  if (/<table[\s>]/i.test(trimmed)) {
-    const tableRecs = parseHtmlTable(trimmed);
-    if (tableRecs.length > 0) return tableRecs;
-  }
-
-  // URL-encoded multi-record (field_N / field[N] / field:N)
-  const params = new URLSearchParams(trimmed);
-  const records = new Map<string, Record<string, string>>();
-  const singleton: Record<string, string> = {};
-  let multiDetected = false;
-
-  for (const [rawKey, value] of params.entries()) {
-    const m = rawKey.match(/^(.+?)[_\[:](\d+)\]?$/);
-    if (m) {
-      multiDetected = true;
-      const fieldName = m[1];
-      const idx = m[2];
-      if (!records.has(idx)) records.set(idx, {});
-      records.get(idx)![fieldName] = value;
-    } else {
-      singleton[rawKey] = value;
-    }
-  }
-
-  if (multiDetected) return Array.from(records.values());
-  if (singleton.mul_no || singleton.mulno) return [singleton];
-
-  // 마지막 fallback: 줄바꿈 + key=value (PayApp 일부 응답 포맷)
-  const lines = trimmed.split(/\r?\n/).filter((l) => l.trim() && l.includes('='));
-  const obj: Record<string, string> = {};
-  for (const line of lines) {
-    const [k, ...rest] = line.split('=');
-    obj[k.trim()] = rest.join('=').trim();
-  }
-  if (obj.mul_no || obj.mulno) return [obj];
-
-  return [];
-}
-
-function getField(rec: Record<string, string>, candidates: string[]): string | null {
-  for (const c of candidates) {
-    if (rec[c] != null && String(rec[c]).trim() !== '') return String(rec[c]).trim();
-  }
-  return null;
-}
-
-function planFromAmount(amount: number): 'individual' | 'business' | null {
-  if (amount === 4900) return 'individual';
-  if (amount === 6900) return 'business';
-  return null;
-}
-
-function normalizePayState(raw: string | null): string {
-  if (!raw) return '';
-  const s = String(raw).trim();
-  // 완료 후보: '4', 'paid', 'complete', 'completed', '결제완료', '완료'
-  if (/^(4|paid|complete|completed|결제완료|완료)$/i.test(s)) return '4';
-  return s;
-}
-
-function toIsoKst(raw: string): string {
-  if (!raw) return new Date().toISOString();
-  if (raw.includes('T') || raw.includes('+') || raw.endsWith('Z')) {
-    return new Date(raw).toISOString();
-  }
-  const isoCandidate = raw.replace(' ', 'T') + '+09:00';
-  const d = new Date(isoCandidate);
-  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-}
-
 function ymdKst(d: Date): string {
-  const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' });
-  return f.format(d);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d);
 }
 function daysAgoKst(days: number): string {
   return ymdKst(new Date(Date.now() - days * 24 * 3600 * 1000));
 }
 
-interface AttemptResult {
-  cmd: string;
-  http_status: number | null;
-  records: Array<Record<string, string>>;
-  raw_response: string;
-  errno: string | null;
-  errmsg: string | null;
-  remoteaddr: string | null;
-  error: string | null;
+function planFromAmount(amount: number | null): 'individual' | 'business' | null {
+  if (amount === 4900) return 'individual';
+  if (amount === 6900) return 'business';
+  return null;
 }
 
-// PayApp 응답에서 errno/errmsg/remoteaddr 추출 — JSON / URL-encoded / XML / key=value 다 커버.
-// remoteaddr 는 errno=70040 등 권한 거부 케이스에서 PayApp 콘솔 IP 화이트리스트 등록용으로 노출됨.
-function extractErrno(
-  raw: string,
-): { errno: string | null; errmsg: string | null; remoteaddr: string | null } {
-  if (!raw) return { errno: null, errmsg: null, remoteaddr: null };
-  const trimmed = raw.trim();
-
-  // 1) JSON 시도
-  try {
-    const j = JSON.parse(trimmed);
-    if (j && typeof j === 'object') {
-      const errno = j.errno ?? j.errno_code ?? j.error_code ?? j.code ?? null;
-      const errmsg =
-        j.errmsg ?? j.errmessage ?? j.error_message ?? j.message ?? j.errorMessage ?? null;
-      const remoteaddr = j.remoteaddr ?? j.remote_addr ?? null;
-      if (errno != null || errmsg != null || remoteaddr != null) {
-        return {
-          errno: errno != null ? String(errno) : null,
-          errmsg: errmsg != null ? String(errmsg) : null,
-          remoteaddr: remoteaddr != null ? String(remoteaddr) : null,
-        };
-      }
-    }
-  } catch {
-    /* not json */
-  }
-
-  // 2) URL-encoded / key=value / XML 통합 정규식
-  const ernoM = trimmed.match(/(?:^|[&\n\s<>])errno[\s=:>]+["']?([^&\n<"']+)/i);
-  // PayApp 운영 응답은 errorMessage 키를 사용 (cmd을 가져오지 못했습니다 등).
-  const msgM =
-    trimmed.match(/(?:^|[&\n\s<>])errorMessage[\s=:>]+["']?([^&\n<"']+)/i) ??
-    trimmed.match(/(?:^|[&\n\s<>])errmsg[\s=:>]+["']?([^&\n<"']+)/i);
-  const ipM = trimmed.match(/(?:^|[&\n\s<>])remoteaddr[\s=:>]+["']?([^&\n<"']+)/i);
-  return {
-    errno: ernoM ? safeDecode(ernoM[1]).trim() : null,
-    errmsg: msgM ? safeDecode(msgM[1]).trim() : null,
-    remoteaddr: ipM ? safeDecode(ipM[1]).trim() : null,
-  };
+interface WebhookEventRow {
+  id: string;
+  payapp_mul_no: string | null;
+  order_no: string | null;
+  pay_state: number | null;
+  price: number | null;
+  linkval_verified: boolean;
+  membership_updated: boolean;
+  processed_at: string | null;
+  created_at: string;
 }
 
-function safeDecode(s: string): string {
-  try {
-    return decodeURIComponent(s);
-  } catch {
-    return s;
-  }
+interface ReplayResult {
+  matched_user_id: string | null;
+  matched_order_id: string | null;
+  matched_subscription_id: string | null;
+  membership_updated: boolean;
+  final_membership_tier: string | null;
+  message: string | null;
 }
 
-async function tryFetchPayApp(cmd: string, sdate: string, edate: string): Promise<AttemptResult> {
-  const params = new URLSearchParams();
-  params.set('cmd', cmd);
-  params.set('userid', PAYAPP_USERID);
-  params.set('linkkey', PAYAPP_LINKKEY);
-  params.set('sdate', sdate);
-  params.set('edate', edate);
-  params.set('pay_state', '4');
-
-  try {
-    const resp = await fetch(PAYAPP_API_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    const text = await resp.text();
-    const records = parsePayappList(text);
-    const { errno, errmsg, remoteaddr } = extractErrno(text);
-    return {
-      cmd,
-      http_status: resp.status,
-      records,
-      raw_response: text,
-      errno,
-      errmsg,
-      remoteaddr,
-      error: null,
-    };
-  } catch (e) {
-    return {
-      cmd,
-      http_status: null,
-      records: [],
-      raw_response: '',
-      errno: null,
-      errmsg: null,
-      remoteaddr: null,
-      error: String(e),
-    };
-  }
-}
-
-// 후보 + cache + env override 를 dedupe 해서 시도 순서 결정.
-function buildCmdOrder(): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const c of [cachedSuccessCmd, PAYAPP_LIST_CMD, ...CANDIDATE_CMDS]) {
-    if (!c) continue;
-    if (seen.has(c)) continue;
-    seen.add(c);
-    out.push(c);
-  }
-  return out;
-}
-
-// 운영 로그 기록 — 실패해도 동기화 자체는 계속 진행
 async function logOp(
   sb: ReturnType<typeof createClient>,
   payload: {
@@ -371,12 +118,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, error: 'method not allowed' }, 405);
 
-  // env check — 어떤 env 가 비었는지 명확히 알려준다
   const missingEnv: string[] = [];
   if (!SUPABASE_URL) missingEnv.push('SUPABASE_URL');
   if (!SERVICE_ROLE) missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
-  if (!PAYAPP_USERID) missingEnv.push('PAYAPP_USERID');
-  if (!PAYAPP_LINKKEY) missingEnv.push('PAYAPP_LINKKEY');
   if (missingEnv.length > 0) {
     return json(
       {
@@ -415,141 +159,67 @@ serve(async (req) => {
     .eq('id', userRes.user.id)
     .maybeSingle();
   if (meErr) {
-    return json(
-      { ok: false, error: 'admin lookup failed', details: meErr.message },
-      500,
-    );
+    return json({ ok: false, error: 'admin lookup failed', details: meErr.message }, 500);
   }
   if (!me || me.role !== 'admin') {
     return json({ ok: false, error: 'admin only', user_id: userRes.user.id }, 403);
   }
 
-  // 입력 (body 비어 있으면 기본값 — 최근 7일)
+  // 입력 (기본값 — 최근 7일)
   let body: { date_from?: string; date_to?: string; plan_type?: string } = {};
   try {
     const text = await req.text();
-    if (text && text.trim().length > 0) {
-      body = JSON.parse(text);
-    }
+    if (text && text.trim().length > 0) body = JSON.parse(text);
   } catch {
-    // 잘못된 JSON 도 무시하고 기본값 진행. 절대 400 으로 죽지 않게.
+    /* invalid JSON → 기본값으로 계속 */
   }
   const dateFrom = body.date_from || daysAgoKst(7);
   const dateTo = body.date_to || daysAgoKst(0);
 
-  const cmdsToTry = buildCmdOrder();
-  console.log('[sync-payapp] request preview:', {
-    cached_cmd: cachedSuccessCmd,
-    cmd_override: PAYAPP_LIST_CMD || null,
-    cmds_to_try: cmdsToTry,
-    date_from: dateFrom,
-    date_to: dateTo,
-    userid_present: PAYAPP_USERID.length > 0,
-    api_url: PAYAPP_API_URL,
-    plan_filter: body.plan_type ?? null,
-  });
+  // 기간 → KST 자정 기준 timestamptz 변환
+  const fromTs = new Date(`${dateFrom}T00:00:00+09:00`).toISOString();
+  const toTs = new Date(`${dateTo}T23:59:59.999+09:00`).toISOString();
 
-  // 후보 cmd 순차 시도
-  const attempts: Array<{
-    cmd: string;
-    http_status: number | null;
-    errno: string | null;
-    errmsg: string | null;
-    remoteaddr: string | null;
-    parsed_count: number;
-    success: boolean;
-    from_cache: boolean;
-    error: string | null;
-    raw_preview: string;
-  }> = [];
-  let records: Array<Record<string, string>> = [];
-  let successCmd: string | null = null;
-  let logFailures = 0;
-  let observedRemoteAddr: string | null = null;
+  console.log('[sync-payapp] webhook replay window:', { dateFrom, dateTo, fromTs, toTs });
 
-  for (const cmd of cmdsToTry) {
-    const attemptStart = Date.now();
-    const fromCache = cmd === cachedSuccessCmd;
-    const r = await tryFetchPayApp(cmd, dateFrom, dateTo);
-    const success = r.records.length > 0;
+  // 미처리 webhook events 조회.
+  //   조건: linkval_verified=true (위변조 제외)
+  //         pay_state IN (4, 64) (승인대기 OR 결제완료)
+  //         membership_updated=false (아직 권한 부여 안 됨)
+  //         created_at in range
+  const { data: events, error: evtErr } = await sb
+    .from('payapp_webhook_events')
+    .select(
+      'id, payapp_mul_no, order_no, pay_state, price, linkval_verified, membership_updated, processed_at, created_at',
+    )
+    .gte('created_at', fromTs)
+    .lte('created_at', toTs)
+    .eq('linkval_verified', true)
+    .eq('membership_updated', false)
+    .in('pay_state', [4, 64])
+    .order('created_at', { ascending: true })
+    .limit(500);
 
-    // payapp_api_sync_attempts (0028) — 운영 진단용 영구 기록
-    try {
-      const { error: insertErr } = await sb.from('payapp_api_sync_attempts').insert({
-        requested_cmd: cmd,
-        date_from: dateFrom,
-        date_to: dateTo,
-        http_status: r.http_status,
-        raw_response: r.raw_response.slice(0, 4000),
-        parsed_count: r.records.length,
-        success,
-        error_message: r.error ?? (r.errno ? `errno=${r.errno} ${r.errmsg ?? ''}` : null),
-        created_by: userRes.user.id,
-      });
-      if (insertErr) {
-        logFailures++;
-        console.warn('[sync-payapp] attempt log insert failed:', insertErr.message);
-      }
-    } catch (e) {
-      logFailures++;
-      console.warn('[sync-payapp] attempt log threw:', String(e));
-    }
-
-    // admin_operation_logs — 각 시도를 warning(미성공)/success(성공) 레벨로 기록.
-    // webhook 기반 결제 시스템은 정상 운영 중이므로 실패해도 error 아님.
+  if (evtErr) {
     await logOp(sb, {
-      level: success ? 'success' : 'warning',
-      status: success ? 'completed' : 'attempted',
-      message:
-        `[cmd 탐색] cmd=${cmd}` +
-        (fromCache ? ' (from cache)' : '') +
-        ` http=${r.http_status ?? '—'} errno=${r.errno ?? '—'} parsed=${r.records.length}`,
-      details: {
-        cmd,
-        from_cache: fromCache,
-        http_status: r.http_status,
-        errno: r.errno,
-        errmsg: r.errmsg,
-        parsed_count: r.records.length,
-        raw_preview: r.raw_response.slice(0, 500),
-        date_from: dateFrom,
-        date_to: dateTo,
-      },
+      level: 'error',
+      status: 'failed',
+      message: `webhook event scan failed: ${evtErr.message}`,
       user_id: userRes.user.id,
-      duration_ms: Date.now() - attemptStart,
-      error_code: !success && r.errno ? `PAYAPP_${r.errno}` : null,
-      error_message: !success ? (r.errmsg ?? r.error ?? null) : null,
+      error_code: 'SCAN_FAILED',
+      error_message: evtErr.message,
+      duration_ms: Date.now() - t0,
     });
-
-    attempts.push({
-      cmd,
-      http_status: r.http_status,
-      errno: r.errno,
-      errmsg: r.errmsg,
-      remoteaddr: r.remoteaddr,
-      parsed_count: r.records.length,
-      success,
-      from_cache: fromCache,
-      error: r.error,
-      raw_preview: r.raw_response.slice(0, 2000),
-    });
-    if (r.remoteaddr && !observedRemoteAddr) observedRemoteAddr = r.remoteaddr;
-
-    if (success) {
-      records = r.records;
-      successCmd = cmd;
-      cachedSuccessCmd = cmd; // 다음 invocation 1순위로 사용
-      break;
-    }
+    return json({
+      ok: false,
+      error: 'webhook scan failed',
+      details: evtErr.message,
+      date_from: dateFrom,
+      date_to: dateTo,
+    }, 500);
   }
 
-  // 진단 플래그: 모든 attempts 가 errno=70040 일 때 cmd 권한/IP 문제로 단정.
-  //   70040 = "cmd을 가져오지 못했습니다" — PayApp 가 cmd 를 인식 못 함.
-  //   원인 우선순위: (1) PayApp 콘솔 '조회 API 사용권한' 미활성화
-  //                  (2) PayApp 콘솔 API IP 화이트리스트에 EF outbound IP 미등록
-  //                  (3) 모든 후보 cmd 명이 실제 API 와 불일치
-  const allErrno70040 =
-    attempts.length > 0 && attempts.every((a) => a.errno === '70040');
+  const rows: WebhookEventRow[] = (events ?? []) as WebhookEventRow[];
 
   let matched = 0;
   let unmatched = 0;
@@ -563,136 +233,111 @@ serve(async (req) => {
     plan_type: string | null;
   }> = [];
 
-  for (const rec of records) {
-    const mul_no = getField(rec, ['mul_no', 'mulno', 'tno', 'payapp_mul_no', 'reqno', 'req_no', 'request_no', 'no']);
-    const priceRaw = getField(rec, ['price', 'amount', 'goodprice']);
-    const price = priceRaw ? Number(priceRaw) : 0;
-    const pay_state = normalizePayState(getField(rec, ['pay_state', 'paystate', 'state', 'status']));
+  for (const row of rows) {
+    const mul_no = row.payapp_mul_no ?? `(event:${row.id.slice(0, 8)})`;
+    const amount = row.price ?? 0;
+    const plan_type = planFromAmount(amount);
 
-    if (pay_state && pay_state !== '4') continue;
-    if (!mul_no || !price) continue;
+    // plan filter (요청 시)
+    if (body.plan_type && plan_type !== body.plan_type) continue;
 
-    const plan_type = planFromAmount(price);
+    // amount 가 plan 가격 아닌 webhook (refund/cancel 등 다른 pay_state) 은
+    // 위 query 의 in (4,64) 로 사전 차단됨. 그래도 방어적으로:
     if (!plan_type) {
       failed++;
-      errors.push({ mul_no, message: `unsupported amount ${price}` });
-      processed.push({ mul_no, status: 'failed', amount: price, plan_type: null });
+      errors.push({ mul_no, message: `unsupported amount ${amount}` });
+      processed.push({ mul_no, status: 'failed', amount, plan_type: null });
       continue;
     }
-    if (body.plan_type && body.plan_type !== plan_type) continue;
 
-    const buyer_email = getField(rec, ['recvemail', 'buyer_email', 'email', 'useremail']);
-    const buyer_phone = getField(rec, ['recvphone', 'buyer_phone', 'phone', 'userphone']);
-    const goodname = getField(rec, ['goodname', 'goodsname', 'pname', 'item_name']);
-    const approval_no = getField(rec, ['approval_no', 'apv_no', 'card_apv_no', 'cardno']);
-    const paid_at_raw = getField(rec, ['paid_at', 'pay_date', 'paydate', 'completedate', 'pdate']);
-    const paid_at = paid_at_raw ? toIsoKst(paid_at_raw) : new Date().toISOString();
-
-    const { data: rpcData, error: rpcErr } = await sb.rpc('admin_sync_payapp_payment', {
-      p_payapp_mul_no: String(mul_no),
-      p_amount: price,
-      p_plan_type: plan_type,
-      p_approval_no: approval_no,
-      p_buyer_email: buyer_email,
-      p_buyer_phone: buyer_phone,
-      p_paid_at: paid_at,
-      p_goodname: goodname,
+    const { data: rpcData, error: rpcErr } = await sb.rpc('admin_replay_webhook_event', {
+      p_event_id: row.id,
     });
 
     if (rpcErr) {
       failed++;
       errors.push({ mul_no, message: rpcErr.message });
-      processed.push({ mul_no, status: 'failed', amount: price, plan_type });
+      processed.push({ mul_no, status: 'failed', amount, plan_type });
       continue;
     }
 
-    const row = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
-      | { status?: string; message?: string }
-      | undefined;
-    const status = row?.status ?? 'unknown';
-    if (status === 'matched' && (row?.message ?? '').includes('already')) {
-      alreadySynced++;
-      processed.push({ mul_no, status: 'already_synced', amount: price, plan_type });
-    } else if (status === 'matched') {
+    const result = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as ReplayResult | undefined;
+    if (result?.membership_updated) {
       matched++;
-      processed.push({ mul_no, status: 'matched', amount: price, plan_type });
-    } else if (status === 'unmatched') {
-      unmatched++;
-      processed.push({ mul_no, status: 'unmatched', amount: price, plan_type });
+      processed.push({ mul_no, status: 'matched', amount, plan_type });
+    } else if (result?.matched_user_id) {
+      // 매칭은 됐지만 membership tier 가 free 로 회수된 케이스 (refund 등) — 정상 처리.
+      alreadySynced++;
+      processed.push({ mul_no, status: 'already_synced', amount, plan_type });
     } else {
-      failed++;
-      processed.push({ mul_no, status: 'failed', amount: price, plan_type });
+      unmatched++;
+      processed.push({ mul_no, status: 'unmatched', amount, plan_type });
     }
   }
 
-  // 운영 로그 기록 — 조회 API 또는 RPC sync 실패는 webhook 기반 시스템이
-  // 정상 동작 중이라 모두 warning 으로 downgrade (치명 오류 아님).
+  // 전체 미처리 webhook 수 (참고용 — 위 query 가 limit 500 으로 잘렸을 때 확인)
+  const { count: pendingTotal } = await sb
+    .from('payapp_webhook_events')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', fromTs)
+    .lte('created_at', toTs)
+    .eq('linkval_verified', true)
+    .eq('membership_updated', false)
+    .in('pay_state', [4, 64]);
+
   const overallLevel: 'success' | 'warning' =
-    failed > 0 || records.length === 0 ? 'warning' : 'success';
+    failed > 0 || (rows.length === 0 && (pendingTotal ?? 0) === 0) ? 'warning' : 'success';
   await logOp(sb, {
     level: overallLevel,
-    status: failed > 0 ? 'failed' : records.length === 0 ? 'skipped' : 'completed',
-    message: `sync ${dateFrom}~${dateTo}: fetched=${records.length} matched=${matched} unmatched=${unmatched} already=${alreadySynced} failed=${failed}` +
-      (successCmd ? ` (cmd=${successCmd})` : ' (no cmd matched)'),
+    status: failed > 0 ? 'failed' : rows.length === 0 ? 'skipped' : 'completed',
+    message:
+      `webhook replay ${dateFrom}~${dateTo}: scanned=${rows.length} ` +
+      `matched=${matched} unmatched=${unmatched} already=${alreadySynced} failed=${failed}`,
     details: {
-      date_from: dateFrom, date_to: dateTo,
-      success_cmd: successCmd, cached_cmd: cachedSuccessCmd,
-      fetched: records.length,
-      matched, unmatched, already_synced: alreadySynced, failed,
-      cmd_attempts: attempts.map((a) => ({
-        cmd: a.cmd, parsed: a.parsed_count, ok: a.success,
-        errno: a.errno, http: a.http_status, from_cache: a.from_cache,
-      })),
+      date_from: dateFrom,
+      date_to: dateTo,
+      scanned: rows.length,
+      pending_total: pendingTotal ?? null,
+      matched,
+      unmatched,
+      already_synced: alreadySynced,
+      failed,
+      mode: 'webhook_replay',
     },
     user_id: userRes.user.id,
     duration_ms: Date.now() - t0,
     error_code: failed > 0 ? 'PARTIAL_FAILED' : null,
-    error_message: errors.length > 0 ? errors.map((e) => `${e.mul_no}:${e.message}`).join('; ').slice(0, 500) : null,
+    error_message:
+      errors.length > 0
+        ? errors.map((e) => `${e.mul_no}:${e.message}`).join('; ').slice(0, 500)
+        : null,
   });
 
-  // 진단용 hint — 0건/에러 케이스에서 운영자가 즉시 다음 액션을 알 수 있도록 구체화.
-  let hint: string | undefined;
-  if (records.length === 0) {
-    if (logFailures > 0) {
-      hint = 'payapp_api_sync_attempts 테이블이 없거나 RLS 차단. 0028 마이그레이션 적용 필요.';
-    } else if (successCmd) {
-      hint = `${successCmd} 가 0건 반환했어요. 기간/필터 또는 PayApp 응답 필드명 확인.`;
-    } else if (allErrno70040) {
-      // 70040 일색 = PayApp 측이 cmd 자체를 거부. 코드 후보 확장으로는 해결 불가능한
-      // 운영 설정 이슈. 정확한 처방을 안내.
-      const ipPart = observedRemoteAddr
-        ? `EF outbound IP=${observedRemoteAddr}. PayApp 콘솔 → API 설정 → 접근 허용 IP 에 이 IP 등록 필요. `
-        : '';
-      hint =
-        `PayApp 가 모든 후보 cmd 에서 errno=70040 ("cmd을 가져오지 못했습니다") 반환. ` +
-        `이는 cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 화이트리스트 문제일 가능성이 높습니다. ` +
-        `조치 순서: ` +
-        `(1) PayApp 가맹점 콘솔에서 "조회 API 사용권한" 활성화 확인. ` +
-        `(2) ${ipPart}` +
-        `(3) PayApp 고객센터에 정확한 결제내역조회 cmd 명 문의 후 PAYAPP_LIST_CMD secret 으로 지정 (현재 후보: ${CANDIDATE_CMDS.join(', ')}). ` +
-        `webhook 기반 결제 처리는 정상 동작 중이므로 치명 오류 아님 — 이 도구는 webhook 누락 시 복구용입니다.`;
-    } else {
-      hint = 'PayApp API 가 모든 cmd 에서 0건 또는 에러 반환. attempts.raw_preview 확인.';
-    }
-  }
+  // 0건일 때 사용자에게 줄 안내:
+  //   PayApp REST API 가 list cmd 를 제공하지 않으므로 webhook 누락 결제는 이
+  //   도구로 복구 불가능. 그런 경우 "order_no 강제완료" 또는 수동 입력 폼 사용.
+  const hint =
+    rows.length === 0
+      ? `${dateFrom}~${dateTo} 기간 내 미처리 webhook event 가 없습니다. ` +
+        `웹훅이 아예 오지 않은 (PayApp 콘솔 → feedbackurl 미호출) 결제는 이 도구로 복구 불가능합니다 — ` +
+        `아래 "order_no 강제완료" 또는 "수동 입력 동기화" 폼을 사용하세요. ` +
+        `참고: PayApp REST API 는 결제내역 일괄 조회 cmd 를 제공하지 않습니다 (errno=70040 은 정상 응답).`
+      : undefined;
 
   return json({
     ok: true,
+    mode: 'webhook_replay',
     date_from: dateFrom,
     date_to: dateTo,
-    success_cmd: successCmd,
-    cached_cmd: cachedSuccessCmd,
-    attempts,
-    fetched: records.length,
+    scanned: rows.length,
+    fetched: rows.length, // 기존 UI 호환 (구 필드)
+    pending_total: pendingTotal ?? null,
     matched,
     unmatched,
     already_synced: alreadySynced,
     failed,
     errors,
     processed,
-    log_failures: logFailures,
-    all_errno_70040: allErrno70040,
-    observed_remote_addr: observedRemoteAddr,
     hint,
   });
 });

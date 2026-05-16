@@ -229,23 +229,51 @@ order by created_at desc;
 - 보이는데 `linkval_verified=false` 면 → `PAYAPP_LINKVAL` 시크릿 불일치.
 - 보이는데 `processed_at` 이 NULL 이면 → 함수 내부 처리 실패 (Supabase Functions 로그 확인).
 
+### ⚠️ PayApp REST API 의 한계 — 결제내역 조회 cmd 없음
+
+PayApp REST API (`https://api.payapp.kr/oapi/apiLoad.html`) 는 **결제내역 일괄 조회를
+지원하지 않습니다**. 공식/오픈소스 PayApp 라이브러리(ssut/payapp 파이썬, chwnam/Box-
+billingPayApp PHP 등) 및 매뉴얼이 일치하게 지원하는 cmd 는 다음 쓰기 계열뿐:
+
+| 분류 | cmd | 용도 |
+|---|---|---|
+| 결제 | `payrequest` / `paycancel` / `paycancelreq` | 결제 요청·취소 |
+| 정기결제 | `rebillRegist` / `rebillPay` / `rebillStop` | 정기결제 등록·즉시결제·해지 |
+
+→ `paymentList` / `payList` / `tradeList` 등의 cmd 는 존재하지 않으며, 호출 시
+`errno=70040 "cmd을 가져오지 못했습니다"` 가 반환되는 것이 **정상 응답**. 따라서 결제
+데이터의 유일한 진실 원천은 PayApp webhook(feedbackurl) 으로 들어와
+`payapp_webhook_events` 에 저장된 payload.
+
+### 결제 누락 복구 흐름 (PayApp 가 webhook 보낸 경우)
+
+`sync-payapp-payments` Edge Function 은 이제 **저장된 webhook event 재처리** 모드로
+동작:
+
 ```sql
--- 2) 자동 동기화 시도 이력 (최근 5건)
-select created_at, requested_cmd, http_status, parsed_count, success,
-       left(raw_response, 500) as raw_preview
-from public.payapp_api_sync_attempts
-order by created_at desc
-limit 5;
+-- 미처리 webhook event 확인
+select id, payapp_mul_no, pay_state, price, membership_updated, processed_at,
+       processing_error, created_at
+from public.payapp_webhook_events
+where linkval_verified = true
+  and membership_updated = false
+  and pay_state in (4, 64)
+  and created_at > now() - interval '7 days'
+order by created_at desc;
 ```
 
-- 모든 cmd 가 `parsed_count=0` 이면 → PayApp API cmd 명/필드명 불일치. `raw_preview` 확인.
-- `success=true` 인 cmd 가 있으면 → `PAYAPP_LIST_CMD` 시크릿에 그 cmd 명 set 후 함수 재배포.
-- 모든 cmd 의 `raw_preview` 에 `errno=70040` ("cmd을 가져오지 못했습니다") 가 보이면 →
-  **cmd 명칭 문제가 아니라 PayApp 계정 권한/IP 문제**. 처방:
-  1. PayApp 가맹점 콘솔 → API 설정 → "조회 API 사용권한" 활성화 확인
-  2. PayApp 콘솔 → API 접근 허용 IP 에 EF outbound IP 등록 (응답의 `remoteaddr=...` 값)
-  3. PayApp 고객센터에 정확한 결제내역조회 cmd 명 문의 후 `PAYAPP_LIST_CMD` 로 지정
-  - webhook 기반 결제 처리는 정상 운영 — 이 도구는 webhook 누락 시 복구/진단용
+→ `/admin → 결제 동기화 → 미처리 webhook 자동 재처리` 버튼이 위 행들을
+`admin_replay_webhook_event` 로 일괄 재처리.
+
+### 결제 누락 복구 흐름 (PayApp webhook 자체가 안 온 경우)
+
+PayApp 콘솔 점검 등으로 feedbackurl 호출이 누락된 결제 → webhook 재처리 도구로는
+복구 불가능 (재처리할 row 자체가 없음). 두 가지 수동 도구 사용:
+
+1. **order_no 강제완료** (admin UI) — PayApp 콘솔에서 결제 확인 후 `swk_...` order_no
+   로 `admin_force_paid_by_order_no` 호출 → 권한 즉시 부여 + 감사 로그.
+2. **수동 입력 동기화** (admin UI 하단 폼) — `payapp_mul_no` + 금액 + 결제일시 직접
+   입력 → `admin_sync_payapp_payment` 가 멱등 처리.
 
 ```sql
 -- 3) 수동 동기화 import 큐 (미매칭 결제)
