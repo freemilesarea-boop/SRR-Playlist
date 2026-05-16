@@ -84,6 +84,29 @@ const PAYAPP_ACTIONABLE_STATES = new Set<number>([
   ...PAYAPP_REFUND_STATES,
 ]);
 
+// PayApp 정기결제 '해지' webhook 감지 — pay_state 와 별개로 raw_payload 신호로 판단.
+// 운영 raw_payload 에서 확인된 후보 키 패턴.
+function isCancelSubscriptionWebhook(p: Record<string, string>): boolean {
+  const truthy = (v?: string) =>
+    v != null && /^(y|yes|t|true|1)$/i.test(String(v).trim());
+  const stop = (v?: string) =>
+    v != null && /^(cancel|stop|expire|terminate|해지)/i.test(String(v).trim());
+  if (truthy(p.rebill_cancel) || truthy(p.unsubscribe) || truthy(p.subscription_cancel)) return true;
+  if (stop(p.rebill_status) || stop(p.subscr_status) || stop(p.subscription_status)) return true;
+  if (
+    (p.canceldate && p.canceldate.length > 0) ||
+    (p.cancel_at && p.cancel_at.length > 0) ||
+    (p.stopdate && p.stopdate.length > 0)
+  ) {
+    // 단, refund/cancel state (8/9/32/70/71) 와 동시 발생 시엔 별도 라우터에 위임 (해지 RPC 불필요)
+    const stateNum = Number(p.pay_state ?? p.paystate ?? p.state ?? 0);
+    if (![8, 9, 32, 70, 71].includes(stateNum)) return true;
+  }
+  // 한글 메시지
+  if (p.message && /정기결제\s*해지|구독\s*해지/i.test(p.message)) return true;
+  return false;
+}
+
 function stateLabel(state: number | null): string {
   if (state == null) return 'unknown';
   switch (state) {
@@ -364,6 +387,72 @@ serve(async (req) => {
   const eventAt = eventAtRaw
     ? new Date(eventAtRaw.replace(' ', 'T') + (eventAtRaw.includes('+') ? '' : '+09:00')).toISOString()
     : isoNow();
+
+  // ─────────────────────────────────────────────────────────────
+  // 정기결제 해지 (subscription cancel) — pay_state 와 별개로 raw_payload 로 판단.
+  // refund/cancel state (라우터) 가 아닐 때만 실행 (중복 적용 방지).
+  // ─────────────────────────────────────────────────────────────
+  const isSubCancel =
+    !isCancelState && !isRefundState && isCancelSubscriptionWebhook(payload);
+  if (isSubCancel && mulNo) {
+    const cancelReason =
+      pickField(payload, ['cancel_reason', 'reason', '사유']) ?? 'PayApp 정기결제 해지';
+    const { data: cancelData, error: cancelErr } = await sb.rpc(
+      '_internal_apply_payapp_subscription_cancel_event',
+      {
+        p_payapp_mul_no: mulNo,
+        p_payapp_rebill_no: rebillNo,
+        p_reason: cancelReason,
+        p_event_at: eventAt,
+        p_source: 'webhook_subscription_cancel',
+      },
+    );
+    const cancelRow = (Array.isArray(cancelData) ? cancelData[0] : cancelData) as
+      | {
+          matched_user_id: string | null;
+          matched_order_id: string | null;
+          matched_subscription_id: string | null;
+          membership_updated: boolean;
+          final_membership_tier: string | null;
+          message: string;
+        }
+      | undefined;
+
+    await sb
+      .from('payapp_webhook_events')
+      .update({
+        matched_user_id: cancelRow?.matched_user_id ?? null,
+        matched_order_id: cancelRow?.matched_order_id ?? null,
+        matched_subscription_id: cancelRow?.matched_subscription_id ?? null,
+        membership_updated: !!cancelRow?.membership_updated,
+        final_membership_tier: cancelRow?.final_membership_tier ?? null,
+        state_label: '정기결제 해지',
+        processing_error: cancelErr?.message ?? (cancelRow?.membership_updated ? null : cancelRow?.message ?? null),
+        processed_at: isoNow(),
+      })
+      .eq('id', insertedEvent?.id);
+
+    await logOp({
+      level: cancelRow?.membership_updated ? 'success' : 'warning',
+      status: cancelRow?.membership_updated ? 'subscription_canceled' : 'failed',
+      message: cancelRow?.membership_updated
+        ? `정기결제 해지 반영 완료 (mul_no=${mulNo})`
+        : `정기결제 해지 매칭 실패 (mul_no=${mulNo})`,
+      details: {
+        mul_no: mulNo,
+        rebill_no: rebillNo,
+        cancel_reason: cancelReason,
+        matched_user_id: cancelRow?.matched_user_id,
+        rpc_error: cancelErr?.message ?? null,
+      },
+      related_id: mulNo,
+      duration_ms: Date.now() - t0,
+      error_code: cancelErr?.code ?? null,
+      error_message: cancelErr?.message ?? null,
+    });
+
+    return SUCCESS();
+  }
 
   if (isActionable && mulNo && payState != null) {
     const planType = planFromAmount(priceNum) ?? (order?.plan_type as 'individual' | 'business' | undefined);

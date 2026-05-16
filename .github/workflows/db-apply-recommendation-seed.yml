@@ -618,6 +618,31 @@ jobs:
                 then 'YES' else 'NO' end);
           SQL
 
+      - name: 1ai) 0042 (정기결제 해지 처리) 적용
+        run: |
+          set -e
+          echo "== 0042 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0042_subscription_cancel_handling.sql
+          echo ""
+          echo "== 검증 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -tA <<'SQL'
+            select 'auto_renew_col=' ||
+              (case when exists (select 1 from information_schema.columns
+                where table_schema='public' and table_name='subscriptions' and column_name='auto_renew')
+                then 'YES' else 'NO' end);
+            select 'cancel_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='_internal_apply_payapp_subscription_cancel_event')
+                then 'YES' else 'NO' end);
+            select 'backfill_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='admin_backfill_subscription_cancels')
+                then 'YES' else 'NO' end);
+          SQL
+          echo ""
+          echo "== 백필 dry-run (admin 컨텍스트 아니라 skip 가능) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "select applied, scanned from public.admin_backfill_subscription_cancels(now() - interval '60 days', true);" || echo "(skip)"
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

@@ -441,3 +441,28 @@ export async function listRecentWebhookEvents(payload: {
     return { rows: [], error: rpcErrorDetail('list_recent_webhook_events', e) };
   }
 }
+
+// ---------- 0042 — 정기결제 해지 백필 ----------
+
+export interface BackfillCancelResult {
+  applied: number;
+  scanned: number;
+  events: unknown[];
+}
+
+export async function backfillSubscriptionCancels(payload: {
+  since?: string; // ISO timestamptz
+  dryRun?: boolean;
+}): Promise<{ ok: boolean; result?: BackfillCancelResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_backfill_subscription_cancels', {
+      p_since: payload.since ?? null,
+      p_dry_run: payload.dryRun ?? true,
+    });
+    if (error) return { ok: false, error: rpcErrorDetail('admin_backfill_subscription_cancels', error) };
+    const row = (Array.isArray(data) ? data[0] : data) as BackfillCancelResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: rpcErrorDetail('admin_backfill_subscription_cancels', e) };
+  }
+}

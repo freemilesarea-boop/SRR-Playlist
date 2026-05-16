@@ -21,6 +21,8 @@ import {
   replayWebhookEvent,
   replayWebhookByMulNo,
   forceActivateMembership,
+  backfillSubscriptionCancels,
+  type BackfillCancelResult,
   type AdminSyncPaymentResult,
   type AutoSyncSummary,
   type ManualPaymentImportRow,
@@ -541,6 +543,9 @@ export default function PaymentSyncTool() {
         </div>
       </section>
 
+      {/* === 정기결제 해지 백필 === */}
+      <SubscriptionCancelBackfill onCompleted={load} />
+
       {/* === 고급 옵션 — 수동 입력 폼 === */}
       <details className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <summary className="cursor-pointer text-sm font-bold tracking-tight">
@@ -950,4 +955,107 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function SubscriptionCancelBackfill({ onCompleted }: { onCompleted: () => void | Promise<void> }) {
+  const [since, setSince] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [busy, setBusy] = useState<'dry' | 'apply' | null>(null);
+  const [result, setResult] = useState<BackfillCancelResult | null>(null);
+  const [resultMode, setResultMode] = useState<'dry' | 'apply' | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run(mode: 'dry' | 'apply') {
+    setErr(null);
+    setResult(null);
+    if (mode === 'apply') {
+      if (
+        !window.confirm(
+          '정기결제 해지 webhook 행을 일괄 적용해 사용자 권한을 free 로 회수합니다.\n' +
+            'dry-run 결과를 먼저 확인했나요? 계속할까요?',
+        )
+      )
+        return;
+    }
+    setBusy(mode);
+    try {
+      const res = await backfillSubscriptionCancels({
+        since: new Date(since + 'T00:00:00+09:00').toISOString(),
+        dryRun: mode === 'dry',
+      });
+      if (!res.ok) {
+        setErr(res.error ?? '백필 실패');
+        toast.error(res.error ?? '백필 실패');
+        return;
+      }
+      setResult(res.result ?? null);
+      setResultMode(mode);
+      if (mode === 'apply') {
+        toast.success(`백필 완료 — ${res.result?.applied ?? 0}건 적용`);
+        await onCompleted();
+      } else {
+        toast.info(`dry-run — ${res.result?.scanned ?? 0}건 매칭 가능`);
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <div>
+        <h3 className="text-sm font-bold tracking-tight">정기결제 해지 백필 (0042)</h3>
+        <p className="mt-0.5 text-[11px] text-ink-mute">
+          PayApp 정기결제 해지 webhook 이 누락되어 active 로 남아있는 사용자를 일괄로 free 회수.
+          반드시 <strong>dry-run</strong> 먼저 실행해서 대상 확인 후 적용.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[11px] text-ink-mute">
+          기준일 이후
+          <input
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            className="input h-7 text-xs"
+          />
+        </label>
+        <button
+          onClick={() => run('dry')}
+          disabled={busy !== null}
+          className="rounded-md bg-bg-deep px-2 py-1 text-[11px] font-semibold ring-1 ring-line/15 hover:bg-bg-hover disabled:opacity-50"
+        >
+          {busy === 'dry' ? '확인 중…' : 'dry-run (변경 없음)'}
+        </button>
+        <button
+          onClick={() => run('apply')}
+          disabled={busy !== null}
+          className="rounded-md bg-red-500/15 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+        >
+          {busy === 'apply' ? '적용 중…' : '백필 적용'}
+        </button>
+      </div>
+      {err && <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">{err}</p>}
+      {result && (
+        <div className="rounded-md bg-bg-deep/40 p-2 text-[11px]">
+          <p className="text-ink-mute">
+            mode: <span className="font-mono">{resultMode}</span> · scanned:{' '}
+            <span className="font-semibold">{result.scanned}</span> · applied:{' '}
+            <span className="font-semibold text-emerald-300">{result.applied}</span>
+          </p>
+          {Array.isArray(result.events) && result.events.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-ink-mute">결과 상세 ({result.events.length})</summary>
+              <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-ink-mute">
+                {JSON.stringify(result.events, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
