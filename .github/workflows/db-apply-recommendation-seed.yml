@@ -729,6 +729,23 @@ jobs:
               ) order by p.proname;
           "
 
+      - name: 1ao) 0048 (admin_force_paid_by_order_no + pending state matching) 적용
+        run: |
+          set -e
+          echo "== 0048 적용 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0048_force_paid_and_pending_match.sql
+          echo ""
+          echo "== RPC 시그니처 확인 =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "
+            select proname, pg_get_function_identity_arguments(p.oid) as args
+            from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+            where n.nspname='public'
+              and p.proname in (
+                'admin_force_paid_by_order_no',
+                '_internal_match_user_for_event'
+              ) order by p.proname;
+          "
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 

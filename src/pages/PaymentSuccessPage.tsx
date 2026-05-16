@@ -239,13 +239,28 @@ function TimeoutView({
         >
           <RefreshCw size={12} /> 다시 확인
         </button>
-        <Link
-          to="/profile"
-          className="inline-flex flex-1 items-center justify-center rounded-lg bg-bg-deep py-2 text-xs hover:bg-bg-hover"
+        <button
+          onClick={async () => {
+            if (!orderNo) return;
+            try {
+              await navigator.clipboard.writeText(orderNo);
+              alert('주문번호를 복사했어요. 관리자에게 전달해주세요.');
+            } catch {
+              // clipboard API 차단 환경 fallback — 그냥 안내만
+              alert(`주문번호: ${orderNo}\n(복사 실패. 직접 캡처해서 관리자에게 전달해주세요.)`);
+            }
+          }}
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-bg-deep py-2 text-xs hover:bg-bg-hover"
         >
-          마이페이지
-        </Link>
+          주문번호 복사
+        </button>
       </div>
+      <Link
+        to="/profile"
+        className="mt-2 block text-center text-[11px] text-ink-mute hover:text-ink"
+      >
+        마이페이지로 가기
+      </Link>
     </>
   );
 }

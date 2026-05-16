@@ -21,6 +21,7 @@ import {
   replayWebhookEvent,
   replayWebhookByMulNo,
   forceActivateMembership,
+  forcePaidByOrderNo,
   backfillSubscriptionCancels,
   type BackfillCancelResult,
   type AdminSyncPaymentResult,
@@ -398,6 +399,36 @@ export default function PaymentSyncTool() {
               className="rounded-md bg-accent/15 px-2 text-[11px] font-semibold text-accent hover:bg-accent/25"
             >
               mul_no 재처리
+            </button>
+            <button
+              onClick={async () => {
+                const orderNo = window.prompt(
+                  '강제 결제완료할 order_no (swk_...) 입력\n\n' +
+                    '⚠️ webhook state=64 누락된 결제에만 사용. PayApp 콘솔에서 실제 결제 완료 확인 후 실행.',
+                );
+                if (!orderNo || !orderNo.trim()) return;
+                const mulNo = window.prompt('연결할 payapp_mul_no (선택, 없으면 빈 채로):') ?? '';
+                const apv = window.prompt('approval_no (선택, 없으면 빈 채로):') ?? '';
+                if (!window.confirm(
+                  `정말 ${orderNo} 를 강제로 결제완료 처리할까요?\n` +
+                    `mul_no=${mulNo || '(자동)'}\napproval_no=${apv || '(없음)'}\n\n감사 로그 기록됨.`,
+                )) return;
+                const res = await forcePaidByOrderNo({
+                  orderNo: orderNo.trim(),
+                  payappMulNo: mulNo.trim() || undefined,
+                  approvalNo: apv.trim() || undefined,
+                });
+                if (!res.ok) toast.error(res.error ?? '강제 결제완료 실패');
+                else
+                  toast.success(
+                    `강제 결제완료 — tier=${res.result?.final_membership_tier ?? '?'} (${res.result?.message ?? ''})`,
+                  );
+                await load();
+              }}
+              className="rounded-md bg-yellow-500/15 px-2 text-[11px] font-semibold text-yellow-200 hover:bg-yellow-500/25"
+              title="webhook state=64 미도착 케이스 — order_no 로 강제 paid 전환"
+            >
+              order_no 강제완료
             </button>
           </div>
         </div>

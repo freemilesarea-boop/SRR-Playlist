@@ -394,7 +394,11 @@ serve(async (req) => {
     '구매자번호', '구매자전화번호',
   ]);
   const goodname = pickField(payload, ['goodname', 'goodsname', 'pname']);
-  const approvalNo = pickField(payload, ['approval_no', 'apv_no', 'card_apv_no', '승인번호']);
+  const approvalNo = pickField(payload, [
+    'approval_no', 'apv_no', 'card_apv_no', '승인번호',
+    'approvalNo', 'approval', 'auth_no', 'authno', 'card_auth_no',
+    'payapp_apv', 'card_approval', 'aprv_no', 'cardno',
+  ]);
   const eventAtRaw = pickField(payload, [
     'paid_at', 'pay_date', 'paydate', 'completedate',
     'cancel_at', 'canceldate', 'refunded_at', 'refunddate',
@@ -586,16 +590,44 @@ serve(async (req) => {
     return SUCCESS();
   }
 
-  // 이하: pending state (1, 4, 10) — order 있으면 status 만 갱신, 권한 변경 없음
+  // pending state (1, 4, 10) 라도 admin 진단 UI 에서 어느 user 의 결제인지 보이게
+  // matched_user_id / matched_order_id 만 update (tier 변경 없음).
+  // _internal_match_user_for_event RPC 가 var1/raw_payload swk_/mul_no/email 순서로 lookup.
+  let pendingMatchUserId: string | null = order?.user_id ?? null;
+  let pendingMatchOrderId: string | null = order?.id ?? null;
+  if (!pendingMatchUserId || !pendingMatchOrderId) {
+    try {
+      const { data: matchData } = await sb.rpc('_internal_match_user_for_event', {
+        p_order_no: orderNo,
+        p_payapp_mul_no: mulNo,
+        p_buyer_email: buyerEmail,
+        p_raw_payload: payload,
+      });
+      const matchRow = (Array.isArray(matchData) ? matchData[0] : matchData) as
+        | { matched_user_id: string | null; matched_order_id: string | null }
+        | undefined;
+      pendingMatchUserId = pendingMatchUserId ?? matchRow?.matched_user_id ?? null;
+      pendingMatchOrderId = pendingMatchOrderId ?? matchRow?.matched_order_id ?? null;
+    } catch (e) {
+      console.warn('[payapp-feedback] _internal_match_user_for_event error:', String(e));
+    }
+  }
+
   if (!order) {
     await sb
       .from('payapp_webhook_events')
-      .update({ processed_at: isoNow(), state_label: label })
+      .update({
+        processed_at: isoNow(),
+        state_label: label,
+        matched_user_id: pendingMatchUserId,
+        matched_order_id: pendingMatchOrderId,
+      })
       .eq('id', insertedEvent?.id);
     await logOp({
       level: 'info', status: 'skipped',
-      message: `non-actionable state=${payState} (${label}), no order match`,
-      details: { mul_no: mulNo, pay_state: payState },
+      message: `non-actionable state=${payState} (${label}), no payment_orders.var1 match` +
+        (pendingMatchUserId ? ` — matched user via fallback: ${pendingMatchUserId}` : ''),
+      details: { mul_no: mulNo, pay_state: payState, fallback_user: pendingMatchUserId, fallback_order: pendingMatchOrderId },
       related_id: mulNo,
       duration_ms: Date.now() - t0,
     });
@@ -627,7 +659,12 @@ serve(async (req) => {
 
   await sb
     .from('payapp_webhook_events')
-    .update({ processed_at: isoNow(), state_label: label })
+    .update({
+      processed_at: isoNow(),
+      state_label: label,
+      matched_user_id: pendingMatchUserId,
+      matched_order_id: pendingMatchOrderId,
+    })
     .eq('id', insertedEvent?.id);
 
   return SUCCESS();

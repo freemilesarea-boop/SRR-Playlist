@@ -527,3 +527,32 @@ export async function backfillPaidOrderByMulNo(
     return { ok: false, error: rpcErrorDetail('admin_backfill_paid_order_by_mul_no', e) };
   }
 }
+
+// ---------- 0048 admin 1-클릭 강제 결제완료 (state=64 미도착 케이스 복구) ----------
+
+export interface ForcePaidByOrderNoResult {
+  matched_user_id: string | null;
+  matched_order_id: string | null;
+  matched_order_no: string | null;
+  final_membership_tier: string | null;
+  message: string;
+}
+
+export async function forcePaidByOrderNo(payload: {
+  orderNo: string;
+  payappMulNo?: string;
+  approvalNo?: string;
+}): Promise<{ ok: boolean; result?: ForcePaidByOrderNoResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_force_paid_by_order_no', {
+      p_order_no: payload.orderNo,
+      p_payapp_mul_no: payload.payappMulNo ?? null,
+      p_approval_no: payload.approvalNo ?? null,
+    });
+    if (error) return { ok: false, error: rpcErrorDetail('admin_force_paid_by_order_no', error) };
+    const row = (Array.isArray(data) ? data[0] : data) as ForcePaidByOrderNoResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: rpcErrorDetail('admin_force_paid_by_order_no', e) };
+  }
+}
