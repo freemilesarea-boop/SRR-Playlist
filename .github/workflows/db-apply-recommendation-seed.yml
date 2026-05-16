@@ -675,6 +675,29 @@ jobs:
               ) order by p.proname;
           "
 
+      - name: 1al) 0045 (membership_tier 단일 진실 원천 + reconcile RPC) 적용
+        run: |
+          set -e
+          echo "== 0045 적용 (active_subscribers 를 membership_tier 기반으로 통일) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/migrations/0045_membership_tier_as_truth.sql
+          echo ""
+          echo "== dashboard_stats 검증 (active_subscribers ↔ personal_users + business_users 합과 일치해야 함) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "
+            select
+              s->>'active_subscribers' as active_subscribers,
+              s->>'personal_users' as personal_users,
+              s->>'business_users' as business_users,
+              s->>'free_users' as free_users,
+              s->>'total_users' as total_users
+            from (select public.admin_dashboard_stats() as s) x;
+          "
+          echo ""
+          echo "== reconcile dry-run (실제 변경 없이 차이만 확인) =="
+          psql ${PSQL_CONN:+"$PSQL_CONN"} -c "
+            select downgraded_count, upgraded_count, total_scanned
+            from public.admin_sync_membership_from_subscriptions(true);
+          "
+
       - name: 2) 추천 메타데이터 시드 실행 (dev_seed_recommendation_metadata.sql)
         run: psql ${PSQL_CONN:+"$PSQL_CONN"} -v ON_ERROR_STOP=1 -f supabase/dev_seed_recommendation_metadata.sql
 
