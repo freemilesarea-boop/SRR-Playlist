@@ -502,3 +502,28 @@ export async function getMyPaymentStatus(orderNo: string): Promise<MyPaymentStat
     return { ok: false, notFound: false, error: rpcErrorDetail('get_my_payment_status', e) };
   }
 }
+
+// ---------- 0047 백필: 기존 webhook event 의 raw_payload 로 원 swk_ order paid 전환 ----------
+
+export interface BackfillPaidByMulNoResult {
+  matched_user_id: string | null;
+  matched_order_id: string | null;
+  matched_order_no: string | null;
+  final_membership_tier: string | null;
+  message: string;
+}
+
+export async function backfillPaidOrderByMulNo(
+  mulNo: string,
+): Promise<{ ok: boolean; result?: BackfillPaidByMulNoResult; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_backfill_paid_order_by_mul_no', {
+      p_mul_no: mulNo,
+    });
+    if (error) return { ok: false, error: rpcErrorDetail('admin_backfill_paid_order_by_mul_no', error) };
+    const row = (Array.isArray(data) ? data[0] : data) as BackfillPaidByMulNoResult | undefined;
+    return row ? { ok: true, result: row } : { ok: false, error: 'empty response' };
+  } catch (e) {
+    return { ok: false, error: rpcErrorDetail('admin_backfill_paid_order_by_mul_no', e) };
+  }
+}

@@ -54,6 +54,17 @@ function pickField(p: Record<string, string>, keys: string[]): string | null {
   return null;
 }
 
+// PayApp 가 echo back 한 raw payload 의 어떤 키에도 var1/order_no 가 안 들어있고
+// memo 등에 swk_<uid8>_xxx_yyy 형태로만 박혀 있는 경우 마지막 보루로 정규식 스캔.
+function scanForSwkOrderNo(p: Record<string, string>): string | null {
+  for (const v of Object.values(p)) {
+    if (typeof v !== 'string') continue;
+    const m = v.match(/swk_[0-9a-fA-F]{8}_[a-zA-Z0-9]+_[a-zA-Z0-9]+/);
+    if (m) return m[0];
+  }
+  return null;
+}
+
 // '결제완료' / 'paid' / '4' / 'complete' 등을 모두 '4' 로 normalize.
 function normalizePayState(raw: string | null | undefined): number | null {
   if (raw == null) return null;
@@ -240,7 +251,11 @@ serve(async (req) => {
   const payload = await readPayload(req);
   const eventKey = buildEventKey(payload);
   // PayApp payload 필드명은 가맹점 설정/통보 채널마다 미세하게 다를 수 있어 후보 확장.
-  const orderNo = pickField(payload, ['var1', 'order_no', 'orderno']);
+  const orderNo =
+    pickField(payload, [
+      'var1', 'order_no', 'orderno', 'orderNo',
+      'order_id', 'orderid', 'custom_order_no', 'memo', 'var2',
+    ]) ?? scanForSwkOrderNo(payload);
   const userIdRaw = pickField(payload, ['var2', 'user_id', 'userid_local']);
   const mulNo = pickField(payload, ['mul_no', 'mulno', 'payapp_mul_no', 'reqno', 'req_no', 'request_no']);
   const rebillNo = pickField(payload, ['rebill_no', 'rebillno']);
@@ -470,6 +485,8 @@ serve(async (req) => {
       p_goodname: goodname,
       p_order_no: orderNo,
       p_source: 'webhook',
+      // 0047: RPC 가 var1/memo/문자열 어디든 swk_ 패턴 스캔할 수 있도록 raw payload 전달
+      p_raw_payload: payload,
     });
 
     const row = (Array.isArray(applyData) ? applyData[0] : applyData) as
