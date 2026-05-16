@@ -594,12 +594,16 @@ const STATE_LABEL: Record<number, { label: string; tone: string }> = {
 function stateBadge(
   state: number | null,
   approval_no?: string | null,
+  membershipUpdated?: boolean,
 ): { label: string; tone: string } {
   // 정책 확정 (운영 webhook 실측): state=64 가 실 결제완료 webhook.
-  // state=4 는 승인대기 webhook (실결제 X, 동일 mul_no 에 곧 state=64 가 따라옴).
-  // approval_no 유무로 판정하지 않음 — 그룹 단위로 membership_updated 인 row 가 진실.
+  // state=4 는 승인대기 webhook 이지만, 0053 trigger 가 자동 paid 승격한 경우
+  // 표시상 결제완료(emerald) 로 노출 — DB pay_state 자체는 4 유지.
   void approval_no;
   if (state == null) return { label: '—', tone: 'text-ink-dim' };
+  if (state === 4 && membershipUpdated) {
+    return { label: '결제완료 (즉시승인)', tone: 'bg-emerald-500/15 text-emerald-300' };
+  }
   return STATE_LABEL[state] ?? { label: String(state), tone: 'bg-ink/10 text-ink-mute' };
 }
 
@@ -710,7 +714,7 @@ function WebhookRow({
     }
   }
 
-  const state = stateBadge(row.pay_state, row.approval_no);
+  const state = stateBadge(row.pay_state, row.approval_no, row.membership_updated);
   const isRefundOrCancel =
     row.pay_state != null && [8, 9, 32, 70, 71].includes(row.pay_state);
   const rowTone = isRefundOrCancel
@@ -805,7 +809,7 @@ function WebhookRow({
     </tr>
     {expanded &&
       secondaries.map((sec) => {
-        const secState = stateBadge(sec.pay_state, sec.approval_no);
+        const secState = stateBadge(sec.pay_state, sec.approval_no, sec.membership_updated);
         return (
           <tr key={sec.id} className="border-b border-line/5 bg-bg-deep/30 text-ink-dim">
             <td className="px-2 py-1 pl-6 text-[10px]">
