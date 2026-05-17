@@ -10,12 +10,20 @@ import { supabase } from './supabase';
 export interface SubscriptionSnapshot {
   id: string;
   plan_type: 'individual' | 'business';
-  status: 'pending' | 'active' | 'canceled' | 'failed' | 'expired' | 'payment_waiting';
+  status:
+    | 'pending'
+    | 'active'
+    | 'canceled'
+    | 'cancel_scheduled'
+    | 'failed'
+    | 'expired'
+    | 'payment_waiting';
   price: number;
   current_period_start: string | null;
   current_period_end: string | null;
   last_paid_at: string | null;
   canceled_at: string | null;
+  cancel_requested_at?: string | null;
   payapp_rebill_no: string | null;
   created_at: string;
 }
@@ -61,13 +69,55 @@ export async function createPayappSubscription(payload: {
 
 export async function cancelPayappSubscription(
   subscriptionId: string,
-): Promise<{ ok: boolean; error?: string }> {
+  reason?: string,
+): Promise<{ ok: boolean; error?: string; current_period_end?: string | null; message?: string }> {
   const { data, error } = await supabase.functions.invoke('cancel-payapp-subscription', {
-    body: { subscription_id: subscriptionId },
+    body: { subscription_id: subscriptionId, reason: reason ?? 'user_request' },
   });
-  if (error) return { ok: false, error: error.message };
-  const r = (data ?? {}) as { ok?: boolean; error?: string };
-  return r.ok ? { ok: true } : { ok: false, error: r.error };
+  if (error) {
+    // supabase-js 가 non-2xx 에서 body 를 error.context 에 담음. message 추출
+    let bodyMsg: string | undefined;
+    try {
+      const errAny = error as unknown as { context?: Response };
+      if (errAny.context && typeof errAny.context.json === 'function') {
+        const b = (await errAny.context.json()) as { message?: string };
+        bodyMsg = b.message;
+      }
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: bodyMsg ?? error.message };
+  }
+  const r = (data ?? {}) as {
+    ok?: boolean;
+    error?: string;
+    current_period_end?: string | null;
+    message?: string;
+  };
+  return r.ok
+    ? { ok: true, current_period_end: r.current_period_end, message: r.message }
+    : { ok: false, error: r.error };
+}
+
+/** 회원 탈퇴 — 활성 구독 있으면 server 에서 reject */
+export async function requestWithdrawal(
+  reason?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('user_request_withdrawal', {
+    p_reason: reason ?? null,
+  });
+  if (error) {
+    const hint = (error as { hint?: string }).hint;
+    return { ok: false, error: hint ?? error.message };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as { withdrawn_at?: string } | undefined;
+  return row ? { ok: true } : { ok: false, error: 'empty response' };
+}
+
+/** 본인 cancel_scheduled 가 period_end 지났으면 즉시 free 회수 — 로그인 시 한 번 호출 */
+export async function expireMyScheduledCancellation(): Promise<number> {
+  const { data } = await supabase.rpc('expire_my_scheduled_cancellation');
+  return (data as number | null) ?? 0;
 }
 
 export async function fetchMySubscription(): Promise<MySubscriptionResult> {

@@ -43,13 +43,30 @@ function RouteFallback() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuthStore();
+  const { session, profile, user, loading, signOut } = useAuthStore();
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center text-ink-mute">불러오는 중…</div>
     );
   }
   if (!session) return <Navigate to="/login" replace />;
+  // 탈퇴 회원 차단 — profile 이 아직 안 로드됐으면 통과시켜 다음 렌더에서 검사
+  if (user && profile && profile.withdrawn_at) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-lg font-bold">탈퇴된 계정이에요</p>
+        <p className="text-sm text-ink-mute">
+          이 계정은 회원 탈퇴 처리됐어요. 다시 이용하려면 새로 가입해주세요.
+        </p>
+        <button
+          onClick={() => void signOut()}
+          className="mt-2 rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
+        >
+          로그아웃
+        </button>
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 

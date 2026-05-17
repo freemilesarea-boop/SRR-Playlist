@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CreditCard,
@@ -12,8 +13,12 @@ import {
   Mic2,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
+  UserX,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { requestWithdrawal } from '@/lib/subscriptionApi';
+import { toast } from '@/store/toastStore';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import { useThemeStore } from '@/store/themeStore';
 import {
@@ -25,6 +30,26 @@ import { getTimeSlotLabel, type ThemeMode } from '@/lib/timeTheme';
 
 export default function ProfilePage() {
   const { profile, user, signOut } = useAuthStore();
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  async function handleConfirmWithdraw() {
+    setWithdrawing(true);
+    try {
+      const res = await requestWithdrawal();
+      if (!res.ok) {
+        toast.error(res.error ?? '탈퇴 요청 실패');
+        return;
+      }
+      toast.success('회원 탈퇴 처리됐어요.');
+      setWithdrawModalOpen(false);
+      await signOut();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '탈퇴 요청 실패');
+    } finally {
+      setWithdrawing(false);
+    }
+  }
   const { mode, resolvedMode, timeSlot, setMode } = useThemeStore();
   const crossfadeSeconds = usePlaybackSettingsStore((s) => s.crossfadeSeconds);
   const setCrossfadeSeconds = usePlaybackSettingsStore((s) => s.setCrossfadeSeconds);
@@ -175,7 +200,73 @@ export default function ProfilePage() {
         <LogOut size={16} /> 로그아웃
       </button>
 
+      <button
+        onClick={() => setWithdrawModalOpen(true)}
+        className="flex w-full items-center justify-center gap-2 text-xs text-ink-dim hover:text-red-400"
+      >
+        <UserX size={14} /> 회원 탈퇴
+      </button>
+
       <p className="text-center text-[11px] text-ink-dim">스르륵 플리 · v0.1.0 MVP</p>
+
+      {withdrawModalOpen && (
+        <WithdrawConfirmModal
+          busy={withdrawing}
+          onCancel={() => setWithdrawModalOpen(false)}
+          onConfirm={handleConfirmWithdraw}
+        />
+      )}
+    </div>
+  );
+}
+
+function WithdrawConfirmModal({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md space-y-4 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+            <AlertTriangle size={18} />
+          </span>
+          <div>
+            <h3 className="text-base font-bold">정말 탈퇴할까요?</h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+              회원 탈퇴 시 계정 이용이 중단되며, 결제 및 정산 관련 기록은 관련 법령에 따라 보관될
+              수 있어요.
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-yellow-200/90">
+              <strong>활성 구독</strong>이 있으면 먼저 구독을 취소하고 결제 기간이 종료된 후 탈퇴해
+              주세요.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
+            계속 이용하기
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+          >
+            {busy ? '처리 중…' : '탈퇴하기'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

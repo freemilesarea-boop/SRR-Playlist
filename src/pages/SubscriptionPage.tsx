@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music } from 'lucide-react';
+import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
-import { createPayappSubscription } from '@/lib/subscriptionApi';
+import {
+  createPayappSubscription,
+  cancelPayappSubscription,
+  expireMyScheduledCancellation,
+  type SubscriptionSnapshot,
+} from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import type { SubscriptionType } from '@/types/db';
+
+function fmtPeriodEnd(s: string | null | undefined): string {
+  if (!s) return '결제 기간 종료일';
+  return new Date(s).toLocaleDateString('ko-KR', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
 
 interface PendingRequest {
   id: string;
@@ -134,6 +146,9 @@ export default function SubscriptionPage() {
   const [phoneModal, setPhoneModal] = useState<{ plan: 'personal' | 'business'; phone: string } | null>(null);
   // 직접 fetch 한 fresh tier — zustand 캐시 stale 일 수 있어 진입/포커스마다 새로 읽음.
   const [freshTier, setFreshTier] = useState<string | null>(null);
+  const [activeSub, setActiveSub] = useState<SubscriptionSnapshot | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   // 표시 기준: fresh tier 가 있으면 그것, 없으면 profile.membership_tier, 그것도 없으면 free.
   // membership_tier 는 webhook(state=64/refund 등) 가 직접 set 하는 단일 진실 원천.
@@ -178,13 +193,54 @@ export default function SubscriptionPage() {
   // zustand profile 캐시와 별개로 진실값 확보. refreshProfile 도 동시에 트리거.
   async function reloadFreshTier() {
     if (!user) return;
+    // 만료된 cancel_scheduled 정리 (period_end 지났으면 free 로 회수)
+    try {
+      await expireMyScheduledCancellation();
+    } catch {
+      /* 0056 미적용 환경 — 조용히 폴백 */
+    }
     const { data, error } = await supabase
       .from('users')
       .select('membership_tier')
       .eq('id', user.id)
       .maybeSingle();
     if (!error && data) setFreshTier((data as { membership_tier: string | null }).membership_tier ?? 'free');
+    // 활성 또는 cancel_scheduled subscription 1건 fetch (UI 표시용)
+    try {
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select(
+          'id, plan_type, status, price, current_period_start, current_period_end, last_paid_at, canceled_at, cancel_requested_at, payapp_rebill_no, created_at',
+        )
+        .eq('user_id', user.id)
+        .in('status', ['active', 'cancel_scheduled', 'payment_waiting', 'pending'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setActiveSub((subData as SubscriptionSnapshot | null) ?? null);
+    } catch {
+      setActiveSub(null);
+    }
     void refreshProfile();
+  }
+
+  async function handleConfirmCancel() {
+    if (!activeSub) return;
+    setCanceling(true);
+    try {
+      const res = await cancelPayappSubscription(activeSub.id, 'user_request');
+      if (!res.ok) {
+        toast.error(res.error ?? '구독 취소 실패');
+        return;
+      }
+      toast.success(res.message ?? '구독이 취소 예약됐어요.');
+      setCancelModalOpen(false);
+      await reloadFreshTier();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '구독 취소 실패');
+    } finally {
+      setCanceling(false);
+    }
   }
 
   useEffect(() => {
@@ -426,15 +482,54 @@ export default function SubscriptionPage() {
         </div>
       </section>
 
+      {/* 현재 구독 상태 + 취소 버튼 */}
+      {activeSub && (activeSub.status === 'active' || activeSub.status === 'cancel_scheduled') && (
+        <section
+          className={`space-y-2 rounded-2xl p-4 ring-1 ${
+            activeSub.status === 'cancel_scheduled'
+              ? 'bg-yellow-500/5 ring-yellow-500/30'
+              : 'bg-bg-card ring-line/10'
+          }`}
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-bold">
+              {activeSub.plan_type === 'business' ? '사업자' : '일반'} 구독
+            </h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+              {activeSub.status === 'cancel_scheduled' ? '취소 예약됨' : '이용 중'}
+            </span>
+          </div>
+          {activeSub.status === 'cancel_scheduled' ? (
+            <p className="text-xs leading-relaxed text-yellow-200/90">
+              <strong>{fmtPeriodEnd(activeSub.current_period_end)}</strong>까지 Premium 기능을 이용할 수 있어요.
+              이후 자동으로 무료 플랜으로 전환됩니다.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs leading-relaxed text-ink-mute">
+                다음 결제일:{' '}
+                <strong className="text-ink">{fmtPeriodEnd(activeSub.current_period_end)}</strong>
+              </p>
+              <button
+                onClick={() => setCancelModalOpen(true)}
+                className="mt-1 inline-flex items-center gap-1 rounded-md bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/20"
+              >
+                구독 취소
+              </button>
+            </>
+          )}
+        </section>
+      )}
+
       <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <h3 className="text-sm font-bold">결제 안내</h3>
         <p className="text-xs leading-relaxed text-ink-mute">
           PayApp 정기결제로 매월 자동 결제됩니다. 결제 완료/구독 활성화는 PayApp 결제 확인 후
           자동 반영돼요.
         </p>
-        <p className="text-xs leading-relaxed text-yellow-200/90">
-          <strong>해지 정책:</strong> 해지 즉시 이용권이 종료되며 무료 플랜으로 다운그레이드됩니다.
-          남은 기간에 대한 환불은 자동 처리되지 않으니 고객센터로 문의해주세요.
+        <p className="text-xs leading-relaxed text-ink-mute">
+          <strong>해지 정책:</strong> 구독을 취소해도 현재 결제 기간이 끝날 때까지 Premium 기능을
+          이용할 수 있어요. 다음 결제일부터 자동결제가 중단됩니다.
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=스르륵 플리 매장 구독 문의"
@@ -444,6 +539,15 @@ export default function SubscriptionPage() {
         </a>
       </div>
 
+      {cancelModalOpen && activeSub && (
+        <CancelConfirmModal
+          periodEnd={activeSub.current_period_end}
+          busy={canceling}
+          onCancel={() => setCancelModalOpen(false)}
+          onConfirm={handleConfirmCancel}
+        />
+      )}
+
       {phoneModal && (
         <PhoneModal
           plan={phoneModal.plan}
@@ -452,6 +556,55 @@ export default function SubscriptionPage() {
           onConfirm={(p) => startPayappCheckout(phoneModal.plan, p)}
         />
       )}
+    </div>
+  );
+}
+
+function CancelConfirmModal({
+  periodEnd,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  periodEnd: string | null;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md space-y-4 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+            <AlertTriangle size={18} />
+          </span>
+          <div>
+            <h3 className="text-base font-bold">구독을 취소할까요?</h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+              구독을 취소해도 현재 결제 기간이 끝날 때까지 Premium 기능을 이용할 수 있어요.{' '}
+              <strong>{fmtPeriodEnd(periodEnd)}</strong> 이후 자동결제가 중단됩니다.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
+            계속 이용하기
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+          >
+            {busy ? '취소 중…' : '구독 취소'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
