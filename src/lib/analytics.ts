@@ -65,13 +65,48 @@ interface StreamPayload {
   event_type: 'start' | 'milestone_30s' | 'complete';
 }
 
+/**
+ * 0078 — anonymous_id (브라우저 단위 영속). 비로그인 사용자 dedup 용.
+ * 동일 브라우저는 같은 anonymous_id 를 재사용한다. session_id 와는 별개.
+ */
+const ANON_ID_KEY = 'srr.anonymous.id';
+export function getAnonymousId(): string {
+  try {
+    let id = localStorage.getItem(ANON_ID_KEY);
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36));
+      localStorage.setItem(ANON_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'anon-' + Math.random().toString(36).slice(2);
+  }
+}
+
+/**
+ * 0078 — 서버측 가드 + dedup RPC 경유 스트림 이벤트 적립.
+ * record_stream_event_safe 가 다음을 처리:
+ *   · 봇 UA 차단 / 5초 미만 milestone 차단 / 30초 dedup
+ *   · eligible_for_payout 자동 판정 (admin/artist 화면, 본인 재생, 미공개 트랙 모두 false)
+ *
+ * 클라이언트는 단순 호출만. 실패해도 사용자 경험 영향 없음 (silent).
+ */
 export async function trackStream(payload: StreamPayload) {
   try {
-    await supabase.from('stream_events').insert({
-      ...payload,
-      session_id: getSessionId(),
+    const sourcePage = typeof window !== 'undefined' ? window.location.pathname : null;
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+    await supabase.rpc('record_stream_event_safe', {
+      p_track_id: payload.track_id,
+      p_session_id: getSessionId(),
+      p_event_type: payload.event_type,
+      p_listened_seconds: payload.listened_seconds,
+      p_completed: payload.completed,
+      p_playlist_id: payload.playlist_id,
+      p_anonymous_id: getAnonymousId(),
+      p_source_page: sourcePage,
+      p_user_agent: userAgent,
     });
   } catch {
-    /* noop */
+    /* analytics 실패는 사용자 경험에 영향 주지 않음 */
   }
 }
