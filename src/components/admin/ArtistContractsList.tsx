@@ -665,18 +665,32 @@ function DispatchHealthBanner({
     env.resend_api_key_set
       ? `set · length=${env.resend_api_key_length ?? '?'} · ${env.resend_api_key_first4 ?? ''}…${env.resend_api_key_last4 ?? ''}`
       : 'MISSING';
+  const inspect = env.env_inspect;
   const efDiag = (
     <p className="mt-1 text-[10px] text-ink-dim">
       EF instance loaded at <span className="font-mono">{env.module_load_at ?? '—'}</span>
       {env.supabase_url ? ` · project: ${env.supabase_url.replace(/^https:\/\//, '').split('.')[0]}` : ''}
     </p>
   );
+  const inspectBlock = inspect ? (
+    <details className="mt-2 rounded bg-bg-card px-2 py-1.5 text-[10px] text-ink-dim">
+      <summary className="cursor-pointer select-none font-semibold text-ink-mute">
+        runtime env 진단 — has_RESEND_API_KEY={String(inspect.has_RESEND_API_KEY)},
+        has_RESEND_FROM={String(inspect.has_RESEND_FROM)},
+        RESEND-like keys: [{inspect.resend_like_keys.join(', ') || '없음'}]
+      </summary>
+      <p className="mt-1.5 font-mono leading-snug break-all">
+        env_keys ({inspect.all_keys.length}): {inspect.all_keys.join(', ')}
+      </p>
+    </details>
+  ) : null;
 
   if (health.ready) {
     return (
       <Alert tone="success" title="메일 발송 준비 완료">
         <p>
           Resend FROM: <span className="font-mono">{env.resend_from}</span>
+          {env.resend_from_is_fallback ? <span className="text-amber-700 dark:text-amber-300"> (fallback)</span> : null}
           {' · '}
           도메인:{' '}
           <span className="font-mono">
@@ -686,6 +700,7 @@ function DispatchHealthBanner({
           KEY: <span className="font-mono">{keyDiag}</span>
         </p>
         {efDiag}
+        {inspectBlock}
       </Alert>
     );
   }
@@ -714,12 +729,13 @@ function DispatchHealthBanner({
         {reasons.length === 0 && <li>알 수 없는 사유. Resend 상태를 확인하세요.</li>}
       </ul>
       <div className="mt-2 rounded bg-bg-card px-2 py-1.5 text-[10px] font-mono leading-relaxed text-ink-dim">
-        FROM={env.resend_from} · KEY={keyDiag}
+        FROM={env.resend_from}{env.resend_from_is_fallback ? ' (fallback)' : ''} · KEY={keyDiag}
         <br />
         domain={env.resend_from_domain ?? '—'} ({health.resend_domain.status ?? '—'})
         <br />
         supabase_url={env.supabase_url ?? '—'} · EF loaded at {env.module_load_at ?? '—'}
       </div>
+      {inspectBlock}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"

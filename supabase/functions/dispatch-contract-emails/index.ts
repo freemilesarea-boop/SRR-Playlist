@@ -6,12 +6,10 @@
 //   POST /dispatch-contract-emails        — 메일 발송 실행 (body: { contract_id })
 //   POST /dispatch-contract-emails        — 환경 점검 (body: { health: true })
 //
-// v3 변경:
-// - env 변수를 handler 내부에서 매 호출마다 읽음 (module-level 캐시 제거).
-//   Supabase Secrets 변경 시 redeploy 없이 즉시 반영되도록.
-// - health 응답에 resend_key_length / supabase_url / module_load_at /
-//   resend_key_first4 / last4 추가 (진단용. 전체 키 노출 X)
-// - dispatch 호출 시작 시 env 스냅샷을 console 로 출력
+// v5 변경:
+// - health 응답에 Deno.env.toObject() 의 key 이름 목록 추가 (값 절대 미노출)
+// - RESEND_API_KEY / RESEND_FROM 각각 명시적으로 set/using_fallback 구분
+// - 비슷한 오타 (RESEND_APIKEY / RESEND_KEY / resend_api_key 등) 자동 탐지
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -34,24 +32,27 @@ function json(body: unknown, status = 200) {
   });
 }
 
+const RESEND_FROM_FALLBACK = 'SRR Playlist <no-reply@srr-playlist.app>';
+
 interface Env {
   SUPABASE_URL: string;
   ANON_KEY: string;
   SERVICE_ROLE: string;
   RESEND_API_KEY: string;
   RESEND_FROM: string;
+  RESEND_FROM_IS_FALLBACK: boolean;
   APP_PUBLIC_URL: string;
 }
 
-/** handler 진입마다 env 를 새로 읽음 — secret 변경 즉시 반영. */
 function readEnv(): Env {
+  const fromRaw = Deno.env.get('RESEND_FROM');
   return {
     SUPABASE_URL: Deno.env.get('SUPABASE_URL') ?? '',
     ANON_KEY: Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     SERVICE_ROLE: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     RESEND_API_KEY: Deno.env.get('RESEND_API_KEY') ?? '',
-    RESEND_FROM:
-      Deno.env.get('RESEND_FROM') ?? 'SRR Playlist <no-reply@srr-playlist.app>',
+    RESEND_FROM: fromRaw && fromRaw.length > 0 ? fromRaw : RESEND_FROM_FALLBACK,
+    RESEND_FROM_IS_FALLBACK: !fromRaw || fromRaw.length === 0,
     APP_PUBLIC_URL: Deno.env.get('APP_PUBLIC_URL') ?? '',
   };
 }
@@ -192,26 +193,20 @@ async function sendOne(env: Env, job: PendingJob, appUrl: string): Promise<SendR
         (data && (data.message || data.error || data.name)) ||
         `HTTP ${res.status}`;
       console.error('[dispatch] Resend error:', {
-        status: res.status,
-        body: raw.slice(0, 800),
-        to: job.recipient_email,
-        kind: job.recipient_kind,
-        job_id: job.job_id,
-        from: env.RESEND_FROM,
+        status: res.status, body: raw.slice(0, 800),
+        to: job.recipient_email, kind: job.recipient_kind,
+        job_id: job.job_id, from: env.RESEND_FROM,
       });
       return {
         ok: false,
         error: `[${res.status}] ${String(errMsg)}`.slice(0, 1500),
-        status_code: res.status,
-        raw: raw.slice(0, 800),
+        status_code: res.status, raw: raw.slice(0, 800),
       };
     }
     const id = data?.id ?? data?.message_id ?? '';
     console.log('[dispatch] Resend sent:', {
-      to: job.recipient_email,
-      kind: job.recipient_kind,
-      provider_message_id: id,
-      job_id: job.job_id,
+      to: job.recipient_email, kind: job.recipient_kind,
+      provider_message_id: id, job_id: job.job_id,
     });
     return { ok: true, id, status_code: res.status, raw: raw.slice(0, 400) };
   } catch (e) {
@@ -235,42 +230,48 @@ async function checkResendDomain(env: Env): Promise<{
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}` },
     });
     const raw = await res.text();
-    if (!res.ok) {
-      return { domain, status: null, region: null, error: `resend_list_${res.status}` };
-    }
+    if (!res.ok) return { domain, status: null, region: null, error: `resend_list_${res.status}` };
     const data = JSON.parse(raw);
     const list: any[] = data?.data ?? data ?? [];
     const match = Array.isArray(list)
       ? list.find((d: any) => (d?.name || '').toLowerCase() === domain)
       : null;
     if (!match) {
-      if (domain.endsWith('resend.dev')) {
-        return { domain, status: 'sandbox', region: null };
-      }
+      if (domain.endsWith('resend.dev')) return { domain, status: 'sandbox', region: null };
       return { domain, status: 'not_registered', region: null };
     }
-    return {
-      domain,
-      status: String(match.status ?? 'unknown'),
-      region: match.region ?? null,
-    };
+    return { domain, status: String(match.status ?? 'unknown'), region: match.region ?? null };
   } catch (e) {
-    return {
-      domain,
-      status: null,
-      region: null,
-      error: e instanceof Error ? e.message : String(e),
-    };
+    return { domain, status: null, region: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
-/** 진단용 — 키 값은 노출 안 함, 길이 + 첫/끝 4글자만. */
 function diagnosticKey(k: string): { set: boolean; length: number; first4: string; last4: string } {
   return {
     set: !!k && k.length > 0,
     length: k.length,
     first4: k.length >= 4 ? k.slice(0, 4) : '',
     last4: k.length >= 4 ? k.slice(-4) : '',
+  };
+}
+
+/**
+ * v5 — runtime env 의 key 이름 목록 + RESEND 관련 오타 후보 탐지.
+ * 값은 절대 노출 X. 이름만.
+ */
+function inspectAllEnvKeys(): {
+  all_keys: string[];
+  resend_like_keys: string[];
+  has_RESEND_API_KEY: boolean;
+  has_RESEND_FROM: boolean;
+} {
+  const all = Object.keys(Deno.env.toObject()).sort();
+  const resendLike = all.filter((k) => /resend|RESEND/.test(k));
+  return {
+    all_keys: all,
+    resend_like_keys: resendLike,
+    has_RESEND_API_KEY: all.includes('RESEND_API_KEY'),
+    has_RESEND_FROM: all.includes('RESEND_FROM'),
   };
 }
 
@@ -293,31 +294,26 @@ serve(async (req) => {
   const user = userRes.user;
 
   let body: { contract_id?: string; health?: boolean } = {};
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: 'invalid body' }, 400);
-  }
+  try { body = await req.json(); }
+  catch { return json({ error: 'invalid body' }, 400); }
 
   const sbAdmin = createClient(env.SUPABASE_URL, env.SERVICE_ROLE, {
     auth: { persistSession: false },
   });
 
   // ============================================
-  // Health 분기 (admin only) — 진단용 env 스냅샷 반환
+  // Health 분기 (admin only) — v5: env 전체 키 이름 노출 (값 X)
   // ============================================
   if (body.health) {
     const { data: u } = await sbAdmin
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
+      .from('users').select('role').eq('id', user.id).maybeSingle();
     if (!u || (u as any).role !== 'admin') {
       return json({ error: 'forbidden' }, 403);
     }
     const keyDiag = diagnosticKey(env.RESEND_API_KEY);
     const fromDomain = extractFromDomain(env.RESEND_FROM);
     const domainCheck = await checkResendDomain(env);
+    const envInspect = inspectAllEnvKeys();
     const result = {
       ok: true,
       env: {
@@ -326,18 +322,24 @@ serve(async (req) => {
         resend_api_key_first4: keyDiag.first4,
         resend_api_key_last4: keyDiag.last4,
         resend_from: env.RESEND_FROM,
+        resend_from_is_fallback: env.RESEND_FROM_IS_FALLBACK,
         resend_from_domain: fromDomain,
         app_public_url: env.APP_PUBLIC_URL || null,
         supabase_url: env.SUPABASE_URL,
         module_load_at: MODULE_LOAD_AT,
         now: new Date().toISOString(),
+        // v5 진단 — 키 이름만, 값 X
+        env_inspect: envInspect,
       },
       resend_domain: domainCheck,
-      ready:
-        keyDiag.set &&
-        (domainCheck.status === 'verified' || domainCheck.status === 'sandbox'),
+      ready: keyDiag.set && (domainCheck.status === 'verified' || domainCheck.status === 'sandbox'),
     };
-    console.log('[dispatch] health check:', result);
+    console.log('[dispatch] health check:', {
+      ...result,
+      // 콘솔에는 더 짧게
+      env_keys_count: envInspect.all_keys.length,
+      resend_like: envInspect.resend_like_keys,
+    });
     return json(result);
   }
 
@@ -348,20 +350,15 @@ serve(async (req) => {
   if (!contractId) return json({ error: 'missing contract_id' }, 400);
 
   const { data: contract, error: cErr } = await sbAdmin
-    .from('artist_contracts')
-    .select('id, artist_user_id, status')
-    .eq('id', contractId)
-    .maybeSingle();
+    .from('artist_contracts').select('id, artist_user_id, status')
+    .eq('id', contractId).maybeSingle();
   if (cErr || !contract) {
     console.error('[dispatch] contract lookup failed:', { contractId, cErr });
     return json({ error: 'contract not found' }, 404);
   }
   if (contract.artist_user_id !== user.id) {
     const { data: u } = await sbAdmin
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
+      .from('users').select('role').eq('id', user.id).maybeSingle();
     if (!u || (u as any).role !== 'admin') {
       return json({ error: 'forbidden' }, 403);
     }
@@ -379,7 +376,6 @@ serve(async (req) => {
     return json({ error: jErr.message }, 500);
   }
   const pending = (jobs ?? []) as PendingJob[];
-
   if (pending.length === 0) {
     return json({ ok: true, processed: 0, message: 'no pending jobs' });
   }
@@ -391,56 +387,53 @@ serve(async (req) => {
       : env.APP_PUBLIC_URL || 'https://srr-playlist.app';
 
   const keyDiag = diagnosticKey(env.RESEND_API_KEY);
+  const envInspect = inspectAllEnvKeys();
   console.log('[dispatch] starting', {
-    contract_id: contractId,
-    pending_count: pending.length,
-    from: env.RESEND_FROM,
-    app_url: appUrl,
-    resend_key_set: keyDiag.set,
-    resend_key_length: keyDiag.length,
+    contract_id: contractId, pending_count: pending.length,
+    from: env.RESEND_FROM, app_url: appUrl,
+    resend_key_set: keyDiag.set, resend_key_length: keyDiag.length,
     module_load_at: MODULE_LOAD_AT,
+    env_keys_count: envInspect.all_keys.length,
+    resend_like_keys: envInspect.resend_like_keys,
   });
 
   if (!env.RESEND_API_KEY) {
-    console.error('[dispatch] RESEND_API_KEY not configured — failing all pending jobs');
+    console.error('[dispatch] RESEND_API_KEY not configured — failing all pending jobs', {
+      env_inspect: envInspect,
+    });
     for (const job of pending) {
       await sbAdmin.rpc('lock_contract_email_job', { p_job_id: job.job_id });
       await sbAdmin.rpc('mark_contract_email_failed', {
         p_job_id: job.job_id,
         p_error:
-          'RESEND_API_KEY not configured on Edge Function (module_load_at=' +
-          MODULE_LOAD_AT +
-          ')',
+          'RESEND_API_KEY not configured (resend_like_keys=' +
+          JSON.stringify(envInspect.resend_like_keys) +
+          ', module_load_at=' + MODULE_LOAD_AT + ')',
       });
     }
     return json(
       {
         ok: false,
         error: 'RESEND_API_KEY not configured',
-        env_snapshot: { module_load_at: MODULE_LOAD_AT, supabase_url: env.SUPABASE_URL },
-        processed: pending.length,
-        sent: 0,
-        failed: pending.length,
+        env_snapshot: {
+          module_load_at: MODULE_LOAD_AT,
+          supabase_url: env.SUPABASE_URL,
+          env_inspect: envInspect,
+        },
+        processed: pending.length, sent: 0, failed: pending.length,
       },
       503,
     );
   }
 
-  let sent = 0;
-  let failed = 0;
+  let sent = 0, failed = 0;
   const results: Array<{
-    job_id: string;
-    ok: boolean;
-    to?: string;
-    error?: string;
-    provider_message_id?: string;
-    status_code?: number;
+    job_id: string; ok: boolean; to?: string; error?: string;
+    provider_message_id?: string; status_code?: number;
   }> = [];
 
   for (const job of pending) {
-    const { data: lockedData } = await sbAdmin.rpc('lock_contract_email_job', {
-      p_job_id: job.job_id,
-    });
+    const { data: lockedData } = await sbAdmin.rpc('lock_contract_email_job', { p_job_id: job.job_id });
     if (lockedData !== true) {
       results.push({ job_id: job.job_id, ok: false, error: 'already locked' });
       continue;
@@ -448,43 +441,28 @@ serve(async (req) => {
     const r = await sendOne(env, job, appUrl);
     if (r.ok) {
       await sbAdmin.rpc('mark_contract_email_sent', {
-        p_job_id: job.job_id,
-        p_provider_message_id: r.id || null,
+        p_job_id: job.job_id, p_provider_message_id: r.id || null,
       });
       sent++;
       results.push({
-        job_id: job.job_id,
-        ok: true,
-        to: job.recipient_email,
-        provider_message_id: r.id,
-        status_code: r.status_code,
+        job_id: job.job_id, ok: true, to: job.recipient_email,
+        provider_message_id: r.id, status_code: r.status_code,
       });
     } else {
       const errBody = r.status_code
         ? `${r.error}${r.raw ? ' | ' + r.raw.slice(0, 200) : ''}`
         : r.error || 'unknown';
       await sbAdmin.rpc('mark_contract_email_failed', {
-        p_job_id: job.job_id,
-        p_error: errBody,
+        p_job_id: job.job_id, p_error: errBody,
       });
       failed++;
       results.push({
-        job_id: job.job_id,
-        ok: false,
-        to: job.recipient_email,
-        error: r.error,
-        status_code: r.status_code,
+        job_id: job.job_id, ok: false, to: job.recipient_email,
+        error: r.error, status_code: r.status_code,
       });
     }
   }
 
   console.log('[dispatch] done', { contract_id: contractId, sent, failed });
-
-  return json({
-    ok: failed === 0,
-    processed: pending.length,
-    sent,
-    failed,
-    results,
-  });
+  return json({ ok: failed === 0, processed: pending.length, sent, failed, results });
 });
