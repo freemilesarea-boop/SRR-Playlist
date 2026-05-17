@@ -660,31 +660,46 @@ function DispatchHealthBanner({
       </Alert>
     );
   }
+  const env = health.env;
+  const keyDiag =
+    env.resend_api_key_set
+      ? `set · length=${env.resend_api_key_length ?? '?'} · ${env.resend_api_key_first4 ?? ''}…${env.resend_api_key_last4 ?? ''}`
+      : 'MISSING';
+  const efDiag = (
+    <p className="mt-1 text-[10px] text-ink-dim">
+      EF instance loaded at <span className="font-mono">{env.module_load_at ?? '—'}</span>
+      {env.supabase_url ? ` · project: ${env.supabase_url.replace(/^https:\/\//, '').split('.')[0]}` : ''}
+    </p>
+  );
+
   if (health.ready) {
     return (
       <Alert tone="success" title="메일 발송 준비 완료">
         <p>
-          Resend FROM: <span className="font-mono">{health.env.resend_from}</span>
+          Resend FROM: <span className="font-mono">{env.resend_from}</span>
           {' · '}
           도메인:{' '}
           <span className="font-mono">
             {health.resend_domain.domain ?? '—'} ({health.resend_domain.status ?? '—'})
           </span>
+          {' · '}
+          KEY: <span className="font-mono">{keyDiag}</span>
         </p>
+        {efDiag}
       </Alert>
     );
   }
   // 미준비
   const reasons: string[] = [];
-  if (!health.env.resend_api_key_set) reasons.push('RESEND_API_KEY 미설정');
+  if (!env.resend_api_key_set) reasons.push('RESEND_API_KEY 미설정 (Edge Function runtime 에서 미인식)');
   if (
-    health.env.resend_from_domain &&
+    env.resend_from_domain &&
     health.resend_domain.status &&
     health.resend_domain.status !== 'verified' &&
     health.resend_domain.status !== 'sandbox'
   ) {
     reasons.push(
-      `FROM 도메인 ${health.env.resend_from_domain} verify 미완료 (status=${health.resend_domain.status})`,
+      `FROM 도메인 ${env.resend_from_domain} verify 미완료 (status=${health.resend_domain.status})`,
     );
   }
   if (health.resend_domain.error) {
@@ -698,6 +713,13 @@ function DispatchHealthBanner({
         ))}
         {reasons.length === 0 && <li>알 수 없는 사유. Resend 상태를 확인하세요.</li>}
       </ul>
+      <div className="mt-2 rounded bg-bg-card px-2 py-1.5 text-[10px] font-mono leading-relaxed text-ink-dim">
+        FROM={env.resend_from} · KEY={keyDiag}
+        <br />
+        domain={env.resend_from_domain ?? '—'} ({health.resend_domain.status ?? '—'})
+        <br />
+        supabase_url={env.supabase_url ?? '—'} · EF loaded at {env.module_load_at ?? '—'}
+      </div>
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
