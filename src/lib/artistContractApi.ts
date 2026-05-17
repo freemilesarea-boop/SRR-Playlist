@@ -150,9 +150,16 @@ export interface DispatchHealth {
   ready: boolean;
   env: {
     resend_api_key_set: boolean;
+    /** 0074 — 진단용 추가 필드 */
+    resend_api_key_length?: number;
+    resend_api_key_first4?: string;
+    resend_api_key_last4?: string;
     resend_from: string;
     resend_from_domain: string | null;
     app_public_url: string | null;
+    supabase_url?: string;
+    module_load_at?: string;
+    now?: string;
   };
   resend_domain: {
     domain: string | null;
