@@ -43,9 +43,15 @@ export interface MyArtistTrackRow {
 
 export interface PendingReviewTrackRow {
   track_id: string;
+  track_code: string | null;
   title: string;
   artist: string | null;
+  artist_name: string | null;
   album_name: string | null;
+  release_title: string | null;
+  isrc: string | null;
+  rights_holder_name: string | null;
+  rights_confirmed_at: string | null;
   main_genre: string | null;
   sub_genre: string | null;
   mood: string | null;
@@ -53,21 +59,43 @@ export interface PendingReviewTrackRow {
   lyrics: string | null;
   audio_url: string;
   cover_url: string | null;
-  duration: number | null;
-  owner_user_id: string | null;
-  artist_profile_id: string | null;
-  uploaded_by_account_type: string | null;
-  source_type: string | null;
-  visibility_status: string;
-  artist_name: string | null;
   payout_verification_status: 'pending' | 'verified' | 'rejected' | null;
   payout_bank_name: string | null;
+  admin_note: string | null;
+  created_at: string;
+}
+
+export interface AdminTrackRow {
+  track_id: string;
+  track_code: string | null;
+  title: string;
+  artist: string | null;
+  artist_name: string | null;
+  artist_email: string | null;
+  album_name: string | null;
+  release_title: string | null;
+  isrc: string | null;
+  rights_holder_name: string | null;
+  rights_confirmed_at: string | null;
+  visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
+  rejected_reason: string | null;
+  admin_note: string | null;
+  payout_verification_status: 'pending' | 'verified' | 'rejected' | null;
+  contract_status: string | null;
+  audio_url: string;
+  cover_url: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
   created_at: string;
 }
 
 export interface UploadInput {
   title: string;
   album_name?: string;
+  release_title?: string;     // 0058 — 발매명 (별도 컬럼)
+  isrc?: string;              // 0058 — 선택 입력
+  rights_holder_name?: string;// 0058 — 권리자명
+  rightsConfirmed: boolean;   // 0058 — 권리 확인 체크박스 (필수)
   artist?: string;
   genre?: string;       // 메인 장르 (기존 컬럼)
   main_genre?: string;
@@ -84,6 +112,7 @@ export interface UploadInput {
 export interface UploadResult {
   ok: boolean;
   track_id?: string;
+  track_code?: string;
   error?: string;
 }
 
@@ -145,6 +174,9 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   const v = validateArtistAudioFile(input.audioFile);
   if (!v.ok) return { ok: false, error: v.error };
   if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
+  if (!input.rightsConfirmed) {
+    return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
+  }
 
   // 아티스트 프로필 확인
   const profile = await fetchMyArtistProfile(userId);
@@ -209,12 +241,20 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   }
 
   // 4) tracks INSERT — RLS 검증 통과해야 성공
+  //    0058: rights_confirmed_at / rights_holder_name / release_title / isrc 추가
+  //    track_code 는 BEFORE INSERT 트리거가 자동 부여
   const { data: trackRow, error: trackErr } = await supabase
     .from('tracks')
     .insert({
       title: input.title.trim(),
       artist: (input.artist?.trim() || profile.artist_name),
       album_name: input.album_name?.trim() || null,
+      release_title: input.release_title?.trim() || input.album_name?.trim() || null,
+      isrc: input.isrc?.trim().toUpperCase() || null,
+      rights_holder_name:
+        input.rights_holder_name?.trim() || profile.real_name || profile.artist_name || null,
+      rights_confirmed_at: new Date().toISOString(),
+      rights_confirmed_by: userId,
       genre: input.genre?.trim() || input.main_genre?.trim() || null,
       main_genre: input.main_genre?.trim() || input.genre?.trim() || null,
       sub_genre: input.sub_genre?.trim() || null,
@@ -230,14 +270,18 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       source_type: 'artist_upload',
       visibility_status: 'pending_review',
     })
-    .select('id')
+    .select('id, track_code')
     .single();
 
   if (trackErr) {
     return { ok: false, error: `트랙 저장 실패: ${trackErr.message}` };
   }
 
-  return { ok: true, track_id: trackRow.id };
+  return {
+    ok: true,
+    track_id: trackRow.id as string,
+    track_code: (trackRow as { track_code?: string | null }).track_code ?? undefined,
+  };
 }
 
 /** 아티스트가 본인 pending_review 곡 삭제 */
@@ -259,8 +303,14 @@ export async function listPendingReviewTracks(): Promise<PendingReviewTrackRow[]
   }
 }
 
-export async function approveArtistTrack(trackId: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.rpc('approve_artist_track', { p_track_id: trackId });
+export async function approveArtistTrack(
+  trackId: string,
+  adminNote?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('approve_artist_track', {
+    p_track_id: trackId,
+    p_admin_note: adminNote ?? null,
+  });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
@@ -268,19 +318,43 @@ export async function approveArtistTrack(trackId: string): Promise<{ ok: boolean
 export async function rejectArtistTrack(
   trackId: string,
   reason: string | null,
+  adminNote?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase.rpc('reject_artist_track', {
     p_track_id: trackId,
     p_reason: reason,
+    p_admin_note: adminNote ?? null,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 
-export async function hideArtistTrack(trackId: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.rpc('hide_artist_track', { p_track_id: trackId });
+export async function hideArtistTrack(
+  trackId: string,
+  adminNote?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('hide_artist_track', {
+    p_track_id: trackId,
+    p_admin_note: adminNote ?? null,
+  });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+export async function adminListArtistTracks(opts?: {
+  status?: 'pending_review' | 'approved' | 'rejected' | 'hidden' | '';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AdminTrackRow[]> {
+  const { data, error } = await supabase.rpc('admin_artist_tracks_list', {
+    p_status: opts?.status || null,
+    p_search: opts?.search || null,
+    p_limit: opts?.limit ?? 100,
+    p_offset: opts?.offset ?? 0,
+  });
+  if (error) throw error;
+  return (data ?? []) as AdminTrackRow[];
 }
 
 // ---------- STREAMING ANALYTICS (0019) ----------
@@ -462,7 +536,8 @@ export interface AdminPayoutRow {
   artist_name: string | null;
   email: string | null;
   bank_name: string;
-  account_number: string;
+  /** 0061 — 항상 마스킹된 값만 RPC 에서 반환 (원본은 admin_reveal_payout_account 로) */
+  masked_account_number: string;
   account_holder: string;
   verification_status: 'pending' | 'verified' | 'rejected';
   rejected_reason: string | null;
@@ -477,6 +552,35 @@ export async function listPendingPayoutAccounts(): Promise<AdminPayoutRow[]> {
   } catch {
     return [];
   }
+}
+
+/** 0061 — admin 만 호출. 원본 계좌번호 반환 + audit log INSERT. verified 상태만 허용. */
+export interface RevealedPayoutAccount {
+  account_id: string;
+  account_number: string;
+  bank_name: string;
+  account_holder: string;
+  artist_user_id: string;
+  log_id: string;
+  viewed_at: string;
+}
+
+export async function adminRevealPayoutAccount(opts: {
+  accountId: string;
+  reason?: string | null;
+  settlementId?: string | null;
+}): Promise<RevealedPayoutAccount> {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+  const { data, error } = await supabase.rpc('admin_reveal_payout_account', {
+    p_account_id: opts.accountId,
+    p_reason: opts.reason ?? null,
+    p_settlement_id: opts.settlementId ?? null,
+    p_user_agent: ua,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as RevealedPayoutAccount | undefined;
+  if (!row) throw new Error('empty response');
+  return row;
 }
 
 export async function verifyArtistPayoutAccount(accountId: string): Promise<{ ok: boolean; error?: string }> {
