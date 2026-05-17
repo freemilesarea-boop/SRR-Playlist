@@ -586,13 +586,24 @@ const SUITABLE_STORE_OPTIONS = [
   '카페', '와인바', '식당', '베이커리', '헬스장', '필라테스', '미용실', '의류매장', '서점', '기타',
 ];
 
+function defaultReleaseDate(): string {
+  // today + 3 days (KST 기준 단순 처리)
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  return d.toISOString().slice(0, 10);
+}
+
 function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<void> }) {
   const [title, setTitle] = useState('');
   const [albumName, setAlbumName] = useState('');
   const [releaseTitle, setReleaseTitle] = useState('');
+  const [releaseType, setReleaseType] = useState<'single' | 'ep' | 'album'>('single');
+  const [releaseDate, setReleaseDate] = useState<string>(defaultReleaseDate());
   const [artistOverride, setArtistOverride] = useState('');
   const [isrc, setIsrc] = useState('');
   const [rightsHolderName, setRightsHolderName] = useState('');
+  const [explicitContent, setExplicitContent] = useState(false);
+  const [instrumental, setInstrumental] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [mainGenre, setMainGenre] = useState('');
   const [subGenre, setSubGenre] = useState('');
@@ -617,6 +628,14 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
     if (!audioFile) return '음원 파일을 선택해주세요';
     if (!title.trim()) return '곡 제목을 입력해주세요';
     if (!albumName.trim()) return '앨범명을 입력해주세요';
+    if (!releaseDate) return '발매일을 선택해주세요';
+    // 발매일 today + 3 days 검증
+    const min = new Date();
+    min.setDate(min.getDate() + 3);
+    min.setHours(0, 0, 0, 0);
+    if (new Date(releaseDate) < min) {
+      return '발매일은 오늘 기준 최소 3일 뒤부터 선택할 수 있어요';
+    }
     if (!mainGenre.trim()) return '메인 장르를 입력해주세요';
     if (!subGenre.trim()) return '서브 장르를 입력해주세요';
     if (!suitableStore.trim()) return '어울리는 매장을 선택해주세요';
@@ -638,8 +657,12 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         title,
         album_name: albumName,
         release_title: releaseTitle || albumName,
+        release_type: releaseType,
+        release_date: releaseDate,
         isrc: isrc || undefined,
         rights_holder_name: rightsHolderName || undefined,
+        explicit_content: explicitContent,
+        instrumental,
         rightsConfirmed,
         artist: artistOverride || undefined,
         main_genre: mainGenre,
@@ -662,9 +685,13 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
       setTitle('');
       setAlbumName('');
       setReleaseTitle('');
+      setReleaseType('single');
+      setReleaseDate(defaultReleaseDate());
       setArtistOverride('');
       setIsrc('');
       setRightsHolderName('');
+      setExplicitContent(false);
+      setInstrumental(false);
       setRightsConfirmed(false);
       setMainGenre('');
       setSubGenre('');
@@ -759,7 +786,62 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         />
       </Field>
 
-      {/* 0058 — 정산/권리 정보 */}
+      {/* 0063 — 발매 정보 */}
+      <hr className="border-line/10" />
+      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">발매 정보</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="발매 유형 *">
+          <select
+            required
+            value={releaseType}
+            onChange={(e) => setReleaseType(e.target.value as 'single' | 'ep' | 'album')}
+            className="input"
+          >
+            <option value="single">싱글 (Single)</option>
+            <option value="ep">EP</option>
+            <option value="album">정규 앨범 (Album)</option>
+          </select>
+        </Field>
+        <Field
+          label="발매일 *"
+          hint="검수 및 출시 준비를 위해 최소 3일 뒤부터 선택할 수 있어요"
+        >
+          <input
+            type="date"
+            required
+            value={releaseDate}
+            min={defaultReleaseDate()}
+            onChange={(e) => setReleaseDate(e.target.value)}
+            className="input"
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex items-start gap-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+          <input
+            type="checkbox"
+            checked={explicitContent}
+            onChange={(e) => setExplicitContent(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="text-xs leading-relaxed">
+            <strong>Explicit</strong> · 선정적/폭력적 가사 포함
+          </span>
+        </label>
+        <label className="flex items-start gap-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+          <input
+            type="checkbox"
+            checked={instrumental}
+            onChange={(e) => setInstrumental(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="text-xs leading-relaxed">
+            <strong>Instrumental</strong> · 가사 없음
+          </span>
+        </label>
+      </div>
+
+      {/* 정산·권리 정보 */}
       <hr className="border-line/10" />
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">
         정산·권리 정보
@@ -804,8 +886,8 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
           className="mt-0.5"
         />
         <span className="text-[12px] leading-relaxed">
-          본인은 업로드하는 음원에 대한 권리자이거나, 해당 음원을 유통 및 정산 받을 권한을
-          보유하고 있음을 <strong className="text-accent">확인합니다.</strong>
+          본인은 업로드하는 음원, 이미지, 메타데이터에 대한 권리자이거나, 해당 콘텐츠를
+          유통 및 정산 받을 권한을 보유하고 있음을 <strong className="text-accent">확인합니다.</strong>
         </span>
       </label>
 

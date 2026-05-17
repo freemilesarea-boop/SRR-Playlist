@@ -91,22 +91,27 @@ export interface AdminTrackRow {
 
 export interface UploadInput {
   title: string;
-  album_name?: string;
-  release_title?: string;     // 0058 — 발매명 (별도 컬럼)
-  isrc?: string;              // 0058 — 선택 입력
-  rights_holder_name?: string;// 0058 — 권리자명
-  rightsConfirmed: boolean;   // 0058 — 권리 확인 체크박스 (필수)
+  album_name: string;
+  release_title?: string;
+  release_type: ReleaseType;       // 0063 — single / ep / album
+  release_date: string;            // 0063 — YYYY-MM-DD, today + 3 days 이상
+  isrc?: string;
+  rights_holder_name?: string;
+  rightsConfirmed: boolean;
   artist?: string;
-  genre?: string;       // 메인 장르 (기존 컬럼)
+  genre?: string;
   main_genre?: string;
   sub_genre?: string;
   mood?: string;
   suitable_store?: string;
   description?: string;
   lyrics?: string;
+  explicit_content?: boolean;      // 0063
+  instrumental?: boolean;          // 0063
   external_link?: string;
   audioFile: File;
   coverFile?: File | null;
+  trackId?: string | null;         // 0063 — 재제출 시 기존 ID
 }
 
 export interface UploadResult {
@@ -267,58 +272,55 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
   }
 
-  // 4) tracks INSERT — RLS 검증 통과해야 성공
-  //    0058: rights_confirmed_at / rights_holder_name / release_title / isrc 추가
-  //    track_code 는 BEFORE INSERT 트리거가 자동 부여
-  const { data: trackRow, error: trackErr } = await supabase
-    .from('tracks')
-    .insert({
+  // 4) submit_artist_release RPC — RLS / 게이트 / track_code 자동 부여 모두 RPC 내부에서
+  try {
+    const trackId = await submitArtistRelease({
+      trackId: input.trackId ?? null,
       title: input.title.trim(),
-      artist: (input.artist?.trim() || profile.artist_name),
-      album_name: input.album_name?.trim() || null,
-      release_title: input.release_title?.trim() || input.album_name?.trim() || null,
-      isrc: input.isrc?.trim().toUpperCase() || null,
-      rights_holder_name:
-        input.rights_holder_name?.trim() || profile.real_name || profile.artist_name || null,
-      rights_confirmed_at: new Date().toISOString(),
-      rights_confirmed_by: userId,
-      genre: input.genre?.trim() || input.main_genre?.trim() || null,
-      main_genre: input.main_genre?.trim() || input.genre?.trim() || null,
-      sub_genre: input.sub_genre?.trim() || null,
+      artist: input.artist?.trim() || profile.artist_name,
+      albumName: input.album_name.trim(),
+      releaseTitle: input.release_title?.trim() || input.album_name.trim(),
+      releaseType: input.release_type,
+      releaseDate: input.release_date,
+      mainGenre: input.main_genre?.trim() || input.genre?.trim() || null,
+      subGenre: input.sub_genre?.trim() || null,
       mood: input.mood?.trim() || null,
-      suitable_store: input.suitable_store?.trim() || null,
+      suitableStore: input.suitable_store?.trim() || null,
       lyrics: input.lyrics?.trim() || null,
-      audio_url: audioUrl,
-      cover_url: coverUrl,
-      owner_user_id: userId,
-      artist_profile_id: profile.id,
-      payout_account_id: payout.id,
-      uploaded_by_account_type: 'artist',
-      source_type: 'artist_upload',
-      visibility_status: 'pending_review',
-    })
-    .select('id, track_code')
-    .single();
+      isrc: input.isrc?.trim().toUpperCase() || null,
+      rightsHolderName:
+        input.rights_holder_name?.trim() || profile.real_name || profile.artist_name || null,
+      explicitContent: input.explicit_content ?? false,
+      instrumental: input.instrumental ?? false,
+      audioUrl,
+      coverUrl,
+      rightsConfirmed: input.rightsConfirmed,
+    });
 
-  if (trackErr) {
-    // RLS 차단인 경우 eligibility 재확인 후 정확한 reason 노출
-    if (trackErr.message.includes('row-level security') || trackErr.code === '42501') {
+    // track_code 는 RPC INSERT 후 트리거가 자동 부여 — 별도 SELECT 로 조회
+    const { data: row } = await supabase
+      .from('tracks')
+      .select('track_code')
+      .eq('id', trackId)
+      .maybeSingle();
+
+    return {
+      ok: true,
+      track_id: trackId,
+      track_code: (row as { track_code?: string | null } | null)?.track_code ?? undefined,
+    };
+  } catch (e) {
+    const err = e as { message?: string; hint?: string; code?: string };
+    const msg = err.message ?? String(e);
+    // RLS 차단 → eligibility 재확인
+    if (msg.includes('row-level security') || err.code === '42501') {
       const recheck = await fetchArtistUploadEligibility();
       if (!recheck.can_upload) {
-        return {
-          ok: false,
-          error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}`,
-        };
+        return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}` };
       }
     }
-    return { ok: false, error: `트랙 저장 실패: ${trackErr.message}` };
+    return { ok: false, error: err.hint ? `${msg} (${err.hint})` : msg };
   }
-
-  return {
-    ok: true,
-    track_id: trackRow.id as string,
-    track_code: (trackRow as { track_code?: string | null }).track_code ?? undefined,
-  };
 }
 
 /** 아티스트가 본인 pending_review 곡 삭제 */
@@ -520,23 +522,120 @@ export type EligibilityReason =
   | 'not_artist'
   | 'no_artist_profile'
   | 'artist_not_approved'
+  | 'approval_sync_broken'    // 0062
   | 'no_paid_membership'
-  | 'no_signed_contract'   // 0057
+  | 'no_signed_contract'      // 0057
   | 'no_payout_account'
   | 'payout_not_verified';
+
+export type ReleaseStatus =
+  | 'draft'
+  | 'submitted'
+  | 'changes_requested'
+  | 'approved'
+  | 'scheduled'
+  | 'released'
+  | 'rejected';
+
+export type ReleaseType = 'single' | 'ep' | 'album';
 
 export interface UploadEligibility {
   can_upload: boolean;
   is_artist: boolean;
   approval_status: string;
   has_paid_membership: boolean;
-  // 0057 — 계약서 단계
   contract_status?: 'not_created' | 'pending_signature' | 'signed' | 'rejected' | 'expired';
   has_signed_contract?: boolean;
   pending_contract_id?: string | null;
   payout_status: string;
   payout_account_id: string | null;
+  min_release_date?: string; // 0063 — YYYY-MM-DD (today + 3 days)
   reasons: EligibilityReason[];
+}
+
+export interface SubmitReleaseInput {
+  trackId?: string | null;
+  title: string;
+  artist?: string | null;
+  albumName: string;
+  releaseTitle?: string | null;
+  releaseType: ReleaseType;
+  releaseDate: string; // YYYY-MM-DD
+  mainGenre?: string | null;
+  subGenre?: string | null;
+  mood?: string | null;
+  suitableStore?: string | null;
+  lyrics?: string | null;
+  isrc?: string | null;
+  rightsHolderName?: string | null;
+  explicitContent: boolean;
+  instrumental: boolean;
+  audioUrl: string;
+  coverUrl?: string | null;
+  rightsConfirmed: boolean;
+}
+
+export async function submitArtistRelease(input: SubmitReleaseInput): Promise<string> {
+  const { data, error } = await supabase.rpc('submit_artist_release', {
+    p_track_id: input.trackId ?? null,
+    p_title: input.title,
+    p_artist: input.artist ?? null,
+    p_album_name: input.albumName,
+    p_release_title: input.releaseTitle ?? null,
+    p_release_type: input.releaseType,
+    p_release_date: input.releaseDate,
+    p_main_genre: input.mainGenre ?? null,
+    p_sub_genre: input.subGenre ?? null,
+    p_mood: input.mood ?? null,
+    p_suitable_store: input.suitableStore ?? null,
+    p_lyrics: input.lyrics ?? null,
+    p_isrc: input.isrc ?? null,
+    p_rights_holder_name: input.rightsHolderName ?? null,
+    p_explicit_content: input.explicitContent,
+    p_instrumental: input.instrumental,
+    p_audio_url: input.audioUrl,
+    p_cover_url: input.coverUrl ?? null,
+    p_rights_confirmed: input.rightsConfirmed,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminApproveArtistRelease(trackId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_approve_artist_release', { p_track_id: trackId });
+  if (error) throw error;
+  return (data as { status: string }).status;
+}
+
+export async function adminRequestTrackChanges(
+  trackId: string,
+  note: string,
+  target: 'audio' | 'cover' | 'metadata' | 'all' = 'all',
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_request_track_changes', {
+    p_track_id: trackId,
+    p_note: note,
+    p_target: target,
+  });
+  if (error) throw error;
+}
+
+export async function adminReleaseNow(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_release_now', { p_track_id: trackId });
+  if (error) throw error;
+}
+
+export async function adminRejectArtistRelease(trackId: string, note: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reject_artist_release', {
+    p_track_id: trackId,
+    p_note: note,
+  });
+  if (error) throw error;
+}
+
+export async function adminStartTrackReview(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_start_track_review', { p_track_id: trackId });
+  if (error) throw error;
 }
 
 export async function fetchArtistUploadEligibility(): Promise<UploadEligibility> {
