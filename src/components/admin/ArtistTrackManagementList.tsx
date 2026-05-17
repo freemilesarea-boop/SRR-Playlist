@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Music, RefreshCw, Search, Check, X, EyeOff, ExternalLink, Wallet } from 'lucide-react';
+import { Fragment, useEffect, useState } from 'react';
+import { Music, RefreshCw, Search, Check, X, EyeOff, ExternalLink, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminListArtistTracks,
   approveArtistTrack,
@@ -9,8 +9,13 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import TrackModerationPanel from './TrackModerationPanel';
 
-type StatusFilter = '' | 'pending_review' | 'approved' | 'rejected' | 'hidden';
+type StatusFilter =
+  | ''
+  | 'pending_review' | 'approved' | 'rejected' | 'hidden'
+  // 0074 — DSP release_status 필터 (서버 RPC 가 둘 다 매칭)
+  | 'submitted' | 'changes_requested' | 'scheduled' | 'released' | 'removed';
 type ActionKind = 'approve' | 'reject' | 'hide';
 
 function fmtDate(s: string | null | undefined): string {
@@ -46,6 +51,7 @@ export default function ArtistTrackManagementList() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{ kind: ActionKind; track: AdminTrackRow } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -142,10 +148,19 @@ export default function ArtistTrackManagementList() {
           className="input w-auto text-sm"
         >
           <option value="">전체 상태</option>
-          <option value="pending_review">심사 대기</option>
-          <option value="approved">승인됨</option>
-          <option value="rejected">거절됨</option>
-          <option value="hidden">숨김</option>
+          <optgroup label="visibility">
+            <option value="pending_review">심사 대기</option>
+            <option value="approved">승인됨</option>
+            <option value="rejected">거절됨</option>
+            <option value="hidden">숨김</option>
+          </optgroup>
+          <optgroup label="DSP release">
+            <option value="submitted">검수 대기 (submitted)</option>
+            <option value="changes_requested">수정 요청</option>
+            <option value="scheduled">발매 예정</option>
+            <option value="released">공개됨</option>
+            <option value="removed">제거됨</option>
+          </optgroup>
         </select>
       </div>
 
@@ -183,12 +198,27 @@ export default function ArtistTrackManagementList() {
               {rows.map((r) => {
                 const payoutKey = r.payout_verification_status ?? 'pending';
                 const payoutTone = PAYOUT_TONE[payoutKey] ?? PAYOUT_TONE.pending;
+                const isExpanded = expandedId === r.track_id;
                 return (
-                  <tr key={r.track_id} className="border-b border-line/10 hover:bg-bg-hover">
+                  <Fragment key={r.track_id}>
+                  <tr className="border-b border-line/10 hover:bg-bg-hover">
                     <td className="px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : r.track_id)}
+                        aria-label="DSP 검수 패널 열기"
+                        className="mr-1 inline-flex items-center text-ink-mute hover:text-ink"
+                      >
+                        {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </button>
                       <code className="rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[10px]">
                         {r.track_code ?? '—'}
                       </code>
+                      {r.release_status && (
+                        <span className="ml-1 inline-flex rounded bg-bg-soft px-1 py-0.5 text-[9px] text-ink-dim">
+                          {r.release_status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium">{r.title}</p>
@@ -277,6 +307,20 @@ export default function ArtistTrackManagementList() {
                       </div>
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr className="border-b border-line/10 bg-bg-soft/30">
+                      <td colSpan={9} className="px-3 py-3">
+                        <TrackModerationPanel
+                          trackId={r.track_id}
+                          trackTitle={r.title}
+                          releaseStatus={r.release_status ?? null}
+                          visibilityStatus={r.visibility_status}
+                          onChanged={load}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

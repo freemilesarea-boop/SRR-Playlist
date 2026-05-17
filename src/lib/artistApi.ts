@@ -112,6 +112,13 @@ export interface AdminTrackRow {
   rights_holder_name: string | null;
   rights_confirmed_at: string | null;
   visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
+  /** 0074 — DSP 검수 파이프라인 (release_status / release_date / removed_reason) */
+  release_status?:
+    | 'draft' | 'submitted' | 'changes_requested'
+    | 'approved' | 'scheduled' | 'released'
+    | 'rejected' | 'removed' | null;
+  release_date?: string | null;
+  removed_reason?: string | null;
   rejected_reason: string | null;
   admin_note: string | null;
   payout_verification_status: 'pending' | 'verified' | 'rejected' | null;
@@ -495,7 +502,11 @@ export async function hideArtistTrack(
 }
 
 export async function adminListArtistTracks(opts?: {
-  status?: 'pending_review' | 'approved' | 'rejected' | 'hidden' | '';
+  /** visibility_status 또는 release_status 의 값 (서버 RPC 가 둘 다 매칭) */
+  status?:
+    | 'pending_review' | 'approved' | 'rejected' | 'hidden'
+    | 'submitted' | 'changes_requested' | 'scheduled' | 'released' | 'removed'
+    | '';
   search?: string;
   limit?: number;
   offset?: number;
@@ -762,6 +773,106 @@ export async function adminRejectArtistRelease(trackId: string, note: string): P
 export async function adminStartTrackReview(trackId: string): Promise<void> {
   const { error } = await supabase.rpc('admin_start_track_review', { p_track_id: trackId });
   if (error) throw error;
+}
+
+// ============================================
+// 0074 — DSP 검수 파이프라인 wrapper
+// ============================================
+
+export type TrackReleaseStatus =
+  | 'draft' | 'submitted' | 'changes_requested'
+  | 'approved' | 'scheduled' | 'released'
+  | 'rejected' | 'removed';
+
+export interface TrackModerationEvent {
+  event_id: number;
+  actor_user_id: string | null;
+  action: string;
+  from_release_status: string | null;
+  to_release_status: string | null;
+  from_visibility_status: string | null;
+  to_visibility_status: string | null;
+  note: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface TrackModerationEmailJob {
+  job_id: string;
+  recipient_email: string;
+  kind: 'approved' | 'rejected' | 'revision_requested' | 'removed' | 'released';
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled';
+  attempts: number;
+  sent_at: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  provider_message_id: string | null;
+  created_at: string;
+}
+
+export async function adminTakedownTrack(trackId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_takedown_track', {
+    p_track_id: trackId, p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+export async function adminRestoreTrack(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_restore_track', { p_track_id: trackId });
+  if (error) throw error;
+}
+
+export async function adminHideReleasedTrack(trackId: string, reason?: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_hide_released_track', {
+    p_track_id: trackId, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function adminUnhideReleasedTrack(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_unhide_released_track', { p_track_id: trackId });
+  if (error) throw error;
+}
+
+export async function adminListTrackModerationEvents(trackId: string): Promise<TrackModerationEvent[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_moderation_events', {
+    p_track_id: trackId,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackModerationEvent[];
+}
+
+export async function adminListTrackModerationEmailJobs(trackId: string): Promise<TrackModerationEmailJob[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_moderation_email_jobs', {
+    p_track_id: trackId,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackModerationEmailJob[];
+}
+
+export async function adminRequeueTrackModerationEmails(
+  trackId: string,
+  onlyFailed = false,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_requeue_track_moderation_emails', {
+    p_track_id: trackId, p_only_failed: onlyFailed,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+export async function dispatchTrackModerationEmails(
+  trackId: string,
+): Promise<{ ok: boolean; sent?: number; failed?: number; processed?: number; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('dispatch-moderation-emails', {
+      body: { track_id: trackId },
+    });
+    if (error) return { ok: false, error: error.message };
+    return data ?? { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**
