@@ -114,7 +114,27 @@ export default function ArtistContractPage() {
       await load();
       setTimeout(() => navigate('/artist'), 800);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '서명에 실패했어요');
+      const err = e as { code?: string; message?: string; details?: string; hint?: string };
+      // eslint-disable-next-line no-console
+      console.error('[contract] sign_artist_contract failed:', {
+        code: err.code, message: err.message, details: err.details, hint: err.hint,
+      });
+      const code = err.code ?? '';
+      const msg = err.message ?? String(e);
+      if (code === 'PGRST202' || code === 'PGRST203' || /not.*found.*schema cache/i.test(msg)) {
+        toast.error('서명 처리 함수가 배포되지 않았습니다. 관리자에게 문의해주세요. (PGRST 캐시 미갱신)');
+      } else if (/digest.*does not exist/i.test(msg) || code === '42883') {
+        toast.error('서명 처리 내부 함수 오류 — 관리자에게 문의해주세요. (pgcrypto schema)');
+      } else if (/cannot sign contract in status/i.test(msg)) {
+        toast.error('이미 서명되었거나 만료된 계약입니다.');
+        await load();
+      } else if (/contract expired/i.test(msg)) {
+        toast.error('계약 서명 기한이 만료됐어요. 관리자에게 재발급을 요청해주세요.');
+      } else if (/forbidden/i.test(msg)) {
+        toast.error('본인 계약만 서명할 수 있어요.');
+      } else {
+        toast.error(`서명에 실패했어요 — ${msg}`);
+      }
     } finally {
       setSigning(false);
     }
