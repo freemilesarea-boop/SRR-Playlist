@@ -97,6 +97,12 @@ export interface PendingReviewTrackRow {
   payout_bank_name: string | null;
   admin_note: string | null;
   created_at: string;
+  /** 0075 — DSP release_status / 발매일 / 검수 시작 / 수정 사유 */
+  release_status?: string | null;
+  release_date?: string | null;
+  submitted_at?: string | null;
+  review_started_at?: string | null;
+  changes_requested_reason?: string | null;
 }
 
 export interface AdminTrackRow {
