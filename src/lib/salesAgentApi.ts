@@ -24,7 +24,12 @@ export interface SalesAgentListRow {
   linked_business_count: number;
   paid_business_count: number;
   total_paid_amount: number;
+  total_commission_amount: number;
+  /** @deprecated 0055 이후 total_commission_amount 와 동일. 호환성용. */
   estimated_commission: number;
+  monthly_paid_amount: number;
+  monthly_commission_amount: number;
+  monthly_paid_count: number;
   created_at: string;
   updated_at: string;
   last_activity_at: string | null;
@@ -71,7 +76,14 @@ export interface SalesAgentDetail {
     linked_business_count: number;
     paid_business_count: number;
     total_paid_amount: number;
+    total_commission_amount: number;
+    /** @deprecated 0055 이후 total_commission_amount 와 동일. */
     estimated_commission: number;
+    monthly_paid_amount: number;
+    monthly_commission_amount: number;
+    monthly_paid_count: number;
+    month_window_start?: string;
+    month_window_end?: string;
   };
 }
 
