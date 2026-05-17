@@ -523,9 +523,11 @@ function PayoutAccountSection({
           </div>
           <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{description}</p>
           {payout?.rejected_reason && (
-            <p className="mt-1.5 rounded-md bg-red-500/10 px-2 py-1 text-[11px] text-red-300">
-              반려 사유: {payout.rejected_reason}
-            </p>
+            <div className="mt-1.5">
+              <Alert tone="error" title="반려 사유">
+                {payout.rejected_reason}
+              </Alert>
+            </div>
           )}
         </div>
       </div>
@@ -579,11 +581,7 @@ function PayoutAccountSection({
             />
           </Field>
 
-          {error && (
-            <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
-              {error}
-            </p>
-          )}
+          {error && <Alert tone="error">{error}</Alert>}
 
           <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
             {busy ? '등록 중…' : status === 'rejected' ? '계좌 다시 등록' : '계좌 등록'}

@@ -277,10 +277,37 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     return { ok: false, error: '승인된 아티스트만 업로드할 수 있습니다' };
   }
 
-  // 1) audio 업로드 — 새 파일이 있을 때만
+  // 1) audio 업로드 — 새 파일이 있을 때만 + SHA-256 계산 (중복 방지)
   let audioUrl: string;
+  let audioSha256: string | null = null;
   const ts = Date.now();
   if (input.audioFile) {
+    try {
+      audioSha256 = await computeAudioSha256(input.audioFile);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[sha256] compute failed:', e);
+    }
+    // 사전 중복 확인 — RPC 가 다시 검증하지만 클라이언트에서 즉시 안내
+    if (audioSha256) {
+      const { data: sess2 } = await supabase.auth.getSession();
+      const uid = sess2.session?.user?.id;
+      if (uid) {
+        const { data: existing } = await supabase
+          .from('tracks')
+          .select('id, track_code, release_status')
+          .eq('owner_user_id', uid)
+          .eq('source_type', 'artist_upload')
+          .eq('audio_sha256', audioSha256)
+          .maybeSingle();
+        // 재제출 모드는 동일 파일 다시 올려도 OK (기존 row 가 자기 자신)
+        if (existing && !input.trackId) {
+          return {
+            ok: false,
+            error: `이미 같은 음원 파일을 업로드하셨어요 (${(existing as { track_code?: string | null }).track_code ?? existing.id.slice(0, 8)}). 내 음원 목록에서 수정해주세요.`,
+          };
+        }
+      }
+    }
     const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
     const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
     const audioPath = `artist_uploads/${userId}/${ts}_${safeName}`;
@@ -638,6 +665,17 @@ export interface SubmitReleaseInput {
   audioUrl: string;
   coverUrl?: string | null;
   rightsConfirmed: boolean;
+  /** 0065 — 클라이언트가 계산한 audio 파일 SHA-256 (hex). 중복 업로드 방지용 */
+  audioSha256?: string | null;
+}
+
+/** Web Crypto API 로 파일 SHA-256 hex 계산. 대용량 파일 안전. */
+export async function computeAudioSha256(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export async function submitArtistRelease(input: SubmitReleaseInput): Promise<string> {
@@ -661,6 +699,7 @@ export async function submitArtistRelease(input: SubmitReleaseInput): Promise<st
     p_audio_url: input.audioUrl,
     p_cover_url: input.coverUrl ?? null,
     p_rights_confirmed: input.rightsConfirmed,
+    p_audio_sha256: input.audioSha256 ?? null,
   });
   if (error) throw error;
   return data as string;
