@@ -269,6 +269,14 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
 
   const eligibility = await fetchArtistUploadEligibility();
   if (!eligibility.can_upload) {
+    const rpcErr = getLastEligibilityError();
+    if (rpcErr) {
+      // RPC 자체가 400 등으로 실패 — eligibility 미확보. 명확히 안내.
+      return {
+        ok: false,
+        error: `업로드 자격 확인 실패 (${rpcErr.code ?? 'RPC'}) — ${rpcErr.message ?? '잠시 후 다시 시도해주세요'}. 문제 지속 시 새로고침 또는 관리자 문의.`,
+      };
+    }
     return { ok: false, error: formatEligibilityError(eligibility.reasons) };
   }
 
@@ -756,6 +764,13 @@ export async function adminStartTrackReview(trackId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * 마지막 fetchArtistUploadEligibility 호출의 raw error (사용자 toast 보강용).
+ * production 빌드에서도 노출 — 운영 진단 시 정확한 메시지 확보.
+ */
+let _lastEligibilityError: { code?: string; message?: string; details?: string } | null = null;
+export function getLastEligibilityError() { return _lastEligibilityError; }
+
 export async function fetchArtistUploadEligibility(): Promise<UploadEligibility> {
   // RPC 실패 시 fallback 은 항상 can_upload=false 로 가드. UI 는 이 외에도
   // payout 상태를 직접 봐서 결정하므로, reasons 빈 배열이 곧 통과로 해석되지 않게 한다.
@@ -771,9 +786,17 @@ export async function fetchArtistUploadEligibility(): Promise<UploadEligibility>
   try {
     const { data, error } = await supabase.rpc('get_artist_upload_eligibility');
     if (error) {
-      if (import.meta.env.DEV) console.error('[eligibility] rpc error:', error);
+      _lastEligibilityError = {
+        code: (error as { code?: string }).code,
+        message: error.message,
+        details: (error as { details?: string }).details,
+      };
+      // 항상 출력 (production 운영 진단 가능하게)
+      // eslint-disable-next-line no-console
+      console.error('[eligibility] rpc error:', _lastEligibilityError);
       return errFallback();
     }
+    _lastEligibilityError = null;
     const row = (Array.isArray(data) ? data[0] : data) as UploadEligibility | undefined;
     return row ?? errFallback();
   } catch (e) {
