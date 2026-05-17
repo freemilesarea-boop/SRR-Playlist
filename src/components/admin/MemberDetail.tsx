@@ -104,6 +104,35 @@ export default function MemberDetail({
                 <KV label="가입일" value={new Date(data.user.created_at).toLocaleDateString('ko-KR')} />
                 <KV label="최근방문" value={data.last_seen_at ? new Date(data.last_seen_at).toLocaleDateString('ko-KR') : '—'} />
               </div>
+              {data.user.withdrawn_at && (
+                <div className="rounded-xl bg-red-500/10 px-3 py-2 ring-1 ring-red-500/30">
+                  <p className="text-xs font-bold text-red-200">
+                    탈퇴 회원 · {new Date(data.user.withdrawn_at).toLocaleDateString('ko-KR')}
+                  </p>
+                  {data.user.withdrawn_reason && (
+                    <p className="mt-0.5 text-[11px] text-red-200/80">사유: {data.user.withdrawn_reason}</p>
+                  )}
+                </div>
+              )}
+              {(() => {
+                const grace = (data as unknown as {
+                  subscriptions?: Array<{ status: string; current_period_end: string | null }>;
+                }).subscriptions?.find(
+                  (s) =>
+                    s.status === 'cancel_scheduled' &&
+                    (!s.current_period_end || new Date(s.current_period_end) > new Date()),
+                );
+                if (!grace) return null;
+                return (
+                  <div className="rounded-xl bg-yellow-500/10 px-3 py-2 ring-1 ring-yellow-500/30">
+                    <p className="text-xs font-bold text-yellow-200">
+                      구독 취소 예정
+                      {grace.current_period_end &&
+                        ` · ${new Date(grace.current_period_end).toLocaleDateString('ko-KR')} 종료`}
+                    </p>
+                  </div>
+                );
+              })()}
             </section>
 
             {/* 활동 요약 */}

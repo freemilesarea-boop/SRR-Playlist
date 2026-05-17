@@ -40,6 +40,7 @@ export default function MembersList() {
   const [search, setSearch] = useState('');
   const [plan, setPlan] = useState<string>('');
   const [role, setRole] = useState<string>('');
+  const [status, setStatus] = useState<'' | 'active' | 'withdrawn' | 'cancel_scheduled'>('');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
 
@@ -51,6 +52,7 @@ export default function MembersList() {
         search: search || undefined,
         plan: plan || undefined,
         role: role || undefined,
+        status: status || undefined,
       });
       setRows(data);
     } catch (e) {
@@ -63,7 +65,7 @@ export default function MembersList() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, role]);
+  }, [plan, role, status]);
 
   // 검색은 디바운스
   useEffect(() => {
@@ -150,6 +152,16 @@ export default function MembersList() {
           <option value="user">일반</option>
           <option value="admin">관리자</option>
         </select>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as typeof status)}
+          className="input w-auto text-sm"
+        >
+          <option value="">전체 상태</option>
+          <option value="active">활성</option>
+          <option value="cancel_scheduled">취소 예정</option>
+          <option value="withdrawn">탈퇴</option>
+        </select>
       </div>
 
       {/* 테이블 */}
@@ -186,7 +198,9 @@ export default function MembersList() {
               {rows.map((m) => (
                 <tr
                   key={m.id}
-                  className="cursor-pointer border-b border-line/10 hover:bg-bg-hover"
+                  className={`cursor-pointer border-b border-line/10 hover:bg-bg-hover ${
+                    m.withdrawn_at ? 'opacity-50' : ''
+                  }`}
                   onClick={() => setDetailId(m.id)}
                 >
                   <td className="px-3 py-2.5">
@@ -200,6 +214,16 @@ export default function MembersList() {
                     {m.signup_completed === false && (
                       <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] text-yellow-200">
                         미완료
+                      </span>
+                    )}
+                    {m.withdrawn_at && (
+                      <span className="ml-1 inline-flex rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-red-200">
+                        탈퇴
+                      </span>
+                    )}
+                    {!m.withdrawn_at && m.has_cancel_scheduled && (
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-200">
+                        취소 예정
                       </span>
                     )}
                   </td>

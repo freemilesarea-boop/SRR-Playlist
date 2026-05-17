@@ -1,8 +1,13 @@
 // supabase/functions/cancel-payapp-subscription/index.ts
 //
-// PayApp 정기결제 해지 (rebillCancel) 요청.
-// MVP 정책: 즉시 free 다운그레이드.
+// 사용자 self-cancel:
+//   1) PayApp rebillCancel 호출 (자동결제 실제 중단)
+//   2) DB: status='cancel_scheduled', auto_renew=false, cancel_requested_at, cancel_reason
+//   3) membership_tier 는 안 건드림 — current_period_end 까지 grace
 //
+// PayApp 해지 webhook 도착 시 0056 의 _internal_apply_payapp_subscription_cancel_event
+// 가 grace period 분기에서 membership 유지.
+
 // deno-lint-ignore-file no-explicit-any
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -43,20 +48,21 @@ serve(async (req) => {
   if (!userRes?.user) return json({ error: 'unauthorized' }, 401);
   const user = userRes.user;
 
-  let body: { subscription_id?: string } = {};
+  let body: { subscription_id?: string; reason?: string } = {};
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid body' }, 400);
   }
   const subId = body.subscription_id;
+  const reason = body.reason ?? 'user_request';
   if (!subId) return json({ error: 'missing subscription_id' }, 400);
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   const { data: sub } = await sb
     .from('subscriptions')
-    .select('id, user_id, status, payapp_rebill_no')
+    .select('id, user_id, status, payapp_rebill_no, current_period_end')
     .eq('id', subId)
     .maybeSingle();
 
@@ -66,7 +72,9 @@ serve(async (req) => {
     return json({ error: `cannot cancel: status=${sub.status}` }, 400);
   }
 
-  // PayApp 에 등록된 rebill_no 가 있으면 해지 요청
+  // 1) PayApp 정기결제 해지 — 등록된 rebill_no 가 있을 때만
+  let payappOk = true;
+  let payappRaw: string | null = null;
   if (sub.payapp_rebill_no) {
     const params = new URLSearchParams();
     params.set('cmd', 'rebillCancel');
@@ -79,27 +87,53 @@ serve(async (req) => {
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
       });
-      const text = await resp.text();
-      const parsed = Object.fromEntries(new URLSearchParams(text).entries());
+      payappRaw = await resp.text();
+      const parsed = Object.fromEntries(new URLSearchParams(payappRaw).entries());
+      // state=1 성공. 그 외는 실패로 간주하되, "이미 해지됨" 류는 OK 취급.
       if (parsed.state !== '1') {
-        // PayApp 에서 거부 — 그대로 진행하되 로그 남김
-        console.warn('[cancel-payapp] PayApp rebillCancel failed:', text);
+        const msg = (parsed.errmsg ?? '').toString();
+        // 이미 해지된 케이스는 우리 입장에선 성공
+        if (/already|이미|해지/i.test(msg)) {
+          payappOk = true;
+        } else {
+          payappOk = false;
+          console.warn('[cancel-payapp] PayApp rebillCancel failed:', payappRaw);
+        }
       }
     } catch (e) {
+      payappOk = false;
       console.warn('[cancel-payapp] network error', e);
     }
   }
 
-  // 내부 상태 즉시 canceled + free 다운그레이드
-  await sb
-    .from('subscriptions')
-    .update({ status: 'canceled', canceled_at: new Date().toISOString() })
-    .eq('id', sub.id);
+  // PayApp 해지가 실패했으면 DB 상태 변경하지 않음 — 자동결제가 계속 도는 상황 방지
+  if (!payappOk) {
+    return json(
+      {
+        error: 'payapp_cancel_failed',
+        message: 'PayApp 자동결제 해지에 실패했어요. 잠시 후 다시 시도하거나 고객센터로 문의해주세요.',
+        payapp_raw: payappRaw,
+      },
+      502,
+    );
+  }
 
-  await sb
-    .from('users')
-    .update({ membership_tier: 'free', subscription_type: 'free' })
-    .eq('id', user.id);
+  // 2) DB 상태 변경 — RPC 호출 (auth.uid() 가 RLS/검증에 쓰임 → user JWT 클라이언트로)
+  const { data: rpcRows, error: rpcError } = await sbUser.rpc('user_cancel_my_subscription', {
+    p_subscription_id: subId,
+    p_reason: reason,
+  });
+  if (rpcError) {
+    return json({ error: 'db_update_failed', message: rpcError.message }, 500);
+  }
+  const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
 
-  return json({ ok: true });
+  return json({
+    ok: true,
+    subscription_id: subId,
+    status: 'cancel_scheduled',
+    current_period_end: row?.current_period_end ?? sub.current_period_end ?? null,
+    message:
+      '구독이 취소 예약됐어요. 현재 결제 기간이 끝날 때까지 Premium 기능을 이용할 수 있어요.',
+  });
 });

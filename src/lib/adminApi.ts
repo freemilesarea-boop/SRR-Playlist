@@ -57,6 +57,9 @@ export interface MemberRow {
   last_seen_at: string | null;
   total_streams: number;
   total_listened_seconds: number;
+  // 0056 — 회원 상태
+  withdrawn_at: string | null;
+  has_cancel_scheduled: boolean;
 }
 
 export interface MemberDetail {
@@ -68,6 +71,8 @@ export interface MemberDetail {
     subscription_type: string;
     business_category: string | null;
     created_at: string;
+    withdrawn_at?: string | null;
+    withdrawn_reason?: string | null;
   };
   total_streams: number;
   total_listened_seconds: number;
@@ -161,16 +166,18 @@ export async function fetchMemberList(opts: {
   search?: string;
   plan?: string;
   role?: string;
+  status?: 'active' | 'withdrawn' | 'cancel_scheduled';
   limit?: number;
   offset?: number;
 } = {}): Promise<MemberRow[]> {
-  // 0033 의 새 시그니처 사용: (p_limit, p_offset, p_search, p_plan, p_role)
+  // 0056 시그니처: (p_limit, p_offset, p_search, p_plan, p_role, p_status)
   const { data, error } = await supabase.rpc('admin_member_list', {
     p_limit: opts.limit ?? 100,
     p_offset: opts.offset ?? 0,
     p_search: opts.search ?? null,
     p_plan: opts.plan ?? null,
     p_role: opts.role ?? null,
+    p_status: opts.status ?? null,
   });
   if (error) throw error;
   return (data ?? []) as MemberRow[];

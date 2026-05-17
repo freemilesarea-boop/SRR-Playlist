@@ -18,6 +18,9 @@ export interface UserRow {
   // 0054 — 영업인 추적
   sales_agent_id?: string | null;
   sales_agent_code?: string | null;
+  // 0056 — 회원 탈퇴
+  withdrawn_at?: string | null;
+  withdrawn_reason?: string | null;
 }
 
 export interface SalesAgentRow {
