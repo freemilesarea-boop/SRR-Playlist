@@ -9,6 +9,7 @@
  */
 
 import { supabase } from './supabase';
+import { useAuthStore } from '@/store/authStore';
 
 export interface ArtistProfile {
   user_id: string;
@@ -154,6 +155,69 @@ export async function withTimeout<T>(
   });
 }
 
+/**
+ * 0077-hotfix — 업로드/저장 등 user.id 만 필요한 액션에서 사용할 빠른 user 조회.
+ *
+ * `supabase.auth.getSession()` 이 토큰 refresh / 네트워크 지연으로 무한 pending 되면
+ * 업로드 전체가 막힘. 다음 순서로 fallback:
+ *   1) authStore 캐시 user (즉시, 동기)
+ *   2) supabase.auth.getUser() — 5초 timeout (서버 검증 포함)
+ *   3) supabase.auth.getSession() — 5초 timeout (refresh 가능)
+ *
+ * 각 단계마다 console.info 로그. 모두 실패 시 null 반환 — 호출자가 안내 메시지 제어.
+ */
+export async function getCurrentUserFast(): Promise<{ id: string; email: string | null } | null> {
+  const log = (msg: string, extra?: Record<string, unknown>) =>
+    console.info('[auth-fast]', msg, extra ?? '');
+
+  // 1) authStore 캐시 — 동기, 가장 빠름
+  try {
+    const cached = useAuthStore.getState().user;
+    if (cached?.id) {
+      log('cache hit', { uid: cached.id.slice(0, 8) + '…' });
+      return { id: cached.id, email: cached.email ?? null };
+    }
+  } catch (e) {
+    log('cache read failed', { err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // 2) supabase.auth.getUser() — 5초 timeout
+  try {
+    const { data, error } = await withTimeout(
+      supabase.auth.getUser(),
+      5_000,
+      'auth.getUser timeout',
+    );
+    if (!error && data.user?.id) {
+      log('getUser ok', { uid: data.user.id.slice(0, 8) + '…' });
+      return { id: data.user.id, email: data.user.email ?? null };
+    }
+    log('getUser empty', { err: error?.message });
+  } catch (e) {
+    log('getUser timeout/fail', { err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // 3) supabase.auth.getSession() — 5초 timeout (refresh 트리거)
+  try {
+    const { data } = await withTimeout(
+      supabase.auth.getSession(),
+      5_000,
+      'auth.getSession timeout',
+    );
+    const u = data.session?.user;
+    if (u?.id) {
+      log('getSession ok', { uid: u.id.slice(0, 8) + '…' });
+      return { id: u.id, email: u.email ?? null };
+    }
+    log('getSession empty');
+  } catch (e) {
+    log('getSession timeout/fail', { err: e instanceof Error ? e.message : String(e) });
+  }
+
+  log('ALL fallbacks failed');
+  return null;
+}
+
 export interface UploadInput {
   title: string;
   album_name: string;
@@ -211,8 +275,9 @@ export async function fetchMyArtistProfile(userId: string): Promise<ArtistProfil
 export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
   // 0064: RLS tracks_select_owner 정책으로 본인 트랙 직접 조회 (release_* 컬럼 포함).
   // 기존 list_my_artist_tracks RPC 는 release_status / changes_requested_reason 미반환이므로 우회.
-  const { data: sess } = await supabase.auth.getSession();
-  const uid = sess.session?.user?.id;
+  // 0077-hotfix: getSession 무한 pending 방지 — getCurrentUserFast 의 3단 fallback 사용.
+  const me = await getCurrentUserFast();
+  const uid = me?.id;
   if (!uid) return [];
   const { data, error } = await supabase
     .from('tracks')
@@ -292,17 +357,19 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   try {
     stage = 'session';
     log('session start');
-    const { data: sess } = await withTimeout(
-      supabase.auth.getSession(),
-      10_000,
-      '세션 확인 시간이 초과되었습니다. 새로고침 후 다시 시도해주세요.',
-    );
-    const userId = sess.session?.user?.id;
+    // 0077-hotfix — getSession 무한 pending 방지: getCurrentUserFast 가 cache→getUser→
+    // getSession 3단 fallback 으로 user.id 빠르게 확보. access_token 은 필요 없음 (이후
+    // supabase client 가 자동 첨부).
+    const me = await getCurrentUserFast();
+    const userId = me?.id;
+    log('session ok', { uid: userId ? userId.slice(0, 8) + '…' : 'null' });
     if (!userId) {
       log('session fail — no user');
-      return { ok: false, error: '로그인이 필요합니다' };
+      return {
+        ok: false,
+        error: '로그인 정보 확인이 지연되고 있습니다. 새로고침 후에도 반복되면 다시 로그인해주세요.',
+      };
     }
-    log('session ok', { userId });
 
     // 입력 검증 — 신규 업로드는 audioFile 필수. 재제출(trackId+existingAudioUrl)은 audioFile 옵션.
     stage = 'validate';
