@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, FileText, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { ArrowLeft, FileText, CheckCircle2, XCircle, Clock, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   fetchMyContract,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/artistContractApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import ContractMarkdown, { splitSummary } from '@/components/contract/ContractMarkdown';
 
 function fmtDateTime(s: string | null | undefined): string {
   if (!s) return '—';
@@ -135,7 +136,7 @@ export default function ArtistContractPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6">
+    <div className="space-y-5 px-4 pb-32 pt-6 sm:px-6 sm:pb-40">
       <header className="flex items-center gap-3">
         <Link
           to="/artist"
@@ -214,9 +215,10 @@ function ContractView({
   onRejectOpen: () => void;
 }) {
   const isReadonly = contract.status !== 'pending_signature';
+  const { summary, main } = splitSummary(contract.contract_body);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* 상태 배너 */}
       <StatusBanner contract={contract} />
 
@@ -230,19 +232,27 @@ function ContractView({
         )}
       </div>
 
-      {/* 본문 */}
+      {/* 핵심 요약 카드 (본문에서 추출) */}
+      {summary && <ContractSummaryCard markdown={summary} />}
+
+      {/* 본문 (동의란 placeholder 섹션 제외) */}
       <section className="space-y-2">
-        <h2 className="flex items-center gap-2 text-sm font-bold">
-          <FileText size={14} /> {contract.contract_title}
+        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+          <FileText size={14} className="text-accent" />
+          {contract.contract_title}
         </h2>
-        <div className="max-h-[60vh] overflow-y-auto rounded-2xl bg-bg-card p-5 ring-1 ring-line/10">
-          <pre className="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-ink">
-            {contract.contract_body}
-          </pre>
-        </div>
+        <article
+          className="rounded-2xl bg-bg-card px-5 py-4 ring-1 ring-line/10 sm:px-7 sm:py-6"
+        >
+          <ContractMarkdown
+            body={main}
+            skipFromHeading="동의"
+            className="contract-body mx-auto max-w-prose"
+          />
+        </article>
       </section>
 
-      {/* 동의 + 서명 또는 readonly 안내 */}
+      {/* 동의/서명 또는 readonly 안내 */}
       {isReadonly ? (
         <div className="space-y-3">
           <Alert tone={contract.status === 'signed' ? 'success' : 'info'}>
@@ -256,43 +266,91 @@ function ContractView({
           )}
         </div>
       ) : (
-        <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-accent/30">
-          <Alert tone="warning">
-            본 계약은 전자문서·전자거래 기본법 및 전자서명법에 따라 서면 계약과 동일한 효력을
-            가집니다. 동의 시점의 IP·접속 기기·시각이 시스템에 기록됩니다.
-          </Alert>
-
-          <label className="flex cursor-pointer items-start gap-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => onAgreedChange(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span className="text-sm leading-relaxed">
-              위 「{contract.contract_title}」의 모든 조항을 확인했으며, 본인은 그 내용에
-              <strong className="text-accent"> 동의합니다.</strong>
-            </span>
-          </label>
-
-          <div className="flex gap-2">
-            <button
-              onClick={onRejectOpen}
-              disabled={signing}
-              className="flex-1 rounded-xl bg-bg-soft py-3 text-sm font-semibold text-ink-mute ring-1 ring-line/10 hover:text-red-400 disabled:opacity-60"
-            >
-              거절
-            </button>
-            <button
-              onClick={onSign}
-              disabled={!agreed || signing}
-              className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-bg hover:opacity-90 disabled:opacity-50"
-            >
-              {signing ? '서명 중…' : '동의 후 서명'}
-            </button>
-          </div>
-        </div>
+        <ContractSignCard
+          title={contract.contract_title}
+          agreed={agreed}
+          signing={signing}
+          onAgreedChange={onAgreedChange}
+          onSign={onSign}
+          onRejectOpen={onRejectOpen}
+        />
       )}
+    </div>
+  );
+}
+
+function ContractSummaryCard({ markdown }: { markdown: string }) {
+  return (
+    <section className="rounded-2xl bg-sky-100 px-4 py-3 ring-1 ring-sky-400/30 dark:bg-sky-500/10 dark:ring-sky-400/25">
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-200 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">
+          <ShieldCheck size={14} />
+        </span>
+        <h3 className="text-sm font-extrabold text-sky-900 dark:text-sky-100">
+          계약 핵심 요약
+        </h3>
+      </div>
+      <div className="mt-2 text-[13px] text-sky-900 dark:text-sky-100">
+        <ContractMarkdown body={markdown} />
+      </div>
+    </section>
+  );
+}
+
+function ContractSignCard({
+  title,
+  agreed,
+  signing,
+  onAgreedChange,
+  onSign,
+  onRejectOpen,
+}: {
+  title: string;
+  agreed: boolean;
+  signing: boolean;
+  onAgreedChange: (v: boolean) => void;
+  onSign: () => void;
+  onRejectOpen: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-accent/40 sm:p-5">
+      <Alert tone="warning">
+        본 계약은 전자문서·전자거래 기본법 및 전자서명법에 따라 서면 계약과 동일한 효력을
+        가집니다. 동의 시점의 IP·접속 기기·시각이 시스템에 기록됩니다.
+      </Alert>
+
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-bg-soft p-3.5 ring-1 ring-line/10 hover:ring-accent/30">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => onAgreedChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-current text-accent"
+        />
+        <span className="text-[13.5px] leading-relaxed text-ink">
+          위 「{title}」의 모든 조항을 확인했으며, 본인은 그 내용에
+          <strong className="text-accent"> 동의합니다.</strong>
+        </span>
+      </label>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={onRejectOpen}
+          disabled={signing}
+          className="flex-1 rounded-xl bg-bg-soft py-3 text-sm font-semibold text-ink-mute ring-1 ring-line/10 hover:text-red-400 disabled:opacity-60"
+        >
+          거절
+        </button>
+        <button
+          onClick={onSign}
+          disabled={!agreed || signing}
+          className="flex-[2] rounded-xl bg-accent py-3 text-sm font-extrabold text-bg shadow-sm hover:opacity-90 disabled:opacity-50"
+        >
+          {signing ? '서명 중…' : '동의 후 서명'}
+        </button>
+      </div>
+      <p className="text-center text-[11px] text-ink-dim">
+        체크박스를 선택해야 "동의 후 서명" 버튼이 활성화됩니다.
+      </p>
     </div>
   );
 }
