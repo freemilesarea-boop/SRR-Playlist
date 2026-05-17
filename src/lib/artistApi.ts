@@ -29,15 +29,49 @@ export interface ArtistProfile {
 
 export interface MyArtistTrackRow {
   track_id: string;
+  track_code: string | null;
   title: string;
   artist: string | null;
+  album_name: string | null;
+  release_title: string | null;
+  release_type: 'single' | 'ep' | 'album' | null;
+  release_date: string | null;
+  release_status:
+    | 'draft'
+    | 'submitted'
+    | 'changes_requested'
+    | 'approved'
+    | 'scheduled'
+    | 'released'
+    | 'rejected'
+    | null;
+  audio_review_status: 'pending' | 'approved' | 'rejected' | null;
+  cover_review_status: 'pending' | 'approved' | 'rejected' | null;
+  metadata_review_status: 'pending' | 'approved' | 'rejected' | null;
+  admin_review_note: string | null;
+  changes_requested_reason: string | null;
+  submission_version: number | null;
+  submitted_at: string | null;
+  resubmitted_at: string | null;
+  reviewed_at: string | null;
+  approved_at: string | null;
+  scheduled_at: string | null;
+  released_at: string | null;
+  visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
+  rejected_reason: string | null;
+  rights_holder_name: string | null;
+  isrc: string | null;
+  explicit_content: boolean | null;
+  instrumental: boolean | null;
   genre: string | null;
+  main_genre: string | null;
+  sub_genre: string | null;
   mood: string | null;
+  suitable_store: string | null;
+  lyrics: string | null;
   cover_url: string | null;
   audio_url: string;
   duration: number | null;
-  visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
-  rejected_reason: string | null;
   created_at: string;
 }
 
@@ -109,9 +143,13 @@ export interface UploadInput {
   explicit_content?: boolean;      // 0063
   instrumental?: boolean;          // 0063
   external_link?: string;
-  audioFile: File;
+  /** 신규 제출 시 필수. 재제출 (trackId) 시 새 파일 업로드만 옵션 */
+  audioFile?: File | null;
   coverFile?: File | null;
   trackId?: string | null;         // 0063 — 재제출 시 기존 ID
+  /** 재제출 시 기존 audio_url (새 파일 미업로드 시 그대로 유지) */
+  existingAudioUrl?: string | null;
+  existingCoverUrl?: string | null;
 }
 
 export interface UploadResult {
@@ -140,13 +178,32 @@ export async function fetchMyArtistProfile(userId: string): Promise<ArtistProfil
 }
 
 export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
-  try {
-    const { data, error } = await supabase.rpc('list_my_artist_tracks', { p_limit: 200 });
-    if (error) return [];
-    return (data ?? []) as MyArtistTrackRow[];
-  } catch {
+  // 0064: RLS tracks_select_owner 정책으로 본인 트랙 직접 조회 (release_* 컬럼 포함).
+  // 기존 list_my_artist_tracks RPC 는 release_status / changes_requested_reason 미반환이므로 우회.
+  const { data: sess } = await supabase.auth.getSession();
+  const uid = sess.session?.user?.id;
+  if (!uid) return [];
+  const { data, error } = await supabase
+    .from('tracks')
+    .select(
+      'id, track_code, title, artist, album_name, release_title, release_type, release_date, ' +
+        'release_status, audio_review_status, cover_review_status, metadata_review_status, ' +
+        'admin_review_note, changes_requested_reason, submission_version, submitted_at, ' +
+        'resubmitted_at, reviewed_at, approved_at, scheduled_at, released_at, ' +
+        'visibility_status, rejected_reason, rights_holder_name, isrc, explicit_content, ' +
+        'instrumental, genre, main_genre, sub_genre, mood, suitable_store, lyrics, ' +
+        'cover_url, audio_url, duration, created_at',
+    )
+    .eq('owner_user_id', uid)
+    .eq('source_type', 'artist_upload')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) {
+    if (import.meta.env.DEV) console.error('[fetchMyArtistTracks] failed:', error);
     return [];
   }
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>;
+  return rows.map((row) => ({ ...row, track_id: row.id })) as unknown as MyArtistTrackRow[];
 }
 
 /** 0062 — eligibility reasons 를 사용자에게 보일 한국어 메시지로 변환 */
@@ -196,57 +253,65 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   const userId = sess.session?.user?.id;
   if (!userId) return { ok: false, error: '로그인이 필요합니다' };
 
-  // 검증
-  const v = validateArtistAudioFile(input.audioFile);
-  if (!v.ok) return { ok: false, error: v.error };
+  // 검증 — 신규 업로드는 audioFile 필수. 재제출(trackId+existingAudioUrl)은 audioFile 옵션.
+  const isResubmit = !!input.trackId;
+  if (!isResubmit && !input.audioFile) {
+    return { ok: false, error: '음원 파일을 선택해주세요' };
+  }
+  if (input.audioFile) {
+    const v = validateArtistAudioFile(input.audioFile);
+    if (!v.ok) return { ok: false, error: v.error };
+  }
   if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
   if (!input.rightsConfirmed) {
     return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
   }
 
-  // 0062 — INSERT 전 eligibility 재확인 (RLS 차단 시 정확한 reason 노출)
   const eligibility = await fetchArtistUploadEligibility();
   if (!eligibility.can_upload) {
     return { ok: false, error: formatEligibilityError(eligibility.reasons) };
   }
 
-  // 아티스트 프로필 확인
   const profile = await fetchMyArtistProfile(userId);
   if (!profile || profile.approval_status !== 'approved') {
     return { ok: false, error: '승인된 아티스트만 업로드할 수 있습니다' };
   }
 
-  // 1) audio 업로드
-  const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
-  const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
+  // 1) audio 업로드 — 새 파일이 있을 때만
+  let audioUrl: string;
   const ts = Date.now();
-  const audioPath = `artist_uploads/${userId}/${ts}_${safeName}`;
+  if (input.audioFile) {
+    const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
+    const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
+    const audioPath = `artist_uploads/${userId}/${ts}_${safeName}`;
+    const mimeMap: Record<string, string> = {
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      wav: 'audio/wav',
+      flac: 'audio/flac',
+    };
+    const audioContentType =
+      mimeMap[audioExt] ?? input.audioFile.type ?? 'application/octet-stream';
+    const { error: audioUpErr } = await supabase.storage
+      .from('audio')
+      .upload(audioPath, input.audioFile, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType: audioContentType,
+      });
+    if (audioUpErr) return { ok: false, error: `오디오 업로드 실패: ${audioUpErr.message}` };
+    const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
+    audioUrl = audioPub.publicUrl;
+  } else {
+    // 재제출 — 기존 audio_url 유지
+    audioUrl = input.existingAudioUrl ?? '';
+    if (!audioUrl) return { ok: false, error: '기존 음원 URL 을 확인할 수 없어요' };
+  }
 
-  // 정규 MIME 강제
-  const mimeMap: Record<string, string> = {
-    mp3: 'audio/mpeg',
-    m4a: 'audio/mp4',
-    wav: 'audio/wav',
-    flac: 'audio/flac',
-  };
-  const audioContentType = mimeMap[audioExt] ?? input.audioFile.type ?? 'application/octet-stream';
-
-  const { error: audioUpErr } = await supabase.storage
-    .from('audio')
-    .upload(audioPath, input.audioFile, {
-      cacheControl: '31536000',
-      upsert: false,
-      contentType: audioContentType,
-    });
-  if (audioUpErr) return { ok: false, error: `오디오 업로드 실패: ${audioUpErr.message}` };
-
-  const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
-  const audioUrl = audioPub.publicUrl;
-
-  // 2) cover 업로드 (옵션)
-  let coverUrl: string | null = null;
+  // 2) cover 업로드 (옵션). 재제출 시 기존 cover 유지
+  let coverUrl: string | null = input.existingCoverUrl ?? null;
   if (input.coverFile) {
-    const coverExt = input.coverFile.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+    void input.coverFile.name.split('.').pop()?.toLowerCase();
     const coverSafe = input.coverFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
     const coverPath = `artist_uploads/${userId}/${ts}_cover_${coverSafe}`;
     const { error: coverUpErr } = await supabase.storage

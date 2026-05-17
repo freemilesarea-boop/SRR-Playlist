@@ -89,7 +89,10 @@ export async function fetchLikedIds(userId: string): Promise<string[]> {
 }
 
 export async function logRecentPlay(userId: string, playlistId: string) {
-  await supabase.from('recent_plays').insert({ user_id: userId, playlist_id: playlistId });
+  const { error } = await supabase
+    .from('recent_plays')
+    .insert({ user_id: userId, playlist_id: playlistId });
+  if (error && import.meta.env.DEV) console.error('[logRecentPlay] insert failed:', error);
 }
 
 export async function fetchRecentPlaylists(userId: string, limit = 12): Promise<PlaylistRow[]> {
