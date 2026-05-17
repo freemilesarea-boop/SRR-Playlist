@@ -155,11 +155,20 @@ export interface DispatchHealth {
     resend_api_key_first4?: string;
     resend_api_key_last4?: string;
     resend_from: string;
+    /** v5 — RESEND_FROM 이 fallback 인지 표시 */
+    resend_from_is_fallback?: boolean;
     resend_from_domain: string | null;
     app_public_url: string | null;
     supabase_url?: string;
     module_load_at?: string;
     now?: string;
+    /** v5 — runtime env 키 이름 목록 (값 X) + RESEND 유사 키 탐지 */
+    env_inspect?: {
+      all_keys: string[];
+      resend_like_keys: string[];
+      has_RESEND_API_KEY: boolean;
+      has_RESEND_FROM: boolean;
+    };
   };
   resend_domain: {
     domain: string | null;
