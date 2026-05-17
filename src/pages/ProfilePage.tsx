@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import { useThemeStore } from '@/store/themeStore';
 import {
@@ -248,12 +249,12 @@ function WithdrawConfirmModal({
               회원 탈퇴 시 계정 이용이 중단되며, 결제 및 정산 관련 기록은 관련 법령에 따라 보관될
               수 있어요.
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-yellow-200/90">
-              <strong>활성 구독</strong>이 있으면 먼저 구독을 취소하고 결제 기간이 종료된 후 탈퇴해
-              주세요.
-            </p>
           </div>
         </div>
+        <Alert tone="warning">
+          <strong>활성 구독</strong>이 있으면 먼저 구독을 취소하고 결제 기간이 종료된 후 탈퇴해
+          주세요.
+        </Alert>
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
             계속 이용하기

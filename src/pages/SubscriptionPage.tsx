@@ -11,6 +11,7 @@ import {
 } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import type { SubscriptionType } from '@/types/db';
+import Alert from '@/components/Alert';
 
 function fmtPeriodEnd(s: string | null | undefined): string {
   if (!s) return '결제 기간 종료일';
@@ -483,41 +484,32 @@ export default function SubscriptionPage() {
       </section>
 
       {/* 현재 구독 상태 + 취소 버튼 */}
-      {activeSub && (activeSub.status === 'active' || activeSub.status === 'cancel_scheduled') && (
-        <section
-          className={`space-y-2 rounded-2xl p-4 ring-1 ${
-            activeSub.status === 'cancel_scheduled'
-              ? 'bg-yellow-500/5 ring-yellow-500/30'
-              : 'bg-bg-card ring-line/10'
-          }`}
-        >
+      {activeSub && activeSub.status === 'cancel_scheduled' && (
+        <Alert tone="warning" title={`${activeSub.plan_type === 'business' ? '사업자' : '일반'} 구독 취소 예약됨`}>
+          <strong>{fmtPeriodEnd(activeSub.current_period_end)}</strong>까지 Premium 기능을 이용할 수
+          있어요. 이후 자동으로 무료 플랜으로 전환됩니다.
+        </Alert>
+      )}
+      {activeSub && activeSub.status === 'active' && (
+        <section className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
           <div className="flex items-baseline justify-between gap-2">
             <h3 className="text-sm font-bold">
               {activeSub.plan_type === 'business' ? '사업자' : '일반'} 구독
             </h3>
             <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-              {activeSub.status === 'cancel_scheduled' ? '취소 예약됨' : '이용 중'}
+              이용 중
             </span>
           </div>
-          {activeSub.status === 'cancel_scheduled' ? (
-            <p className="text-xs leading-relaxed text-yellow-200/90">
-              <strong>{fmtPeriodEnd(activeSub.current_period_end)}</strong>까지 Premium 기능을 이용할 수 있어요.
-              이후 자동으로 무료 플랜으로 전환됩니다.
-            </p>
-          ) : (
-            <>
-              <p className="text-xs leading-relaxed text-ink-mute">
-                다음 결제일:{' '}
-                <strong className="text-ink">{fmtPeriodEnd(activeSub.current_period_end)}</strong>
-              </p>
-              <button
-                onClick={() => setCancelModalOpen(true)}
-                className="mt-1 inline-flex items-center gap-1 rounded-md bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/20"
-              >
-                구독 취소
-              </button>
-            </>
-          )}
+          <p className="text-xs leading-relaxed text-ink-mute">
+            다음 결제일:{' '}
+            <strong className="text-ink">{fmtPeriodEnd(activeSub.current_period_end)}</strong>
+          </p>
+          <button
+            onClick={() => setCancelModalOpen(true)}
+            className="mt-1 inline-flex items-center gap-1 rounded-md bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600"
+          >
+            구독 취소
+          </button>
         </section>
       )}
 

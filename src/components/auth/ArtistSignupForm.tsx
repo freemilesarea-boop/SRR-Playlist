@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Mic2, CheckCircle2, UserCheck, AlertTriangle } from 'lucide-react';
+import { Mic2, CheckCircle2, UserCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
+import Alert, { inlineToneClass } from '@/components/Alert';
 
 interface Props {
   onDone: () => void;
@@ -301,19 +302,18 @@ export default function ArtistSignupForm({ onDone }: Props) {
             {salesAgent ? '확인됨' : salesAgentChecking ? '확인 중…' : '코드 확인'}
           </button>
         </div>
-        {salesAgentError && <p className="mt-1 text-[11px] text-red-300">{salesAgentError}</p>}
+        {salesAgentError && (
+          <p className={`mt-1 text-[11px] ${inlineToneClass.error}`}>{salesAgentError}</p>
+        )}
         {salesAgent && (
-          <p className="mt-1 text-[11px] text-emerald-300">
+          <p className={`mt-1 text-[11px] ${inlineToneClass.success}`}>
             담당 추천인: {salesAgent.name} ({salesAgent.code})
           </p>
         )}
       </Field>
-      <div className="flex items-start gap-2 rounded-xl bg-yellow-500/10 px-3 py-2 ring-1 ring-yellow-500/30">
-        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-yellow-300" />
-        <p className="text-xs leading-relaxed text-yellow-200/90">
-          추천인 코드 미입력 시 아티스트 승인이 거절될 수 있습니다.
-        </p>
-      </div>
+      <Alert tone="warning">
+        추천인 코드 미입력 시 아티스트 승인이 거절될 수 있습니다.
+      </Alert>
 
       <hr className="border-line/10" />
 
@@ -327,7 +327,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
         <input type="password" required minLength={6} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} autoComplete="new-password" className="input" />
       </Field>
 
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <Alert tone="error">{error}</Alert>}
 
       <button type="submit" disabled={busy} className="btn-primary w-full py-3">
         {busy ? '가입 중…' : '아티스트 회원가입 신청'}
