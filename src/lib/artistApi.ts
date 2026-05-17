@@ -144,6 +144,27 @@ export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
   }
 }
 
+/** 0062 — eligibility reasons 를 사용자에게 보일 한국어 메시지로 변환 */
+export function formatEligibilityError(reasons: string[]): string {
+  if (!reasons || reasons.length === 0) return '업로드 자격 미달';
+  const labels: Record<string, string> = {
+    login_required: '로그인이 필요해요',
+    not_artist: '아티스트 계정이 아니에요',
+    no_artist_profile: '아티스트 프로필이 없어요',
+    artist_not_approved: '아티스트 승인 대기 중 — 관리자 승인 후 가능',
+    approval_sync_broken:
+      '계정 상태 동기화 오류 — 관리자에게 문의해주세요 (artist_approval_status sync)',
+    no_paid_membership:
+      '음원 업로드는 월 4,900원 정기이용권(individual) 결제 후 가능해요',
+    no_signed_contract:
+      '음원 유통 계약서 서명이 필요해요 (마이페이지 → 아티스트 → 계약서)',
+    no_payout_account: '정산 계좌 등록이 필요해요',
+    payout_not_verified: '정산 계좌 승인 대기 중',
+  };
+  const msgs = reasons.map((r) => labels[r] ?? r);
+  return msgs.join(' / ');
+}
+
 /** 파일 확장자 검증 */
 const ALLOWED_AUDIO_EXT = ['mp3', 'wav', 'm4a', 'flac'];
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024; // 100MB
@@ -176,6 +197,12 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
   if (!input.rightsConfirmed) {
     return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
+  }
+
+  // 0062 — INSERT 전 eligibility 재확인 (RLS 차단 시 정확한 reason 노출)
+  const eligibility = await fetchArtistUploadEligibility();
+  if (!eligibility.can_upload) {
+    return { ok: false, error: formatEligibilityError(eligibility.reasons) };
   }
 
   // 아티스트 프로필 확인
@@ -274,6 +301,16 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     .single();
 
   if (trackErr) {
+    // RLS 차단인 경우 eligibility 재확인 후 정확한 reason 노출
+    if (trackErr.message.includes('row-level security') || trackErr.code === '42501') {
+      const recheck = await fetchArtistUploadEligibility();
+      if (!recheck.can_upload) {
+        return {
+          ok: false,
+          error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}`,
+        };
+      }
+    }
     return { ok: false, error: `트랙 저장 실패: ${trackErr.message}` };
   }
 
