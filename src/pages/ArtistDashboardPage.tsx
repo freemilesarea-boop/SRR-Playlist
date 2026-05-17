@@ -589,7 +589,11 @@ const SUITABLE_STORE_OPTIONS = [
 function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<void> }) {
   const [title, setTitle] = useState('');
   const [albumName, setAlbumName] = useState('');
+  const [releaseTitle, setReleaseTitle] = useState('');
   const [artistOverride, setArtistOverride] = useState('');
+  const [isrc, setIsrc] = useState('');
+  const [rightsHolderName, setRightsHolderName] = useState('');
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [mainGenre, setMainGenre] = useState('');
   const [subGenre, setSubGenre] = useState('');
   const [suitableStore, setSuitableStore] = useState('');
@@ -617,6 +621,7 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
     if (!subGenre.trim()) return '서브 장르를 입력해주세요';
     if (!suitableStore.trim()) return '어울리는 매장을 선택해주세요';
     if (!mood.trim()) return '곡 분위기를 입력해주세요';
+    if (!rightsConfirmed) return '권리 확인 체크박스를 동의해주세요';
     return null;
   }
 
@@ -632,6 +637,10 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
       const res = await uploadArtistTrack({
         title,
         album_name: albumName,
+        release_title: releaseTitle || albumName,
+        isrc: isrc || undefined,
+        rights_holder_name: rightsHolderName || undefined,
+        rightsConfirmed,
         artist: artistOverride || undefined,
         main_genre: mainGenre,
         sub_genre: subGenre,
@@ -645,10 +654,18 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         toast.error(res.error ?? '업로드 실패');
         return;
       }
-      toast.success('업로드 완료. 관리자 검수 후 공개됩니다.');
+      toast.success(
+        res.track_code
+          ? `업로드 완료 (${res.track_code}). 관리자 검수 후 공개됩니다.`
+          : '업로드 완료. 관리자 검수 후 공개됩니다.',
+      );
       setTitle('');
       setAlbumName('');
+      setReleaseTitle('');
       setArtistOverride('');
+      setIsrc('');
+      setRightsHolderName('');
+      setRightsConfirmed(false);
       setMainGenre('');
       setSubGenre('');
       setSuitableStore('');
@@ -742,11 +759,62 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         />
       </Field>
 
-      <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
+      {/* 0058 — 정산/권리 정보 */}
+      <hr className="border-line/10" />
+      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">
+        정산·권리 정보
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="발매명 (선택)" hint="비우면 앨범명 그대로 사용">
+          <input
+            type="text"
+            value={releaseTitle}
+            onChange={(e) => setReleaseTitle(e.target.value)}
+            className="input"
+            maxLength={120}
+            placeholder="예: 봄날의 EP"
+          />
+        </Field>
+        <Field label="ISRC (선택)" hint="대문자 12자리. 없으면 비워두세요">
+          <input
+            type="text"
+            value={isrc}
+            onChange={(e) => setIsrc(e.target.value.toUpperCase())}
+            className="input font-mono"
+            maxLength={15}
+            placeholder="예: KRA012600001"
+          />
+        </Field>
+      </div>
+      <Field label="권리자명" hint="비우면 가입 시 입력한 본명 사용">
+        <input
+          type="text"
+          value={rightsHolderName}
+          onChange={(e) => setRightsHolderName(e.target.value)}
+          className="input"
+          maxLength={120}
+          placeholder="예: 홍길동 또는 (주)회사명"
+        />
+      </Field>
+      <label className="flex items-start gap-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+        <input
+          type="checkbox"
+          checked={rightsConfirmed}
+          onChange={(e) => setRightsConfirmed(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-[12px] leading-relaxed">
+          본인은 업로드하는 음원에 대한 권리자이거나, 해당 음원을 유통 및 정산 받을 권한을
+          보유하고 있음을 <strong className="text-accent">확인합니다.</strong>
+        </span>
+      </label>
+
+      <button type="submit" disabled={busy || !rightsConfirmed} className="btn-primary w-full py-2.5">
         {busy ? '업로드 중…' : '업로드 신청'}
       </button>
       <p className="text-[11px] text-ink-dim">
         업로드된 음원은 <strong className="text-accent">관리자 검수</strong> 후 서비스에 노출됩니다.
+        정산용 트랙코드(SRR-TRK-...)는 업로드 시 자동 부여됩니다.
       </p>
     </form>
   );
