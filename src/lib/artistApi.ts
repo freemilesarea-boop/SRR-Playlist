@@ -402,8 +402,13 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       track_code: (row as { track_code?: string | null } | null)?.track_code ?? undefined,
     };
   } catch (e) {
-    const err = e as { message?: string; hint?: string; code?: string };
+    const err = e as { message?: string; hint?: string; details?: string; code?: string };
     const msg = err.message ?? String(e);
+    if (import.meta.env.DEV) {
+      console.error('[uploadArtistTrack] submit_artist_release failed:', {
+        code: err.code, message: err.message, details: err.details, hint: err.hint,
+      });
+    }
     // RLS 차단 → eligibility 재확인
     if (msg.includes('row-level security') || err.code === '42501') {
       const recheck = await fetchArtistUploadEligibility();
@@ -411,7 +416,16 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}` };
       }
     }
-    return { ok: false, error: err.hint ? `${msg} (${err.hint})` : msg };
+    // PostgREST 함수 호환성 문제 — overload/시그니처 불일치
+    if (err.code === 'PGRST203' || err.code === 'PGRST202') {
+      return {
+        ok: false,
+        error:
+          '음원 등록 함수 호출 실패 (서버 함수 시그니처 불일치). 잠시 후 다시 시도해주시고, 문제가 지속되면 관리자에게 문의해주세요.',
+      };
+    }
+    const tail = err.hint ?? err.details;
+    return { ok: false, error: tail ? `${msg} (${tail})` : msg };
   }
 }
 
