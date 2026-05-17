@@ -127,17 +127,25 @@ export default function BusinessSignupForm({ onDone }: Props) {
     }
     setBusy(true);
     try {
-      // 가입 직전 영업인 코드 재검증 — 입력했는데 검증 못 한 상태로 진입 방지
-      if (salesAgentCode.trim() && !salesAgent) {
-        const r = await verifySalesAgentCode(salesAgentCode.trim());
+      // 가입 직전 영업인 코드 재검증 — 검증 클릭 후 비활성화된 경우까지 차단.
+      // 검증된 캐시(salesAgent) 가 있어도 항상 최신 상태로 재조회한다.
+      let verifiedAgent = salesAgent;
+      const codeTrim = salesAgentCode.trim();
+      if (codeTrim) {
+        const r = await verifySalesAgentCode(codeTrim);
         if (!r) {
+          // 처음 검증 안 했거나, 이전에 활성이었다가 비활성화된 경우 모두 차단
+          setSalesAgent(null);
+          setSalesAgentError('유효하지 않은 영업인 코드입니다.');
           setError('유효하지 않은 영업인 코드입니다.');
           setBusy(false);
           return;
         }
+        verifiedAgent = r;
         setSalesAgent(r);
+      } else {
+        verifiedAgent = null;
       }
-      const verifiedAgent = salesAgent;
 
       // 0021 트리거가 user_metadata 를 읽어 public.users 자동 채움
       await signUpWithPassword(email.trim(), password, fullName.trim(), {
