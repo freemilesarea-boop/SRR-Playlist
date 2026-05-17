@@ -14,6 +14,8 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  /** 0078 — mute 직전 볼륨 (unmute 시 복원용) */
+  mutedVolume: number;
   shuffleOrder: number[];
   /** 세션 복원 직후 audio 가 loadedmetadata 될 때 적용할 seek 위치 (초). 한 번 소비 후 null. */
   pendingSeekSec: number | null;
@@ -28,9 +30,43 @@ interface PlayerState {
   setShuffle: (v: boolean) => void;
   setRepeat: (r: RepeatMode) => void;
   setVolume: (v: number) => void;
+  /** 0078 — 음소거 토글: muted 면 mutedVolume 으로 복원, 아니면 현재 볼륨 기억 후 0 */
+  toggleMute: () => void;
   setCurrentTime: (t: number) => void;
   setDuration: (d: number) => void;
   setPendingSeek: (sec: number | null) => void;
+}
+
+// 0078 — localStorage 영속화
+const VOLUME_KEY = 'srr.player.volume';
+const MUTED_VOL_KEY = 'srr.player.mutedVolume';
+
+function loadVolume(): number {
+  try {
+    const raw = localStorage.getItem(VOLUME_KEY);
+    if (raw === null) return 1;
+    const v = Number(raw);
+    if (Number.isFinite(v) && v >= 0 && v <= 1) return v;
+  } catch { /* */ }
+  return 1;
+}
+
+function loadMutedVolume(): number {
+  try {
+    const raw = localStorage.getItem(MUTED_VOL_KEY);
+    if (raw === null) return 1;
+    const v = Number(raw);
+    if (Number.isFinite(v) && v > 0 && v <= 1) return v;
+  } catch { /* */ }
+  return 1;
+}
+
+function saveVolume(v: number): void {
+  try { localStorage.setItem(VOLUME_KEY, String(v)); } catch { /* */ }
+}
+
+function saveMutedVolume(v: number): void {
+  try { localStorage.setItem(MUTED_VOL_KEY, String(v)); } catch { /* */ }
 }
 
 function buildShuffleOrder(len: number, startIndex: number): number[] {
@@ -51,7 +87,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeat: 'off',
   currentTime: 0,
   duration: 0,
-  volume: 1,
+  volume: loadVolume(),
+  mutedVolume: loadMutedVolume(),
   shuffleOrder: [],
   pendingSeekSec: null,
 
@@ -156,7 +193,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setRepeat: (r) => set({ repeat: r }),
-  setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)) }),
+  setVolume: (v) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    set({ volume: clamped });
+    saveVolume(clamped);
+    if (clamped > 0) {
+      set({ mutedVolume: clamped });
+      saveMutedVolume(clamped);
+    }
+  },
+
+  toggleMute: () => {
+    const { volume, mutedVolume } = get();
+    if (volume > 0) {
+      // mute: 현재 볼륨 기억 후 0
+      set({ mutedVolume: volume, volume: 0 });
+      saveMutedVolume(volume);
+      saveVolume(0);
+    } else {
+      // unmute: mutedVolume 으로 복원 (최소 0.1 보장)
+      const restored = mutedVolume > 0 ? mutedVolume : 1;
+      set({ volume: restored });
+      saveVolume(restored);
+    }
+  },
   setCurrentTime: (t) => set({ currentTime: t }),
   setDuration: (d) => set({ duration: d }),
   setPendingSeek: (sec) => set({ pendingSeekSec: sec }),
