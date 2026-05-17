@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Mic2 } from 'lucide-react';
+import { Mic2, CheckCircle2, UserCheck, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
 
 interface Props {
@@ -26,6 +27,11 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 추천인(영업인) 코드 — 선택. 입력 시 verify_sales_agent_code 로 검증
+  const [salesAgentCode, setSalesAgentCode] = useState('');
+  const [salesAgent, setSalesAgent] = useState<VerifiedSalesAgent | null>(null);
+  const [salesAgentError, setSalesAgentError] = useState<string | null>(null);
+  const [salesAgentChecking, setSalesAgentChecking] = useState(false);
 
   function validate(): string | null {
     if (!realName.trim()) return '이름을 입력해주세요';
@@ -33,10 +39,36 @@ export default function ArtistSignupForm({ onDone }: Props) {
     if (!artistName.trim()) return '아티스트명을 입력해주세요';
     if (phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않아요';
     if (!address.trim()) return '주소를 입력해주세요';
+    // 추천인 코드 입력 시 검증 필수 (미입력은 허용)
+    if (salesAgentCode.trim() && !salesAgent) {
+      return '유효하지 않은 추천인 코드입니다.';
+    }
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
     return null;
+  }
+
+  async function handleSalesAgentVerify() {
+    setSalesAgentError(null);
+    setSalesAgent(null);
+    const trimmed = salesAgentCode.trim();
+    if (!trimmed) return;
+    setSalesAgentChecking(true);
+    try {
+      const r = await verifySalesAgentCode(trimmed);
+      if (!r) {
+        setSalesAgentError('유효하지 않은 추천인 코드입니다.');
+        return;
+      }
+      setSalesAgent(r);
+    } catch (e) {
+      setSalesAgentError(
+        e instanceof Error ? `코드 확인에 실패했어요: ${e.message}` : '코드 확인에 실패했어요',
+      );
+    } finally {
+      setSalesAgentChecking(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -49,6 +81,24 @@ export default function ArtistSignupForm({ onDone }: Props) {
     }
     setBusy(true);
     try {
+      // 가입 직전 추천인 코드 재검증 — 검증 클릭 후 비활성화된 경우까지 차단.
+      let verifiedAgent = salesAgent;
+      const codeTrim = salesAgentCode.trim();
+      if (codeTrim) {
+        const r = await verifySalesAgentCode(codeTrim);
+        if (!r) {
+          setSalesAgent(null);
+          setSalesAgentError('유효하지 않은 추천인 코드입니다.');
+          setError('유효하지 않은 추천인 코드입니다.');
+          setBusy(false);
+          return;
+        }
+        verifiedAgent = r;
+        setSalesAgent(r);
+      } else {
+        verifiedAgent = null;
+      }
+
       // 0021 트리거가 user_metadata 를 읽어 public.users + artist_profiles 자동 생성.
       // 이메일 인증 ON / OFF 무관하게 atomic 처리됨.
       await signUpWithPassword(email.trim(), password, artistName.trim(), {
@@ -60,7 +110,9 @@ export default function ArtistSignupForm({ onDone }: Props) {
         artist_name: artistName.trim(),
       });
 
-      // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용
+      // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용.
+      // 추천인 코드는 profile.sales_agent_id/code 로 저장 → applyPendingSignupOnLogin
+      // 의 users.update 가 자동 동기화.
       try {
         localStorage.setItem(
           'srr-pending-signup',
@@ -75,6 +127,12 @@ export default function ArtistSignupForm({ onDone }: Props) {
               address: address.trim(),
               signup_completed: true,
               artist_approval_status: 'pending',
+              ...(verifiedAgent
+                ? {
+                    sales_agent_id: verifiedAgent.id,
+                    sales_agent_code: verifiedAgent.code,
+                  }
+                : {}),
             },
             artist: {
               real_name: realName.trim(),
@@ -98,6 +156,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
       let hasSession = false;
       if (sess.session?.user?.id) {
         hasSession = true;
+        const uid = sess.session.user.id;
         const { data: rpcRes, error: rpcErr } = await supabase.rpc(
           'submit_artist_signup_profile',
           {
@@ -109,13 +168,25 @@ export default function ArtistSignupForm({ onDone }: Props) {
             p_email: email.trim(),
           },
         );
+        // 추천인 연결 — RPC 시그니처 미수정. 별도 users.update 로 sales_agent 컬럼만 set
+        if (verifiedAgent) {
+          const { error: agErr } = await supabase
+            .from('users')
+            .update({
+              sales_agent_id: verifiedAgent.id,
+              sales_agent_code: verifiedAgent.code,
+            })
+            .eq('id', uid);
+          if (agErr && import.meta.env.DEV) {
+            console.warn('[artist-signup] sales_agent update failed:', agErr);
+          }
+        }
         // eslint-disable-next-line no-console
         console.log('[artist-signup] submit RPC:', { rpcRes, rpcErr });
         if (rpcErr) {
           // RPC 가 0024 미적용 등으로 없을 수도 있음 — fallback 으로 직접 upsert
           // eslint-disable-next-line no-console
           console.warn('[artist-signup] RPC 실패, 직접 upsert fallback:', rpcErr.message);
-          const uid = sess.session.user.id;
           const { error: uErr } = await supabase
             .from('users')
             .update({
@@ -198,6 +269,51 @@ export default function ArtistSignupForm({ onDone }: Props) {
       <Field label="주소 *">
         <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" className="input" />
       </Field>
+
+      {/* 추천인 코드 (선택, 미입력 시 승인 거절 가능 안내) */}
+      <hr className="border-line/10" />
+      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">추천인 코드</p>
+      <Field label="추천인 코드">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={salesAgentCode}
+            onChange={(e) => {
+              setSalesAgentCode(e.target.value);
+              setSalesAgent(null);
+              setSalesAgentError(null);
+            }}
+            placeholder="추천인 코드를 입력해주세요"
+            className="input flex-1"
+            autoCapitalize="characters"
+          />
+          <button
+            type="button"
+            onClick={handleSalesAgentVerify}
+            disabled={salesAgentChecking || !salesAgentCode.trim() || !!salesAgent}
+            className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
+              salesAgent
+                ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
+                : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
+            }`}
+          >
+            {salesAgent ? <CheckCircle2 size={14} /> : <UserCheck size={14} />}
+            {salesAgent ? '확인됨' : salesAgentChecking ? '확인 중…' : '코드 확인'}
+          </button>
+        </div>
+        {salesAgentError && <p className="mt-1 text-[11px] text-red-300">{salesAgentError}</p>}
+        {salesAgent && (
+          <p className="mt-1 text-[11px] text-emerald-300">
+            담당 추천인: {salesAgent.name} ({salesAgent.code})
+          </p>
+        )}
+      </Field>
+      <div className="flex items-start gap-2 rounded-xl bg-yellow-500/10 px-3 py-2 ring-1 ring-yellow-500/30">
+        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-yellow-300" />
+        <p className="text-xs leading-relaxed text-yellow-200/90">
+          추천인 코드 미입력 시 아티스트 승인이 거절될 수 있습니다.
+        </p>
+      </div>
 
       <hr className="border-line/10" />
 
