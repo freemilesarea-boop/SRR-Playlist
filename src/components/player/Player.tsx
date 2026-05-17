@@ -615,9 +615,17 @@ export default function Player() {
     const last = recentErrorToasts.get(dedupKey);
     if (!last || now - last >= TOAST_DEDUP_MS) {
       recentErrorToasts.set(dedupKey, now);
+      // 0077 — route-aware 메시지: admin/artist 화면이면 운영자용 상세 / 그 외 public 은 짧게
+      const path = typeof window !== 'undefined' ? window.location.pathname : '';
+      const isOperatorContext = /^\/(admin|artist)/.test(path);
       if (isPermanent) {
-        // 일반 사용자용 짧은 메시지. 운영자/아티스트용 상세 문구는 admin/artist 화면에서.
-        toast.error('이 음원을 재생할 수 없습니다. 다음 곡을 선택해주세요.');
+        if (isOperatorContext) {
+          toast.error(
+            `이 음원은 브라우저에서 재생할 수 없는 파일 형식이거나 업로드 중 문제가 발생했습니다. 재업로드 후 재검수가 필요합니다. [${codeName}]`,
+          );
+        } else {
+          toast.error('이 음원을 재생할 수 없습니다. 다른 곡을 선택해주세요.');
+        }
       } else {
         toast.error(`재생 실패 (${codeName})`);
       }
