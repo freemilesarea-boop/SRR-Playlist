@@ -2,19 +2,20 @@
 //
 // 계약 서명 후 호출되어 contract_email_jobs 의 pending 항목을 Resend 로 발송.
 //
-// 호출 방식:
-//   POST /dispatch-contract-emails
-//   Authorization: Bearer <user_jwt>
-//   Body: { contract_id: uuid }
+// 엔드포인트:
+//   POST /dispatch-contract-emails        — 메일 발송 실행 (body: { contract_id })
+//   POST /dispatch-contract-emails        — 환경 점검 (body: { health: true })
 //
 // 권한:
 //   - 본인 계약 서명자 (artist_user_id == auth.uid()) 또는 admin
 //   - 그 외는 401/403
+//   - health 체크는 admin only
 //
 // 발송 결과:
 //   - 각 job 별 mark_contract_email_sent / mark_contract_email_failed 호출
 //   - 계약 자체 (artist_contracts.status='signed') 는 절대 rollback 안 함
-//   - Resend 실패한 job 은 status='failed' + last_error 기록 — 관리자 재발송 가능
+//   - Resend 실패 시 status_code, raw response 일부, message 모두 last_error 에 보존
+//   - 모든 status 전이는 contract_email_job_events 에 trigger 로 자동 기록
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -27,6 +28,7 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
 const RESEND_FROM =
   Deno.env.get('RESEND_FROM') ?? 'SRR Playlist <no-reply@srr-playlist.app>';
+const APP_PUBLIC_URL = Deno.env.get('APP_PUBLIC_URL') ?? '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,11 +74,19 @@ function escapeHtml(s: string): string {
 
 function fmtDateTimeKR(iso: string): string {
   try {
-    const d = new Date(iso);
-    return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
   } catch {
     return iso;
   }
+}
+
+/** "Name <addr@domain>" 또는 "addr@domain" 에서 domain 추출 */
+function extractFromDomain(from: string): string | null {
+  const m = from.match(/<([^>]+)>/);
+  const email = m ? m[1] : from.trim();
+  const at = email.lastIndexOf('@');
+  if (at < 0) return null;
+  return email.slice(at + 1).toLowerCase();
 }
 
 function buildHtml(job: PendingJob, appUrl: string): string {
@@ -135,11 +145,25 @@ function buildHtml(job: PendingJob, appUrl: string): string {
 </body></html>`;
 }
 
-async function sendOne(job: PendingJob, appUrl: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+interface SendResult {
+  ok: boolean;
+  id?: string;
+  error?: string;
+  status_code?: number;
+  raw?: string;
+}
+
+async function sendOne(job: PendingJob, appUrl: string): Promise<SendResult> {
   if (!RESEND_API_KEY) {
     return { ok: false, error: 'RESEND_API_KEY not configured' };
   }
   const html = buildHtml(job, appUrl);
+  const payload = {
+    from: RESEND_FROM,
+    to: [job.recipient_email],
+    subject: job.subject,
+    html,
+  };
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -147,23 +171,102 @@ async function sendOne(job: PendingJob, appUrl: string): Promise<{ ok: true; id:
         Authorization: `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: [job.recipient_email],
-        subject: job.subject,
-        html,
-      }),
+      body: JSON.stringify(payload),
     });
-    const data = await res.json().catch(() => ({}));
+    const raw = await res.text();
+    let data: any = null;
+    try { data = JSON.parse(raw); } catch { /* non-json */ }
     if (!res.ok) {
       const errMsg =
         (data && (data.message || data.error || data.name)) ||
         `HTTP ${res.status}`;
-      return { ok: false, error: String(errMsg).slice(0, 1500) };
+      console.error('[dispatch] Resend error:', {
+        status: res.status,
+        body: raw.slice(0, 800),
+        to: job.recipient_email,
+        kind: job.recipient_kind,
+        job_id: job.job_id,
+      });
+      return {
+        ok: false,
+        error: `[${res.status}] ${String(errMsg)}`.slice(0, 1500),
+        status_code: res.status,
+        raw: raw.slice(0, 800),
+      };
     }
-    return { ok: true, id: (data && (data.id || data.message_id)) ?? '' };
+    const id = data?.id ?? data?.message_id ?? '';
+    console.log('[dispatch] Resend sent:', {
+      to: job.recipient_email,
+      kind: job.recipient_kind,
+      provider_message_id: id,
+      job_id: job.job_id,
+    });
+    return { ok: true, id, status_code: res.status, raw: raw.slice(0, 400) };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[dispatch] fetch threw:', { msg, to: job.recipient_email });
+    return { ok: false, error: msg };
+  }
+}
+
+interface EnvCheck {
+  resend_api_key_set: boolean;
+  resend_from: string;
+  resend_from_domain: string | null;
+  app_public_url: string | null;
+}
+
+function envCheck(): EnvCheck {
+  return {
+    resend_api_key_set: !!RESEND_API_KEY && RESEND_API_KEY.length > 0,
+    resend_from: RESEND_FROM,
+    resend_from_domain: extractFromDomain(RESEND_FROM),
+    app_public_url: APP_PUBLIC_URL || null,
+  };
+}
+
+/** Resend API 로 from 도메인 verification 상태 조회. 실패 시 null. */
+async function checkResendDomain(): Promise<{
+  domain: string | null;
+  status: string | null;
+  region: string | null;
+  error?: string;
+}> {
+  const domain = extractFromDomain(RESEND_FROM);
+  if (!RESEND_API_KEY) return { domain, status: null, region: null, error: 'no_api_key' };
+  if (!domain) return { domain: null, status: null, region: null, error: 'no_from_domain' };
+  try {
+    const res = await fetch('https://api.resend.com/domains', {
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+    });
+    const raw = await res.text();
+    if (!res.ok) {
+      return { domain, status: null, region: null, error: `resend_list_${res.status}` };
+    }
+    const data = JSON.parse(raw);
+    const list: any[] = data?.data ?? data ?? [];
+    const match = Array.isArray(list)
+      ? list.find((d: any) => (d?.name || '').toLowerCase() === domain)
+      : null;
+    if (!match) {
+      // resend.dev 같은 sandbox 도메인은 도메인 목록에 안 잡혀도 정상 동작 — 별도 처리
+      if (domain.endsWith('resend.dev')) {
+        return { domain, status: 'sandbox', region: null };
+      }
+      return { domain, status: 'not_registered', region: null };
+    }
+    return {
+      domain,
+      status: String(match.status ?? 'unknown'),
+      region: match.region ?? null,
+    };
+  } catch (e) {
+    return {
+      domain,
+      status: null,
+      region: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
@@ -183,25 +286,56 @@ serve(async (req) => {
   if (!userRes?.user) return json({ error: 'unauthorized' }, 401);
   const user = userRes.user;
 
-  let body: { contract_id?: string } = {};
+  let body: { contract_id?: string; health?: boolean } = {};
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid body' }, 400);
   }
-  const contractId = body.contract_id;
-  if (!contractId) return json({ error: 'missing contract_id' }, 400);
 
-  // 권한: 본인 계약 또는 admin
   const sbAdmin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false },
   });
+
+  // ============================================
+  // Health check 분기 (admin only)
+  // ============================================
+  if (body.health) {
+    const { data: u } = await sbAdmin
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!u || (u as any).role !== 'admin') {
+      return json({ error: 'forbidden' }, 403);
+    }
+    const env = envCheck();
+    const domainCheck = await checkResendDomain();
+    return json({
+      ok: true,
+      env,
+      resend_domain: domainCheck,
+      ready:
+        env.resend_api_key_set &&
+        (domainCheck.status === 'verified' || domainCheck.status === 'sandbox'),
+    });
+  }
+
+  // ============================================
+  // 일반 발송 분기
+  // ============================================
+  const contractId = body.contract_id;
+  if (!contractId) return json({ error: 'missing contract_id' }, 400);
+
   const { data: contract, error: cErr } = await sbAdmin
     .from('artist_contracts')
     .select('id, artist_user_id, status')
     .eq('id', contractId)
     .maybeSingle();
-  if (cErr || !contract) return json({ error: 'contract not found' }, 404);
+  if (cErr || !contract) {
+    console.error('[dispatch] contract lookup failed:', { contractId, cErr });
+    return json({ error: 'contract not found' }, 404);
+  }
   if (contract.artist_user_id !== user.id) {
     const { data: u } = await sbAdmin
       .from('users')
@@ -216,36 +350,71 @@ serve(async (req) => {
     return json({ error: `contract not signed (status=${contract.status})` }, 400);
   }
 
-  // pending jobs 조회 (service_role)
   const { data: jobs, error: jErr } = await sbAdmin.rpc(
     'get_pending_contract_email_jobs',
     { p_contract_id: contractId, p_limit: 50 },
   );
-  if (jErr) return json({ error: jErr.message }, 500);
+  if (jErr) {
+    console.error('[dispatch] get_pending failed:', jErr);
+    return json({ error: jErr.message }, 500);
+  }
   const pending = (jobs ?? []) as PendingJob[];
 
   if (pending.length === 0) {
     return json({ ok: true, processed: 0, message: 'no pending jobs' });
   }
 
-  // 앱 URL 결정 (origin 헤더 우선, 없으면 환경변수, 둘 다 없으면 fallback)
   const origin = req.headers.get('origin') ?? '';
   const appUrl =
     origin && /^https?:\/\//.test(origin)
       ? origin
-      : Deno.env.get('APP_PUBLIC_URL') ?? 'https://srr-playlist.app';
+      : APP_PUBLIC_URL || 'https://srr-playlist.app';
+
+  // 환경 미설정 시 빠른 실패 — 모든 job 을 일괄 failed 로 마킹하고 명확한 에러 반환
+  if (!RESEND_API_KEY) {
+    console.error('[dispatch] RESEND_API_KEY not configured — failing all pending jobs');
+    for (const job of pending) {
+      await sbAdmin.rpc('lock_contract_email_job', { p_job_id: job.job_id });
+      await sbAdmin.rpc('mark_contract_email_failed', {
+        p_job_id: job.job_id,
+        p_error: 'RESEND_API_KEY not configured on Edge Function',
+      });
+    }
+    return json(
+      {
+        ok: false,
+        error: 'RESEND_API_KEY not configured',
+        processed: pending.length,
+        sent: 0,
+        failed: pending.length,
+      },
+      503,
+    );
+  }
+
+  console.log('[dispatch] starting', {
+    contract_id: contractId,
+    pending_count: pending.length,
+    from: RESEND_FROM,
+    app_url: appUrl,
+  });
 
   let sent = 0;
   let failed = 0;
-  const results: Array<{ job_id: string; ok: boolean; error?: string }> = [];
+  const results: Array<{
+    job_id: string;
+    ok: boolean;
+    to?: string;
+    error?: string;
+    provider_message_id?: string;
+    status_code?: number;
+  }> = [];
 
   for (const job of pending) {
-    // lock — race 방지 (다른 호출이 동시에 처리 시 한쪽만 진행)
     const { data: lockedData } = await sbAdmin.rpc('lock_contract_email_job', {
       p_job_id: job.job_id,
     });
-    const locked = lockedData === true;
-    if (!locked) {
+    if (lockedData !== true) {
       results.push({ job_id: job.job_id, ok: false, error: 'already locked' });
       continue;
     }
@@ -256,16 +425,43 @@ serve(async (req) => {
         p_provider_message_id: r.id || null,
       });
       sent++;
-      results.push({ job_id: job.job_id, ok: true });
+      results.push({
+        job_id: job.job_id,
+        ok: true,
+        to: job.recipient_email,
+        provider_message_id: r.id,
+        status_code: r.status_code,
+      });
     } else {
+      const errBody = r.status_code
+        ? `${r.error}${r.raw ? ' | ' + r.raw.slice(0, 200) : ''}`
+        : r.error || 'unknown';
       await sbAdmin.rpc('mark_contract_email_failed', {
         p_job_id: job.job_id,
-        p_error: r.error,
+        p_error: errBody,
       });
       failed++;
-      results.push({ job_id: job.job_id, ok: false, error: r.error });
+      results.push({
+        job_id: job.job_id,
+        ok: false,
+        to: job.recipient_email,
+        error: r.error,
+        status_code: r.status_code,
+      });
     }
   }
 
-  return json({ ok: true, processed: pending.length, sent, failed, results });
+  console.log('[dispatch] done', {
+    contract_id: contractId,
+    sent,
+    failed,
+  });
+
+  return json({
+    ok: failed === 0,
+    processed: pending.length,
+    sent,
+    failed,
+    results,
+  });
 });

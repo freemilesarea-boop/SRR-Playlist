@@ -4,14 +4,18 @@ import {
   adminListContracts,
   adminCreateContract,
   adminListContractEmailJobs,
+  adminListContractEmailEvents,
   adminRequeueContractEmails,
   dispatchContractEmails,
+  checkDispatchHealth,
   ARTIST_CONTRACT_V1_BODY,
   ARTIST_CONTRACT_V1_VERSION,
   ARTIST_CONTRACT_V1_TITLE,
   type AdminContractRow,
   type ContractStatus,
   type ContractEmailJob,
+  type ContractEmailEvent,
+  type DispatchHealth,
 } from '@/lib/artistContractApi';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
@@ -53,6 +57,7 @@ export default function ArtistContractsList() {
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [detailRow, setDetailRow] = useState<AdminContractRow | null>(null);
+  const [health, setHealth] = useState<DispatchHealth | { ok: false; error: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -77,6 +82,14 @@ export default function ArtistContractsList() {
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // 메일 환경설정 health check (mount 시 1회)
+  useEffect(() => {
+    void (async () => {
+      const h = await checkDispatchHealth();
+      setHealth(h);
+    })();
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -104,6 +117,8 @@ export default function ArtistContractsList() {
       </div>
 
       {error && <Alert tone="error" title="계약 목록 조회 실패">{error}</Alert>}
+
+      <DispatchHealthBanner health={health} onRecheck={async () => setHealth(await checkDispatchHealth())} />
 
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -393,16 +408,22 @@ function CreateContractModal({
 // ============================================
 function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose: () => void }) {
   const [emailJobs, setEmailJobs] = useState<ContractEmailJob[] | null>(null);
+  const [emailEvents, setEmailEvents] = useState<ContractEmailEvent[] | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
   const [emailErr, setEmailErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
 
   async function loadJobs() {
     setEmailLoading(true);
     setEmailErr(null);
     try {
-      const jobs = await adminListContractEmailJobs(row.id);
+      const [jobs, events] = await Promise.all([
+        adminListContractEmailJobs(row.id),
+        adminListContractEmailEvents(row.id).catch(() => []),
+      ]);
       setEmailJobs(jobs);
+      setEmailEvents(events);
     } catch (e) {
       setEmailErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -523,6 +544,14 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
                         {j.sent_at && (
                           <span className="text-ink-dim">완료: {fmtDate(j.sent_at)}</span>
                         )}
+                        {j.provider_message_id && (
+                          <span
+                            className="font-mono text-[10px] text-ink-dim"
+                            title={j.provider_message_id}
+                          >
+                            id: {j.provider_message_id.slice(0, 8)}…
+                          </span>
+                        )}
                         {j.last_error && (
                           <p className="basis-full text-[10px] leading-snug text-red-700 dark:text-red-300">
                             {j.last_error}
@@ -532,6 +561,44 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
                     ))}
                   </ul>
                 )
+              )}
+
+              {emailEvents && emailEvents.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEvents((v) => !v)}
+                    className="text-[11px] font-semibold text-ink-mute hover:text-ink"
+                  >
+                    {showEvents ? '▼' : '▶'} 상태 전이 로그 ({emailEvents.length})
+                  </button>
+                  {showEvents && (
+                    <ul className="mt-1 space-y-0.5 rounded-lg bg-bg-card p-2 text-[10px] ring-1 ring-line/10">
+                      {emailEvents.map((e) => (
+                        <li
+                          key={e.event_id}
+                          className="flex flex-wrap items-center gap-1.5 font-mono"
+                        >
+                          <span className="text-ink-dim">
+                            {new Date(e.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                          </span>
+                          <span className="text-ink">
+                            {(e.from_status ?? '∅')} → {e.to_status}
+                          </span>
+                          <span className="text-ink-mute">{e.recipient_email}</span>
+                          {e.attempts != null && (
+                            <span className="text-ink-dim">attempts={e.attempts}</span>
+                          )}
+                          {e.error && (
+                            <p className="basis-full pl-2 text-red-700 dark:text-red-300">
+                              {e.error}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </section>
           )}
@@ -543,6 +610,89 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
         </div>
       </div>
     </div>
+  );
+}
+
+function DispatchHealthBanner({
+  health,
+  onRecheck,
+}: {
+  health: DispatchHealth | { ok: false; error: string } | null;
+  onRecheck: () => void | Promise<void>;
+}) {
+  if (!health) {
+    return (
+      <Alert tone="info">
+        메일 발송 환경 점검 중…
+      </Alert>
+    );
+  }
+  if (!('env' in health)) {
+    // 호출 자체 실패 (네트워크 / 권한)
+    return (
+      <Alert tone="error" title="발송 환경 점검 실패">
+        <p>{health.error}</p>
+        <button
+          type="button"
+          onClick={() => void onRecheck()}
+          className="mt-1 inline-flex rounded bg-bg-card px-2 py-0.5 text-[11px] font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
+        >
+          다시 점검
+        </button>
+      </Alert>
+    );
+  }
+  if (health.ready) {
+    return (
+      <Alert tone="success" title="메일 발송 준비 완료">
+        <p>
+          Resend FROM: <span className="font-mono">{health.env.resend_from}</span>
+          {' · '}
+          도메인:{' '}
+          <span className="font-mono">
+            {health.resend_domain.domain ?? '—'} ({health.resend_domain.status ?? '—'})
+          </span>
+        </p>
+      </Alert>
+    );
+  }
+  // 미준비
+  const reasons: string[] = [];
+  if (!health.env.resend_api_key_set) reasons.push('RESEND_API_KEY 미설정');
+  if (
+    health.env.resend_from_domain &&
+    health.resend_domain.status &&
+    health.resend_domain.status !== 'verified' &&
+    health.resend_domain.status !== 'sandbox'
+  ) {
+    reasons.push(
+      `FROM 도메인 ${health.env.resend_from_domain} verify 미완료 (status=${health.resend_domain.status})`,
+    );
+  }
+  if (health.resend_domain.error) {
+    reasons.push(`Resend API 오류: ${health.resend_domain.error}`);
+  }
+  return (
+    <Alert tone="warning" title="메일 발송 환경 미준비 — 발송이 실패할 수 있어요">
+      <ul className="ml-4 list-disc space-y-0.5">
+        {reasons.map((r, i) => (
+          <li key={i}>{r}</li>
+        ))}
+        {reasons.length === 0 && <li>알 수 없는 사유. Resend 상태를 확인하세요.</li>}
+      </ul>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void onRecheck()}
+          className="inline-flex rounded bg-bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
+        >
+          다시 점검
+        </button>
+        <span className="text-[11px] text-ink-mute">
+          Supabase Edge Function secrets 에 RESEND_API_KEY / RESEND_FROM 을 설정한 뒤 다시 점검을 눌러주세요.
+        </span>
+      </div>
+    </Alert>
   );
 }
 

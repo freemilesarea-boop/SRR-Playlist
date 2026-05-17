@@ -114,6 +114,58 @@ export async function adminRequeueContractEmails(
   return (data as number) ?? 0;
 }
 
+export interface ContractEmailEvent {
+  event_id: number;
+  job_id: string;
+  recipient_email: string;
+  from_status: string | null;
+  to_status: string;
+  attempts: number | null;
+  error: string | null;
+  provider_message_id: string | null;
+  at: string;
+}
+
+export async function adminListContractEmailEvents(
+  contractId: string,
+): Promise<ContractEmailEvent[]> {
+  const { data, error } = await supabase.rpc('admin_list_contract_email_events', {
+    p_contract_id: contractId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ContractEmailEvent[];
+}
+
+export interface DispatchHealth {
+  ok: boolean;
+  ready: boolean;
+  env: {
+    resend_api_key_set: boolean;
+    resend_from: string;
+    resend_from_domain: string | null;
+    app_public_url: string | null;
+  };
+  resend_domain: {
+    domain: string | null;
+    status: string | null;
+    region: string | null;
+    error?: string;
+  };
+}
+
+/** admin only — Edge Function 환경설정 + Resend 도메인 verification 상태 점검 */
+export async function checkDispatchHealth(): Promise<DispatchHealth | { ok: false; error: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('dispatch-contract-emails', {
+      body: { health: true },
+    });
+    if (error) return { ok: false, error: error.message };
+    return (data ?? { ok: false, error: 'no data' }) as DispatchHealth;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function signMyContract(
   contractId: string,
   meta?: { ip?: string | null; userAgent?: string | null },
