@@ -34,11 +34,37 @@ export default function ArtistContractPage() {
       // 0068 — 본인 계약이 없으면 (승인+결제 완료 아티스트는) 자동 발행 시도
       if (!c) {
         try {
-          await ensureMyContract();
+          // 항상 출력 (production 운영 진단). 실패 사유를 사용자에게도 노출.
+          // eslint-disable-next-line no-console
+          console.log('[contract] no row found — calling ensure_artist_contract_for_user');
+          const id = await ensureMyContract();
+          // eslint-disable-next-line no-console
+          console.log('[contract] ensure returned contract_id:', id);
           c = await fetchMyContract();
+          if (!c) {
+            // ensure 가 id 를 반환했는데 fetchMyContract 가 빈 결과면 RLS / RPC 캐시 등 환경 문제
+            // eslint-disable-next-line no-console
+            console.warn('[contract] ensure ok but fetchMyContract still null. id=', id);
+          }
         } catch (ensureErr) {
-          // 게이트 미통과 (not approved / not paid 등) — 조용히 폴백, UI 는 기존 미발급 상태 표시
-          if (import.meta.env.DEV) console.debug('[contract] ensure skipped:', ensureErr);
+          const err = ensureErr as { code?: string; message?: string; details?: string; hint?: string };
+          // eslint-disable-next-line no-console
+          console.error('[contract] ensure_artist_contract_for_user failed:', {
+            code: err.code, message: err.message, details: err.details, hint: err.hint,
+          });
+          // 게이트 미통과 사유를 사용자에게 명확히 안내
+          const msg = err.message ?? String(ensureErr);
+          if (/not approved/i.test(msg)) {
+            setError('아티스트 승인이 완료된 후 계약서를 발행할 수 있어요. (관리자 승인 대기)');
+          } else if (/not paid/i.test(msg) || /tier=/i.test(msg)) {
+            setError('월 4,900원 정기이용권(individual) 결제 완료 후 계약서를 발행할 수 있어요.');
+          } else if (/not artist/i.test(msg)) {
+            setError('아티스트 계정이 아니에요.');
+          } else if (/no active contract template/i.test(msg)) {
+            setError('서버에 활성 계약서 템플릿이 없습니다. 관리자에게 문의해주세요.');
+          } else {
+            setError(`계약서 자동 발행 실패 — ${msg}`);
+          }
         }
       }
       setContract(c);
@@ -123,12 +149,29 @@ export default function ArtistContractPage() {
       {loading ? (
         <p className="py-12 text-center text-sm text-ink-mute">불러오는 중…</p>
       ) : error ? (
-        <Alert tone="error" title="계약서 조회 실패">{error}</Alert>
+        <div className="space-y-2">
+          <Alert tone="error" title="계약서 자동 발행 실패">{error}</Alert>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-lg bg-bg-card px-3 py-1.5 text-xs font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
+          >
+            다시 시도
+          </button>
+        </div>
       ) : !contract ? (
-        <Alert tone="info" title="아직 계약서가 발행되지 않았어요">
-          관리자가 회원님 계약서를 생성하면 이 화면에서 본문을 확인하고 동의할 수 있어요.
-          승인 + 결제 완료 후 보통 1영업일 내 발행됩니다.
-        </Alert>
+        <div className="space-y-2">
+          <Alert tone="info" title="계약서 발행 대기">
+            계약서가 자동 발행되지 않았어요. 아래 버튼을 눌러 재시도해주세요. (승인+결제 완료 후 가능)
+          </Alert>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="btn-primary inline-flex px-4 py-2 text-sm"
+          >
+            계약서 자동 발행 재시도
+          </button>
+        </div>
       ) : (
         <ContractView
           contract={contract}
