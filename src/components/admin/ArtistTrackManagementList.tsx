@@ -24,17 +24,33 @@ function fmtDate(s: string | null | undefined): string {
 }
 
 const STATUS_TONE: Record<string, string> = {
+  // visibility_status
   pending_review: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
   approved: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
   rejected: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
   hidden: 'bg-ink/10 text-ink-dim',
+  // 0075 — release_status 톤
+  draft: 'bg-ink/10 text-ink-dim',
+  submitted: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  changes_requested: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  scheduled: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
+  released: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+  removed: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
 };
 
 const STATUS_LABEL: Record<string, string> = {
+  // visibility_status (fallback)
   pending_review: '심사 대기',
   approved: '승인됨',
   rejected: '거절됨',
   hidden: '숨김',
+  // 0075 — release_status (사용자 정의 명칭)
+  draft: '초안',
+  submitted: '검수 대기',
+  changes_requested: '수정 요청',
+  scheduled: '발매 예약',
+  released: '공개 중',
+  removed: '제거됨',
 };
 
 const PAYOUT_TONE: Record<string, string> = {
@@ -235,14 +251,35 @@ export default function ArtistTrackManagementList() {
                       <code className="font-mono text-[11px]">{r.isrc ?? '—'}</code>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.visibility_status] ?? STATUS_TONE.hidden}`}
-                      >
-                        {STATUS_LABEL[r.visibility_status] ?? r.visibility_status}
-                      </span>
+                      {/* 0075 — release_status 를 주 상태로 표시. hidden 인 경우 별도 표기 */}
+                      {(() => {
+                        const primary = r.release_status ?? r.visibility_status;
+                        const tone = STATUS_TONE[primary] ?? STATUS_TONE.hidden;
+                        const label = STATUS_LABEL[primary] ?? primary;
+                        return (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
+                      {r.visibility_status === 'hidden' && r.release_status === 'released' && (
+                        <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink-dim">
+                          숨김
+                        </span>
+                      )}
+                      {r.release_date && (
+                        <p className="mt-1 text-[10px] text-ink-mute">
+                          발매일 {fmtDate(r.release_date)}
+                        </p>
+                      )}
                       {r.rejected_reason && (
                         <p className="mt-1 text-[10px] text-red-700 dark:text-red-300">
                           {r.rejected_reason}
+                        </p>
+                      )}
+                      {r.removed_reason && (
+                        <p className="mt-1 text-[10px] text-red-700 dark:text-red-300">
+                          제거 사유: {r.removed_reason}
                         </p>
                       )}
                     </td>
