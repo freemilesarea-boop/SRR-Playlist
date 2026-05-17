@@ -32,7 +32,7 @@ import {
   type PayoutAccount,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
-import { CreditCard, Wallet } from 'lucide-react';
+import { CreditCard, Wallet, FileSignature } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
@@ -247,6 +247,14 @@ function UploadGate({
     return <PaymentRequiredCard userEmail={userEmail} />;
   }
 
+  // 계약 단계 게이트 (0057). RPC 결과가 없는 환경(0057 미적용)에서는 통과 처리.
+  if (
+    eligibility.has_signed_contract === false ||
+    (eligibility.contract_status && eligibility.contract_status !== 'signed')
+  ) {
+    return <ContractRequiredCard contractStatus={eligibility.contract_status ?? 'not_created'} />;
+  }
+
   // 결제 완료 — 정산 계좌가 verified 가 아니면 무조건 등록/대기 섹션을 보여준다.
   // payout 상태가 단일 진실의 원천 (RPC 실패에 영향받지 않음).
   const isPayoutVerified = payout?.verification_status === 'verified';
@@ -289,6 +297,60 @@ function maskAccountNumber(num: string): string {
   const tail = cleaned.slice(-3);
   const middle = '*'.repeat(Math.max(cleaned.length - 6, 1));
   return `${head}${middle}${tail}`;
+}
+
+function ContractRequiredCard({
+  contractStatus,
+}: {
+  contractStatus: 'not_created' | 'pending_signature' | 'signed' | 'rejected' | 'expired';
+}) {
+  const titleByStatus: Record<typeof contractStatus, string> = {
+    not_created: '계약서 발행 대기 중',
+    pending_signature: '계약서 서명이 필요해요',
+    signed: '계약 완료',
+    rejected: '계약이 거절됐어요',
+    expired: '계약 서명 기한이 만료됐어요',
+  };
+  const bodyByStatus: Record<typeof contractStatus, string> = {
+    not_created:
+      '결제는 완료됐어요. 관리자가 계약서를 발행하면 이 화면에 알림이 표시되고 서명할 수 있어요. 보통 1영업일 내 발행됩니다.',
+    pending_signature:
+      '계약서가 발행됐어요. 본문을 확인하고 동의·서명을 완료하면 음원 등록 단계로 진행할 수 있어요.',
+    signed: '서명 완료. 다음 단계로 이동하는 중…',
+    rejected:
+      '이전 계약을 거절하셨어요. 음원 등록을 진행하려면 관리자에게 재발행을 요청해주세요.',
+    expired:
+      '계약 서명 기한이 만료됐어요. 관리자에게 재발행을 요청해주세요.',
+  };
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+          <FileSignature size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold">음원 유통 계약서 — {titleByStatus[contractStatus]}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+            {bodyByStatus[contractStatus]}
+          </p>
+        </div>
+      </div>
+      {contractStatus === 'pending_signature' && (
+        <Link to="/artist/contract" className="btn-primary block w-full py-2.5 text-center">
+          계약서 확인 및 서명
+        </Link>
+      )}
+      {contractStatus !== 'pending_signature' && contractStatus !== 'signed' && (
+        <Link
+          to="/artist/contract"
+          className="block w-full rounded-xl bg-bg-soft py-2.5 text-center text-sm font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
+        >
+          계약 상태 보기
+        </Link>
+      )}
+    </div>
+  );
 }
 
 function PaymentRequiredCard({ userEmail }: { userEmail: string }) {

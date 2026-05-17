@@ -410,6 +410,7 @@ export type EligibilityReason =
   | 'no_artist_profile'
   | 'artist_not_approved'
   | 'no_paid_membership'
+  | 'no_signed_contract'   // 0057
   | 'no_payout_account'
   | 'payout_not_verified';
 
@@ -418,6 +419,10 @@ export interface UploadEligibility {
   is_artist: boolean;
   approval_status: string;
   has_paid_membership: boolean;
+  // 0057 — 계약서 단계
+  contract_status?: 'not_created' | 'pending_signature' | 'signed' | 'rejected' | 'expired';
+  has_signed_contract?: boolean;
+  pending_contract_id?: string | null;
   payout_status: string;
   payout_account_id: string | null;
   reasons: EligibilityReason[];
