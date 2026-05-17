@@ -132,7 +132,7 @@ export default function ArtistTrackManagementList() {
             <Music size={16} className="text-accent" /> 음원 관리
           </h2>
           <p className="text-xs text-ink-mute">
-            {rows.length}건 · approved 만 Phase 4 정산 대상
+            {rows.length}건 · release_status='released' 인 트랙만 정산 대상
           </p>
         </div>
         <button
@@ -230,11 +230,6 @@ export default function ArtistTrackManagementList() {
                       <code className="rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[10px]">
                         {r.track_code ?? '—'}
                       </code>
-                      {r.release_status && (
-                        <span className="ml-1 inline-flex rounded bg-bg-soft px-1 py-0.5 text-[9px] text-ink-dim">
-                          {r.release_status}
-                        </span>
-                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium">{r.title}</p>
