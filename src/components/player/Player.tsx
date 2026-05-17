@@ -601,11 +601,9 @@ export default function Player() {
     pause();
 
     if (isPermanent) {
-      const isAdmin = profile?.role === 'admin';
+      // 0063: 관리자 재업로드 문구 제거. 아티스트가 직접 다시 업로드해야 함.
       toast.error(
-        isAdmin
-          ? `이 음원은 브라우저에서 재생할 수 없어요 (${codeName}). 관리자에서 표준 MP3로 재업로드하세요.`
-          : `이 음원은 브라우저에서 재생할 수 없어요 (${codeName}). 관리자에서 재업로드가 필요합니다.`,
+        `이 음원은 브라우저에서 재생할 수 없는 파일 형식이거나 업로드 중 문제가 발생했습니다. 아티스트가 음원을 다시 업로드한 후 재검수를 진행해주세요. (mp3, wav, flac 권장) [${codeName}]`,
       );
     } else {
       toast.error(`재생 실패 (${codeName}). 다음 곡으로 넘어갑니다.`);
