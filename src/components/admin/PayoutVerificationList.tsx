@@ -9,6 +9,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import RevealAccountButton from './RevealAccountButton';
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   pending: { label: '확인 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
@@ -16,21 +17,10 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   rejected: { label: '거절됨', tone: 'bg-red-500/15 text-red-300' },
 };
 
-function maskAccount(num: string): string {
-  if (!num) return '';
-  const cleaned = num.replace(/\s+/g, '');
-  if (cleaned.length <= 6) return cleaned;
-  const head = cleaned.slice(0, 3);
-  const tail = cleaned.slice(-3);
-  const middle = '*'.repeat(Math.max(cleaned.length - 6, 1));
-  return `${head}${middle}${tail}`;
-}
-
 export default function PayoutVerificationList() {
   const [rows, setRows] = useState<AdminPayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [revealId, setRevealId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,21 +115,20 @@ export default function PayoutVerificationList() {
             )}
             {rows.map((r) => {
               const s = STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
-              const revealed = revealId === r.account_id;
               return (
                 <tr key={r.account_id} className="border-b border-line/10 last:border-b-0">
                   <td className="px-3 py-2.5 font-medium">{r.artist_name ?? '—'}</td>
                   <td className="px-3 py-2.5 text-xs text-ink-mute">{r.email ?? '—'}</td>
                   <td className="px-3 py-2.5 text-xs">{r.bank_name}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono">
-                    <button
-                      type="button"
-                      onClick={() => setRevealId(revealed ? null : r.account_id)}
-                      className="rounded px-1 py-0.5 hover:bg-bg-hover"
-                      title={revealed ? '마스킹' : '계좌번호 펼치기'}
-                    >
-                      {revealed ? r.account_number : maskAccount(r.account_number)}
-                    </button>
+                  <td className="px-3 py-2.5 text-xs">
+                    {r.verification_status === 'verified' ? (
+                      <RevealAccountButton
+                        accountId={r.account_id}
+                        maskedValue={r.masked_account_number}
+                      />
+                    ) : (
+                      <code className="font-mono text-ink-mute">{r.masked_account_number}</code>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-xs">{r.account_holder}</td>
                   <td className="px-3 py-2.5">

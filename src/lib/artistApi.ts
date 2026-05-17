@@ -536,7 +536,8 @@ export interface AdminPayoutRow {
   artist_name: string | null;
   email: string | null;
   bank_name: string;
-  account_number: string;
+  /** 0061 — 항상 마스킹된 값만 RPC 에서 반환 (원본은 admin_reveal_payout_account 로) */
+  masked_account_number: string;
   account_holder: string;
   verification_status: 'pending' | 'verified' | 'rejected';
   rejected_reason: string | null;
@@ -551,6 +552,35 @@ export async function listPendingPayoutAccounts(): Promise<AdminPayoutRow[]> {
   } catch {
     return [];
   }
+}
+
+/** 0061 — admin 만 호출. 원본 계좌번호 반환 + audit log INSERT. verified 상태만 허용. */
+export interface RevealedPayoutAccount {
+  account_id: string;
+  account_number: string;
+  bank_name: string;
+  account_holder: string;
+  artist_user_id: string;
+  log_id: string;
+  viewed_at: string;
+}
+
+export async function adminRevealPayoutAccount(opts: {
+  accountId: string;
+  reason?: string | null;
+  settlementId?: string | null;
+}): Promise<RevealedPayoutAccount> {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+  const { data, error } = await supabase.rpc('admin_reveal_payout_account', {
+    p_account_id: opts.accountId,
+    p_reason: opts.reason ?? null,
+    p_settlement_id: opts.settlementId ?? null,
+    p_user_agent: ua,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as RevealedPayoutAccount | undefined;
+  if (!row) throw new Error('empty response');
+  return row;
 }
 
 export async function verifyArtistPayoutAccount(accountId: string): Promise<{ ok: boolean; error?: string }> {

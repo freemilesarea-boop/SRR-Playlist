@@ -10,6 +10,7 @@ import {
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import RevealAccountButton from './RevealAccountButton';
 
 function fmtKrw(n: number | null | undefined): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -20,6 +21,7 @@ interface DetailData {
     id: string;
     settlement_month: string;
     status: SettlementStatus;
+    payout_account_id: string | null;
     gross_settlement_amount: number;
     company_fee_amount: number;
     sales_agent_fee_amount: number;
@@ -215,13 +217,21 @@ export default function ArtistSettlementDetail({
 
             <section>
               <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">지급 계좌 (snapshot)</h5>
-              <div className="rounded-xl bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
+              <div className="space-y-1.5 rounded-xl bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
                 {data.settlement.payout_bank_name ? (
                   <>
                     <p>
                       {data.settlement.payout_bank_name} · {data.settlement.payout_account_holder}
                     </p>
-                    <p className="font-mono text-ink-mute">{data.settlement.masked_account_number}</p>
+                    {data.settlement.payout_account_id ? (
+                      <RevealAccountButton
+                        accountId={data.settlement.payout_account_id}
+                        maskedValue={data.settlement.masked_account_number}
+                        settlementId={data.settlement.id}
+                      />
+                    ) : (
+                      <p className="font-mono text-ink-mute">{data.settlement.masked_account_number}</p>
+                    )}
                   </>
                 ) : (
                   <p className="text-ink-dim">계좌 정보 없음</p>
