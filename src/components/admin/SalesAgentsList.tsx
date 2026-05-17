@@ -98,9 +98,11 @@ export default function SalesAgentsList() {
                 <th className="px-3 py-2.5 text-left font-semibold">상태</th>
                 <th className="px-3 py-2.5 text-right font-semibold">유입 사업자</th>
                 <th className="px-3 py-2.5 text-right font-semibold">결제 완료</th>
-                <th className="px-3 py-2.5 text-right font-semibold">총 결제</th>
+                <th className="px-3 py-2.5 text-right font-semibold">누적 결제</th>
                 <th className="px-3 py-2.5 text-right font-semibold">수수료율</th>
-                <th className="px-3 py-2.5 text-right font-semibold">예상 정산</th>
+                <th className="px-3 py-2.5 text-right font-semibold">누적 정산액</th>
+                <th className="px-3 py-2.5 text-right font-semibold">이번 달 결제</th>
+                <th className="px-3 py-2.5 text-right font-semibold">이번 달 정산액</th>
                 <th className="px-3 py-2.5 text-right font-semibold">생성</th>
                 <th className="px-3 py-2.5 text-right font-semibold">최근 활동</th>
                 <th className="px-3 py-2.5 text-right font-semibold">관리</th>
@@ -109,14 +111,14 @@ export default function SalesAgentsList() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
                     등록된 영업인이 없어요. 우측 상단에서 추가해주세요.
                   </td>
                 </tr>
@@ -147,7 +149,16 @@ export default function SalesAgentsList() {
                   <td className="px-3 py-2.5 text-right tabular-nums">{fmtKrw(r.total_paid_amount)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{r.commission_rate}%</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
-                    {fmtKrw(r.estimated_commission)}
+                    {fmtKrw(r.total_commission_amount)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    <span>{fmtKrw(r.monthly_paid_amount)}</span>
+                    {r.monthly_paid_count > 0 && (
+                      <span className="ml-1 text-[10px] text-ink-dim">({r.monthly_paid_count}건)</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-accent">
+                    {fmtKrw(r.monthly_commission_amount)}
                   </td>
                   <td className="px-3 py-2.5 text-right text-xs text-ink-mute">
                     {fmtDate(r.created_at)}
@@ -457,8 +468,29 @@ function SalesAgentDetailModal({ id, onClose }: { id: string; onClose: () => voi
             <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Stat label="유입 사업자" value={String(data.summary.linked_business_count)} />
               <Stat label="결제 완료" value={String(data.summary.paid_business_count)} />
-              <Stat label="총 결제" value={fmtKrw(data.summary.total_paid_amount)} />
-              <Stat label="예상 정산" value={fmtKrw(data.summary.estimated_commission)} />
+              <Stat label="누적 결제" value={fmtKrw(data.summary.total_paid_amount)} />
+              <Stat label="누적 정산액" value={fmtKrw(data.summary.total_commission_amount)} />
+            </section>
+
+            <section>
+              <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                이번 달 정산 (KST 기준)
+              </h4>
+              <div className="grid grid-cols-3 gap-2">
+                <Stat
+                  label="이번 달 결제"
+                  value={fmtKrw(data.summary.monthly_paid_amount)}
+                />
+                <Stat
+                  label="이번 달 결제 건수"
+                  value={`${data.summary.monthly_paid_count}건`}
+                />
+                <Stat
+                  label="이번 달 정산액"
+                  value={fmtKrw(data.summary.monthly_commission_amount)}
+                  emphasize
+                />
+              </div>
             </section>
 
             <section>
@@ -555,11 +587,19 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
-    <div className="rounded-xl bg-bg-card px-3 py-2.5">
+    <div
+      className={`rounded-xl px-3 py-2.5 ${
+        emphasize ? 'bg-accent/10 ring-1 ring-accent/30' : 'bg-bg-card'
+      }`}
+    >
       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
-      <p className="mt-1 text-base font-extrabold tabular-nums">{value}</p>
+      <p
+        className={`mt-1 text-base font-extrabold tabular-nums ${emphasize ? 'text-accent' : ''}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
