@@ -224,4 +224,4 @@ export async function adminListContracts(opts?: {
 /** 관리자: 계약서 생성 시 사용할 기본 본문 — docs/ARTIST_CONTRACT_DRAFT_v1.md raw import */
 export const ARTIST_CONTRACT_V1_BODY: string = contractV1Body;
 export const ARTIST_CONTRACT_V1_VERSION = 'v1';
-export const ARTIST_CONTRACT_V1_TITLE = '음원 유통 및 스트리밍 정산 계약서 (v1)';
+export const ARTIST_CONTRACT_V1_TITLE = '음원 스트리밍 및 정산 이용 계약서';
