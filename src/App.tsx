@@ -30,6 +30,7 @@ const PaymentSuccessPage = lazy(() => import('@/pages/PaymentSuccessPage'));
 const PaymentFailPage = lazy(() => import('@/pages/PaymentFailPage'));
 const ArtistDashboardPage = lazy(() => import('@/pages/ArtistDashboardPage'));
 const ArtistContractPage = lazy(() => import('@/pages/ArtistContractPage'));
+const ArtistSettlementsPage = lazy(() => import('@/pages/ArtistSettlementsPage'));
 const TermsPage = lazy(() => import('@/pages/legal/TermsPage'));
 const PrivacyPage = lazy(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazy(() => import('@/pages/legal/NoticePage'));
@@ -149,6 +150,7 @@ export default function App() {
             <Route path="/payment/fail" element={<PaymentFailPage />} />
             <Route path="/artist" element={<ArtistDashboardPage />} />
             <Route path="/artist/contract" element={<ArtistContractPage />} />
+            <Route path="/artist/settlements" element={<ArtistSettlementsPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/notice" element={<NoticePage />} />
