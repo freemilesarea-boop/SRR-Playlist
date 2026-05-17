@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, CheckCircle2 } from 'lucide-react';
+import { Building2, CheckCircle2, UserCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import {
@@ -8,6 +8,7 @@ import {
   verifyBusinessNumber,
   type BusinessVerificationResult,
 } from '@/lib/businessVerification';
+import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
 
 interface Props {
@@ -39,6 +40,11 @@ export default function BusinessSignupForm({ onDone }: Props) {
   const [verifying, setVerifying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 영업인 코드 (선택)
+  const [salesAgentCode, setSalesAgentCode] = useState('');
+  const [salesAgent, setSalesAgent] = useState<VerifiedSalesAgent | null>(null);
+  const [salesAgentError, setSalesAgentError] = useState<string | null>(null);
+  const [salesAgentChecking, setSalesAgentChecking] = useState(false);
 
   function validate(): string | null {
     if (!fullName.trim()) return '이름을 입력해주세요';
@@ -50,10 +56,37 @@ export default function BusinessSignupForm({ onDone }: Props) {
     if (!representativeName.trim()) return '대표자명을 입력해주세요';
     if (!businessOpenDate) return '개업일자를 입력해주세요';
     if (!businessVerification?.business_verified) return '사업자 검증을 완료해주세요';
+    // 영업인 코드 입력 시 검증 필수. 미입력은 OK.
+    if (salesAgentCode.trim() && !salesAgent) {
+      return '유효하지 않은 영업인 코드입니다.';
+    }
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
     return null;
+  }
+
+  async function handleSalesAgentVerify() {
+    setSalesAgentError(null);
+    setSalesAgent(null);
+    const trimmed = salesAgentCode.trim();
+    if (!trimmed) return;
+    setSalesAgentChecking(true);
+    try {
+      const r = await verifySalesAgentCode(trimmed);
+      if (!r) {
+        setSalesAgentError('유효하지 않은 영업인 코드입니다.');
+        return;
+      }
+      setSalesAgent(r);
+    } catch (e) {
+      // 마이그레이션 미적용 등의 환경에선 RPC 가 없어 에러. 사용자에겐 명확히.
+      setSalesAgentError(
+        e instanceof Error ? `코드 확인에 실패했어요: ${e.message}` : '코드 확인에 실패했어요',
+      );
+    } finally {
+      setSalesAgentChecking(false);
+    }
   }
 
   async function handleBusinessVerify() {
@@ -94,6 +127,26 @@ export default function BusinessSignupForm({ onDone }: Props) {
     }
     setBusy(true);
     try {
+      // 가입 직전 영업인 코드 재검증 — 검증 클릭 후 비활성화된 경우까지 차단.
+      // 검증된 캐시(salesAgent) 가 있어도 항상 최신 상태로 재조회한다.
+      let verifiedAgent = salesAgent;
+      const codeTrim = salesAgentCode.trim();
+      if (codeTrim) {
+        const r = await verifySalesAgentCode(codeTrim);
+        if (!r) {
+          // 처음 검증 안 했거나, 이전에 활성이었다가 비활성화된 경우 모두 차단
+          setSalesAgent(null);
+          setSalesAgentError('유효하지 않은 영업인 코드입니다.');
+          setError('유효하지 않은 영업인 코드입니다.');
+          setBusy(false);
+          return;
+        }
+        verifiedAgent = r;
+        setSalesAgent(r);
+      } else {
+        verifiedAgent = null;
+      }
+
       // 0021 트리거가 user_metadata 를 읽어 public.users 자동 채움
       await signUpWithPassword(email.trim(), password, fullName.trim(), {
         account_type: 'business',
@@ -111,6 +164,13 @@ export default function BusinessSignupForm({ onDone }: Props) {
         phone: phone.trim(),
         address: address.trim(),
         signup_completed: true,
+        // 영업인 연결 — 코드 입력 + 검증 통과한 경우에만 저장
+        ...(verifiedAgent
+          ? {
+              sales_agent_id: verifiedAgent.id,
+              sales_agent_code: verifiedAgent.code,
+            }
+          : {}),
         // business 정보는 별도 테이블에 저장
       };
       const pendingBvp = {
@@ -229,6 +289,45 @@ export default function BusinessSignupForm({ onDone }: Props) {
         {bizVerified && businessVerification && (
           <p className="mt-1 text-[11px] text-emerald-300">
             {businessVerification.business_state} · {businessVerification.tax_type}
+          </p>
+        )}
+      </Field>
+
+      {/* 영업인 코드 (선택) */}
+      <hr className="border-line/10" />
+      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">영업인 코드 (선택)</p>
+      <Field label="영업인 코드" hint="영업인을 통해 안내받은 코드가 있다면 입력해주세요. 입력하지 않아도 가입 가능합니다.">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={salesAgentCode}
+            onChange={(e) => {
+              setSalesAgentCode(e.target.value);
+              setSalesAgent(null);
+              setSalesAgentError(null);
+            }}
+            placeholder="예: A7K3M9"
+            className="input flex-1"
+            autoCapitalize="characters"
+          />
+          <button
+            type="button"
+            onClick={handleSalesAgentVerify}
+            disabled={salesAgentChecking || !salesAgentCode.trim() || !!salesAgent}
+            className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
+              salesAgent
+                ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
+                : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
+            }`}
+          >
+            {salesAgent ? <CheckCircle2 size={14} /> : <UserCheck size={14} />}
+            {salesAgent ? '확인됨' : salesAgentChecking ? '확인 중…' : '확인'}
+          </button>
+        </div>
+        {salesAgentError && <p className="mt-1 text-[11px] text-red-300">{salesAgentError}</p>}
+        {salesAgent && (
+          <p className="mt-1 text-[11px] text-emerald-300">
+            담당 영업인: {salesAgent.name} ({salesAgent.code})
           </p>
         )}
       </Field>
