@@ -130,6 +130,24 @@ export interface AdminTrackRow {
   created_at: string;
 }
 
+/**
+ * 0074-hotfix — Promise 에 타임아웃을 강제. 무한 대기로 "업로드 중…" 가 멈추는 문제 방지.
+ * timeoutMessage 는 사용자 toast 에 그대로 노출되는 한국어 메시지.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T> | PromiseLike<T>,
+  ms: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
 export interface UploadInput {
   title: string;
   album_name: string;
@@ -256,191 +274,286 @@ export function validateArtistAudioFile(file: File): { ok: boolean; error?: stri
  *   3) tracks INSERT — RLS 가 owner_user_id/source_type/visibility_status/승인상태 모두 검증
  */
 export async function uploadArtistTrack(input: UploadInput): Promise<UploadResult> {
-  const { data: sess } = await supabase.auth.getSession();
-  const userId = sess.session?.user?.id;
-  if (!userId) return { ok: false, error: '로그인이 필요합니다' };
+  // ============================================
+  // 0074-hotfix: 단계별 console.info + 모든 await timeout + finally 안전 보장
+  // ============================================
+  const log = (msg: string, extra?: Record<string, unknown>) =>
+    console.info('[upload]', msg, extra ?? '');
+  const startedAt = Date.now();
+  log('start', { isResubmit: !!input.trackId, hasAudio: !!input.audioFile, hasCover: !!input.coverFile });
 
-  // 검증 — 신규 업로드는 audioFile 필수. 재제출(trackId+existingAudioUrl)은 audioFile 옵션.
-  const isResubmit = !!input.trackId;
-  if (!isResubmit && !input.audioFile) {
-    return { ok: false, error: '음원 파일을 선택해주세요' };
-  }
-  if (input.audioFile) {
-    const v = validateArtistAudioFile(input.audioFile);
-    if (!v.ok) return { ok: false, error: v.error };
-  }
-  if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
-  if (!input.rightsConfirmed) {
-    return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
-  }
-
-  const eligibility = await fetchArtistUploadEligibility();
-  if (!eligibility.can_upload) {
-    const rpcErr = getLastEligibilityError();
-    if (rpcErr) {
-      // RPC 자체가 400 등으로 실패 — eligibility 미확보. 명확히 안내.
-      return {
-        ok: false,
-        error: `업로드 자격 확인 실패 (${rpcErr.code ?? 'RPC'}) — ${rpcErr.message ?? '잠시 후 다시 시도해주세요'}. 문제 지속 시 새로고침 또는 관리자 문의.`,
-      };
+  let stage = 'init';
+  try {
+    stage = 'session';
+    log('session start');
+    const { data: sess } = await withTimeout(
+      supabase.auth.getSession(),
+      10_000,
+      '세션 확인 시간이 초과되었습니다. 새로고침 후 다시 시도해주세요.',
+    );
+    const userId = sess.session?.user?.id;
+    if (!userId) {
+      log('session fail — no user');
+      return { ok: false, error: '로그인이 필요합니다' };
     }
-    return { ok: false, error: formatEligibilityError(eligibility.reasons) };
-  }
+    log('session ok', { userId });
 
-  const profile = await fetchMyArtistProfile(userId);
-  if (!profile || profile.approval_status !== 'approved') {
-    return { ok: false, error: '승인된 아티스트만 업로드할 수 있습니다' };
-  }
-
-  // 1) audio 업로드 — 새 파일이 있을 때만 + SHA-256 계산 (중복 방지)
-  let audioUrl: string;
-  let audioSha256: string | null = null;
-  const ts = Date.now();
-  if (input.audioFile) {
-    try {
-      audioSha256 = await computeAudioSha256(input.audioFile);
-    } catch (e) {
-      if (import.meta.env.DEV) console.warn('[sha256] compute failed:', e);
+    // 입력 검증 — 신규 업로드는 audioFile 필수. 재제출(trackId+existingAudioUrl)은 audioFile 옵션.
+    stage = 'validate';
+    const isResubmit = !!input.trackId;
+    if (!isResubmit && !input.audioFile) {
+      return { ok: false, error: '음원 파일을 선택해주세요' };
     }
-    // 사전 중복 확인 — RPC 가 다시 검증하지만 클라이언트에서 즉시 안내
-    if (audioSha256) {
-      const { data: sess2 } = await supabase.auth.getSession();
-      const uid = sess2.session?.user?.id;
-      if (uid) {
-        const { data: existing } = await supabase
-          .from('tracks')
-          .select('id, track_code, release_status')
-          .eq('owner_user_id', uid)
-          .eq('source_type', 'artist_upload')
-          .eq('audio_sha256', audioSha256)
-          .maybeSingle();
-        // 재제출 모드는 동일 파일 다시 올려도 OK (기존 row 가 자기 자신)
-        if (existing && !input.trackId) {
-          return {
-            ok: false,
-            error: `이미 같은 음원 파일을 업로드하셨어요 (${(existing as { track_code?: string | null }).track_code ?? existing.id.slice(0, 8)}). 내 음원 목록에서 수정해주세요.`,
-          };
+    if (input.audioFile) {
+      const v = validateArtistAudioFile(input.audioFile);
+      if (!v.ok) return { ok: false, error: v.error };
+    }
+    if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
+    if (!input.rightsConfirmed) {
+      return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
+    }
+
+    stage = 'eligibility';
+    log('eligibility start');
+    const eligibility = await withTimeout(
+      fetchArtistUploadEligibility(),
+      15_000,
+      '업로드 자격 확인 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도해주세요.',
+    );
+    log('eligibility done', { can_upload: eligibility.can_upload });
+    if (!eligibility.can_upload) {
+      const rpcErr = getLastEligibilityError();
+      if (rpcErr) {
+        return {
+          ok: false,
+          error: `업로드 자격 확인 실패 (${rpcErr.code ?? 'RPC'}) — ${rpcErr.message ?? '잠시 후 다시 시도해주세요'}. 문제 지속 시 새로고침 또는 관리자 문의.`,
+        };
+      }
+      return { ok: false, error: formatEligibilityError(eligibility.reasons) };
+    }
+
+    stage = 'profile';
+    log('profile fetch start');
+    const profile = await withTimeout(
+      fetchMyArtistProfile(userId),
+      10_000,
+      '아티스트 프로필 확인 시간이 초과되었습니다.',
+    );
+    log('profile fetch done', { hasProfile: !!profile, status: profile?.approval_status });
+    if (!profile || profile.approval_status !== 'approved') {
+      return { ok: false, error: '승인된 아티스트만 업로드할 수 있습니다' };
+    }
+
+    // 1) audio 업로드 — 새 파일이 있을 때만 + SHA-256 계산 (중복 방지)
+    let audioUrl: string;
+    let audioSha256: string | null = null;
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 10);
+    if (input.audioFile) {
+      stage = 'sha256';
+      log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
+      try {
+        audioSha256 = await withTimeout(
+          computeAudioSha256(input.audioFile),
+          45_000,
+          'SHA-256 계산 시간이 초과되었습니다 — 파일 크기를 줄이거나 다른 브라우저에서 시도해주세요.',
+        );
+        log('sha256 ok', { sha: audioSha256?.slice(0, 10) + '…' });
+      } catch (e) {
+        log('sha256 fail (계속)', { err: e instanceof Error ? e.message : String(e) });
+      }
+      // 사전 중복 확인
+      if (audioSha256) {
+        stage = 'dup-check';
+        log('dup-check start');
+        try {
+          const { data: existing } = await withTimeout(
+            supabase
+              .from('tracks')
+              .select('id, track_code, release_status')
+              .eq('owner_user_id', userId)
+              .eq('source_type', 'artist_upload')
+              .eq('audio_sha256', audioSha256)
+              .maybeSingle(),
+            10_000,
+            '중복 확인 시간이 초과되었습니다.',
+          );
+          if (existing && !input.trackId) {
+            log('dup-check found', { id: existing.id });
+            return {
+              ok: false,
+              error: `이미 같은 음원 파일을 업로드하셨어요 (${(existing as { track_code?: string | null }).track_code ?? existing.id.slice(0, 8)}). 내 음원 목록에서 수정해주세요.`,
+            };
+          }
+          log('dup-check none');
+        } catch (e) {
+          log('dup-check skip (계속)', { err: e instanceof Error ? e.message : String(e) });
         }
       }
+
+      stage = 'audio-upload';
+      const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
+      const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
+      const audioPath = `artist_uploads/${userId}/${ts}_${rand}_${safeName}`;
+      const mimeMap: Record<string, string> = {
+        mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac',
+      };
+      const audioContentType = mimeMap[audioExt] ?? input.audioFile.type ?? 'application/octet-stream';
+      log('audio upload start', { path: audioPath, sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
+      let audioUpRes;
+      try {
+        audioUpRes = await withTimeout(
+          supabase.storage.from('audio').upload(audioPath, input.audioFile, {
+            cacheControl: '31536000', upsert: false, contentType: audioContentType,
+          }),
+          120_000,
+          '오디오 업로드 시간이 초과되었습니다 (2분). 파일 크기 또는 네트워크 상태를 확인한 뒤 다시 시도해주세요.',
+        );
+      } catch (e) {
+        log('audio upload TIMEOUT', { err: e instanceof Error ? e.message : String(e) });
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      if (audioUpRes.error) {
+        log('audio upload fail', { msg: audioUpRes.error.message });
+        return { ok: false, error: `오디오 업로드 실패: ${audioUpRes.error.message}` };
+      }
+      const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
+      audioUrl = audioPub.publicUrl;
+      log('audio upload ok', { url: audioUrl });
+    } else {
+      audioUrl = input.existingAudioUrl ?? '';
+      if (!audioUrl) return { ok: false, error: '기존 음원 URL 을 확인할 수 없어요' };
+      log('audio reuse existing', { url: audioUrl });
     }
-    const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
-    const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
-    const audioPath = `artist_uploads/${userId}/${ts}_${safeName}`;
-    const mimeMap: Record<string, string> = {
-      mp3: 'audio/mpeg',
-      m4a: 'audio/mp4',
-      wav: 'audio/wav',
-      flac: 'audio/flac',
-    };
-    const audioContentType =
-      mimeMap[audioExt] ?? input.audioFile.type ?? 'application/octet-stream';
-    const { error: audioUpErr } = await supabase.storage
-      .from('audio')
-      .upload(audioPath, input.audioFile, {
-        cacheControl: '31536000',
-        upsert: false,
-        contentType: audioContentType,
-      });
-    if (audioUpErr) return { ok: false, error: `오디오 업로드 실패: ${audioUpErr.message}` };
-    const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
-    audioUrl = audioPub.publicUrl;
-  } else {
-    // 재제출 — 기존 audio_url 유지
-    audioUrl = input.existingAudioUrl ?? '';
-    if (!audioUrl) return { ok: false, error: '기존 음원 URL 을 확인할 수 없어요' };
-  }
 
-  // 2) cover 업로드 (옵션). 재제출 시 기존 cover 유지
-  let coverUrl: string | null = input.existingCoverUrl ?? null;
-  if (input.coverFile) {
-    void input.coverFile.name.split('.').pop()?.toLowerCase();
-    const coverSafe = input.coverFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
-    const coverPath = `artist_uploads/${userId}/${ts}_cover_${coverSafe}`;
-    const { error: coverUpErr } = await supabase.storage
-      .from('covers')
-      .upload(coverPath, input.coverFile, {
-        cacheControl: '31536000',
-        upsert: false,
-        contentType: input.coverFile.type || undefined,
-      });
-    if (!coverUpErr) {
-      const { data } = supabase.storage.from('covers').getPublicUrl(coverPath);
-      coverUrl = data.publicUrl;
+    // 2) cover 업로드 (옵션)
+    stage = 'cover-upload';
+    let coverUrl: string | null = input.existingCoverUrl ?? null;
+    if (input.coverFile) {
+      const coverSafe = input.coverFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
+      const coverPath = `artist_uploads/${userId}/${ts}_${rand}_cover_${coverSafe}`;
+      log('cover upload start', { path: coverPath, sizeKB: (input.coverFile.size / 1024).toFixed(0) });
+      try {
+        const { error: coverUpErr } = await withTimeout(
+          supabase.storage.from('covers').upload(coverPath, input.coverFile, {
+            cacheControl: '31536000', upsert: false, contentType: input.coverFile.type || undefined,
+          }),
+          45_000,
+          '커버 이미지 업로드 시간이 초과되었습니다 (45초).',
+        );
+        if (!coverUpErr) {
+          const { data } = supabase.storage.from('covers').getPublicUrl(coverPath);
+          coverUrl = data.publicUrl;
+          log('cover upload ok', { url: coverUrl });
+        } else {
+          log('cover upload skip (계속)', { msg: coverUpErr.message });
+        }
+      } catch (e) {
+        log('cover upload TIMEOUT (계속)', { err: e instanceof Error ? e.message : String(e) });
+        // cover 실패해도 진행 (선택 항목)
+      }
+    } else {
+      log('cover none');
     }
-  }
 
-  // 3) verified payout account 조회 (RLS 가 검증하지만 클라이언트 측 빠른 가드)
-  const { data: payout } = await supabase
-    .from('artist_payout_accounts')
-    .select('id, verification_status')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!payout || payout.verification_status !== 'verified') {
-    return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
-  }
+    // 3) verified payout account 조회
+    stage = 'payout-check';
+    log('payout check start');
+    let payoutOk = false;
+    try {
+      const { data: payout } = await withTimeout(
+        supabase.from('artist_payout_accounts').select('id, verification_status').eq('user_id', userId).maybeSingle(),
+        10_000,
+        '정산 계좌 확인 시간이 초과되었습니다.',
+      );
+      payoutOk = !!payout && payout.verification_status === 'verified';
+      log('payout check done', { verified: payoutOk });
+    } catch (e) {
+      log('payout check TIMEOUT', { err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    if (!payoutOk) {
+      return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
+    }
 
-  // 4) submit_artist_release RPC — RLS / 게이트 / track_code 자동 부여 모두 RPC 내부에서
-  try {
-    const trackId = await submitArtistRelease({
-      trackId: input.trackId ?? null,
-      title: input.title.trim(),
-      artist: input.artist?.trim() || profile.artist_name,
-      albumName: input.album_name.trim(),
-      releaseTitle: input.release_title?.trim() || input.album_name.trim(),
-      releaseType: input.release_type,
-      releaseDate: input.release_date,
-      mainGenre: input.main_genre?.trim() || input.genre?.trim() || null,
-      subGenre: input.sub_genre?.trim() || null,
-      mood: input.mood?.trim() || null,
-      suitableStore: input.suitable_store?.trim() || null,
-      lyrics: input.lyrics?.trim() || null,
-      isrc: input.isrc?.trim().toUpperCase() || null,
-      rightsHolderName:
-        input.rights_holder_name?.trim() || profile.real_name || profile.artist_name || null,
-      explicitContent: input.explicit_content ?? false,
-      instrumental: input.instrumental ?? false,
-      audioUrl,
-      coverUrl,
-      rightsConfirmed: input.rightsConfirmed,
-    });
-
-    // track_code 는 RPC INSERT 후 트리거가 자동 부여 — 별도 SELECT 로 조회
-    const { data: row } = await supabase
-      .from('tracks')
-      .select('track_code')
-      .eq('id', trackId)
-      .maybeSingle();
-
-    return {
-      ok: true,
-      track_id: trackId,
-      track_code: (row as { track_code?: string | null } | null)?.track_code ?? undefined,
-    };
-  } catch (e) {
-    const err = e as { message?: string; hint?: string; details?: string; code?: string };
-    const msg = err.message ?? String(e);
-    if (import.meta.env.DEV) {
-      console.error('[uploadArtistTrack] submit_artist_release failed:', {
+    // 4) submit_artist_release RPC
+    stage = 'submit-rpc';
+    log('submit_artist_release RPC start');
+    let trackId: string;
+    try {
+      trackId = await withTimeout(
+        submitArtistRelease({
+          trackId: input.trackId ?? null,
+          title: input.title.trim(),
+          artist: input.artist?.trim() || profile.artist_name,
+          albumName: input.album_name.trim(),
+          releaseTitle: input.release_title?.trim() || input.album_name.trim(),
+          releaseType: input.release_type,
+          releaseDate: input.release_date,
+          mainGenre: input.main_genre?.trim() || input.genre?.trim() || null,
+          subGenre: input.sub_genre?.trim() || null,
+          mood: input.mood?.trim() || null,
+          suitableStore: input.suitable_store?.trim() || null,
+          lyrics: input.lyrics?.trim() || null,
+          isrc: input.isrc?.trim().toUpperCase() || null,
+          rightsHolderName:
+            input.rights_holder_name?.trim() || profile.real_name || profile.artist_name || null,
+          explicitContent: input.explicit_content ?? false,
+          instrumental: input.instrumental ?? false,
+          audioUrl,
+          coverUrl,
+          rightsConfirmed: input.rightsConfirmed,
+        }),
+        45_000,
+        '음원 등록 서버 응답 시간이 초과되었습니다 (45초). 잠시 후 다시 시도해주세요.',
+      );
+      log('submit_artist_release RPC ok', { trackId });
+    } catch (e) {
+      const err = e as { message?: string; hint?: string; details?: string; code?: string };
+      const msg = err.message ?? String(e);
+      log('submit_artist_release RPC FAIL', {
         code: err.code, message: err.message, details: err.details, hint: err.hint,
       });
-    }
-    // RLS 차단 → eligibility 재확인
-    if (msg.includes('row-level security') || err.code === '42501') {
-      const recheck = await fetchArtistUploadEligibility();
-      if (!recheck.can_upload) {
-        return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}` };
+      if (msg.includes('row-level security') || err.code === '42501') {
+        const recheck = await fetchArtistUploadEligibility().catch(() => null);
+        if (recheck && !recheck.can_upload) {
+          return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}` };
+        }
       }
+      if (err.code === 'PGRST203' || err.code === 'PGRST202') {
+        return {
+          ok: false,
+          error: '음원 등록 함수 호출 실패 (서버 함수 시그니처 불일치). 잠시 후 다시 시도해주시고, 문제가 지속되면 관리자에게 문의해주세요.',
+        };
+      }
+      const tail = err.hint ?? err.details;
+      return { ok: false, error: tail ? `${msg} (${tail})` : msg };
     }
-    // PostgREST 함수 호환성 문제 — overload/시그니처 불일치
-    if (err.code === 'PGRST203' || err.code === 'PGRST202') {
-      return {
-        ok: false,
-        error:
-          '음원 등록 함수 호출 실패 (서버 함수 시그니처 불일치). 잠시 후 다시 시도해주시고, 문제가 지속되면 관리자에게 문의해주세요.',
-      };
+
+    // 5) track_code 조회 — 실패해도 OK, 트랙 저장은 이미 성공
+    stage = 'fetch-track-code';
+    log('track_code fetch start');
+    let trackCode: string | undefined;
+    try {
+      const { data: row } = await withTimeout(
+        supabase.from('tracks').select('track_code').eq('id', trackId).maybeSingle(),
+        10_000,
+        'track_code 조회 시간이 초과되었습니다 (저장은 완료됨).',
+      );
+      trackCode = (row as { track_code?: string | null } | null)?.track_code ?? undefined;
+      log('track_code ok', { trackCode });
+    } catch (e) {
+      log('track_code skip', { err: e instanceof Error ? e.message : String(e) });
     }
-    const tail = err.hint ?? err.details;
-    return { ok: false, error: tail ? `${msg} (${tail})` : msg };
+
+    log('SUCCESS', { trackId, trackCode, elapsedMs: Date.now() - startedAt });
+    return { ok: true, track_id: trackId, track_code: trackCode };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    log('FATAL at stage=' + stage, { err: msg });
+    return { ok: false, error: `${stage} 단계 실패 — ${msg}` };
+  } finally {
+    log('finally', { stage, elapsedMs: Date.now() - startedAt });
   }
 }
 
