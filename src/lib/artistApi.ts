@@ -1001,6 +1001,43 @@ export async function adminListReleaseFailures(
   return (data ?? []) as ReleaseFailureRow[];
 }
 
+// ============================================
+// 0078 — admin streaming dashboard wrappers
+// ============================================
+
+export interface AdminStreamingDay {
+  day: string;
+  total_streams: number;
+  eligible_streams: number;
+  unique_listeners: number;
+  unique_tracks: number;
+}
+
+export async function adminStreamingOverview(days = 30): Promise<AdminStreamingDay[]> {
+  const { data, error } = await supabase.rpc('admin_streaming_overview', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as AdminStreamingDay[];
+}
+
+export interface AdminTopTrackRow {
+  rank: number;
+  track_id: string;
+  track_code: string | null;
+  title: string;
+  artist: string | null;
+  artist_user_id: string | null;
+  stream_count: number;
+  eligible_count: number;
+}
+
+export async function adminTopStreamingTracks(days = 7, limit = 20): Promise<AdminTopTrackRow[]> {
+  const { data, error } = await supabase.rpc('admin_top_streaming_tracks', {
+    p_days: days, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as AdminTopTrackRow[];
+}
+
 export async function adminRequestTrackChanges(
   trackId: string,
   note: string,
