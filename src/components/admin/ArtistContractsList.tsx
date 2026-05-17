@@ -1,0 +1,448 @@
+import { useEffect, useState } from 'react';
+import { Plus, X, RefreshCw, Eye, FileText, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import {
+  adminListContracts,
+  adminCreateContract,
+  ARTIST_CONTRACT_V1_BODY,
+  ARTIST_CONTRACT_V1_VERSION,
+  ARTIST_CONTRACT_V1_TITLE,
+  type AdminContractRow,
+  type ContractStatus,
+} from '@/lib/artistContractApi';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
+
+function fmtDate(s: string | null | undefined): string {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('ko-KR');
+}
+
+const STATUS_LABEL: Record<ContractStatus, { label: string; tone: string; icon: React.ReactNode }> = {
+  pending_signature: {
+    label: '서명 대기',
+    tone: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+    icon: <Clock size={11} />,
+  },
+  signed: {
+    label: '서명 완료',
+    tone: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+    icon: <CheckCircle2 size={11} />,
+  },
+  rejected: {
+    label: '거절됨',
+    tone: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+    icon: <XCircle size={11} />,
+  },
+  expired: {
+    label: '만료',
+    tone: 'bg-ink/10 text-ink-dim',
+    icon: <Clock size={11} />,
+  },
+};
+
+export default function ArtistContractsList() {
+  const [rows, setRows] = useState<AdminContractRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ContractStatus | ''>('');
+  const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailRow, setDetailRow] = useState<AdminContractRow | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await adminListContracts({ status: status || undefined, search: search || undefined });
+      setRows(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  useEffect(() => {
+    const t = window.setTimeout(load, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold tracking-tight">아티스트 계약 관리</h2>
+          <p className="text-xs text-ink-mute">
+            {rows.length}건 · 승인 + 결제 완료 아티스트만 계약서 생성 가능
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => void load()}
+            className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-3 py-2 text-xs font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
+          >
+            <RefreshCw size={12} /> 새로고침
+          </button>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-black hover:bg-accent/90"
+          >
+            <Plus size={12} /> 계약서 생성
+          </button>
+        </div>
+      </div>
+
+      {error && <Alert tone="error" title="계약 목록 조회 실패">{error}</Alert>}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="이메일 또는 닉네임 검색"
+          className="input flex-1 min-w-[180px] text-sm"
+        />
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as ContractStatus | '')}
+          className="input w-auto text-sm"
+        >
+          <option value="">전체 상태</option>
+          <option value="pending_signature">서명 대기</option>
+          <option value="signed">서명 완료</option>
+          <option value="rejected">거절됨</option>
+          <option value="expired">만료</option>
+        </select>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead>
+              <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
+                <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
+                <th className="px-3 py-2.5 text-left font-semibold">계약 버전</th>
+                <th className="px-3 py-2.5 text-left font-semibold">상태</th>
+                <th className="px-3 py-2.5 text-right font-semibold">발행일</th>
+                <th className="px-3 py-2.5 text-right font-semibold">서명일</th>
+                <th className="px-3 py-2.5 text-right font-semibold">만료일</th>
+                <th className="w-px px-3 py-2.5 text-right font-semibold">상세</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">불러오는 중…</td>
+                </tr>
+              )}
+              {!loading && rows.length === 0 && !error && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
+                    계약서가 없어요. 우측 상단에서 발행해주세요.
+                  </td>
+                </tr>
+              )}
+              {rows.map((r) => {
+                const meta = STATUS_LABEL[r.status];
+                return (
+                  <tr key={r.id} className="border-b border-line/10 hover:bg-bg-hover">
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium">{r.artist_nickname || '—'}</p>
+                      <p className="text-xs text-ink-mute">{r.artist_email || r.artist_user_id.slice(0, 8)}</p>
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-xs">{r.contract_version}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.tone}`}>
+                        {meta.icon} {meta.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-xs text-ink-mute">{fmtDate(r.created_at)}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-ink-mute">{fmtDate(r.signed_at)}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-ink-mute">{fmtDate(r.expires_at)}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button
+                        onClick={() => setDetailRow(r)}
+                        className="rounded p-1.5 hover:bg-ink/5"
+                        title="상세"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {createOpen && (
+        <CreateContractModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            void load();
+          }}
+        />
+      )}
+
+      {detailRow && <ContractDetailModal row={detailRow} onClose={() => setDetailRow(null)} />}
+    </div>
+  );
+}
+
+// ============================================
+// 계약서 생성 모달
+// ============================================
+
+interface EligibleArtist {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+}
+
+function CreateContractModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [artists, setArtists] = useState<EligibleArtist[]>([]);
+  const [artistUserId, setArtistUserId] = useState('');
+  const [version, setVersion] = useState(ARTIST_CONTRACT_V1_VERSION);
+  const [title, setTitle] = useState(ARTIST_CONTRACT_V1_TITLE);
+  const [body, setBody] = useState(ARTIST_CONTRACT_V1_BODY);
+  const [expiresAt, setExpiresAt] = useState(''); // YYYY-MM-DD
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 발행 가능한 아티스트 후보: approved + 결제 완료 + (계약 미발행 또는 만료/거절)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // admin_member_list 활용: 단순 필터 — account_type='artist' 가 list 에 직접 노출되지 않으므로
+        // 직접 users 테이블 + auth.users 조회. RLS 는 admin all 정책 (관리자만)
+        const { data, error: e } = await supabase
+          .from('users')
+          .select('id, nickname, account_type, artist_approval_status, membership_tier')
+          .eq('account_type', 'artist')
+          .eq('artist_approval_status', 'approved')
+          .in('membership_tier', ['individual', 'business']);
+        if (e) throw e;
+        const list = (data ?? []) as Array<{
+          id: string;
+          nickname: string | null;
+          account_type: string;
+          artist_approval_status: string;
+          membership_tier: string;
+        }>;
+        // 이메일은 별도 fetch 필요하지만 단순화: nickname + uid 일부
+        const mapped: EligibleArtist[] = list.map((u) => ({
+          id: u.id,
+          email: null,
+          nickname: u.nickname,
+        }));
+        if (alive) setArtists(mapped);
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!artistUserId) {
+      setError('대상 아티스트를 선택해주세요.');
+      return;
+    }
+    if (body.trim().length < 100) {
+      setError('계약 본문이 너무 짧아요 (최소 100자).');
+      return;
+    }
+    setBusy(true);
+    try {
+      const expIso = expiresAt ? new Date(expiresAt + 'T23:59:59+09:00').toISOString() : null;
+      await adminCreateContract({
+        artistUserId,
+        contractVersion: version.trim(),
+        contractTitle: title.trim(),
+        contractBody: body,
+        expiresAt: expIso,
+      });
+      toast.success('계약서가 발행됐어요. 아티스트가 동의하면 음원 등록 가능.');
+      onCreated();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('already exists')
+          ? '이미 동일 버전 계약서가 존재해요. 버전을 변경해주세요.'
+          : msg,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-soft/95 px-5 py-3 backdrop-blur">
+          <h3 className="text-base font-bold">계약서 발행</h3>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3 p-5">
+          <Alert tone="info">
+            승인 + 결제 완료된 아티스트만 노출됩니다. 동일 버전은 한 아티스트당 1건만 발행 가능
+            (재발행 필요 시 새 버전 — 예: v1.1).
+          </Alert>
+
+          <Field label="대상 아티스트 *">
+            <select
+              required
+              value={artistUserId}
+              onChange={(e) => setArtistUserId(e.target.value)}
+              className="input"
+            >
+              <option value="">— 선택 —</option>
+              {artists.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nickname || '이름없음'} ({a.id.slice(0, 8)})
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="계약 버전 *">
+            <input
+              type="text"
+              required
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              className="input font-mono"
+              placeholder="예: v1, v1.1"
+            />
+          </Field>
+
+          <Field label="계약 제목 *">
+            <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
+          </Field>
+
+          <Field label="서명 만료일 (선택)" hint="비워두면 만료 없음">
+            <input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              className="input"
+            />
+          </Field>
+
+          <Field label="계약 본문 *" hint="아티스트 동의 시점에 immutable 스냅샷으로 저장">
+            <textarea
+              required
+              rows={12}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="input font-mono text-[11px]"
+            />
+            <span className="block text-[10px] text-ink-dim">길이: {body.length}자</span>
+          </Field>
+
+          {error && <Alert tone="error">{error}</Alert>}
+
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 btn-ghost py-2 text-sm">
+              취소
+            </button>
+            <button type="submit" disabled={busy} className="flex-1 btn-primary py-2 text-sm">
+              {busy ? '발행 중…' : '계약서 발행'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// 계약서 상세 모달 (read-only)
+// ============================================
+function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-soft/95 px-5 py-3 backdrop-blur">
+          <h3 className="flex items-center gap-2 text-base font-bold">
+            <FileText size={16} /> {row.contract_title}{' '}
+            <span className="font-mono text-xs text-ink-mute">({row.contract_version})</span>
+          </h3>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <Meta label="아티스트" value={row.artist_nickname || row.artist_email || row.artist_user_id.slice(0, 8)} />
+            <Meta label="상태" value={STATUS_LABEL[row.status].label} />
+            <Meta label="발행일" value={fmtDate(row.created_at)} />
+            <Meta label="서명일" value={fmtDate(row.signed_at)} />
+            <Meta label="서명 만료" value={fmtDate(row.expires_at)} />
+          </div>
+          {row.rejected_reason && (
+            <Alert tone="error" title="거절 사유">{row.rejected_reason}</Alert>
+          )}
+          <Alert tone="info">
+            아티스트가 동의한 본문 자체는 사이즈가 크므로 상세 화면에는 표시하지 않습니다. 분쟁 시
+            DB 의 contract_body 컬럼을 참조하세요 (immutable 스냅샷 보장).
+          </Alert>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-mute">{label}</span>
+      {children}
+      {hint && <span className="block text-[11px] text-ink-dim">{hint}</span>}
+    </label>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-bg-card px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
+    </div>
+  );
+}

@@ -10,8 +10,10 @@ import {
   Mic2,
   ScrollText,
   Handshake,
+  FileSignature,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
+import ArtistContractsList from '@/components/admin/ArtistContractsList';
 import TrackReviewList from '@/components/admin/TrackReviewList';
 import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
 import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
@@ -38,6 +40,7 @@ type Tab =
   | 'payment-sync'
   | 'content'
   | 'artists'
+  | 'artist-contracts'
   | 'payout-verification'
   | 'track-review'
   | 'operation-logs'
@@ -54,6 +57,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
+  { key: 'artist-contracts', label: '계약 관리', icon: <FileSignature size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
@@ -114,6 +118,7 @@ export default function AdminPage() {
       {tab === 'operation-logs' && <AdminOperationLogs />}
       {tab === 'content' && <ContentManagement />}
       {tab === 'artists' && <ArtistApprovalList />}
+      {tab === 'artist-contracts' && <ArtistContractsList />}
       {tab === 'payout-verification' && <PayoutVerificationList />}
       {tab === 'track-review' && <TrackReviewList />}
       {tab === 'recommendation' && <RecommendationTester />}

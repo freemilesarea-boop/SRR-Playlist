@@ -21,6 +21,8 @@ export interface UserRow {
   // 0056 — 회원 탈퇴
   withdrawn_at?: string | null;
   withdrawn_reason?: string | null;
+  // 0057 — 아티스트 계약서 상태
+  contract_status?: 'not_created' | 'pending_signature' | 'signed' | 'rejected' | 'expired';
 }
 
 export interface SalesAgentRow {
