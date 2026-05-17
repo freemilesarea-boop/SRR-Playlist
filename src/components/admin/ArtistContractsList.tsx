@@ -3,11 +3,15 @@ import { Plus, X, RefreshCw, Eye, FileText, CheckCircle2, Clock, XCircle } from 
 import {
   adminListContracts,
   adminCreateContract,
+  adminListContractEmailJobs,
+  adminRequeueContractEmails,
+  dispatchContractEmails,
   ARTIST_CONTRACT_V1_BODY,
   ARTIST_CONTRACT_V1_VERSION,
   ARTIST_CONTRACT_V1_TITLE,
   type AdminContractRow,
   type ContractStatus,
+  type ContractEmailJob,
 } from '@/lib/artistContractApi';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
@@ -385,9 +389,57 @@ function CreateContractModal({
 }
 
 // ============================================
-// 계약서 상세 모달 (read-only)
+// 계약서 상세 모달 — read-only + 메일 발송 상태/재발송
 // ============================================
 function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose: () => void }) {
+  const [emailJobs, setEmailJobs] = useState<ContractEmailJob[] | null>(null);
+  const [emailLoading, setEmailLoading] = useState(true);
+  const [emailErr, setEmailErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function loadJobs() {
+    setEmailLoading(true);
+    setEmailErr(null);
+    try {
+      const jobs = await adminListContractEmailJobs(row.id);
+      setEmailJobs(jobs);
+    } catch (e) {
+      setEmailErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (row.status === 'signed') void loadJobs();
+    else setEmailLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row.id]);
+
+  async function handleRequeue(onlyFailed: boolean) {
+    if (busy) return;
+    if (!confirm(onlyFailed ? '실패한 발송만 재시도할까요?' : '모든 수신자에게 다시 발송할까요?'))
+      return;
+    setBusy(true);
+    try {
+      const count = await adminRequeueContractEmails(row.id, onlyFailed);
+      if (count === 0) {
+        toast.info('재발송할 대상이 없어요');
+      } else {
+        toast.success(`${count}건 재발송 큐 등록`);
+        // dispatch 호출
+        const r = await dispatchContractEmails(row.id);
+        if (r.ok) toast.success(`재발송 완료 — 성공 ${r.sent ?? 0} · 실패 ${r.failed ?? 0}`);
+        else toast.warning(r.error ?? '메일 발송 중 일부 실패');
+        await loadJobs();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '재발송 실패');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
@@ -418,6 +470,72 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
           {row.rejected_reason && (
             <Alert tone="error" title="거절 사유">{row.rejected_reason}</Alert>
           )}
+
+          {row.status === 'signed' && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold">계약서 사본 메일 발송 상태</h4>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void handleRequeue(true)}
+                    disabled={busy || emailLoading}
+                    className="rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-400/30 hover:bg-amber-500/25 disabled:opacity-50 dark:text-amber-200"
+                  >
+                    실패만 재발송
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRequeue(false)}
+                    disabled={busy || emailLoading}
+                    className="rounded-md bg-bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-50"
+                  >
+                    전체 재발송
+                  </button>
+                </div>
+              </div>
+              {emailErr && <Alert tone="error">{emailErr}</Alert>}
+              {emailLoading ? (
+                <p className="text-xs text-ink-mute">불러오는 중…</p>
+              ) : emailJobs && emailJobs.length === 0 ? (
+                <p className="text-xs text-ink-mute">발송 작업이 없어요.</p>
+              ) : (
+                emailJobs && (
+                  <ul className="space-y-1 rounded-xl bg-bg-card p-2 ring-1 ring-line/10">
+                    {emailJobs.map((j) => (
+                      <li
+                        key={j.job_id}
+                        className="flex flex-wrap items-center gap-2 rounded-md bg-bg-soft p-2 text-[11px]"
+                      >
+                        <EmailJobBadge status={j.status} />
+                        <span
+                          className="rounded-full bg-bg-card px-1.5 py-0.5 text-[10px] font-semibold text-ink-mute ring-1 ring-line/10"
+                          title={j.recipient_kind}
+                        >
+                          {j.recipient_kind === 'artist'
+                            ? '본인'
+                            : j.recipient_kind === 'admin'
+                              ? 'admin'
+                              : 'hardcoded'}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate font-mono">{j.recipient_email}</span>
+                        <span className="text-ink-dim">{j.attempts}회 시도</span>
+                        {j.sent_at && (
+                          <span className="text-ink-dim">완료: {fmtDate(j.sent_at)}</span>
+                        )}
+                        {j.last_error && (
+                          <p className="basis-full text-[10px] leading-snug text-red-700 dark:text-red-300">
+                            {j.last_error}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              )}
+            </section>
+          )}
+
           <Alert tone="info">
             아티스트가 동의한 본문 자체는 사이즈가 크므로 상세 화면에는 표시하지 않습니다. 분쟁 시
             DB 의 contract_body 컬럼을 참조하세요 (immutable 스냅샷 보장).
@@ -425,6 +543,35 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
         </div>
       </div>
     </div>
+  );
+}
+
+function EmailJobBadge({ status }: { status: ContractEmailJob['status'] }) {
+  if (status === 'sent') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200">
+        <CheckCircle2 size={10} /> 발송
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-500/15 dark:text-red-200">
+        <XCircle size={10} /> 실패
+      </span>
+    );
+  }
+  if (status === 'sending') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-900 dark:bg-sky-500/15 dark:text-sky-200">
+        진행
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+      <Clock size={10} /> 대기
+    </span>
   );
 }
 

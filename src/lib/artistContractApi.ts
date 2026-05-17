@@ -41,6 +41,26 @@ export interface AdminContractRow {
   expires_at: string | null;
   created_by: string | null;
   created_at: string;
+  /** 0068 — email 발송 상태 (선택, RPC 가 아직 미반환이면 undefined) */
+  email_status?: 'not_sent' | 'queued' | 'sent' | 'partial_failed' | 'failed';
+  emailed_to_artist_at?: string | null;
+  emailed_to_admin_at?: string | null;
+  last_admin_emailed_at?: string | null;
+  admin_email_delivery_count?: number;
+  last_email_error?: string | null;
+}
+
+export interface ContractEmailJob {
+  job_id: string;
+  recipient_email: string;
+  recipient_kind: 'artist' | 'admin' | 'hardcoded';
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled';
+  attempts: number;
+  sent_at: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  provider_message_id: string | null;
+  created_at: string;
 }
 
 export async function fetchMyContract(): Promise<MyContract | null> {
@@ -48,6 +68,50 @@ export async function fetchMyContract(): Promise<MyContract | null> {
   if (error) throw error;
   const rows = (data ?? []) as MyContract[];
   return rows[0] ?? null;
+}
+
+/** 0068 — 승인+결제 완료 아티스트가 호출. 본인 계약 없으면 활성 template 으로 생성. */
+export async function ensureMyContract(): Promise<string> {
+  const { data, error } = await supabase.rpc('ensure_artist_contract_for_user');
+  if (error) throw error;
+  return data as string;
+}
+
+/** 0068 — 서명 완료 후 Edge Function 호출하여 메일 발송 큐 처리 */
+export async function dispatchContractEmails(
+  contractId: string,
+): Promise<{ ok: boolean; sent?: number; failed?: number; processed?: number; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('dispatch-contract-emails', {
+      body: { contract_id: contractId },
+    });
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+    return data ?? { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function adminListContractEmailJobs(contractId: string): Promise<ContractEmailJob[]> {
+  const { data, error } = await supabase.rpc('admin_list_contract_email_jobs', {
+    p_contract_id: contractId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ContractEmailJob[];
+}
+
+export async function adminRequeueContractEmails(
+  contractId: string,
+  onlyFailed = false,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_requeue_contract_emails', {
+    p_contract_id: contractId,
+    p_only_failed: onlyFailed,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
 }
 
 export async function signMyContract(

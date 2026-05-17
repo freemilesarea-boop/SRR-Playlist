@@ -384,7 +384,7 @@ function ContractRequiredCard({
   };
   const bodyByStatus: Record<typeof contractStatus, string> = {
     not_created:
-      '결제는 완료됐어요. 관리자가 계약서를 발행하면 이 화면에 알림이 표시되고 서명할 수 있어요. 보통 1영업일 내 발행됩니다.',
+      '결제는 완료됐어요. 아래 버튼을 누르면 계약서가 자동 발행되며, 본문을 확인 후 동의·서명할 수 있어요.',
     pending_signature:
       '계약서가 발행됐어요. 본문을 확인하고 동의·서명을 완료하면 음원 등록 단계로 진행할 수 있어요.',
     signed: '서명 완료. 다음 단계로 이동하는 중…',
@@ -407,12 +407,12 @@ function ContractRequiredCard({
           </p>
         </div>
       </div>
-      {contractStatus === 'pending_signature' && (
+      {(contractStatus === 'pending_signature' || contractStatus === 'not_created') && (
         <Link to="/artist/contract" className="btn-primary block w-full py-2.5 text-center">
-          계약서 확인 및 서명
+          {contractStatus === 'not_created' ? '계약서 발행 + 확인' : '계약서 확인 및 서명'}
         </Link>
       )}
-      {contractStatus !== 'pending_signature' && contractStatus !== 'signed' && (
+      {(contractStatus === 'rejected' || contractStatus === 'expired') && (
         <Link
           to="/artist/contract"
           className="block w-full rounded-xl bg-bg-soft py-2.5 text-center text-sm font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
