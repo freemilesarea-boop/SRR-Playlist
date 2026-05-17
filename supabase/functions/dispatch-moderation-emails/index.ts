@@ -47,7 +47,7 @@ function readEnv(): Env {
 interface PendingJob {
   job_id: string; track_id: string;
   recipient_email: string; recipient_user_id: string | null;
-  kind: 'approved' | 'rejected' | 'revision_requested' | 'removed' | 'released';
+  kind: 'approved' | 'rejected' | 'revision_requested' | 'removed' | 'released' | 'scheduled';
   subject: string; attempts: number;
   track_title: string; track_artist: string | null;
   track_code: string | null; release_status: string;
@@ -73,15 +73,17 @@ function fmtDateKR(iso: string | null): string {
 function buildHtml(job: PendingJob, appUrl: string): string {
   const kindLabel: Record<string, string> = {
     approved: '승인 완료', rejected: '반려', revision_requested: '수정 요청',
-    removed: '제거', released: '공개 시작',
+    removed: '제거', released: '즉시 공개됨', scheduled: '발매 예약됨',
   };
   const kindColor: Record<string, string> = {
     approved: '#15803d', rejected: '#b91c1c',
-    revision_requested: '#b45309', removed: '#7f1d1d', released: '#15803d',
+    revision_requested: '#b45309', removed: '#7f1d1d',
+    released: '#15803d', scheduled: '#1d4ed8',
   };
   const kindBg: Record<string, string> = {
     approved: '#dcfce7', rejected: '#fee2e2',
-    revision_requested: '#fef3c7', removed: '#fecaca', released: '#dcfce7',
+    revision_requested: '#fef3c7', removed: '#fecaca',
+    released: '#dcfce7', scheduled: '#dbeafe',
   };
   const note = job.kind === 'rejected'
     ? job.rejected_reason ?? job.admin_review_note
@@ -100,7 +102,9 @@ function buildHtml(job: PendingJob, appUrl: string): string {
   const bg = kindBg[job.kind] || '#f4f4f5';
 
   let intro = '';
-  if (job.kind === 'approved') intro = '제출하신 음원이 검수 승인되었습니다. 발매일이 도래하면 자동으로 공개됩니다.';
+  if (job.kind === 'released') intro = '제출하신 음원이 검수 승인되어 지금 바로 서비스에 공개되었습니다. 정산 대상에 즉시 포함됩니다.';
+  else if (job.kind === 'scheduled') intro = '제출하신 음원이 검수 승인되어 발매일에 자동으로 공개됩니다. 발매일이 도래할 때까지 공개되지 않으며 정산 대상에서도 제외됩니다.';
+  else if (job.kind === 'approved') intro = '제출하신 음원이 검수 승인되었습니다.';
   else if (job.kind === 'rejected') intro = '제출하신 음원이 검수에서 반려되었습니다. 아래 사유를 확인해주세요.';
   else if (job.kind === 'revision_requested') intro = '제출하신 음원에 수정 요청이 도착했습니다. 아래 사유에 따라 수정 후 재제출해주세요.';
   else if (job.kind === 'removed') intro = '권리 또는 정책 사유로 음원이 제거되었습니다. 관련 문의는 운영팀에 연락 부탁드립니다.';
