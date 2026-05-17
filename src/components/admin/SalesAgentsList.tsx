@@ -90,9 +90,9 @@ export default function SalesAgentsList() {
 
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[1280px] text-sm">
             <thead>
-              <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
+              <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
                 <th className="px-3 py-2.5 text-left font-semibold">영업인</th>
                 <th className="px-3 py-2.5 text-left font-semibold">코드</th>
                 <th className="px-3 py-2.5 text-left font-semibold">상태</th>
@@ -105,7 +105,7 @@ export default function SalesAgentsList() {
                 <th className="px-3 py-2.5 text-right font-semibold">이번 달 정산액</th>
                 <th className="px-3 py-2.5 text-right font-semibold">생성</th>
                 <th className="px-3 py-2.5 text-right font-semibold">최근 활동</th>
-                <th className="px-3 py-2.5 text-right font-semibold">관리</th>
+                <th className="w-px px-3 py-2.5 text-right font-semibold">관리</th>
               </tr>
             </thead>
             <tbody>
