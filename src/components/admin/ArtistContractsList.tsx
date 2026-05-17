@@ -6,6 +6,7 @@ import {
   adminListContractEmailJobs,
   adminListContractEmailEvents,
   adminRequeueContractEmails,
+  adminEnqueueContractEmails,
   dispatchContractEmails,
   checkDispatchHealth,
   ARTIST_CONTRACT_V1_BODY,
@@ -439,21 +440,38 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
 
   async function handleRequeue(onlyFailed: boolean) {
     if (busy) return;
-    if (!confirm(onlyFailed ? '실패한 발송만 재시도할까요?' : '모든 수신자에게 다시 발송할까요?'))
-      return;
+    const hasJobs = (emailJobs?.length ?? 0) > 0;
+    const action = !hasJobs
+      ? '발송 작업이 없어요. 지금 생성하고 발송할까요?'
+      : onlyFailed
+        ? '실패한 발송만 재시도할까요?'
+        : '모든 수신자에게 다시 발송할까요?';
+    if (!confirm(action)) return;
     setBusy(true);
     try {
-      const count = await adminRequeueContractEmails(row.id, onlyFailed);
-      if (count === 0) {
-        toast.info('재발송할 대상이 없어요');
+      let count = 0;
+      if (!hasJobs) {
+        // 0073 — jobs 0건 케이스: enqueue 부터 호출
+        count = await adminEnqueueContractEmails(row.id);
+        if (count === 0) {
+          toast.warning('생성할 수신자가 없어요 (계약이 signed 상태가 아니거나 데이터 없음)');
+        } else {
+          toast.success(`${count}건 발송 큐 생성`);
+        }
       } else {
-        toast.success(`${count}건 재발송 큐 등록`);
-        // dispatch 호출
-        const r = await dispatchContractEmails(row.id);
-        if (r.ok) toast.success(`재발송 완료 — 성공 ${r.sent ?? 0} · 실패 ${r.failed ?? 0}`);
-        else toast.warning(r.error ?? '메일 발송 중 일부 실패');
-        await loadJobs();
+        count = await adminRequeueContractEmails(row.id, onlyFailed);
+        if (count === 0) {
+          toast.info('재발송할 대상이 없어요');
+        } else {
+          toast.success(`${count}건 재발송 큐 등록`);
+        }
       }
+      if (count > 0) {
+        const r = await dispatchContractEmails(row.id);
+        if (r.ok) toast.success(`발송 완료 — 성공 ${r.sent ?? 0} · 실패 ${r.failed ?? 0}`);
+        else toast.warning(r.error ?? '메일 발송 중 일부 실패');
+      }
+      await loadJobs();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '재발송 실패');
     } finally {

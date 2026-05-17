@@ -114,6 +114,15 @@ export async function adminRequeueContractEmails(
   return (data as number) ?? 0;
 }
 
+/** 0073 — jobs 미생성 케이스 복구용. signed 인데 contract_email_jobs 가 0건일 때 사용. */
+export async function adminEnqueueContractEmails(contractId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_enqueue_contract_emails', {
+    p_contract_id: contractId,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
 export interface ContractEmailEvent {
   event_id: number;
   job_id: string;
