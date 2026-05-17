@@ -53,6 +53,13 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
  */
 const sessionFailedTrackIds = new Set<string>();
 
+/**
+ * 0077 — toast dedup: 같은 트랙+에러 코드 조합은 30초 내 1회만 표시.
+ * 키 형식: `${trackId}:${errCode}`. 메인페이지 진입 시 preload 에러 폭주 방지.
+ */
+const recentErrorToasts = new Map<string, number>();
+const TOAST_DEDUP_MS = 30_000;
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -252,11 +259,10 @@ export default function Player() {
       audio.pause();
       // 2) 새 src 적용
       audio.src = current.audio_url;
-      // 3) 명시적 load (모바일 Safari + 일부 브라우저 호환)
-      try {
-        audio.load();
-      } catch {
-        /* noop */
+      // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
+      //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
+      if (playing) {
+        try { audio.load(); } catch { /* noop */ }
       }
       audio.currentTime = 0;
       audio.volume = volume;
@@ -579,15 +585,10 @@ export default function Player() {
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
       console.error('[audio] error', {
-        id: current?.id,
-        title: current?.title,
-        audio_url: current?.audio_url,
-        code: err?.code,
-        codeName,
-        message: err?.message,
-        networkState: target.networkState,
-        readyState: target.readyState,
-        src: target.src,
+        id: current?.id, title: current?.title, audio_url: current?.audio_url,
+        code: err?.code, codeName, message: err?.message,
+        networkState: target.networkState, readyState: target.readyState, src: target.src,
+        playing,
       });
     }
 
@@ -597,16 +598,29 @@ export default function Player() {
       sessionFailedTrackIds.add(current.id);
     }
 
+    // 0077-hotfix — 사용자가 재생을 시도하지 않은 상태 (preload 에러) 면 silent skip.
+    // 메인페이지 진입 시 preload 만으로 onError 가 발화되어 toast 폭주하는 문제를 차단.
+    if (!playing) {
+      setErrored(true);
+      // 자동 next 도 호출하지 않음 — 사용자 의도 없이 큐를 진행시키지 않음.
+      return;
+    }
+
     setErrored(true);
     pause();
 
-    if (isPermanent) {
-      // 0063: 관리자 재업로드 문구 제거. 아티스트가 직접 다시 업로드해야 함.
-      toast.error(
-        `이 음원은 브라우저에서 재생할 수 없는 파일 형식이거나 업로드 중 문제가 발생했습니다. 아티스트가 음원을 다시 업로드한 후 재검수를 진행해주세요. (mp3, wav, flac 권장) [${codeName}]`,
-      );
-    } else {
-      toast.error(`재생 실패 (${codeName}). 다음 곡으로 넘어갑니다.`);
+    // 0077-hotfix — 같은 트랙+코드 30초 dedup
+    const dedupKey = `${current?.id ?? 'unknown'}:${err?.code ?? 0}`;
+    const now = Date.now();
+    const last = recentErrorToasts.get(dedupKey);
+    if (!last || now - last >= TOAST_DEDUP_MS) {
+      recentErrorToasts.set(dedupKey, now);
+      if (isPermanent) {
+        // 일반 사용자용 짧은 메시지. 운영자/아티스트용 상세 문구는 admin/artist 화면에서.
+        toast.error('이 음원을 재생할 수 없습니다. 다음 곡을 선택해주세요.');
+      } else {
+        toast.error(`재생 실패 (${codeName})`);
+      }
     }
 
     // 자동 next — 단 다음 트랙도 sessionFailedTrackIds 에 있으면 추가 스킵 (Player 메인 effect 가 처리)
@@ -640,7 +654,7 @@ export default function Player() {
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
         ref={audioARef}
-        preload="auto"
+        preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onCanPlay={onCanPlay}
@@ -650,7 +664,7 @@ export default function Player() {
       />
       <audio
         ref={audioBRef}
-        preload="auto"
+        preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onCanPlay={onCanPlay}
