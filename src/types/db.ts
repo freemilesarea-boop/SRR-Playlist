@@ -15,6 +15,23 @@ export interface UserRow {
   account_type?: 'individual' | 'business' | 'artist';
   artist_approval_status?: 'pending' | 'approved' | 'rejected' | null;
   membership_tier?: 'free' | 'individual' | 'business';
+  // 0054 — 영업인 추적
+  sales_agent_id?: string | null;
+  sales_agent_code?: string | null;
+}
+
+export interface SalesAgentRow {
+  id: string;
+  user_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  code: string;
+  commission_rate: number;
+  is_active: boolean;
+  note?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TrackRow {

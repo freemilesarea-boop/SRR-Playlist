@@ -84,12 +84,23 @@ export interface MemberDetail {
     subscription_type: string;
     status: string;
     paid_at: string;
+    sales_agent_id?: string | null;
+    sales_agent_code?: string | null;
   }>;
   subscription_requests: Array<{
     requested_plan: string;
     status: string;
     created_at: string;
   }>;
+  // 0054 — 연결된 영업인 (없으면 null)
+  sales_agent?: {
+    id: string;
+    name: string;
+    code: string;
+    is_active: boolean;
+    commission_rate: number;
+    linked_at: string;
+  } | null;
 }
 
 export interface TrackAnalytics {

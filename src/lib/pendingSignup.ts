@@ -21,6 +21,9 @@ interface PendingProfile {
   address: string;
   signup_completed: true;
   artist_approval_status?: 'pending';
+  // 0054 — 사업자 가입 시 영업인 코드 연결
+  sales_agent_id?: string;
+  sales_agent_code?: string;
 }
 
 interface PendingArtistFields {
@@ -98,6 +101,12 @@ export async function applyPendingSignupOnLogin(
         signup_completed: true,
         ...(p.profile.account_type === 'artist'
           ? { artist_approval_status: 'pending' as const }
+          : {}),
+        ...(p.profile.sales_agent_id
+          ? {
+              sales_agent_id: p.profile.sales_agent_id,
+              sales_agent_code: p.profile.sales_agent_code ?? null,
+            }
           : {}),
       })
       .eq('id', userId);

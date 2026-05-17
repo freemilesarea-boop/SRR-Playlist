@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet } from 'lucide-react';
+import { X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake } from 'lucide-react';
 import { fetchMemberDetail, type MemberDetail as MemberDetailType } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
 
@@ -112,6 +112,31 @@ export default function MemberDetail({
               <Stat icon={<Clock size={14} />} label="누적 청취" value={fmtTime(data.total_listened_seconds)} />
             </section>
 
+            {/* 영업인 (있을 때만 노출) */}
+            {data.sales_agent && (
+              <section>
+                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  <Handshake size={14} /> 연결된 영업인
+                </h4>
+                <div className="rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm font-semibold">{data.sales_agent.name}</p>
+                    <code className="rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[11px]">
+                      {data.sales_agent.code}
+                    </code>
+                    {!data.sales_agent.is_active && (
+                      <span className="rounded-full bg-ink/10 px-1.5 py-0.5 text-[10px] text-ink-dim">
+                        비활성
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-ink-mute">
+                    수수료율 {data.sales_agent.commission_rate}%
+                  </p>
+                </div>
+              </section>
+            )}
+
             {/* 최근 재생 */}
             <ListSection icon={<Headphones size={14} />} title={`최근 재생 (${data.recent_plays.length})`}>
               {data.recent_plays.length === 0 ? (
@@ -157,6 +182,12 @@ export default function MemberDetail({
                       <p className="text-xs text-ink-mute">
                         {PLAN_LABEL[r.subscription_type] ?? r.subscription_type} · {r.status}
                       </p>
+                      {r.sales_agent_code && (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-ink-dim">
+                          <Handshake size={10} /> 영업인{' '}
+                          <code className="font-mono">{r.sales_agent_code}</code>
+                        </p>
+                      )}
                     </div>
                     <span className="text-xs text-ink-dim">
                       {new Date(r.paid_at).toLocaleDateString('ko-KR')}
