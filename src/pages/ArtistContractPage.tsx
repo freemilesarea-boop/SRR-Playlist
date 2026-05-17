@@ -5,6 +5,8 @@ import {
   fetchMyContract,
   signMyContract,
   rejectMyContract,
+  ensureMyContract,
+  dispatchContractEmails,
   type MyContract,
 } from '@/lib/artistContractApi';
 import { toast } from '@/store/toastStore';
@@ -28,9 +30,18 @@ export default function ArtistContractPage() {
     setLoading(true);
     setError(null);
     try {
-      const c = await fetchMyContract();
+      let c = await fetchMyContract();
+      // 0068 — 본인 계약이 없으면 (승인+결제 완료 아티스트는) 자동 발행 시도
+      if (!c) {
+        try {
+          await ensureMyContract();
+          c = await fetchMyContract();
+        } catch (ensureErr) {
+          // 게이트 미통과 (not approved / not paid 등) — 조용히 폴백, UI 는 기존 미발급 상태 표시
+          if (import.meta.env.DEV) console.debug('[contract] ensure skipped:', ensureErr);
+        }
+      }
       setContract(c);
-      // signed 상태면 동의 체크박스 미리 체크 (readonly)
       if (c?.status === 'signed') setAgreed(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -52,12 +63,25 @@ export default function ArtistContractPage() {
     setSigning(true);
     try {
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
-      // IP 는 서버 측에서 채울 수도 있지만, MVP 는 클라이언트가 null 로 두고 향후 EF 로 캡처 가능
       await signMyContract(contract.id, { ip: null, userAgent: ua });
-      toast.success('계약이 체결됐어요. 음원 등록 단계로 이동할 수 있어요.');
+      toast.success('계약이 체결됐어요. 계약서 사본 메일을 발송 중입니다.');
+
+      // 0068 — Edge Function 호출하여 메일 발송 (실패해도 계약 signed 는 유지)
+      void (async () => {
+        const r = await dispatchContractEmails(contract.id);
+        if (r.ok) {
+          if (r.sent && r.sent > 0) {
+            toast.success(`계약서 사본 ${r.sent}건 발송 완료${r.failed ? ` · 실패 ${r.failed}건` : ''}`);
+          }
+        } else {
+          toast.warning(
+            '메일 발송이 일부 실패했어요. 관리자가 자동 재시도하거나, 마이페이지에서 상태를 확인할 수 있어요.',
+          );
+        }
+      })();
+
       await load();
-      // 서명 완료 후 dashboard 로 자동 이동
-      setTimeout(() => navigate('/artist'), 600);
+      setTimeout(() => navigate('/artist'), 800);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '서명에 실패했어요');
     } finally {
