@@ -8,6 +8,7 @@ import {
   Repeat,
   Repeat1,
   Volume2,
+  Volume1,
   VolumeX,
   ChevronUp,
   ChevronDown,
@@ -108,6 +109,7 @@ export default function Player() {
     setShuffle,
     setRepeat,
     setVolume,
+    toggleMute,
     setCurrentTime,
     setDuration,
     setPendingSeek,
@@ -121,6 +123,21 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
+  // 0078 — 미니 플레이어 볼륨 popover
+  const [volumePopover, setVolumePopover] = useState(false);
+  const volumeBtnRef = useRef<HTMLButtonElement>(null);
+  const volumePopoverRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!volumePopover) return;
+    function onDocClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (volumeBtnRef.current?.contains(t)) return;
+      if (volumePopoverRef.current?.contains(t)) return;
+      setVolumePopover(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [volumePopover]);
 
   const skipChainRef = useRef(0);
   useEffect(() => {
@@ -720,6 +737,27 @@ export default function Player() {
           >
             {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
           </button>
+          {/* 0078 — 미니 플레이어 볼륨 버튼 (popover 는 outer button 밖에 sibling 으로) */}
+          <button
+            ref={volumeBtnRef}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setVolumePopover((v) => !v);
+            }}
+            className="relative flex h-10 w-10 items-center justify-center text-ink-mute hover:text-ink"
+            aria-label="볼륨 조절"
+            aria-expanded={volumePopover}
+            aria-haspopup="dialog"
+          >
+            {volume === 0 ? (
+              <VolumeX size={18} />
+            ) : volume < 0.5 ? (
+              <Volume1 size={18} />
+            ) : (
+              <Volume2 size={18} />
+            )}
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -732,6 +770,38 @@ export default function Player() {
           </button>
           <ChevronUp size={18} className="relative mr-1 text-ink-dim sm:hidden" />
         </button>
+        {/* 0078 — 볼륨 popover: outer button 외부 sibling 으로 (overflow-hidden 회피) */}
+        {volumePopover && (
+          <div
+            ref={volumePopoverRef}
+            role="dialog"
+            aria-label="볼륨 조절"
+            className="absolute right-3 bottom-full mb-2 z-30 flex items-center gap-2 rounded-2xl bg-bg-card p-3 shadow-elevated ring-1 ring-line/15 backdrop-blur sm:right-4"
+            style={{ minWidth: 220 }}
+          >
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={volume === 0 ? '음소거 해제' : '음소거'}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-mute hover:bg-bg-hover hover:text-ink"
+            >
+              {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              aria-label="볼륨 슬라이더"
+              className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-ink/15 accent-accent"
+            />
+            <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-mute tabular-nums">
+              {Math.round(volume * 100)}
+            </span>
+          </div>
+        )}
         <div className="mx-2 mt-1.5 h-1 overflow-hidden rounded-full bg-ink/10">
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-200"
@@ -880,7 +950,7 @@ export default function Player() {
             </div>
 
             <div className="flex w-full max-w-xs items-center gap-2 text-white/60">
-              <button onClick={() => setVolume(volume > 0 ? 0 : 1)} aria-label="음소거">
+              <button onClick={toggleMute} aria-label={volume === 0 ? '음소거 해제' : '음소거'}>
                 {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
               <input
