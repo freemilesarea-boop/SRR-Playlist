@@ -3,8 +3,10 @@ import { useToastStore } from '@/store/toastStore';
 
 const styles: Record<string, string> = {
   info: 'bg-bg-card text-ink ring-line/15',
-  success: 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/30',
-  error: 'bg-red-500/15 text-red-100 ring-red-400/30',
+  success:
+    'bg-emerald-100 text-emerald-900 ring-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-50 dark:ring-emerald-400/30',
+  error:
+    'bg-red-100 text-red-900 ring-red-400/40 dark:bg-red-500/15 dark:text-red-50 dark:ring-red-400/30',
 };
 
 const Icons = {

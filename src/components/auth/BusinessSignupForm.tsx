@@ -10,6 +10,7 @@ import {
 } from '@/lib/businessVerification';
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
+import Alert, { inlineToneClass } from '@/components/Alert';
 
 interface Props {
   onDone: () => void;
@@ -285,9 +286,9 @@ export default function BusinessSignupForm({ onDone }: Props) {
               ? '검증 중…'
               : '사업자 검증하기'}
         </button>
-        {bizError && <p className="mt-1 text-[11px] text-red-300">{bizError}</p>}
+        {bizError && <p className={`mt-1 text-[11px] ${inlineToneClass.error}`}>{bizError}</p>}
         {bizVerified && businessVerification && (
-          <p className="mt-1 text-[11px] text-emerald-300">
+          <p className={`mt-1 text-[11px] ${inlineToneClass.success}`}>
             {businessVerification.business_state} · {businessVerification.tax_type}
           </p>
         )}
@@ -324,9 +325,11 @@ export default function BusinessSignupForm({ onDone }: Props) {
             {salesAgent ? '확인됨' : salesAgentChecking ? '확인 중…' : '확인'}
           </button>
         </div>
-        {salesAgentError && <p className="mt-1 text-[11px] text-red-300">{salesAgentError}</p>}
+        {salesAgentError && (
+          <p className={`mt-1 text-[11px] ${inlineToneClass.error}`}>{salesAgentError}</p>
+        )}
         {salesAgent && (
-          <p className="mt-1 text-[11px] text-emerald-300">
+          <p className={`mt-1 text-[11px] ${inlineToneClass.success}`}>
             담당 영업인: {salesAgent.name} ({salesAgent.code})
           </p>
         )}
@@ -346,7 +349,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
         <input type="password" required minLength={6} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} autoComplete="new-password" className="input" />
       </Field>
 
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <Alert tone="error">{error}</Alert>}
 
       <button type="submit" disabled={busy} className="btn-primary w-full py-3">
         {busy ? '가입 중…' : '사업자 회원가입'}
