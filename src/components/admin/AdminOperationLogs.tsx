@@ -11,6 +11,7 @@ import {
   type LogCategory,
 } from '@/lib/adminLogsApi';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 
 const LEVEL_META: Record<LogLevel, { label: string; tone: string; icon: React.ReactNode }> = {
   info: { label: 'info', tone: 'bg-ink/10 text-ink-mute', icon: <Info size={11} /> },
@@ -114,15 +115,14 @@ export default function AdminOperationLogs() {
       </div>
 
       {loadError && (
-        <div className="rounded-2xl bg-red-500/10 p-3 ring-1 ring-red-500/30">
-          <p className="text-xs font-bold text-red-200">로그 RPC 호출 실패</p>
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-red-100/85">
+        <Alert tone="error" title="로그 RPC 호출 실패">
+          <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] opacity-90">
             {loadError}
           </pre>
-          <p className="mt-1 text-[11px] text-red-100/80">
+          <p className="mt-1 text-[11px] opacity-80">
             0041 마이그레이션이 운영 DB 에 적용되지 않았을 수 있어요. 워크플로 실행 후 재시도.
           </p>
-        </div>
+        </Alert>
       )}
 
       {/* KPI 4종 */}
@@ -220,7 +220,7 @@ export default function AdminOperationLogs() {
                   </div>
                   <p className="mt-1 text-sm text-ink">{r.message}</p>
                   {r.error_message && (
-                    <p className="mt-1 rounded bg-red-500/10 px-2 py-1 font-mono text-[11px] text-red-300">
+                    <p className="mt-1 rounded bg-red-100 px-2 py-1 font-mono text-[11px] text-red-800 dark:bg-red-500/10 dark:text-red-300">
                       {r.error_code && <span className="font-bold">[{r.error_code}]</span>}{' '}
                       {r.error_message}
                     </p>
