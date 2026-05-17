@@ -173,12 +173,17 @@ function ContractView({
 
       {/* 동의 + 서명 또는 readonly 안내 */}
       {isReadonly ? (
-        <Alert tone={contract.status === 'signed' ? 'success' : 'info'}>
-          {contract.status === 'signed' && '이미 서명 완료된 계약이에요. 본문은 수정할 수 없어요.'}
-          {contract.status === 'rejected' &&
-            `이 계약은 거절됐어요. 사유: ${contract.rejected_reason ?? '—'}`}
-          {contract.status === 'expired' && '계약 서명 기한이 만료됐어요. 관리자에게 재발급을 요청해주세요.'}
-        </Alert>
+        <div className="space-y-3">
+          <Alert tone={contract.status === 'signed' ? 'success' : 'info'}>
+            {contract.status === 'signed' && '이미 서명 완료된 계약이에요. 본문은 수정할 수 없어요.'}
+            {contract.status === 'rejected' &&
+              `이 계약은 거절됐어요. 사유: ${contract.rejected_reason ?? '—'}`}
+            {contract.status === 'expired' && '계약 서명 기한이 만료됐어요. 관리자에게 재발급을 요청해주세요.'}
+          </Alert>
+          {(contract.status === 'rejected' || contract.status === 'expired') && (
+            <ContractReissueCTA status={contract.status} contractId={contract.id} />
+          )}
+        </div>
       ) : (
         <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-accent/30">
           <Alert tone="warning">
@@ -249,6 +254,47 @@ function StatusBanner({ contract }: { contract: MyContract }) {
     <Alert tone="error">
       <Clock size={12} className="mr-1 inline" /> 만료됨. 관리자에게 재발급을 요청해주세요.
     </Alert>
+  );
+}
+
+function ContractReissueCTA({
+  status,
+  contractId,
+}: {
+  status: 'rejected' | 'expired';
+  contractId: string;
+}) {
+  const reason = status === 'rejected' ? '거절' : '만료';
+  const subject = encodeURIComponent(`[SRR Playlist] 아티스트 계약서 재발행 요청 (${reason})`);
+  const body = encodeURIComponent(
+    [
+      '안녕하세요, 아티스트 계약서 재발행을 요청드립니다.',
+      '',
+      `계약 ID: ${contractId}`,
+      `현재 상태: ${status === 'rejected' ? '거절됨 (rejected)' : '만료됨 (expired)'}`,
+      '',
+      '재발행 사유 / 요청사항:',
+      '(자유 기재)',
+      '',
+      '— 가입 이메일과 동일한 주소로 보내주시면 빠른 확인이 가능합니다.',
+    ].join('\n'),
+  );
+  const href = `mailto:freemilesarea@gmail.com?subject=${subject}&body=${body}`;
+
+  return (
+    <div className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <h3 className="text-sm font-bold">계약서 재발행 요청</h3>
+      <p className="text-xs leading-relaxed text-ink-mute">
+        계약이 {reason}된 상태에서는 음원 등록·정산이 진행되지 않아요. 아래 버튼으로 관리자에게
+        재발행을 요청해주세요. 평균 1영업일 내 새 계약서가 발행됩니다.
+      </p>
+      <a
+        href={href}
+        className="inline-flex w-full items-center justify-center rounded-xl bg-accent px-4 py-2.5 text-sm font-bold text-bg hover:opacity-90"
+      >
+        관리자에게 재발행 요청 메일 보내기
+      </a>
+    </div>
   );
 }
 

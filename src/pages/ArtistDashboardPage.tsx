@@ -36,6 +36,7 @@ import { CreditCard, Wallet, FileSignature } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 
 import type { LucideIcon } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export default function ArtistDashboardPage() {
   const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
   const [payout, setPayout] = useState<PayoutAccount | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingTrack, setEditingTrack] = useState<MyArtistTrackRow | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -118,7 +120,12 @@ export default function ArtistDashboardPage() {
           payout={payout}
           membershipTier={profile?.membership_tier ?? null}
           userEmail={user?.email ?? ''}
-          onUploaded={load}
+          editingTrack={editingTrack}
+          onCancelEdit={() => setEditingTrack(null)}
+          onUploaded={() => {
+            setEditingTrack(null);
+            void load();
+          }}
           onPayoutSubmitted={load}
         />
       )}
@@ -153,7 +160,15 @@ export default function ArtistDashboardPage() {
         ) : (
           <ul className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
             {tracks.map((t) => (
-              <MyTrackRow key={t.track_id} track={t} onChanged={load} />
+              <MyTrackRow
+                key={t.track_id}
+                track={t}
+                onChanged={load}
+                onEdit={() => {
+                  setEditingTrack(t);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
             ))}
           </ul>
         )}
@@ -220,6 +235,8 @@ function UploadGate({
   payout,
   membershipTier,
   userEmail,
+  editingTrack,
+  onCancelEdit,
   onUploaded,
   onPayoutSubmitted,
 }: {
@@ -227,6 +244,8 @@ function UploadGate({
   payout: PayoutAccount | null;
   membershipTier: 'free' | 'individual' | 'business' | null;
   userEmail: string;
+  editingTrack?: MyArtistTrackRow | null;
+  onCancelEdit?: () => void;
   onUploaded: () => void | Promise<void>;
   onPayoutSubmitted: () => void | Promise<void>;
 }) {
@@ -266,7 +285,12 @@ function UploadGate({
   return (
     <>
       <VerifiedPayoutSummary payout={payout} />
-      <ArtistUploadForm onUploaded={onUploaded} />
+      <ArtistUploadForm
+        onUploaded={onUploaded}
+        editingTrack={editingTrack}
+        onCancelEdit={onCancelEdit}
+        key={editingTrack?.track_id ?? 'new'}
+      />
     </>
   );
 }
@@ -499,9 +523,11 @@ function PayoutAccountSection({
           </div>
           <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{description}</p>
           {payout?.rejected_reason && (
-            <p className="mt-1.5 rounded-md bg-red-500/10 px-2 py-1 text-[11px] text-red-300">
-              반려 사유: {payout.rejected_reason}
-            </p>
+            <div className="mt-1.5">
+              <Alert tone="error" title="반려 사유">
+                {payout.rejected_reason}
+              </Alert>
+            </div>
           )}
         </div>
       </div>
@@ -555,11 +581,7 @@ function PayoutAccountSection({
             />
           </Field>
 
-          {error && (
-            <p className="rounded-md bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
-              {error}
-            </p>
-          )}
+          {error && <Alert tone="error">{error}</Alert>}
 
           <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
             {busy ? '등록 중…' : status === 'rejected' ? '계좌 다시 등록' : '계좌 등록'}
@@ -593,23 +615,39 @@ function defaultReleaseDate(): string {
   return d.toISOString().slice(0, 10);
 }
 
-function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<void> }) {
-  const [title, setTitle] = useState('');
-  const [albumName, setAlbumName] = useState('');
-  const [releaseTitle, setReleaseTitle] = useState('');
-  const [releaseType, setReleaseType] = useState<'single' | 'ep' | 'album'>('single');
-  const [releaseDate, setReleaseDate] = useState<string>(defaultReleaseDate());
-  const [artistOverride, setArtistOverride] = useState('');
-  const [isrc, setIsrc] = useState('');
-  const [rightsHolderName, setRightsHolderName] = useState('');
-  const [explicitContent, setExplicitContent] = useState(false);
-  const [instrumental, setInstrumental] = useState(false);
-  const [rightsConfirmed, setRightsConfirmed] = useState(false);
-  const [mainGenre, setMainGenre] = useState('');
-  const [subGenre, setSubGenre] = useState('');
-  const [suitableStore, setSuitableStore] = useState('');
-  const [mood, setMood] = useState('');
-  const [lyrics, setLyrics] = useState('');
+function ArtistUploadForm({
+  onUploaded,
+  editingTrack,
+  onCancelEdit,
+}: {
+  onUploaded: () => void | Promise<void>;
+  editingTrack?: MyArtistTrackRow | null;
+  onCancelEdit?: () => void;
+}) {
+  // 재제출 모드: editingTrack 의 기존 메타 preload. audio/cover 는 사용자가 재업로드 (새 파일).
+  const isEditing = !!editingTrack;
+  const [title, setTitle] = useState(editingTrack?.title ?? '');
+  const [albumName, setAlbumName] = useState(editingTrack?.album_name ?? '');
+  const [releaseTitle, setReleaseTitle] = useState(editingTrack?.release_title ?? '');
+  const [releaseType, setReleaseType] = useState<'single' | 'ep' | 'album'>(
+    editingTrack?.release_type ?? 'single',
+  );
+  const [releaseDate, setReleaseDate] = useState<string>(
+    editingTrack?.release_date ?? defaultReleaseDate(),
+  );
+  const [artistOverride, setArtistOverride] = useState(editingTrack?.artist ?? '');
+  const [isrc, setIsrc] = useState(editingTrack?.isrc ?? '');
+  const [rightsHolderName, setRightsHolderName] = useState(
+    editingTrack?.rights_holder_name ?? '',
+  );
+  const [explicitContent, setExplicitContent] = useState(editingTrack?.explicit_content ?? false);
+  const [instrumental, setInstrumental] = useState(editingTrack?.instrumental ?? false);
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);  // 재제출 시에도 다시 체크 필요
+  const [mainGenre, setMainGenre] = useState(editingTrack?.main_genre ?? '');
+  const [subGenre, setSubGenre] = useState(editingTrack?.sub_genre ?? '');
+  const [suitableStore, setSuitableStore] = useState(editingTrack?.suitable_store ?? '');
+  const [mood, setMood] = useState(editingTrack?.mood ?? '');
+  const [lyrics, setLyrics] = useState(editingTrack?.lyrics ?? '');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -625,7 +663,8 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
   }
 
   function missing(): string | null {
-    if (!audioFile) return '음원 파일을 선택해주세요';
+    // 재제출 모드: audioFile 미선택이어도 기존 audio_url 유지 가능
+    if (!isEditing && !audioFile) return '음원 파일을 선택해주세요';
     if (!title.trim()) return '곡 제목을 입력해주세요';
     if (!albumName.trim()) return '앨범명을 입력해주세요';
     if (!releaseDate) return '발매일을 선택해주세요';
@@ -654,6 +693,9 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
     setBusy(true);
     try {
       const res = await uploadArtistTrack({
+        trackId: editingTrack?.track_id ?? null,
+        existingAudioUrl: editingTrack?.audio_url ?? null,
+        existingCoverUrl: editingTrack?.cover_url ?? null,
         title,
         album_name: albumName,
         release_title: releaseTitle || albumName,
@@ -670,7 +712,7 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         suitable_store: suitableStore,
         mood,
         lyrics: lyrics || undefined,
-        audioFile: audioFile!,
+        audioFile,
         coverFile,
       });
       if (!res.ok) {
@@ -678,9 +720,11 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
         return;
       }
       toast.success(
-        res.track_code
-          ? `업로드 완료 (${res.track_code}). 관리자 검수 후 공개됩니다.`
-          : '업로드 완료. 관리자 검수 후 공개됩니다.',
+        isEditing
+          ? '재제출 완료. 관리자 재검수가 진행됩니다.'
+          : res.track_code
+            ? `업로드 완료 (${res.track_code}). 관리자 검수 후 공개됩니다.`
+            : '업로드 완료. 관리자 검수 후 공개됩니다.',
       );
       setTitle('');
       setAlbumName('');
@@ -701,6 +745,7 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
       setAudioFile(null);
       setCoverFile(null);
       await onUploaded();
+      onCancelEdit?.();
     } finally {
       setBusy(false);
     }
@@ -708,11 +753,32 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-      <h2 className="flex items-center gap-1.5 text-sm font-bold">
-        <Upload size={14} className="text-accent" /> 새 음원 업로드
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold">
+          <Upload size={14} className="text-accent" />
+          {isEditing
+            ? `수정 후 재제출 — ${editingTrack?.track_code ?? editingTrack?.title ?? ''}`
+            : '새 음원 업로드'}
+        </h2>
+        {isEditing && onCancelEdit && (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="text-xs text-ink-mute hover:text-ink"
+          >
+            취소
+          </button>
+        )}
+      </div>
 
-      <Field label="오디오 파일 *" hint="mp3 / wav / m4a / flac · 100MB 이하">
+      {isEditing && editingTrack?.changes_requested_reason && (
+        <Alert tone="warning" title="관리자 수정 요청 사유">
+          {editingTrack.changes_requested_reason}
+        </Alert>
+      )}
+
+      <Field label={isEditing ? '오디오 파일 (선택 — 새 파일 업로드 시 교체)' : '오디오 파일 *'}
+        hint="mp3 / wav / m4a / flac · 100MB 이하">
         <input
           type="file"
           accept=".mp3,.wav,.m4a,.flac,audio/*"
@@ -902,10 +968,20 @@ function ArtistUploadForm({ onUploaded }: { onUploaded: () => void | Promise<voi
   );
 }
 
-function MyTrackRow({ track, onChanged }: { track: MyArtistTrackRow; onChanged: () => void | Promise<void> }) {
+function MyTrackRow({
+  track,
+  onChanged,
+  onEdit,
+}: {
+  track: MyArtistTrackRow;
+  onChanged: () => void | Promise<void>;
+  onEdit?: () => void;
+}) {
   const status = STATUS_LABEL[track.visibility_status] ?? STATUS_LABEL.pending_review;
   const Icon = status.Icon;
   const canDelete = track.visibility_status === 'pending_review';
+  const canEdit =
+    track.release_status === 'draft' || track.release_status === 'changes_requested';
 
   async function onDelete() {
     if (!window.confirm('이 음원을 삭제하시겠어요? (심사 대기 상태에서만 삭제 가능)')) return;
@@ -940,11 +1016,26 @@ function MyTrackRow({ track, onChanged }: { track: MyArtistTrackRow; onChanged: 
             · {new Date(track.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
           </span>
         </div>
-        {track.rejected_reason && (
-          <p className="mt-1 text-[11px] text-red-300">거절 사유: {track.rejected_reason}</p>
+        {track.changes_requested_reason && (
+          <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
+            ⚠️ 관리자 수정 요청: {track.changes_requested_reason}
+          </p>
+        )}
+        {!track.changes_requested_reason && track.rejected_reason && (
+          <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
+            거절 사유: {track.rejected_reason}
+          </p>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {canEdit && onEdit && (
+          <button
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-2 py-1 text-[11px] font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/25"
+          >
+            수정 후 재제출
+          </button>
+        )}
         {track.audio_url && (
           <audio src={track.audio_url} controls preload="none" className="h-7 max-w-[180px]" />
         )}

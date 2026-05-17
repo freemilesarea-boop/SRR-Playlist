@@ -197,10 +197,20 @@ export default function BusinessSignupForm({ onDone }: Props) {
       const { data: sess } = await supabase.auth.getSession();
       if (sess.session?.user?.id) {
         const uid = sess.session.user.id;
-        await supabase.from('users').update(pendingProfile).eq('id', uid);
-        await supabase
+        const { error: uErr } = await supabase
+          .from('users')
+          .update(pendingProfile)
+          .eq('id', uid);
+        const { error: bErr } = await supabase
           .from('business_verification_profiles')
           .upsert({ user_id: uid, ...pendingBvp }, { onConflict: 'user_id' });
+        if (uErr || bErr) {
+          // 가입은 성공 — localStorage 캐시가 다음 로그인 시 재적용. 사용자에게 안내만.
+          if (import.meta.env.DEV) {
+            console.error('[business-signup] post-signup sync failed:', { uErr, bErr });
+          }
+          toast.info('가입 직후 일부 정보 동기화가 지연됐어요. 로그인하면 자동 적용됩니다.');
+        }
       }
 
       toast.success('사업자 회원가입이 완료됐어요. 이메일 인증 메일을 확인해주세요.');

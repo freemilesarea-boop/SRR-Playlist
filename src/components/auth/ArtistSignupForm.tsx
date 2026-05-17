@@ -182,12 +182,14 @@ export default function ArtistSignupForm({ onDone }: Props) {
             console.warn('[artist-signup] sales_agent update failed:', agErr);
           }
         }
-        // eslint-disable-next-line no-console
-        console.log('[artist-signup] submit RPC:', { rpcRes, rpcErr });
+        if (import.meta.env.DEV) {
+          console.log('[artist-signup] submit RPC:', { rpcRes, rpcErr });
+        }
         if (rpcErr) {
           // RPC 가 0024 미적용 등으로 없을 수도 있음 — fallback 으로 직접 upsert
-          // eslint-disable-next-line no-console
-          console.warn('[artist-signup] RPC 실패, 직접 upsert fallback:', rpcErr.message);
+          if (import.meta.env.DEV) {
+            console.warn('[artist-signup] RPC 실패, 직접 upsert fallback:', rpcErr.message);
+          }
           const { error: uErr } = await supabase
             .from('users')
             .update({
@@ -224,8 +226,9 @@ export default function ArtistSignupForm({ onDone }: Props) {
           }
         }
       } else {
-        // eslint-disable-next-line no-console
-        console.log('[artist-signup] no session after signup — 이메일 인증 후 첫 로그인 시 자동 적용');
+        if (import.meta.env.DEV) {
+          console.log('[artist-signup] no session after signup — 이메일 인증 후 첫 로그인 시 자동 적용');
+        }
       }
 
       // 세션 유무에 따라 메시지 차별화
