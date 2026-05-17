@@ -1,17 +1,20 @@
 import { useCallback, useState } from 'react';
-import { Music, Check, X, EyeOff, Play, FileText, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
+import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
-  approveArtistTrack,
-  rejectArtistTrack,
-  hideArtistTrack,
+  adminApproveArtistRelease,
+  adminRejectArtistRelease,
+  adminRequestTrackChanges,
+  dispatchTrackModerationEmails,
   type PendingReviewTrackRow,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 
-type ActionKind = 'approve' | 'reject' | 'hide';
+// 0076 — 검수 액션을 release_status 기반 RPC 로 통일
+// (이전: approve_artist_track / reject_artist_track / hide_artist_track — visibility-only 였음)
+type ActionKind = 'approve' | 'reject' | 'changes';
 
 const PAYOUT_TONE: Record<string, string> = {
   verified:
@@ -54,24 +57,44 @@ export default function TrackReviewList() {
     const { kind, track } = modal;
     setBusyId(track.track_id);
     try {
-      const res =
-        kind === 'approve'
-          ? await approveArtistTrack(track.track_id, adminNote || null)
-          : kind === 'reject'
-            ? await rejectArtistTrack(track.track_id, reason || null, adminNote || null)
-            : await hideArtistTrack(track.track_id, adminNote || null);
-      if (!res.ok) {
-        toast.error(res.error ?? '처리 실패');
-        return;
+      // 0076 — release_status 기반 RPC. 옛 visibility-only RPC 는 사용 안 함.
+      // reason 은 아티스트에게 노출되는 사유. adminNote 는 별도 내부 메모로 전달 (현 RPC 는
+      // 단일 텍스트만 받아서 reason 우선, 없으면 adminNote 합쳐 전달)
+      const combinedReason = (reason || '').trim() || (adminNote || '').trim() || '';
+      if (kind === 'approve') {
+        const newStatus = await adminApproveArtistRelease(track.track_id);
+        toast.success(
+          newStatus === 'released'
+            ? '승인 완료 — 서비스에 공개되었습니다'
+            : newStatus === 'scheduled'
+              ? `승인 완료 — 발매 예약 (${track.release_date ?? '발매일 미정'})`
+              : `승인 완료 (${newStatus})`,
+        );
+      } else if (kind === 'reject') {
+        if (!combinedReason) {
+          toast.error('거절 사유를 입력해주세요');
+          return;
+        }
+        await adminRejectArtistRelease(track.track_id, combinedReason);
+        toast.success('반려 처리 완료 — 아티스트에게 사유가 전달됩니다');
+      } else if (kind === 'changes') {
+        if (!combinedReason) {
+          toast.error('수정 요청 사유를 입력해주세요');
+          return;
+        }
+        await adminRequestTrackChanges(track.track_id, combinedReason, 'all');
+        toast.success('수정 요청 완료 — 아티스트가 수정 후 재제출할 수 있습니다');
       }
-      const labels: Record<ActionKind, string> = {
-        approve: '승인 완료 — 서비스에 노출됩니다',
-        reject: '거절 처리 완료',
-        hide: '숨김 처리 완료',
-      };
-      toast.success(labels[kind]);
+      // 알림 메일 자동 발송 (실패해도 검수 자체는 진행됨)
+      void (async () => {
+        const r = await dispatchTrackModerationEmails(track.track_id);
+        if (r.ok && (r.sent ?? 0) > 0) toast.info(`알림 메일 ${r.sent}건 발송`);
+      })();
       setModal(null);
       await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`처리 실패: ${msg}`);
     } finally {
       setBusyId(null);
     }
@@ -213,11 +236,11 @@ export default function TrackReviewList() {
                       <X size={11} /> 거절
                     </button>
                     <button
-                      onClick={() => setModal({ kind: 'hide', track: r })}
+                      onClick={() => setModal({ kind: 'changes', track: r })}
                       disabled={busyId === r.track_id}
-                      className="inline-flex items-center gap-1 rounded-md bg-ink/5 px-2.5 py-1 text-[11px] font-semibold text-ink-mute hover:bg-ink/10 disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-50 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
                     >
-                      <EyeOff size={11} /> 숨김
+                      <MessageSquareWarning size={11} /> 수정 요청
                     </button>
                     {r.audio_url && (
                       <a
@@ -270,18 +293,18 @@ function ReviewActionModal({
   const [adminNote, setAdminNote] = useState('');
   const titles: Record<ActionKind, string> = {
     approve: '승인 처리',
-    reject: '거절 처리',
-    hide: '숨김 처리',
+    reject: '반려 처리',
+    changes: '수정 요청',
   };
   const tones: Record<ActionKind, 'success' | 'error' | 'warning'> = {
     approve: 'success',
     reject: 'error',
-    hide: 'warning',
+    changes: 'warning',
   };
   const buttonColor: Record<ActionKind, string> = {
     approve: 'bg-emerald-500 hover:bg-emerald-600',
     reject: 'bg-red-500 hover:bg-red-600',
-    hide: 'bg-amber-500 hover:bg-amber-600',
+    changes: 'bg-amber-500 hover:bg-amber-600',
   };
   return (
     <div
@@ -299,28 +322,44 @@ function ReviewActionModal({
             <p className="mt-0.5 font-mono text-[11px] opacity-80">{trackCode}</p>
           )}
         </Alert>
-        {kind === 'reject' && (
+        {(kind === 'reject' || kind === 'changes') && (
           <label className="block space-y-1">
-            <span className="text-xs font-semibold text-ink-mute">아티스트에게 노출될 거절 사유</span>
+            <span className="text-xs font-semibold text-ink-mute">
+              {kind === 'reject' ? '아티스트에게 노출될 반려 사유' : '아티스트에게 노출될 수정 요청 사유'}
+            </span>
             <textarea
-              rows={2}
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="input"
-              placeholder="예: 권리 확인 미흡, 음질 불량 등"
+              placeholder={
+                kind === 'reject'
+                  ? '예: 권리 확인 불가, 메타데이터 부족, 음질 문제, AI 정책 위반 가능성 등'
+                  : '예: 가사 보완 필요, 커버 이미지 재업로드 등'
+              }
             />
           </label>
         )}
-        <label className="block space-y-1">
-          <span className="text-xs font-semibold text-ink-mute">내부 관리자 메모 (선택)</span>
-          <textarea
-            rows={2}
-            value={adminNote}
-            onChange={(e) => setAdminNote(e.target.value)}
-            className="input"
-            placeholder="다음 검수자가 참고할 메모"
-          />
-        </label>
+        {kind === 'approve' && (
+          <Alert tone="info">
+            <p className="text-xs leading-relaxed">
+              승인 시 계약 / 정산 계좌 / 아티스트 승인 게이트가 재검증됩니다.<br/>
+              발매일이 미래면 <b>발매 예약</b>, 오늘 이하면 <b>즉시 공개</b> 됩니다.
+            </p>
+          </Alert>
+        )}
+        {kind !== 'approve' && (
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-ink-mute">내부 관리자 메모 (선택)</span>
+            <textarea
+              rows={2}
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              className="input"
+              placeholder="다음 검수자가 참고할 메모"
+            />
+          </label>
+        )}
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
             취소

@@ -1,13 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Music, RefreshCw, Search, Check, X, EyeOff, ExternalLink, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
-import {
-  adminListArtistTracks,
-  approveArtistTrack,
-  rejectArtistTrack,
-  hideArtistTrack,
-  type AdminTrackRow,
-} from '@/lib/artistApi';
-import { toast } from '@/store/toastStore';
+import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
+import { adminListArtistTracks, type AdminTrackRow } from '@/lib/artistApi';
 import Alert from '@/components/Alert';
 import TrackModerationPanel from './TrackModerationPanel';
 
@@ -16,7 +9,6 @@ type StatusFilter =
   | 'pending_review' | 'approved' | 'rejected' | 'hidden'
   // 0074 — DSP release_status 필터 (서버 RPC 가 둘 다 매칭)
   | 'submitted' | 'changes_requested' | 'scheduled' | 'released' | 'removed';
-type ActionKind = 'approve' | 'reject' | 'hide';
 
 function fmtDate(s: string | null | undefined): string {
   if (!s) return '—';
@@ -65,8 +57,7 @@ export default function ArtistTrackManagementList() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusFilter>('');
   const [search, setSearch] = useState('');
-  const [modal, setModal] = useState<{ kind: ActionKind; track: AdminTrackRow } | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function load() {
@@ -95,34 +86,6 @@ export default function ArtistTrackManagementList() {
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
-
-  async function handleConfirm(reason: string, adminNote: string) {
-    if (!modal) return;
-    const { kind, track } = modal;
-    setBusyId(track.track_id);
-    try {
-      const res =
-        kind === 'approve'
-          ? await approveArtistTrack(track.track_id, adminNote || null)
-          : kind === 'reject'
-            ? await rejectArtistTrack(track.track_id, reason || null, adminNote || null)
-            : await hideArtistTrack(track.track_id, adminNote || null);
-      if (!res.ok) {
-        toast.error(res.error ?? '처리 실패');
-        return;
-      }
-      const labels: Record<ActionKind, string> = {
-        approve: '승인 완료',
-        reject: '거절 처리 완료',
-        hide: '숨김 처리 완료',
-      };
-      toast.success(labels[kind]);
-      setModal(null);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -295,36 +258,18 @@ export default function ArtistTrackManagementList() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
-                        {r.visibility_status !== 'approved' && (
-                          <button
-                            onClick={() => setModal({ kind: 'approve', track: r })}
-                            disabled={busyId === r.track_id}
-                            className="rounded p-1.5 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
-                            title="승인"
-                          >
-                            <Check size={14} />
-                          </button>
-                        )}
-                        {r.visibility_status !== 'rejected' && (
-                          <button
-                            onClick={() => setModal({ kind: 'reject', track: r })}
-                            disabled={busyId === r.track_id}
-                            className="rounded p-1.5 text-red-700 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/15"
-                            title="거절"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                        {r.visibility_status !== 'hidden' && (
-                          <button
-                            onClick={() => setModal({ kind: 'hide', track: r })}
-                            disabled={busyId === r.track_id}
-                            className="rounded p-1.5 text-ink-mute hover:bg-ink/10 disabled:opacity-50"
-                            title="숨김"
-                          >
-                            <EyeOff size={14} />
-                          </button>
-                        )}
+                        {/* 0076 — row-level visibility-only 액션 (approve/reject/hide) 제거.
+                            release_status 와 어긋난 부정합 발생 방지. 모든 액션은 expand
+                            패널 (TrackModerationPanel) 의 release_status 기반 RPC 로 통일. */}
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : r.track_id)}
+                          disabled={busyId === r.track_id}
+                          className="inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover hover:text-ink disabled:opacity-50"
+                          title="검수 패널 열기/닫기"
+                        >
+                          {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          검수
+                        </button>
                         {r.audio_url && (
                           <a
                             href={r.audio_url}
@@ -360,101 +305,7 @@ export default function ArtistTrackManagementList() {
         </div>
       </div>
 
-      {modal && (
-        <ActionModal
-          kind={modal.kind}
-          trackTitle={modal.track.title}
-          trackCode={modal.track.track_code}
-          busy={busyId === modal.track.track_id}
-          onCancel={() => setModal(null)}
-          onConfirm={handleConfirm}
-        />
-      )}
     </div>
   );
 }
 
-function ActionModal({
-  kind,
-  trackTitle,
-  trackCode,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  kind: ActionKind;
-  trackTitle: string;
-  trackCode: string | null;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: (reason: string, adminNote: string) => void;
-}) {
-  const [reason, setReason] = useState('');
-  const [adminNote, setAdminNote] = useState('');
-  const titles: Record<ActionKind, string> = {
-    approve: '승인 처리',
-    reject: '거절 처리',
-    hide: '숨김 처리',
-  };
-  const tones: Record<ActionKind, 'success' | 'error' | 'warning'> = {
-    approve: 'success',
-    reject: 'error',
-    hide: 'warning',
-  };
-  const buttonColor: Record<ActionKind, string> = {
-    approve: 'bg-emerald-500 hover:bg-emerald-600',
-    reject: 'bg-red-500 hover:bg-red-600',
-    hide: 'bg-amber-500 hover:bg-amber-600',
-  };
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-      onClick={onCancel}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md space-y-3 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
-      >
-        <h3 className="text-base font-bold">{titles[kind]}</h3>
-        <Alert tone={tones[kind]}>
-          <p className="font-semibold">{trackTitle}</p>
-          {trackCode && <p className="mt-0.5 font-mono text-[11px] opacity-80">{trackCode}</p>}
-        </Alert>
-        {kind === 'reject' && (
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-ink-mute">아티스트에게 노출될 거절 사유</span>
-            <textarea
-              rows={2}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="input"
-              placeholder="예: 권리 확인 미흡, 음질 불량 등"
-            />
-          </label>
-        )}
-        <label className="block space-y-1">
-          <span className="text-xs font-semibold text-ink-mute">내부 관리자 메모 (선택)</span>
-          <textarea
-            rows={2}
-            value={adminNote}
-            onChange={(e) => setAdminNote(e.target.value)}
-            className="input"
-            placeholder="다음 검수자가 참고할 메모"
-          />
-        </label>
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
-            취소
-          </button>
-          <button
-            onClick={() => onConfirm(reason, adminNote)}
-            disabled={busy}
-            className={`rounded-lg px-4 py-2 text-xs font-bold text-white disabled:opacity-60 ${buttonColor[kind]}`}
-          >
-            {busy ? '처리 중…' : `${titles[kind]}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
