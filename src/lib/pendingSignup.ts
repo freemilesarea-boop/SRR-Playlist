@@ -81,12 +81,38 @@ export function clearPendingSignup(): void {
  * 첫 로그인 시 호출. localStorage 에 보관된 가입 정보를 DB 에 적용.
  * - 0021 트리거가 이미 처리했어도 ON CONFLICT 로 안전
  * - 적용 성공 시 localStorage 정리
+ * - 이미 가입 완료(signup_completed=true) / 이미 승인된 아티스트인 경우:
+ *   재적용 시 RLS(artist_insert_self_pending 등) 위배로 403. 이 케이스는
+ *   "이미 처리됨" 으로 판단하고 localStorage 만 정리하여 무한 403 방지.
  */
 export async function applyPendingSignupOnLogin(
   userId: string,
-): Promise<{ ok: boolean; type?: string; error?: string }> {
+): Promise<{ ok: boolean; type?: string; error?: string; skipped?: 'already_applied' }> {
   const p = readPendingSignup();
   if (!p) return { ok: true };
+
+  // 사전 체크: users.signup_completed=true 면 이미 적용된 것으로 간주
+  try {
+    const { data: existing } = await supabase
+      .from('users')
+      .select('signup_completed, account_type, artist_approval_status')
+      .eq('id', userId)
+      .maybeSingle();
+    const row = existing as
+      | { signup_completed?: boolean | null; account_type?: string | null; artist_approval_status?: string | null }
+      | null;
+    const alreadyApplied =
+      !!row?.signup_completed &&
+      row.account_type === p.profile.account_type &&
+      (p.type !== 'artist' || row.artist_approval_status !== null);
+    if (alreadyApplied) {
+      if (import.meta.env.DEV) console.debug('[pendingSignup] already applied — clearing cache');
+      clearPendingSignup();
+      return { ok: true, skipped: 'already_applied' };
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('[pendingSignup] pre-check failed (proceeding):', e);
+  }
 
   try {
     // 1) public.users 업데이트
@@ -121,6 +147,15 @@ export async function applyPendingSignupOnLogin(
         .from('artist_profiles')
         .upsert({ user_id: userId, ...p.artist }, { onConflict: 'user_id' });
       if (aErr) {
+        // RLS 403 (42501): 이미 approved 상태로 row 존재 → pending 강제 upsert 불가.
+        // 이미 적용된 것으로 간주하고 localStorage 정리 (무한 403 차단)
+        const code = (aErr as { code?: string }).code;
+        if (code === '42501') {
+          if (import.meta.env.DEV)
+            console.debug('[pendingSignup] artist_profiles 403 — already approved, clearing cache');
+          clearPendingSignup();
+          return { ok: true, skipped: 'already_applied' };
+        }
         if (import.meta.env.DEV) console.error('[pendingSignup] artist_profiles.upsert failed:', aErr);
         return { ok: false, error: aErr.message };
       }
@@ -129,6 +164,13 @@ export async function applyPendingSignupOnLogin(
         .from('business_verification_profiles')
         .upsert({ user_id: userId, ...p.bvp }, { onConflict: 'user_id' });
       if (bErr) {
+        const code = (bErr as { code?: string }).code;
+        if (code === '42501') {
+          if (import.meta.env.DEV)
+            console.debug('[pendingSignup] bvp 403 — already processed, clearing cache');
+          clearPendingSignup();
+          return { ok: true, skipped: 'already_applied' };
+        }
         if (import.meta.env.DEV) console.error('[pendingSignup] bvp.upsert failed:', bErr);
         return { ok: false, error: bErr.message };
       }

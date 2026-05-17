@@ -37,6 +37,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import ArtistBatchUploadForm from '@/components/artist/ArtistBatchUploadForm';
 
 import type { LucideIcon } from 'lucide-react';
 
@@ -282,16 +283,62 @@ function UploadGate({
   }
 
   // 모두 OK — 업로드 폼 + (참고용) 계좌 요약 카드
+  // 재제출 모드(editingTrack)는 무조건 단일 업로드. 신규는 단일/일괄 토글.
   return (
     <>
       <VerifiedPayoutSummary payout={payout} />
-      <ArtistUploadForm
-        onUploaded={onUploaded}
-        editingTrack={editingTrack}
-        onCancelEdit={onCancelEdit}
-        key={editingTrack?.track_id ?? 'new'}
-      />
+      {editingTrack ? (
+        <ArtistUploadForm
+          onUploaded={onUploaded}
+          editingTrack={editingTrack}
+          onCancelEdit={onCancelEdit}
+          key={editingTrack.track_id}
+        />
+      ) : (
+        <UploadModeSwitcher onUploaded={onUploaded} />
+      )}
     </>
+  );
+}
+
+function UploadModeSwitcher({
+  onUploaded,
+}: {
+  onUploaded: () => void | Promise<void>;
+}) {
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
+        <button
+          type="button"
+          onClick={() => setMode('single')}
+          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+            mode === 'single'
+              ? 'bg-accent text-bg'
+              : 'text-ink-mute hover:text-ink'
+          }`}
+        >
+          단일 업로드
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('batch')}
+          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+            mode === 'batch'
+              ? 'bg-accent text-bg'
+              : 'text-ink-mute hover:text-ink'
+          }`}
+        >
+          일괄 업로드 (최대 30곡)
+        </button>
+      </div>
+      {mode === 'single' ? (
+        <ArtistUploadForm onUploaded={onUploaded} key="single" />
+      ) : (
+        <ArtistBatchUploadForm onUploaded={onUploaded} key="batch" />
+      )}
+    </div>
   );
 }
 
