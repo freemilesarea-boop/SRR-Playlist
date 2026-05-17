@@ -54,7 +54,11 @@ export default function ArtistContractPage() {
           });
           // 게이트 미통과 사유를 사용자에게 명확히 안내
           const msg = err.message ?? String(ensureErr);
-          if (/not approved/i.test(msg)) {
+          if (/approval_sync_broken/i.test(msg)) {
+            setError(
+              '계정 상태 동기화 오류 — artist_profiles 와 users 의 승인 상태가 일치하지 않아요. 관리자에게 문의해주세요 (approval_sync_broken).',
+            );
+          } else if (/not approved/i.test(msg)) {
             setError('아티스트 승인이 완료된 후 계약서를 발행할 수 있어요. (관리자 승인 대기)');
           } else if (/not paid/i.test(msg) || /tier=/i.test(msg)) {
             setError('월 4,900원 정기이용권(individual) 결제 완료 후 계약서를 발행할 수 있어요.');
