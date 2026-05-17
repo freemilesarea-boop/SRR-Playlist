@@ -9,6 +9,7 @@ import {
   type SalesAgentDetail,
 } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 
 function fmtKrw(n: number): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -79,13 +80,12 @@ export default function SalesAgentsList() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
-          <p className="font-bold">영업인 목록 조회 실패</p>
-          <pre className="mt-1 whitespace-pre-wrap break-all text-[11px]">{error}</pre>
-          <p className="mt-1 text-[11px] text-red-300">
+        <Alert tone="error" title="영업인 목록 조회 실패">
+          <pre className="whitespace-pre-wrap break-all text-[11px]">{error}</pre>
+          <p className="mt-1 text-[11px] opacity-80">
             0054_sales_agents.sql 마이그레이션이 적용됐는지 확인해주세요.
           </p>
-        </div>
+        </Alert>
       )}
 
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">

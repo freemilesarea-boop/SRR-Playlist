@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake } from 'lucide-react';
 import { fetchMemberDetail, type MemberDetail as MemberDetailType } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 
 const PLAN_LABEL: Record<string, string> = {
   free: '무료',
@@ -105,14 +106,12 @@ export default function MemberDetail({
                 <KV label="최근방문" value={data.last_seen_at ? new Date(data.last_seen_at).toLocaleDateString('ko-KR') : '—'} />
               </div>
               {data.user.withdrawn_at && (
-                <div className="rounded-xl bg-red-500/10 px-3 py-2 ring-1 ring-red-500/30">
-                  <p className="text-xs font-bold text-red-200">
-                    탈퇴 회원 · {new Date(data.user.withdrawn_at).toLocaleDateString('ko-KR')}
-                  </p>
-                  {data.user.withdrawn_reason && (
-                    <p className="mt-0.5 text-[11px] text-red-200/80">사유: {data.user.withdrawn_reason}</p>
-                  )}
-                </div>
+                <Alert
+                  tone="error"
+                  title={`탈퇴 회원 · ${new Date(data.user.withdrawn_at).toLocaleDateString('ko-KR')}`}
+                >
+                  {data.user.withdrawn_reason ? `사유: ${data.user.withdrawn_reason}` : '계정 이용이 중단된 상태예요.'}
+                </Alert>
               )}
               {(() => {
                 const grace = (data as unknown as {
@@ -124,13 +123,11 @@ export default function MemberDetail({
                 );
                 if (!grace) return null;
                 return (
-                  <div className="rounded-xl bg-yellow-500/10 px-3 py-2 ring-1 ring-yellow-500/30">
-                    <p className="text-xs font-bold text-yellow-200">
-                      구독 취소 예정
-                      {grace.current_period_end &&
-                        ` · ${new Date(grace.current_period_end).toLocaleDateString('ko-KR')} 종료`}
-                    </p>
-                  </div>
+                  <Alert tone="warning">
+                    <strong>구독 취소 예정</strong>
+                    {grace.current_period_end &&
+                      ` · ${new Date(grace.current_period_end).toLocaleDateString('ko-KR')} 종료`}
+                  </Alert>
                 );
               })()}
             </section>

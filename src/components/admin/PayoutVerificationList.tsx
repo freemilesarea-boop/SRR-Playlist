@@ -8,6 +8,7 @@ import {
   type AdminPayoutRow,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
+import Alert from '@/components/Alert';
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   pending: { label: '확인 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
@@ -88,11 +89,10 @@ export default function PayoutVerificationList() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-yellow-500/5 p-3 ring-1 ring-yellow-500/20">
-        <p className="text-[11px] leading-relaxed text-yellow-200/90">
-          ⚠️ 계좌번호는 민감정보입니다. 본인 명의 확인 후 승인해주세요. 화면에 마스킹 표시되며, 클릭 시 일시적으로 펼쳐집니다.
-        </p>
-      </div>
+      <Alert tone="warning">
+        계좌번호는 민감정보입니다. 본인 명의 확인 후 승인해주세요. 화면에 마스킹 표시되며, 클릭
+        시 일시적으로 펼쳐집니다.
+      </Alert>
 
       <div className="overflow-x-auto rounded-2xl bg-bg-card ring-1 ring-line/10">
         <table className="w-full min-w-[760px] text-sm">
