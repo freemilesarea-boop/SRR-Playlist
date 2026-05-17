@@ -106,14 +106,23 @@ export default function TrackModerationPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackId]);
 
-  async function doApprove() {
+  /** 0076 — immediateRelease: true=즉시 공개 / false=예약 발매 / null=admin_settings 기본값 */
+  async function doApprove(immediateRelease: boolean | null) {
     if (busy) return;
-    if (!confirm('이 트랙을 승인할까요? (계약/계좌/승인 게이트 재검증됩니다)')) return;
+    const confirmMsg = immediateRelease === true
+      ? '이 트랙을 즉시 공개할까요? (정산 대상 즉시 포함)'
+      : immediateRelease === false
+        ? '이 트랙을 발매일까지 예약 상태로 유지할까요?'
+        : '이 트랙을 승인할까요? (운영 기본 설정에 따름)';
+    if (!confirm(confirmMsg + '\n계약/정산 계좌/아티스트 승인 게이트가 재검증됩니다.')) return;
     setBusy(true);
     try {
-      await adminApproveArtistRelease(trackId);
-      toast.success('승인 완료');
-      // dispatch email
+      const res = await adminApproveArtistRelease(trackId, immediateRelease);
+      toast.success(
+        res.status === 'released'
+          ? '승인 완료 — 즉시 공개됨'
+          : `승인 완료 — 발매 예약 (${res.release_date ?? '발매일 미정'})`,
+      );
       void (async () => {
         const r = await dispatchTrackModerationEmails(trackId);
         if (r.ok && (r.sent ?? 0) > 0) toast.success(`알림 메일 ${r.sent}건 발송`);
@@ -301,9 +310,14 @@ export default function TrackModerationPanel({
       {/* 액션 버튼 */}
       <div className="flex flex-wrap gap-1.5">
         {canApprove && (
-          <ActionBtn icon={<CheckCircle2 size={12} />} tone="success" onClick={doApprove} disabled={busy}>
-            승인
-          </ActionBtn>
+          <>
+            <ActionBtn icon={<CheckCircle2 size={12} />} tone="success" onClick={() => doApprove(true)} disabled={busy}>
+              즉시 공개
+            </ActionBtn>
+            <ActionBtn icon={<CheckCircle2 size={12} />} tone="neutral" onClick={() => doApprove(false)} disabled={busy}>
+              예약 발매
+            </ActionBtn>
+          </>
         )}
         {canRequestChanges && (
           <ActionBtn icon={<MessageSquareWarning size={12} />} tone="warning" onClick={() => { setActionPanel('changes'); setReasonText(''); }} disabled={busy}>

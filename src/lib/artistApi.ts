@@ -857,10 +857,81 @@ export async function submitArtistRelease(input: SubmitReleaseInput): Promise<st
   return data as string;
 }
 
-export async function adminApproveArtistRelease(trackId: string): Promise<string> {
-  const { data, error } = await supabase.rpc('admin_approve_artist_release', { p_track_id: trackId });
+export interface ApproveReleaseResult {
+  ok: boolean;
+  track_id: string;
+  status: 'scheduled' | 'released';
+  immediate_release: boolean;
+  release_date: string;
+}
+
+/**
+ * 0076 — 관리자 승인.
+ * @param immediateRelease
+ *   - true: 즉시 공개 (released)
+ *   - false: 예약 발매 유지 (scheduled)
+ *   - null/undefined: admin_settings.default_immediate_release 사용 (기본 true)
+ *   release_date 가 과거인 경우 서버가 강제로 immediate=true 처리.
+ */
+export async function adminApproveArtistRelease(
+  trackId: string,
+  immediateRelease?: boolean | null,
+): Promise<ApproveReleaseResult> {
+  const { data, error } = await supabase.rpc('admin_approve_artist_release', {
+    p_track_id: trackId,
+    p_immediate_release: immediateRelease ?? null,
+  });
   if (error) throw error;
-  return (data as { status: string }).status;
+  return data as ApproveReleaseResult;
+}
+
+export async function getAdminSetting<T = unknown>(key: string): Promise<T | null> {
+  const { data, error } = await supabase.rpc('admin_get_setting', { p_key: key });
+  if (error) throw error;
+  return (data as T) ?? null;
+}
+
+export async function setAdminSetting(key: string, value: unknown): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_setting', { p_key: key, p_value: value });
+  if (error) throw error;
+}
+
+export interface DueScheduledReleaseRow {
+  track_id: string;
+  track_code: string | null;
+  status: 'released' | 'failed';
+  error: string | null;
+}
+
+/** scheduled 중 release_date 도래한 트랙들 일괄 released 처리. 외부 cron / Edge Function / 관리자 수동 호출용. */
+export async function processDueScheduledReleases(): Promise<DueScheduledReleaseRow[]> {
+  const { data, error } = await supabase.rpc('process_due_scheduled_releases');
+  if (error) throw error;
+  return (data ?? []) as DueScheduledReleaseRow[];
+}
+
+export interface ReleaseFailureRow {
+  id: number;
+  track_id: string;
+  track_code: string | null;
+  title: string | null;
+  kind: 'approve' | 'schedule' | 'auto_release' | 'manual_release' | 'requeue';
+  error_code: string | null;
+  error_message: string | null;
+  context: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function adminListReleaseFailures(
+  trackId?: string | null,
+  limit = 50,
+): Promise<ReleaseFailureRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_release_failures', {
+    p_track_id: trackId ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as ReleaseFailureRow[];
 }
 
 export async function adminRequestTrackChanges(

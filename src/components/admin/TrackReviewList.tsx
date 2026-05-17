@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
@@ -7,6 +7,7 @@ import {
   adminRejectArtistRelease,
   adminRequestTrackChanges,
   dispatchTrackModerationEmails,
+  getAdminSetting,
   type PendingReviewTrackRow,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
@@ -52,23 +53,23 @@ export default function TrackReviewList() {
 
   useFreshFetch(load, []);
 
-  async function handleConfirm(reason: string, adminNote: string) {
+  async function handleConfirm(
+    reason: string,
+    adminNote: string,
+    /** approve 액션 한정: true=즉시 공개, false=예약 발매 유지, null=admin_settings 기본값 */
+    immediateRelease: boolean | null = null,
+  ) {
     if (!modal) return;
     const { kind, track } = modal;
     setBusyId(track.track_id);
     try {
-      // 0076 — release_status 기반 RPC. 옛 visibility-only RPC 는 사용 안 함.
-      // reason 은 아티스트에게 노출되는 사유. adminNote 는 별도 내부 메모로 전달 (현 RPC 는
-      // 단일 텍스트만 받아서 reason 우선, 없으면 adminNote 합쳐 전달)
       const combinedReason = (reason || '').trim() || (adminNote || '').trim() || '';
       if (kind === 'approve') {
-        const newStatus = await adminApproveArtistRelease(track.track_id);
+        const res = await adminApproveArtistRelease(track.track_id, immediateRelease);
         toast.success(
-          newStatus === 'released'
-            ? '승인 완료 — 서비스에 공개되었습니다'
-            : newStatus === 'scheduled'
-              ? `승인 완료 — 발매 예약 (${track.release_date ?? '발매일 미정'})`
-              : `승인 완료 (${newStatus})`,
+          res.status === 'released'
+            ? `승인 완료 — 서비스에 즉시 공개되었습니다 (정산 대상 포함)`
+            : `승인 완료 — 발매 예약 (${res.release_date ?? track.release_date ?? '발매일 미정'})`,
         );
       } else if (kind === 'reject') {
         if (!combinedReason) {
@@ -265,6 +266,7 @@ export default function TrackReviewList() {
           kind={modal.kind}
           trackTitle={modal.track.title}
           trackCode={modal.track.track_code}
+          releaseDate={modal.track.release_date ?? null}
           busy={busyId === modal.track.track_id}
           onCancel={() => setModal(null)}
           onConfirm={handleConfirm}
@@ -278,6 +280,7 @@ function ReviewActionModal({
   kind,
   trackTitle,
   trackCode,
+  releaseDate,
   busy,
   onCancel,
   onConfirm,
@@ -285,12 +288,27 @@ function ReviewActionModal({
   kind: ActionKind;
   trackTitle: string;
   trackCode: string | null;
+  releaseDate: string | null;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string, adminNote: string) => void;
+  onConfirm: (reason: string, adminNote: string, immediateRelease: boolean | null) => void;
 }) {
   const [reason, setReason] = useState('');
   const [adminNote, setAdminNote] = useState('');
+  const [defaultImmediate, setDefaultImmediate] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (kind !== 'approve') return;
+    void (async () => {
+      try {
+        const v = await getAdminSetting<boolean>('default_immediate_release');
+        if (typeof v === 'boolean') setDefaultImmediate(v);
+      } catch {
+        // ignore — 기본값 true 유지
+      }
+    })();
+  }, [kind]);
+
   const titles: Record<ActionKind, string> = {
     approve: '승인 처리',
     reject: '반려 처리',
@@ -306,6 +324,10 @@ function ReviewActionModal({
     reject: 'bg-red-500 hover:bg-red-600',
     changes: 'bg-amber-500 hover:bg-amber-600',
   };
+
+  // release_date 가 과거면 즉시 공개만 가능 (서버도 강제)
+  const releaseDatePast = releaseDate ? new Date(releaseDate) <= new Date(new Date().toDateString()) : false;
+
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
@@ -320,6 +342,9 @@ function ReviewActionModal({
           <p className="font-semibold">{trackTitle}</p>
           {trackCode && (
             <p className="mt-0.5 font-mono text-[11px] opacity-80">{trackCode}</p>
+          )}
+          {releaseDate && (
+            <p className="mt-0.5 text-[11px] opacity-80">발매일 {releaseDate}</p>
           )}
         </Alert>
         {(kind === 'reject' || kind === 'changes') && (
@@ -341,12 +366,16 @@ function ReviewActionModal({
           </label>
         )}
         {kind === 'approve' && (
-          <Alert tone="info">
-            <p className="text-xs leading-relaxed">
-              승인 시 계약 / 정산 계좌 / 아티스트 승인 게이트가 재검증됩니다.<br/>
-              발매일이 미래면 <b>발매 예약</b>, 오늘 이하면 <b>즉시 공개</b> 됩니다.
-            </p>
-          </Alert>
+          <>
+            <Alert tone="info">
+              <p className="text-xs leading-relaxed">
+                승인 시 계약 / 정산 계좌 / 아티스트 승인 게이트가 재검증됩니다.<br/>
+                {releaseDatePast
+                  ? '발매일이 오늘 이하 — 즉시 공개만 가능합니다.'
+                  : <>기본값: <b>{defaultImmediate ? '즉시 공개' : '예약 발매'}</b> (운영 설정)</>}
+              </p>
+            </Alert>
+          </>
         )}
         {kind !== 'approve' && (
           <label className="block space-y-1">
@@ -360,17 +389,38 @@ function ReviewActionModal({
             />
           </label>
         )}
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
             취소
           </button>
-          <button
-            onClick={() => onConfirm(reason, adminNote)}
-            disabled={busy}
-            className={`rounded-lg px-4 py-2 text-xs font-bold text-white disabled:opacity-60 ${buttonColor[kind]}`}
-          >
-            {busy ? '처리 중…' : `${titles[kind]}`}
-          </button>
+          {kind === 'approve' ? (
+            <>
+              {!releaseDatePast && (
+                <button
+                  onClick={() => onConfirm('', '', false)}
+                  disabled={busy}
+                  className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-60"
+                >
+                  {busy ? '처리 중…' : '예약 발매 유지'}
+                </button>
+              )}
+              <button
+                onClick={() => onConfirm('', '', true)}
+                disabled={busy}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
+              >
+                {busy ? '처리 중…' : '즉시 공개'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onConfirm(reason, adminNote, null)}
+              disabled={busy}
+              className={`rounded-lg px-4 py-2 text-xs font-bold text-white disabled:opacity-60 ${buttonColor[kind]}`}
+            >
+              {busy ? '처리 중…' : `${titles[kind]}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
