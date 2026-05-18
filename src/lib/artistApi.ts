@@ -1052,6 +1052,10 @@ export interface StreamingExclusionBreakdown {
   artist_preview: number;
   self_play: number;
   daily_user_track_cap: number;
+  /** 0089 — 플레이어 음소거 또는 volume=0 */
+  muted_play: number;
+  /** 0089 — 플레이어 볼륨 10% 미만 */
+  low_player_volume: number;
   total_excluded: number;
   total_eligible: number;
   days: number;

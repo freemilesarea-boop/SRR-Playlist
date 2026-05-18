@@ -63,6 +63,10 @@ interface StreamPayload {
   listened_seconds: number;
   completed: boolean;
   event_type: 'start' | 'milestone_30s' | 'complete';
+  /** 0089 — 플레이어 내부 볼륨 0.0~1.0 (muted/low_volume 검사 입력) */
+  player_volume?: number | null;
+  /** 0089 — 플레이어 muted 상태. volume=0 도 muted 로 간주됨 */
+  player_muted?: boolean | null;
 }
 
 /**
@@ -105,6 +109,8 @@ export async function trackStream(payload: StreamPayload) {
       p_anonymous_id: getAnonymousId(),
       p_source_page: sourcePage,
       p_user_agent: userAgent,
+      p_player_volume: typeof payload.player_volume === 'number' ? payload.player_volume : null,
+      p_player_muted: typeof payload.player_muted === 'boolean' ? payload.player_muted : null,
     });
   } catch {
     /* analytics 실패는 사용자 경험에 영향 주지 않음 */

@@ -282,11 +282,13 @@ export default function StreamingAnalytics() {
             </div>
           )}
           {!eligLoading && breakdown && breakdown.total_excluded > 0 && (
-            <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-7">
               <ReasonCard label="미공개" value={breakdown.unreleased} hint="release_status != released" tone="info" />
               <ReasonCard label="관리자 미리듣기" value={breakdown.admin_preview} hint="/admin* 페이지 재생" tone="info" />
               <ReasonCard label="아티스트 미리듣기" value={breakdown.artist_preview} hint="/artist* 페이지 재생" tone="info" />
               <ReasonCard label="셀프 재생" value={breakdown.self_play} hint="아티스트 본인 트랙" tone="warn" />
+              <ReasonCard label="음소거 재생" value={breakdown.muted_play} hint="플레이어 음소거 상태" tone="warn" />
+              <ReasonCard label="저음량 재생" value={breakdown.low_player_volume} hint="플레이어 볼륨 10% 미만" tone="warn" />
               <ReasonCard label="24시간 반복 제한" value={breakdown.daily_user_track_cap} hint={`같은 user+track 24h ${capValue}회 초과`} tone="error" />
             </div>
           )}
