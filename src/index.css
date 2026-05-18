@@ -43,7 +43,7 @@
     @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold tracking-tight transition-[transform,opacity,background-color] duration-smooth ease-emphasized active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-accent text-bg shadow-card hover:opacity-95 hover:-translate-y-0.5;
+    @apply btn bg-accent text-white shadow-card ring-1 ring-white/10 hover:bg-accent-soft hover:-translate-y-0.5;
   }
   .btn-ghost {
     @apply btn bg-bg-card text-ink hover:bg-bg-hover;
