@@ -7,6 +7,7 @@ import {
 } from '@/lib/artistApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
+import AudioHealthPanel from './AudioHealthPanel';
 
 const RANGES = [
   { key: 1, label: '오늘' },
@@ -246,6 +247,11 @@ export default function StreamingAnalytics() {
           )}
         </div>
       </section>
+
+      {/* 0082 — 오디오 헬스 + 예약 발매 워커 */}
+      <div className="border-t border-line/10 pt-4">
+        <AudioHealthPanel />
+      </div>
 
       <div className="border-t border-line/10 pt-4">
         <h3 className="text-sm font-bold tracking-tight">곡별 재생 / 완료 (legacy plays 기반)</h3>
