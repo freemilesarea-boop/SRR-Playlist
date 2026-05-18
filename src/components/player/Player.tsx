@@ -877,12 +877,14 @@ export default function Player() {
             </span>
           </div>
         )}
-        <div className="mx-2 mt-1.5 h-1 overflow-hidden rounded-full bg-ink/10">
+        <div className="relative mx-2 mt-1.5 h-1 rounded-full bg-ink/10">
           <div
-            className="h-full rounded-full bg-accent transition-[width] duration-200"
+            className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
             style={{
               width: duration ? `${Math.min(100, (currentTime / duration) * 100)}%` : '0%',
-              boxShadow: '0 0 12px rgb(var(--color-accent) / 0.5)',
+              background:
+                'linear-gradient(90deg, rgb(var(--color-accent-soft)) 0%, rgb(var(--color-accent)) 100%)',
+              boxShadow: '0 0 14px rgb(var(--color-accent) / 0.6)',
             }}
           />
         </div>
@@ -982,6 +984,10 @@ export default function Player() {
                 step={0.1}
                 aria-label="재생 위치"
                 disabled={!playable || !duration}
+                style={{
+                  ['--progress' as string]: duration ? `${(currentTime / duration) * 100}%` : '0%',
+                }}
+                className="seekbar-accent"
               />
               <div className="flex justify-between text-[11px] text-white/60">
                 <span>{formatTime(currentTime)}</span>

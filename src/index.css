@@ -93,6 +93,34 @@ input[type='range']::-webkit-slider-thumb {
 input[type='range']:hover::-webkit-slider-thumb {
   transform: scale(1.2);
 }
+
+/* Spotify-style accent fill on seekbar */
+input[type='range'].seekbar-accent::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    rgb(var(--color-accent)) 0%,
+    rgb(var(--color-accent)) var(--progress, 0%),
+    rgb(var(--color-ink) / 0.12) var(--progress, 0%),
+    rgb(var(--color-ink) / 0.12) 100%
+  );
+}
+input[type='range'].seekbar-accent::-moz-range-track {
+  background: linear-gradient(
+    to right,
+    rgb(var(--color-accent)) 0%,
+    rgb(var(--color-accent)) var(--progress, 0%),
+    rgb(var(--color-ink) / 0.12) var(--progress, 0%),
+    rgb(var(--color-ink) / 0.12) 100%
+  );
+}
+input[type='range'].seekbar-accent::-webkit-slider-thumb {
+  background: rgb(var(--color-accent));
+  box-shadow: 0 0 0 3px rgb(var(--color-accent) / 0.2), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+input[type='range'].seekbar-accent::-moz-range-thumb {
+  background: rgb(var(--color-accent));
+  box-shadow: 0 0 0 3px rgb(var(--color-accent) / 0.2), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
 input[type='range']::-moz-range-track {
   height: 5px;
   background: rgb(var(--color-ink) / 0.12);
