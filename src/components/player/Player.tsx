@@ -155,6 +155,62 @@ export default function Player() {
     setErrored(false);
   }, [current?.id]);
 
+  /* ---------- 0093 MediaSession API: 잠금화면 / 이어폰 / Bluetooth 컨트롤 ---------- */
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    if (!current) {
+      try { navigator.mediaSession.metadata = null; } catch { /* noop */ }
+      return;
+    }
+    try {
+      const artwork = current.cover_url
+        ? [
+            { src: current.cover_url, sizes: '96x96', type: 'image/png' },
+            { src: current.cover_url, sizes: '192x192', type: 'image/png' },
+            { src: current.cover_url, sizes: '512x512', type: 'image/png' },
+          ]
+        : [];
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title ?? '',
+        artist: current.artist ?? playlist?.title ?? '',
+        album: playlist?.title ?? '',
+        artwork,
+      });
+    } catch {
+      /* MediaMetadata 미지원 환경 silent */
+    }
+  }, [current?.id, current?.title, current?.artist, current?.cover_url, playlist?.title]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    const setH = (action: MediaSessionAction, h: MediaSessionActionHandler | null) => {
+      try { ms.setActionHandler(action, h); } catch { /* 일부 액션 미지원 시 throw */ }
+    };
+    setH('play', () => { if (!playing) toggle(); });
+    setH('pause', () => { if (playing) toggle(); });
+    setH('previoustrack', () => prev());
+    setH('nexttrack', () => next());
+    setH('seekto', (details) => {
+      const audio = activeRef();
+      if (!audio || typeof details?.seekTime !== 'number') return;
+      try { audio.currentTime = details.seekTime; setCurrentTime(details.seekTime); } catch { /* noop */ }
+    });
+    return () => {
+      setH('play', null); setH('pause', null);
+      setH('previoustrack', null); setH('nexttrack', null);
+      setH('seekto', null);
+    };
+  }, [playing, toggle, prev, next, setCurrentTime]);
+
+  // playbackState 동기화 — 잠금화면 play/pause 아이콘
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = current ? (playing ? 'playing' : 'paused') : 'none';
+    } catch { /* noop */ }
+  }, [playing, current?.id]);
+
   /* ---------- analytics: start / 15s / 30s / complete ---------- */
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const profile = useAuthStore((s) => s.profile);

@@ -72,6 +72,7 @@ serve(async (req) => {
   const failed = rows.filter((r) => r.status === 'failed').length;
 
   // 0083 — 실패 발생 시 admin_notifications 적립 (silent 실패)
+  let hasNewError = false;
   if (failed > 0) {
     try {
       for (const r of rows.filter((x) => x.status === 'failed').slice(0, 10)) {
@@ -84,6 +85,7 @@ serve(async (req) => {
           p_track_id: r.track_id,
         });
       }
+      hasNewError = true;
     } catch (e) {
       console.error('[scheduled-releases] notification enqueue failed (continuing):', e);
     }
@@ -102,6 +104,18 @@ serve(async (req) => {
       } catch (e) {
         console.error('[scheduled-releases] info notification failed (continuing):', e);
       }
+    }
+  }
+
+  // 0093 — 외부 채널 dispatch (error 만 자동 전파, info 요약은 admin_settings.min_severity 가드)
+  if (hasNewError) {
+    try {
+      const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      await sbAdmin.functions.invoke('dispatch-admin-notifications', {
+        body: { since_ts: since, limit: 50 },
+      });
+    } catch (e) {
+      console.error('[scheduled-releases] external notify dispatch failed (continuing):', e);
     }
   }
 
