@@ -118,8 +118,10 @@ export default function HomeLibrarySections() {
                 imageUrl={cont.track.cover_url}
                 size="sm"
               />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                <Play size={16} fill="currentColor" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 6px 18px rgb(var(--color-accent) / 0.5)' }}>
+                  <Play size={14} fill="currentColor" className="ml-0.5" />
+                </span>
               </div>
             </div>
             <div className="min-w-0 flex-1 text-left">
@@ -138,7 +140,7 @@ export default function HomeLibrarySections() {
                 />
               </div>
             </div>
-            <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[11px] font-bold text-bg">
+            <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[11px] font-bold text-white shadow-card ring-1 ring-white/15">
               이어듣기
             </span>
           </button>
@@ -172,8 +174,10 @@ export default function HomeLibrarySections() {
                   <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
                     <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
                     {playable && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Play size={16} fill="currentColor" className="text-white" />
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 6px 18px rgb(var(--color-accent) / 0.5)' }}>
+                          <Play size={14} fill="currentColor" className="ml-0.5" />
+                        </span>
                       </div>
                     )}
                     {!playable && (

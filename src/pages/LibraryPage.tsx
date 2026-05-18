@@ -160,8 +160,10 @@ export default function LibraryPage() {
                   <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
                     <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
                     {playable && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Play size={20} fill="currentColor" className="text-white" />
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.5)' }}>
+                          <Play size={16} fill="currentColor" className="ml-0.5" />
+                        </span>
                       </div>
                     )}
                     {!playable && (
@@ -292,10 +294,12 @@ function ContinueCard({
           <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="md" />
           <button
             onClick={onPlay}
-            className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100"
+            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"
             aria-label="이어듣기"
           >
-            <Play size={22} fill="currentColor" />
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.5)' }}>
+              <Play size={18} fill="currentColor" className="ml-0.5" />
+            </span>
           </button>
         </div>
         <div className="min-w-0 flex-1 space-y-1">
@@ -347,8 +351,10 @@ function LikedTrackRow({
       <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
         <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="sm" />
         {playable && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-            <Play size={14} fill="currentColor" className="text-white" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-card ring-1 ring-white/15">
+              <Play size={11} fill="currentColor" className="ml-0.5" />
+            </span>
           </div>
         )}
       </div>

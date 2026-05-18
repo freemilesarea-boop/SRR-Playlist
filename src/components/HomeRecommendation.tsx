@@ -111,8 +111,10 @@ export default function HomeRecommendation({
                 <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
                 {/* 재생버튼 hover overlay 는 playable 일 때만 */}
                 {playable && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Play size={18} fill="currentColor" className="text-white" />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.5)' }}>
+                      <Play size={16} fill="currentColor" className="ml-0.5" />
+                    </span>
                   </div>
                 )}
                 {!playable && (

@@ -184,8 +184,10 @@ export default function TrackSharePage() {
                   <div className="relative aspect-square overflow-hidden rounded-xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-0.5">
                     <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="md" />
                     {playable && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Play size={18} fill="currentColor" className="text-white" />
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 8px 22px rgb(var(--color-accent) / 0.5)' }}>
+                          <Play size={16} fill="currentColor" className="ml-0.5" />
+                        </span>
                       </div>
                     )}
                     {!playable && (

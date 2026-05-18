@@ -44,8 +44,8 @@ export default function PlaylistCard({
           />
 
           {/* hover 시 재생 아이콘 */}
-          <div className="pointer-events-none absolute bottom-2 right-2 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-accent text-bg shadow-lift opacity-0 transition-all duration-smooth ease-emphasized group-hover:translate-y-0 group-hover:opacity-100">
-            <Play size={14} fill="currentColor" />
+          <div className="pointer-events-none absolute bottom-2 right-2 flex h-11 w-11 translate-y-2 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15 opacity-0 transition-all duration-smooth ease-emphasized group-hover:translate-y-0 group-hover:opacity-100" style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.45)' }}>
+            <Play size={16} fill="currentColor" className="ml-0.5" />
           </div>
 
           {/* 재생가능 배지 */}
