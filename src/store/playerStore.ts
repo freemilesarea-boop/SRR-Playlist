@@ -136,6 +136,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ currentTime: 0, pendingSeekSec: null });
       return;
     }
+    // 0091-fix — 큐 1곡 + repeat='all' 무한 루프 가드:
+    // 같은 곡으로 자동 점프하면 raw stream_events 가 무한 누적됨.
+    // (24h cap 으로 eligible 은 보호되지만 raw 카운트는 보호 안 됨)
+    // → 자동 정지 (사용자가 직접 재생 클릭하면 다시 시작)
+    if (queue.length <= 1) {
+      set({ playing: false, currentTime: 0, pendingSeekSec: null });
+      return;
+    }
     if (shuffle && shuffleOrder.length === queue.length) {
       const pos = shuffleOrder.indexOf(index);
       const nextPos = pos + 1;
