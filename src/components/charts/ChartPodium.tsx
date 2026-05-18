@@ -79,8 +79,10 @@ export default function ChartPodium({
                 >
                   {style.badge}
                 </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Play size={20} fill="currentColor" className="text-white" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.5)' }}>
+                    <Play size={18} fill="currentColor" className="ml-0.5" />
+                  </span>
                 </div>
               </div>
 

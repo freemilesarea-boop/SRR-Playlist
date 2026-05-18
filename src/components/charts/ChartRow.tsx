@@ -54,8 +54,10 @@ export default function ChartRow({
           size="sm"
         />
         {playable && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-            <Play size={16} fill="currentColor" className="text-white" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15" style={{ boxShadow: '0 6px 18px rgb(var(--color-accent) / 0.5)' }}>
+              <Play size={14} fill="currentColor" className="ml-0.5" />
+            </span>
           </div>
         )}
       </div>
