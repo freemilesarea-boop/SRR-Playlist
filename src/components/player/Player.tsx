@@ -167,6 +167,9 @@ export default function Player() {
       listened_seconds: 0,
       completed: false,
       event_type: 'start',
+      // 0089 — 플레이어 볼륨/뮤트 (volume=0 도 muted 로 분류됨)
+      player_volume: volume,
+      player_muted: volume === 0,
     });
   }, [current?.id, playable, playing, userId, playlist?.id, current]);
 
@@ -181,6 +184,8 @@ export default function Player() {
         listened_seconds: Math.floor(currentTime),
         completed: false,
         event_type: 'milestone_30s',
+        player_volume: volume,
+        player_muted: volume === 0,
       });
     }
   }, [currentTime, current, userId, playlist?.id]);
@@ -584,6 +589,8 @@ export default function Player() {
         listened_seconds: Math.floor(duration || currentTime || 0),
         completed: true,
         event_type: 'complete',
+        player_volume: volume,
+        player_muted: volume === 0,
       });
       void clearContinueListening(current.id, userId);
     }
