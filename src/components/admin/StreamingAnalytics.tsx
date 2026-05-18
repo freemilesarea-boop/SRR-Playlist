@@ -4,9 +4,11 @@ import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
 import {
   adminStreamingOverview, adminTopStreamingTracks,
   adminStreamingExclusionBreakdown,
+  getAdminSetting, setAdminSetting,
   type AdminStreamingDay, type AdminTopTrackRow,
   type StreamingExclusionBreakdown,
 } from '@/lib/artistApi';
+import { toast } from '@/store/toastStore';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 import AudioHealthPanel from './AudioHealthPanel';
@@ -43,6 +45,41 @@ export default function StreamingAnalytics() {
   const [eligError, setEligError] = useState<string | null>(null);
   // 0087 — 제외 사유별 breakdown
   const [breakdown, setBreakdown] = useState<StreamingExclusionBreakdown | null>(null);
+  // 0088 — 24h cap 설정값 (admin_settings.stream_daily_user_track_cap)
+  const [capValue, setCapValue] = useState<number>(3);
+  const [capInput, setCapInput] = useState<string>('3');
+  const [capBusy, setCapBusy] = useState(false);
+
+  const loadCap = useCallback(async () => {
+    try {
+      const v = await getAdminSetting<number>('stream_daily_user_track_cap');
+      const n = typeof v === 'number' && v > 0 ? v : 3;
+      setCapValue(n);
+      setCapInput(String(n));
+    } catch {
+      // admin guard 차단 등 — fallback
+    }
+  }, []);
+
+  useEffect(() => { void loadCap(); }, [loadCap]);
+
+  async function onSaveCap() {
+    const n = Number(capInput);
+    if (!Number.isFinite(n) || n < 1 || n > 100) {
+      toast.error('1~100 사이 정수만 입력 가능합니다');
+      return;
+    }
+    setCapBusy(true);
+    try {
+      await setAdminSetting('stream_daily_user_track_cap', n);
+      setCapValue(n);
+      toast.success(`24시간 반복 제한값 ${n}회로 변경 — 이후 신규 이벤트부터 적용`);
+    } catch (e) {
+      toast.error('변경 실패: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setCapBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -202,13 +239,39 @@ export default function StreamingAnalytics() {
 
         {/* 0087 — 제외 사유별 분석 */}
         <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-          <div className="flex items-center justify-between border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-dim">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-dim">
             <span>제외 사유별 분석 ({days}일)</span>
-            {breakdown && (
-              <span className="text-ink-mute normal-case tracking-normal">
-                eligible {breakdown.total_eligible.toLocaleString()} · 제외 {breakdown.total_excluded.toLocaleString()}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2 normal-case tracking-normal text-ink-mute">
+              {breakdown && (
+                <span>
+                  eligible {breakdown.total_eligible.toLocaleString()} · 제외 {breakdown.total_excluded.toLocaleString()}
+                </span>
+              )}
+              {/* 0088 — 24h cap 설정 인풋 */}
+              <label className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2 py-1 ring-1 ring-line/10">
+                <span className="text-[10px] text-ink-dim">24h 반복 제한</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={capInput}
+                  onChange={(e) => setCapInput(e.target.value)}
+                  className="w-12 bg-transparent text-center text-xs font-bold text-ink tabular-nums focus:outline-none"
+                  aria-label="24시간 반복 제한값"
+                />
+                <span className="text-[10px] text-ink-dim">회</span>
+                {Number(capInput) !== capValue && (
+                  <button
+                    type="button"
+                    onClick={() => void onSaveCap()}
+                    disabled={capBusy}
+                    className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/25 disabled:opacity-50"
+                  >
+                    {capBusy ? '저장 중…' : '저장'}
+                  </button>
+                )}
+              </label>
+            </div>
           </div>
           {eligLoading && (
             <div className="p-6 text-center text-xs text-ink-mute">불러오는 중…</div>
@@ -224,7 +287,7 @@ export default function StreamingAnalytics() {
               <ReasonCard label="관리자 미리듣기" value={breakdown.admin_preview} hint="/admin* 페이지 재생" tone="info" />
               <ReasonCard label="아티스트 미리듣기" value={breakdown.artist_preview} hint="/artist* 페이지 재생" tone="info" />
               <ReasonCard label="셀프 재생" value={breakdown.self_play} hint="아티스트 본인 트랙" tone="warn" />
-              <ReasonCard label="24시간 반복 제한" value={breakdown.daily_user_track_cap} hint="같은 user+track 24h 3회 초과" tone="error" />
+              <ReasonCard label="24시간 반복 제한" value={breakdown.daily_user_track_cap} hint={`같은 user+track 24h ${capValue}회 초과`} tone="error" />
             </div>
           )}
         </div>
