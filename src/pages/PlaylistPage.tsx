@@ -237,7 +237,7 @@ export default function PlaylistPage() {
           <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
         </button>
         <ShareButton
-          title={`스르륵 플리 — ${playlist.title}`}
+          title={`듣다 — ${playlist.title}`}
           text={playlist.description ?? `${playlist.category} 플레이리스트`}
           url={playlistShareUrl(playlist.id)}
           targetType="playlist"

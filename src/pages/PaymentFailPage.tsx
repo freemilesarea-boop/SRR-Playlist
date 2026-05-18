@@ -22,7 +22,7 @@ export default function PaymentFailPage() {
             <RotateCcw size={14} /> 다시 결제하기
           </Link>
           <a
-            href="mailto:freemilesarea@gmail.com?subject=SRR Playlist 결제 문의"
+            href="mailto:freemilesarea@gmail.com?subject=듣다 결제 문의"
             className="btn-ghost justify-center py-2.5"
           >
             <HelpCircle size={14} /> 고객센터 문의

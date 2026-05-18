@@ -7,9 +7,9 @@ interface LinkItem {
 }
 
 const ABOUT_LINKS: LinkItem[] = [
-  { label: '스르륵 플리', href: '/' },
-  { label: '광고 문의', href: 'mailto:freemilesarea@gmail.com?subject=스르륵 플리 광고 문의' },
-  { label: 'B2B 문의', href: 'mailto:freemilesarea@gmail.com?subject=스르륵 플리 B2B 문의' },
+  { label: '듣다', href: '/' },
+  { label: '광고 문의', href: 'mailto:freemilesarea@gmail.com?subject=듣다 광고 문의' },
+  { label: 'B2B 문의', href: 'mailto:freemilesarea@gmail.com?subject=듣다 B2B 문의' },
 ];
 
 const SERVICE_LINKS: LinkItem[] = [

@@ -35,7 +35,7 @@ export default function CuratorProfilePage() {
 
   const mailtoUrl = useMemo(() => {
     if (!profile?.contact_email) return null;
-    const subject = encodeURIComponent(`스르륵 플리 — ${profile.display_name} 협업 문의`);
+    const subject = encodeURIComponent(`듣다 — ${profile.display_name} 협업 문의`);
     return `mailto:${profile.contact_email}?subject=${subject}`;
   }, [profile]);
 

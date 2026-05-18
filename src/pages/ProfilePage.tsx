@@ -208,7 +208,7 @@ export default function ProfilePage() {
         <UserX size={14} /> 회원 탈퇴
       </button>
 
-      <p className="text-center text-[11px] text-ink-dim">스르륵 플리 · v0.1.0 MVP</p>
+      <p className="text-center text-[11px] text-ink-dim">듣다 · v0.1.0 MVP</p>
 
       {withdrawModalOpen && (
         <WithdrawConfirmModal

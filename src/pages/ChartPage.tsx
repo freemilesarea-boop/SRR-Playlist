@@ -134,7 +134,7 @@ export default function ChartPage() {
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-accent">차트</p>
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">스르륵 차트</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">듣다 차트</h1>
           </div>
         </div>
         <p className="text-sm text-ink-mute">

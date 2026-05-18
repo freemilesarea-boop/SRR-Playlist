@@ -228,7 +228,7 @@ function SuccessView({ row, onGo }: { row: MyPaymentStatusRow; onGo: () => void 
         <h1 className="text-lg font-bold">결제가 완료됐어요</h1>
       </div>
       <p className="mt-2 text-sm text-ink-mute">
-        {isBusiness ? 'SRR Playlist 사업자 정기이용권' : 'SRR Playlist 정기이용권'} ·{' '}
+        {isBusiness ? '듣다 사업자 정기이용권' : '듣다 정기이용권'} ·{' '}
         {row.amount.toLocaleString()}원
       </p>
       <p className="mt-1 text-xs text-ink-dim">

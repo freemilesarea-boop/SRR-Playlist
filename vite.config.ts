@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: '스르륵 플리',
-        short_name: '스르륵',
+        name: '듣다',
+        short_name: '듣다',
         description: '상황 기반 감성 플레이리스트 + 매장 BGM',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
