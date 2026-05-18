@@ -40,6 +40,12 @@ export interface SettlementItem {
   track_code: string;
   track_title: string;
   stream_count: number;
+  /** 0079 — 정산에 실제 반영된 카운트 (= stream_count) */
+  eligible_stream_count?: number;
+  /** 0079 — 전체 milestone_30s 카운트 (eligible + excluded) */
+  raw_milestone_stream_count?: number;
+  /** 0079 — admin/artist 미리듣기, 셀프재생 등으로 제외된 카운트 */
+  excluded_stream_count?: number;
   pool_revenue_share: number;
 }
 

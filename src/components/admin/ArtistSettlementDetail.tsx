@@ -240,28 +240,43 @@ export default function ArtistSettlementDetail({
             </section>
 
             <section>
-              <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">트랙별 상세 ({data.items.length})</h5>
+              <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                트랙별 상세 ({data.items.length}) — eligible 만 정산 반영
+              </h5>
               <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-xs">
                   <thead className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
                     <tr>
                       <th className="px-3 py-2 text-left">track_code</th>
                       <th className="px-3 py-2 text-left">제목</th>
-                      <th className="px-3 py-2 text-right">스트림</th>
+                      <th className="px-3 py-2 text-right" title="전체 milestone_30s">raw</th>
+                      <th className="px-3 py-2 text-right" title="제외 (admin/artist 미리듣기, 셀프재생 등)">제외</th>
+                      <th className="px-3 py-2 text-right" title="정산 대상 = stream_count">eligible</th>
                       <th className="px-3 py-2 text-right">배분액</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.items.map((it, i) => (
+                    {data.items.map((it, i) => {
+                      const raw = it.raw_milestone_stream_count ?? it.stream_count;
+                      const excluded = it.excluded_stream_count ?? 0;
+                      const eligible = it.eligible_stream_count ?? it.stream_count;
+                      return (
                       <tr key={i} className="border-b border-line/10 last:border-b-0">
                         <td className="px-3 py-2 font-mono text-[10px]">{it.track_code}</td>
                         <td className="px-3 py-2">{it.track_title}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{it.stream_count.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                          {excluded > 0 ? `-${excluded.toLocaleString()}` : '0'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{eligible.toLocaleString()}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(it.pool_revenue_share)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </section>
 
