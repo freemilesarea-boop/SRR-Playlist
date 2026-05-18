@@ -73,6 +73,9 @@ export interface MyArtistTrackRow {
   cover_url: string | null;
   audio_url: string;
   duration: number | null;
+  /** 0083 — 본인 트랙에 한해 안전 라벨로 표시. 원문 audio_health_error 는 노출 X */
+  audio_health_status?: 'unknown' | 'ok' | 'unreachable' | 'wrong_mime' | 'empty' | 'error' | null;
+  audio_health_checked_at?: string | null;
   created_at: string;
 }
 
@@ -288,7 +291,8 @@ export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
         'resubmitted_at, reviewed_at, approved_at, scheduled_at, released_at, ' +
         'visibility_status, rejected_reason, rights_holder_name, isrc, explicit_content, ' +
         'instrumental, genre, main_genre, sub_genre, mood, suitable_store, lyrics, ' +
-        'cover_url, audio_url, duration, created_at',
+        'cover_url, audio_url, duration, created_at, ' +
+        'audio_health_status, audio_health_checked_at',
     )
     .eq('owner_user_id', uid)
     .eq('source_type', 'artist_upload')
@@ -1103,6 +1107,52 @@ export async function runProcessScheduledReleases(): Promise<{
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+// ============================================
+// 0083 — admin_notifications wrapper
+// ============================================
+
+export interface AdminNotification {
+  id: number;
+  kind: string;
+  severity: 'info' | 'warning' | 'error';
+  title: string;
+  body: string | null;
+  context: Record<string, unknown> | null;
+  track_id: string | null;
+  track_code: string | null;
+  track_title: string | null;
+  read_at: string | null;
+  read_by: string | null;
+  created_at: string;
+}
+
+export async function adminListNotifications(
+  onlyUnread = false, limit = 50,
+): Promise<AdminNotification[]> {
+  const { data, error } = await supabase.rpc('admin_list_notifications', {
+    p_only_unread: onlyUnread, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as AdminNotification[];
+}
+
+export async function adminNotificationUnreadCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_notification_unread_count');
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+export async function adminMarkNotificationRead(id: number): Promise<void> {
+  const { error } = await supabase.rpc('admin_mark_notification_read', { p_id: id });
+  if (error) throw error;
+}
+
+export async function adminMarkAllNotificationsRead(): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_mark_all_notifications_read');
+  if (error) throw error;
+  return (data as number) ?? 0;
 }
 
 export async function adminRequestTrackChanges(

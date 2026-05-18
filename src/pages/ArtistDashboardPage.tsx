@@ -1062,6 +1062,10 @@ function MyTrackRow({
           <span className="text-ink-dim">
             · {new Date(track.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
           </span>
+          {/* 0083 — 본인 트랙 한정 audio_health 안전 라벨 (원문 오류 X) */}
+          {track.audio_health_status && track.audio_health_status !== 'unknown' && (
+            <ArtistAudioHealthBadge status={track.audio_health_status} />
+          )}
         </div>
         {track.changes_requested_reason && (
           <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
@@ -1293,5 +1297,39 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="block text-[11px] text-ink-dim">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * 0083 — 본인 트랙 한정 audio_health 안전 라벨.
+ * 운영 오류 원문은 노출 X. 안전한 안내 문구만.
+ */
+function ArtistAudioHealthBadge({
+  status,
+}: {
+  status: NonNullable<MyArtistTrackRow['audio_health_status']>;
+}) {
+  if (status === 'ok') {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+        🎵 정상
+      </span>
+    );
+  }
+  const map = {
+    unreachable: { label: '음원 접근 불가', tone: 'bg-red-500/15 text-red-700 dark:text-red-300' },
+    wrong_mime:  { label: '음원 형식 확인 필요', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+    empty:       { label: '파일 크기 오류', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+    error:       { label: '검사 실패', tone: 'bg-red-500/15 text-red-700 dark:text-red-300' },
+  } as const;
+  const m = (map as Record<string, { label: string; tone: string }>)[status];
+  if (!m) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${m.tone}`}
+      title="운영팀에서 자동 검사된 음원 상태입니다"
+    >
+      ⚠ {m.label}
+    </span>
   );
 }

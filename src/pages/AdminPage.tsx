@@ -26,6 +26,7 @@ import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
 import Dashboard from '@/components/admin/Dashboard';
+import AdminNotificationsBell from '@/components/admin/AdminNotificationsBell';
 import MembersList from '@/components/admin/MembersList';
 import StreamingAnalytics from '@/components/admin/StreamingAnalytics';
 import RevenueManagement from '@/components/admin/RevenueManagement';
@@ -87,11 +88,14 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
-        <p className="text-xs text-ink-mute">
-          대시보드 · 회원 · 스트리밍 · 매출 · 구독 · 콘텐츠
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
+          <p className="text-xs text-ink-mute">
+            대시보드 · 회원 · 스트리밍 · 매출 · 구독 · 콘텐츠
+          </p>
+        </div>
+        <AdminNotificationsBell />
       </header>
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
