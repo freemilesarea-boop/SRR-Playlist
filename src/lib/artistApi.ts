@@ -1038,6 +1038,73 @@ export async function adminTopStreamingTracks(days = 7, limit = 20): Promise<Adm
   return (data ?? []) as AdminTopTrackRow[];
 }
 
+// ============================================
+// 0082 — audio health 워커 + 조회
+// ============================================
+
+export interface AudioHealthSummary {
+  unknown: number; ok: number; unreachable: number;
+  wrong_mime: number; empty: number; error: number;
+  total_with_audio: number;
+  last_check_at: string | null;
+}
+
+export async function adminAudioHealthSummary(): Promise<AudioHealthSummary> {
+  const { data, error } = await supabase.rpc('admin_audio_health_summary');
+  if (error) throw error;
+  return data as AudioHealthSummary;
+}
+
+export interface AudioHealthIssue {
+  track_id: string; track_code: string | null; title: string; artist: string | null;
+  release_status: string | null; visibility_status: string | null;
+  audio_url: string;
+  audio_health_status: 'unknown' | 'ok' | 'unreachable' | 'wrong_mime' | 'empty' | 'error';
+  audio_health_checked_at: string | null;
+  audio_health_error: string | null;
+  audio_content_type: string | null;
+  audio_content_length: number | null;
+}
+
+export async function adminAudioHealthIssues(limit = 100): Promise<AudioHealthIssue[]> {
+  const { data, error } = await supabase.rpc('admin_audio_health_issues', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AudioHealthIssue[];
+}
+
+/** Edge Function `check-audio-health` 호출 — admin Bearer 인증 */
+export async function runAudioHealthCheck(opts?: {
+  limit?: number; recheck_after_hours?: number; track_ids?: string[];
+}): Promise<{
+  ok: boolean; processed?: number; updated?: number;
+  summary?: Record<string, number>; error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke('check-audio-health', {
+      body: opts ?? {},
+    });
+    if (error) return { ok: false, error: error.message };
+    return data ?? { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Edge Function `process-scheduled-releases` 호출 — admin Bearer 인증 */
+export async function runProcessScheduledReleases(): Promise<{
+  ok: boolean; processed?: number; released?: number; failed?: number; error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke('process-scheduled-releases', {
+      body: {},
+    });
+    if (error) return { ok: false, error: error.message };
+    return data ?? { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function adminRequestTrackChanges(
   trackId: string,
   note: string,
