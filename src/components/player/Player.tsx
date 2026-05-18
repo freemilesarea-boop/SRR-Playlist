@@ -61,6 +61,13 @@ const sessionFailedTrackIds = new Set<string>();
 const recentErrorToasts = new Map<string, number>();
 const TOAST_DEDUP_MS = 30_000;
 
+/**
+ * 0091-fix — 추천 toast dedup (세션 / 10분).
+ * 큐 끝 → 추천 추가 → 다시 끝 → 또 추가 시 toast 폭주 방지.
+ */
+let lastRecommendToastAt = 0;
+const RECOMMEND_TOAST_DEDUP_MS = 10 * 60 * 1000;
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -572,7 +579,12 @@ export default function Player() {
       currentTime: 0,
       shuffleOrder: shuffle ? [...shuffleOrder, ...playable.map((_, i) => queue.length + i)] : [],
     });
-    toast.success('비슷한 분위기의 곡을 이어서 추천했어요');
+    // 0091-fix — toast dedup (10분 윈도우, 큐 끝 반복 시 폭주 방지)
+    const now = Date.now();
+    if (now - lastRecommendToastAt >= RECOMMEND_TOAST_DEDUP_MS) {
+      lastRecommendToastAt = now;
+      toast.success('비슷한 분위기의 곡을 이어서 추천했어요');
+    }
     return true;
   }
 
