@@ -136,7 +136,7 @@ export default function HomePage() {
   const nick = profile?.nickname || '게스트';
 
   return (
-    <div className="space-y-8 px-4 pb-12 pt-6 sm:space-y-10 sm:px-6 sm:pt-8">
+    <div className="space-y-10 px-4 pb-16 pt-6 sm:space-y-12 sm:px-6 sm:pt-10 lg:space-y-14 lg:px-8 lg:pt-12">
       {/* Greeting */}
       <header className="space-y-3">
         <div className="space-y-1">

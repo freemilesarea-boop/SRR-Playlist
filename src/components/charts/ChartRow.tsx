@@ -34,19 +34,19 @@ export default function ChartRow({
       onClick={handleClick}
       aria-disabled={!playable}
       title={!playable ? '재생할 수 없는 트랙입니다' : undefined}
-      className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
-        playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
-      } ${isCurrent ? 'bg-accent/10' : ''}`}
+      className={`group flex w-full items-center gap-4 rounded-xl px-3 py-3 text-left transition-colors duration-smooth sm:gap-5 sm:px-4 ${
+        playable ? 'hover:bg-ink/8' : 'cursor-not-allowed opacity-[0.55]'
+      } ${isCurrent ? 'bg-accent/12 ring-1 ring-accent/25' : ''}`}
     >
-      {/* 순위 */}
-      <div className="w-7 shrink-0 text-right text-sm font-bold tabular-nums">
+      {/* 순위 — 고정 폭 */}
+      <div className="w-8 shrink-0 text-center text-sm font-bold tabular-nums sm:w-10">
         <span className={isCurrent ? 'text-accent' : 'text-ink-mute'}>
           {rank.toString().padStart(2, '0')}
         </span>
       </div>
 
       {/* 커버 */}
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10 sm:h-14 sm:w-14">
         <AutoCover
           title={track.title}
           category={track.genre}
@@ -81,33 +81,36 @@ export default function ChartRow({
         </p>
       </div>
 
-      {/* 좋아요 버튼 — 호버 시 진하게 표시, 좋아요한 상태면 항상 표시 */}
-      <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
-        <TrackLikeButton
-          trackId={track.track_id}
-          track={chartTrackToTrackRow(track)}
-          size={14}
-        />
-      </span>
+      {/* 우측 액션 영역 — 정렬 통일 */}
+      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+        {/* 좋아요 버튼 */}
+        <span className="opacity-70 transition-opacity group-hover:opacity-100">
+          <TrackLikeButton
+            trackId={track.track_id}
+            track={chartTrackToTrackRow(track)}
+            size={14}
+          />
+        </span>
 
-      {/* 재생 수 (모바일 짧게, 데스크탑 자세히) */}
-      <div className="hidden shrink-0 text-right md:block">
-        <p className="text-xs font-semibold tabular-nums text-ink">
-          {NUM(track.play_count)}
-          <span className="ml-1 text-[10px] font-normal text-ink-dim">회</span>
-        </p>
-        {track.completed_count > 0 && (
-          <p className="text-[10px] text-ink-dim">완료 {NUM(track.completed_count)}</p>
-        )}
-      </div>
-      <div className="shrink-0 text-right md:hidden">
-        {track.play_count > 0 ? (
-          <p className="text-xs font-semibold tabular-nums text-ink-mute">
+        {/* 재생 수 — 고정 폭 */}
+        <div className="hidden w-20 text-right md:block">
+          <p className="text-xs font-semibold tabular-nums text-ink">
             {NUM(track.play_count)}
+            <span className="ml-1 text-[10px] font-normal text-ink-dim">회</span>
           </p>
-        ) : (
-          <p className="text-[10px] text-ink-dim">{track.duration ? formatTime(track.duration) : ''}</p>
-        )}
+          {track.completed_count > 0 && (
+            <p className="text-[10px] text-ink-dim">완료 {NUM(track.completed_count)}</p>
+          )}
+        </div>
+        <div className="w-12 text-right md:hidden">
+          {track.play_count > 0 ? (
+            <p className="text-xs font-semibold tabular-nums text-ink-mute">
+              {NUM(track.play_count)}
+            </p>
+          ) : (
+            <p className="text-[10px] text-ink-dim">{track.duration ? formatTime(track.duration) : ''}</p>
+          )}
+        </div>
       </div>
     </button>
   );

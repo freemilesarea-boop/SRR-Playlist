@@ -22,22 +22,24 @@ export default function AppShell() {
     <div className="flex min-h-screen flex-col bg-bg pt-safe">
       <Sidebar />
 
-      {/* 상단 우측 테마 토글 (앱 폭에 정렬, lg+ 에선 사이드바 폭만큼 우측으로) */}
+      {/* 상단 우측 테마 토글 — lg+ 에선 사이드바 폭만큼 우측으로 */}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe sm:px-6 lg:pl-60">
         <div className="pointer-events-auto pt-2.5">
           <ThemeQuickToggle />
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 lg:ml-60 lg:mr-0">
-        <Outlet />
-      </main>
-      {/* 풀폭 Footer — main 밖에 두어 max-w-5xl 제약 받지 않음.
-          Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한
-          padding-bottom 으로 마지막 줄이 가려지지 않게. lg+ 에선 사이드바 영역 만큼 left padding. */}
-      <div className="pb-44 lg:pl-60">
-        <Footer />
+      {/* main + footer 영역을 사이드바 우측 영역에 두고, 그 안에서 max-w 컨텐츠를 mx-auto 로 중앙 정렬 */}
+      <div className="flex-1 lg:pl-60">
+        <main className="mx-auto w-full max-w-[1500px]">
+          <Outlet />
+        </main>
+        {/* Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한 padding-bottom 으로 마지막 줄 보호 */}
+        <div className="pb-44">
+          <Footer />
+        </div>
       </div>
+
       <Player />
       <BottomNav />
     </div>
