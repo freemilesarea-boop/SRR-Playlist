@@ -806,7 +806,7 @@ export default function Player() {
               e.stopPropagation();
               handlePlayBtn();
             }}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:scale-105 disabled:opacity-50"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15 transition hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
             aria-label={playing ? '일시정지' : '재생'}
             disabled={errored}
           >
@@ -1002,7 +1002,7 @@ export default function Player() {
               </button>
               <button
                 onClick={handlePlayBtn}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-2xl transition hover:scale-105 disabled:opacity-50"
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-white shadow-2xl ring-1 ring-white/20 transition hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
                 aria-label={playing ? '일시정지' : '재생'}
                 disabled={errored}
               >

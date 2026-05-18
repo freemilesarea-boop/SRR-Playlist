@@ -51,7 +51,7 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
 
         <div className="flex flex-1 flex-col gap-2">
           {badge && (
-            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-white/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur ring-1 ring-white/10">
+            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-accent/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur ring-1 ring-accent/40">
               <Sparkles size={10} /> {badge}
             </span>
           )}
@@ -64,7 +64,7 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
             </p>
           )}
           <div className="mt-2 flex items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-black shadow-lift transition group-hover:scale-105">
+            <span className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-lift ring-1 ring-white/15 transition group-hover:scale-105 group-hover:bg-accent-soft">
               <Play size={14} fill="currentColor" /> 바로 재생
             </span>
             {noAudio && (
