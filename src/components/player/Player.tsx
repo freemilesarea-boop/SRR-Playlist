@@ -773,8 +773,8 @@ export default function Player() {
         playsInline
       />
 
-      {/* Mini player */}
-      <div className="fixed inset-x-0 bottom-[5.25rem] z-20 mx-auto max-w-3xl px-3 sm:bottom-[5.5rem] sm:px-4 lg:left-60 lg:right-0 lg:bottom-3 lg:mx-auto">
+      {/* Mini player — 모바일은 BottomNav 위, 데스크탑은 사이드바 우측 영역 중앙 */}
+      <div className="fixed inset-x-0 bottom-[5.25rem] z-20 mx-auto max-w-3xl px-3 sm:bottom-[5.5rem] sm:px-4 lg:left-60 lg:right-0 lg:bottom-4 lg:max-w-[min(960px,calc(100vw-15rem-4rem))] lg:px-6">
         <button
           onClick={() => setExpanded(true)}
           className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl glass-strong p-2.5 transition duration-smooth ease-emphasized hover:-translate-y-0.5"
