@@ -40,6 +40,7 @@ export interface MyArtistTrackRow {
   release_status:
     | 'draft'
     | 'submitted'
+    | 'review_pending'
     | 'changes_requested'
     | 'approved'
     | 'scheduled'
@@ -124,7 +125,7 @@ export interface AdminTrackRow {
   visibility_status: 'pending_review' | 'approved' | 'rejected' | 'hidden';
   /** 0074 — DSP 검수 파이프라인 (release_status / release_date / removed_reason) */
   release_status?:
-    | 'draft' | 'submitted' | 'changes_requested'
+    | 'draft' | 'submitted' | 'review_pending' | 'changes_requested'
     | 'approved' | 'scheduled' | 'released'
     | 'rejected' | 'removed' | null;
   release_date?: string | null;
@@ -695,7 +696,7 @@ export async function adminListArtistTracks(opts?: {
   /** visibility_status 또는 release_status 의 값 (서버 RPC 가 둘 다 매칭) */
   status?:
     | 'pending_review' | 'approved' | 'rejected' | 'hidden'
-    | 'submitted' | 'changes_requested' | 'scheduled' | 'released' | 'removed'
+    | 'submitted' | 'review_pending' | 'changes_requested' | 'scheduled' | 'released' | 'removed'
     | '';
   search?: string;
   limit?: number;

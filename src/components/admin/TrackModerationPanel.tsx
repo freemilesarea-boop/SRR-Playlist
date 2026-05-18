@@ -44,6 +44,7 @@ const REJECT_TEMPLATES = [
 const STATUS_LABEL: Record<string, string> = {
   draft: '초안',
   submitted: '검수 대기',
+  review_pending: '검수 중',
   changes_requested: '수정 요청',
   approved: '승인됨',
   scheduled: '발매 예정',
@@ -55,6 +56,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_TONE: Record<string, string> = {
   draft: 'bg-ink/10 text-ink-dim',
   submitted: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  review_pending: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
   changes_requested: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
   approved: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
   scheduled: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
@@ -285,9 +287,9 @@ export default function TrackModerationPanel({
   }
 
   const status = releaseStatus ?? '';
-  const canApprove = status === 'submitted' || status === 'changes_requested';
-  const canReject = status === 'submitted' || status === 'changes_requested';
-  const canRequestChanges = status === 'submitted';
+  const canApprove = status === 'submitted' || status === 'review_pending' || status === 'changes_requested';
+  const canReject = status === 'submitted' || status === 'review_pending' || status === 'changes_requested';
+  const canRequestChanges = status === 'submitted' || status === 'review_pending';
   const canTakedown = ['draft', 'submitted', 'changes_requested', 'approved', 'scheduled', 'released'].includes(status);
   const canRestore = status === 'removed' || status === 'rejected';
   const canHideReleased = status === 'released' && visibilityStatus !== 'hidden';

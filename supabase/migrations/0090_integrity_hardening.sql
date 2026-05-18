@@ -1,0 +1,54 @@
+-- 0090 — 운영 무결성 강화 (4 part)
+-- A) audio_sha256 cross-owner dup 차단
+-- B) released/scheduled immutable 핵심 컬럼 보호
+-- C) settlement snapshot 강화 (artist_name / cap / policy)
+-- D) review_pending 검수 잠금 상태 도입
+--
+-- (DDL/RPC 전체 본문은 mcp__apply_migration 0090_integrity_hardening 에 즉시 반영됨.
+--  요약:)
+--
+-- A) audio_sha256 cross-owner 차단:
+--    - idx_tracks_global_audio_sha256_active UNIQUE INDEX (active 상태만)
+--    - submit_artist_release RPC 에 cross-owner dup 검사 추가
+--    - 본인 동일 sha 는 멱등 (기존 row 반환), 타인 dup 은 raise
+--
+-- B) released/scheduled immutable:
+--    - _tracks_immutable_fields_check BEFORE UPDATE trigger
+--    - title/isrc/audio_url/audio_sha256/release_date/rights_holder_name/release_title/track_code
+--      변경 시 'released track immutable' raise (admin 포함)
+--    - release_status 자체는 변경 가능 (admin_takedown_track 등)
+--
+-- C) settlement snapshot:
+--    - settlement_items.artist_name_snapshot text
+--    - artist_settlements.stream_daily_user_track_cap_snapshot int
+--    - artist_settlements.settlement_policy_snapshot jsonb
+--    - 기존 데이터 best-effort backfill
+--    - admin_generate_monthly_settlement 본문에 snapshot 채우기 추가
+--    - admin_settlement_detail 응답에 artist_name_snapshot 노출
+--
+-- D) review_pending 상태 도입:
+--    - tracks_release_status_check 에 'review_pending' 추가
+--    - admin_start_track_review: submitted → review_pending 자동 전이
+--    - _tracks_artist_update_guard: review_pending 도 아티스트 mutate 차단
+--    - _sync_track_release_visibility: review_pending → pending_review
+--    - _log_track_moderation_event: review_pending 전이 'review_started'
+--    - _enqueue_track_moderation_email: review_pending 자체는 메일 X
+--      submitted/review_pending/changes_requested 모두 released/scheduled 전이 시 메일 발송
+--    - list_pending_review_tracks WHERE 에 review_pending 포함
+--    - admin_approve_artist_release / admin_reject_artist_release /
+--      admin_request_track_changes 모두 review_pending 도 허용
+--
+-- 프론트:
+-- - MyArtistTrackRow / AdminTrackRow / StatusFilter / STATUS_LABEL / STATUS_TONE 에
+--   review_pending 추가
+-- - 아티스트 트랙 row 에 review_pending 시 '🔍 현재 검수 중이라 수정할 수 없습니다' 표시
+-- - TrackModerationPanel canApprove / canRequestChanges 도 review_pending 도 허용
+-- - 라벨: review_pending='검수 중' (sky)
+--
+-- 호환:
+-- - 기존 정산 계산 로직 변경 X — snapshot 저장만 추가
+-- - 기존 RLS / 권한 / cron / EF 무영향
+-- - service_role 프론트 노출 X
+-- - 0078~0089 가드 (eligible_for_payout / dedup / cap / volume) 모두 유지
+
+NOTIFY pgrst, 'reload schema';

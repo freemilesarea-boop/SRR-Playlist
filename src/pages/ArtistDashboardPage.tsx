@@ -1067,6 +1067,11 @@ function MyTrackRow({
             <ArtistAudioHealthBadge status={track.audio_health_status} />
           )}
         </div>
+        {track.release_status === 'review_pending' && (
+          <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
+            🔍 현재 검수 중이라 수정할 수 없습니다. 결과 안내 후 다시 시도해주세요.
+          </p>
+        )}
         {track.changes_requested_reason && (
           <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
             ⚠️ 관리자 수정 요청: {track.changes_requested_reason}
