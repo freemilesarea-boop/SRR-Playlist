@@ -1043,6 +1043,27 @@ export async function adminTopStreamingTracks(days = 7, limit = 20): Promise<Adm
 }
 
 // ============================================
+// 0087 — exclusion_reason breakdown
+// ============================================
+
+export interface StreamingExclusionBreakdown {
+  unreleased: number;
+  admin_preview: number;
+  artist_preview: number;
+  self_play: number;
+  daily_user_track_cap: number;
+  total_excluded: number;
+  total_eligible: number;
+  days: number;
+}
+
+export async function adminStreamingExclusionBreakdown(days = 30): Promise<StreamingExclusionBreakdown> {
+  const { data, error } = await supabase.rpc('admin_streaming_exclusion_breakdown', { p_days: days });
+  if (error) throw error;
+  return data as StreamingExclusionBreakdown;
+}
+
+// ============================================
 // 0082 — audio health 워커 + 조회
 // ============================================
 

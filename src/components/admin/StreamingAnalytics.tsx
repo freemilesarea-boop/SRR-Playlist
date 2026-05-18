@@ -3,7 +3,9 @@ import { Headphones, Play, CheckCircle, Clock, Users, Music, ShieldCheck, Shield
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
 import {
   adminStreamingOverview, adminTopStreamingTracks,
+  adminStreamingExclusionBreakdown,
   type AdminStreamingDay, type AdminTopTrackRow,
+  type StreamingExclusionBreakdown,
 } from '@/lib/artistApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
@@ -39,6 +41,8 @@ export default function StreamingAnalytics() {
   const [topTracks, setTopTracks] = useState<AdminTopTrackRow[]>([]);
   const [eligLoading, setEligLoading] = useState(true);
   const [eligError, setEligError] = useState<string | null>(null);
+  // 0087 — 제외 사유별 breakdown
+  const [breakdown, setBreakdown] = useState<StreamingExclusionBreakdown | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,12 +60,14 @@ export default function StreamingAnalytics() {
     setEligLoading(true);
     setEligError(null);
     try {
-      const [ov, top] = await Promise.all([
+      const [ov, top, bd] = await Promise.all([
         adminStreamingOverview(days),
         adminTopStreamingTracks(days, 20),
+        adminStreamingExclusionBreakdown(days),
       ]);
       setOverview(ov);
       setTopTracks(top);
+      setBreakdown(bd);
     } catch (e) {
       setEligError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -190,6 +196,35 @@ export default function StreamingAnalytics() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+
+        {/* 0087 — 제외 사유별 분석 */}
+        <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+          <div className="flex items-center justify-between border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-dim">
+            <span>제외 사유별 분석 ({days}일)</span>
+            {breakdown && (
+              <span className="text-ink-mute normal-case tracking-normal">
+                eligible {breakdown.total_eligible.toLocaleString()} · 제외 {breakdown.total_excluded.toLocaleString()}
+              </span>
+            )}
+          </div>
+          {eligLoading && (
+            <div className="p-6 text-center text-xs text-ink-mute">불러오는 중…</div>
+          )}
+          {!eligLoading && breakdown && breakdown.total_excluded === 0 && (
+            <div className="p-6 text-center text-xs text-ink-mute">
+              제외된 스트림이 없어요. (해당 기간 모든 milestone 이 정산 대상)
+            </div>
+          )}
+          {!eligLoading && breakdown && breakdown.total_excluded > 0 && (
+            <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-5">
+              <ReasonCard label="미공개" value={breakdown.unreleased} hint="release_status != released" tone="info" />
+              <ReasonCard label="관리자 미리듣기" value={breakdown.admin_preview} hint="/admin* 페이지 재생" tone="info" />
+              <ReasonCard label="아티스트 미리듣기" value={breakdown.artist_preview} hint="/artist* 페이지 재생" tone="info" />
+              <ReasonCard label="셀프 재생" value={breakdown.self_play} hint="아티스트 본인 트랙" tone="warn" />
+              <ReasonCard label="24시간 반복 제한" value={breakdown.daily_user_track_cap} hint="같은 user+track 24h 3회 초과" tone="error" />
             </div>
           )}
         </div>
@@ -339,6 +374,30 @@ function Summary({
         {icon} {label}
       </div>
       <p className={`mt-1 text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
+
+/**
+ * 0087 — 제외 사유별 분석 카드 (다섯 가지 reason 전용)
+ */
+function ReasonCard({
+  label, value, hint, tone,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  tone: 'info' | 'warn' | 'error';
+}) {
+  const toneClass =
+    tone === 'error' ? 'bg-red-500/15 text-red-700 ring-red-400/30 dark:text-red-300'
+    : tone === 'warn'  ? 'bg-amber-500/15 text-amber-700 ring-amber-400/30 dark:text-amber-300'
+    : 'bg-sky-500/15 text-sky-700 ring-sky-400/30 dark:text-sky-300';
+  return (
+    <div className={`rounded-xl p-2.5 ring-1 ${toneClass}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">{label}</p>
+      <p className="mt-0.5 text-lg font-extrabold tabular-nums">{value.toLocaleString()}</p>
+      <p className="mt-0.5 text-[9px] opacity-70" title={hint}>{hint}</p>
     </div>
   );
 }
