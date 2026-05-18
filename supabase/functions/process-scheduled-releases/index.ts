@@ -70,6 +70,41 @@ serve(async (req) => {
   const rows = (data ?? []) as Array<{ track_id: string; track_code: string | null; status: string; error: string | null }>;
   const released = rows.filter((r) => r.status === 'released').length;
   const failed = rows.filter((r) => r.status === 'failed').length;
+
+  // 0083 — 실패 발생 시 admin_notifications 적립 (silent 실패)
+  if (failed > 0) {
+    try {
+      for (const r of rows.filter((x) => x.status === 'failed').slice(0, 10)) {
+        await sbAdmin.rpc('create_admin_notification', {
+          p_kind: 'scheduled_release_failed',
+          p_severity: 'error',
+          p_title: `예약 발매 실패 — ${r.track_code ?? r.track_id.slice(0, 8)}`,
+          p_body: r.error ?? 'unknown',
+          p_context: { released, failed, total: rows.length },
+          p_track_id: r.track_id,
+        });
+      }
+    } catch (e) {
+      console.error('[scheduled-releases] notification enqueue failed (continuing):', e);
+    }
+  } else if (released > 0) {
+    // 성공 요약 (info) — 5건 이상만
+    if (released >= 5) {
+      try {
+        await sbAdmin.rpc('create_admin_notification', {
+          p_kind: 'worker_summary',
+          p_severity: 'info',
+          p_title: `예약 발매 — ${released}건 공개됨`,
+          p_body: `처리 ${rows.length}건 / released ${released}`,
+          p_context: { released, failed, total: rows.length },
+          p_track_id: null,
+        });
+      } catch (e) {
+        console.error('[scheduled-releases] info notification failed (continuing):', e);
+      }
+    }
+  }
+
   console.log('[scheduled-releases] done', { mode, processed: rows.length, released, failed });
   return json({ ok: true, mode, processed: rows.length, released, failed, results: rows });
 });

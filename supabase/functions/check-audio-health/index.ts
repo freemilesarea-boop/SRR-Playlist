@@ -169,6 +169,39 @@ serve(async (req) => {
     unreachable: results.filter((r) => r.status === 'unreachable').length,
     error: results.filter((r) => r.status === 'error').length,
   };
+
+  // 0083 — 문제 발견 시 admin_notifications 적립 (silent 실패, 워커 결과에 영향 X)
+  const problems = results.filter((r) => r.status !== 'ok');
+  if (problems.length > 0) {
+    try {
+      // 트랙별 개별 알림 (최대 20건 — 폭주 방지)
+      for (const p of problems.slice(0, 20)) {
+        const sev = (p.status === 'unreachable' || p.status === 'error') ? 'error' : 'warning';
+        await sbAdmin.rpc('create_admin_notification', {
+          p_kind: 'audio_health_issue',
+          p_severity: sev,
+          p_title: `오디오 ${p.status} — ${p.url.split('/').pop()?.slice(0, 40) ?? ''}`,
+          p_body: p.error ?? `content-type=${p.content_type ?? '?'} / size=${p.content_length ?? '?'}`,
+          p_context: { status: p.status, http_status: p.http_status ?? null, content_type: p.content_type, content_length: p.content_length },
+          p_track_id: p.track_id,
+        });
+      }
+      // 5건 이상이면 요약 알림도 함께
+      if (problems.length >= 5) {
+        await sbAdmin.rpc('create_admin_notification', {
+          p_kind: 'worker_summary',
+          p_severity: 'warning',
+          p_title: `오디오 헬스체크 — 문제 ${problems.length}건`,
+          p_body: `처리 ${results.length}건 / 정상 ${summary.ok} / 접근불가 ${summary.unreachable} / MIME 오류 ${summary.wrong_mime} / 빈파일 ${summary.empty} / 검사실패 ${summary.error}`,
+          p_context: { summary, processed: results.length },
+          p_track_id: null,
+        });
+      }
+    } catch (e) {
+      console.error('[health] notification enqueue failed (continuing):', e);
+    }
+  }
+
   console.log('[health] done', { mode, processed: results.length, updated, summary });
   return json({ ok: true, mode, processed: results.length, updated, summary, results });
 });
