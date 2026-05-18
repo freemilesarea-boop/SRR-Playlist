@@ -21,7 +21,7 @@ export default function Sidebar() {
           >
             <Music2 size={17} fill="currentColor" />
           </span>
-          <span className="text-base font-extrabold tracking-tight">스르륵 플리</span>
+          <span className="text-base font-extrabold tracking-tight">듣다</span>
         </Link>
       </div>
 
@@ -45,7 +45,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-line/10 px-5 py-4 text-[10px] leading-relaxed text-ink-dim">
-        <p>스르륵 플리 · v0.1.0 MVP</p>
+        <p>듣다 · v0.1.0 MVP</p>
         <p className="mt-1 text-ink-dim/70">© 루베르 콘텐츠 스튜디오</p>
       </div>
     </aside>

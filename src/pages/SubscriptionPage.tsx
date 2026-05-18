@@ -333,7 +333,7 @@ export default function SubscriptionPage() {
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <a
-              href="mailto:hello@srr-playlist.app?subject=스르륵 플리 구독 문의"
+              href="mailto:hello@srr-playlist.app?subject=듣다 구독 문의"
               className="inline-flex items-center gap-1 rounded-md bg-bg-card px-3 py-1.5 text-xs hover:bg-bg-hover"
             >
               <Mail size={12} /> 이메일 문의
@@ -524,7 +524,7 @@ export default function SubscriptionPage() {
           이용할 수 있어요. 다음 결제일부터 자동결제가 중단됩니다.
         </p>
         <a
-          href="mailto:freemilesarea@gmail.com?subject=스르륵 플리 매장 구독 문의"
+          href="mailto:freemilesarea@gmail.com?subject=듣다 매장 구독 문의"
           className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
         >
           <Mail size={12} /> 매장 일괄 도입 문의
@@ -618,7 +618,7 @@ function PhoneModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
       <div className="w-full max-w-sm space-y-3 rounded-2xl bg-bg-card p-5 ring-1 ring-line/10">
         <h3 className="text-base font-bold">
-          {plan === 'business' ? 'SRR Playlist 사업자 정기이용권' : 'SRR Playlist 정기이용권'} 결제
+          {plan === 'business' ? '듣다 사업자 정기이용권' : '듣다 정기이용권'} 결제
         </h3>
         <p className="text-xs text-ink-mute">
           결제 알림을 받을 휴대폰 번호를 입력해주세요. PayApp 결제창으로 이동합니다.

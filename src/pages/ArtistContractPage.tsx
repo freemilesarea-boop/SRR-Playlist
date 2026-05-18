@@ -414,7 +414,7 @@ function ContractReissueCTA({
   contractId: string;
 }) {
   const reason = status === 'rejected' ? '거절' : '만료';
-  const subject = encodeURIComponent(`[SRR Playlist] 아티스트 계약서 재발행 요청 (${reason})`);
+  const subject = encodeURIComponent(`[듣다] 아티스트 계약서 재발행 요청 (${reason})`);
   const body = encodeURIComponent(
     [
       '안녕하세요, 아티스트 계약서 재발행을 요청드립니다.',

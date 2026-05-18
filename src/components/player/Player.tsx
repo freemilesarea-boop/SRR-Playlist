@@ -958,7 +958,7 @@ export default function Player() {
                   />
                 </span>
                 <ShareButton
-                  title={`스르륵 플리 — ${current.title}`}
+                  title={`듣다 — ${current.title}`}
                   text={current.artist ?? '지금 듣고 있는 곡'}
                   url={trackShareUrl(current.id)}
                   targetType="track"

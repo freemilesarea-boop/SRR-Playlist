@@ -4,12 +4,12 @@ export default function TermsPage() {
   return (
     <LegalPageLayout
       title="이용약관"
-      subtitle="스르륵 플리(SRR Playlist) 서비스 이용에 관한 약관입니다."
+      subtitle="듣다(deudda) 서비스 이용에 관한 약관입니다."
       updatedAt="2026-05-14"
     >
       <LegalSection title="제1조 (목적)">
         <p>
-          본 약관은 루베르 콘텐츠 스튜디오(이하 “회사”)가 제공하는 스르륵 플리(SRR Playlist, 이하
+          본 약관은 루베르 콘텐츠 스튜디오(이하 “회사”)가 제공하는 듣다(deudda, 이하
           “서비스”)의 이용 조건과 절차, 회사와 회원의 권리·의무 및 책임 사항을 규정함을 목적으로
           합니다.
         </p>
@@ -29,7 +29,7 @@ export default function TermsPage() {
         <LegalList
           items={[
             '결제 수단: PayApp 정기결제(rebill) 모듈 사용',
-            '요금제: SRR Playlist 정기이용권(월 4,900원) / SRR Playlist 사업자 정기이용권(월 6,900원)',
+            '요금제: 듣다 정기이용권(월 4,900원) / 듣다 사업자 정기이용권(월 6,900원)',
             '결제 주기: 매월 자동 청구',
             '결제 영수증/세금계산서: PayApp 가맹점 정보 기반 발행',
             '결제 실패 시 회사는 자동으로 다음 사이클에 재시도하거나 권한을 일시 정지할 수 있습니다.',

@@ -32,7 +32,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const RESEND_FROM_FALLBACK = 'SRR Playlist <no-reply@srr-playlist.app>';
+const RESEND_FROM_FALLBACK = '듣다 <no-reply@srr-playlist.app>';
 
 interface Env {
   SUPABASE_URL: string;
@@ -108,7 +108,7 @@ function buildHtml(job: PendingJob, appUrl: string): string {
       : job.recipient_kind === 'admin'
         ? '관리자 사본'
         : '운영팀 사본';
-  const heading = `[스르륵 플리] 아티스트 계약 체결 완료 — ${kindLabel}`;
+  const heading = `[듣다] 아티스트 계약 체결 완료 — ${kindLabel}`;
   const contractLink = `${appUrl.replace(/\/$/, '')}/artist/contract`;
   const safeBody = escapeHtml(job.contract_body);
   const artistDisplay = job.artist_name || job.artist_email || job.artist_user_id;
@@ -121,7 +121,7 @@ function buildHtml(job: PendingJob, appUrl: string): string {
       <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;max-width:100%;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
         <tr><td style="padding:24px 28px 12px 28px;border-bottom:1px solid #e4e4e7;">
           <h1 style="margin:0;font-size:18px;font-weight:800;color:#18181b;">아티스트 계약 체결 완료</h1>
-          <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">스르륵 플리 정산 시스템</p>
+          <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">듣다 정산 시스템</p>
         </td></tr>
         <tr><td style="padding:20px 28px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.7;">

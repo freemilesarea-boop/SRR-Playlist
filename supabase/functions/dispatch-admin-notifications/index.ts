@@ -98,7 +98,7 @@ async function sendEmail(
   resendKey: string, from: string, to: string[], n: NotificationRow,
 ): Promise<{ ok: boolean; error?: string }> {
   const emoji = SEV_EMOJI[n.severity] ?? '📣';
-  const subject = `[SRR Ops ${n.severity.toUpperCase()}] ${n.title}`.slice(0, 180);
+  const subject = `[듣다 Ops ${n.severity.toUpperCase()}] ${n.title}`.slice(0, 180);
   const html = `<!DOCTYPE html><html lang="ko"><body style="font-family:-apple-system,sans-serif;background:#f4f4f5;padding:24px;color:#18181b;">
   <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;">
     <h2 style="margin:0 0 12px;">${emoji} ${escapeHtml(n.title)}</h2>
@@ -109,7 +109,7 @@ async function sendEmail(
       <tr><td style="color:#71717a;">시각</td><td>${new Date(n.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</td></tr>
     </table>
     ${n.body ? `<div style="background:#f4f4f5;border-radius:8px;padding:12px;margin-top:12px;white-space:pre-wrap;font-size:13px;">${escapeHtml(n.body)}</div>` : ''}
-    <p style="margin-top:18px;font-size:11px;color:#71717a;">스르륵 플리 운영 알림 시스템 자동 발송 · admin_notifications id ${n.id}</p>
+    <p style="margin-top:18px;font-size:11px;color:#71717a;">듣다 운영 알림 시스템 자동 발송 · admin_notifications id ${n.id}</p>
   </div>
 </body></html>`;
   try {
@@ -137,7 +137,7 @@ serve(async (req) => {
   const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-  const RESEND_FROM = Deno.env.get('RESEND_FROM') || 'SRR Playlist Ops <no-reply@srr-playlist.app>';
+  const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <no-reply@srr-playlist.app>';
 
   const authHeader = req.headers.get('authorization') ?? '';
   const cronSecret = req.headers.get('x-cron-secret') ?? '';

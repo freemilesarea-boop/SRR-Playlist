@@ -69,7 +69,7 @@ export default function Onboarding() {
 
         <div className="relative flex items-center justify-between p-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-accent">
-            스르륵 플리에 오신 걸 환영해요
+            듣다에 오신 걸 환영해요
           </p>
           <button
             onClick={close}

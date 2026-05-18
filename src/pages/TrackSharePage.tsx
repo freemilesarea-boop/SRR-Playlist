@@ -142,7 +142,7 @@ export default function TrackSharePage() {
         <TrackLikeButton trackId={track.id} track={track} size={18} stopPropagation={false} />
         <div className="ml-auto">
           <ShareButton
-            title={`스르륵 플리 — ${track.title}`}
+            title={`듣다 — ${track.title}`}
             text={track.artist ?? '지금 듣고 있는 곡'}
             url={trackShareUrl(track.id)}
             targetType="track"

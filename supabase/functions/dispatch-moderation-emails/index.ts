@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const MODULE_LOAD_AT = new Date().toISOString();
-const RESEND_FROM_FALLBACK = 'SRR Playlist <no-reply@srr-playlist.app>';
+const RESEND_FROM_FALLBACK = '듣다 <no-reply@srr-playlist.app>';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -119,7 +119,7 @@ function buildHtml(job: PendingJob, appUrl: string): string {
         <tr><td style="padding:24px 28px 12px 28px;border-bottom:1px solid #e4e4e7;">
           <span style="display:inline-block;background:${bg};color:${color};padding:4px 10px;border-radius:9999px;font-size:11px;font-weight:700;">${label}</span>
           <h1 style="margin:8px 0 0 0;font-size:18px;font-weight:800;color:#18181b;">음원 검수 안내</h1>
-          <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">스르륵 플리 음원 검수 시스템</p>
+          <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">듣다 음원 검수 시스템</p>
         </td></tr>
         <tr><td style="padding:20px 28px 4px 28px;font-size:13.5px;line-height:1.7;color:#27272a;">
           ${escapeHtml(intro)}
@@ -146,7 +146,7 @@ function buildHtml(job: PendingJob, appUrl: string): string {
         </td></tr>
         <tr><td style="padding:14px 28px 22px 28px;border-top:1px solid #e4e4e7;background:#fafafa;">
           <p style="margin:0;font-size:11px;color:#71717a;line-height:1.6;">
-            본 메일은 스르륵 플리 음원 검수 시스템이 자동 발송했습니다.<br/>
+            본 메일은 듣다 음원 검수 시스템이 자동 발송했습니다.<br/>
             문의: <a href="mailto:freemilesarea@gmail.com" style="color:#18181b;">freemilesarea@gmail.com</a>
           </p>
         </td></tr>

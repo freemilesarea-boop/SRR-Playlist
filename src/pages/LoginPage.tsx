@@ -49,7 +49,7 @@ export default function LoginPage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft text-2xl">
             🎵
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">스르륵 플리</h1>
+          <h1 className="text-2xl font-bold tracking-tight">듣다</h1>
           <p className="text-sm text-ink-mute">상황에 어울리는 음악, 흐르듯 자연스럽게.</p>
         </div>
 
