@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Headphones, Play, CheckCircle, Clock } from 'lucide-react';
+import { Headphones, Play, CheckCircle, Clock, Users, Music, ShieldCheck, ShieldOff } from 'lucide-react';
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
+import {
+  adminStreamingOverview, adminTopStreamingTracks,
+  type AdminStreamingDay, type AdminTopTrackRow,
+} from '@/lib/artistApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 
@@ -29,6 +33,11 @@ export default function StreamingAnalytics() {
   const [rows, setRows] = useState<TrackAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AdminError | null>(null);
+  // 0078 — 정산 기준 분석 (raw / eligible / excluded)
+  const [overview, setOverview] = useState<AdminStreamingDay[]>([]);
+  const [topTracks, setTopTracks] = useState<AdminTopTrackRow[]>([]);
+  const [eligLoading, setEligLoading] = useState(true);
+  const [eligError, setEligError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,9 +51,30 @@ export default function StreamingAnalytics() {
     }
   }, [days]);
 
+  const loadEligible = useCallback(async () => {
+    setEligLoading(true);
+    setEligError(null);
+    try {
+      const [ov, top] = await Promise.all([
+        adminStreamingOverview(days),
+        adminTopStreamingTracks(days, 20),
+      ]);
+      setOverview(ov);
+      setTopTracks(top);
+    } catch (e) {
+      setEligError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEligLoading(false);
+    }
+  }, [days]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadEligible();
+  }, [loadEligible]);
 
   if (error) return <AdminErrorState error={error} onRetry={load} />;
 
@@ -55,12 +85,20 @@ export default function StreamingAnalytics() {
     : 0;
   const completionRate = totalPlays > 0 ? (totalCompletes / totalPlays) * 100 : 0;
 
+  // 0078 — 정산 기준 집계
+  const sumRaw = overview.reduce((s, d) => s + Number(d.total_streams), 0);
+  const sumEligible = overview.reduce((s, d) => s + Number(d.eligible_streams), 0);
+  const sumExcluded = sumRaw - sumEligible;
+  const eligibleRatio = sumRaw > 0 ? (sumEligible / sumRaw) * 100 : 0;
+  const sumListeners = overview.reduce((s, d) => s + Number(d.unique_listeners), 0);
+  const sumTracks = overview.reduce((m, d) => Math.max(m, Number(d.unique_tracks)), 0);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold tracking-tight">스트리밍 분석</h2>
-          <p className="text-xs text-ink-mute">곡별 재생/완료 통계</p>
+          <p className="text-xs text-ink-mute">정산 기준 + 곡별 재생/완료 통계</p>
         </div>
         <div className="flex rounded-full bg-bg-card p-1">
           {RANGES.map((r) => (
@@ -75,6 +113,143 @@ export default function StreamingAnalytics() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ============================================ */}
+      {/* 0078 — 정산 기준 분석 (raw / eligible / excluded) */}
+      {/* ============================================ */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold tracking-tight">정산 기준 스트리밍</h3>
+          <span className="text-[10px] text-ink-dim">milestone_30s · eligible_for_payout 기준</span>
+        </div>
+        {eligError && (
+          <div className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+            {eligError}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Summary icon={<Play size={14} />} label="raw milestone" value={sumRaw.toLocaleString()} />
+          <Summary icon={<ShieldCheck size={14} />} label="eligible" value={sumEligible.toLocaleString()} tone="success" />
+          <Summary icon={<ShieldOff size={14} />} label="제외분" value={sumExcluded.toLocaleString()} tone="warn" />
+          <Summary icon={<CheckCircle size={14} />} label="eligible 비율" value={`${eligibleRatio.toFixed(1)}%`} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Summary icon={<Users size={14} />} label={`고유 청취자 (${days}d)`} value={sumListeners.toLocaleString()} />
+          <Summary icon={<Music size={14} />} label="고유 트랙" value={sumTracks.toLocaleString()} />
+          <Summary icon={<Clock size={14} />} label="기간" value={`${days}일`} />
+        </div>
+
+        {/* 일별 추이 */}
+        <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+          <div className="border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-dim">
+            일별 추이
+          </div>
+          {eligLoading && (
+            <div className="p-6 text-center text-xs text-ink-mute">불러오는 중…</div>
+          )}
+          {!eligLoading && overview.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-mute">
+              아직 집계된 스트리밍 데이터가 없습니다.
+            </div>
+          )}
+          {!eligLoading && overview.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px] text-xs">
+                <thead className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                  <tr>
+                    <th className="px-3 py-2 text-left">날짜</th>
+                    <th className="px-3 py-2 text-right">raw</th>
+                    <th className="px-3 py-2 text-right">eligible</th>
+                    <th className="px-3 py-2 text-right">제외</th>
+                    <th className="px-3 py-2 text-right">청취자</th>
+                    <th className="px-3 py-2 text-right">트랙</th>
+                    <th className="px-3 py-2 text-right">eligible %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overview.map((d) => {
+                    const raw = Number(d.total_streams);
+                    const elig = Number(d.eligible_streams);
+                    const excl = raw - elig;
+                    const ratio = raw > 0 ? (elig / raw) * 100 : 0;
+                    return (
+                      <tr key={d.day} className="border-b border-line/10 last:border-b-0">
+                        <td className="px-3 py-2 font-mono text-[11px]">{d.day}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">{elig.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                          {excl > 0 ? `-${excl.toLocaleString()}` : '0'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{Number(d.unique_listeners).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{Number(d.unique_tracks).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{ratio.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* TOP 트랙 */}
+        <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+          <div className="border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-dim">
+            TOP 트랙 ({days}일)
+          </div>
+          {eligLoading && (
+            <div className="p-6 text-center text-xs text-ink-mute">불러오는 중…</div>
+          )}
+          {!eligLoading && topTracks.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-mute">
+              집계된 TOP 트랙이 없습니다.
+            </div>
+          )}
+          {!eligLoading && topTracks.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px] text-xs">
+                <thead className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                  <tr>
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">곡 제목</th>
+                    <th className="px-3 py-2 text-left">아티스트</th>
+                    <th className="px-3 py-2 text-right">raw</th>
+                    <th className="px-3 py-2 text-right">eligible</th>
+                    <th className="px-3 py-2 text-right">제외</th>
+                    <th className="px-3 py-2 text-right">eligible %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topTracks.map((t) => {
+                    const raw = Number(t.stream_count);
+                    const elig = Number(t.eligible_count);
+                    const excl = raw - elig;
+                    const ratio = raw > 0 ? (elig / raw) * 100 : 0;
+                    return (
+                      <tr key={t.track_id} className="border-b border-line/10 last:border-b-0 hover:bg-bg-hover">
+                        <td className="px-3 py-2 tabular-nums text-ink-dim">{t.rank}</td>
+                        <td className="px-3 py-2 font-medium">{t.title}</td>
+                        <td className="px-3 py-2 text-ink-mute">{t.artist ?? '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">{elig.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                          {excl > 0 ? `-${excl.toLocaleString()}` : '0'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{ratio.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="border-t border-line/10 pt-4">
+        <h3 className="text-sm font-bold tracking-tight">곡별 재생 / 완료 (legacy plays 기반)</h3>
+        <p className="text-[10px] text-ink-dim">stream_events.event_type='start/complete' 기반 — 정산과 무관</p>
       </div>
 
       {/* 요약 카드 */}
@@ -140,13 +315,24 @@ export default function StreamingAnalytics() {
   );
 }
 
-function Summary({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Summary({
+  icon, label, value, tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone?: 'success' | 'warn';
+}) {
+  const valueClass =
+    tone === 'success' ? 'text-emerald-700 dark:text-emerald-300'
+    : tone === 'warn'  ? 'text-amber-700 dark:text-amber-300'
+    : '';
   return (
     <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
       <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
         {icon} {label}
       </div>
-      <p className="mt-1 text-xl font-extrabold tabular-nums">{value}</p>
+      <p className={`mt-1 text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
     </div>
   );
 }
