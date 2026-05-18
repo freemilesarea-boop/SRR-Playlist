@@ -11,7 +11,7 @@ const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }
 
 export default function BottomNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 pb-safe">
+    <nav className="fixed inset-x-0 bottom-0 z-30 pb-safe lg:hidden">
       <div className="mx-auto mb-2 max-w-3xl px-3 sm:mb-3 sm:px-4">
         <div className="glass-strong relative rounded-3xl px-1.5 py-1.5">
           {/* 상단 미세 하이라이트 */}
