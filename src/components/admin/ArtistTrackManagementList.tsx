@@ -8,7 +8,7 @@ type StatusFilter =
   | ''
   | 'pending_review' | 'approved' | 'rejected' | 'hidden'
   // 0074 — DSP release_status 필터 (서버 RPC 가 둘 다 매칭)
-  | 'submitted' | 'changes_requested' | 'scheduled' | 'released' | 'removed';
+  | 'submitted' | 'review_pending' | 'changes_requested' | 'scheduled' | 'released' | 'removed';
 
 function fmtDate(s: string | null | undefined): string {
   if (!s) return '—';
@@ -24,6 +24,7 @@ const STATUS_TONE: Record<string, string> = {
   // 0075 — release_status 톤
   draft: 'bg-ink/10 text-ink-dim',
   submitted: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  review_pending: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
   changes_requested: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
   scheduled: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
   released: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
@@ -39,6 +40,7 @@ const STATUS_LABEL: Record<string, string> = {
   // 0075 — release_status (사용자 정의 명칭)
   draft: '초안',
   submitted: '검수 대기',
+  review_pending: '검수 중',
   changes_requested: '수정 요청',
   scheduled: '발매 예약',
   released: '공개 중',
@@ -135,6 +137,7 @@ export default function ArtistTrackManagementList() {
           </optgroup>
           <optgroup label="DSP release">
             <option value="submitted">검수 대기 (submitted)</option>
+            <option value="review_pending">검수 중</option>
             <option value="changes_requested">수정 요청</option>
             <option value="scheduled">발매 예정</option>
             <option value="released">공개됨</option>
