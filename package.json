@@ -19,6 +19,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@sentry/react": "^10.53.1",
     "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.453.0",
     "react": "^18.3.1",

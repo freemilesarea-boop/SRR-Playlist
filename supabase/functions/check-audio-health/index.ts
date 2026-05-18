@@ -172,12 +172,13 @@ serve(async (req) => {
 
   // 0083 — 문제 발견 시 admin_notifications 적립 (silent 실패, 워커 결과에 영향 X)
   const problems = results.filter((r) => r.status !== 'ok');
+  const notificationIds: number[] = [];
   if (problems.length > 0) {
     try {
       // 트랙별 개별 알림 (최대 20건 — 폭주 방지)
       for (const p of problems.slice(0, 20)) {
         const sev = (p.status === 'unreachable' || p.status === 'error') ? 'error' : 'warning';
-        await sbAdmin.rpc('create_admin_notification', {
+        const { data: nid } = await sbAdmin.rpc('create_admin_notification', {
           p_kind: 'audio_health_issue',
           p_severity: sev,
           p_title: `오디오 ${p.status} — ${p.url.split('/').pop()?.slice(0, 40) ?? ''}`,
@@ -185,10 +186,11 @@ serve(async (req) => {
           p_context: { status: p.status, http_status: p.http_status ?? null, content_type: p.content_type, content_length: p.content_length },
           p_track_id: p.track_id,
         });
+        if (typeof nid === 'number') notificationIds.push(nid);
       }
       // 5건 이상이면 요약 알림도 함께
       if (problems.length >= 5) {
-        await sbAdmin.rpc('create_admin_notification', {
+        const { data: sumId } = await sbAdmin.rpc('create_admin_notification', {
           p_kind: 'worker_summary',
           p_severity: 'warning',
           p_title: `오디오 헬스체크 — 문제 ${problems.length}건`,
@@ -196,9 +198,22 @@ serve(async (req) => {
           p_context: { summary, processed: results.length },
           p_track_id: null,
         });
+        if (typeof sumId === 'number') notificationIds.push(sumId);
       }
     } catch (e) {
       console.error('[health] notification enqueue failed (continuing):', e);
+    }
+
+    // 0093 — 외부 채널 dispatch (silent fire-and-forget, 워커 결과 영향 X)
+    if (notificationIds.length > 0) {
+      try {
+        const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        await sbAdmin.functions.invoke('dispatch-admin-notifications', {
+          body: { since_ts: since, limit: 50 },
+        });
+      } catch (e) {
+        console.error('[health] external notify dispatch failed (continuing):', e);
+      }
     }
   }
 
