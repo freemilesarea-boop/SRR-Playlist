@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const MODULE_LOAD_AT = new Date().toISOString();
-const RESEND_FROM_FALLBACK = '듣다 <no-reply@srr-playlist.app>';
+const RESEND_FROM_FALLBACK = '듣다 <noreply@deudda.com>';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -245,7 +245,7 @@ serve(async (req) => {
   if (pending.length === 0) return json({ ok: true, processed: 0, message: 'no pending jobs' });
 
   const origin = req.headers.get('origin') ?? '';
-  const appUrl = origin && /^https?:\/\//.test(origin) ? origin : env.APP_PUBLIC_URL || 'https://srr-playlist.app';
+  const appUrl = origin && /^https?:\/\//.test(origin) ? origin : env.APP_PUBLIC_URL || 'https://deudda.com';
 
   console.log('[mod-dispatch] starting', {
     track_id: trackId, pending_count: pending.length, from: env.RESEND_FROM,
