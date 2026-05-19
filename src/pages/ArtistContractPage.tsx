@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, FileText, CheckCircle2, XCircle, Clock, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -10,6 +10,8 @@ import {
   type MyContract,
 } from '@/lib/artistContractApi';
 import { toast } from '@/store/toastStore';
+import { useAuthStore } from '@/store/authStore';
+import { useFreshFetch } from '@/hooks/useFreshFetch';
 import Alert from '@/components/Alert';
 import ContractMarkdown, { splitSummary } from '@/components/contract/ContractMarkdown';
 
@@ -20,6 +22,7 @@ function fmtDateTime(s: string | null | undefined): string {
 
 export default function ArtistContractPage() {
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const [contract, setContract] = useState<MyContract | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +84,9 @@ export default function ArtistContractPage() {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  // mount + userId 변화 + focus/visibility 복귀 시 모두 refetch
+  // (재로그인 / 탭 전환 후에도 stale 데이터 차단)
+  useFreshFetch(load, [userId]);
 
   async function handleSign() {
     if (!contract) return;

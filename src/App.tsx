@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
@@ -8,35 +8,37 @@ import { usePlayerStore } from '@/store/playerStore';
 import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
 import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
 
-// 홈/로그인은 즉시 로드, 나머지는 라우트 단위로 코드 스플리팅
+// 홈/로그인은 즉시 로드, 나머지는 라우트 단위로 코드 스플리팅.
+// lazyWithRetry — 새 deploy 직후 옛 manifest 의 chunk 404 시 1회 자동 reload.
 import HomePage from '@/pages/HomePage';
 import LoginPage from '@/pages/LoginPage';
-const PlaylistPage = lazy(() => import('@/pages/PlaylistPage'));
-const BusinessPage = lazy(() => import('@/pages/BusinessPage'));
-const LibraryPage = lazy(() => import('@/pages/LibraryPage'));
-const SubscriptionPage = lazy(() => import('@/pages/SubscriptionPage'));
-const AdminPage = lazy(() => import('@/pages/AdminPage'));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
-const ChartPage = lazy(() => import('@/pages/ChartPage'));
-const SearchPage = lazy(() => import('@/pages/SearchPage'));
-const TrackSharePage = lazy(() => import('@/pages/TrackSharePage'));
-const CuratorProfilePage = lazy(() => import('@/pages/CuratorProfilePage'));
-const PaymentSuccessPage = lazy(() => import('@/pages/PaymentSuccessPage'));
-const PaymentFailPage = lazy(() => import('@/pages/PaymentFailPage'));
-const ArtistDashboardPage = lazy(() => import('@/pages/ArtistDashboardPage'));
-const ArtistContractPage = lazy(() => import('@/pages/ArtistContractPage'));
-const ArtistSettlementsPage = lazy(() => import('@/pages/ArtistSettlementsPage'));
-const TermsPage = lazy(() => import('@/pages/legal/TermsPage'));
-const PrivacyPage = lazy(() => import('@/pages/legal/PrivacyPage'));
-const NoticePage = lazy(() => import('@/pages/legal/NoticePage'));
-const SupportPage = lazy(() => import('@/pages/legal/SupportPage'));
-const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'));
-const AuthResetPasswordPage = lazy(() => import('@/pages/AuthResetPasswordPage'));
+const PlaylistPage = lazyWithRetry(() => import('@/pages/PlaylistPage'));
+const BusinessPage = lazyWithRetry(() => import('@/pages/BusinessPage'));
+const LibraryPage = lazyWithRetry(() => import('@/pages/LibraryPage'));
+const SubscriptionPage = lazyWithRetry(() => import('@/pages/SubscriptionPage'));
+const AdminPage = lazyWithRetry(() => import('@/pages/AdminPage'));
+const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
+const ChartPage = lazyWithRetry(() => import('@/pages/ChartPage'));
+const SearchPage = lazyWithRetry(() => import('@/pages/SearchPage'));
+const TrackSharePage = lazyWithRetry(() => import('@/pages/TrackSharePage'));
+const CuratorProfilePage = lazyWithRetry(() => import('@/pages/CuratorProfilePage'));
+const PaymentSuccessPage = lazyWithRetry(() => import('@/pages/PaymentSuccessPage'));
+const PaymentFailPage = lazyWithRetry(() => import('@/pages/PaymentFailPage'));
+const ArtistDashboardPage = lazyWithRetry(() => import('@/pages/ArtistDashboardPage'));
+const ArtistContractPage = lazyWithRetry(() => import('@/pages/ArtistContractPage'));
+const ArtistSettlementsPage = lazyWithRetry(() => import('@/pages/ArtistSettlementsPage'));
+const TermsPage = lazyWithRetry(() => import('@/pages/legal/TermsPage'));
+const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
+const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
+const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
+const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
+const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
 
 function RouteFallback() {
   return (
@@ -137,6 +139,8 @@ export default function App() {
 
   useEffect(() => {
     void init();
+    // 페이지 정상 로드 도달 → chunk-reload flag clear (다음 chunk 실패 시 retry 가능)
+    clearChunkReloadFlag();
   }, [init]);
 
   useWakeLock(businessMode && playing);
