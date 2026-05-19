@@ -32,7 +32,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const RESEND_FROM_FALLBACK = '듣다 <noreply@deudda.com>';
+const RESEND_FROM_FALLBACK = '듣다 <no-reply@deudda.com>';
 
 interface Env {
   SUPABASE_URL: string;
@@ -176,6 +176,15 @@ async function sendOne(env: Env, job: PendingJob, appUrl: string): Promise<SendR
     subject: job.subject,
     html,
   };
+  // [diag] Resend 실제 payload 의 from 값 — 운영 진단용
+  console.log('[dispatch-contract] resend.send', {
+    from: payload.from,
+    from_is_fallback: env.RESEND_FROM_IS_FALLBACK,
+    to: job.recipient_email,
+    subject: job.subject,
+    job_id: job.job_id,
+    kind: job.recipient_kind,
+  });
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

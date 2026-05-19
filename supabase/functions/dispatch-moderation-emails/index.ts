@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const MODULE_LOAD_AT = new Date().toISOString();
-const RESEND_FROM_FALLBACK = '듣다 <noreply@deudda.com>';
+const RESEND_FROM_FALLBACK = '듣다 <no-reply@deudda.com>';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -161,6 +161,14 @@ interface SendResult { ok: boolean; id?: string; error?: string; status_code?: n
 async function sendOne(env: Env, job: PendingJob, appUrl: string): Promise<SendResult> {
   if (!env.RESEND_API_KEY) return { ok: false, error: 'RESEND_API_KEY not configured' };
   const html = buildHtml(job, appUrl);
+  // [diag] Resend 실제 payload 의 from 값 — 운영 진단용
+  console.log('[dispatch-moderation] resend.send', {
+    from: env.RESEND_FROM,
+    to: job.recipient_email,
+    subject: job.subject,
+    job_id: job.job_id,
+    kind: job.kind,
+  });
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

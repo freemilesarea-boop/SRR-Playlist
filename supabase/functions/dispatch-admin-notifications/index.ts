@@ -112,6 +112,8 @@ async function sendEmail(
     <p style="margin-top:18px;font-size:11px;color:#71717a;">듣다 운영 알림 시스템 자동 발송 · admin_notifications id ${n.id}</p>
   </div>
 </body></html>`;
+  // [diag] Resend 실제 payload 의 from 값 — 운영 진단용
+  console.log('[dispatch-admin-notifications] resend.send', { from, to, subject });
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -137,7 +139,7 @@ serve(async (req) => {
   const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-  const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <noreply@deudda.com>';
+  const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <no-reply@deudda.com>';
 
   const authHeader = req.headers.get('authorization') ?? '';
   const cronSecret = req.headers.get('x-cron-secret') ?? '';
