@@ -14,6 +14,7 @@ import {
   type MemberDetail as MemberDetailType,
 } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
+import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
 
 type DangerAction = 'disable' | 'enable' | 'withdraw' | 'mask_pii' | 'password_reset' | 'force_signout';
@@ -63,7 +64,7 @@ export default function MemberDetail({
     fetchMemberDetail(userId)
       .then((d) => setData(d))
       .catch((e) => {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         setError(msg);
         toast.error(msg);
       })
@@ -119,8 +120,7 @@ export default function MemberDetail({
       setConfirmText('');
       reload();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(msg);
+      toast.error(errorMessage(err));
     } finally {
       setActionBusy(false);
     }
@@ -134,7 +134,7 @@ export default function MemberDetail({
         if (alive) setData(d);
       })
       .catch((e) => {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         if (alive) setError(msg);
         toast.error(msg);
       })
