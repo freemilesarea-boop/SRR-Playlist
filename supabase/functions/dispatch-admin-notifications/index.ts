@@ -137,7 +137,7 @@ serve(async (req) => {
   const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-  const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <no-reply@srr-playlist.app>';
+  const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <noreply@deudda.com>';
 
   const authHeader = req.headers.get('authorization') ?? '';
   const cronSecret = req.headers.get('x-cron-secret') ?? '';

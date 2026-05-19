@@ -32,7 +32,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const RESEND_FROM_FALLBACK = '듣다 <no-reply@srr-playlist.app>';
+const RESEND_FROM_FALLBACK = '듣다 <noreply@deudda.com>';
 
 interface Env {
   SUPABASE_URL: string;
@@ -384,7 +384,7 @@ serve(async (req) => {
   const appUrl =
     origin && /^https?:\/\//.test(origin)
       ? origin
-      : env.APP_PUBLIC_URL || 'https://srr-playlist.app';
+      : env.APP_PUBLIC_URL || 'https://deudda.com';
 
   const keyDiag = diagnosticKey(env.RESEND_API_KEY);
   const envInspect = inspectAllEnvKeys();
