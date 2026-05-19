@@ -35,6 +35,7 @@ const TermsPage = lazy(() => import('@/pages/legal/TermsPage'));
 const PrivacyPage = lazy(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazy(() => import('@/pages/legal/NoticePage'));
 const SupportPage = lazy(() => import('@/pages/legal/SupportPage'));
+const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'));
 
 function RouteFallback() {
   return (
@@ -133,6 +134,7 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route
             element={
               <RequireAuth>
