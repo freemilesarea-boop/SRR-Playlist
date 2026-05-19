@@ -60,6 +60,10 @@ export interface MemberRow {
   // 0056 — 회원 상태
   withdrawn_at: string | null;
   has_cancel_scheduled: boolean;
+  // 0095 — 신규 상태
+  disabled_at: string | null;
+  pii_masked_at: string | null;
+  last_sign_in_at: string | null;
 }
 
 export interface MemberDetail {
@@ -73,6 +77,13 @@ export interface MemberDetail {
     created_at: string;
     withdrawn_at?: string | null;
     withdrawn_reason?: string | null;
+    // 0095 — 신규 상태
+    disabled_at?: string | null;
+    disabled_reason?: string | null;
+    pii_masked_at?: string | null;
+    last_sign_in_at?: string | null;
+    account_type?: string;
+    membership_tier?: string;
   };
   total_streams: number;
   total_listened_seconds: number;
@@ -230,6 +241,90 @@ export async function updateUserPlan(
     })
     .eq('id', userId);
   if (error) throw error;
+}
+
+/* ---------- 0095 — 관리자 회원 위험 작업 wrappers ---------- */
+
+export async function adminDisableUser(userId: string, reason?: string) {
+  const { data, error } = await supabase.rpc('admin_disable_user', {
+    p_user_id: userId,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; canceled_subs: number };
+}
+
+export async function adminEnableUser(userId: string) {
+  const { data, error } = await supabase.rpc('admin_enable_user', { p_user_id: userId });
+  if (error) throw error;
+  return data as { ok: boolean };
+}
+
+export async function adminWithdrawUser(userId: string, reason?: string) {
+  const { data, error } = await supabase.rpc('admin_withdraw_user', {
+    p_user_id: userId,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; canceled_subs: number };
+}
+
+export async function adminMaskUserPii(userId: string) {
+  const { data, error } = await supabase.rpc('admin_mask_user_pii', { p_user_id: userId });
+  if (error) throw error;
+  return data as { ok: boolean; anon_nickname: string };
+}
+
+export async function adminForceSignOutUser(userId: string) {
+  const { data, error } = await supabase.rpc('admin_force_sign_out_user', { p_user_id: userId });
+  if (error) throw error;
+  return data as { ok: boolean; deleted_tokens: number; error: string | null };
+}
+
+export async function adminCanHardDeleteUser(userId: string) {
+  const { data, error } = await supabase.rpc('admin_can_hard_delete_user', { p_user_id: userId });
+  if (error) throw error;
+  return data as {
+    can_hard_delete: boolean;
+    blocking: {
+      artist_contracts: number;
+      artist_settlements: number;
+      streaming_revenues: number;
+      payout_account_reveal_logs: number;
+    };
+    note: string;
+  };
+}
+
+/**
+ * 비밀번호 재설정 메일 발송 trigger — Edge Function 호출.
+ * Supabase Auth 가 사용자에게 magic link 메일 발송.
+ * 비밀번호 원문은 어디에도 노출되지 않음 (bcrypt only).
+ */
+export async function adminTriggerPasswordReset(userId: string) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('로그인 세션이 없어요.');
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const res = await fetch(`${supabaseUrl}/functions/v1/admin-trigger-password-reset`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    detail?: string;
+    sent_to_hash?: string;
+  };
+  if (!res.ok || !body.ok) {
+    throw new Error(body.error ?? body.detail ?? '재설정 메일 발송 실패');
+  }
+  return body as { ok: true; sent_to_hash: string };
 }
 
 export async function insertRevenue(payload: {

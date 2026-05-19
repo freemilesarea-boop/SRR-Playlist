@@ -1,8 +1,29 @@
 import { useEffect, useState } from 'react';
-import { X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake } from 'lucide-react';
-import { fetchMemberDetail, type MemberDetail as MemberDetailType } from '@/lib/adminApi';
+import {
+  X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
+  Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut,
+} from 'lucide-react';
+import {
+  fetchMemberDetail,
+  adminDisableUser,
+  adminEnableUser,
+  adminWithdrawUser,
+  adminMaskUserPii,
+  adminForceSignOutUser,
+  adminTriggerPasswordReset,
+  type MemberDetail as MemberDetailType,
+} from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+
+type DangerAction = 'disable' | 'enable' | 'withdraw' | 'mask_pii' | 'password_reset' | 'force_signout';
+interface PendingAction {
+  kind: DangerAction;
+  label: string;
+  description: string;
+  irreversible: boolean;
+  requiresReason: boolean;
+}
 
 const PLAN_LABEL: Record<string, string> = {
   free: '무료',
@@ -32,6 +53,78 @@ export default function MemberDetail({
   const [data, setData] = useState<MemberDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [reasonText, setReasonText] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+
+  function reload() {
+    setLoading(true);
+    fetchMemberDetail(userId)
+      .then((d) => setData(d))
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        toast.error(msg);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  async function execAction() {
+    if (!pending) return;
+    setActionBusy(true);
+    try {
+      const reason = reasonText.trim() || undefined;
+      let resultMsg = '';
+      switch (pending.kind) {
+        case 'disable': {
+          const r = await adminDisableUser(userId, reason);
+          resultMsg = `비활성화 처리됨 (구독 ${r.canceled_subs}건 cancel_scheduled)`;
+          // 강제 로그아웃 fire-and-forget
+          void adminForceSignOutUser(userId).catch(() => {});
+          break;
+        }
+        case 'enable': {
+          await adminEnableUser(userId);
+          resultMsg = '비활성화 해제됨';
+          break;
+        }
+        case 'withdraw': {
+          const r = await adminWithdrawUser(userId, reason);
+          resultMsg = `탈퇴 처리됨 (구독 ${r.canceled_subs}건 cancel_scheduled)`;
+          void adminForceSignOutUser(userId).catch(() => {});
+          break;
+        }
+        case 'mask_pii': {
+          const r = await adminMaskUserPii(userId);
+          resultMsg = `개인정보 마스킹 완료 → ${r.anon_nickname}`;
+          break;
+        }
+        case 'password_reset': {
+          const r = await adminTriggerPasswordReset(userId);
+          resultMsg = `재설정 메일 발송됨 (${r.sent_to_hash})`;
+          break;
+        }
+        case 'force_signout': {
+          const r = await adminForceSignOutUser(userId);
+          resultMsg = r.ok
+            ? `강제 로그아웃 완료 (refresh_token ${r.deleted_tokens}개 삭제)`
+            : `로그아웃 부분 실패: ${r.error ?? 'unknown'}`;
+          break;
+        }
+      }
+      toast.success(resultMsg);
+      setPending(null);
+      setReasonText('');
+      setConfirmText('');
+      reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -104,6 +197,13 @@ export default function MemberDetail({
                 <KV label="플랜" value={PLAN_LABEL[data.user.subscription_type] ?? data.user.subscription_type} />
                 <KV label="가입일" value={new Date(data.user.created_at).toLocaleDateString('ko-KR')} />
                 <KV label="최근방문" value={data.last_seen_at ? new Date(data.last_seen_at).toLocaleDateString('ko-KR') : '—'} />
+                <KV label="최근로그인" value={data.user.last_sign_in_at ? fmtDateTime(data.user.last_sign_in_at) : '—'} />
+                {data.user.disabled_at && (
+                  <KV label="비활성화" value={fmtDateTime(data.user.disabled_at)} />
+                )}
+                {data.user.pii_masked_at && (
+                  <KV label="PII 마스킹" value={fmtDateTime(data.user.pii_masked_at)} />
+                )}
               </div>
               {data.user.withdrawn_at && (
                 <Alert
@@ -111,6 +211,16 @@ export default function MemberDetail({
                   title={`탈퇴 회원 · ${new Date(data.user.withdrawn_at).toLocaleDateString('ko-KR')}`}
                 >
                   {data.user.withdrawn_reason ? `사유: ${data.user.withdrawn_reason}` : '계정 이용이 중단된 상태예요.'}
+                </Alert>
+              )}
+              {data.user.disabled_at && (
+                <Alert tone="warning" title={`비활성화됨 · ${fmtDateTime(data.user.disabled_at)}`}>
+                  {data.user.disabled_reason ?? '관리자가 일시 비활성화한 계정입니다.'}
+                </Alert>
+              )}
+              {data.user.pii_masked_at && (
+                <Alert tone="info">
+                  <strong>PII 마스킹 완료</strong> · {fmtDateTime(data.user.pii_masked_at)}
                 </Alert>
               )}
               {(() => {
@@ -241,8 +351,267 @@ export default function MemberDetail({
                 ))
               )}
             </ListSection>
+
+            {/* 위험 작업 — 0095 */}
+            <section className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4">
+              <h4 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-red-300">
+                <AlertTriangle size={14} /> 위험 작업 (Danger Zone)
+              </h4>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <DangerButton
+                  icon={<KeyRound size={14} />}
+                  label="비밀번호 재설정 메일 발송"
+                  description="사용자에게 재설정 magic link 메일이 발송됩니다."
+                  onClick={() =>
+                    setPending({
+                      kind: 'password_reset',
+                      label: '비밀번호 재설정 메일 발송',
+                      description: '사용자에게 magic link 가 담긴 메일이 발송돼요. 비밀번호 원문은 어디에도 노출되지 않아요.',
+                      irreversible: false,
+                      requiresReason: false,
+                    })
+                  }
+                />
+                <DangerButton
+                  icon={<LogOut size={14} />}
+                  label="강제 로그아웃 (모든 세션)"
+                  description="해당 사용자의 모든 기기/탭 세션을 즉시 종료합니다."
+                  onClick={() =>
+                    setPending({
+                      kind: 'force_signout',
+                      label: '강제 로그아웃',
+                      description: '사용자의 모든 refresh token 을 삭제해요. 즉시 모든 기기에서 로그아웃됩니다.',
+                      irreversible: false,
+                      requiresReason: false,
+                    })
+                  }
+                />
+                {data.user.disabled_at ? (
+                  <DangerButton
+                    icon={<ShieldOff size={14} />}
+                    label="비활성화 해제"
+                    description="계정 접근 권한을 복원합니다."
+                    tone="ok"
+                    onClick={() =>
+                      setPending({
+                        kind: 'enable',
+                        label: '비활성화 해제',
+                        description: '이 계정이 다시 로그인 및 서비스 이용할 수 있어요.',
+                        irreversible: false,
+                        requiresReason: false,
+                      })
+                    }
+                  />
+                ) : (
+                  <DangerButton
+                    icon={<Ban size={14} />}
+                    label="비활성화"
+                    description="계정 접근을 차단하고 활성 구독을 cancel_scheduled 처리합니다."
+                    onClick={() =>
+                      setPending({
+                        kind: 'disable',
+                        label: '비활성화 처리',
+                        description: '계정 접근을 즉시 차단하고, 활성 구독은 cancel_scheduled 로 전환돼요. 강제 로그아웃도 함께 실행됩니다. 비활성화 해제로 복원 가능해요.',
+                        irreversible: false,
+                        requiresReason: true,
+                      })
+                    }
+                  />
+                )}
+                <DangerButton
+                  icon={<UserX size={14} />}
+                  label="탈퇴 처리 (운영자 대행)"
+                  description="활성 구독 자동 cancel + tier free. 정산/계약 이력은 보존됩니다."
+                  disabled={!!data.user.withdrawn_at}
+                  onClick={() =>
+                    setPending({
+                      kind: 'withdraw',
+                      label: '탈퇴 처리 (운영자 대행)',
+                      description: '활성 구독을 cancel_scheduled 로 전환하고, withdrawn_at 을 기록해요. 사용자는 즉시 모든 서비스에서 차단되며, 정산/계약/결제 이력은 보존됩니다. 강제 로그아웃도 함께 실행됩니다.',
+                      irreversible: true,
+                      requiresReason: true,
+                    })
+                  }
+                />
+                <DangerButton
+                  icon={<Eye size={14} />}
+                  label="개인정보 마스킹"
+                  description="이름/연락처/주소 등 PII 를 NULL 화. 정산용 식별자는 보존."
+                  disabled={!!data.user.pii_masked_at}
+                  onClick={() =>
+                    setPending({
+                      kind: 'mask_pii',
+                      label: '개인정보 마스킹',
+                      description: 'users / artist_profiles / business_profiles 의 PII (full_name, phone, address, birth_date, CI/DI 등) 를 NULL 처리해요. nickname 은 "탈퇴회원_xxxxxxxx" 로 익명화돼요. 정산용 artist_name, auth.users.email 은 보존됩니다. 되돌릴 수 없어요.',
+                      irreversible: true,
+                      requiresReason: false,
+                    })
+                  }
+                />
+              </div>
+              <p className="mt-3 text-[10px] leading-relaxed text-ink-dim">
+                * 모든 위험 작업은 admin_operation_logs 에 영구 기록됩니다.<br />
+                * 본인 계정 / 마지막 관리자 계정은 자동으로 보호돼요.<br />
+                * hard delete (계정 완전 삭제) 는 정산/계약/결제 이력 무결성을 위해 UI 에서 노출하지 않습니다.
+              </p>
+            </section>
           </div>
         )}
+      </div>
+
+      {/* 위험 작업 2단계 confirm modal */}
+      {pending && (
+        <DangerConfirmModal
+          pending={pending}
+          busy={actionBusy}
+          reasonText={reasonText}
+          confirmText={confirmText}
+          onChangeReason={setReasonText}
+          onChangeConfirm={setConfirmText}
+          onCancel={() => {
+            if (actionBusy) return;
+            setPending(null);
+            setReasonText('');
+            setConfirmText('');
+          }}
+          onConfirm={() => void execAction()}
+        />
+      )}
+    </div>
+  );
+}
+
+function DangerButton({
+  icon,
+  label,
+  description,
+  onClick,
+  disabled,
+  tone = 'danger',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: 'danger' | 'ok';
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`group flex flex-col items-start gap-1 rounded-xl bg-bg-card p-3 text-left ring-1 transition disabled:opacity-40 disabled:pointer-events-none ${
+        tone === 'ok'
+          ? 'ring-green-500/30 hover:bg-green-500/10 hover:ring-green-500/50'
+          : 'ring-red-500/30 hover:bg-red-500/10 hover:ring-red-500/50'
+      }`}
+    >
+      <span
+        className={`flex items-center gap-1.5 text-xs font-bold ${
+          tone === 'ok' ? 'text-green-300' : 'text-red-200'
+        }`}
+      >
+        {icon} {label}
+      </span>
+      <span className="text-[11px] leading-relaxed text-ink-mute">{description}</span>
+    </button>
+  );
+}
+
+function DangerConfirmModal({
+  pending,
+  busy,
+  reasonText,
+  confirmText,
+  onChangeReason,
+  onChangeConfirm,
+  onCancel,
+  onConfirm,
+}: {
+  pending: PendingAction;
+  busy: boolean;
+  reasonText: string;
+  confirmText: string;
+  onChangeReason: (v: string) => void;
+  onChangeConfirm: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const reasonOk = !pending.requiresReason || reasonText.trim().length >= 2;
+  const confirmOk = confirmText.trim() === '확인';
+  const canSubmit = reasonOk && confirmOk && !busy;
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-md space-y-4 rounded-2xl bg-bg-soft p-5 ring-1 ring-line/15"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+            <AlertTriangle size={18} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-base font-bold">{pending.label}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-mute">{pending.description}</p>
+            {pending.irreversible && (
+              <p className="mt-2 text-[11px] font-bold text-red-300">⚠ 이 작업은 되돌릴 수 없어요.</p>
+            )}
+          </div>
+        </div>
+
+        {pending.requiresReason && (
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-ink-mute">
+              사유 (2자 이상)
+            </label>
+            <input
+              type="text"
+              value={reasonText}
+              onChange={(e) => onChangeReason(e.target.value)}
+              placeholder="예: 약관 위반 / 본인 요청 / 어뷰징"
+              disabled={busy}
+              className="input text-sm"
+            />
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-bold uppercase tracking-wider text-ink-mute">
+            진행하려면 <code className="font-mono">확인</code> 을 입력하세요
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => onChangeConfirm(e.target.value)}
+            placeholder="확인"
+            disabled={busy}
+            className="input text-sm"
+          />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="btn-ghost flex-1 py-2.5 text-sm"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!canSubmit}
+            className="flex-1 rounded-full bg-red-500/90 px-4 py-2.5 text-sm font-bold text-white ring-1 ring-white/15 transition hover:bg-red-500 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            {busy ? '처리 중…' : '실행'}
+          </button>
+        </div>
       </div>
     </div>
   );
