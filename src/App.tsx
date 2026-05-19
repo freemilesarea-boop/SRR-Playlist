@@ -36,6 +36,7 @@ const PrivacyPage = lazy(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazy(() => import('@/pages/legal/NoticePage'));
 const SupportPage = lazy(() => import('@/pages/legal/SupportPage'));
 const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'));
+const AuthResetPasswordPage = lazy(() => import('@/pages/AuthResetPasswordPage'));
 
 function RouteFallback() {
   return (
@@ -60,6 +61,24 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
         <p className="text-lg font-bold">탈퇴된 계정이에요</p>
         <p className="text-sm text-ink-mute">
           이 계정은 회원 탈퇴 처리됐어요. 다시 이용하려면 새로 가입해주세요.
+        </p>
+        <button
+          onClick={() => void signOut()}
+          className="mt-2 rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
+        >
+          로그아웃
+        </button>
+      </div>
+    );
+  }
+  // 0095 — 비활성화 계정 차단 (관리자가 disable 처리)
+  if (user && profile && (profile as { disabled_at?: string | null }).disabled_at) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-lg font-bold">계정이 비활성화됐어요</p>
+        <p className="text-sm text-ink-mute">
+          운영자가 이 계정을 일시 비활성화했어요.<br />
+          문의는 freemilesarea@gmail.com 으로 보내주세요.
         </p>
         <button
           onClick={() => void signOut()}
@@ -135,6 +154,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/auth/reset" element={<AuthResetPasswordPage />} />
           <Route
             element={
               <RequireAuth>
