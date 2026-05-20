@@ -32,6 +32,7 @@ import { recommendSimilarTracks } from '@/lib/recommendationApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 
@@ -966,6 +967,7 @@ export default function Player() {
                   variant="icon"
                   className="border-0 bg-white/10 backdrop-blur ring-white/15 text-white/90 hover:text-white"
                 />
+                <AddToPlaylistButton trackId={current.id} variant="player" />
                 {!playable && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
                     <AlertCircle size={11} /> 음원 준비중

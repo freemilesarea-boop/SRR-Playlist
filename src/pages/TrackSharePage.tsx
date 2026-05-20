@@ -12,6 +12,7 @@ import { trackShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 
@@ -140,6 +141,7 @@ export default function TrackSharePage() {
           <Play size={16} fill="currentColor" /> 재생
         </button>
         <TrackLikeButton trackId={track.id} track={track} size={18} stopPropagation={false} />
+        <AddToPlaylistButton trackId={track.id} variant="icon" />
         <div className="ml-auto">
           <ShareButton
             title={`듣다 — ${track.title}`}
