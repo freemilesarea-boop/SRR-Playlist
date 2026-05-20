@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Search, BarChart3, Heart, Store, User, Music2, Wand2, type LucideIcon } from 'lucide-react';
+import { Home, Search, BarChart3, Heart, Store, User, Music2, Wand2, ListMusic, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
@@ -7,6 +7,7 @@ const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }
   { to: '/search', label: '검색', Icon: Search, end: false },
   { to: '/charts', label: '차트', Icon: BarChart3, end: false },
   { to: '/library', label: '보관함', Icon: Heart, end: false },
+  { to: '/my/playlists', label: '내 플레이리스트', Icon: ListMusic, end: false },
   { to: '/business', label: '매장', Icon: Store, end: false },
   { to: '/profile', label: '내 정보', Icon: User, end: false },
 ];

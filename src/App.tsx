@@ -40,6 +40,8 @@ const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
 const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
 const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
 const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'));
+const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
+const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
 
 function RouteFallback() {
   return (
@@ -187,6 +189,8 @@ export default function App() {
             <Route path="/subscription" element={<SubscriptionPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/curator/studio" element={<CuratorStudioPage />} />
+            <Route path="/my/playlists" element={<MyPlaylistsPage />} />
+            <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
             <Route
               path="/admin"
               element={
