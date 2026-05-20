@@ -4,10 +4,18 @@ import { isPlayableTrack } from '@/lib/audio';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
+/** 0102 — 플레이리스트 청취 조회수 집계용 컨텍스트 (어떤 플리에서 재생이 시작됐는지) */
+export interface PlaylistContext {
+  type: 'catalog' | 'user';
+  id: string;
+}
+
 interface PlayerState {
   queue: TrackRow[];
   index: number;
   playlist: PlaylistRow | null;
+  /** 0102 — 현재 큐가 시작된 플레이리스트 컨텍스트 (조회수 누적 기준) */
+  playlistContext: PlaylistContext | null;
   playing: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
@@ -20,7 +28,7 @@ interface PlayerState {
   /** 세션 복원 직후 audio 가 loadedmetadata 될 때 적용할 seek 위치 (초). 한 번 소비 후 null. */
   pendingSeekSec: number | null;
 
-  setQueue: (tracks: TrackRow[], startIndex?: number, playlist?: PlaylistRow | null) => void;
+  setQueue: (tracks: TrackRow[], startIndex?: number, playlist?: PlaylistRow | null, context?: PlaylistContext | null) => void;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -82,6 +90,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
   index: 0,
   playlist: null,
+  playlistContext: null,
   playing: false,
   shuffle: false,
   repeat: 'off',
@@ -92,7 +101,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffleOrder: [],
   pendingSeekSec: null,
 
-  setQueue: (tracks, startIndex = 0, playlist = null) => {
+  setQueue: (tracks, startIndex = 0, playlist = null, context = null) => {
     // 안전장치: 재생 불가(audio_url null/빈문자열/형식이상) 트랙은 큐에서 제외.
     // 호출 측에서 이미 filterPlayableTracks 를 호출했으면 이 단계는 no-op.
     // 호출 측이 잊었어도 무한 next() 캐스케이드를 차단한다.
@@ -117,6 +126,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: filtered,
       index: safeIdx,
       playlist,
+      playlistContext: context,
       playing: true,
       currentTime: 0,
       duration: 0,

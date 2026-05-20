@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Play, GripVertical, Trash2, Pencil, Lock, Globe, X, Music2, Heart,
 } from 'lucide-react';
@@ -71,7 +71,7 @@ export default function UserPlaylistDetailPage() {
       return;
     }
     const idx = startId ? Math.max(0, playable.findIndex((t) => t.id === startId)) : 0;
-    setQueue(playable, idx, null);
+    setQueue(playable, idx, null, { type: 'user', id });
   }
 
   async function onRemove(trackId: string) {
@@ -143,8 +143,18 @@ export default function UserPlaylistDetailPage() {
             {data.is_public ? '공개 플레이리스트' : '비공개 플레이리스트'}
           </span>
           <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{data.title}</h1>
+          <p className="text-sm font-medium text-ink-mute">
+            {data.creator_is_curator ? '큐레이터 ' : 'by '}
+            {data.creator_handle ? (
+              <Link to={`/curator/${data.creator_handle}`} className="hover:text-accent">{data.creator_name}</Link>
+            ) : (
+              data.creator_name
+            )}
+          </p>
           {data.description && <p className="text-sm text-ink-mute">{data.description}</p>}
-          <p className="text-xs text-ink-dim">트랙 {tracks.length} · 팔로워 {data.follower_count}</p>
+          <p className="text-xs text-ink-dim">
+            트랙 {tracks.length} · 팔로워 {data.follower_count} · 조회수 {data.total_views.toLocaleString()}
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <button onClick={() => playAll()} disabled={!hasPlayable} className="btn-primary px-5 py-2.5 disabled:opacity-50">
               <Play size={16} fill="currentColor" /> 재생

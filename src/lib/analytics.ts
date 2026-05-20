@@ -116,3 +116,26 @@ export async function trackStream(payload: StreamPayload) {
     /* analytics 실패는 사용자 경험에 영향 주지 않음 */
   }
 }
+
+/**
+ * 0102 — 플레이리스트 청취 조회수 기록 (10분 이상 청취 시 서버가 1 view 집계).
+ * stream_events 정산과 완전 분리. 실패해도 silent.
+ */
+export async function recordPlaylistQualifiedView(
+  playlistType: 'catalog' | 'user',
+  playlistId: string,
+  listenedSeconds: number,
+): Promise<{ counted: boolean; total_views?: number } | null> {
+  try {
+    const { data } = await supabase.rpc('record_playlist_qualified_view', {
+      p_playlist_type: playlistType,
+      p_playlist_id: playlistId,
+      p_listened_seconds: Math.floor(listenedSeconds),
+      p_session_id: getSessionId(),
+      p_anonymous_id: getAnonymousId(),
+    });
+    return (data as { counted: boolean; total_views?: number }) ?? null;
+  } catch {
+    return null;
+  }
+}
