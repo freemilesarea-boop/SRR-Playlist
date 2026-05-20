@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Heart, Play, Shuffle, AlertCircle, CheckCircle2, Music } from 'lucide-react';
 import { fetchPlaylistCurator } from '@/lib/curatorApi';
-import { fetchPlaylist, fetchPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
+import { fetchPlaylist, fetchPlaylistTracks, fetchAutoPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -63,11 +63,15 @@ export default function PlaylistPage() {
     if (!id) return;
     let alive = true;
     setLoading(true);
-    Promise.all([fetchPlaylist(id), fetchPlaylistTracks(id)])
-      .then(([p, t]) => {
+    // 플리 먼저 조회 → is_auto 면 실시간 매칭, 아니면 저장된 playlist_tracks
+    fetchPlaylist(id)
+      .then(async (p) => {
         if (!alive) return;
         setPlaylist(p);
-        setTracks(t);
+        const t = p?.is_auto
+          ? await fetchAutoPlaylistTracks(id)
+          : await fetchPlaylistTracks(id);
+        if (alive) setTracks(t);
       })
       .finally(() => alive && setLoading(false));
     if (user) {

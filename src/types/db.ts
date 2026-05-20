@@ -69,6 +69,10 @@ export interface PlaylistRow {
   created_at: string;
   /** 큐레이터(작성자) user_id — 0013 마이그레이션 이후 추가. 기존 seed/admin 플리는 null 가능. */
   created_by_user_id?: string | null;
+  /** 0098 — 출시 상태 / 0103 — 동적 스마트 플리 */
+  status?: 'draft' | 'released';
+  is_auto?: boolean;
+  auto_rule?: Record<string, unknown> | null;
 }
 
 export interface PlaylistTrackRow {

@@ -241,12 +241,23 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink-mute">트랙 ({tracks.length})</h2>
-        <button onClick={() => setPicker(true)} className="btn-primary text-xs">
-          <Plus size={14} /> 트랙 추가
-        </button>
-      </div>
+      {playlist.is_auto && (
+        <div className="rounded-xl bg-accent/10 p-3 text-xs leading-relaxed text-accent ring-1 ring-accent/20">
+          ⚡ 자동(스마트) 플레이리스트예요. 트랙은 규칙(auto_rule)에 따라 실시간으로 채워지며
+          수동으로 추가/삭제/순서 변경할 수 없어요. 규칙을 바꾸면 노출 트랙이 자동 갱신돼요.
+        </div>
+      )}
+
+      {!playlist.is_auto && (
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-ink-mute">트랙 ({tracks.length})</h2>
+          <button onClick={() => setPicker(true)} className="btn-primary text-xs">
+            <Plus size={14} /> 트랙 추가
+          </button>
+        </div>
+      )}
+
+      {!playlist.is_auto && (
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={tracks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -262,8 +273,9 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
           </ul>
         </SortableContext>
       </DndContext>
+      )}
 
-      {picker && (
+      {picker && !playlist.is_auto && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center">
           <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-bg-soft sm:rounded-2xl">
             <div className="flex items-center justify-between border-b border-line/10 p-4">
