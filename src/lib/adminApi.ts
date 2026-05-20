@@ -84,6 +84,7 @@ export interface MemberDetail {
     last_sign_in_at?: string | null;
     account_type?: string;
     membership_tier?: string;
+    is_curator?: boolean;
   };
   total_streams: number;
   total_listened_seconds: number;
@@ -294,6 +295,20 @@ export async function adminCanHardDeleteUser(userId: string) {
     };
     note: string;
   };
+}
+
+/* ---------- 0098 — 큐레이터 권한 부여/회수 ---------- */
+
+export async function adminGrantCurator(userId: string) {
+  const { data, error } = await supabase.rpc('admin_grant_curator', { p_user_id: userId });
+  if (error) throw error;
+  return data as { ok: boolean; is_curator: boolean };
+}
+
+export async function adminRevokeCurator(userId: string) {
+  const { data, error } = await supabase.rpc('admin_revoke_curator', { p_user_id: userId });
+  if (error) throw error;
+  return data as { ok: boolean; is_curator: boolean };
 }
 
 /**

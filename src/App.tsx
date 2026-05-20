@@ -39,6 +39,7 @@ const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
 const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
 const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
 const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
+const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'));
 
 function RouteFallback() {
   return (
@@ -185,6 +186,7 @@ export default function App() {
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/curator/studio" element={<CuratorStudioPage />} />
             <Route
               path="/admin"
               element={

@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Search, BarChart3, Heart, Store, User, Music2, type LucideIcon } from 'lucide-react';
+import { Home, Search, BarChart3, Heart, Store, User, Music2, Wand2, type LucideIcon } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
 
 const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
   { to: '/', label: '홈', Icon: Home, end: true },
@@ -11,6 +12,10 @@ const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }
 ];
 
 export default function Sidebar() {
+  const isCurator = useAuthStore((s) => s.profile?.is_curator ?? false);
+  const navItems = isCurator
+    ? [...items, { to: '/curator/studio', label: '스튜디오', Icon: Wand2, end: false }]
+    : items;
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg-soft/70 backdrop-blur-xl pt-safe lg:flex">
       <div className="px-5 pt-5 pb-3">
@@ -26,7 +31,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {items.map(({ to, label, Icon, end }) => (
+        {navItems.map(({ to, label, Icon, end }) => (
           <NavLink key={to} to={to} end={end}>
             {({ isActive }) => (
               <span
