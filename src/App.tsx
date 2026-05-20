@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
@@ -44,9 +44,23 @@ const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
 const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
 
 function RouteFallback() {
+  // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setStuck(true), 10_000);
+    return () => window.clearTimeout(id);
+  }, []);
   return (
-    <div className="flex h-[60vh] items-center justify-center text-ink-mute">
-      불러오는 중…
+    <div className="flex h-[60vh] flex-col items-center justify-center gap-3 text-ink-mute">
+      <p>불러오는 중…</p>
+      {stuck && (
+        <button
+          onClick={() => window.location.reload()}
+          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white ring-1 ring-white/15 hover:bg-accent-soft"
+        >
+          새로고침
+        </button>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { errorMessage } from '@/lib/errorMessage';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
+import ErrorRetry from '@/components/common/ErrorRetry';
 
 type Tab = 'mine' | 'liked' | 'followed';
 
@@ -82,11 +83,9 @@ export default function MyPlaylistsPage() {
         <TabBtn active={tab === 'followed'} onClick={() => setTab('followed')} icon={<Users size={14} />} label="팔로우한" />
       </div>
 
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</div>
-      )}
-
-      {loading ? (
+      {error ? (
+        <ErrorRetry message={error} onRetry={() => void load()} />
+      ) : loading ? (
         <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>
       ) : tab === 'mine' ? (
         mine.length === 0 ? (

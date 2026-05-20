@@ -15,6 +15,7 @@ import { errorMessage } from '@/lib/errorMessage';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
+import ErrorRetry from '@/components/common/ErrorRetry';
 
 const CATEGORIES = ['카페', '와인바', '레스토랑', '필라테스', '드라이브', '집중', '휴식', '운동'];
 
@@ -117,13 +118,9 @@ export default function CuratorStudioPage() {
         </button>
       </header>
 
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
+      {error ? (
+        <ErrorRetry message={error} onRetry={() => void load()} />
+      ) : loading ? (
         <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>
       ) : playlists.length === 0 ? (
         <div className="rounded-2xl bg-bg-card/60 p-8 text-center text-sm text-ink-mute ring-1 ring-line/10">

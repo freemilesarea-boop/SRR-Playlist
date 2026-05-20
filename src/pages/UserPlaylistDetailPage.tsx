@@ -25,6 +25,7 @@ import { errorMessage } from '@/lib/errorMessage';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
+import ErrorRetry from '@/components/common/ErrorRetry';
 
 type DetailTrack = TrackRow & { order_index: number };
 
@@ -114,11 +115,21 @@ export default function UserPlaylistDetailPage() {
   }
 
   if (loading) return <div className="px-4 py-16 text-center text-sm text-ink-mute sm:px-6">불러오는 중…</div>;
-  if (error || !data) {
+  if (error) {
+    return (
+      <div className="px-4 py-10 sm:px-6">
+        <ErrorRetry message={error} onRetry={() => void load()} />
+        <div className="mt-3 text-center">
+          <button onClick={() => navigate(-1)} className="btn-ghost text-sm"><ArrowLeft size={14} /> 뒤로</button>
+        </div>
+      </div>
+    );
+  }
+  if (!data) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
         <Music2 size={32} className="text-ink-dim" />
-        <p className="text-sm text-ink-mute">{error ?? '플레이리스트를 찾을 수 없어요.'}</p>
+        <p className="text-sm text-ink-mute">플레이리스트를 찾을 수 없어요.</p>
         <button onClick={() => navigate(-1)} className="btn-ghost mt-2 text-sm"><ArrowLeft size={14} /> 뒤로</button>
       </div>
     );
