@@ -14,6 +14,7 @@ import HomeLibrarySections from '@/components/HomeLibrarySections';
 import HomeRecommendation from '@/components/HomeRecommendation';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { fetchCuratorMadePlaylists, type CuratorMadePlaylist } from '@/lib/curatorStudioApi';
+import { fetchNewPublicPlaylists, type NewPublicPlaylist } from '@/lib/userPlaylistApi';
 import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
 import { Wand2 } from 'lucide-react';
@@ -26,6 +27,7 @@ export default function HomePage() {
   const [popularByFollows, setPopularByFollows] = useState<PopularPlaylist[]>([]);
   const [featuredCurators, setFeaturedCurators] = useState<FeaturedCurator[]>([]);
   const [curatorMade, setCuratorMade] = useState<CuratorMadePlaylist[]>([]);
+  const [newPublic, setNewPublic] = useState<NewPublicPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +36,17 @@ export default function HomePage() {
     let alive = true;
     void fetchCuratorMadePlaylists(10).then((rows) => {
       if (alive) setCuratorMade(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 신규 공개 플리 — released 카탈로그 + 공개 user_playlists 통합 (0101)
+  useEffect(() => {
+    let alive = true;
+    void fetchNewPublicPlaylists(12).then((rows) => {
+      if (alive) setNewPublic(rows);
     });
     return () => {
       alive = false;
@@ -327,7 +340,37 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Newest */}
+      {/* 신규 플레이리스트 — released 카탈로그 + 공개 user_playlists 통합 (source-aware 링크) */}
+      {newPublic.length > 0 && (
+        <section className="space-y-3">
+          <div className="px-0.5">
+            <h2 className="text-lg font-bold tracking-tight sm:text-xl">신규 플레이리스트</h2>
+            <p className="mt-0.5 text-xs text-ink-mute">방금 공개된 플레이리스트</p>
+          </div>
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
+            {newPublic.map((p) => (
+              <Link
+                key={`${p.source}-${p.id}`}
+                to={p.source === 'user' ? `/my/playlist/${p.id}` : `/playlist/${p.id}`}
+                className="group w-36 shrink-0 space-y-2 sm:w-44"
+              >
+                <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
+                  <AutoCover title={p.title} category={p.category} imageUrl={p.thumbnail_url} size="lg" />
+                  <div className="pointer-events-none absolute inset-0 opacity-30" style={gradientStyle(p.category || p.title)} />
+                </div>
+                <div className="space-y-0.5 px-0.5">
+                  <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">{p.title}</h3>
+                  <p className="line-clamp-1 text-xs text-ink-mute">
+                    {p.source === 'user' ? '사용자 플레이리스트' : p.category ?? '플레이리스트'}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 새로 추가된 (카탈로그 전용 — 기존 유지) */}
       {newest.length > 0 && (
         <PlaylistRow_
           title="새로 추가된"

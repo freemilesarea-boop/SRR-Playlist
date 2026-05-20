@@ -337,7 +337,7 @@ export default function SearchPage() {
                 </ResultSection>
               )}
 
-              {/* 플레이리스트 */}
+              {/* 플레이리스트 (admin/curator) */}
               {groups.playlists.length > 0 && (
                 <ResultSection
                   title="플레이리스트"
@@ -350,6 +350,46 @@ export default function SearchPage() {
                         <PlaylistResultRow
                           item={p}
                           onClick={() => p.id && navigate(`/playlist/${p.id}`)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </ResultSection>
+              )}
+
+              {/* 사용자 플레이리스트 (공개) */}
+              {groups.userPlaylists.length > 0 && (
+                <ResultSection
+                  title="사용자 플레이리스트"
+                  icon={<ListMusic size={14} />}
+                  count={groups.userPlaylists.length}
+                >
+                  <ul className="divide-y divide-line/10">
+                    {groups.userPlaylists.map((p) => (
+                      <li key={p.id ?? p.title}>
+                        <PlaylistResultRow
+                          item={p}
+                          onClick={() => p.id && navigate(`/my/playlist/${p.id}`)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </ResultSection>
+              )}
+
+              {/* 큐레이터 */}
+              {groups.curators.length > 0 && (
+                <ResultSection
+                  title="큐레이터"
+                  icon={<ListMusic size={14} />}
+                  count={groups.curators.length}
+                >
+                  <ul className="divide-y divide-line/10">
+                    {groups.curators.map((c) => (
+                      <li key={c.id ?? c.title}>
+                        <PlaylistResultRow
+                          item={c}
+                          onClick={() => c.category && navigate(`/curator/${c.category}`)}
                         />
                       </li>
                     ))}
