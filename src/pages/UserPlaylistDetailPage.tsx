@@ -26,6 +26,7 @@ import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import { withTimeout } from '@/lib/withTimeout';
 
 type DetailTrack = TrackRow & { order_index: number };
 
@@ -48,7 +49,7 @@ export default function UserPlaylistDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const d = await fetchUserPlaylistDetail(id);
+      const d = await withTimeout(fetchUserPlaylistDetail(id), 12_000, '플레이리스트');
       if (!d) {
         setError('플레이리스트를 찾을 수 없어요.');
         setData(null);
