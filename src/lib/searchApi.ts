@@ -3,7 +3,7 @@ import { applyDemoMode } from './demoMode';
 import { getSessionId } from './analytics';
 import type { TrackRow } from '@/types/db';
 
-export type SearchResultType = 'track' | 'playlist' | 'genre' | 'mood' | 'category';
+export type SearchResultType = 'track' | 'playlist' | 'user_playlist' | 'curator' | 'genre' | 'mood' | 'category';
 
 export interface SearchResult {
   result_type: SearchResultType;
@@ -22,6 +22,8 @@ export interface SearchResult {
 export interface GroupedResults {
   tracks: SearchResult[];
   playlists: SearchResult[];
+  userPlaylists: SearchResult[];
+  curators: SearchResult[];
   genres: SearchResult[];
   moods: SearchResult[];
   categories: SearchResult[];
@@ -113,7 +115,7 @@ export interface SearchOutcome {
 }
 
 function emptyGroups(): GroupedResults {
-  return { tracks: [], playlists: [], genres: [], moods: [], categories: [] };
+  return { tracks: [], playlists: [], userPlaylists: [], curators: [], genres: [], moods: [], categories: [] };
 }
 
 function groupResults(rows: SearchResult[]): GroupedResults {
@@ -121,6 +123,8 @@ function groupResults(rows: SearchResult[]): GroupedResults {
   for (const r of rows) {
     if (r.result_type === 'track') g.tracks.push(r);
     else if (r.result_type === 'playlist') g.playlists.push(r);
+    else if (r.result_type === 'user_playlist') g.userPlaylists.push(r);
+    else if (r.result_type === 'curator') g.curators.push(r);
     else if (r.result_type === 'genre') g.genres.push(r);
     else if (r.result_type === 'mood') g.moods.push(r);
     else if (r.result_type === 'category') g.categories.push(r);

@@ -113,3 +113,23 @@ export async function fetchFollowedUserPlaylists(): Promise<FollowedUserPlaylist
   if (error) throw error;
   return (data ?? []) as FollowedUserPlaylist[];
 }
+
+export interface NewPublicPlaylist {
+  id: string;
+  title: string;
+  category: string | null;
+  thumbnail_url: string | null;
+  source: 'catalog' | 'user';
+  sort_at: string;
+}
+
+/** 홈 "신규 플레이리스트" — released 카탈로그 + 공개 user_playlists 통합 (created/released desc). */
+export async function fetchNewPublicPlaylists(limit = 12): Promise<NewPublicPlaylist[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_new_public_playlists', { p_limit: limit });
+    if (error) throw error;
+    return (data ?? []) as NewPublicPlaylist[];
+  } catch {
+    return [];
+  }
+}
