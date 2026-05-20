@@ -105,7 +105,7 @@ export default function PlaylistPage() {
       toast.info(`재생 불가 ${dropped.length}곡은 제외하고 재생할게요`);
     }
     setShuffle(shuffle);
-    setQueue(playable, resolvedStart, playlist);
+    setQueue(playable, resolvedStart, playlist, { type: 'catalog', id: playlist.id });
     if (user) void logRecentPlay(user.id, playlist.id).catch(() => {});
   }
 

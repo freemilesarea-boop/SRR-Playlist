@@ -22,6 +22,10 @@ export interface UserPlaylistDetail {
   owner_user_id: string;
   is_owner: boolean;
   created_at: string;
+  creator_name: string;
+  creator_is_curator: boolean;
+  creator_handle: string | null;
+  total_views: number;
   follower_count: number;
   is_following: boolean;
   tracks: Array<TrackRow & { order_index: number }>;

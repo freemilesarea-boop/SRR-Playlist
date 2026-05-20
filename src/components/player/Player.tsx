@@ -22,7 +22,7 @@ import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
-import { trackStream } from '@/lib/analytics';
+import { trackStream, recordPlaylistQualifiedView } from '@/lib/analytics';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -100,6 +100,7 @@ export default function Player() {
     queue,
     index,
     playlist,
+    playlistContext,
     playing,
     shuffle,
     repeat,
@@ -218,6 +219,12 @@ export default function Player() {
   const startedTrackIdRef = useRef<string | null>(null);
   const milestoneSentRef = useRef(false);
   const recentSentRef = useRef<string | null>(null);
+
+  // 0102 — 플레이리스트 청취 조회수 누적 (10분 = 1 view, 컨텍스트 단위 합산)
+  const pvCtxKeyRef = useRef<string | null>(null);
+  const pvSecondsRef = useRef(0);
+  const pvRecordedRef = useRef(false);
+  const pvLastTimeRef = useRef(0);
 
   useEffect(() => {
     if (!current || !playable || !playing) return;
@@ -556,7 +563,39 @@ export default function Player() {
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
     const target = e.currentTarget;
     if (target !== activeRef()) return; // 다른 audio 이벤트 무시
-    setCurrentTime(target.currentTime);
+    const t = target.currentTime;
+    setCurrentTime(t);
+    accumulatePlaylistView(t);
+  }
+
+  // 0102 — 플레이리스트 청취 조회수 누적.
+  // 컨텍스트(플리)가 바뀌면 리셋. muted/저볼륨/일시정지 시 누적 안 함.
+  // 곡이 바뀌어도 같은 컨텍스트면 합산. 10분(600s) 누적 시 1회 RPC.
+  function accumulatePlaylistView(t: number) {
+    const ctx = playlistContext;
+    const ctxKey = ctx ? `${ctx.type}:${ctx.id}` : null;
+    if (ctxKey !== pvCtxKeyRef.current) {
+      // 컨텍스트 변경 → 누적 리셋
+      pvCtxKeyRef.current = ctxKey;
+      pvSecondsRef.current = 0;
+      pvRecordedRef.current = false;
+      pvLastTimeRef.current = t;
+      return;
+    }
+    if (!ctx || pvRecordedRef.current) {
+      pvLastTimeRef.current = t;
+      return;
+    }
+    const delta = t - pvLastTimeRef.current;
+    pvLastTimeRef.current = t;
+    // delta 가 0~2초 범위 + 실제 재생 중 + 볼륨 충분할 때만 (seek 점프/뮤트/저볼륨 제외)
+    if (playing && delta > 0 && delta < 2 && volume >= 0.1) {
+      pvSecondsRef.current += delta;
+      if (pvSecondsRef.current >= 600) {
+        pvRecordedRef.current = true; // 중복 호출 방지
+        void recordPlaylistQualifiedView(ctx.type, ctx.id, pvSecondsRef.current);
+      }
+    }
   }
 
   function onLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
