@@ -35,6 +35,20 @@ export async function fetchPlaylistTracks(playlistId: string): Promise<TrackRow[
   return applyDemoMode(tracks);
 }
 
+/**
+ * 0103 — 동적 스마트 플레이리스트 트랙 (auto_rule 기반 실시간 매칭).
+ * playlist_tracks 저장 없이 RPC 가 점수순으로 반환. is_auto=true 플리에서만 사용.
+ */
+export async function fetchAutoPlaylistTracks(playlistId: string, limit = 100): Promise<TrackRow[]> {
+  const { data, error } = await supabase.rpc('get_auto_playlist_tracks', {
+    p_playlist_id: playlistId,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  const tracks = ((data ?? []) as TrackRow[]);
+  return applyDemoMode(tracks);
+}
+
 /** 플레이리스트별 (총 트랙 수, 재생 가능한 트랙 수) 를 한 번에 가져옵니다. */
 export async function fetchPlaylistCounts(): Promise<
   Map<string, { total: number; playable: number }>
