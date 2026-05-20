@@ -16,6 +16,7 @@ import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import { withTimeout } from '@/lib/withTimeout';
 
 const CATEGORIES = ['카페', '와인바', '레스토랑', '필라테스', '드라이브', '집중', '휴식', '운동'];
 
@@ -34,7 +35,11 @@ export default function CuratorStudioPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pls, trs] = await Promise.all([fetchMyCuratorPlaylists(), fetchTracks()]);
+      const [pls, trs] = await withTimeout(
+        Promise.all([fetchMyCuratorPlaylists(), fetchTracks()]),
+        12_000,
+        '스튜디오',
+      );
       setPlaylists(pls);
       setAllTracks(trs);
     } catch (e) {

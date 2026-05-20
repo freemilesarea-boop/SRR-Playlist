@@ -19,43 +19,63 @@ import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import { withTimeout } from '@/lib/withTimeout';
 
 type Tab = 'mine' | 'liked' | 'followed';
+type SourceState<T> = { data: T; loading: boolean; error: string | null };
 
 export default function MyPlaylistsPage() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const [tab, setTab] = useState<Tab>('mine');
-  const [mine, setMine] = useState<MyUserPlaylist[]>([]);
-  const [followed, setFollowed] = useState<FollowedUserPlaylist[]>([]);
-  const [likedTracks, setLikedTracks] = useState<TrackRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [mine, setMine] = useState<SourceState<MyUserPlaylist[]>>({ data: [], loading: true, error: null });
+  const [liked, setLiked] = useState<SourceState<TrackRow[]>>({ data: [], loading: true, error: null });
+  const [followed, setFollowed] = useState<SourceState<FollowedUserPlaylist[]>>({ data: [], loading: true, error: null });
   const [showCreate, setShowCreate] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  // 탭별 독립 로드 — 하나가 실패/지연돼도 다른 탭은 정상. allSettled + page-level timeout.
+  async function loadMine() {
+    setMine((s) => ({ ...s, loading: true, error: null }));
     try {
-      const [m, f, ov] = await Promise.all([
-        fetchMyUserPlaylists(),
-        fetchFollowedUserPlaylists(),
-        userId ? fetchLibraryOverview(userId) : Promise.resolve(null),
-      ]);
-      setMine(m);
-      setFollowed(f);
-      setLikedTracks((ov?.liked_tracks ?? []) as TrackRow[]);
+      const m = await withTimeout(fetchMyUserPlaylists(), 12_000, '내 플리');
+      setMine({ data: m, loading: false, error: null });
     } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
+      setMine({ data: [], loading: false, error: errorMessage(e) });
+    }
+  }
+  async function loadLiked() {
+    if (!userId) {
+      setLiked({ data: [], loading: false, error: null });
+      return;
+    }
+    setLiked((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const ov = await withTimeout(fetchLibraryOverview(userId), 12_000, '좋아요한 곡');
+      setLiked({ data: (ov?.liked_tracks ?? []) as TrackRow[], loading: false, error: null });
+    } catch (e) {
+      setLiked({ data: [], loading: false, error: errorMessage(e) });
+    }
+  }
+  async function loadFollowed() {
+    setFollowed((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const f = await withTimeout(fetchFollowedUserPlaylists(), 12_000, '팔로우한 플리');
+      setFollowed({ data: f, loading: false, error: null });
+    } catch (e) {
+      setFollowed({ data: [], loading: false, error: errorMessage(e) });
     }
   }
 
-  useFreshFetch(load, [userId]);
+  function loadAll() {
+    void loadMine();
+    void loadLiked();
+    void loadFollowed();
+  }
+
+  useFreshFetch(loadAll, [userId]);
 
   function playLiked(startId: string) {
-    const { playable } = filterPlayableTracks(likedTracks);
+    const { playable } = filterPlayableTracks(liked.data);
     if (playable.length === 0) {
       toast.info('재생 가능한 곡이 없어요.');
       return;
@@ -83,90 +103,104 @@ export default function MyPlaylistsPage() {
         <TabBtn active={tab === 'followed'} onClick={() => setTab('followed')} icon={<Users size={14} />} label="팔로우한" />
       </div>
 
-      {error ? (
-        <ErrorRetry message={error} onRetry={() => void load()} />
-      ) : loading ? (
-        <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>
-      ) : tab === 'mine' ? (
-        mine.length === 0 ? (
-          <Empty>아직 만든 플레이리스트가 없어요. "새 플리" 로 시작해보세요.</Empty>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {mine.map((p) => (
-              <Link key={p.id} to={`/my/playlist/${p.id}`} className="group block space-y-2">
-                <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-1 group-hover:shadow-lift">
-                  <AutoCover title={p.title} category={null} imageUrl={p.thumbnail_url} size="lg" />
-                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-                    {p.is_public ? <Globe size={9} /> : <Lock size={9} />}
-                    {p.is_public ? '공개' : '비공개'}
-                  </span>
-                </div>
-                <div className="space-y-0.5 px-0.5">
-                  <h3 className="line-clamp-1 text-sm font-semibold">{p.title}</h3>
-                  <p className="line-clamp-1 text-xs text-ink-mute">트랙 {p.track_count}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )
-      ) : tab === 'liked' ? (
-        likedTracks.length === 0 ? (
-          <Empty>아직 좋아요한 곡이 없어요.</Empty>
-        ) : (
-          <ul className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-            {likedTracks.map((t) => {
-              const playable = isPlayableUrl(t.audio_url);
-              return (
-                <li key={t.id}>
-                  <button
-                    onClick={() => playable && playLiked(t.id)}
-                    disabled={!playable}
-                    className={`flex w-full items-center gap-3 border-b border-line/10 px-3 py-2.5 text-left last:border-b-0 ${
-                      playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-50'
-                    }`}
-                  >
-                    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
-                      <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
-                      {playable && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity hover:opacity-100">
-                          <Play size={14} fill="currentColor" className="text-white" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{t.title}</p>
-                      <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )
-      ) : followed.length === 0 ? (
-        <Empty>팔로우한 플레이리스트가 없어요.</Empty>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {followed.map((p) => (
-            <Link key={p.id} to={`/my/playlist/${p.id}`} className="group block space-y-2">
-              <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-1 group-hover:shadow-lift">
-                <AutoCover title={p.title} category={null} imageUrl={p.thumbnail_url} size="lg" />
-              </div>
-              <div className="space-y-0.5 px-0.5">
-                <h3 className="line-clamp-1 text-sm font-semibold">{p.title}</h3>
-                <p className="line-clamp-1 text-xs text-ink-mute">트랙 {p.track_count}</p>
-              </div>
-            </Link>
+      {/* min-h 로 footer 가 본문 위로 딸려 올라오지 않게 */}
+      <div className="min-h-[50vh]">
+        {tab === 'mine' &&
+          (mine.error ? (
+            <ErrorRetry message={mine.error} onRetry={() => void loadMine()} />
+          ) : mine.loading ? (
+            <Loading />
+          ) : mine.data.length === 0 ? (
+            <Empty>아직 만든 플레이리스트가 없어요. "새 플리" 로 시작해보세요.</Empty>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {mine.data.map((p) => (
+                <Link key={p.id} to={`/my/playlist/${p.id}`} className="group block space-y-2">
+                  <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-1 group-hover:shadow-lift">
+                    <AutoCover title={p.title} category={null} imageUrl={p.thumbnail_url} size="lg" />
+                    <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+                      {p.is_public ? <Globe size={9} /> : <Lock size={9} />}
+                      {p.is_public ? '공개' : '비공개'}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 px-0.5">
+                    <h3 className="line-clamp-1 text-sm font-semibold">{p.title}</h3>
+                    <p className="line-clamp-1 text-xs text-ink-mute">트랙 {p.track_count}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           ))}
-        </div>
-      )}
+
+        {tab === 'liked' &&
+          (liked.error ? (
+            <ErrorRetry message={liked.error} onRetry={() => void loadLiked()} />
+          ) : liked.loading ? (
+            <Loading />
+          ) : liked.data.length === 0 ? (
+            <Empty>아직 좋아요한 곡이 없어요.</Empty>
+          ) : (
+            <ul className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+              {liked.data.map((t) => {
+                const playable = isPlayableUrl(t.audio_url);
+                return (
+                  <li key={t.id}>
+                    <button
+                      onClick={() => playable && playLiked(t.id)}
+                      disabled={!playable}
+                      className={`flex w-full items-center gap-3 border-b border-line/10 px-3 py-2.5 text-left last:border-b-0 ${
+                        playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-50'
+                      }`}
+                    >
+                      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
+                        <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
+                        {playable && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity hover:opacity-100">
+                            <Play size={14} fill="currentColor" className="text-white" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{t.title}</p>
+                        <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ))}
+
+        {tab === 'followed' &&
+          (followed.error ? (
+            <ErrorRetry message={followed.error} onRetry={() => void loadFollowed()} />
+          ) : followed.loading ? (
+            <Loading />
+          ) : followed.data.length === 0 ? (
+            <Empty>팔로우한 플레이리스트가 없어요.</Empty>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {followed.data.map((p) => (
+                <Link key={p.id} to={`/my/playlist/${p.id}`} className="group block space-y-2">
+                  <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition group-hover:-translate-y-1 group-hover:shadow-lift">
+                    <AutoCover title={p.title} category={null} imageUrl={p.thumbnail_url} size="lg" />
+                  </div>
+                  <div className="space-y-0.5 px-0.5">
+                    <h3 className="line-clamp-1 text-sm font-semibold">{p.title}</h3>
+                    <p className="line-clamp-1 text-xs text-ink-mute">트랙 {p.track_count}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ))}
+      </div>
 
       {showCreate && (
         <CreateModal
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
-            void load();
+            void loadMine();
           }}
         />
       )}
@@ -185,6 +219,10 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
       {icon} {label}
     </button>
   );
+}
+
+function Loading() {
+  return <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>;
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
