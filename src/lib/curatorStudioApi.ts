@@ -68,6 +68,16 @@ export async function unreleaseCuratorPlaylist(playlistId: string) {
   return data as { ok: boolean; status: string };
 }
 
+/** released 상태에서도 썸네일만 변경 — RPC 경유 (released RLS 우회, 컬럼 제한). */
+export async function updateCuratorPlaylistThumbnail(playlistId: string, thumbnailUrl: string) {
+  const { data, error } = await supabase.rpc('update_curator_playlist_thumbnail', {
+    p_playlist_id: playlistId,
+    p_thumbnail_url: thumbnailUrl,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; thumbnail_url: string };
+}
+
 export async function fetchMyCuratorPlaylists(): Promise<MyCuratorPlaylist[]> {
   const { data, error } = await supabase.rpc('get_my_curator_playlists');
   if (error) throw error;

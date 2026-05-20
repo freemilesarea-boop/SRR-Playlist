@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
 import { fetchAllCurators, setPlaylistCurator, type CuratorListItem } from '@/lib/curatorApi';
+import { updateCuratorPlaylistThumbnail } from '@/lib/curatorStudioApi';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
@@ -153,11 +154,16 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
       });
       if (upErr) throw new Error(`업로드 실패: ${upErr.message}`);
       const { data } = supabase.storage.from('covers').getPublicUrl(path);
-      const { error } = await supabase
-        .from('playlists')
-        .update({ thumbnail_url: data.publicUrl })
-        .eq('id', playlistId);
-      if (error) throw new Error(`저장 실패: ${error.message}`);
+      if (variant === 'curator') {
+        // released 상태에서도 썸네일만 수정 가능하도록 RPC 경유 (RLS 우회 + 컬럼 제한)
+        await updateCuratorPlaylistThumbnail(playlistId, data.publicUrl);
+      } else {
+        const { error } = await supabase
+          .from('playlists')
+          .update({ thumbnail_url: data.publicUrl })
+          .eq('id', playlistId);
+        if (error) throw new Error(`저장 실패: ${error.message}`);
+      }
       await reload();
       toast.success('썸네일을 변경했어요.');
     } catch (e) {
