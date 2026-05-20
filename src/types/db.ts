@@ -23,6 +23,11 @@ export interface UserRow {
   withdrawn_reason?: string | null;
   // 0057 — 아티스트 계약서 상태
   contract_status?: 'not_created' | 'pending_signature' | 'signed' | 'rejected' | 'expired';
+  // 0095 — 회원 비활성/마스킹
+  disabled_at?: string | null;
+  pii_masked_at?: string | null;
+  // 0098 — 큐레이터 권한
+  is_curator?: boolean;
 }
 
 export interface SalesAgentRow {

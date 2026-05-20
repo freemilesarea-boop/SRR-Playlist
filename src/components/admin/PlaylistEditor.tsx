@@ -26,9 +26,11 @@ interface Props {
   playlistId: string;
   allTracks: TrackRow[];
   onClose: () => void;
+  /** 'curator' 면 큐레이터 연결 select 를 숨김 (큐레이터 본인 스튜디오에서 사용) */
+  variant?: 'admin' | 'curator';
 }
 
-export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props) {
+export default function PlaylistEditor({ playlistId, allTracks, onClose, variant = 'admin' }: Props) {
   const [playlist, setPlaylist] = useState<PlaylistRow | null>(null);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +40,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
   const [savingCurator, setSavingCurator] = useState(false);
 
   useEffect(() => {
+    if (variant !== 'admin') return;
     let alive = true;
     void fetchAllCurators().then((list) => {
       if (alive) setCurators(list);
@@ -45,7 +48,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
     return () => {
       alive = false;
     };
-  }, []);
+  }, [variant]);
 
   async function onCuratorChange(nextId: string) {
     if (!playlist) return;
@@ -212,23 +215,25 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose }: Props
         </label>
       </div>
 
-      {/* 큐레이터 연결 */}
-      <div className="flex items-center gap-3 rounded-2xl bg-bg-card p-3">
-        <div className="flex-1 text-xs text-ink-mute">큐레이터</div>
-        <select
-          value={playlist.created_by_user_id ?? ''}
-          onChange={(e) => void onCuratorChange(e.target.value)}
-          disabled={savingCurator}
-          className="rounded-lg bg-bg-deep px-3 py-2 text-sm ring-1 ring-line/15 focus:outline-none focus:ring-accent/60"
-        >
-          <option value="">— 없음 —</option>
-          {curators.map((c) => (
-            <option key={c.user_id} value={c.user_id}>
-              {c.display_name} (@{c.handle}){c.is_verified ? ' ✓' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* 큐레이터 연결 — admin 모드에서만 */}
+      {variant === 'admin' && (
+        <div className="flex items-center gap-3 rounded-2xl bg-bg-card p-3">
+          <div className="flex-1 text-xs text-ink-mute">큐레이터</div>
+          <select
+            value={playlist.created_by_user_id ?? ''}
+            onChange={(e) => void onCuratorChange(e.target.value)}
+            disabled={savingCurator}
+            className="rounded-lg bg-bg-deep px-3 py-2 text-sm ring-1 ring-line/15 focus:outline-none focus:ring-accent/60"
+          >
+            <option value="">— 없음 —</option>
+            {curators.map((c) => (
+              <option key={c.user_id} value={c.user_id}>
+                {c.display_name} (@{c.handle}){c.is_verified ? ' ✓' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink-mute">트랙 ({tracks.length})</h2>

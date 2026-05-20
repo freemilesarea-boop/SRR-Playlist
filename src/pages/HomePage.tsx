@@ -13,6 +13,10 @@ import HomeSearchBar from '@/components/HomeSearchBar';
 import HomeLibrarySections from '@/components/HomeLibrarySections';
 import HomeRecommendation from '@/components/HomeRecommendation';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
+import { fetchCuratorMadePlaylists, type CuratorMadePlaylist } from '@/lib/curatorStudioApi';
+import { gradientStyle } from '@/lib/cover';
+import AutoCover from '@/components/AutoCover';
+import { Wand2 } from 'lucide-react';
 
 export default function HomePage() {
   const { profile, user } = useAuthStore();
@@ -21,8 +25,20 @@ export default function HomePage() {
   const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
   const [popularByFollows, setPopularByFollows] = useState<PopularPlaylist[]>([]);
   const [featuredCurators, setFeaturedCurators] = useState<FeaturedCurator[]>([]);
+  const [curatorMade, setCuratorMade] = useState<CuratorMadePlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 큐레이터 제작 출시 플리 (0098 미적용 시 빈 배열 → 섹션 숨김)
+  useEffect(() => {
+    let alive = true;
+    void fetchCuratorMadePlaylists(10).then((rows) => {
+      if (alive) setCuratorMade(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 팔로워 기준 인기 플리 (0012 미적용 시 빈 배열 → 섹션 숨김)
   useEffect(() => {
@@ -274,6 +290,41 @@ export default function HomePage() {
           playlists={businessPicks}
           counts={counts}
         />
+      )}
+
+      {/* 큐레이터 추천 — 큐레이터가 직접 제작·출시한 플리 (0098) */}
+      {curatorMade.length > 0 && (
+        <section className="space-y-3">
+          <div className="px-0.5">
+            <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight sm:text-xl">
+              <Wand2 size={16} className="text-accent" /> 큐레이터 추천
+            </h2>
+            <p className="mt-0.5 text-xs text-ink-mute">큐레이터가 직접 만든 플레이리스트</p>
+          </div>
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
+            {curatorMade.map((p) => (
+              <Link
+                key={p.id}
+                to={`/playlist/${p.id}`}
+                className="group w-36 shrink-0 space-y-2 sm:w-44"
+              >
+                <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
+                  <AutoCover title={p.title} category={p.category} imageUrl={p.thumbnail_url} size="lg" />
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-30"
+                    style={gradientStyle(p.category || p.title)}
+                  />
+                </div>
+                <div className="space-y-0.5 px-0.5">
+                  <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">{p.title}</h3>
+                  <p className="line-clamp-1 text-xs text-ink-mute">
+                    {p.curator_name ? `by ${p.curator_name}` : p.category}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Newest */}

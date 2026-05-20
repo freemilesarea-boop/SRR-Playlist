@@ -11,6 +11,8 @@ import {
   adminMaskUserPii,
   adminForceSignOutUser,
   adminTriggerPasswordReset,
+  adminGrantCurator,
+  adminRevokeCurator,
   type MemberDetail as MemberDetailType,
 } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
@@ -58,6 +60,21 @@ export default function MemberDetail({
   const [actionBusy, setActionBusy] = useState(false);
   const [reasonText, setReasonText] = useState('');
   const [confirmText, setConfirmText] = useState('');
+  const [curatorBusy, setCuratorBusy] = useState(false);
+
+  async function toggleCurator(grant: boolean) {
+    setCuratorBusy(true);
+    try {
+      if (grant) await adminGrantCurator(userId);
+      else await adminRevokeCurator(userId);
+      toast.success(grant ? '큐레이터 권한을 부여했어요' : '큐레이터 권한을 회수했어요');
+      reload();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setCuratorBusy(false);
+    }
+  }
 
   function reload() {
     setLoading(true);
@@ -246,6 +263,37 @@ export default function MemberDetail({
             <section className="grid grid-cols-2 gap-2">
               <Stat icon={<Headphones size={14} />} label="총 스트리밍" value={data.total_streams.toLocaleString()} />
               <Stat icon={<Clock size={14} />} label="누적 청취" value={fmtTime(data.total_listened_seconds)} />
+            </section>
+
+            {/* 큐레이터 권한 — 일반 액션 (Danger Zone 과 분리) */}
+            <section className="flex items-center justify-between gap-3 rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
+              <div>
+                <p className="text-sm font-semibold">큐레이터 권한</p>
+                <p className="text-xs text-ink-mute">
+                  {data.user.is_curator
+                    ? '플레이리스트를 직접 제작·출시할 수 있어요.'
+                    : '부여 시 스튜디오에서 플레이리스트를 만들 수 있어요.'}
+                </p>
+              </div>
+              {data.user.is_curator ? (
+                <button
+                  type="button"
+                  onClick={() => void toggleCurator(false)}
+                  disabled={curatorBusy}
+                  className="btn-ghost shrink-0 text-xs disabled:opacity-50"
+                >
+                  권한 회수
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void toggleCurator(true)}
+                  disabled={curatorBusy}
+                  className="btn-primary shrink-0 text-xs disabled:opacity-50"
+                >
+                  큐레이터 지정
+                </button>
+              )}
             </section>
 
             {/* 영업인 (있을 때만 노출) */}
