@@ -18,6 +18,7 @@ export interface UserPlaylistDetail {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  computed_cover_url: string | null;
   is_public: boolean;
   owner_user_id: string;
   is_owner: boolean;
@@ -123,6 +124,7 @@ export interface NewPublicPlaylist {
   title: string;
   category: string | null;
   thumbnail_url: string | null;
+  cover_url: string | null;
   source: 'catalog' | 'user';
   sort_at: string;
 }

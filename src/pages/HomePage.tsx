@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchPlaylists, fetchRecentPlaylists, fetchPlaylistCounts } from '@/lib/api';
+import { fetchPlaylists, fetchRecentPlaylists, fetchPlaylistCounts, fetchPlaylistCovers } from '@/lib/api';
 import { fetchPopularPlaylistsByFollows, type PopularPlaylist } from '@/lib/playlistFollowApi';
 import { fetchFeaturedCurators, type FeaturedCurator } from '@/lib/curatorApi';
 import { Link } from 'react-router-dom';
@@ -24,6 +24,7 @@ export default function HomePage() {
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [recents, setRecents] = useState<PlaylistRow[]>([]);
   const [counts, setCounts] = useState<Map<string, { total: number; playable: number }>>(new Map());
+  const [covers, setCovers] = useState<Map<string, string>>(new Map());
   const [popularByFollows, setPopularByFollows] = useState<PopularPlaylist[]>([]);
   const [featuredCurators, setFeaturedCurators] = useState<FeaturedCurator[]>([]);
   const [curatorMade, setCuratorMade] = useState<CuratorMadePlaylist[]>([]);
@@ -85,11 +86,13 @@ export default function HomePage() {
       }),
       user ? fetchRecentPlaylists(user.id).catch(() => []) : Promise.resolve([]),
       fetchPlaylistCounts().catch(() => new Map()),
-    ]).then(([all, recent, cnt]) => {
+      fetchPlaylistCovers().catch(() => new Map<string, string>()),
+    ]).then(([all, recent, cnt, cov]) => {
       if (!alive) return;
       setPlaylists(all);
       setRecents(recent);
       setCounts(cnt);
+      setCovers(cov);
       setLoading(false);
     });
     return () => {
@@ -201,6 +204,7 @@ export default function HomePage() {
             badge="Editor's Pick"
             playableCount={counts.get(featured.id)?.playable}
             totalCount={counts.get(featured.id)?.total}
+            coverUrl={covers.get(featured.id)}
           />
         </section>
       )}
@@ -218,6 +222,7 @@ export default function HomePage() {
           subtitle="다시 듣고 싶을 때"
           playlists={recents.slice(0, 8)}
           counts={counts}
+          covers={covers}
         />
       )}
 
@@ -228,6 +233,7 @@ export default function HomePage() {
           subtitle="시간대 자동 추천"
           playlists={slotPlaylists}
           counts={counts}
+          covers={covers}
         />
       )}
 
@@ -238,6 +244,7 @@ export default function HomePage() {
           subtitle="많이 듣고 있어요"
           playlists={popular}
           counts={counts}
+          covers={covers}
         />
       )}
 
@@ -248,6 +255,7 @@ export default function HomePage() {
           subtitle="구독자 수 기준 급상승"
           playlists={popularByFollows}
           counts={counts}
+          covers={covers}
         />
       )}
 
@@ -302,6 +310,7 @@ export default function HomePage() {
           subtitle="자영업자가 그대로 틀어두기 좋은"
           playlists={businessPicks}
           counts={counts}
+          covers={covers}
         />
       )}
 
@@ -355,8 +364,10 @@ export default function HomePage() {
                 className="group w-36 shrink-0 space-y-2 sm:w-44"
               >
                 <div className="relative aspect-square overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
-                  <AutoCover title={p.title} category={p.category} imageUrl={p.thumbnail_url} size="lg" />
-                  <div className="pointer-events-none absolute inset-0 opacity-30" style={gradientStyle(p.category || p.title)} />
+                  <AutoCover title={p.title} category={p.category} imageUrl={p.cover_url ?? p.thumbnail_url} size="lg" />
+                  {!(p.cover_url ?? p.thumbnail_url) && (
+                    <div className="pointer-events-none absolute inset-0 opacity-30" style={gradientStyle(p.category || p.title)} />
+                  )}
                 </div>
                 <div className="space-y-0.5 px-0.5">
                   <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">{p.title}</h3>
@@ -377,6 +388,7 @@ export default function HomePage() {
           subtitle="이번 주 업데이트"
           playlists={newest}
           counts={counts}
+          covers={covers}
         />
       )}
 

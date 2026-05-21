@@ -11,6 +11,8 @@ interface Props {
   totalCount?: number;
   /** 카드 크기: sm(가로 스크롤), md(그리드 기본), lg(피처드) */
   variant?: 'sm' | 'md' | 'lg';
+  /** 대표 커버(내부 음원 자켓). 없으면 thumbnail_url → AutoCover 그라데이션 fallback */
+  coverUrl?: string | null;
 }
 
 export default function PlaylistCard({
@@ -18,6 +20,7 @@ export default function PlaylistCard({
   playableCount,
   totalCount,
   variant = 'md',
+  coverUrl,
 }: Props) {
   const showCount = typeof totalCount === 'number';
   const noAudio = showCount && (playableCount ?? 0) === 0;
@@ -30,7 +33,7 @@ export default function PlaylistCard({
           <AutoCover
             title={playlist.title}
             category={playlist.category}
-            imageUrl={playlist.thumbnail_url}
+            imageUrl={coverUrl ?? playlist.thumbnail_url}
             size={coverSize}
           />
 
