@@ -6,6 +6,7 @@ import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { toast } from '@/store/toastStore';
 import ChartRow from './charts/ChartRow';
 
@@ -32,12 +33,17 @@ export default function HomeChartSection() {
   }, []);
 
   function handlePlay(idx: number) {
+    if (!useAuthStore.getState().session) {
+      toast.info('로그인 후 이용해주세요.');
+      useGateStore.getState().open('login');
+      return;
+    }
     if (tracks.length === 0) return;
     if (!isPlayableUrl(tracks[idx]?.audio_url)) return; // 재생 불가 행은 변경 없음
     const rows = tracks.map(chartTrackToTrackRow);
     const { playable } = filterPlayableTracks(rows);
     if (playable.length === 0) {
-      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
+      toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const targetId = tracks[idx].track_id;
