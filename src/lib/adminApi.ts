@@ -64,6 +64,8 @@ export interface MemberRow {
   disabled_at: string | null;
   pii_masked_at: string | null;
   last_sign_in_at: string | null;
+  // 0105 — 프로모션 사용 여부
+  has_promotion?: boolean;
 }
 
 export interface MemberDetail {
@@ -108,6 +110,17 @@ export interface MemberDetail {
     requested_plan: string;
     status: string;
     created_at: string;
+  }>;
+  // 0105 — 프로모션 사용 기록
+  promotions?: Array<{
+    code: string;
+    name: string | null;
+    discount_type: 'fixed' | 'percent';
+    discount_amount: number | null;
+    original_amount: number | null;
+    final_amount: number | null;
+    plan_type: string | null;
+    redeemed_at: string;
   }>;
   // 0054 — 연결된 영업인 (없으면 null)
   sales_agent?: {
@@ -340,6 +353,95 @@ export async function adminTriggerPasswordReset(userId: string) {
     throw new Error(body.error ?? body.detail ?? '재설정 메일 발송 실패');
   }
   return body as { ok: true; sent_to_hash: string };
+}
+
+/* ---------- 0104 — 프로모션 코드 ---------- */
+
+export interface PromotionValidation {
+  valid: boolean;
+  reason: string;
+  promotion_code_id?: string;
+  code?: string;
+  name?: string | null;
+  discount_type?: 'fixed' | 'percent';
+  original_amount?: number;
+  discount_amount?: number;
+  final_amount?: number;
+}
+
+export interface PromotionCodeRow {
+  id: string;
+  code: string;
+  name: string | null;
+  target_plan: 'individual' | 'business' | 'all';
+  discount_type: 'fixed' | 'percent';
+  discount_amount: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+  deleted_at: string | null;
+  note: string | null;
+  created_at: string;
+  redemption_count: number;
+  total_discount: number;
+}
+
+/** 프로모션 코드 검증 (회원/비회원 모두 호출 가능, 가격은 서버 권위). */
+export async function validatePromotionCode(
+  code: string,
+  planType: 'individual' | 'business',
+): Promise<PromotionValidation> {
+  const { data, error } = await supabase.rpc('validate_promotion_code', {
+    p_code: code,
+    p_plan_type: planType,
+  });
+  if (error) throw error;
+  return data as PromotionValidation;
+}
+
+export async function adminListPromotionCodes(): Promise<PromotionCodeRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_promotion_codes');
+  if (error) throw error;
+  return (data ?? []) as PromotionCodeRow[];
+}
+
+export async function adminCreatePromotionCode(payload: {
+  code: string;
+  name?: string | null;
+  target_plan: 'individual' | 'business' | 'all';
+  discount_type: 'fixed' | 'percent';
+  discount_amount: number;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  note?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_create_promotion_code', {
+    p_code: payload.code,
+    p_name: payload.name ?? null,
+    p_target_plan: payload.target_plan,
+    p_discount_type: payload.discount_type,
+    p_discount_amount: payload.discount_amount,
+    p_starts_at: payload.starts_at ?? null,
+    p_ends_at: payload.ends_at ?? null,
+    p_note: payload.note ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminSetPromotionActive(id: string, active: boolean) {
+  const { data, error } = await supabase.rpc('admin_set_promotion_active', {
+    p_id: id,
+    p_active: active,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; is_active: boolean };
+}
+
+export async function adminDeletePromotionCode(id: string) {
+  const { data, error } = await supabase.rpc('admin_delete_promotion_code', { p_id: id });
+  if (error) throw error;
+  return data as { ok: boolean };
 }
 
 export async function insertRevenue(payload: {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
-  Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut,
+  Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -317,6 +317,40 @@ export default function MemberDetail({
                   <p className="mt-0.5 text-xs text-ink-mute">
                     수수료율 {data.sales_agent.commission_rate}%
                   </p>
+                </div>
+              </section>
+            )}
+
+            {data.promotions && data.promotions.length > 0 && (
+              <section>
+                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  <Ticket size={14} /> 프로모션 적용 ({data.promotions.length})
+                </h4>
+                <div className="space-y-1.5">
+                  {data.promotions.map((p, i) => (
+                    <div key={i} className="rounded-xl bg-accent/5 px-3 py-2.5 ring-1 ring-accent/20">
+                      <div className="flex items-baseline gap-2">
+                        <code className="rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[11px] font-bold">
+                          {p.code}
+                        </code>
+                        {p.name && <span className="text-xs text-ink-mute">{p.name}</span>}
+                      </div>
+                      <p className="mt-1 text-xs text-ink-mute">
+                        {p.original_amount != null && (
+                          <span className="line-through">₩{p.original_amount.toLocaleString()}</span>
+                        )}
+                        {p.discount_amount != null && (
+                          <span className="ml-1 text-accent">
+                            -{p.discount_type === 'percent' ? `${p.discount_amount}%` : `₩${p.discount_amount.toLocaleString()}`}
+                          </span>
+                        )}
+                        {p.final_amount != null && (
+                          <span className="ml-1 font-semibold text-ink">→ ₩{p.final_amount.toLocaleString()}</span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-ink-dim">{fmtDateTime(p.redeemed_at)}</p>
+                    </div>
+                  ))}
                 </div>
               </section>
             )}

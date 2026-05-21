@@ -58,6 +58,7 @@ export async function fetchSubscriptionPlans(): Promise<SubscriptionPlan[]> {
 export async function createPayappSubscription(payload: {
   plan_type: 'individual' | 'business';
   recvphone: string;
+  promotion_code?: string | null;
 }): Promise<{ ok: boolean; payurl?: string; order_no?: string; error?: string }> {
   const { data, error } = await supabase.functions.invoke('create-payapp-subscription', {
     body: payload,
