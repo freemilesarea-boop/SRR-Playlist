@@ -5,6 +5,7 @@ import { fetchTrackChart, chartTrackToTrackRow, type ChartTrack } from '@/lib/ch
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { usePlayerStore } from '@/store/playerStore';
+import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import ChartRow from './charts/ChartRow';
 
@@ -36,7 +37,7 @@ export default function HomeChartSection() {
     const rows = tracks.map(chartTrackToTrackRow);
     const { playable } = filterPlayableTracks(rows);
     if (playable.length === 0) {
-      toast.info('아직 재생 가능한 음원이 없어요.');
+      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const targetId = tracks[idx].track_id;

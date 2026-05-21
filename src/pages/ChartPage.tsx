@@ -10,6 +10,7 @@ import {
   type GenreSummary,
 } from '@/lib/chartsApi';
 import { usePlayerStore } from '@/store/playerStore';
+import { useAuthStore } from '@/store/authStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
@@ -113,7 +114,7 @@ export default function ChartPage() {
     const trackRows = tracks.map(chartTrackToTrackRow);
     const { playable } = filterPlayableTracks(trackRows);
     if (playable.length === 0) {
-      toast.info('아직 재생 가능한 음원이 없어요.');
+      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     // 클릭된 트랙을 playable 인덱스로 매핑
