@@ -7,7 +7,11 @@ import {
   adminApproveArtistRelease,
   adminRejectArtistRelease,
   adminRequestTrackChanges,
+  adminBulkApproveTracks,
+  adminBulkRejectTracks,
+  adminApproveAllPending,
   dispatchTrackModerationEmails,
+  dispatchAllModerationEmails,
   getAdminSetting,
   type PendingReviewTrackRow,
   type PendingReviewCounts,
@@ -47,6 +51,11 @@ export default function TrackReviewList() {
     kind: ActionKind;
     track: PendingReviewTrackRow;
   } | null>(null);
+  // 일괄 선택/처리
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<'approve' | 'reject' | 'approveAll' | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +66,7 @@ export default function TrackReviewList() {
       ]);
       setRows(data);
       setCounts(cnt);
+      setSelected(new Set());
     } finally {
       setLoading(false);
     }
@@ -123,6 +133,108 @@ export default function TrackReviewList() {
     }
   }
 
+  const pageIds = rows.map((r) => r.track_id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  function toggleSelectAllPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // 선택 곡 일괄 승인
+  async function runBulkApprove(immediate: boolean | null) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkProgress(`${ids.length}곡 승인 중…`);
+    try {
+      const res = await adminBulkApproveTracks(ids, immediate);
+      const mail = await dispatchAllModerationEmails();
+      const sentMsg = mail.ok && (mail.sent ?? 0) > 0 ? ` — 메일 ${mail.sent}통 발송` : '';
+      if (res.failed.length === 0) {
+        toast.success(`${res.approved}곡 승인 완료${sentMsg}`);
+      } else {
+        toast.warning(`승인 ${res.approved}곡 · 실패 ${res.failed.length}곡${sentMsg}`);
+      }
+      setBulk(null);
+      await load();
+    } catch (e) {
+      toast.error(`일괄 승인 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(null);
+    }
+  }
+
+  // 선택 곡 일괄 거절
+  async function runBulkReject(reason: string) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!reason.trim()) {
+      toast.error('거절 사유를 입력해주세요');
+      return;
+    }
+    setBulkBusy(true);
+    setBulkProgress(`${ids.length}곡 거절 중…`);
+    try {
+      const res = await adminBulkRejectTracks(ids, reason.trim());
+      const mail = await dispatchAllModerationEmails();
+      const sentMsg = mail.ok && (mail.sent ?? 0) > 0 ? ` — 메일 ${mail.sent}통 발송` : '';
+      if (res.failed.length === 0) {
+        toast.success(`${res.rejected}곡 거절 완료${sentMsg}`);
+      } else {
+        toast.warning(`거절 ${res.rejected}곡 · 실패 ${res.failed.length}곡${sentMsg}`);
+      }
+      setBulk(null);
+      await load();
+    } catch (e) {
+      toast.error(`일괄 거절 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(null);
+    }
+  }
+
+  // 현재 필터 전체 승인 (서버 chunk 반복)
+  async function runApproveAll(immediate: boolean | null) {
+    setBulkBusy(true);
+    let approved = 0;
+    let failedTotal = 0;
+    try {
+      // 안전 상한: 최대 1000 chunk(=최대 50만곡)까지 반복
+      for (let i = 0; i < 1000; i++) {
+        const res = await adminApproveAllPending(artistId, immediate, 200);
+        approved += res.approved ?? 0;
+        failedTotal += res.failed?.length ?? 0;
+        setBulkProgress(`${approved}곡 승인 완료 · 남은 ${res.remaining ?? 0}곡…`);
+        if ((res.remaining ?? 0) <= 0 || (res.approved ?? 0) === 0) break;
+      }
+      const mail = await dispatchAllModerationEmails();
+      const sentMsg = mail.ok && (mail.sent ?? 0) > 0 ? ` — ${mail.sent}개 묶음 메일 발송` : '';
+      if (failedTotal === 0) toast.success(`${approved}곡 승인 완료${sentMsg}`);
+      else toast.warning(`승인 ${approved}곡 · 실패 ${failedTotal}곡${sentMsg}`);
+      setBulk(null);
+      setPage(0);
+      await load();
+    } catch (e) {
+      toast.error(`전체 승인 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -155,6 +267,44 @@ export default function TrackReviewList() {
         )}
       </div>
 
+      {/* 일괄 작업 툴바 */}
+      {!loading && rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
+            <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAllPage} />
+            현재 페이지 전체 선택
+          </label>
+          <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => setBulk('approve')}
+            disabled={selected.size === 0 || bulkBusy}
+            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-40 dark:bg-emerald-500/15 dark:text-emerald-300"
+          >
+            <Check size={11} /> 선택 승인
+          </button>
+          <button
+            onClick={() => setBulk('reject')}
+            disabled={selected.size === 0 || bulkBusy}
+            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/15 dark:text-red-300"
+          >
+            <X size={11} /> 선택 거절
+          </button>
+          <button
+            onClick={() => setBulk('approveAll')}
+            disabled={bulkBusy || filteredTotal === 0}
+            className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-semibold text-black hover:bg-accent/90 disabled:opacity-40"
+          >
+            <Check size={11} /> 현재 필터 전체 승인 ({filteredTotal.toLocaleString()})
+          </button>
+        </div>
+      )}
+      {bulkProgress && (
+        <div className="rounded-lg bg-accent/10 px-3 py-2 text-xs font-semibold text-accent ring-1 ring-accent/20">
+          ⏳ {bulkProgress}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         {loading ? (
           <div className="p-8 text-center text-xs text-ink-mute">불러오는 중…</div>
@@ -170,6 +320,13 @@ export default function TrackReviewList() {
               return (
                 <li key={r.track_id} className="space-y-2 p-3">
                   <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.track_id)}
+                      onChange={() => toggleSelect(r.track_id)}
+                      className="mt-1 shrink-0"
+                      aria-label="선택"
+                    />
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-bg-hover">
                       {r.cover_url ? (
                         <img src={r.cover_url} alt="" className="h-full w-full object-cover" />
@@ -335,6 +492,103 @@ export default function TrackReviewList() {
           onConfirm={handleConfirm}
         />
       )}
+
+      {bulk && (
+        <BulkActionModal
+          kind={bulk}
+          count={bulk === 'approveAll' ? filteredTotal : selected.size}
+          busy={bulkBusy}
+          onCancel={() => !bulkBusy && setBulk(null)}
+          onApprove={(immediate) => (bulk === 'approveAll' ? runApproveAll(immediate) : runBulkApprove(immediate))}
+          onReject={(reason) => runBulkReject(reason)}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkActionModal({
+  kind,
+  count,
+  busy,
+  onCancel,
+  onApprove,
+  onReject,
+}: {
+  kind: 'approve' | 'reject' | 'approveAll';
+  count: number;
+  busy: boolean;
+  onCancel: () => void;
+  onApprove: (immediate: boolean | null) => void;
+  onReject: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const isReject = kind === 'reject';
+  const title = isReject ? '선택 일괄 거절' : kind === 'approveAll' ? '현재 필터 전체 승인' : '선택 일괄 승인';
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md space-y-3 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
+      >
+        <h3 className="text-base font-bold">{title}</h3>
+        <Alert tone={isReject ? 'error' : 'warning'}>
+          {kind === 'approveAll' ? (
+            <p>현재 필터의 심사 대기 <b>{count.toLocaleString()}곡</b>을 승인합니다. 계속할까요?</p>
+          ) : (
+            <p>선택한 <b>{count.toLocaleString()}곡</b>을 {isReject ? '거절' : '승인'}합니다. 계속할까요?</p>
+          )}
+          <p className="mt-1 text-[11px] opacity-80">
+            메일은 업로드 묶음(앨범)당 1통만 발송됩니다.
+          </p>
+        </Alert>
+        {isReject && (
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-ink-mute">아티스트에게 노출될 거절 사유 (전체 공통)</span>
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="input"
+              placeholder="예: 권리 확인 불가, 메타데이터 부족 등"
+            />
+          </label>
+        )}
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
+          <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
+            취소
+          </button>
+          {isReject ? (
+            <button
+              onClick={() => onReject(reason)}
+              disabled={busy || !reason.trim()}
+              className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+            >
+              {busy ? '처리 중…' : `${count.toLocaleString()}곡 거절`}
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => onApprove(false)}
+                disabled={busy}
+                className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-60"
+              >
+                {busy ? '처리 중…' : '예약 발매'}
+              </button>
+              <button
+                onClick={() => onApprove(true)}
+                disabled={busy}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
+              >
+                {busy ? '처리 중…' : '즉시 공개'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
