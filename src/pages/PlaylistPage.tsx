@@ -5,6 +5,7 @@ import { fetchPlaylistCurator } from '@/lib/curatorApi';
 import { fetchPlaylist, fetchPlaylistTracks, fetchAutoPlaylistTracks, toggleLike, fetchLikedIds, logRecentPlay } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableTrack, countPlayable } from '@/lib/audio';
@@ -88,14 +89,19 @@ export default function PlaylistPage() {
 
   function handlePlay(startIndex = 0, shuffle = false) {
     if (!playlist) return;
+    if (!useAuthStore.getState().session) {
+      toast.info('로그인 후 이용해주세요.');
+      useGateStore.getState().open('login');
+      return;
+    }
     if (tracks.length === 0) {
-      if (useAuthStore.getState().session) toast.info('이 플레이리스트에는 아직 곡이 없어요.');
+      toast.info('이 플레이리스트에는 아직 곡이 없어요.');
       return;
     }
     // 재생 가능 트랙만 큐에 — 무한 next() 캐스케이드 차단
     const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
+      toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     // 원본 시작 트랙이 살아남았는지 확인 → 새 인덱스로 매핑

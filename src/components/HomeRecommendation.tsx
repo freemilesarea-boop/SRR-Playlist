@@ -7,6 +7,7 @@ import {
 import { getKstTimeSlot, getTimeSlotLabel } from '@/lib/timeTheme';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import AutoCover from '@/components/AutoCover';
@@ -68,13 +69,18 @@ export default function HomeRecommendation({
   }, [subtitle, businessType, slotLabel]);
 
   function play(idx: number) {
+    // 우선순위: login gate > empty queue. 비회원은 empty 검사 자체를 돌리지 않음.
+    if (!useAuthStore.getState().session) {
+      toast.info('로그인 후 이용해주세요.');
+      useGateStore.getState().open('login');
+      return;
+    }
     if (tracks.length === 0) return;
     // 클릭된 트랙이 재생 불가면 변경 없음 (카드 onClick 에서도 막혀 있지만 이중 방어)
     if (!isPlayableUrl(tracks[idx]?.audio_url)) return;
     const { playable } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      // 비회원은 로그인 모달(Player gate)로 유도 — 빈 큐 toast 표시 안 함
-      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
+      toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const targetId = tracks[idx].id;

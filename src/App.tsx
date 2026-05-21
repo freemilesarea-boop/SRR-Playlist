@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
+import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
 
@@ -170,6 +171,7 @@ export default function App() {
   return (
     <>
       <Toaster />
+      <GlobalGate />
       <Onboarding />
       <Suspense fallback={<RouteFallback />}>
         <Routes>

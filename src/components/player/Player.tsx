@@ -33,8 +33,8 @@ import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
-import SubscriptionGate, { type GateMode } from '@/components/player/SubscriptionGate';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
+import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 
@@ -154,7 +154,7 @@ export default function Player() {
   const session = useAuthStore((s) => s.session);
   const gateProfile = useAuthStore((s) => s.profile);
   const membership = resolveMembership(session, gateProfile);
-  const [gateModal, setGateModal] = useState<GateMode | null>(null);
+  const openGate = useGateStore((s) => s.open);
   const pvTrackIdRef = useRef<string | null>(null);
   const previewSecRef = useRef(0);
   const previewBlockedRef = useRef(false);
@@ -178,19 +178,20 @@ export default function Player() {
     previewLastTRef.current = 0;
   }, [current?.id]);
 
-  // 재생 시작 시 게이트: anonymous 차단 + free 미리듣기 초과 차단 (모든 진입점 단일 choke)
+  // 재생 시작 시 게이트: anonymous 차단 + free 미리듣기 초과 차단 (모든 진입점 단일 choke, fallback)
   useEffect(() => {
     if (!playing) return;
     if (membership === 'anonymous') {
       pause();
-      setGateModal('login');
+      toast.info('로그인 후 이용해주세요.');
+      openGate('login');
     } else if (
       membership === 'free' &&
       previewBlockedRef.current &&
       pvTrackIdRef.current === current?.id
     ) {
       pause();
-      setGateModal('upsell');
+      openGate('upsell');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, membership, current?.id]);
@@ -619,7 +620,7 @@ export default function Player() {
       previewLastTRef.current = t;
       if (playing) {
         pause();
-        setGateModal('upsell');
+        openGate('upsell');
       }
       return;
     }
@@ -630,7 +631,8 @@ export default function Player() {
       if (previewSecRef.current >= PREVIEW_LIMIT_SECONDS) {
         previewBlockedRef.current = true;
         pause();
-        setGateModal('upsell');
+        toast.info('무료회원에게는 미리듣기만 제공됩니다.');
+        openGate('upsell');
       }
     }
   }
@@ -858,7 +860,6 @@ export default function Player() {
 
   return (
     <>
-      {gateModal && <SubscriptionGate mode={gateModal} onClose={() => setGateModal(null)} />}
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
         ref={audioARef}

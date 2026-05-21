@@ -11,6 +11,7 @@ import {
 } from '@/lib/chartsApi';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
@@ -106,6 +107,11 @@ export default function ChartPage() {
   );
 
   function handlePlay(idx: number) {
+    if (!useAuthStore.getState().session) {
+      toast.info('로그인 후 이용해주세요.');
+      useGateStore.getState().open('login');
+      return;
+    }
     if (tracks.length === 0) return;
     // 클릭된 행이 재생 불가면 아무 변경 없이 무시 (UI 1차 차단 + ChartRow disabled 와 이중 방어)
     if (!isPlayableUrl(tracks[idx]?.audio_url)) {
@@ -114,7 +120,7 @@ export default function ChartPage() {
     const trackRows = tracks.map(chartTrackToTrackRow);
     const { playable } = filterPlayableTracks(trackRows);
     if (playable.length === 0) {
-      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
+      toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     // 클릭된 트랙을 playable 인덱스로 매핑

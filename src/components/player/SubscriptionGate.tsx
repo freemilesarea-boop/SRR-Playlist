@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Lock, Crown, X } from 'lucide-react';
+import type { GateMode } from '@/store/gateStore';
 
-export type GateMode = 'login' | 'upsell';
+export type { GateMode };
 
 /**
  * 재생 구독 게이트 모달.

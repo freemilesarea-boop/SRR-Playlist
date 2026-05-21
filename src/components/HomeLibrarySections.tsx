@@ -8,6 +8,7 @@ import {
 } from '@/lib/libraryApi';
 import { loadPlayerSession } from '@/lib/playerSession';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
@@ -43,9 +44,14 @@ export default function HomeLibrarySections() {
   }, [userId]);
 
   function play(tracks: TrackRow[], idx: number) {
+    if (!useAuthStore.getState().session) {
+      toast.info('로그인 후 이용해주세요.');
+      useGateStore.getState().open('login');
+      return;
+    }
     const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
+      toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const origStart = tracks[idx];
