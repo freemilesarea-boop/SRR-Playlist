@@ -3,15 +3,19 @@ import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronD
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
+  countPendingReviewTracks,
   adminApproveArtistRelease,
   adminRejectArtistRelease,
   adminRequestTrackChanges,
   dispatchTrackModerationEmails,
   getAdminSetting,
   type PendingReviewTrackRow,
+  type PendingReviewCounts,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+
+const PAGE_SIZE = 50;
 
 // 0076 — 검수 액션을 release_status 기반 RPC 로 통일
 // (이전: approve_artist_track / reject_artist_track / hide_artist_track — visibility-only 였음)
@@ -36,6 +40,9 @@ export default function TrackReviewList() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openLyricsId, setOpenLyricsId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [artistId, setArtistId] = useState<string | null>(null);
+  const [counts, setCounts] = useState<PendingReviewCounts>({ total: 0, by_artist: [] });
   const [modal, setModal] = useState<{
     kind: ActionKind;
     track: PendingReviewTrackRow;
@@ -44,14 +51,29 @@ export default function TrackReviewList() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listPendingReviewTracks();
+      const [data, cnt] = await Promise.all([
+        listPendingReviewTracks({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, artistId }),
+        countPendingReviewTracks(),
+      ]);
       setRows(data);
+      setCounts(cnt);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, artistId]);
 
-  useFreshFetch(load, []);
+  useFreshFetch(load, [page, artistId]);
+
+  // 필터 기준 총건수 (아티스트 필터 시 해당 아티스트 건수, 아니면 전체)
+  const filteredTotal = artistId
+    ? counts.by_artist.find((a) => a.owner_user_id === artistId)?.n ?? 0
+    : counts.total;
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
+
+  // 액션 처리로 현재 페이지가 범위를 벗어나면 마지막 페이지로 보정
+  useEffect(() => {
+    if (page > 0 && page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
 
   async function handleConfirm(
     reason: string,
@@ -103,13 +125,34 @@ export default function TrackReviewList() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
             <Music size={16} className="text-accent" /> 음원 검수
           </h2>
-          <p className="text-xs text-ink-mute">심사 대기 {rows.length}건</p>
+          <p className="text-xs text-ink-mute">
+            심사 대기 총 {counts.total.toLocaleString()}건
+            {artistId && <> · 이 아티스트 {filteredTotal.toLocaleString()}건</>}
+            {' · '}{page + 1}/{pageCount} 페이지
+          </p>
         </div>
+        {counts.by_artist.length > 0 && (
+          <select
+            value={artistId ?? ''}
+            onChange={(e) => {
+              setArtistId(e.target.value || null);
+              setPage(0);
+            }}
+            className="input w-auto max-w-[220px] text-xs"
+          >
+            <option value="">전체 아티스트 ({counts.total.toLocaleString()})</option>
+            {counts.by_artist.map((a) => (
+              <option key={a.owner_user_id ?? a.artist_name} value={a.owner_user_id ?? ''}>
+                {a.artist_name} ({a.n})
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
@@ -260,6 +303,26 @@ export default function TrackReviewList() {
           </ul>
         )}
       </div>
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-center gap-3 text-xs">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0 || loading}
+            className="rounded-md bg-bg-soft px-3 py-1.5 font-semibold ring-1 ring-line/10 disabled:opacity-40"
+          >
+            이전
+          </button>
+          <span className="text-ink-mute">{page + 1} / {pageCount}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={page >= pageCount - 1 || loading}
+            className="rounded-md bg-bg-soft px-3 py-1.5 font-semibold ring-1 ring-line/10 disabled:opacity-40"
+          >
+            다음
+          </button>
+        </div>
+      )}
 
       {modal && (
         <ReviewActionModal

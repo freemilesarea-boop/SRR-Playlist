@@ -27,7 +27,7 @@ interface Props {
 }
 
 const ALLOWED_AUDIO_EXT = ['mp3', 'm4a', 'wav', 'ogg', 'aac', 'flac'];
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
 /**
@@ -124,7 +124,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
     if (!file) { setAudioFile(null); return; }
     if (!isAudioFile(file)) { toast.error('음원 파일만 업로드할 수 있어요.'); return; }
     if (file.size > MAX_AUDIO_BYTES) {
-      toast.error(`파일이 너무 커요. 50MB 이하로 (현재 ${Math.round(file.size / 1024 / 1024)}MB)`);
+      toast.error(`파일이 너무 커요. 100MB 이하로 (현재 ${Math.round(file.size / 1024 / 1024)}MB)`);
       return;
     }
     setAudioFile(file);
@@ -356,7 +356,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
       <input value={mood} onChange={(e) => setMood(e.target.value)} placeholder="무드 (단일, 자동: 첫 mood_tag)" className="input" />
 
       <label className="block space-y-1">
-        <span className="text-xs text-ink-mute">음원 파일 * (mp3 / m4a / wav, ≤ 50MB)</span>
+        <span className="text-xs text-ink-mute">음원 파일 * (mp3 / m4a / wav, ≤ 100MB)</span>
         <input required type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac"
           onChange={(e) => pickAudio(e.target.files?.[0] ?? null)}
           className="block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-bg-hover file:px-3 file:py-1.5 file:text-xs file:text-ink hover:file:bg-ink/10" />
