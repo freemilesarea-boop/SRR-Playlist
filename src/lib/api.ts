@@ -88,6 +88,24 @@ export async function fetchPlaylistCounts(): Promise<
   return map;
 }
 
+/**
+ * 0110 — 카탈로그 플레이리스트 대표 커버 맵 (playlist_id → cover_url).
+ * 내부 음원 자켓 기반. 1회 호출(N+1 방지). 없으면 키 없음 → 카드가 그라데이션 fallback.
+ */
+export async function fetchPlaylistCovers(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { data, error } = await supabase.rpc('get_catalog_playlist_covers');
+    if (error) return map;
+    for (const r of (data ?? []) as Array<{ playlist_id: string; cover_url: string | null }>) {
+      if (r.cover_url) map.set(r.playlist_id, r.cover_url);
+    }
+  } catch {
+    /* noop */
+  }
+  return map;
+}
+
 export async function fetchTracks(): Promise<TrackRow[]> {
   const { data, error } = await supabase
     .from('tracks')

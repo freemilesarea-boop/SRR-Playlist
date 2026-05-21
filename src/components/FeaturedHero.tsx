@@ -9,9 +9,11 @@ interface Props {
   badge?: string;
   playableCount?: number;
   totalCount?: number;
+  /** 대표 커버(내부 음원 자켓) */
+  coverUrl?: string | null;
 }
 
-export default function FeaturedHero({ playlist, badge, playableCount, totalCount }: Props) {
+export default function FeaturedHero({ playlist, badge, playableCount, totalCount, coverUrl }: Props) {
   const noAudio = typeof totalCount === 'number' && (playableCount ?? 0) === 0;
 
   return (
@@ -49,7 +51,7 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
           <AutoCover
             title={playlist.title}
             category={playlist.category}
-            imageUrl={playlist.thumbnail_url}
+            imageUrl={coverUrl ?? playlist.thumbnail_url}
             size="xl"
           />
         </div>

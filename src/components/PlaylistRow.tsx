@@ -8,6 +8,8 @@ interface Props {
   playlists: PlaylistRowType[];
   emptyText?: string;
   counts?: Map<string, { total: number; playable: number }>;
+  /** 플레이리스트 대표 커버 맵 (playlist_id → cover_url) */
+  covers?: Map<string, string | null>;
   /** 가로 스크롤 (모바일) — false 면 그리드 */
   scroll?: boolean;
   variant?: 'sm' | 'md';
@@ -19,6 +21,7 @@ export default function PlaylistRow({
   playlists,
   emptyText,
   counts,
+  covers,
   scroll = true,
   variant = 'sm',
 }: Props) {
@@ -64,6 +67,7 @@ export default function PlaylistRow({
                   playableCount={c?.playable}
                   totalCount={c?.total}
                   variant={variant}
+                  coverUrl={covers?.get(p.id)}
                 />
               </div>
             );
@@ -80,6 +84,7 @@ export default function PlaylistRow({
                 playableCount={c?.playable}
                 totalCount={c?.total}
                 variant={variant}
+                coverUrl={covers?.get(p.id)}
               />
             );
           })}

@@ -36,6 +36,12 @@ export default function PlaylistPage() {
   const [followerCount, setFollowerCount] = useState<number>(0);
   const [curator, setCurator] = useState<Awaited<ReturnType<typeof fetchPlaylistCurator>>>(null);
 
+  // 대표 커버 — 포함 음원 중 첫 자켓 (없으면 undefined → thumbnail/그라데이션 fallback)
+  const coverFromTracks = useMemo(
+    () => tracks.find((t) => t.cover_url && t.cover_url.trim())?.cover_url ?? undefined,
+    [tracks],
+  );
+
   // 큐레이터 조회 (0013 미적용 / 작성자 없음 시 null)
   useEffect(() => {
     if (!id) return;
@@ -161,7 +167,7 @@ export default function PlaylistPage() {
             <AutoCover
               title={playlist.title}
               category={playlist.category}
-              imageUrl={playlist.thumbnail_url}
+              imageUrl={playlist.thumbnail_url ?? coverFromTracks}
               size="xl"
             />
           </div>

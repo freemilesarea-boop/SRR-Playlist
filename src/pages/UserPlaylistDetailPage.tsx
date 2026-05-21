@@ -147,7 +147,7 @@ export default function UserPlaylistDetailPage() {
       {/* 헤더 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="aspect-square w-32 shrink-0 overflow-hidden rounded-2xl shadow-elevated ring-1 ring-line/10 sm:w-44">
-          <AutoCover title={data.title} category={null} imageUrl={data.thumbnail_url} size="xl" />
+          <AutoCover title={data.title} category={null} imageUrl={data.thumbnail_url ?? data.computed_cover_url} size="xl" />
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <span className="flex items-center gap-1 text-[11px] font-medium text-ink-mute">
