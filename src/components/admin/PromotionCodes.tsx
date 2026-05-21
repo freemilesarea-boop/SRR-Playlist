@@ -114,7 +114,7 @@ export default function PromotionCodes() {
                 <th className="px-3 py-2.5 text-right font-semibold">할인</th>
                 <th className="px-3 py-2.5 text-left font-semibold">기간</th>
                 <th className="px-3 py-2.5 text-left font-semibold">상태</th>
-                <th className="px-3 py-2.5 text-right font-semibold">사용</th>
+                <th className="px-3 py-2.5 text-right font-semibold">사용 / 제한</th>
                 <th className="px-3 py-2.5 text-right font-semibold">누적 할인</th>
                 <th className="w-px px-3 py-2.5 text-right font-semibold">관리</th>
               </tr>
@@ -154,7 +154,15 @@ export default function PromotionCodes() {
                         <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink-dim">비활성</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{r.redemption_count}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.max_redemptions != null ? (
+                        <span className={r.redemption_count >= r.max_redemptions ? 'font-semibold text-red-300' : ''}>
+                          {r.redemption_count} / {r.max_redemptions}
+                        </span>
+                      ) : (
+                        <span>{r.redemption_count} / <span className="text-ink-dim">무제한</span></span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{(r.total_discount ?? 0).toLocaleString()}원</td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
@@ -199,6 +207,7 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
   const [discountAmount, setDiscountAmount] = useState('2000');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const [maxRedemptions, setMaxRedemptions] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,6 +224,15 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
       setError('할인 금액/비율을 올바르게 입력해주세요.');
       return;
     }
+    let maxR: number | null = null;
+    if (maxRedemptions.trim()) {
+      const m = Number(maxRedemptions);
+      if (!Number.isFinite(m) || m <= 0) {
+        setError('선착순 제한은 1 이상의 숫자여야 해요. (무제한은 비워두세요)');
+        return;
+      }
+      maxR = Math.round(m);
+    }
     setBusy(true);
     try {
       await adminCreatePromotionCode({
@@ -226,6 +244,7 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         note: note.trim() || null,
+        max_redemptions: maxR,
       });
       toast.success('프로모션 코드가 생성됐어요.');
       onSaved();
@@ -291,6 +310,16 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
               <input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="input" />
             </Field>
           </div>
+          <Field label="선착순 제한" hint="비워두면 무제한. 도달 시 신규 적용 차단.">
+            <input
+              type="number"
+              min={1}
+              value={maxRedemptions}
+              onChange={(e) => setMaxRedemptions(e.target.value)}
+              className="input"
+              placeholder="예: 100"
+            />
+          </Field>
           <Field label="메모">
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </Field>

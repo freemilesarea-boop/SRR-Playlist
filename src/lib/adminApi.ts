@@ -367,6 +367,8 @@ export interface PromotionValidation {
   original_amount?: number;
   discount_amount?: number;
   final_amount?: number;
+  max_redemptions?: number | null;
+  remaining?: number | null;
 }
 
 export interface PromotionCodeRow {
@@ -382,6 +384,7 @@ export interface PromotionCodeRow {
   deleted_at: string | null;
   note: string | null;
   created_at: string;
+  max_redemptions: number | null;
   redemption_count: number;
   total_discount: number;
 }
@@ -414,6 +417,7 @@ export async function adminCreatePromotionCode(payload: {
   starts_at?: string | null;
   ends_at?: string | null;
   note?: string | null;
+  max_redemptions?: number | null;
 }): Promise<string> {
   const { data, error } = await supabase.rpc('admin_create_promotion_code', {
     p_code: payload.code,
@@ -424,6 +428,7 @@ export async function adminCreatePromotionCode(payload: {
     p_starts_at: payload.starts_at ?? null,
     p_ends_at: payload.ends_at ?? null,
     p_note: payload.note ?? null,
+    p_max_redemptions: payload.max_redemptions ?? null,
   });
   if (error) throw error;
   return data as string;

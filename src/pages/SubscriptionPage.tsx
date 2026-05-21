@@ -177,7 +177,9 @@ export default function SubscriptionPage() {
         window.location.href = res.payurl;
         return;
       }
-      toast.error(res.error ?? 'PayApp 결제 생성 실패');
+      // 결제 직전 서버 재검증에서 프로모션 사유가 오면 친화 메시지로 표시
+      const reasonMsg = res.reason ? PROMO_REASON_MSG[res.reason] : undefined;
+      toast.error(reasonMsg ?? res.error ?? 'PayApp 결제 생성 실패');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'PayApp 결제 생성 실패');
     } finally {
@@ -618,6 +620,7 @@ const PROMO_REASON_MSG: Record<string, string> = {
   expired: '만료된 프로모션 코드입니다.',
   plan_mismatch: '이 요금제에는 사용할 수 없는 코드입니다.',
   plan_not_found: '사용할 수 없는 프로모션 코드입니다.',
+  usage_limit_reached: '선착순 혜택이 모두 마감되었습니다.',
 };
 
 function PhoneModal({
@@ -728,6 +731,11 @@ function PhoneModal({
               <span>결제 금액</span>
               <span>{applied.final_amount?.toLocaleString()}원</span>
             </div>
+            {applied.remaining != null && (
+              <p className="pt-0.5 text-[11px] font-semibold text-accent">
+                남은 혜택 {applied.remaining.toLocaleString()}개
+              </p>
+            )}
           </div>
         )}
 
