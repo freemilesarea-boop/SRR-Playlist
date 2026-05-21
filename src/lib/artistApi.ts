@@ -169,7 +169,7 @@ export function friendlyUploadError(e: unknown): string {
   const lower = raw.toLowerCase();
   const name = e instanceof Error ? e.name : '';
   if (name === 'AbortError' || lower.includes('aborted') || lower.includes('abort')) {
-    return '파일 업로드 중 연결이 종료되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
+    return '업로드 연결이 중단됐어요. 다시 시도해주세요.';
   }
   if (
     lower.includes('failed to fetch') ||
@@ -184,8 +184,13 @@ export function friendlyUploadError(e: unknown): string {
   if (lower.includes('초과') || lower.includes('timeout') || lower.includes('오래')) {
     return '업로드 시간이 오래 걸리고 있어요. 잠시 후 네트워크가 안정되면 다시 시도해주세요.';
   }
-  if (lower.includes('exceeded') && lower.includes('maximum')) {
-    return '파일 크기가 허용 용량(100MB)을 초과했어요.';
+  if (
+    (lower.includes('exceeded') && (lower.includes('maximum') || lower.includes('size'))) ||
+    lower.includes('too large') ||
+    lower.includes('payload too large') ||
+    lower.includes('413')
+  ) {
+    return '파일 용량이 업로드 한도를 초과했어요. (현재 플랜의 곡당 업로드 한도를 확인해주세요)';
   }
   // 의미 있는 서버 메시지는 살리되, 빈/모호한 raw 는 일반 안내로 대체
   return raw.trim() ? `업로드 실패: ${raw}` : '파일 업로드에 실패했어요. 다시 시도해주세요.';
@@ -281,6 +286,12 @@ export interface UploadInput {
   /** 재제출 시 기존 audio_url (새 파일 미업로드 시 그대로 유지) */
   existingAudioUrl?: string | null;
   existingCoverUrl?: string | null;
+  /**
+   * 일괄 업로드 최적화: 호출 전에 eligibility 를 한 번 확인했으면 true.
+   * 파일마다 eligibility RPC 를 반복 호출(30곡=30 RPC)하지 않도록 내부 검사를 건너뜀.
+   * (submit_artist_release RPC + RLS 가 서버에서 최종 자격을 재검증하므로 안전)
+   */
+  skipEligibilityCheck?: boolean;
 }
 
 export interface UploadResult {
@@ -424,22 +435,26 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     }
 
     stage = 'eligibility';
-    log('eligibility start');
-    const eligibility = await withTimeout(
-      fetchArtistUploadEligibility(),
-      15_000,
-      '업로드 자격 확인 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도해주세요.',
-    );
-    log('eligibility done', { can_upload: eligibility.can_upload });
-    if (!eligibility.can_upload) {
-      const rpcErr = getLastEligibilityError();
-      if (rpcErr) {
-        return {
-          ok: false,
-          error: `업로드 자격 확인 실패 (${rpcErr.code ?? 'RPC'}) — ${rpcErr.message ?? '잠시 후 다시 시도해주세요'}. 문제 지속 시 새로고침 또는 관리자 문의.`,
-        };
+    if (input.skipEligibilityCheck) {
+      log('eligibility skipped (batch pre-checked)');
+    } else {
+      log('eligibility start');
+      const eligibility = await withTimeout(
+        fetchArtistUploadEligibility(),
+        20_000,
+        '업로드 자격 확인이 지연됐어요. 다시 시도해주세요.',
+      );
+      log('eligibility done', { can_upload: eligibility.can_upload });
+      if (!eligibility.can_upload) {
+        const rpcErr = getLastEligibilityError();
+        if (rpcErr) {
+          return {
+            ok: false,
+            error: `업로드 자격 확인 실패 (${rpcErr.code ?? 'RPC'}) — ${rpcErr.message ?? '잠시 후 다시 시도해주세요'}. 문제 지속 시 새로고침 또는 관리자 문의.`,
+          };
+        }
+        return { ok: false, error: formatEligibilityError(eligibility.reasons) };
       }
-      return { ok: false, error: formatEligibilityError(eligibility.reasons) };
     }
 
     stage = 'profile';
