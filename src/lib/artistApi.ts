@@ -644,13 +644,37 @@ export async function deleteMyArtistTrack(trackId: string): Promise<{ ok: boolea
 
 // ---------- ADMIN ----------
 
-export async function listPendingReviewTracks(): Promise<PendingReviewTrackRow[]> {
+export async function listPendingReviewTracks(opts?: {
+  limit?: number;
+  offset?: number;
+  artistId?: string | null;
+}): Promise<PendingReviewTrackRow[]> {
   try {
-    const { data, error } = await supabase.rpc('list_pending_review_tracks', { p_limit: 200 });
+    const { data, error } = await supabase.rpc('list_pending_review_tracks', {
+      p_limit: opts?.limit ?? 50,
+      p_offset: opts?.offset ?? 0,
+      p_artist_id: opts?.artistId ?? null,
+    });
     if (error) return [];
     return (data ?? []) as PendingReviewTrackRow[];
   } catch {
     return [];
+  }
+}
+
+export interface PendingReviewCounts {
+  total: number;
+  by_artist: Array<{ owner_user_id: string | null; artist_name: string; n: number }>;
+}
+
+/** 검수 대기 총건수 + 아티스트별 건수 (관리자 헤더/필터용). */
+export async function countPendingReviewTracks(): Promise<PendingReviewCounts> {
+  try {
+    const { data, error } = await supabase.rpc('count_pending_review_tracks');
+    if (error || !data) return { total: 0, by_artist: [] };
+    return data as PendingReviewCounts;
+  } catch {
+    return { total: 0, by_artist: [] };
   }
 }
 

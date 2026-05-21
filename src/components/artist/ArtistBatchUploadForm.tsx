@@ -11,7 +11,7 @@
  * - 중복 음원 검출: uploadArtistTrack 내부의 sha256 pre-check 가 처리. 결과 "duplicate" 표시.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, Loader2, Copy, FileAudio, Image as ImageIcon } from 'lucide-react';
 import {
   uploadArtistTrack,
@@ -122,6 +122,17 @@ export default function ArtistBatchUploadForm({
   function patchTrack(id: string, patch: Partial<TrackRow>) {
     setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
+
+  // 업로드 진행 중 탭 닫힘/새로고침 방지 경고
+  useEffect(() => {
+    if (!submitting && uploadingCount === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [submitting, uploadingCount]);
 
   function onPickFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -708,9 +719,14 @@ export default function ArtistBatchUploadForm({
             : `총 ${tracks.length}곡 제출`}
         </button>
         <p className="text-[11px] text-ink-dim">
-          동시 업로드 {CONCURRENCY}개씩 진행되며, 각 곡은 독립적으로 성공/실패합니다.
+          동시 업로드 {CONCURRENCY}개씩 순차 처리되며, 각 곡은 독립적으로 성공/실패합니다.
           실패한 곡만 별도로 재시도할 수 있어요.
         </p>
+        {(submitting || uploadingCount > 0) && (
+          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-300">
+            업로드가 끝날 때까지 창을 닫거나 새로고침하지 마세요. 대량 업로드는 순차 처리되어 시간이 걸릴 수 있어요.
+          </p>
+        )}
       </section>
     </form>
   );
