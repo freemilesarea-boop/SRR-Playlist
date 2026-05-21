@@ -334,7 +334,7 @@ export default function Player() {
       const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
       if (skipChainRef.current >= cap) {
         pause();
-        toast.error('재생 가능한 음원이 없어요. 관리자에서 재업로드가 필요합니다.');
+        toast.error('아직 재생 가능한 곡이 없어요.');
         skipChainRef.current = 0;
         return;
       }
@@ -349,7 +349,7 @@ export default function Player() {
         const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
         if (skipChainRef.current >= cap) {
           pause();
-          toast.error('재생 가능한 음원이 없어요. 관리자 페이지에서 음원을 업로드해주세요.');
+          toast.error('아직 재생 가능한 곡이 없어요.');
           skipChainRef.current = 0;
           return;
         }

@@ -45,7 +45,7 @@ export default function HomeLibrarySections() {
   function play(tracks: TrackRow[], idx: number) {
     const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      toast.info('재생 가능한 음원이 없어요.');
+      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const origStart = tracks[idx];

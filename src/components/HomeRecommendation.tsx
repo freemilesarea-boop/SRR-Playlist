@@ -6,6 +6,7 @@ import {
 } from '@/lib/recommendationApi';
 import { getKstTimeSlot, getTimeSlotLabel } from '@/lib/timeTheme';
 import { usePlayerStore } from '@/store/playerStore';
+import { useAuthStore } from '@/store/authStore';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import AutoCover from '@/components/AutoCover';
@@ -72,7 +73,8 @@ export default function HomeRecommendation({
     if (!isPlayableUrl(tracks[idx]?.audio_url)) return;
     const { playable } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      toast.info('재생 가능한 음원이 없어요.');
+      // 비회원은 로그인 모달(Player gate)로 유도 — 빈 큐 toast 표시 안 함
+      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     const targetId = tracks[idx].id;

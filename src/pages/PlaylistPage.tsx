@@ -89,13 +89,13 @@ export default function PlaylistPage() {
   function handlePlay(startIndex = 0, shuffle = false) {
     if (!playlist) return;
     if (tracks.length === 0) {
-      toast.info('이 플레이리스트에는 아직 곡이 없어요.');
+      if (useAuthStore.getState().session) toast.info('이 플레이리스트에는 아직 곡이 없어요.');
       return;
     }
     // 재생 가능 트랙만 큐에 — 무한 next() 캐스케이드 차단
     const { playable, dropped } = filterPlayableTracks(tracks);
     if (playable.length === 0) {
-      toast.info('아직 재생할 수 있는 음원이 없어요. 관리자 페이지에서 업로드해주세요.');
+      if (useAuthStore.getState().session) toast.info('아직 재생 가능한 곡이 없어요.');
       return;
     }
     // 원본 시작 트랙이 살아남았는지 확인 → 새 인덱스로 매핑
