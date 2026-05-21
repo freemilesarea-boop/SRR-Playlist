@@ -33,6 +33,8 @@ import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
+import SubscriptionGate, { type GateMode } from '@/components/player/SubscriptionGate';
+import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 
@@ -148,6 +150,16 @@ export default function Player() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [volumePopover]);
 
+  // 0104 — 구독 게이트: anonymous 차단 / free 25초 미리듣기
+  const session = useAuthStore((s) => s.session);
+  const gateProfile = useAuthStore((s) => s.profile);
+  const membership = resolveMembership(session, gateProfile);
+  const [gateModal, setGateModal] = useState<GateMode | null>(null);
+  const pvTrackIdRef = useRef<string | null>(null);
+  const previewSecRef = useRef(0);
+  const previewBlockedRef = useRef(false);
+  const previewLastTRef = useRef(0);
+
   const skipChainRef = useRef(0);
   useEffect(() => {
     if (playable) skipChainRef.current = 0;
@@ -156,6 +168,32 @@ export default function Player() {
   useEffect(() => {
     setErrored(false);
   }, [current?.id]);
+
+  /* ---------- 0104 구독 게이트 ---------- */
+  // 곡 변경 시 미리듣기 타이머 리셋
+  useEffect(() => {
+    pvTrackIdRef.current = current?.id ?? null;
+    previewSecRef.current = 0;
+    previewBlockedRef.current = false;
+    previewLastTRef.current = 0;
+  }, [current?.id]);
+
+  // 재생 시작 시 게이트: anonymous 차단 + free 미리듣기 초과 차단 (모든 진입점 단일 choke)
+  useEffect(() => {
+    if (!playing) return;
+    if (membership === 'anonymous') {
+      pause();
+      setGateModal('login');
+    } else if (
+      membership === 'free' &&
+      previewBlockedRef.current &&
+      pvTrackIdRef.current === current?.id
+    ) {
+      pause();
+      setGateModal('upsell');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, membership, current?.id]);
 
   /* ---------- 0093 MediaSession API: 잠금화면 / 이어폰 / Bluetooth 컨트롤 ---------- */
   useEffect(() => {
@@ -566,6 +604,35 @@ export default function Player() {
     const t = target.currentTime;
     setCurrentTime(t);
     accumulatePlaylistView(t);
+    enforcePreviewLimit(t);
+  }
+
+  // 0104 — 무료회원 25초 미리듣기 강제. 실제 청취 delta 누적 (seek 점프/뮤트/일시정지 제외).
+  function enforcePreviewLimit(t: number) {
+    if (membership !== 'free') return;
+    // 곡 변경은 effect 가 리셋 — 여기선 같은 곡 기준으로 누적
+    if (pvTrackIdRef.current !== current?.id) {
+      previewLastTRef.current = t;
+      return;
+    }
+    if (previewBlockedRef.current) {
+      previewLastTRef.current = t;
+      if (playing) {
+        pause();
+        setGateModal('upsell');
+      }
+      return;
+    }
+    const delta = t - previewLastTRef.current;
+    previewLastTRef.current = t;
+    if (playing && delta > 0 && delta < 2 && volume > 0) {
+      previewSecRef.current += delta;
+      if (previewSecRef.current >= PREVIEW_LIMIT_SECONDS) {
+        previewBlockedRef.current = true;
+        pause();
+        setGateModal('upsell');
+      }
+    }
   }
 
   // 0102 — 플레이리스트 청취 조회수 누적.
@@ -791,6 +858,7 @@ export default function Player() {
 
   return (
     <>
+      {gateModal && <SubscriptionGate mode={gateModal} onClose={() => setGateModal(null)} />}
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
         ref={audioARef}
