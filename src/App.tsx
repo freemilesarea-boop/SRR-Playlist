@@ -176,35 +176,32 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/auth/reset" element={<AuthResetPasswordPage />} />
-          <Route
-            element={
-              <RequireAuth>
-                <AppShell />
-              </RequireAuth>
-            }
-          >
+          <Route element={<AppShell />}>
+            {/* ---- 공개 (비회원 열람 가능, 재생 시 Player gate 가 로그인 유도) ---- */}
             <Route index element={<HomePage />} />
             <Route path="/charts" element={<ChartPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/track/:id" element={<TrackSharePage />} />
             <Route path="/curator/:handle" element={<CuratorProfilePage />} />
-            <Route path="/payment/success" element={<PaymentSuccessPage />} />
-            <Route path="/payment/fail" element={<PaymentFailPage />} />
-            <Route path="/artist" element={<ArtistDashboardPage />} />
-            <Route path="/artist/contract" element={<ArtistContractPage />} />
-            <Route path="/artist/settlements" element={<ArtistSettlementsPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/notice" element={<NoticePage />} />
             <Route path="/support" element={<SupportPage />} />
-            <Route path="/business" element={<BusinessPage />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/subscription" element={<SubscriptionPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/curator/studio" element={<CuratorStudioPage />} />
-            <Route path="/my/playlists" element={<MyPlaylistsPage />} />
-            <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
+
+            {/* ---- 보호 (로그인 필요) ---- */}
+            <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
+            <Route path="/payment/fail" element={<RequireAuth><PaymentFailPage /></RequireAuth>} />
+            <Route path="/artist" element={<RequireAuth><ArtistDashboardPage /></RequireAuth>} />
+            <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
+            <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
+            <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
+            <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
+            <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
+            <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+            <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
+            <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
+            <Route path="/my/playlist/:id" element={<RequireAuth><UserPlaylistDetailPage /></RequireAuth>} />
             <Route
               path="/admin"
               element={
