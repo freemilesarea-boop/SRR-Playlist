@@ -160,6 +160,38 @@ export async function withTimeout<T>(
 }
 
 /**
+ * 업로드 단계 raw 에러를 사용자 친화 메시지로 변환.
+ * AbortError / "signal is aborted without reason" / 네트워크 오류가
+ * 사용자에게 그대로 노출되지 않도록 한다.
+ */
+export function friendlyUploadError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e ?? '');
+  const lower = raw.toLowerCase();
+  const name = e instanceof Error ? e.name : '';
+  if (name === 'AbortError' || lower.includes('aborted') || lower.includes('abort')) {
+    return '파일 업로드 중 연결이 종료되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
+  }
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('load failed') ||
+    lower.includes('err_network') ||
+    lower.includes('connection')
+  ) {
+    return '네트워크 상태를 확인해주세요. 업로드 연결이 불안정합니다.';
+  }
+  if (lower.includes('초과') || lower.includes('timeout') || lower.includes('오래')) {
+    return '업로드 시간이 오래 걸리고 있어요. 잠시 후 네트워크가 안정되면 다시 시도해주세요.';
+  }
+  if (lower.includes('exceeded') && lower.includes('maximum')) {
+    return '파일 크기가 허용 용량(100MB)을 초과했어요.';
+  }
+  // 의미 있는 서버 메시지는 살리되, 빈/모호한 raw 는 일반 안내로 대체
+  return raw.trim() ? `업로드 실패: ${raw}` : '파일 업로드에 실패했어요. 다시 시도해주세요.';
+}
+
+/**
  * 0077-hotfix — 업로드/저장 등 user.id 만 필요한 액션에서 사용할 빠른 user 조회.
  *
  * `supabase.auth.getSession()` 이 토큰 refresh / 네트워크 지연으로 무한 pending 되면
@@ -480,20 +512,22 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       log('audio upload start', { path: audioPath, sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
       let audioUpRes;
       try {
+        // 업로드는 글로벌 fetch timeout 미적용(supabase.ts) + 앱 단 상한 10분.
+        // Slow 3G 대용량(100MB)도 완주하도록 넉넉히 둔다.
         audioUpRes = await withTimeout(
           supabase.storage.from('audio').upload(audioPath, input.audioFile, {
             cacheControl: '31536000', upsert: false, contentType: audioContentType,
           }),
-          120_000,
-          '오디오 업로드 시간이 초과되었습니다 (2분). 파일 크기 또는 네트워크 상태를 확인한 뒤 다시 시도해주세요.',
+          600_000,
+          '업로드 시간이 오래 걸리고 있어요. 네트워크 상태를 확인한 뒤 다시 시도해주세요.',
         );
       } catch (e) {
-        log('audio upload TIMEOUT', { err: e instanceof Error ? e.message : String(e) });
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        log('audio upload error', { err: e instanceof Error ? e.message : String(e) });
+        return { ok: false, error: friendlyUploadError(e) };
       }
       if (audioUpRes.error) {
         log('audio upload fail', { msg: audioUpRes.error.message });
-        return { ok: false, error: `오디오 업로드 실패: ${audioUpRes.error.message}` };
+        return { ok: false, error: friendlyUploadError(audioUpRes.error) };
       }
       const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
       audioUrl = audioPub.publicUrl;
@@ -516,8 +550,8 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           supabase.storage.from('covers').upload(coverPath, input.coverFile, {
             cacheControl: '31536000', upsert: false, contentType: input.coverFile.type || undefined,
           }),
-          45_000,
-          '커버 이미지 업로드 시간이 초과되었습니다 (45초).',
+          120_000,
+          '커버 이미지 업로드 시간이 초과되었습니다.',
         );
         if (!coverUpErr) {
           const { data } = supabase.storage.from('covers').getPublicUrl(coverPath);
