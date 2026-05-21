@@ -785,6 +785,33 @@ export async function adminListArtistTracks(opts?: {
   return (data ?? []) as AdminTrackRow[];
 }
 
+export interface BulkDeleteResult {
+  deleted_count: number;
+  skipped_count: number;
+  skipped: Array<{ track_id: string; reason: string }>;
+  failed: Array<{ track_id: string; error: string }>;
+  mode: 'soft' | 'hard';
+}
+
+/**
+ * 음원 일괄 삭제 (관리자). mode='soft'(기본) = release_status='removed' 복구 가능,
+ * 'hard' = row 완전 삭제 + storage cleanup 큐 적재.
+ * 정산/스트리밍 연결 곡, released/scheduled/approved 곡은 서버에서 차단(skip).
+ */
+export async function adminBulkDeleteTracks(
+  trackIds: string[],
+  mode: 'soft' | 'hard' = 'soft',
+  reason?: string | null,
+): Promise<BulkDeleteResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_delete_tracks', {
+    p_track_ids: trackIds,
+    p_mode: mode,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkDeleteResult;
+}
+
 // ---------- STREAMING ANALYTICS (0019) ----------
 
 export interface ArtistStreamingSummaryRow {

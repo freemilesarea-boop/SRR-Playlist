@@ -1,8 +1,11 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
-import { adminListArtistTracks, type AdminTrackRow } from '@/lib/artistApi';
+import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle } from 'lucide-react';
+import { adminListArtistTracks, adminBulkDeleteTracks, type AdminTrackRow } from '@/lib/artistApi';
+import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import TrackModerationPanel from './TrackModerationPanel';
+
+const PROTECTED_STATUSES = ['released', 'scheduled', 'approved'];
 
 type StatusFilter =
   | ''
@@ -61,6 +64,10 @@ export default function ArtistTrackManagementList() {
   const [search, setSearch] = useState('');
   const [busyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [delModal, setDelModal] = useState(false);
+  const [delHard, setDelHard] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -71,10 +78,55 @@ export default function ArtistTrackManagementList() {
         search: search || undefined,
       });
       setRows(data);
+      setSelected(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  const pageIds = rows.map((r) => r.track_id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  function toggleSelectAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  // 선택 항목 중 보호 상태(released/scheduled/approved) 개수 — 모달 안내용
+  const selectedProtected = rows.filter(
+    (r) => selected.has(r.track_id) && PROTECTED_STATUSES.includes(r.release_status ?? ''),
+  ).length;
+
+  async function runDelete() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setDelBusy(true);
+    try {
+      const res = await adminBulkDeleteTracks(ids, delHard ? 'hard' : 'soft', '관리자 일괄 삭제');
+      if (res.skipped_count > 0) {
+        toast.warning(`${res.deleted_count}곡 삭제 완료, ${res.skipped_count}곡 건너뜀 (발매/정산 이력)`);
+      } else {
+        toast.success(`${res.deleted_count}곡 삭제 완료${delHard ? ' (완전 삭제)' : ''}`);
+      }
+      if (res.failed.length > 0) toast.error(`${res.failed.length}곡 처리 실패`);
+      setDelModal(false);
+      setDelHard(false);
+      await load();
+    } catch (e) {
+      toast.error(`삭제 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDelBusy(false);
     }
   }
 
@@ -146,11 +198,33 @@ export default function ArtistTrackManagementList() {
         </select>
       </div>
 
+      {/* 일괄 선택/삭제 툴바 */}
+      {!loading && rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
+            <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
+            현재 목록 전체 선택
+          </label>
+          <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => setDelModal(true)}
+            disabled={selected.size === 0}
+            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/15 dark:text-red-300"
+          >
+            <Trash2 size={12} /> 선택 삭제
+          </button>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1200px] text-sm">
             <thead>
               <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
+                <th className="w-px px-3 py-2.5 text-left font-semibold">
+                  <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} aria-label="전체 선택" />
+                </th>
                 <th className="px-3 py-2.5 text-left font-semibold">track_code</th>
                 <th className="px-3 py-2.5 text-left font-semibold">제목</th>
                 <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
@@ -165,14 +239,14 @@ export default function ArtistTrackManagementList() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-mute">
                     등록된 음원이 없어요.
                   </td>
                 </tr>
@@ -184,6 +258,14 @@ export default function ArtistTrackManagementList() {
                 return (
                   <Fragment key={r.track_id}>
                   <tr className="border-b border-line/10 hover:bg-bg-hover">
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.track_id)}
+                        onChange={() => toggleSelect(r.track_id)}
+                        aria-label="선택"
+                      />
+                    </td>
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
@@ -289,7 +371,7 @@ export default function ArtistTrackManagementList() {
                   </tr>
                   {isExpanded && (
                     <tr className="border-b border-line/10 bg-bg-soft/30">
-                      <td colSpan={9} className="px-3 py-3">
+                      <td colSpan={10} className="px-3 py-3">
                         <TrackModerationPanel
                           trackId={r.track_id}
                           trackTitle={r.title}
@@ -308,6 +390,53 @@ export default function ArtistTrackManagementList() {
         </div>
       </div>
 
+      {delModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+          onClick={() => !delBusy && setDelModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md space-y-3 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
+          >
+            <h3 className="flex items-center gap-2 text-base font-bold">
+              <AlertTriangle size={18} className="text-red-400" /> 음원 일괄 삭제
+            </h3>
+            <Alert tone="error">
+              <p>선택한 <b>{selected.size}곡</b>을 삭제합니다. 이 작업은 되돌리기 어렵습니다.</p>
+              {selectedProtected > 0 && (
+                <p className="mt-1 text-[11px]">
+                  이 중 <b>{selectedProtected}곡</b>은 발매/정산 이력이 있어 삭제되지 않고 건너뜁니다.
+                </p>
+              )}
+            </Alert>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-bg-card p-3 text-xs ring-1 ring-line/10">
+              <input
+                type="checkbox"
+                checked={delHard}
+                onChange={(e) => setDelHard(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <b>완전 삭제 (hard)</b> — DB에서 행을 제거하고 스토리지 파일을 정리 대상으로 표시합니다.
+                해제 시 <b>보관 삭제(soft)</b>: 목록에서 숨기고 복구할 수 있어요. (테스트 데이터는 완전 삭제 권장)
+              </span>
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setDelModal(false)} disabled={delBusy} className="btn-ghost px-3 py-2 text-xs">
+                취소
+              </button>
+              <button
+                onClick={() => void runDelete()}
+                disabled={delBusy}
+                className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+              >
+                {delBusy ? '삭제 중…' : `${selected.size}곡 삭제`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
