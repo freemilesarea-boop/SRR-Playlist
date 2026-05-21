@@ -59,13 +59,29 @@ export async function createPayappSubscription(payload: {
   plan_type: 'individual' | 'business';
   recvphone: string;
   promotion_code?: string | null;
-}): Promise<{ ok: boolean; payurl?: string; order_no?: string; error?: string }> {
+}): Promise<{ ok: boolean; payurl?: string; order_no?: string; error?: string; reason?: string }> {
   const { data, error } = await supabase.functions.invoke('create-payapp-subscription', {
     body: payload,
   });
-  if (error) return { ok: false, error: error.message };
-  const r = (data ?? {}) as { ok?: boolean; payurl?: string; order_no?: string; error?: string };
-  return r.ok ? { ok: true, payurl: r.payurl, order_no: r.order_no } : { ok: false, error: r.error };
+  if (error) {
+    // non-2xx 응답 body(예: {error,reason})를 error.context 에서 추출 — 프로모션 마감 등 사유 전달
+    let body: { error?: string; reason?: string } = {};
+    try {
+      const errAny = error as unknown as { context?: Response };
+      if (errAny.context && typeof errAny.context.json === 'function') {
+        body = (await errAny.context.json()) as { error?: string; reason?: string };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: body.error ?? error.message, reason: body.reason };
+  }
+  const r = (data ?? {}) as {
+    ok?: boolean; payurl?: string; order_no?: string; error?: string; reason?: string;
+  };
+  return r.ok
+    ? { ok: true, payurl: r.payurl, order_no: r.order_no }
+    : { ok: false, error: r.error, reason: r.reason };
 }
 
 export async function cancelPayappSubscription(

@@ -126,6 +126,7 @@ serve(async (req) => {
   let chargeAmount: number = plan.price;
   let promoId: string | null = null;
   let promoDiscount = 0;
+  let redemptionId: string | null = null;
   if (promotionCode) {
     const { data: vr } = await sb.rpc('validate_promotion_code', {
       p_code: promotionCode,
@@ -141,6 +142,22 @@ serve(async (req) => {
     promoId = v.promotion_code_id ?? null;
     promoDiscount = v.discount_amount ?? 0;
     chargeAmount = typeof v.final_amount === 'number' ? v.final_amount : plan.price;
+
+    // 선착순 슬롯 예약 — row lock 으로 동시 결제 race 직렬화. 마감 시 결제 차단.
+    if (promoId) {
+      const { data: rid } = await sb.rpc('redeem_promotion_code', {
+        p_promotion_code_id: promoId,
+        p_user_id: user.id,
+        p_plan_type: plan.plan_type,
+        p_original_amount: originalAmount,
+        p_discount_amount: promoDiscount,
+        p_final_amount: chargeAmount,
+      });
+      if (!rid) {
+        return json({ error: 'invalid_promotion', reason: 'usage_limit_reached' }, 400);
+      }
+      redemptionId = rid as string;
+    }
   }
 
   const orderNo = generateOrderNo(user.id);
@@ -197,18 +214,14 @@ serve(async (req) => {
     final_amount: chargeAmount,
   }).select('id').single();
 
-  // 프로모션 사용 기록 (무제한 중복 허용 — 단순 insert)
-  if (promoId) {
-    await sb.from('promotion_code_redemptions').insert({
-      promotion_code_id: promoId,
-      user_id: user.id,
-      payment_order_id: orderRow?.id ?? null,
-      subscription_id: subscriptionId,
-      plan_type: plan.plan_type,
-      original_amount: originalAmount,
-      discount_amount: promoDiscount,
-      final_amount: chargeAmount,
-    });
+  // 선착순 예약 단계에서 이미 사용기록(redemption) 생성됨 → order/subscription id 만 연결
+  if (redemptionId) {
+    await sb.from('promotion_code_redemptions')
+      .update({
+        payment_order_id: orderRow?.id ?? null,
+        subscription_id: subscriptionId,
+      })
+      .eq('id', redemptionId);
   }
 
   // PayApp rebillRegist 호출
@@ -267,6 +280,8 @@ serve(async (req) => {
       .from('payment_orders')
       .update({ status: 'failed', raw_response: { error: String(e) } })
       .eq('order_no', orderNo);
+    // PayApp 호출 실패 → 예약한 선착순 슬롯 반환
+    if (redemptionId) await sb.from('promotion_code_redemptions').delete().eq('id', redemptionId);
     return json({ error: 'payapp request failed' }, 502);
   }
 
@@ -298,6 +313,8 @@ serve(async (req) => {
       raw_response: payappResp,
     })
     .eq('order_no', orderNo);
+  // 결제 등록 실패 → 예약한 선착순 슬롯 반환
+  if (redemptionId) await sb.from('promotion_code_redemptions').delete().eq('id', redemptionId);
   return json(
     {
       ok: false,
