@@ -74,6 +74,17 @@ export async function fetchPlaylistCounts(): Promise<
     if (url.length > 0) entry.playable += 1;
     map.set(r.playlist_id, entry);
   });
+
+  // 자동(스마트) 플레이리스트는 playlist_tracks 가 없으므로 동적 매칭 수를 별도 RPC 로 병합.
+  // (없으면 "0곡" 으로 표시되고 정렬에서 밀려 비어있는 것처럼 보임)
+  try {
+    const { data: autoCounts } = await supabase.rpc('auto_playlist_counts');
+    for (const a of (autoCounts ?? []) as Array<{ playlist_id: string; n: number }>) {
+      map.set(a.playlist_id, { total: a.n, playable: a.n });
+    }
+  } catch {
+    /* RPC 미적용 환경 — 조용히 폴백 */
+  }
   return map;
 }
 
