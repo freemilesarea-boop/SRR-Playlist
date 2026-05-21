@@ -16,6 +16,8 @@ import { Upload, X, CheckCircle2, AlertCircle, Loader2, Copy, FileAudio, Image a
 import {
   uploadArtistTrack,
   validateArtistAudioFile,
+  fetchArtistUploadEligibility,
+  formatEligibilityError,
   type ReleaseType,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
@@ -246,7 +248,20 @@ export default function ArtistBatchUploadForm({
       lyrics: t.lyrics.trim() || undefined,
       audioFile: t.file,
       coverFile: t.coverFile ?? common.coverFile,
+      // 자격은 제출 직전 한 번만 확인 (파일마다 RPC 반복 호출 방지)
+      skipEligibilityCheck: true,
     });
+  }
+
+  /** 제출 직전 업로드 자격을 1회만 확인. 통과 시 null, 실패 시 사용자 메시지 반환. */
+  async function checkEligibilityOnce(): Promise<string | null> {
+    try {
+      const elig = await fetchArtistUploadEligibility();
+      if (!elig.can_upload) return formatEligibilityError(elig.reasons);
+      return null;
+    } catch {
+      return '업로드 자격 확인이 지연됐어요. 다시 시도해주세요.';
+    }
   }
 
   async function runPool(ids: string[]) {
@@ -289,6 +304,11 @@ export default function ArtistBatchUploadForm({
         toast.info('업로드할 곡이 없어요 (모두 성공 상태)');
         return;
       }
+      const eligErr = await checkEligibilityOnce();
+      if (eligErr) {
+        toast.error(eligErr);
+        return;
+      }
       setTracks((prev) =>
         prev.map((t) =>
           targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
@@ -322,6 +342,11 @@ export default function ArtistBatchUploadForm({
     }
     setSubmitting(true);
     try {
+      const eligErr = await checkEligibilityOnce();
+      if (eligErr) {
+        toast.error(eligErr);
+        return;
+      }
       setTracks((prev) =>
         prev.map((t) =>
           failedIds.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
