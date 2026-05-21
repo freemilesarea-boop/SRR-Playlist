@@ -14,6 +14,7 @@ import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
+import { LogoMark } from '@/components/Logo';
 
 // 홈/로그인은 즉시 로드, 나머지는 라우트 단위로 코드 스플리팅.
 // lazyWithRetry — 새 deploy 직후 옛 manifest 의 chunk 404 시 1회 자동 reload.
@@ -53,6 +54,7 @@ function RouteFallback() {
   }, []);
   return (
     <div className="flex h-[60vh] flex-col items-center justify-center gap-3 text-ink-mute">
+      <LogoMark size={40} className="animate-pulse text-accent" />
       <p>불러오는 중…</p>
       {stuck && (
         <button
@@ -70,7 +72,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, profile, user, loading, signOut } = useAuthStore();
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center text-ink-mute">불러오는 중…</div>
+      <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+        <LogoMark size={44} className="animate-pulse text-accent" />
+        <p>불러오는 중…</p>
+      </div>
     );
   }
   if (!session) return <Navigate to="/login" replace />;

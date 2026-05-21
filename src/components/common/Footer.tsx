@@ -1,5 +1,6 @@
-import { Instagram, Music2 } from 'lucide-react';
+import { Instagram } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Logo from '@/components/Logo';
 
 interface LinkItem {
   label: string;
@@ -66,12 +67,7 @@ export default function Footer() {
           {/* Brand col */}
           <div className="lg:col-span-4">
             <Link to="/" className="inline-flex items-center gap-2.5 group">
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-white ring-1 ring-white/15 transition-transform group-hover:scale-105"
-                style={{ boxShadow: '0 6px 20px rgb(var(--color-accent) / 0.45)' }}
-              >
-                <Music2 size={17} fill="currentColor" />
-              </span>
+              <Logo size={36} className="transition-transform group-hover:scale-105" />
               <span className="text-lg font-extrabold tracking-tight text-white">듣다</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-neutral-400">
