@@ -57,6 +57,9 @@ interface PendingJob {
   changes_requested_reason: string | null;
   removed_reason: string | null;
   artist_name: string | null;
+  batch_key: string | null;
+  batch_count: number;
+  batch_titles: string[] | null;
 }
 
 function escapeHtml(s: string): string {
@@ -101,14 +104,32 @@ function buildHtml(job: PendingJob, appUrl: string): string {
   const color = kindColor[job.kind] || '#18181b';
   const bg = kindBg[job.kind] || '#f4f4f5';
 
+  // 묶음(앨범/일괄 업로드) 단위 — N곡이면 곡 목록을 함께 표기, 1곡이면 단일 상세
+  const count = Math.max(1, job.batch_count || 1);
+  const titles = (job.batch_titles && job.batch_titles.length > 0) ? job.batch_titles : [job.track_title];
+  const nLabel = count > 1 ? `${count}곡` : '음원';
+
   let intro = '';
-  if (job.kind === 'released') intro = '제출하신 음원이 검수 승인되어 지금 바로 서비스에 공개되었습니다. 정산 대상에 즉시 포함됩니다.';
-  else if (job.kind === 'scheduled') intro = '제출하신 음원이 검수 승인되어 발매일에 자동으로 공개됩니다. 발매일이 도래할 때까지 공개되지 않으며 정산 대상에서도 제외됩니다.';
-  else if (job.kind === 'approved') intro = '제출하신 음원이 검수 승인되었습니다.';
-  else if (job.kind === 'rejected') intro = '제출하신 음원이 검수에서 반려되었습니다. 아래 사유를 확인해주세요.';
-  else if (job.kind === 'revision_requested') intro = '제출하신 음원에 수정 요청이 도착했습니다. 아래 사유에 따라 수정 후 재제출해주세요.';
-  else if (job.kind === 'removed') intro = '권리 또는 정책 사유로 음원이 제거되었습니다. 관련 문의는 운영팀에 연락 부탁드립니다.';
+  if (job.kind === 'released') intro = `제출하신 ${nLabel}이 검수 승인되어 지금 바로 서비스에 공개되었습니다. 정산 대상에 즉시 포함됩니다.`;
+  else if (job.kind === 'scheduled') intro = `제출하신 ${nLabel}이 검수 승인되어 발매일에 자동으로 공개됩니다. 발매일이 도래할 때까지 공개되지 않으며 정산 대상에서도 제외됩니다.`;
+  else if (job.kind === 'approved') intro = `제출하신 ${nLabel}이 검수 승인되었습니다.`;
+  else if (job.kind === 'rejected') intro = `제출하신 ${nLabel}이 검수에서 반려되었습니다. 아래 사유를 확인해주세요.`;
+  else if (job.kind === 'revision_requested') intro = `제출하신 ${nLabel}에 수정 요청이 도착했습니다. 아래 사유에 따라 수정 후 재제출해주세요.`;
+  else if (job.kind === 'removed') intro = `권리 또는 정책 사유로 ${nLabel}이 제거되었습니다. 관련 문의는 운영팀에 연락 부탁드립니다.`;
   else intro = '음원 상태가 업데이트되었습니다.';
+
+  // 묶음 곡 목록 (2곡 이상일 때만 별도 목록 블록 — 너무 길면 상위 30곡까지)
+  const listBlock = count > 1
+    ? `<tr><td style="padding:4px 28px 12px 28px;">
+         <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 16px;">
+           <p style="margin:0 0 8px 0;font-size:11px;color:#71717a;font-weight:700;">승인된 곡 목록 (${count}곡)</p>
+           <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#27272a;">
+             ${titles.slice(0, 30).map((t) => `<li>${escapeHtml(t || '')}</li>`).join('')}
+             ${count > 30 ? `<li style="color:#71717a;">외 ${count - 30}곡…</li>` : ''}
+           </ol>
+         </div>
+       </td></tr>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><title>${escapeHtml(job.subject)}</title></head>
@@ -127,13 +148,16 @@ function buildHtml(job: PendingJob, appUrl: string): string {
         <tr><td style="padding:12px 28px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.7;">
             <tr><td style="color:#71717a;width:120px;">아티스트</td><td style="color:#18181b;font-weight:600;">${escapeHtml(artistDisplay)}</td></tr>
-            <tr><td style="color:#71717a;">곡 제목</td><td style="color:#18181b;font-weight:600;">${safeTitle || '—'}</td></tr>
-            <tr><td style="color:#71717a;">참여 아티스트</td><td style="color:#18181b;">${safeArtist || '—'}</td></tr>
-            <tr><td style="color:#71717a;">트랙 코드</td><td style="color:#18181b;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;">${escapeHtml(job.track_code ?? '—')}</td></tr>
+            ${count > 1
+              ? `<tr><td style="color:#71717a;">곡 수</td><td style="color:#18181b;font-weight:600;">${count}곡</td></tr>`
+              : `<tr><td style="color:#71717a;">곡 제목</td><td style="color:#18181b;font-weight:600;">${safeTitle || '—'}</td></tr>
+                 <tr><td style="color:#71717a;">참여 아티스트</td><td style="color:#18181b;">${safeArtist || '—'}</td></tr>
+                 <tr><td style="color:#71717a;">트랙 코드</td><td style="color:#18181b;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;">${escapeHtml(job.track_code ?? '—')}</td></tr>`}
             <tr><td style="color:#71717a;">발매일</td><td style="color:#18181b;">${escapeHtml(fmtDateKR(job.release_date))}</td></tr>
-            <tr><td style="color:#71717a;">상태</td><td style="color:${color};font-weight:600;">${label} (${escapeHtml(job.release_status)})</td></tr>
+            <tr><td style="color:#71717a;">상태</td><td style="color:${color};font-weight:600;">${label}</td></tr>
           </table>
         </td></tr>
+        ${listBlock}
         ${safeNote ? `
         <tr><td style="padding:0 28px 12px 28px;">
           <div style="background:${bg};border:1px solid ${color}33;border-radius:10px;padding:14px 16px;">
@@ -214,7 +238,7 @@ serve(async (req) => {
   if (!userRes?.user) return json({ error: 'unauthorized' }, 401);
   const user = userRes.user;
 
-  let body: { track_id?: string; health?: boolean } = {};
+  let body: { track_id?: string; health?: boolean; drain?: boolean } = {};
   try { body = await req.json(); }
   catch { return json({ error: 'invalid body' }, 400); }
 
@@ -235,7 +259,9 @@ serve(async (req) => {
   }
 
   const trackId = body.track_id;
-  if (!trackId) return json({ error: 'missing track_id' }, 400);
+  // drain 모드: track_id 없이 모든 pending job 처리 (일괄/전체 승인 후 1회 호출).
+  // 묶음당 job 이 1개만 enqueue 되므로, 전체 drain 해도 메일은 묶음 수만큼만 발송됨.
+  const drain = body.drain === true || !trackId;
 
   // 권한: admin 만 호출 허용 (artist 본인 dispatch 호출은 자동 발생하지 않으므로)
   const { data: u } = await sbAdmin.from('users').select('role').eq('id', user.id).maybeSingle();
@@ -243,7 +269,7 @@ serve(async (req) => {
 
   const { data: jobs, error: jErr } = await sbAdmin.rpc(
     'get_pending_track_moderation_email_jobs',
-    { p_track_id: trackId, p_limit: 50 },
+    { p_track_id: drain ? null : trackId, p_limit: drain ? 200 : 50 },
   );
   if (jErr) {
     console.error('[mod-dispatch] get_pending failed:', jErr);

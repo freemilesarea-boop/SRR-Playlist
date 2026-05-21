@@ -1385,6 +1385,68 @@ export async function dispatchTrackModerationEmails(
   }
 }
 
+/** 묶음/전체 승인 후 1회 호출 — 모든 pending 메일 job 을 drain (묶음당 1통). */
+export async function dispatchAllModerationEmails(): Promise<{
+  ok: boolean; sent?: number; failed?: number; processed?: number; error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke('dispatch-moderation-emails', {
+      body: { drain: true },
+    });
+    if (error) return { ok: false, error: error.message };
+    return data ?? { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export interface BulkModerationResult {
+  ok: boolean;
+  approved?: number;
+  rejected?: number;
+  remaining?: number;
+  failed: Array<{ track_id: string; error: string }>;
+}
+
+export async function adminBulkApproveTracks(
+  trackIds: string[],
+  immediate: boolean | null = null,
+): Promise<BulkModerationResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_approve_tracks', {
+    p_track_ids: trackIds,
+    p_immediate: immediate,
+  });
+  if (error) throw error;
+  return data as BulkModerationResult;
+}
+
+export async function adminBulkRejectTracks(
+  trackIds: string[],
+  reason: string,
+): Promise<BulkModerationResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_reject_tracks', {
+    p_track_ids: trackIds,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as BulkModerationResult;
+}
+
+/** 전체(필터) 승인 — 서버가 pending 을 chunk(p_limit)로 승인하고 remaining 반환. */
+export async function adminApproveAllPending(
+  artistId: string | null = null,
+  immediate: boolean | null = null,
+  limit = 200,
+): Promise<BulkModerationResult> {
+  const { data, error } = await supabase.rpc('admin_approve_all_pending', {
+    p_artist_id: artistId,
+    p_immediate: immediate,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return data as BulkModerationResult;
+}
+
 /**
  * 마지막 fetchArtistUploadEligibility 호출의 raw error (사용자 toast 보강용).
  * production 빌드에서도 노출 — 운영 진단 시 정확한 메시지 확보.
