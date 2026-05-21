@@ -12,6 +12,7 @@ import {
   ScrollText,
   Handshake,
   FileSignature,
+  Ticket,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -33,6 +34,7 @@ import RevenueManagement from '@/components/admin/RevenueManagement';
 import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
 import ContentManagement from '@/components/admin/ContentManagement';
 import RecommendationTester from '@/components/admin/RecommendationTester';
+import PromotionCodes from '@/components/admin/PromotionCodes';
 
 type Tab =
   | 'dashboard'
@@ -41,6 +43,7 @@ type Tab =
   | 'streaming'
   | 'revenue'
   | 'subscriptions'
+  | 'promotions'
   | 'payment-sync'
   | 'content'
   | 'artists'
@@ -59,6 +62,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
+  { key: 'promotions', label: '프로모션', icon: <Ticket size={14} /> },
   { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
@@ -125,6 +129,7 @@ export default function AdminPage() {
       {tab === 'streaming' && <StreamingAnalytics />}
       {tab === 'revenue' && <RevenueManagement />}
       {tab === 'subscriptions' && <SubscriptionRequests />}
+      {tab === 'promotions' && <PromotionCodes />}
       {tab === 'payment-sync' && <PaymentSyncTool />}
       {tab === 'operation-logs' && <AdminOperationLogs />}
       {tab === 'content' && <ContentManagement />}

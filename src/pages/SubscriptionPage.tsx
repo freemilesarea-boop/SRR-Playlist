@@ -10,6 +10,7 @@ import {
   type SubscriptionSnapshot,
 } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
+import { validatePromotionCode, type PromotionValidation } from '@/lib/adminApi';
 import type { SubscriptionType } from '@/types/db';
 import Alert from '@/components/Alert';
 
@@ -156,13 +157,21 @@ export default function SubscriptionPage() {
   const tier = freshTier ?? profile?.membership_tier ?? 'free';
   const current: PlanKey = tierToPlanKey(tier);
 
-  async function startPayappCheckout(planUi: 'personal' | 'business', phone: string) {
+  async function startPayappCheckout(
+    planUi: 'personal' | 'business',
+    phone: string,
+    promotionCode?: string | null,
+  ) {
     if (!user) return;
     setBusy(planUi);
     try {
       // SubscriptionType 'personal' ↔ PayApp 'individual' 매핑
       const planType: 'individual' | 'business' = planUi === 'personal' ? 'individual' : 'business';
-      const res = await createPayappSubscription({ plan_type: planType, recvphone: phone });
+      const res = await createPayappSubscription({
+        plan_type: planType,
+        recvphone: phone,
+        promotion_code: promotionCode ?? null,
+      });
       if (res.ok && res.payurl) {
         // PayApp 결제창으로 이동. 권한 부여는 절대 여기서 X — feedbackurl 웹훅에서만.
         window.location.href = res.payurl;
@@ -545,7 +554,7 @@ export default function SubscriptionPage() {
           plan={phoneModal.plan}
           busy={busy === phoneModal.plan}
           onCancel={() => setPhoneModal(null)}
-          onConfirm={(p) => startPayappCheckout(phoneModal.plan, p)}
+          onConfirm={(p, promo) => startPayappCheckout(phoneModal.plan, p, promo)}
         />
       )}
     </div>
@@ -601,6 +610,16 @@ function CancelConfirmModal({
   );
 }
 
+const PROMO_REASON_MSG: Record<string, string> = {
+  invalid: '사용할 수 없는 프로모션 코드입니다.',
+  inactive: '사용할 수 없는 프로모션 코드입니다.',
+  empty: '사용할 수 없는 프로모션 코드입니다.',
+  not_started: '아직 사용할 수 없는 프로모션 코드입니다.',
+  expired: '만료된 프로모션 코드입니다.',
+  plan_mismatch: '이 요금제에는 사용할 수 없는 코드입니다.',
+  plan_not_found: '사용할 수 없는 프로모션 코드입니다.',
+};
+
 function PhoneModal({
   plan,
   busy,
@@ -610,10 +629,43 @@ function PhoneModal({
   plan: 'personal' | 'business';
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (phone: string) => void;
+  onConfirm: (phone: string, promotionCode: string | null) => void;
 }) {
   const [phone, setPhone] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<PromotionValidation | null>(null);
   const valid = phone.replace(/\D/g, '').length >= 9;
+  const planType: 'individual' | 'business' = plan === 'business' ? 'business' : 'individual';
+
+  async function applyPromo() {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoError(null);
+    try {
+      const v = await validatePromotionCode(code, planType);
+      if (v.valid) {
+        setApplied(v);
+      } else {
+        setApplied(null);
+        setPromoError(PROMO_REASON_MSG[v.reason] ?? '사용할 수 없는 프로모션 코드입니다.');
+      }
+    } catch {
+      setApplied(null);
+      setPromoError('프로모션 코드 확인 중 오류가 발생했어요.');
+    } finally {
+      setPromoChecking(false);
+    }
+  }
+
+  function clearPromo() {
+    setApplied(null);
+    setPromoInput('');
+    setPromoError(null);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
       <div className="w-full max-w-sm space-y-3 rounded-2xl bg-bg-card p-5 ring-1 ring-line/10">
@@ -631,12 +683,60 @@ function PhoneModal({
           onChange={(e) => setPhone(e.target.value)}
           className="input"
         />
+
+        {/* 프로모션 코드 */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-ink-mute">프로모션 코드</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="코드 입력 (선택)"
+              value={promoInput}
+              disabled={!!applied}
+              onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+              className="input flex-1 disabled:opacity-60"
+            />
+            {applied ? (
+              <button onClick={clearPromo} className="btn-ghost shrink-0 px-3 py-2 text-xs">
+                해제
+              </button>
+            ) : (
+              <button
+                onClick={applyPromo}
+                disabled={!promoInput.trim() || promoChecking}
+                className="btn-primary shrink-0 px-4 py-2 text-xs"
+              >
+                {promoChecking ? '확인 중…' : '적용'}
+              </button>
+            )}
+          </div>
+          {promoError && <p className="text-xs text-red-400">{promoError}</p>}
+        </div>
+
+        {/* 가격 요약 — 서버 검증 결과 기준 (최종 금액은 결제 시 서버 재계산) */}
+        {applied && (
+          <div className="space-y-1 rounded-xl bg-bg-soft/60 p-3 text-xs ring-1 ring-accent/30">
+            <div className="flex items-center justify-between text-ink-mute">
+              <span>정상가</span>
+              <span className="line-through">{applied.original_amount?.toLocaleString()}원</span>
+            </div>
+            <div className="flex items-center justify-between text-accent">
+              <span>{applied.name || applied.code} 할인</span>
+              <span>-{applied.discount_amount?.toLocaleString()}원</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-line/10 pt-1 font-bold text-ink">
+              <span>결제 금액</span>
+              <span>{applied.final_amount?.toLocaleString()}원</span>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onCancel} className="btn-ghost px-3 py-2 text-xs">
             취소
           </button>
           <button
-            onClick={() => onConfirm(phone)}
+            onClick={() => onConfirm(phone, applied ? promoInput.trim() : null)}
             disabled={!valid || busy}
             className="btn-primary px-4 py-2 text-xs"
           >

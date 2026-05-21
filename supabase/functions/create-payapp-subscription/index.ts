@@ -94,7 +94,7 @@ serve(async (req) => {
   const user = userRes.user;
 
   // 입력 파싱
-  let body: { plan_type?: string; recvphone?: string } = {};
+  let body: { plan_type?: string; recvphone?: string; promotion_code?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -102,6 +102,7 @@ serve(async (req) => {
   }
   const planType = body.plan_type;
   const recvphone = (body.recvphone ?? '').replace(/\D/g, '');
+  const promotionCode = (body.promotion_code ?? '').trim();
   if (planType !== 'individual' && planType !== 'business') {
     return json({ error: 'invalid plan_type' }, 400);
   }
@@ -120,6 +121,28 @@ serve(async (req) => {
     return json({ error: 'plan not found' }, 404);
   }
 
+  // 프로모션 코드 — 서버에서 재검증 + 최종가격 재계산 (프론트 가격 신뢰 X)
+  const originalAmount: number = plan.price;
+  let chargeAmount: number = plan.price;
+  let promoId: string | null = null;
+  let promoDiscount = 0;
+  if (promotionCode) {
+    const { data: vr } = await sb.rpc('validate_promotion_code', {
+      p_code: promotionCode,
+      p_plan_type: plan.plan_type,
+    });
+    const v = vr as {
+      valid?: boolean; reason?: string; promotion_code_id?: string;
+      discount_amount?: number; final_amount?: number;
+    } | null;
+    if (!v?.valid) {
+      return json({ error: 'invalid_promotion', reason: v?.reason ?? 'invalid' }, 400);
+    }
+    promoId = v.promotion_code_id ?? null;
+    promoDiscount = v.discount_amount ?? 0;
+    chargeAmount = typeof v.final_amount === 'number' ? v.final_amount : plan.price;
+  }
+
   const orderNo = generateOrderNo(user.id);
 
   // 기존 pending 구독이 있으면 그걸 갱신, 없으면 신규
@@ -135,7 +158,11 @@ serve(async (req) => {
     subscriptionId = existing.id;
     await sb
       .from('subscriptions')
-      .update({ plan_type: plan.plan_type, price: plan.price, status: 'pending' })
+      .update({
+        plan_type: plan.plan_type, price: chargeAmount, status: 'pending',
+        promotion_code_id: promoId, discount_amount: promoDiscount,
+        original_amount: originalAmount, current_amount: chargeAmount,
+      })
       .eq('id', subscriptionId);
   } else {
     const { data: created, error: createErr } = await sb
@@ -143,8 +170,12 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         plan_type: plan.plan_type,
-        price: plan.price,
+        price: chargeAmount,
         status: 'pending',
+        promotion_code_id: promoId,
+        discount_amount: promoDiscount,
+        original_amount: originalAmount,
+        current_amount: chargeAmount,
       })
       .select('id')
       .single();
@@ -152,22 +183,40 @@ serve(async (req) => {
     subscriptionId = created.id;
   }
 
-  // payment_orders 생성
-  await sb.from('payment_orders').insert({
+  // payment_orders 생성 (서버 계산 금액)
+  const { data: orderRow } = await sb.from('payment_orders').insert({
     user_id: user.id,
     subscription_id: subscriptionId,
     order_no: orderNo,
     plan_type: plan.plan_type,
-    amount: plan.price,
+    amount: chargeAmount,
     status: 'requested',
-  });
+    promotion_code_id: promoId,
+    discount_amount: promoDiscount,
+    original_amount: originalAmount,
+    final_amount: chargeAmount,
+  }).select('id').single();
+
+  // 프로모션 사용 기록 (무제한 중복 허용 — 단순 insert)
+  if (promoId) {
+    await sb.from('promotion_code_redemptions').insert({
+      promotion_code_id: promoId,
+      user_id: user.id,
+      payment_order_id: orderRow?.id ?? null,
+      subscription_id: subscriptionId,
+      plan_type: plan.plan_type,
+      original_amount: originalAmount,
+      discount_amount: promoDiscount,
+      final_amount: chargeAmount,
+    });
+  }
 
   // PayApp rebillRegist 호출
   const params = new URLSearchParams();
   params.set('cmd', 'rebillRegist');
   params.set('userid', PAYAPP_USERID);
   params.set('goodname', plan.name);
-  params.set('goodprice', String(plan.price));
+  params.set('goodprice', String(chargeAmount));
   params.set('recvphone', recvphone);
   params.set('recvemail', user.email ?? '');
   params.set('memo', PAYAPP_PAYMENT_MEMO);
@@ -193,7 +242,7 @@ serve(async (req) => {
   // 브랜딩 문구 확인용. 운영자가 결제창에 표시되는 memo / goodname 을 검증 가능.
   console.log('[create-payapp] request preview:', {
     goodname: plan.name,
-    goodprice: plan.price,
+    goodprice: chargeAmount,
     memo: PAYAPP_PAYMENT_MEMO,
     userid_present: PAYAPP_USERID.length > 0,
     feedbackurl: `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`,

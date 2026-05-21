@@ -226,6 +226,11 @@ export default function MembersList() {
                         취소 예정
                       </span>
                     )}
+                    {m.has_promotion && (
+                      <span className="ml-1 inline-flex rounded-full bg-accent/15 px-1.5 py-0.5 text-[9px] font-semibold text-accent">
+                        프로모션
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <select
