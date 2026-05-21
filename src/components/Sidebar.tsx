@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Search, BarChart3, Heart, Store, User, Music2, Wand2, ListMusic, type LucideIcon } from 'lucide-react';
+import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import Logo from '@/components/Logo';
 
 const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
   { to: '/', label: '홈', Icon: Home, end: true },
@@ -21,12 +22,7 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg-soft/70 backdrop-blur-xl pt-safe lg:flex">
       <div className="px-5 pt-5 pb-3">
         <Link to="/" className="inline-flex items-center gap-2.5 group">
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-white ring-1 ring-white/15 transition-transform group-hover:scale-105"
-            style={{ boxShadow: '0 6px 20px rgb(var(--color-accent) / 0.45)' }}
-          >
-            <Music2 size={17} fill="currentColor" />
-          </span>
+          <Logo size={36} className="transition-transform group-hover:scale-105" />
           <span className="text-base font-extrabold tracking-tight">듣다</span>
         </Link>
       </div>

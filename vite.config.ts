@@ -8,7 +8,14 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: [
+        'favicon.svg',
+        'favicon.ico',
+        'favicon.png',
+        'favicon-32.png',
+        'apple-touch-icon.png',
+        'og-image.png',
+      ],
       manifest: {
         name: '듣다',
         short_name: '듣다',
