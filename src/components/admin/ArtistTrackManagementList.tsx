@@ -68,6 +68,7 @@ export default function ArtistTrackManagementList() {
   const [delModal, setDelModal] = useState(false);
   const [delHard, setDelHard] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
+  const [deletableOnly, setDeletableOnly] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -93,19 +94,31 @@ export default function ArtistTrackManagementList() {
       return next;
     });
   }
-  const pageIds = rows.map((r) => r.track_id);
-  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  // 상태 기반 삭제 가능 여부 (released/scheduled/approved 는 일반 삭제 불가).
+  // 정산/스트리밍 연결은 서버가 최종 차단 — 클라이언트는 상태 기준으로만 안내.
+  function isProtected(r: AdminTrackRow): boolean {
+    return PROTECTED_STATUSES.includes(r.release_status ?? '');
+  }
+  const visibleRows = deletableOnly ? rows.filter((r) => !isProtected(r)) : rows;
+  const deletableIds = visibleRows.filter((r) => !isProtected(r)).map((r) => r.track_id);
+  const allDeletableSelected =
+    deletableIds.length > 0 && deletableIds.every((id) => selected.has(id));
+
+  // "현재 목록 전체 선택" / 헤더 체크박스 — 삭제 가능한 곡만 토글
   function toggleSelectAll() {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
-      else pageIds.forEach((id) => next.add(id));
+      if (allDeletableSelected) deletableIds.forEach((id) => next.delete(id));
+      else deletableIds.forEach((id) => next.add(id));
       return next;
     });
   }
-  // 선택 항목 중 보호 상태(released/scheduled/approved) 개수 — 모달 안내용
+  // "삭제 가능만 선택" — 현재 로드된 삭제 가능 곡 전체 선택
+  function selectDeletable() {
+    setSelected(new Set(rows.filter((r) => !isProtected(r)).map((r) => r.track_id)));
+  }
   const selectedProtected = rows.filter(
-    (r) => selected.has(r.track_id) && PROTECTED_STATUSES.includes(r.release_status ?? ''),
+    (r) => selected.has(r.track_id) && isProtected(r),
   ).length;
 
   async function runDelete() {
@@ -114,10 +127,15 @@ export default function ArtistTrackManagementList() {
     setDelBusy(true);
     try {
       const res = await adminBulkDeleteTracks(ids, delHard ? 'hard' : 'soft', '관리자 일괄 삭제');
-      if (res.skipped_count > 0) {
-        toast.warning(`${res.deleted_count}곡 삭제 완료, ${res.skipped_count}곡 건너뜀 (발매/정산 이력)`);
-      } else {
-        toast.success(`${res.deleted_count}곡 삭제 완료${delHard ? ' (완전 삭제)' : ''}`);
+      if (res.deleted_count > 0) {
+        toast.success(
+          `${res.deleted_count}곡 삭제 완료${delHard ? ' (완전 삭제)' : ''}` +
+            (res.skipped_count > 0 ? `, ${res.skipped_count}곡은 발매/정산 이력으로 건너뜀` : ''),
+        );
+      } else if (res.skipped_count > 0) {
+        // 전부 차단된 경우 — 사유를 명확히 안내
+        toast.error(`발매/정산 이력이 있는 ${res.skipped_count}곡은 삭제할 수 없습니다.`);
+        toast.info('삭제 가능한 대기/실패/거절 상태의 음원만 삭제할 수 있어요.');
       }
       if (res.failed.length > 0) toast.error(`${res.failed.length}곡 처리 실패`);
       setDelModal(false);
@@ -202,8 +220,18 @@ export default function ArtistTrackManagementList() {
       {!loading && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
           <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
-            <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
-            현재 목록 전체 선택
+            <input type="checkbox" checked={allDeletableSelected} onChange={toggleSelectAll} />
+            삭제 가능 전체 선택
+          </label>
+          <button
+            onClick={selectDeletable}
+            className="rounded-md bg-bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
+          >
+            삭제 가능만 선택
+          </button>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-[11px] text-ink-mute">
+            <input type="checkbox" checked={deletableOnly} onChange={(e) => setDeletableOnly(e.target.checked)} />
+            삭제 가능만 보기
           </label>
           <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
           <div className="flex-1" />
@@ -223,7 +251,7 @@ export default function ArtistTrackManagementList() {
             <thead>
               <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
                 <th className="w-px px-3 py-2.5 text-left font-semibold">
-                  <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} aria-label="전체 선택" />
+                  <input type="checkbox" checked={allDeletableSelected} onChange={toggleSelectAll} aria-label="삭제 가능 전체 선택" />
                 </th>
                 <th className="px-3 py-2.5 text-left font-semibold">track_code</th>
                 <th className="px-3 py-2.5 text-left font-semibold">제목</th>
@@ -244,17 +272,20 @@ export default function ArtistTrackManagementList() {
                   </td>
                 </tr>
               )}
-              {!loading && rows.length === 0 && !error && (
+              {!loading && visibleRows.length === 0 && !error && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-mute">
-                    등록된 음원이 없어요.
+                    {deletableOnly && rows.length > 0
+                      ? '삭제 가능한(대기/실패/거절) 음원이 없어요.'
+                      : '등록된 음원이 없어요.'}
                   </td>
                 </tr>
               )}
-              {rows.map((r) => {
+              {visibleRows.map((r) => {
                 const payoutKey = r.payout_verification_status ?? 'pending';
                 const payoutTone = PAYOUT_TONE[payoutKey] ?? PAYOUT_TONE.pending;
                 const isExpanded = expandedId === r.track_id;
+                const protectedRow = isProtected(r);
                 return (
                   <Fragment key={r.track_id}>
                   <tr className="border-b border-line/10 hover:bg-bg-hover">
@@ -263,6 +294,8 @@ export default function ArtistTrackManagementList() {
                         type="checkbox"
                         checked={selected.has(r.track_id)}
                         onChange={() => toggleSelect(r.track_id)}
+                        disabled={protectedRow}
+                        title={protectedRow ? '발매/정산 이력이 있는 곡은 일반 삭제할 수 없습니다.' : '선택'}
                         aria-label="선택"
                       />
                     </td>
