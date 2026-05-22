@@ -10,6 +10,7 @@
 
 import { supabase, supabaseProjectRef } from './supabase';
 import { useAuthStore } from '@/store/authStore';
+import { uploadDebug } from '@/store/uploadDebugStore';
 
 export interface ArtistProfile {
   user_id: string;
@@ -401,16 +402,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   const log = (msg: string, extra?: Record<string, unknown>) =>
     console.info('[UploadTrack]', msg, extra ?? '');
   const startedAt = Date.now();
+  const fileMeta = (f?: File | null) =>
+    f ? { name: f.name, size: f.size, type: f.type } : null;
+  uploadDebug.begin({ title: input.title, audio: fileMeta(input.audioFile), cover: fileMeta(input.coverFile) });
   log('started', {
     projectRef: supabaseProjectRef,
     isResubmit: !!input.trackId,
     title: input.title,
-    audio: input.audioFile
-      ? { name: input.audioFile.name, size: input.audioFile.size, type: input.audioFile.type }
-      : 'none',
-    cover: input.coverFile
-      ? { name: input.coverFile.name, size: input.coverFile.size, type: input.coverFile.type }
-      : 'none',
+    audio: fileMeta(input.audioFile) ?? 'none',
+    cover: fileMeta(input.coverFile) ?? 'none',
   });
 
   let stage = 'init';
@@ -554,16 +554,24 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           '업로드 시간이 오래 걸리고 있어요. 네트워크 상태를 확인한 뒤 다시 시도해주세요.',
         );
       } catch (e) {
+        const msg = friendlyUploadError(e);
         log('audio upload error', { err: e instanceof Error ? e.message : String(e) });
-        return { ok: false, error: friendlyUploadError(e) };
+        uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${msg}` });
+        uploadDebug.step('audio-upload', 'error', msg);
+        return { ok: false, error: msg };
       }
       if (audioUpRes.error) {
+        const msg = friendlyUploadError(audioUpRes.error);
         log('audio upload fail', { msg: audioUpRes.error.message });
-        return { ok: false, error: friendlyUploadError(audioUpRes.error) };
+        uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${audioUpRes.error.message}` });
+        uploadDebug.step('audio-upload', 'error', audioUpRes.error.message);
+        return { ok: false, error: msg };
       }
       const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
       audioUrl = audioPub.publicUrl;
       log('audio upload ok', { url: audioUrl });
+      uploadDebug.patch({ audioStatus: 'ok' });
+      uploadDebug.step('audio-upload', 'ok', audioPath);
     } else {
       audioUrl = input.existingAudioUrl ?? '';
       if (!audioUrl) return { ok: false, error: '기존 음원 URL 을 확인할 수 없어요' };
@@ -590,18 +598,26 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           const { data } = supabase.storage.from('covers').getPublicUrl(coverPath);
           coverUrl = data.publicUrl;
           log('cover upload ok', { url: coverUrl });
+          uploadDebug.patch({ coverStatus: 'ok' });
+          uploadDebug.step('cover-upload', 'ok', coverPath);
         } else {
           coverWarning = '커버 이미지 업로드에 실패했어요. 음원은 등록되며, 관리자/수정에서 커버를 다시 등록할 수 있어요.';
           console.warn('[uploadArtistTrack] 커버 업로드 실패 (음원은 계속 등록):', { title: input.title, msg: coverUpErr.message });
           log('cover upload skip (계속)', { msg: coverUpErr.message });
+          uploadDebug.patch({ coverStatus: 'error' });
+          uploadDebug.step('cover-upload', 'warn', coverUpErr.message);
         }
       } catch (e) {
         coverWarning = '커버 이미지 업로드가 지연/실패했어요. 음원은 등록되며, 나중에 커버를 다시 등록할 수 있어요.';
         console.warn('[uploadArtistTrack] 커버 업로드 예외 (음원은 계속 등록):', { title: input.title, err: e instanceof Error ? e.message : String(e) });
         log('cover upload TIMEOUT (계속)', { err: e instanceof Error ? e.message : String(e) });
+        uploadDebug.patch({ coverStatus: 'error' });
+        uploadDebug.step('cover-upload', 'warn', e instanceof Error ? e.message : String(e));
       }
     } else {
       log('cover none');
+      uploadDebug.patch({ coverStatus: 'none' });
+      uploadDebug.step('cover-upload', 'info', '커버 미첨부');
     }
 
     // 3) verified payout account 조회
@@ -656,12 +672,17 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         '음원 등록 서버 응답 시간이 초과되었습니다 (45초). 잠시 후 다시 시도해주세요.',
       );
       log('submit_artist_release RPC ok', { trackId });
+      uploadDebug.patch({ rpcStatus: 'ok', trackId });
+      uploadDebug.step('submit-rpc', 'ok', trackId);
     } catch (e) {
       const err = e as { message?: string; hint?: string; details?: string; code?: string };
       const msg = err.message ?? String(e);
       log('submit_artist_release RPC FAIL', {
         code: err.code, message: err.message, details: err.details, hint: err.hint,
       });
+      const tailDbg = [err.code, err.details, err.hint].filter(Boolean).join(' | ');
+      uploadDebug.finish({ ok: false, rpcStatus: 'error', error: `submit-rpc: ${msg}${tailDbg ? ` (${tailDbg})` : ''}` });
+      uploadDebug.step('submit-rpc', 'error', `${msg}${tailDbg ? ` (${tailDbg})` : ''}`);
       if (msg.includes('row-level security') || err.code === '42501') {
         const recheck = await fetchArtistUploadEligibility().catch(() => null);
         if (recheck && !recheck.can_upload) {
@@ -699,15 +720,21 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       log('saved row verified', {
         trackId, trackCode, release_status: saved?.release_status ?? null, cover_url: savedCover,
       });
+      uploadDebug.patch({ coverUrl: savedCover, releaseStatus: saved?.release_status ?? null });
+      uploadDebug.step('verify', savedCover ? 'ok' : 'warn', `cover_url=${savedCover ?? 'NULL'} · status=${saved?.release_status ?? '?'}`);
     } catch (e) {
       log('track_code skip', { err: e instanceof Error ? e.message : String(e) });
     }
 
     log('SUCCESS', { trackId, trackCode, coverWarning, elapsedMs: Date.now() - startedAt });
+    uploadDebug.finish({ ok: true, trackId, error: coverWarning });
+    uploadDebug.step('done', coverWarning ? 'warn' : 'ok', coverWarning ?? '업로드 완료');
     return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('FATAL at stage=' + stage, { err: msg });
+    uploadDebug.finish({ ok: false, error: `${stage} 단계 실패 — ${msg}` });
+    uploadDebug.step(stage, 'error', msg);
     return { ok: false, error: `${stage} 단계 실패 — ${msg}` };
   } finally {
     log('finally', { stage, elapsedMs: Date.now() - startedAt });

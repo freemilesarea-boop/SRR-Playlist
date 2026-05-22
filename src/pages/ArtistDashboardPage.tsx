@@ -38,6 +38,7 @@ import { BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import ArtistBatchUploadForm from '@/components/artist/ArtistBatchUploadForm';
+import UploadDebugPanel from '@/components/artist/UploadDebugPanel';
 
 import type { LucideIcon } from 'lucide-react';
 
@@ -309,6 +310,7 @@ function UploadModeSwitcher({
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   return (
     <div className="space-y-2">
+      <UploadDebugPanel />
       <div className="flex gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
         <button
           type="button"
