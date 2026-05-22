@@ -77,11 +77,11 @@ export default function Footer() {
             </p>
             <div className="mt-6 flex items-center gap-3">
               <a
-                href="#"
+                href="https://www.instagram.com/deud.da/"
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label="Instagram"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-neutral-400 ring-1 ring-white/10 transition hover:bg-accent/15 hover:text-accent hover:ring-accent/30"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/5 text-neutral-400 ring-1 ring-white/10 transition hover:bg-accent/15 hover:text-accent hover:ring-accent/30"
               >
                 <Instagram size={15} />
               </a>
