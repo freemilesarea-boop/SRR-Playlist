@@ -248,27 +248,40 @@ function CreateContractModal({
     let alive = true;
     (async () => {
       try {
-        // admin_member_list 활용: 단순 필터 — account_type='artist' 가 list 에 직접 노출되지 않으므로
-        // 직접 users 테이블 + auth.users 조회. RLS 는 admin all 정책 (관리자만)
+        // 승인 단일 진실원천 = artist_profiles.approval_status.
+        // users 미러(account_type/artist_approval_status)로 필터하면 sync 깨진 승인 아티스트가
+        // 후보에서 누락되므로, artist_profiles(approved)에서 user_id 를 얻고 users 는 결제등급만 확인.
+        const { data: profs, error: pe } = await supabase
+          .from('artist_profiles')
+          .select('user_id, artist_name')
+          .eq('approval_status', 'approved');
+        if (pe) throw pe;
+        const ids = (profs ?? []).map((p) => (p as { user_id: string }).user_id);
+        if (ids.length === 0) {
+          if (alive) setArtists([]);
+          return;
+        }
+        const nameByUid = new Map(
+          (profs ?? []).map((p) => {
+            const r = p as { user_id: string; artist_name: string | null };
+            return [r.user_id, r.artist_name];
+          }),
+        );
         const { data, error: e } = await supabase
           .from('users')
-          .select('id, nickname, account_type, artist_approval_status, membership_tier')
-          .eq('account_type', 'artist')
-          .eq('artist_approval_status', 'approved')
+          .select('id, nickname, membership_tier')
+          .in('id', ids)
           .in('membership_tier', ['individual', 'business']);
         if (e) throw e;
         const list = (data ?? []) as Array<{
           id: string;
           nickname: string | null;
-          account_type: string;
-          artist_approval_status: string;
           membership_tier: string;
         }>;
-        // 이메일은 별도 fetch 필요하지만 단순화: nickname + uid 일부
         const mapped: EligibleArtist[] = list.map((u) => ({
           id: u.id,
           email: null,
-          nickname: u.nickname,
+          nickname: u.nickname ?? nameByUid.get(u.id) ?? null,
         }));
         if (alive) setArtists(mapped);
       } catch (e) {

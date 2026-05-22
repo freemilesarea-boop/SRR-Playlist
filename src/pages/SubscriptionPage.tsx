@@ -277,19 +277,13 @@ export default function SubscriptionPage() {
   async function requestPlan(plan: PlanKey) {
     if (!user || plan === current) return;
     if (plan === 'free') {
-      setBusy('free');
-      // membership_tier 와 subscription_type 둘 다 free 로 정리 (단일 진실 원천 일관성)
-      const { error } = await supabase
-        .from('users')
-        .update({ subscription_type: 'free', membership_tier: 'free' })
-        .eq('id', user.id);
-      setBusy(null);
-      if (error) {
-        toast.error(error.message);
-        return;
+      // membership_tier 는 서버(webhook/정산 RPC)만 변경 가능 — 클라이언트가 직접 내릴 수 없다.
+      // 활성 구독이 있으면 정식 해지 플로우(PayApp 정기결제 해지 + 기간 종료 시 free 회수)를 사용.
+      if (activeSub && (activeSub.status === 'active' || activeSub.status === 'payment_waiting')) {
+        setCancelModalOpen(true);
+      } else {
+        toast.info('현재 활성 구독이 없어요. 결제/정산 문의는 고객센터로 연락해주세요.');
       }
-      await reloadFreshTier();
-      toast.success('무료 플랜으로 변경되었어요.');
       return;
     }
 
