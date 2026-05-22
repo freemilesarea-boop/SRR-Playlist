@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CreditCard,
@@ -22,6 +22,12 @@ import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import { useThemeStore } from '@/store/themeStore';
+import {
+  fetchMyArtistProfile,
+  fetchArtistUploadEligibility,
+  type ArtistProfile,
+  type UploadEligibility,
+} from '@/lib/artistApi';
 import {
   usePlaybackSettingsStore,
   CROSSFADE_OPTIONS,
@@ -174,9 +180,15 @@ export default function ProfilePage() {
         </button>
       </section>
 
-      {/* 아티스트 관리 카드 — account_type='artist' 일 때만 노출 */}
-      {profile?.account_type === 'artist' && (
-        <ArtistManagementCard approvalStatus={profile?.artist_approval_status ?? 'pending'} />
+      {/* 아티스트 관리/등록 카드 — artist_profiles(approval_status) 가 source of truth.
+          프로필이 있거나 account_type=artist 이면 노출. 미러(account_type/artist_approval_status)
+          가 깨져도 카드가 사라지지 않도록 카드 내부에서 프로필을 직접 조회한다. */}
+      {user?.id && (
+        <ArtistManagementCard
+          userId={user.id}
+          accountType={profile?.account_type ?? null}
+          usersApproval={profile?.artist_approval_status ?? null}
+        />
       )}
 
       {/* 큐레이터 프로필 — 로그인 사용자만 (0013 미적용 환경에선 저장 시 에러 안내) */}
@@ -283,31 +295,109 @@ function Row({ to, icon, label }: { to: string; icon: React.ReactNode; label: st
 }
 
 function ArtistManagementCard({
-  approvalStatus,
+  userId,
+  accountType,
+  usersApproval,
 }: {
-  approvalStatus: 'pending' | 'approved' | 'rejected' | null | undefined;
+  userId: string;
+  accountType: string | null;
+  usersApproval: 'pending' | 'approved' | 'rejected' | null;
 }) {
-  const status: { label: string; tone: string; icon: React.ReactNode; cta: string } =
-    approvalStatus === 'approved'
+  // undefined = 로딩 중, null = 프로필 없음
+  const [artistProfile, setArtistProfile] = useState<ArtistProfile | null | undefined>(undefined);
+  const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const p = await fetchMyArtistProfile(userId);
+      if (!alive) return;
+      setArtistProfile(p);
+      // 승인된 경우에만 계약 상태 조회 (일반 리스너에 불필요한 RPC 호출 방지)
+      if (p?.approval_status === 'approved') {
+        const e = await fetchArtistUploadEligibility().catch(() => null);
+        if (alive) setEligibility(e);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  // 아티스트 컨텍스트 여부: 프로필이 있거나 account_type=artist (둘 다 아니면 일반 리스너 → 숨김)
+  const isArtistContext = accountType === 'artist' || artistProfile != null;
+
+  // 로딩 중: 아티스트로 보일 때만 스켈레톤, 일반 리스너는 아무것도 렌더하지 않음
+  if (artistProfile === undefined) {
+    return accountType === 'artist' ? (
+      <div className="h-28 animate-pulse rounded-2xl bg-bg-card" />
+    ) : null;
+  }
+  if (!isArtistContext) return null;
+
+  // ── 상태 결정 ─────────────────────────────────────────────
+  // source of truth = artist_profiles.approval_status
+  type CardState = {
+    label: string;
+    tone: string;
+    icon: React.ReactNode;
+    cta: string;
+    note: string;
+    syncNote?: string;
+  };
+
+  let state: CardState;
+  if (artistProfile == null) {
+    // account_type=artist 인데 프로필이 없는 비정상 케이스 → 등록/문의 (버튼 유지)
+    state = {
+      label: '등록 필요',
+      tone: 'bg-yellow-500/15 text-yellow-200',
+      icon: <AlertTriangle size={11} />,
+      cta: '아티스트 등록 신청',
+      note: '아티스트 정보가 저장되지 않았어요. 등록을 이어서 진행하거나 고객센터로 문의해주세요.',
+    };
+  } else if (artistProfile.approval_status === 'pending') {
+    state = {
+      label: '검토 중',
+      tone: 'bg-yellow-500/15 text-yellow-200',
+      icon: <Clock size={11} />,
+      cta: '진행 상태 보기',
+      note: '관리자 승인 검토 중이에요. 평균 1영업일 이내 처리됩니다.',
+    };
+  } else if (artistProfile.approval_status === 'rejected') {
+    state = {
+      label: '승인 거절됨',
+      tone: 'bg-red-500/15 text-red-300',
+      icon: <XCircle size={11} />,
+      cta: '거절 사유 확인',
+      note: '승인이 거절됐어요. 사유를 확인하고 재신청할 수 있어요.',
+    };
+  } else {
+    // approved — 계약 서명 여부로 계약서 단계 / 대시보드 분기
+    const signed =
+      eligibility?.has_signed_contract === true || eligibility?.contract_status === 'signed';
+    // 미러(account_type/artist_approval_status) 가 승인 프로필과 어긋난 상태 감지
+    const mirrorDesynced = usersApproval !== 'approved' || accountType !== 'artist';
+    state = signed
       ? {
           label: '승인 완료',
           tone: 'bg-emerald-500/15 text-emerald-300',
           icon: <CheckCircle2 size={11} />,
           cta: '아티스트 관리',
+          note: '내 음원 업로드, 정산 계좌, 스트리밍 현황을 관리해요.',
         }
-      : approvalStatus === 'rejected'
-        ? {
-            label: '승인 거절됨',
-            tone: 'bg-red-500/15 text-red-300',
-            icon: <XCircle size={11} />,
-            cta: '거절 사유 확인',
-          }
-        : {
-            label: '승인 대기 중',
-            tone: 'bg-yellow-500/15 text-yellow-200',
-            icon: <Clock size={11} />,
-            cta: '진행 상태 보기',
-          };
+      : {
+          label: '승인 완료',
+          tone: 'bg-emerald-500/15 text-emerald-300',
+          icon: <CheckCircle2 size={11} />,
+          cta: '계약서 확인하기',
+          note: '승인이 완료됐어요. 음원 유통 계약서를 확인·서명하면 음원 업로드가 시작돼요.',
+        };
+    if (mirrorDesynced) {
+      state.syncNote =
+        '계정 상태를 동기화하고 있어요. 계약서 단계에서 자동으로 복구되며, 문제가 지속되면 고객센터로 문의해주세요.';
+    }
+  }
 
   return (
     <section className="rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
@@ -317,22 +407,26 @@ function ArtistManagementCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-bold tracking-tight">아티스트 관리</h2>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.tone}`}>
-              {status.icon}
-              {status.label}
+            <h2 className="text-sm font-bold tracking-tight">아티스트</h2>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${state.tone}`}>
+              {state.icon}
+              {state.label}
             </span>
           </div>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
-            내 음원 업로드, 정산 계좌, 스트리밍 현황을 관리해요.
-          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{state.note}</p>
+          {state.syncNote && (
+            <p className="mt-1.5 flex items-start gap-1 text-[11px] leading-relaxed text-yellow-200/90">
+              <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+              {state.syncNote}
+            </p>
+          )}
         </div>
       </div>
       <Link
         to="/artist"
         className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-accent py-2.5 text-sm font-bold text-bg shadow-sm hover:opacity-90"
       >
-        {status.cta}
+        {state.cta}
         <ChevronRight size={14} />
       </Link>
     </section>
