@@ -3,6 +3,7 @@ import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRig
 import { adminListArtistTracks, adminBulkDeleteTracks, type AdminTrackRow } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import AutoCover from '@/components/AutoCover';
 import TrackModerationPanel from './TrackModerationPanel';
 
 const PROTECTED_STATUSES = ['released', 'scheduled', 'approved'];
@@ -253,6 +254,7 @@ export default function ArtistTrackManagementList() {
                 <th className="w-px px-3 py-2.5 text-left font-semibold">
                   <input type="checkbox" checked={allDeletableSelected} onChange={toggleSelectAll} aria-label="삭제 가능 전체 선택" />
                 </th>
+                <th className="w-px px-3 py-2.5 text-left font-semibold">커버</th>
                 <th className="px-3 py-2.5 text-left font-semibold">track_code</th>
                 <th className="px-3 py-2.5 text-left font-semibold">제목</th>
                 <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
@@ -267,14 +269,14 @@ export default function ArtistTrackManagementList() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={11} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && visibleRows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={11} className="px-3 py-8 text-center text-xs text-ink-mute">
                     {deletableOnly && rows.length > 0
                       ? '삭제 가능한(대기/실패/거절) 음원이 없어요.'
                       : '등록된 음원이 없어요.'}
@@ -298,6 +300,11 @@ export default function ArtistTrackManagementList() {
                         title={protectedRow ? '발매/정산 이력이 있는 곡은 일반 삭제할 수 없습니다.' : '선택'}
                         aria-label="선택"
                       />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="h-10 w-10 overflow-hidden rounded-md bg-bg-hover ring-1 ring-line/10">
+                        <AutoCover title={r.title} category={r.artist} imageUrl={r.cover_url} size="sm" />
+                      </div>
                     </td>
                     <td className="px-3 py-2.5">
                       <button
@@ -404,7 +411,7 @@ export default function ArtistTrackManagementList() {
                   </tr>
                   {isExpanded && (
                     <tr className="border-b border-line/10 bg-bg-soft/30">
-                      <td colSpan={10} className="px-3 py-3">
+                      <td colSpan={11} className="px-3 py-3">
                         <TrackModerationPanel
                           trackId={r.track_id}
                           trackTitle={r.title}
