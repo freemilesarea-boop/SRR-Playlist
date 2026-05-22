@@ -15,6 +15,11 @@ const SERVICE_LINKS: LinkItem[] = [
   { label: '아티스트', href: '/artist' },
 ];
 
+const DEUDDA_SERVICE_LINKS: LinkItem[] = [
+  { label: '듣다 서비스 소개', href: '/service' },
+  { label: '업종별 미리듣기', href: '/service/preview' },
+];
+
 const SUPPORT_LINKS: LinkItem[] = [
   { label: '고객센터', href: '/support' },
   { label: '공지사항', href: '/notice' },
@@ -65,7 +70,7 @@ export default function Footer() {
         {/* 메인 그리드 — Brand | Service | Support | Business */}
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-12 lg:gap-10">
           {/* Brand col */}
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-3">
             <Link to="/" className="inline-flex items-center gap-2.5 group">
               <Logo size={36} className="transition-transform group-hover:scale-105" />
               <span className="text-lg font-extrabold tracking-tight text-white">듣다</span>
@@ -88,11 +93,14 @@ export default function Footer() {
             </div>
           </div>
 
+          {/* 듣다 서비스 col */}
+          <FooterSection title="듣다 서비스" items={DEUDDA_SERVICE_LINKS} className="lg:col-span-2" />
+
           {/* Service col */}
           <FooterSection title="서비스" items={SERVICE_LINKS} className="lg:col-span-2" />
 
           {/* Support col */}
-          <FooterSection title="지원" items={SUPPORT_LINKS} className="lg:col-span-3" />
+          <FooterSection title="지원" items={SUPPORT_LINKS} className="lg:col-span-2" />
 
           {/* Business col */}
           <div className="lg:col-span-3">

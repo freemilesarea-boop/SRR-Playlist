@@ -36,6 +36,8 @@ const ArtistDashboardPage = lazyWithRetry(() => import('@/pages/ArtistDashboardP
 const ArtistContractPage = lazyWithRetry(() => import('@/pages/ArtistContractPage'));
 const ArtistSettlementsPage = lazyWithRetry(() => import('@/pages/ArtistSettlementsPage'));
 const TermsPage = lazyWithRetry(() => import('@/pages/legal/TermsPage'));
+const ServicePage = lazyWithRetry(() => import('@/pages/ServicePage'));
+const ServicePreviewPage = lazyWithRetry(() => import('@/pages/ServicePreviewPage'));
 const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
 const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
@@ -195,6 +197,8 @@ export default function App() {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/notice" element={<NoticePage />} />
             <Route path="/support" element={<SupportPage />} />
+            <Route path="/service" element={<ServicePage />} />
+            <Route path="/service/preview" element={<ServicePreviewPage />} />
 
             {/* ---- 보호 (로그인 필요) ---- */}
             <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
