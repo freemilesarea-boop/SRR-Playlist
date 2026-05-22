@@ -299,6 +299,8 @@ export interface UploadResult {
   track_id?: string;
   track_code?: string;
   error?: string;
+  /** 커버를 첨부했으나 업로드 실패 → 음원은 등록됨. UI 가 "커버 재등록 안내" 표시용 */
+  cover_warning?: string;
 }
 
 /** 본인 아티스트 프로필 조회 (없으면 null) */
@@ -553,9 +555,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       log('audio reuse existing', { url: audioUrl });
     }
 
-    // 2) cover 업로드 (옵션)
+    // 2) cover 업로드 (옵션) — 실패해도 음원 등록은 진행하되, 실패 사실을 호출자에 surface
     stage = 'cover-upload';
     let coverUrl: string | null = input.existingCoverUrl ?? null;
+    let coverWarning: string | undefined;
     if (input.coverFile) {
       const coverSafe = input.coverFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
       const coverPath = `artist_uploads/${userId}/${ts}_${rand}_cover_${coverSafe}`;
@@ -573,11 +576,14 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           coverUrl = data.publicUrl;
           log('cover upload ok', { url: coverUrl });
         } else {
+          coverWarning = '커버 이미지 업로드에 실패했어요. 음원은 등록되며, 관리자/수정에서 커버를 다시 등록할 수 있어요.';
+          console.warn('[uploadArtistTrack] 커버 업로드 실패 (음원은 계속 등록):', { title: input.title, msg: coverUpErr.message });
           log('cover upload skip (계속)', { msg: coverUpErr.message });
         }
       } catch (e) {
+        coverWarning = '커버 이미지 업로드가 지연/실패했어요. 음원은 등록되며, 나중에 커버를 다시 등록할 수 있어요.';
+        console.warn('[uploadArtistTrack] 커버 업로드 예외 (음원은 계속 등록):', { title: input.title, err: e instanceof Error ? e.message : String(e) });
         log('cover upload TIMEOUT (계속)', { err: e instanceof Error ? e.message : String(e) });
-        // cover 실패해도 진행 (선택 항목)
       }
     } else {
       log('cover none');
@@ -663,18 +669,25 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let trackCode: string | undefined;
     try {
       const { data: row } = await withTimeout(
-        supabase.from('tracks').select('track_code').eq('id', trackId).maybeSingle(),
+        supabase.from('tracks').select('track_code, cover_url').eq('id', trackId).maybeSingle(),
         10_000,
         'track_code 조회 시간이 초과되었습니다 (저장은 완료됨).',
       );
-      trackCode = (row as { track_code?: string | null } | null)?.track_code ?? undefined;
-      log('track_code ok', { trackCode });
+      const saved = row as { track_code?: string | null; cover_url?: string | null } | null;
+      trackCode = saved?.track_code ?? undefined;
+      // 커버 저장 즉시 검증: 커버를 보냈는데 DB에 cover_url 이 없으면 경고
+      const savedCover = saved?.cover_url ?? null;
+      if (coverUrl && !savedCover) {
+        coverWarning = coverWarning ?? '커버가 저장되지 않았어요. 관리자/수정에서 커버를 다시 등록해주세요.';
+        console.warn('[uploadArtistTrack] cover_url 미저장 감지:', { trackId, trackCode, sentCover: coverUrl });
+      }
+      log('track_code ok', { trackCode, savedCover: !!savedCover });
     } catch (e) {
       log('track_code skip', { err: e instanceof Error ? e.message : String(e) });
     }
 
-    log('SUCCESS', { trackId, trackCode, elapsedMs: Date.now() - startedAt });
-    return { ok: true, track_id: trackId, track_code: trackCode };
+    log('SUCCESS', { trackId, trackCode, coverWarning, elapsedMs: Date.now() - startedAt });
+    return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('FATAL at stage=' + stage, { err: msg });
@@ -810,6 +823,31 @@ export async function adminBulkDeleteTracks(
   });
   if (error) throw error;
   return data as BulkDeleteResult;
+}
+
+/** 관리자: 커버 이미지를 covers 버킷에 업로드하고 public URL 반환 */
+export async function uploadAdminTrackCover(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  try {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const path = `admin_covers/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('covers').upload(path, file, {
+      cacheControl: '31536000', upsert: false, contentType: file.type || undefined,
+    });
+    if (error) return { ok: false, error: error.message };
+    const { data } = supabase.storage.from('covers').getPublicUrl(path);
+    return { ok: true, url: data.publicUrl };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 관리자: 트랙 cover_url 설정/교체 (커버 누락 곡 복구용) */
+export async function adminSetTrackCover(trackId: string, coverUrl: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_track_cover', {
+    p_track_id: trackId,
+    p_cover_url: coverUrl,
+  });
+  if (error) throw error;
 }
 
 // ---------- STREAMING ANALYTICS (0019) ----------

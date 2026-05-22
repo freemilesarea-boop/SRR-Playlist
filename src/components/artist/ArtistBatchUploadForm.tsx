@@ -227,7 +227,7 @@ export default function ArtistBatchUploadForm({
     return null;
   }
 
-  async function uploadOne(t: TrackRow): Promise<{ ok: boolean; error?: string; track_code?: string }> {
+  async function uploadOne(t: TrackRow): Promise<{ ok: boolean; error?: string; track_code?: string; cover_warning?: string }> {
     return uploadArtistTrack({
       title: t.title.trim(),
       artist: (t.artist.trim() || common.artist.trim()) || undefined,
@@ -277,6 +277,7 @@ export default function ArtistBatchUploadForm({
           const res = await uploadOne(t);
           if (res.ok) {
             patchTrack(id, { status: 'success', trackCode: res.track_code });
+            if (res.cover_warning) toast.warning(`${t.title}: ${res.cover_warning}`);
           } else {
             patchTrack(id, { status: 'failed', error: res.error ?? '업로드 실패' });
           }
