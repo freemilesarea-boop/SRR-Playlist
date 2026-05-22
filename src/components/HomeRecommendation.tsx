@@ -130,9 +130,9 @@ export default function HomeRecommendation({
                     <TrackStateBadge state={state} variant="pill" />
                   </span>
                 )}
-                {playable && (
+                {playable && (t.mood || t.genre) && (
                   <span className="absolute right-1.5 top-1.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
-                    +{t.score}
+                    {t.mood || t.genre}
                   </span>
                 )}
               </div>

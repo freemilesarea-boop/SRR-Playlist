@@ -111,7 +111,6 @@ export default function Player() {
     duration,
     shuffleOrder,
     pendingSeekSec,
-    play,
     pause,
     toggle,
     next,
@@ -444,27 +443,6 @@ export default function Player() {
     if (audioARef.current) audioARef.current.volume = activeIdx === 0 ? volume : 0;
     if (audioBRef.current) audioBRef.current.volume = activeIdx === 1 ? volume : 0;
   }, [volume, activeIdx, crossfading]);
-
-  /* ---------- MediaSession ---------- */
-  useEffect(() => {
-    if (!('mediaSession' in navigator) || !current) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: current.title,
-        artist: current.artist ?? '',
-        album: playlist?.title ?? '',
-        artwork: current.cover_url
-          ? [{ src: current.cover_url, sizes: '512x512', type: 'image/png' }]
-          : undefined,
-      });
-      navigator.mediaSession.setActionHandler('play', play);
-      navigator.mediaSession.setActionHandler('pause', pause);
-      navigator.mediaSession.setActionHandler('previoustrack', prev);
-      navigator.mediaSession.setActionHandler('nexttrack', next);
-    } catch {
-      /* noop */
-    }
-  }, [current, playlist, play, pause, prev, next]);
 
   /* ============================================
    * Crossfade 엔진

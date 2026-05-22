@@ -212,7 +212,7 @@ export default function App() {
             <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
             <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
             <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
-            <Route path="/my/playlist/:id" element={<RequireAuth><UserPlaylistDetailPage /></RequireAuth>} />
+            <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
             <Route
               path="/admin"
               element={
