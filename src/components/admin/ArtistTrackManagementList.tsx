@@ -5,6 +5,11 @@ import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
 import TrackModerationPanel from './TrackModerationPanel';
+import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import {
+  adminGetTrackTags, adminUpdateTrackTags, validateSelectedMeta, emptySelectedMeta,
+  type SelectedMeta,
+} from '@/lib/trackMetadataOptions';
 
 const PROTECTED_STATUSES = ['released', 'scheduled', 'approved'];
 
@@ -71,6 +76,40 @@ export default function ArtistTrackManagementList() {
   const [delBusy, setDelBusy] = useState(false);
   const [deletableOnly, setDeletableOnly] = useState(false);
   const [coverBusyId, setCoverBusyId] = useState<string | null>(null);
+  const [tagModal, setTagModal] = useState<{ trackId: string; title: string } | null>(null);
+  const [tagMeta, setTagMeta] = useState<SelectedMeta>(emptySelectedMeta);
+  const [tagBusy, setTagBusy] = useState(false);
+
+  async function openTagEditor(trackId: string, title: string) {
+    setTagModal({ trackId, title });
+    setTagMeta(emptySelectedMeta());
+    try {
+      const t = await adminGetTrackTags(trackId);
+      setTagMeta({
+        genre_tags: t.genre_tags, mood_tags: t.mood_tags,
+        business_type_tags: t.business_type_tags, vocal_type: t.vocal_type,
+        recommended_dayparts: t.recommended_dayparts,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '태그 조회 실패');
+    }
+  }
+  async function saveTags() {
+    if (!tagModal) return;
+    const err = validateSelectedMeta(tagMeta);
+    if (err) { toast.error(err); return; }
+    setTagBusy(true);
+    try {
+      await adminUpdateTrackTags(tagModal.trackId, tagMeta);
+      toast.success('태그가 수정됐어요.');
+      setTagModal(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '태그 수정 실패');
+    } finally {
+      setTagBusy(false);
+    }
+  }
 
   async function replaceCover(trackId: string, file: File | null) {
     if (!file) return;
@@ -419,6 +458,13 @@ export default function ArtistTrackManagementList() {
                           {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           검수
                         </button>
+                        <button
+                          onClick={() => void openTagEditor(r.track_id, r.title)}
+                          className="inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover hover:text-ink"
+                          title="장르/무드/매장/시간대 태그 수정"
+                        >
+                          태그
+                        </button>
                         <label
                           className="inline-flex cursor-pointer items-center rounded p-1.5 text-ink-mute hover:bg-ink/10"
                           title={r.cover_url ? '커버 교체' : '커버 등록'}
@@ -516,6 +562,26 @@ export default function ArtistTrackManagementList() {
                 className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
               >
                 {delBusy ? '삭제 중…' : `${selected.size}곡 삭제`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {tagModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+          onClick={() => !tagBusy && setTagModal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl animate-slide-up"
+          >
+            <h3 className="mb-3 text-base font-bold">태그 수정 · {tagModal.title}</h3>
+            <TrackMetaSelectors value={tagMeta} onChange={setTagMeta} disabled={tagBusy} />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setTagModal(null)} disabled={tagBusy} className="btn-ghost px-3 py-2 text-xs">취소</button>
+              <button onClick={() => void saveTags()} disabled={tagBusy} className="btn-primary px-4 py-2 text-xs">
+                {tagBusy ? '저장 중…' : '태그 저장'}
               </button>
             </div>
           </div>

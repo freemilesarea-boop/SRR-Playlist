@@ -39,6 +39,10 @@ import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import ArtistBatchUploadForm from '@/components/artist/ArtistBatchUploadForm';
 import UploadDebugPanel from '@/components/artist/UploadDebugPanel';
+import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import {
+  emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
+} from '@/lib/trackMetadataOptions';
 
 import type { LucideIcon } from 'lucide-react';
 
@@ -653,9 +657,6 @@ function Row2({ label, value }: { label: string; value: string }) {
   );
 }
 
-const SUITABLE_STORE_OPTIONS = [
-  '카페', '와인바', '식당', '베이커리', '헬스장', '필라테스', '미용실', '의류매장', '서점', '기타',
-];
 
 function defaultReleaseDate(): string {
   // today + 3 days (KST 기준 단순 처리)
@@ -690,12 +691,19 @@ function ArtistUploadForm({
     editingTrack?.rights_holder_name ?? '',
   );
   const [explicitContent, setExplicitContent] = useState(editingTrack?.explicit_content ?? false);
-  const [instrumental, setInstrumental] = useState(editingTrack?.instrumental ?? false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);  // 재제출 시에도 다시 체크 필요
-  const [mainGenre, setMainGenre] = useState(editingTrack?.main_genre ?? '');
-  const [subGenre, setSubGenre] = useState(editingTrack?.sub_genre ?? '');
-  const [suitableStore, setSuitableStore] = useState(editingTrack?.suitable_store ?? '');
-  const [mood, setMood] = useState(editingTrack?.mood ?? '');
+  const [meta, setMeta] = useState<SelectedMeta>(() => {
+    const e = editingTrack as unknown as Partial<SelectedMeta> | null;
+    return e
+      ? {
+          genre_tags: e.genre_tags ?? [],
+          mood_tags: e.mood_tags ?? [],
+          business_type_tags: e.business_type_tags ?? [],
+          vocal_type: e.vocal_type ?? '',
+          recommended_dayparts: e.recommended_dayparts ?? [],
+        }
+      : emptySelectedMeta();
+  });
   const [lyrics, setLyrics] = useState(editingTrack?.lyrics ?? '');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -724,10 +732,8 @@ function ArtistUploadForm({
     if (new Date(releaseDate) < min) {
       return '발매일은 오늘 기준 최소 3일 뒤부터 선택할 수 있어요';
     }
-    if (!mainGenre.trim()) return '메인 장르를 입력해주세요';
-    if (!subGenre.trim()) return '서브 장르를 입력해주세요';
-    if (!suitableStore.trim()) return '어울리는 매장을 선택해주세요';
-    if (!mood.trim()) return '곡 분위기를 입력해주세요';
+    const metaErr = validateSelectedMeta(meta);
+    if (metaErr) return metaErr;
     if (!rightsConfirmed) return '권리 확인 체크박스를 동의해주세요';
     return null;
   }
@@ -753,13 +759,13 @@ function ArtistUploadForm({
         isrc: isrc || undefined,
         rights_holder_name: rightsHolderName || undefined,
         explicit_content: explicitContent,
-        instrumental,
+        instrumental: meta.vocal_type === 'instrumental',
         rightsConfirmed,
         artist: artistOverride || undefined,
-        main_genre: mainGenre,
-        sub_genre: subGenre,
-        suitable_store: suitableStore,
-        mood,
+        main_genre: meta.genre_tags[0],
+        sub_genre: meta.genre_tags[1] || undefined,
+        suitable_store: meta.business_type_tags[0],
+        mood: meta.mood_tags[0],
         lyrics: lyrics || undefined,
         audioFile,
         coverFile,
@@ -767,6 +773,11 @@ function ArtistUploadForm({
       if (!res.ok) {
         toast.error(res.error ?? '업로드 실패');
         return;
+      }
+      // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
+      if (res.track_id) {
+        try { await setTrackSelectedMetadata(res.track_id, meta); }
+        catch (me) { console.warn('[upload] set metadata 실패', me); }
       }
       toast.success(
         isEditing
@@ -784,12 +795,8 @@ function ArtistUploadForm({
       setIsrc('');
       setRightsHolderName('');
       setExplicitContent(false);
-      setInstrumental(false);
       setRightsConfirmed(false);
-      setMainGenre('');
-      setSubGenre('');
-      setSuitableStore('');
-      setMood('');
+      setMeta(emptySelectedMeta());
       setLyrics('');
       setAudioFile(null);
       setCoverFile(null);
@@ -858,29 +865,10 @@ function ArtistUploadForm({
         <Field label="곡 제목 *">
           <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="input" maxLength={120} />
         </Field>
-        <Field label="메인 장르 *">
-          <input type="text" required value={mainGenre} onChange={(e) => setMainGenre(e.target.value)} className="input" placeholder="예: pop, rnb, hiphop, lofi" />
-        </Field>
-        <Field label="서브 장르 *">
-          <input type="text" required value={subGenre} onChange={(e) => setSubGenre(e.target.value)} className="input" placeholder="예: ballad, indie, dance pop" />
-        </Field>
-        <Field label="어울리는 매장 *">
-          <select
-            required
-            value={suitableStore}
-            onChange={(e) => setSuitableStore(e.target.value)}
-            className="input"
-          >
-            <option value="">— 선택 —</option>
-            {SUITABLE_STORE_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="곡 분위기 *">
-          <input type="text" required value={mood} onChange={(e) => setMood(e.target.value)} className="input" placeholder="예: chill, dreamy, upbeat" />
-        </Field>
       </div>
+
+      {/* 선택형 표준 메타데이터 (장르/무드/매장/보컬/시간대) */}
+      <TrackMetaSelectors value={meta} onChange={setMeta} disabled={busy} />
 
       <Field label="가사" hint="(선택)">
         <textarea
@@ -941,17 +929,6 @@ function ArtistUploadForm({
           />
           <span className="text-xs leading-relaxed">
             <strong>Explicit</strong> · 선정적/폭력적 가사 포함
-          </span>
-        </label>
-        <label className="flex items-start gap-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
-          <input
-            type="checkbox"
-            checked={instrumental}
-            onChange={(e) => setInstrumental(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span className="text-xs leading-relaxed">
-            <strong>Instrumental</strong> · 가사 없음
           </span>
         </label>
       </div>

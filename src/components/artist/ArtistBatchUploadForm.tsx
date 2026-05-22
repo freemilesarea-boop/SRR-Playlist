@@ -22,13 +22,13 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import {
+  emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
+} from '@/lib/trackMetadataOptions';
 
 const MAX_TRACKS = 30;
 const CONCURRENCY = 3;
-
-const SUITABLE_STORE_OPTIONS = [
-  '카페', '와인바', '식당', '베이커리', '헬스장', '필라테스', '미용실', '의류매장', '서점', '기타',
-];
 
 function defaultReleaseDate(): string {
   const d = new Date();
@@ -108,6 +108,7 @@ export default function ArtistBatchUploadForm({
   onUploaded: () => void | Promise<void>;
 }) {
   const [common, setCommon] = useState<CommonMeta>(initialCommon);
+  const [meta, setMeta] = useState<SelectedMeta>(emptySelectedMeta);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -216,10 +217,8 @@ export default function ArtistBatchUploadForm({
     if (new Date(common.releaseDate) < min) {
       return '발매일은 오늘 기준 최소 3일 뒤부터 선택할 수 있어요';
     }
-    if (!common.mainGenre.trim()) return '공통 메인 장르를 입력해주세요';
-    if (!common.subGenre.trim()) return '공통 서브 장르를 입력해주세요';
-    if (!common.suitableStore.trim()) return '공통 어울리는 매장을 선택해주세요';
-    if (!common.mood.trim()) return '공통 분위기를 입력해주세요';
+    const metaErr = validateSelectedMeta(meta);
+    if (metaErr) return `공통 메타데이터: ${metaErr}`;
     if (!rightsConfirmed) return '권리 확인 체크박스를 동의해주세요';
     for (const t of tracks) {
       if (!t.title.trim()) return `곡 제목 미입력: ${t.file.name}`;
@@ -227,7 +226,7 @@ export default function ArtistBatchUploadForm({
     return null;
   }
 
-  async function uploadOne(t: TrackRow): Promise<{ ok: boolean; error?: string; track_code?: string; cover_warning?: string }> {
+  async function uploadOne(t: TrackRow): Promise<{ ok: boolean; error?: string; track_id?: string; track_code?: string; cover_warning?: string }> {
     return uploadArtistTrack({
       title: t.title.trim(),
       artist: (t.artist.trim() || common.artist.trim()) || undefined,
@@ -239,12 +238,12 @@ export default function ArtistBatchUploadForm({
       rights_holder_name:
         (t.rightsHolderName.trim() || common.rightsHolderName.trim()) || undefined,
       explicit_content: t.explicit,
-      instrumental: t.instrumental,
+      instrumental: meta.vocal_type === 'instrumental',
       rightsConfirmed,
-      main_genre: common.mainGenre,
-      sub_genre: common.subGenre,
-      suitable_store: common.suitableStore,
-      mood: common.mood,
+      main_genre: meta.genre_tags[0],
+      sub_genre: meta.genre_tags[1] || undefined,
+      suitable_store: meta.business_type_tags[0],
+      mood: meta.mood_tags[0],
       lyrics: t.lyrics.trim() || undefined,
       audioFile: t.file,
       coverFile: t.coverFile ?? common.coverFile,
@@ -276,6 +275,11 @@ export default function ArtistBatchUploadForm({
         try {
           const res = await uploadOne(t);
           if (res.ok) {
+            // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
+            if (res.track_id) {
+              try { await setTrackSelectedMetadata(res.track_id, meta); }
+              catch (me) { console.warn('[batch] set metadata 실패', me); }
+            }
             patchTrack(id, { status: 'success', trackCode: res.track_code });
             if (res.cover_warning) toast.warning(`${t.title}: ${res.cover_warning}`);
           } else {
@@ -469,48 +473,6 @@ export default function ArtistBatchUploadForm({
               className="input"
             />
           </Field>
-          <Field label="메인 장르 *">
-            <input
-              type="text"
-              required
-              value={common.mainGenre}
-              onChange={(e) => setCommon({ ...common, mainGenre: e.target.value })}
-              placeholder="예: K-POP / Indie / R&B"
-              className="input"
-            />
-          </Field>
-          <Field label="서브 장르 *">
-            <input
-              type="text"
-              required
-              value={common.subGenre}
-              onChange={(e) => setCommon({ ...common, subGenre: e.target.value })}
-              className="input"
-            />
-          </Field>
-          <Field label="어울리는 매장 *">
-            <select
-              required
-              value={common.suitableStore}
-              onChange={(e) => setCommon({ ...common, suitableStore: e.target.value })}
-              className="input"
-            >
-              <option value="">선택</option>
-              {SUITABLE_STORE_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="분위기 *">
-            <input
-              type="text"
-              required
-              value={common.mood}
-              onChange={(e) => setCommon({ ...common, mood: e.target.value })}
-              placeholder="예: 잔잔한 / 신나는 / 감성적"
-              className="input"
-            />
-          </Field>
           <Field label="권리자명">
             <input
               type="text"
@@ -521,7 +483,11 @@ export default function ArtistBatchUploadForm({
             />
           </Field>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+
+        {/* 선택형 표준 메타데이터 (장르/무드/매장/보컬/시간대) */}
+        <TrackMetaSelectors value={meta} onChange={setMeta} disabled={submitting} />
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded-md bg-bg-soft p-2 text-xs ring-1 ring-line/10">
             <input
               type="checkbox"
@@ -529,14 +495,6 @@ export default function ArtistBatchUploadForm({
               onChange={(e) => setCommon({ ...common, explicit: e.target.checked })}
             />
             explicit (19+)
-          </label>
-          <label className="flex items-center gap-2 rounded-md bg-bg-soft p-2 text-xs ring-1 ring-line/10">
-            <input
-              type="checkbox"
-              checked={common.instrumental}
-              onChange={(e) => setCommon({ ...common, instrumental: e.target.checked })}
-            />
-            instrumental
           </label>
           <label className="flex items-center gap-2 rounded-md bg-bg-soft p-2 text-xs ring-1 ring-line/10 cursor-pointer hover:bg-bg-soft/80">
             <ImageIcon size={12} className="text-ink-dim" />
