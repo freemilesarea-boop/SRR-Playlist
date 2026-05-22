@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle } from 'lucide-react';
-import { adminListArtistTracks, adminBulkDeleteTracks, type AdminTrackRow } from '@/lib/artistApi';
+import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
+import { adminListArtistTracks, adminBulkDeleteTracks, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
@@ -70,6 +70,30 @@ export default function ArtistTrackManagementList() {
   const [delHard, setDelHard] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
   const [deletableOnly, setDeletableOnly] = useState(false);
+  const [coverBusyId, setCoverBusyId] = useState<string | null>(null);
+
+  async function replaceCover(trackId: string, file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('이미지 파일만 업로드할 수 있어요.');
+      return;
+    }
+    setCoverBusyId(trackId);
+    try {
+      const up = await uploadAdminTrackCover(file);
+      if (!up.ok || !up.url) {
+        toast.error(`커버 업로드 실패: ${up.error ?? '알 수 없음'}`);
+        return;
+      }
+      await adminSetTrackCover(trackId, up.url);
+      toast.success('커버가 등록됐어요.');
+      await load();
+    } catch (e) {
+      toast.error(`커버 등록 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCoverBusyId(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -395,6 +419,26 @@ export default function ArtistTrackManagementList() {
                           {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           검수
                         </button>
+                        <label
+                          className="inline-flex cursor-pointer items-center rounded p-1.5 text-ink-mute hover:bg-ink/10"
+                          title={r.cover_url ? '커버 교체' : '커버 등록'}
+                        >
+                          {coverBusyId === r.track_id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <ImagePlus size={14} />
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={coverBusyId === r.track_id}
+                            onChange={(e) => {
+                              void replaceCover(r.track_id, e.target.files?.[0] ?? null);
+                              e.currentTarget.value = '';
+                            }}
+                          />
+                        </label>
                         {r.audio_url && (
                           <a
                             href={r.audio_url}
