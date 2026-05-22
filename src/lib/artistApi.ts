@@ -1251,6 +1251,49 @@ export async function adminStreamingExclusionBreakdown(days = 30): Promise<Strea
 }
 
 // ============================================
+// 0119 — 월간 스트리밍 정산 요약 (관리자)
+// ============================================
+
+export interface MonthlyStreamingSummary {
+  month_start: string;   // YYYY-MM-DD (해당 월 1일)
+  month_end: string;     // YYYY-MM-DD (해당 월 말일)
+  total_stream_count: number;
+  eligible_stream_count: number;
+  excluded_stream_count: number;
+  unique_tracks: number;
+  unique_artists: number;
+  estimated_revenue: number;        // 월간 매출 × 정산 풀 비율 (정산 대상 풀, 원)
+  settlement_ready_amount: number;  // 해당 월 지급 준비(payable/paid) 정산액 합 (원)
+  pool_revenue_ratio: number;
+}
+
+/**
+ * 관리자 월간 스트리밍 정산 요약.
+ * @param monthStart YYYY-MM-DD (해당 월 아무 날짜나 가능 — 서버가 1일로 정규화). 미지정 시 이번 달.
+ */
+export async function adminGetMonthlyStreamingSummary(
+  monthStart?: string | null,
+): Promise<MonthlyStreamingSummary> {
+  const { data, error } = await supabase.rpc('admin_get_monthly_streaming_summary', {
+    p_month_start: monthStart ?? undefined,
+  });
+  if (error) throw error;
+  const d = (data ?? {}) as Record<string, unknown>;
+  return {
+    month_start: (d.month_start as string) ?? '',
+    month_end: (d.month_end as string) ?? '',
+    total_stream_count: Number(d.total_stream_count ?? 0),
+    eligible_stream_count: Number(d.eligible_stream_count ?? 0),
+    excluded_stream_count: Number(d.excluded_stream_count ?? 0),
+    unique_tracks: Number(d.unique_tracks ?? 0),
+    unique_artists: Number(d.unique_artists ?? 0),
+    estimated_revenue: Number(d.estimated_revenue ?? 0),
+    settlement_ready_amount: Number(d.settlement_ready_amount ?? 0),
+    pool_revenue_ratio: Number(d.pool_revenue_ratio ?? 0.7),
+  };
+}
+
+// ============================================
 // 0082 — audio health 워커 + 조회
 // ============================================
 

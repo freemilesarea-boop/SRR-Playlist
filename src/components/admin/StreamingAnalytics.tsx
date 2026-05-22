@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Headphones, Play, CheckCircle, Clock, Users, Music, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Headphones, Play, CheckCircle, Clock, Users, Music, ShieldCheck, ShieldOff, CalendarRange, Coins, Wallet } from 'lucide-react';
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
 import {
   adminStreamingOverview, adminTopStreamingTracks,
   adminStreamingExclusionBreakdown,
+  adminGetMonthlyStreamingSummary,
   getAdminSetting, setAdminSetting,
   type AdminStreamingDay, type AdminTopTrackRow,
   type StreamingExclusionBreakdown,
+  type MonthlyStreamingSummary,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
@@ -158,6 +160,11 @@ export default function StreamingAnalytics() {
           ))}
         </div>
       </div>
+
+      {/* ============================================ */}
+      {/* 0119 — 이번 달 스트리밍 정산 요약 (월간 총합) */}
+      {/* ============================================ */}
+      <MonthlySettlementSummary />
 
       {/* ============================================ */}
       {/* 0078 — 정산 기준 분석 (raw / eligible / excluded) */}
@@ -440,6 +447,122 @@ function Summary({
       </div>
       <p className={`mt-1 text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
     </div>
+  );
+}
+
+/** KST 기준 이번 달 'YYYY-MM' */
+function currentMonthKST(): string {
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** 'YYYY-MM' 에서 n개월 전/후 'YYYY-MM' */
+function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function fmtKRW(n: number): string {
+  return `₩${Math.round(n).toLocaleString()}`;
+}
+
+/**
+ * 0119 — 이번 달 스트리밍 정산 요약.
+ * 기준: 해당 월 1일 00:00 ~ 말일 23:59:59 (Asia/Seoul). 정산 판단용 월간 총합.
+ */
+function MonthlySettlementSummary() {
+  const thisMonth = currentMonthKST();
+  const [month, setMonth] = useState(thisMonth);
+  const [data, setData] = useState<MonthlyStreamingSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await adminGetMonthlyStreamingSummary(`${month}-01`));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [month]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const lastMonth = shiftMonth(thisMonth, -1);
+
+  return (
+    <section className="space-y-3 rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CalendarRange size={16} className="text-accent" />
+          <h3 className="text-sm font-bold tracking-tight">이번 달 스트리밍 정산 요약</h3>
+          {data && (
+            <span className="text-[10px] text-ink-dim">
+              {data.month_start} ~ {data.month_end} · KST
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setMonth(thisMonth)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+              month === thisMonth ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:text-ink'
+            }`}
+          >
+            이번 달
+          </button>
+          <button
+            onClick={() => setMonth(lastMonth)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+              month === lastMonth ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:text-ink'
+            }`}
+          >
+            지난달
+          </button>
+          <input
+            type="month"
+            value={month}
+            max={thisMonth}
+            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            className="rounded-lg bg-bg-card px-2 py-1 text-xs ring-1 ring-line/10 focus:outline-none"
+            aria-label="정산 기준 월 선택"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="h-24 animate-pulse rounded-xl bg-bg-card" />
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Summary icon={<Play size={14} />} label="총 스트리밍" value={data.total_stream_count.toLocaleString()} />
+            <Summary icon={<ShieldCheck size={14} />} label="정산 대상" value={data.eligible_stream_count.toLocaleString()} tone="success" />
+            <Summary icon={<ShieldOff size={14} />} label="제외 스트리밍" value={data.excluded_stream_count.toLocaleString()} tone="warn" />
+            <Summary icon={<Users size={14} />} label="참여 아티스트" value={data.unique_artists.toLocaleString()} />
+            <Summary icon={<Music size={14} />} label="참여 음원" value={data.unique_tracks.toLocaleString()} />
+            <Summary icon={<CheckCircle size={14} />} label="정산 풀 비율" value={`${(data.pool_revenue_ratio * 100).toFixed(0)}%`} />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Summary icon={<Coins size={14} />} label="예상 정산 금액 (매출 × 풀)" value={fmtKRW(data.estimated_revenue)} tone="success" />
+            <Summary icon={<Wallet size={14} />} label="지급 준비 정산액" value={fmtKRW(data.settlement_ready_amount)} />
+          </div>
+          <p className="text-[10px] leading-relaxed text-ink-dim">
+            정산 대상 = milestone_30s · eligible_for_payout 기준. 예상 정산 금액 = 해당 월 결제 매출 × 정산 풀
+            비율. 지급 준비 정산액 = 해당 월 정산건 중 지급 대상(payable/paid) 합계.
+          </p>
+        </>
+      ) : null}
+    </section>
   );
 }
 
