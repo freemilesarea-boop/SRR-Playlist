@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { gradientStyle } from '@/lib/cover';
 
 interface Props {
@@ -31,13 +32,27 @@ export default function AutoCover({
   className = '',
   showInitial = true,
 }: Props) {
-  if (imageUrl) {
+  // 이미지 로드 실패(403/404/깨진 URL) 시 그라데이션 fallback 으로 전환
+  const [errored, setErrored] = useState(false);
+  useEffect(() => {
+    setErrored(false);
+  }, [imageUrl]);
+
+  const hasImage = !!imageUrl && !errored;
+
+  if (hasImage) {
     return (
       <img
-        src={imageUrl}
-        alt={title}
+        src={imageUrl as string}
+        alt={`${title} 앨범 커버`}
         loading="lazy"
         className={`h-full w-full object-cover ${className}`}
+        onError={() => {
+          if (import.meta.env.DEV) {
+            console.warn('[AutoCover] 커버 이미지 로드 실패 → fallback:', { title, imageUrl });
+          }
+          setErrored(true);
+        }}
       />
     );
   }
