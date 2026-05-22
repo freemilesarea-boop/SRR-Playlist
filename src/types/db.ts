@@ -73,6 +73,10 @@ export interface PlaylistRow {
   status?: 'draft' | 'released';
   is_auto?: boolean;
   auto_rule?: Record<string, unknown> | null;
+  /** 0113 — AI 자동 생성 플레이리스트 (업종/시간대/분위기 기반, 저장형 자동 배치) */
+  is_auto_generated?: boolean;
+  subtitle?: string | null;
+  daypart?: string | null;
 }
 
 export interface PlaylistTrackRow {

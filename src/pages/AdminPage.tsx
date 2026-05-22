@@ -35,6 +35,7 @@ import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
 import ContentManagement from '@/components/admin/ContentManagement';
 import RecommendationTester from '@/components/admin/RecommendationTester';
 import PromotionCodes from '@/components/admin/PromotionCodes';
+import AutoPlaylistManager from '@/components/admin/AutoPlaylistManager';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
@@ -47,6 +48,7 @@ type Tab =
   | 'promotions'
   | 'payment-sync'
   | 'content'
+  | 'auto-playlists'
   | 'artists'
   | 'artist-contracts'
   | 'payout-verification'
@@ -67,6 +69,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
+  { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'artist-contracts', label: '계약 관리', icon: <FileSignature size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
@@ -137,6 +140,7 @@ export default function AdminPage() {
       {tab === 'payment-sync' && <PaymentSyncTool />}
       {tab === 'operation-logs' && <AdminOperationLogs />}
       {tab === 'content' && <ContentManagement />}
+      {tab === 'auto-playlists' && <AutoPlaylistManager />}
       {tab === 'artists' && <ArtistApprovalList />}
       {tab === 'artist-contracts' && <ArtistContractsList />}
       {tab === 'payout-verification' && <PayoutVerificationList />}
