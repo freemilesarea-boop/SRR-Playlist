@@ -5,6 +5,25 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(url && anon);
 
+/** 현재 연결된 Supabase project ref (예: nsoesrvwkxqifjcxzvol). UI/로그 진단용. */
+export const supabaseProjectRef: string = (() => {
+  try {
+    const host = new URL(url ?? '').host; // <ref>.supabase.co
+    return host.split('.')[0] || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
+
+// 어떤 프로젝트/DB 에 연결됐는지 즉시 확인 (배포본에서도 출력) — 업로드 미반영 진단용
+// eslint-disable-next-line no-console
+console.log('[SupabaseEnv]', {
+  url: url ?? '(missing)',
+  projectRef: supabaseProjectRef,
+  anonKeySet: Boolean(anon),
+  configured: isSupabaseConfigured,
+});
+
 /**
  * 모든 Supabase 요청에 hard timeout 적용 (Storage 업로드는 예외).
  *
