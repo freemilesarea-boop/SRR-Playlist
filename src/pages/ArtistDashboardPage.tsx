@@ -91,8 +91,10 @@ export default function ArtistDashboardPage() {
 
   // 로그인 안 됨
   if (!authLoading && !user) return <Navigate to="/login" replace />;
-  // account_type 이 artist 가 아니면 차단
-  if (!authLoading && profile && profile.account_type !== 'artist') {
+  // source of truth = artist_profiles. account_type 은 미러일 뿐이므로 단독으로 차단하지 않는다.
+  // 프로필 로딩이 끝났는데도 아티스트 프로필이 없고 account_type 도 artist 가 아닐 때만 차단
+  // (미러가 깨진 승인 아티스트가 대시보드에서 튕기지 않도록 보호).
+  if (!authLoading && !loading && !artist && profile && profile.account_type !== 'artist') {
     return <Navigate to="/" replace />;
   }
 
