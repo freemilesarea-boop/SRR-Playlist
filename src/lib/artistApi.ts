@@ -8,7 +8,7 @@
  *   - admin: approveArtistTrack / rejectArtistTrack / hideArtistTrack / listPendingReviewTracks
  */
 
-import { supabase } from './supabase';
+import { supabase, supabaseProjectRef } from './supabase';
 import { useAuthStore } from '@/store/authStore';
 
 export interface ArtistProfile {
@@ -399,9 +399,19 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
   // 0074-hotfix: 단계별 console.info + 모든 await timeout + finally 안전 보장
   // ============================================
   const log = (msg: string, extra?: Record<string, unknown>) =>
-    console.info('[upload]', msg, extra ?? '');
+    console.info('[UploadTrack]', msg, extra ?? '');
   const startedAt = Date.now();
-  log('start', { isResubmit: !!input.trackId, hasAudio: !!input.audioFile, hasCover: !!input.coverFile });
+  log('started', {
+    projectRef: supabaseProjectRef,
+    isResubmit: !!input.trackId,
+    title: input.title,
+    audio: input.audioFile
+      ? { name: input.audioFile.name, size: input.audioFile.size, type: input.audioFile.type }
+      : 'none',
+    cover: input.coverFile
+      ? { name: input.coverFile.name, size: input.coverFile.size, type: input.coverFile.type }
+      : 'none',
+  });
 
   let stage = 'init';
   try {
@@ -431,7 +441,12 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       const v = validateArtistAudioFile(input.audioFile);
       if (!v.ok) return { ok: false, error: v.error };
     }
-    if (!input.title.trim()) return { ok: false, error: '곡 제목을 입력하세요' };
+    const titleTrim = input.title.trim();
+    if (!titleTrim) return { ok: false, error: '곡 제목을 입력하세요' };
+    // placeholder/미입력 방지 — "<...>" 형태(예: "<곡 제목>")는 실제 제목이 아님
+    if (/^<.*>$/.test(titleTrim)) {
+      return { ok: false, error: '곡 제목을 실제 제목으로 입력해주세요 (예시 텍스트는 사용할 수 없어요).' };
+    }
     if (!input.rightsConfirmed) {
       return { ok: false, error: '권리 확인 체크박스를 동의해주세요' };
     }
@@ -669,19 +684,21 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let trackCode: string | undefined;
     try {
       const { data: row } = await withTimeout(
-        supabase.from('tracks').select('track_code, cover_url').eq('id', trackId).maybeSingle(),
+        supabase.from('tracks').select('track_code, cover_url, release_status').eq('id', trackId).maybeSingle(),
         10_000,
         'track_code 조회 시간이 초과되었습니다 (저장은 완료됨).',
       );
-      const saved = row as { track_code?: string | null; cover_url?: string | null } | null;
+      const saved = row as { track_code?: string | null; cover_url?: string | null; release_status?: string | null } | null;
       trackCode = saved?.track_code ?? undefined;
       // 커버 저장 즉시 검증: 커버를 보냈는데 DB에 cover_url 이 없으면 경고
       const savedCover = saved?.cover_url ?? null;
       if (coverUrl && !savedCover) {
         coverWarning = coverWarning ?? '커버가 저장되지 않았어요. 관리자/수정에서 커버를 다시 등록해주세요.';
-        console.warn('[uploadArtistTrack] cover_url 미저장 감지:', { trackId, trackCode, sentCover: coverUrl });
+        console.warn('[UploadTrack] cover_url 미저장 감지:', { trackId, trackCode, sentCover: coverUrl });
       }
-      log('track_code ok', { trackCode, savedCover: !!savedCover });
+      log('saved row verified', {
+        trackId, trackCode, release_status: saved?.release_status ?? null, cover_url: savedCover,
+      });
     } catch (e) {
       log('track_code skip', { err: e instanceof Error ? e.message : String(e) });
     }

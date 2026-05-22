@@ -35,6 +35,7 @@ import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
 import ContentManagement from '@/components/admin/ContentManagement';
 import RecommendationTester from '@/components/admin/RecommendationTester';
 import PromotionCodes from '@/components/admin/PromotionCodes';
+import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
   | 'dashboard'
@@ -97,6 +98,9 @@ export default function AdminPage() {
           <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
           <p className="text-xs text-ink-mute">
             대시보드 · 회원 · 스트리밍 · 매출 · 구독 · 콘텐츠
+          </p>
+          <p className="text-[10px] font-mono text-ink-dim">
+            Connected Supabase: <span className="text-accent">{supabaseProjectRef}</span>
           </p>
         </div>
         <AdminNotificationsBell />
