@@ -272,7 +272,7 @@ export default function SearchPage() {
 
           {!loading && groups && (
             <>
-              {isFallback && (
+              {isFallback && import.meta.env.DEV && (
                 <div className="flex items-start gap-2 rounded-xl bg-yellow-500/5 px-3 py-2.5 text-[11px] text-ink-mute ring-1 ring-yellow-400/20">
                   <AlertCircle size={12} className="mt-0.5 shrink-0 text-yellow-300" />
                   <span>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { Link } from 'react-router-dom';
 import {
@@ -80,14 +80,6 @@ export default function LibraryPage() {
   const liked = data?.liked_tracks ?? [];
   const recent = data?.recently_played ?? [];
   const recommended = data?.recommended_playlists ?? [];
-
-  // 좋아요 정렬 — 최신 vs 많이 들은
-  const [likedSort, setLikedSort] = useState<'recent' | 'plays'>('recent');
-  const sortedLiked = useMemo(() => {
-    if (likedSort === 'recent') return liked;
-    // 데이터에 play_count 가 없으니 created_at desc 로 fallback (실제 plays 는 chart RPC 필요)
-    return [...liked];
-  }, [liked, likedSort]);
 
   function playTracks(tracks: TrackRow[], startIndex = 0) {
     if (tracks.length === 0) return;
@@ -191,35 +183,20 @@ export default function LibraryPage() {
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight sm:text-xl">
             <Heart size={16} className="text-rose-400" fill="currentColor" /> 좋아요한 곡
           </h2>
-          {liked.length > 0 && (
-            <div className="flex rounded-full bg-bg-card p-0.5 ring-1 ring-line/10">
-              {(['recent', 'plays'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setLikedSort(s)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                    likedSort === s ? 'bg-accent text-bg' : 'text-ink-mute hover:text-ink'
-                  }`}
-                >
-                  {s === 'recent' ? '최신순' : '많이 들은순'}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         {loading ? (
           <SkeletonRow vertical />
-        ) : sortedLiked.length === 0 ? (
+        ) : liked.length === 0 ? (
           <Empty>아직 저장한 곡이 없어요. 마음에 드는 곡에 ♡를 눌러보세요.</Empty>
         ) : (
           <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
             <ul className="divide-y divide-line/10">
-              {sortedLiked.map((t, i) => (
+              {liked.map((t, i) => (
                 <li key={t.id}>
                   <LikedTrackRow
                     track={t}
                     isCurrent={currentTrackId === t.id}
-                    onPlay={() => playTracks(sortedLiked, i)}
+                    onPlay={() => playTracks(liked, i)}
                   />
                 </li>
               ))}

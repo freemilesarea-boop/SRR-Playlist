@@ -49,6 +49,8 @@ export default function ChartPage() {
   const [loading, setLoading] = useState(true);
   const [genres, setGenres] = useState<GenreSummary[]>([]);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  // 장르 차트에 반영할 기간 — 마지막으로 선택한 일/주/월/Top100 탭 기준 (기본 weekly)
+  const [genrePeriod, setGenrePeriod] = useState<ChartPeriod>('weekly');
 
   const setQueue = usePlayerStore((s) => s.setQueue);
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id);
@@ -56,6 +58,7 @@ export default function ChartPage() {
   // 일/주/월/Top100 차트
   useEffect(() => {
     if (tab === 'genre') return;
+    setGenrePeriod(TAB_TO_PERIOD[tab]); // 장르 탭이 이어받을 기간 기억
     let alive = true;
     setLoading(true);
     fetchTrackChart(TAB_TO_PERIOD[tab], TAB_LIMIT[tab])
@@ -88,7 +91,7 @@ export default function ChartPage() {
     if (tab !== 'genre' || !selectedGenre) return;
     let alive = true;
     setLoading(true);
-    fetchTrackChartByGenre(selectedGenre, 'weekly', 50)
+    fetchTrackChartByGenre(selectedGenre, genrePeriod, 50)
       .then((res) => {
         if (!alive) return;
         setTracks(res.tracks);
@@ -99,7 +102,7 @@ export default function ChartPage() {
     return () => {
       alive = false;
     };
-  }, [tab, selectedGenre]);
+  }, [tab, selectedGenre, genrePeriod]);
 
   const totalPlays = useMemo(
     () => tracks.reduce((s, t) => s + Number(t.play_count || 0), 0),
