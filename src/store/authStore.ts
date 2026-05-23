@@ -6,6 +6,7 @@ import type { UserRow } from '@/types/db';
 declare global {
   interface Window {
     __srrAuthListenersBound?: boolean;
+    __srrAuthSubBound?: boolean;
   }
 }
 
@@ -75,6 +76,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           if (document.visibilityState === 'visible') refreshIfLoggedIn();
         });
       }
+
+      // onAuthStateChange 는 앱 생애주기에 한 번만 등록한다. StrictMode/init 재호출 시
+      // 중복 등록되면 TOKEN_REFRESHED 마다 loadProfile/refreshProfile 가 N배로 발화됨.
+      if (typeof window !== 'undefined' && window.__srrAuthSubBound) {
+        set({ loading: false });
+        return;
+      }
+      if (typeof window !== 'undefined') window.__srrAuthSubBound = true;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
         const prevUserId = get().user?.id ?? null;

@@ -126,8 +126,11 @@ export default function StreamingAnalytics() {
 
   const totalPlays = rows.reduce((s, r) => s + Number(r.plays), 0);
   const totalCompletes = rows.reduce((s, r) => s + Number(r.completes), 0);
-  const avgSeconds = rows.length
-    ? rows.reduce((s, r) => s + Number(r.avg_seconds), 0) / rows.filter((r) => r.plays > 0).length || 0
+  // 평균 재생시간: 재생이 있었던(plays>0) 트랙들만으로 분자·분모를 일치시킨다.
+  // (기존: 분자는 전체 합, 분모는 plays>0 개수 → 평균이 왜곡되고 0건일 때 NaN)
+  const playedRows = rows.filter((r) => r.plays > 0);
+  const avgSeconds = playedRows.length
+    ? playedRows.reduce((s, r) => s + Number(r.avg_seconds), 0) / playedRows.length
     : 0;
   const completionRate = totalPlays > 0 ? (totalCompletes / totalPlays) * 100 : 0;
 

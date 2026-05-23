@@ -37,6 +37,7 @@ import ContentManagement from '@/components/admin/ContentManagement';
 import RecommendationTester from '@/components/admin/RecommendationTester';
 import PromotionCodes from '@/components/admin/PromotionCodes';
 import AutoPlaylistManager from '@/components/admin/AutoPlaylistManager';
+import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
@@ -133,25 +134,29 @@ export default function AdminPage() {
         </div>
       </nav>
 
-      {tab === 'dashboard' && <Dashboard />}
-      {tab === 'members' && <MembersList />}
-      {tab === 'sales-agents' && <SalesAgentsList />}
-      {tab === 'streaming' && <StreamingAnalytics />}
-      {tab === 'revenue' && <RevenueManagement />}
-      {tab === 'subscriptions' && <SubscriptionRequests />}
-      {tab === 'promotions' && <PromotionCodes />}
-      {tab === 'payment-sync' && <PaymentSyncTool />}
-      {tab === 'operation-logs' && <AdminOperationLogs />}
-      {tab === 'content' && <ContentManagement />}
-      {tab === 'auto-playlists' && <AutoPlaylistManager />}
-      {tab === 'artists' && <ArtistApprovalList />}
-      {tab === 'artist-contracts' && <ArtistContractsList />}
-      {tab === 'payout-verification' && <PayoutVerificationList />}
-      {tab === 'track-review' && <TrackReviewList />}
-      {tab === 'artist-tracks' && <ArtistTrackManagementList />}
-      {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
-      {tab === 'artist-settlements' && <ArtistSettlementsList />}
-      {tab === 'recommendation' && <RecommendationTester />}
+      {/* 한 탭 패널의 렌더 throw 가 관리자 페이지 전체를 화이트스크린시키지 않도록 격리.
+          resetKey=tab 로 탭 전환 시 직전 탭의 에러 상태를 자동 초기화. */}
+      <AdminErrorBoundary resetKey={tab}>
+        {tab === 'dashboard' && <Dashboard />}
+        {tab === 'members' && <MembersList />}
+        {tab === 'sales-agents' && <SalesAgentsList />}
+        {tab === 'streaming' && <StreamingAnalytics />}
+        {tab === 'revenue' && <RevenueManagement />}
+        {tab === 'subscriptions' && <SubscriptionRequests />}
+        {tab === 'promotions' && <PromotionCodes />}
+        {tab === 'payment-sync' && <PaymentSyncTool />}
+        {tab === 'operation-logs' && <AdminOperationLogs />}
+        {tab === 'content' && <ContentManagement />}
+        {tab === 'auto-playlists' && <AutoPlaylistManager />}
+        {tab === 'artists' && <ArtistApprovalList />}
+        {tab === 'artist-contracts' && <ArtistContractsList />}
+        {tab === 'payout-verification' && <PayoutVerificationList />}
+        {tab === 'track-review' && <TrackReviewList />}
+        {tab === 'artist-tracks' && <ArtistTrackManagementList />}
+        {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
+        {tab === 'artist-settlements' && <ArtistSettlementsList />}
+        {tab === 'recommendation' && <RecommendationTester />}
+      </AdminErrorBoundary>
     </div>
   );
 }

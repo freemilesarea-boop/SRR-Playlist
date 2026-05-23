@@ -163,10 +163,28 @@ export interface RevenueSummary {
   }>;
 }
 
+const EMPTY_DASHBOARD_STATS: DashboardStats = {
+  today_visitors: 0,
+  today_unique_visitors: 0,
+  today_streams: 0,
+  today_new_users: 0,
+  today_revenue: 0,
+  week_revenue: 0,
+  month_revenue: 0,
+  total_revenue: 0,
+  active_subscribers: 0,
+  free_users: 0,
+  personal_users: 0,
+  business_users: 0,
+  total_users: 0,
+  pending_subscriptions: 0,
+};
+
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const { data, error } = await supabase.rpc('admin_dashboard_stats');
   if (error) throw error;
-  return data as DashboardStats;
+  // RPC 가 null 을 반환해도(데이터 없음/집계 전) 렌더가 깨지지 않도록 기본값 병합.
+  return { ...EMPTY_DASHBOARD_STATS, ...((data as Partial<DashboardStats> | null) ?? {}) };
 }
 
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
@@ -225,7 +243,17 @@ export async function fetchTrackAnalytics(days = 30): Promise<TrackAnalytics[]> 
 export async function fetchRevenueSummary(): Promise<RevenueSummary> {
   const { data, error } = await supabase.rpc('admin_revenue_summary');
   if (error) throw error;
-  return data as RevenueSummary;
+  // by_plan/by_status/recent 가 누락돼도 Object.keys/map 이 throw 하지 않도록 기본값 보강.
+  const d = (data as Partial<RevenueSummary> | null) ?? {};
+  return {
+    today: d.today ?? 0,
+    week: d.week ?? 0,
+    month: d.month ?? 0,
+    total: d.total ?? 0,
+    by_plan: d.by_plan ?? {},
+    by_status: d.by_status ?? {},
+    recent: d.recent ?? [],
+  };
 }
 
 export async function recomputeDailyMetrics(date?: string) {
