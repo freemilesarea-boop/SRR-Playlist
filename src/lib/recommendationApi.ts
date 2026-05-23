@@ -88,6 +88,53 @@ export async function recommendSimilarTracks(
   }
 }
 
+export interface PersonalizedPlaylist {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  cover_url: string | null;
+  track_count: number;
+  score: number;
+}
+
+/**
+ * 로그인 사용자의 청취 이력 기반 개인화 추천 신곡.
+ * 비로그인/콜드스타트 사용자는 최신·인기 트랙으로 폴백(RPC 내부 처리).
+ */
+export async function fetchPersonalizedTracks(limit = 12): Promise<RecommendedTrack[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_personalized_recommendations', {
+      p_limit: limit,
+    });
+    if (error) throw error;
+    const rows = (data ?? []) as Array<RpcTrackRow & { reason?: string }>;
+    const tracks = rows.map((r) => {
+      const t = toTrack(r);
+      return { ...t, score_reasons: r.reason ? [r.reason] : t.score_reasons };
+    });
+    return applyDemoMode(tracks) as RecommendedTrack[];
+  } catch {
+    return [];
+  }
+}
+
+/** 사용자 취향(장르/무드) 태그와 겹치는 플레이리스트 추천. */
+export async function fetchPersonalizedPlaylists(limit = 8): Promise<PersonalizedPlaylist[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_personalized_playlists', {
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return ((data ?? []) as PersonalizedPlaylist[]).map((p) => ({
+      ...p,
+      track_count: Number(p.track_count ?? 0),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function recommendPlaylistsByContext(
   ctx: RecommendContext,
 ): Promise<RecommendedPlaylist[]> {

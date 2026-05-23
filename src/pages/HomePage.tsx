@@ -12,6 +12,7 @@ import HomeChartSection from '@/components/HomeChartSection';
 import HomeSearchBar from '@/components/HomeSearchBar';
 import HomeLibrarySections from '@/components/HomeLibrarySections';
 import HomeRecommendation from '@/components/HomeRecommendation';
+import HomePersonalized from '@/components/HomePersonalized';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
 import { fetchCuratorMadePlaylists, type CuratorMadePlaylist } from '@/lib/curatorStudioApi';
 import { fetchNewPublicPlaylists, type NewPublicPlaylist } from '@/lib/userPlaylistApi';
@@ -202,6 +203,9 @@ export default function HomePage() {
 
       {/* 이어듣기 + 최근 들은 음악 (상단 노출 — Continue Listening) */}
       <HomeLibrarySections />
+
+      {/* 개인화 추천 — 청취 이력 기반 신곡/플레이리스트 (콜드스타트는 최신·인기 폴백) */}
+      <HomePersonalized />
 
       {/* Featured */}
       {featured && (
