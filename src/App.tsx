@@ -184,6 +184,8 @@ export default function App() {
   const profilePending = !!authUser && !authProfile && authLoading;
   const isWithdrawn = !!(authUser && authProfile?.withdrawn_at);
   const isDisabled = !!(authUser && (authProfile as { disabled_at?: string | null } | null)?.disabled_at);
+  // auth 세션은 있는데 public.users 프로필이 없음 (계정 초기화/삭제됨) → 세션 정리 후 재가입 유도
+  const profileMissing = !!authUser && !authProfile && !authLoading;
 
   return (
     <>
@@ -194,6 +196,8 @@ export default function App() {
         <WithdrawnAccountScreen onSignOut={() => void signOut()} />
       ) : isDisabled ? (
         <DisabledAccountScreen onSignOut={() => void signOut()} />
+      ) : profileMissing ? (
+        <ProfileMissingScreen onSignOut={signOut} />
       ) : (
         <>
           <GlobalGate />
@@ -290,6 +294,27 @@ function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
       >
         로그아웃
       </button>
+    </div>
+  );
+}
+
+// auth 세션은 있으나 public.users 프로필이 없는 경우(계정 초기화/삭제됨):
+// 홈/닉네임/플레이어가 렌더되기 전에 세션을 정리하고 재가입 화면으로 보낸다.
+function ProfileMissingScreen({ onSignOut }: { onSignOut: () => Promise<void> }) {
+  useEffect(() => {
+    let alive = true;
+    void onSignOut().finally(() => {
+      if (alive) window.setTimeout(() => window.location.replace('/login'), 60);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [onSignOut]);
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+      <LogoMark size={40} className="text-accent" />
+      <p className="text-lg font-bold">가입 정보가 초기화되었습니다.</p>
+      <p className="text-sm text-ink-mute">다시 가입해주세요. 로그인 화면으로 이동합니다…</p>
     </div>
   );
 }
