@@ -13,8 +13,18 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   profile: UserRow | null;
+  profileError: string | null;
+  /** Supabase 세션 복원(getSession) 완료 여부 */
+  isAuthReady: boolean;
+  /** 현재 auth 상태에 대한 profile 조회 완료 여부 (세션 없음=true) */
+  isProfileReady: boolean;
+  /** 하위호환 coarse 플래그: auth+profile 가 아직 정착되지 않음 */
   loading: boolean;
   init: () => Promise<void>;
+  /** 게이팅 fetch — isProfileReady/loading 을 토글. 사용자 전환/초기화 시. */
+  loadProfile: (userId: string) => Promise<void>;
+  /** 사일런트 refetch — readiness/loading 을 건드리지 않음 (focus/액션 후 갱신용). */
+  refreshProfile: () => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signUpWithPassword: (
     email: string,
@@ -24,30 +34,37 @@ interface AuthState {
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
   profile: null,
+  profileError: null,
+  isAuthReady: false,
+  isProfileReady: false,
   loading: true,
 
   init: async () => {
-    set({ loading: true });
+    set({ loading: true, isAuthReady: false, isProfileReady: false });
     if (!isSupabaseConfigured) {
-      // 미설정 시 더미 호출이 영원히 멈출 수 있으므로 즉시 종료
-      set({ session: null, user: null, profile: null, loading: false });
+      set({
+        session: null, user: null, profile: null, profileError: null,
+        isAuthReady: true, isProfileReady: true, loading: false,
+      });
       return;
     }
     try {
       const { data } = await supabase.auth.getSession();
-      set({ session: data.session, user: data.session?.user ?? null });
-      if (data.session?.user) {
-        await get().refreshProfile();
+      const s = data.session ?? null;
+      set({ session: s, user: s?.user ?? null, isAuthReady: true });
+      if (s?.user) {
+        await get().loadProfile(s.user.id);
+      } else {
+        set({ profile: null, profileError: null, isProfileReady: true, loading: false });
       }
-      // 페이지 포커스 / 가시성 변화 시 profile 자동 refetch — 결제/환불 webhook
-      // 적용 직후 다른 탭에서 처리된 변경을 빠르게 반영. 한 번만 등록.
+
+      // focus/가시성 변화 시 사일런트 refetch (결제/환불 webhook 반영). 한 번만 등록.
       if (typeof window !== 'undefined' && !window.__srrAuthListenersBound) {
         window.__srrAuthListenersBound = true;
         const refreshIfLoggedIn = () => {
@@ -60,47 +77,75 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
-        set({ session, user: session?.user ?? null });
-        if (session?.user) {
-          await get().refreshProfile();
-          // 1) 가입 직후 pending signup 캐시 적용 — 0021 트리거 미적용 환경 / 이메일 인증
-          //    ON 환경에서 첫 로그인 시 가입 정보 DB 적용 보장.
-          void (async () => {
-            try {
-              const { applyPendingSignupOnLogin } = await import('@/lib/pendingSignup');
-              const r = await applyPendingSignupOnLogin(session.user.id);
-              if (r.ok && r.type) {
-                // 적용 후 profile 다시 불러옴 (account_type / artist_approval_status 등 반영)
-                await get().refreshProfile();
-              }
-            } catch (e) {
-              if (import.meta.env.DEV) console.error('[auth] applyPendingSignup error:', e);
-            }
-          })();
-          // 2) 비로그인 동안 localStorage 에 쌓인 좋아요/최근/이어듣기/팔로우를 DB 로 머지
-          void (async () => {
-            try {
-              const { mergePersonalLibrary } = await import('@/lib/personalLibraryApi');
-              await mergePersonalLibrary(session.user.id);
-            } catch {
-              /* 마이그레이션 미적용 등 — 조용히 폴백 */
-            }
-            try {
-              const { mergePlaylistFollows } = await import('@/lib/playlistFollowApi');
-              await mergePlaylistFollows(session.user.id);
-            } catch {
-              /* 0012 미적용 — 조용히 폴백 */
-            }
-          })();
-        } else {
-          set({ profile: null });
+        const prevUserId = get().user?.id ?? null;
+        const nextUserId = session?.user?.id ?? null;
+        set({ session, user: session?.user ?? null, isAuthReady: true });
+
+        if (!nextUserId) {
+          // 로그아웃/세션 만료 — 절대 여기서 강제 이동/사이드이펙트 없음
+          set({ profile: null, profileError: null, isProfileReady: true, loading: false });
+          return;
         }
+
+        // 같은 사용자 + 이미 프로필 로드됨 (TOKEN_REFRESHED 등) → loader 깜빡임 방지 위해 사일런트만
+        if (nextUserId === prevUserId && get().isProfileReady && get().profile) {
+          void get().refreshProfile();
+          return;
+        }
+
+        // 신규 로그인 / 사용자 전환 → 게이팅 로드 (이 구간엔 loader 표시, 절대 signOut/redirect 안 함)
+        await get().loadProfile(nextUserId);
+
+        // 가입 직후 pending signup 캐시 적용 + 비로그인 라이브러리 머지 (best-effort)
+        void (async () => {
+          try {
+            const { applyPendingSignupOnLogin } = await import('@/lib/pendingSignup');
+            const r = await applyPendingSignupOnLogin(nextUserId);
+            if (r.ok && r.type) await get().refreshProfile();
+          } catch (e) {
+            if (import.meta.env.DEV) console.error('[auth] applyPendingSignup error:', e);
+          }
+        })();
+        void (async () => {
+          try {
+            const { mergePersonalLibrary } = await import('@/lib/personalLibraryApi');
+            await mergePersonalLibrary(nextUserId);
+          } catch { /* noop */ }
+          try {
+            const { mergePlaylistFollows } = await import('@/lib/playlistFollowApi');
+            await mergePlaylistFollows(nextUserId);
+          } catch { /* noop */ }
+        })();
       });
     } catch {
-      // 네트워크 실패 등 — 로그인 페이지로 폴백
-      set({ session: null, user: null, profile: null });
-    } finally {
-      set({ loading: false });
+      // 네트워크 실패 등 — 세션 없음으로 정착시키고 로딩 종료 (로그인 라우트는 RequireAuth 가 판단)
+      set({
+        session: null, user: null, profile: null, profileError: null,
+        isAuthReady: true, isProfileReady: true, loading: false,
+      });
+    }
+  },
+
+  loadProfile: async (userId) => {
+    set({ isProfileReady: false, loading: true, profileError: null });
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) {
+        set({ profile: null, profileError: error.message, isProfileReady: true, loading: false });
+        return;
+      }
+      set({ profile: (data as UserRow | null) ?? null, profileError: null, isProfileReady: true, loading: false });
+    } catch (e) {
+      set({
+        profile: null,
+        profileError: e instanceof Error ? e.message : 'profile load failed',
+        isProfileReady: true,
+        loading: false,
+      });
     }
   },
 
@@ -110,8 +155,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ profile: null });
       return;
     }
-    const { data } = await supabase.from('users').select('*').eq('id', user.id).maybeSingle();
-    set({ profile: data ?? null });
+    // 사일런트: 실패해도 기존 profile 유지 (배경 갱신이 화면을 깨지 않도록)
+    const { data, error } = await supabase.from('users').select('*').eq('id', user.id).maybeSingle();
+    if (error) return;
+    set({ profile: (data as UserRow | null) ?? null, profileError: null });
   },
 
   signInWithPassword: async (email, password) => {
@@ -120,13 +167,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUpWithPassword: async (email, password, nickname, metadata) => {
-    // user_metadata 는 0021 handle_new_user 트리거가 읽어서 public.users +
-    // artist_profiles 자동 생성에 사용. 이메일 인증 ON 환경에서도 동작.
     const data: Record<string, string | null | undefined> = {
       nickname: nickname || email.split('@')[0],
       ...(metadata ?? {}),
     };
-    // 항상 출력 (DEV 만 아닌 production 도) — 운영 진단 시 사용자에게 콘솔 캡처 요청 가능
     // eslint-disable-next-line no-console
     console.log('[auth] signUp request:', { email, data });
     const { data: signUpData, error } = await supabase.auth.signUp({
@@ -139,7 +183,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('[auth] signUp error:', error);
       throw error;
     }
-    // 응답 가시화 — user_id / session 존재 여부 / identities length
     const ids = signUpData.user?.identities;
     // eslint-disable-next-line no-console
     console.log('[auth] signUp response:', {
@@ -148,8 +191,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       has_session: !!signUpData.session,
       identities_count: ids?.length ?? 0,
     });
-    // Supabase quirk: confirm email ON 환경에서 동일 이메일로 재가입 시 error 가 아닌
-    // user.identities=[] 빈 배열 + 정상 응답으로 반환됨 → silent duplicate.
+    // confirm email ON 환경에서 동일 이메일 재가입 시 identities=[] 빈 배열로 반환됨 → silent duplicate.
     if (signUpData.user && (!ids || ids.length === 0)) {
       throw new Error('이미 가입된 이메일입니다. 로그인해주세요.');
     }
@@ -165,6 +207,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ session: null, user: null, profile: null });
+    set({
+      session: null, user: null, profile: null, profileError: null,
+      isProfileReady: true, loading: false,
+    });
   },
 }));
