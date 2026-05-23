@@ -29,7 +29,7 @@ export default function ArtistApplyModal({
   const [error, setError] = useState<string | null>(null);
 
   function validate(): string | null {
-    if (!inviteCode.trim()) return '아티스트 초대코드를 입력해주세요';
+    if (!inviteCode.trim()) return '영업코드를 입력해주세요';
     if (!realName.trim()) return '이름을 입력해주세요';
     if (!birthDate) return '생년월일을 입력해주세요';
     if (!artistName.trim()) return '아티스트명을 입력해주세요';
@@ -92,12 +92,12 @@ export default function ArtistApplyModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-2.5">
-          <Field label="아티스트 초대코드 *">
+          <Field label="영업코드 *">
             <input
               className="input font-mono"
               value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="예: ART-XXXXXXXXXX"
+              onChange={(e) => setInviteCode(e.target.value)}
+              placeholder="담당 영업인/관리자에게 받은 영업코드"
               disabled={busy}
             />
           </Field>

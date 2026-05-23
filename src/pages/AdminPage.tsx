@@ -15,7 +15,6 @@ import {
   Ticket,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
-import ArtistInviteCodes from '@/components/admin/ArtistInviteCodes';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
 import ArtistTrackManagementList from '@/components/admin/ArtistTrackManagementList';
 import ArtistSettlementsList from '@/components/admin/ArtistSettlementsList';
@@ -51,7 +50,6 @@ type Tab =
   | 'content'
   | 'auto-playlists'
   | 'artists'
-  | 'artist-codes'
   | 'artist-contracts'
   | 'payout-verification'
   | 'track-review'
@@ -73,7 +71,6 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
-  { key: 'artist-codes', label: '초대코드', icon: <Ticket size={14} /> },
   { key: 'artist-contracts', label: '계약 관리', icon: <FileSignature size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
@@ -145,7 +142,6 @@ export default function AdminPage() {
       {tab === 'content' && <ContentManagement />}
       {tab === 'auto-playlists' && <AutoPlaylistManager />}
       {tab === 'artists' && <ArtistApprovalList />}
-      {tab === 'artist-codes' && <ArtistInviteCodes />}
       {tab === 'artist-contracts' && <ArtistContractsList />}
       {tab === 'payout-verification' && <PayoutVerificationList />}
       {tab === 'track-review' && <TrackReviewList />}
