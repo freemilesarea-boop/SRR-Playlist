@@ -144,6 +144,10 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const init = useAuthStore((s) => s.init);
+  const authUser = useAuthStore((s) => s.user);
+  const authProfile = useAuthStore((s) => s.profile);
+  const authLoading = useAuthStore((s) => s.loading);
+  const signOut = useAuthStore((s) => s.signOut);
   const initTheme = useThemeStore((s) => s.init);
   const refreshTimeSlot = useThemeStore((s) => s.refreshTimeSlot);
   const businessMode = useBusinessStore((s) => s.businessMode);
@@ -175,56 +179,117 @@ export default function App() {
     return <ConfigMissingScreen />;
   }
 
+  // 로그인 사용자인데 프로필 로딩 전이면 — 탈퇴/비활성 판정 전이므로 잠깐 로더.
+  // (홈/추천/플레이어가 "탈퇴회원_xxx님" 으로 잠깐 노출되는 것을 방지)
+  const profilePending = !!authUser && !authProfile && authLoading;
+  const isWithdrawn = !!(authUser && authProfile?.withdrawn_at);
+  const isDisabled = !!(authUser && (authProfile as { disabled_at?: string | null } | null)?.disabled_at);
+
   return (
     <>
       <Toaster />
-      <GlobalGate />
-      <Onboarding />
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/auth/reset" element={<AuthResetPasswordPage />} />
-          <Route element={<AppShell />}>
-            {/* ---- 공개 (비회원 열람 가능, 재생 시 Player gate 가 로그인 유도) ---- */}
-            <Route index element={<HomePage />} />
-            <Route path="/charts" element={<ChartPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/playlist/:id" element={<PlaylistPage />} />
-            <Route path="/track/:id" element={<TrackSharePage />} />
-            <Route path="/curator/:handle" element={<CuratorProfilePage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/notice" element={<NoticePage />} />
-            <Route path="/support" element={<SupportPage />} />
-            <Route path="/service" element={<ServicePage />} />
-            <Route path="/service/preview" element={<ServicePreviewPage />} />
+      {profilePending ? (
+        <AccountStatusLoader />
+      ) : isWithdrawn ? (
+        <WithdrawnAccountScreen onSignOut={() => void signOut()} />
+      ) : isDisabled ? (
+        <DisabledAccountScreen onSignOut={() => void signOut()} />
+      ) : (
+        <>
+          <GlobalGate />
+          <Onboarding />
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/auth/reset" element={<AuthResetPasswordPage />} />
+              <Route element={<AppShell />}>
+                {/* ---- 공개 (비회원 열람 가능, 재생 시 Player gate 가 로그인 유도) ---- */}
+                <Route index element={<HomePage />} />
+                <Route path="/charts" element={<ChartPage />} />
+                <Route path="/search" element={<SearchPage />} />
+                <Route path="/playlist/:id" element={<PlaylistPage />} />
+                <Route path="/track/:id" element={<TrackSharePage />} />
+                <Route path="/curator/:handle" element={<CuratorProfilePage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/notice" element={<NoticePage />} />
+                <Route path="/support" element={<SupportPage />} />
+                <Route path="/service" element={<ServicePage />} />
+                <Route path="/service/preview" element={<ServicePreviewPage />} />
 
-            {/* ---- 보호 (로그인 필요) ---- */}
-            <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
-            <Route path="/payment/fail" element={<RequireAuth><PaymentFailPage /></RequireAuth>} />
-            <Route path="/artist" element={<RequireAuth><ArtistDashboardPage /></RequireAuth>} />
-            <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
-            <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
-            <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
-            <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
-            <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
-            <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
-            <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
-            <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
-            <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
-            <Route
-              path="/admin"
-              element={
-                <RequireAdmin>
-                  <AdminPage />
-                </RequireAdmin>
-              }
-            />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+                {/* ---- 보호 (로그인 필요) ---- */}
+                <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
+                <Route path="/payment/fail" element={<RequireAuth><PaymentFailPage /></RequireAuth>} />
+                <Route path="/artist" element={<RequireAuth><ArtistDashboardPage /></RequireAuth>} />
+                <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
+                <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
+                <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
+                <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
+                <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
+                <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+                <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
+                <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
+                <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireAdmin>
+                      <AdminPage />
+                    </RequireAdmin>
+                  }
+                />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </>
+      )}
     </>
+  );
+}
+
+function AccountStatusLoader() {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+      <LogoMark size={44} className="animate-pulse text-accent" />
+      <p>불러오는 중…</p>
+    </div>
+  );
+}
+
+function WithdrawnAccountScreen({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+      <LogoMark size={40} className="text-accent" />
+      <p className="text-lg font-bold">이 계정은 회원 탈퇴 처리되었습니다.</p>
+      <p className="text-sm text-ink-mute">
+        동일한 이메일로 다시 가입하실 수 있습니다.
+      </p>
+      <button
+        onClick={onSignOut}
+        className="mt-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-bg hover:opacity-90"
+      >
+        로그아웃 후 새로 가입하기
+      </button>
+    </div>
+  );
+}
+
+function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+      <p className="text-lg font-bold">계정이 비활성화됐어요</p>
+      <p className="text-sm text-ink-mute">
+        운영자가 이 계정을 일시 비활성화했어요.<br />
+        문의는 freemilesarea@gmail.com 으로 보내주세요.
+      </p>
+      <button
+        onClick={onSignOut}
+        className="mt-2 rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
+      >
+        로그아웃
+      </button>
+    </div>
   );
 }

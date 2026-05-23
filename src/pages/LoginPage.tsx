@@ -161,7 +161,7 @@ export default function LoginPage() {
               <ArtistSignupForm onDone={() => setSignupDone(true)} />
             )}
 
-            {mode === 'signin' && (
+            {(mode === 'signin' || mode === 'signup-type') && (
               <>
                 <div className="relative flex items-center gap-3 text-xs text-ink-dim">
                   <div className="h-px flex-1 bg-ink/10" />
@@ -180,19 +180,38 @@ export default function LoginPage() {
                   ) : (
                     <GoogleLogo />
                   )}
-                  <span>{googleBusy ? 'Google 로그인 중…' : 'Google로 계속하기'}</span>
+                  <span>
+                    {googleBusy
+                      ? 'Google 처리 중…'
+                      : mode === 'signin'
+                        ? 'Google로 로그인'
+                        : 'Google로 회원가입'}
+                  </span>
                 </button>
 
-                <button
-                  type="button"
-                  className="block w-full text-center text-xs text-ink-mute hover:text-ink"
-                  onClick={() => {
-                    setMode('signup-type');
-                    setError(null);
-                  }}
-                >
-                  계정이 없으신가요? 회원가입
-                </button>
+                {mode === 'signin' ? (
+                  <button
+                    type="button"
+                    className="block w-full text-center text-xs text-ink-mute hover:text-ink"
+                    onClick={() => {
+                      setMode('signup-type');
+                      setError(null);
+                    }}
+                  >
+                    처음이신가요? <span className="font-semibold text-accent">회원가입</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="block w-full text-center text-xs text-ink-mute hover:text-ink"
+                    onClick={() => {
+                      setMode('signin');
+                      setError(null);
+                    }}
+                  >
+                    이미 계정이 있으신가요? <span className="font-semibold text-accent">로그인</span>
+                  </button>
+                )}
               </>
             )}
           </>
