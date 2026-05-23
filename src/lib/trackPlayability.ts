@@ -10,7 +10,15 @@ import { isPlayableTrack, isPlayableUrl } from './audio';
  */
 export type TrackPlaybackState = 'ready' | 'processing' | 'missing' | 'error';
 
-export function getTrackPlaybackState(track: Pick<TrackRow, 'audio_url'>): TrackPlaybackState {
+/** 관리자 삭제(removed)·숨김(hidden) 트랙 여부 — 객체에 해당 필드가 있을 때만 검사(선택적). */
+function isRemovedOrHidden(track: { release_status?: string | null; visibility_status?: string | null; removed_at?: string | null }): boolean {
+  return track.release_status === 'removed' || track.visibility_status === 'hidden' || track.removed_at != null;
+}
+
+export function getTrackPlaybackState(
+  track: Pick<TrackRow, 'audio_url'> & { release_status?: string | null; visibility_status?: string | null; removed_at?: string | null },
+): TrackPlaybackState {
+  if (isRemovedOrHidden(track)) return 'missing';
   const url = track.audio_url;
   if (url == null) return 'missing';
   const trimmed = typeof url === 'string' ? url.trim() : '';
@@ -54,9 +62,12 @@ export function filterPlayableTracks<T extends Pick<TrackRow, 'audio_url'>>(
   const playable: T[] = [];
   const dropped: T[] = [];
   for (const t of tracks) {
-    // isPlayableTrack 는 audio_url 필드만 봄 — Pick<TrackRow,'audio_url'> 로 충분
-    if (isPlayableUrl(t.audio_url)) playable.push(t);
-    else dropped.push(t);
+    // 삭제/숨김 트랙은 재생 후보에서 제외 + audio_url 정상 검사
+    if (!isRemovedOrHidden(t as { release_status?: string | null; visibility_status?: string | null; removed_at?: string | null }) && isPlayableUrl(t.audio_url)) {
+      playable.push(t);
+    } else {
+      dropped.push(t);
+    }
   }
   return { playable, dropped };
 }

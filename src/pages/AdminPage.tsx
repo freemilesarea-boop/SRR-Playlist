@@ -9,6 +9,7 @@ import {
   Sparkles,
   Mic2,
   Music,
+  Trash2,
   ScrollText,
   Handshake,
   FileSignature,
@@ -54,6 +55,7 @@ type Tab =
   | 'payout-verification'
   | 'track-review'
   | 'artist-tracks'
+  | 'deleted-tracks'
   | 'artist-settlements'
   | 'operation-logs'
   | 'recommendation';
@@ -75,6 +77,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'artist-tracks', label: '음원 관리', icon: <Music size={14} /> },
+  { key: 'deleted-tracks', label: '삭제 음원', icon: <Trash2 size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
 ];
@@ -146,6 +149,7 @@ export default function AdminPage() {
       {tab === 'payout-verification' && <PayoutVerificationList />}
       {tab === 'track-review' && <TrackReviewList />}
       {tab === 'artist-tracks' && <ArtistTrackManagementList />}
+      {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
       {tab === 'artist-settlements' && <ArtistSettlementsList />}
       {tab === 'recommendation' && <RecommendationTester />}
     </div>
