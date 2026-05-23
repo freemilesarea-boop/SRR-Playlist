@@ -102,8 +102,14 @@ export default function MembersList() {
   async function changePlan(id: string, newPlan: 'free' | 'personal' | 'individual' | 'business') {
     try {
       await updateUserPlan(id, newPlan);
+      // updateUserPlan 은 subscription_type 과 membership_tier 를 함께 갱신(personal→individual)하므로
+      // 낙관적 로컬 상태도 두 필드를 일치시킨다 (재조회 전 desync 방지).
+      const tier: MemberRow['membership_tier'] =
+        newPlan === 'personal' || newPlan === 'individual' ? 'individual' : newPlan === 'business' ? 'business' : 'free';
       setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, subscription_type: newPlan } : r)),
+        prev.map((r) =>
+          r.id === id ? { ...r, subscription_type: newPlan, membership_tier: tier } : r,
+        ),
       );
       toast.success('플랜이 변경됐어요.');
     } catch (e) {
@@ -244,7 +250,7 @@ export default function MembersList() {
                   </td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <select
-                      value={m.subscription_type}
+                      value={m.subscription_type === 'personal' ? 'individual' : m.subscription_type}
                       onChange={(e) =>
                         changePlan(
                           m.id,

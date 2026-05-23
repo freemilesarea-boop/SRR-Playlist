@@ -194,8 +194,8 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
                       <p className="font-mono text-[10px] text-ink-mute">{it.track_code}</p>
                     </div>
                     <div className="text-right">
-                      <p className="tabular-nums">{it.stream_count.toLocaleString()} 스트림</p>
-                      <p className="tabular-nums font-bold">{`₩${it.pool_revenue_share.toLocaleString()}`}</p>
+                      <p className="tabular-nums">{Number(it.stream_count ?? 0).toLocaleString()} 스트림</p>
+                      <p className="tabular-nums font-bold">{`₩${Number(it.pool_revenue_share ?? 0).toLocaleString()}`}</p>
                     </div>
                   </li>
                 ))}

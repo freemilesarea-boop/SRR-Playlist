@@ -86,7 +86,11 @@ export default function IndividualSignupForm({ onDone }: Props) {
         signup_completed: true,
       };
       try {
-        localStorage.setItem('srr-pending-signup', JSON.stringify(pendingProfile));
+        // PendingSignup 판별 유니온 형태로 저장 — readPendingSignup() 가 type/email/profile 을 기대.
+        localStorage.setItem(
+          'srr-pending-signup',
+          JSON.stringify({ type: 'individual', email: email.trim(), profile: pendingProfile }),
+        );
       } catch { /* noop */ }
 
       // 3) 즉시 로그인된 세션이 있으면 (이메일 컨펌 OFF 환경) 바로 users 업데이트 시도

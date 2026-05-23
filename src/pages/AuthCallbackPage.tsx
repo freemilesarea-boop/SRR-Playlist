@@ -25,13 +25,21 @@ export default function AuthCallbackPage() {
     }
   }, [session, navigate]);
 
-  // session 적용 전에 너무 오래 머무르면 (취소 / 오류) 로그인 페이지로
+  // session 적용 전에 너무 오래 머무르면 (취소 / 오류) 로그인 페이지로.
   useEffect(() => {
+    // 1) provider 가 명시적 에러(error=access_denied 등)를 돌려준 경우 즉시 처리.
+    const qs = `${window.location.search}${window.location.hash}`;
+    if (/[?#&]error(_description)?=/.test(qs)) {
+      navigate('/login?error=oauth_callback_failed', { replace: true });
+      return;
+    }
+    // 2) 정상 흐름이면 느린 네트워크에서 PKCE 코드 교환이 끝날 시간을 충분히 준다.
+    //    (이전 8초는 fetch 타임아웃 예산 25초보다 짧아, 성공 직전 로그인을 실패로 오판했음)
     const t = window.setTimeout(() => {
       if (!useAuthStore.getState().session) {
         navigate('/login?error=oauth_callback_failed', { replace: true });
       }
-    }, 8000);
+    }, 20000);
     return () => window.clearTimeout(t);
   }, [navigate]);
 

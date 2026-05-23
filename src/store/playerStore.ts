@@ -156,17 +156,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (shuffle && shuffleOrder.length === queue.length) {
       const pos = shuffleOrder.indexOf(index);
-      const nextPos = pos + 1;
-      if (nextPos >= shuffleOrder.length) {
-        if (repeat === 'all') {
-          set({ index: shuffleOrder[0], currentTime: 0, playing: true, pendingSeekSec: null });
-        } else {
-          set({ playing: false, currentTime: 0, pendingSeekSec: null });
+      // 현재 index 가 shuffleOrder 에 없으면(큐 변경 등) shuffle 순서 점프 대신 선형 진행으로 폴백.
+      if (pos !== -1) {
+        const nextPos = pos + 1;
+        if (nextPos >= shuffleOrder.length) {
+          if (repeat === 'all') {
+            set({ index: shuffleOrder[0], currentTime: 0, playing: true, pendingSeekSec: null });
+          } else {
+            set({ playing: false, currentTime: 0, pendingSeekSec: null });
+          }
+          return;
         }
+        set({ index: shuffleOrder[nextPos], currentTime: 0, playing: true, pendingSeekSec: null });
         return;
       }
-      set({ index: shuffleOrder[nextPos], currentTime: 0, playing: true, pendingSeekSec: null });
-      return;
     }
     if (index + 1 >= queue.length) {
       if (repeat === 'all') {
@@ -189,9 +192,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (shuffle && shuffleOrder.length === queue.length) {
       const pos = shuffleOrder.indexOf(index);
-      const prevPos = Math.max(0, pos - 1);
-      set({ index: shuffleOrder[prevPos], currentTime: 0, playing: true, pendingSeekSec: null });
-      return;
+      // 현재 index 가 shuffleOrder 에 없으면 선형 진행으로 폴백 (아래 공통 경로).
+      if (pos !== -1) {
+        const prevPos = Math.max(0, pos - 1);
+        set({ index: shuffleOrder[prevPos], currentTime: 0, playing: true, pendingSeekSec: null });
+        return;
+      }
     }
     set({ index: Math.max(0, index - 1), currentTime: 0, playing: true, pendingSeekSec: null });
   },

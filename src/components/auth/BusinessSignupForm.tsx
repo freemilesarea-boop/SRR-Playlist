@@ -191,7 +191,12 @@ export default function BusinessSignupForm({ onDone }: Props) {
       };
 
       try {
-        localStorage.setItem('srr-pending-signup', JSON.stringify({ profile: pendingProfile, bvp: pendingBvp }));
+        // PendingSignup 판별 유니온 형태로 저장 — type/email 누락 시 다음 로그인에서
+        // applyPendingSignupOnLogin 의 business 분기가 실행되지 않아 bvp 가 유실됨.
+        localStorage.setItem(
+          'srr-pending-signup',
+          JSON.stringify({ type: 'business', email: email.trim(), profile: pendingProfile, bvp: pendingBvp }),
+        );
       } catch { /* noop */ }
 
       const { data: sess } = await supabase.auth.getSession();

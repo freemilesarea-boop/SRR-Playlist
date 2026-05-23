@@ -257,6 +257,24 @@ export default function Player() {
   const startedTrackIdRef = useRef<string | null>(null);
   const milestoneSentRef = useRef(false);
   const recentSentRef = useRef<string | null>(null);
+  // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
+  // 마운트 해제 후 stale next() 발화를 막는다.
+  const nextTimerRef = useRef<number | null>(null);
+  function scheduleNext(delayMs: number) {
+    if (nextTimerRef.current !== null) window.clearTimeout(nextTimerRef.current);
+    nextTimerRef.current = window.setTimeout(() => {
+      nextTimerRef.current = null;
+      next();
+    }, delayMs);
+  }
+  useEffect(() => {
+    return () => {
+      if (nextTimerRef.current !== null) {
+        window.clearTimeout(nextTimerRef.current);
+        nextTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 0102 — 플레이리스트 청취 조회수 누적 (10분 = 1 view, 컨텍스트 단위 합산)
   const pvCtxKeyRef = useRef<string | null>(null);
@@ -284,6 +302,10 @@ export default function Player() {
 
   useEffect(() => {
     if (!current || milestoneSentRef.current) return;
+    // 실제 재생 중 + 재생 가능 + 이 트랙에 대해 start 이벤트가 발화된 경우에만 집계.
+    // (세션 복원 seek 로 currentTime 이 30 을 넘긴 채 정지 상태인 경우 오집계 방지)
+    if (!playable || !playing) return;
+    if (startedTrackIdRef.current !== current.id) return;
     if (currentTime >= 30) {
       milestoneSentRef.current = true;
       void trackStream({
@@ -297,7 +319,7 @@ export default function Player() {
         player_muted: volume === 0,
       });
     }
-  }, [currentTime, current, userId, playlist?.id]);
+  }, [currentTime, current, userId, playlist?.id, playable, playing]);
 
   useEffect(() => {
     if (!current) return;
@@ -750,8 +772,13 @@ export default function Player() {
       void clearContinueListening(current.id, userId);
     }
     // 자동 이어추천이 큐를 늘렸으면 next() 가 자연스럽게 동작 (마지막 → 새 곡)
+    const endedId = current?.id ?? null;
     void maybeAutoplayRecommendations().then((added) => {
-      if (!added) next();
+      if (added) return;
+      // await 도중 사용자가 next/prev/트랙변경을 했으면 중복 진행 금지 (stale closure 방어)
+      const st = usePlayerStore.getState();
+      if (endedId !== null && st.queue[st.index]?.id !== endedId) return;
+      next();
     });
   }
 
@@ -811,7 +838,7 @@ export default function Player() {
     }
 
     // 자동 next — 단 다음 트랙도 sessionFailedTrackIds 에 있으면 추가 스킵 (Player 메인 effect 가 처리)
-    window.setTimeout(() => next(), 600);
+    scheduleNext(600);
   }
 
   function cycleRepeat() {
