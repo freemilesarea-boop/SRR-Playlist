@@ -26,7 +26,6 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 추천인(영업인) 코드 — 선택. 입력 시 verify_sales_agent_code 로 검증
@@ -36,16 +35,14 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [salesAgentChecking, setSalesAgentChecking] = useState(false);
 
   function validate(): string | null {
-    if (!inviteCode.trim()) return '아티스트 초대코드를 입력해주세요 (관리자에게 발급받으세요)';
     if (!realName.trim()) return '이름을 입력해주세요';
     if (!birthDate) return '생년월일을 입력해주세요';
     if (!artistName.trim()) return '아티스트명을 입력해주세요';
     if (phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않아요';
     if (!address.trim()) return '주소를 입력해주세요';
-    // 추천인 코드 입력 시 검증 필수 (미입력은 허용)
-    if (salesAgentCode.trim() && !salesAgent) {
-      return '유효하지 않은 추천인 코드입니다.';
-    }
+    // 아티스트 가입은 유효한 영업코드 필수
+    if (!salesAgentCode.trim()) return '영업코드를 입력해주세요 (아티스트 가입 필수)';
+    if (!salesAgent) return '영업코드 확인을 완료해주세요';
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
@@ -111,8 +108,8 @@ export default function ArtistSignupForm({ onDone }: Props) {
         phone: phone.trim(),
         address: address.trim(),
         artist_name: artistName.trim(),
-        // 서버(handle_new_user)가 이 코드를 검증·1회성 소비한 경우에만 artist 로 생성됨.
-        artist_invite_code: inviteCode.trim(),
+        // 서버(handle_new_user)가 이 영업코드를 검증한 경우에만 artist 로 생성됨.
+        sales_agent_code: salesAgentCode.trim(),
       });
 
       // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용.
@@ -207,18 +204,6 @@ export default function ArtistSignupForm({ onDone }: Props) {
         </p>
       </div>
 
-      <Field label="아티스트 초대코드 *" hint="관리자에게 발급받은 코드">
-        <input
-          type="text"
-          required
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-          placeholder="예: ART-XXXXXXXXXX"
-          className="input font-mono"
-          autoCapitalize="characters"
-        />
-      </Field>
-
       <Field label="이름 *">
         <input type="text" required value={realName} onChange={(e) => setRealName(e.target.value)} autoComplete="name" className="input" />
       </Field>
@@ -235,10 +220,10 @@ export default function ArtistSignupForm({ onDone }: Props) {
         <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" className="input" />
       </Field>
 
-      {/* 추천인 코드 (선택, 미입력 시 승인 거절 가능 안내) */}
+      {/* 영업코드 (아티스트 가입 필수) */}
       <hr className="border-line/10" />
-      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">추천인 코드</p>
-      <Field label="추천인 코드">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">영업코드 *</p>
+      <Field label="영업코드 (아티스트 가입 필수)">
         <div className="flex gap-2">
           <input
             type="text"
@@ -276,7 +261,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
         )}
       </Field>
       <Alert tone="warning">
-        추천인 코드 미입력 시 아티스트 승인이 거절될 수 있습니다.
+        아티스트 가입은 <strong>유효한 영업코드</strong>가 있어야 가능합니다. 코드는 담당 영업인/관리자에게 발급받으세요.
       </Alert>
 
       <hr className="border-line/10" />
