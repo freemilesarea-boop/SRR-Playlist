@@ -17,8 +17,11 @@ import {
   uploadArtistTrack,
   validateArtistAudioFile,
   fetchArtistUploadEligibility,
+  fetchMyArtistProfile,
+  getCurrentUserFast,
   formatEligibilityError,
   type ReleaseType,
+  type ArtistProfile,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -226,7 +229,10 @@ export default function ArtistBatchUploadForm({
     return null;
   }
 
-  async function uploadOne(t: TrackRow): Promise<{ ok: boolean; error?: string; track_id?: string; track_code?: string; cover_warning?: string }> {
+  async function uploadOne(
+    t: TrackRow,
+    profile: ArtistProfile | null,
+  ): Promise<{ ok: boolean; error?: string; track_id?: string; track_code?: string; cover_warning?: string }> {
     return uploadArtistTrack({
       title: t.title.trim(),
       artist: (t.artist.trim() || common.artist.trim()) || undefined,
@@ -247,23 +253,38 @@ export default function ArtistBatchUploadForm({
       lyrics: t.lyrics.trim() || undefined,
       audioFile: t.file,
       coverFile: t.coverFile ?? common.coverFile,
-      // 자격은 제출 직전 한 번만 확인 (파일마다 RPC 반복 호출 방지)
+      // 자격/프로필/정산계좌는 제출 직전 1회만 확인 (곡마다 RPC/조회 반복 → 연결 경합 timeout 방지)
       skipEligibilityCheck: true,
+      prefetchedProfile: profile,
+      skipPayoutCheck: true,
     });
   }
 
-  /** 제출 직전 업로드 자격을 1회만 확인. 통과 시 null, 실패 시 사용자 메시지 반환. */
-  async function checkEligibilityOnce(): Promise<string | null> {
+  /**
+   * 제출 직전 1회만: 업로드 자격(eligibility, payout 포함) + 아티스트 프로필 확인.
+   * 통과 시 profile 반환, 실패 시 사용자 메시지 반환. 곡별로 반복하지 않는다.
+   */
+  async function runPreflight(): Promise<{ error: string | null; profile: ArtistProfile | null }> {
     try {
-      const elig = await fetchArtistUploadEligibility();
-      if (!elig.can_upload) return formatEligibilityError(elig.reasons);
-      return null;
+      const me = await getCurrentUserFast();
+      if (!me?.id) {
+        return { error: '로그인 정보 확인이 지연됐어요. 새로고침 후 다시 시도해주세요.', profile: null };
+      }
+      const [elig, profile] = await Promise.all([
+        fetchArtistUploadEligibility(),
+        fetchMyArtistProfile(me.id),
+      ]);
+      if (!elig.can_upload) return { error: formatEligibilityError(elig.reasons), profile: null };
+      if (!profile || profile.approval_status !== 'approved') {
+        return { error: '승인된 아티스트만 업로드할 수 있어요.', profile: null };
+      }
+      return { error: null, profile };
     } catch {
-      return '업로드 자격 확인이 지연됐어요. 다시 시도해주세요.';
+      return { error: '계정 상태 확인이 지연되었습니다. 다시 시도해주세요.', profile: null };
     }
   }
 
-  async function runPool(ids: string[]) {
+  async function runPool(ids: string[], profile: ArtistProfile | null) {
     const queue = [...ids];
     const worker = async () => {
       while (queue.length > 0) {
@@ -273,7 +294,7 @@ export default function ArtistBatchUploadForm({
         if (!t) continue;
         patchTrack(id, { status: 'uploading', error: undefined });
         try {
-          const res = await uploadOne(t);
+          const res = await uploadOne(t, profile);
           if (res.ok) {
             // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
             if (res.track_id) {
@@ -309,9 +330,9 @@ export default function ArtistBatchUploadForm({
         toast.info('업로드할 곡이 없어요 (모두 성공 상태)');
         return;
       }
-      const eligErr = await checkEligibilityOnce();
-      if (eligErr) {
-        toast.error(eligErr);
+      const { error: preErr, profile } = await runPreflight();
+      if (preErr) {
+        toast.error(preErr);
         return;
       }
       setTracks((prev) =>
@@ -319,7 +340,7 @@ export default function ArtistBatchUploadForm({
           targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
         ),
       );
-      await runPool(targets);
+      await runPool(targets, profile);
       // 결과 요약 (state 가 최신이 아닐 수 있으므로 ref 대신 setter 콜백 사용)
       setTracks((prev) => {
         const ok = prev.filter((t) => t.status === 'success').length;
@@ -347,9 +368,9 @@ export default function ArtistBatchUploadForm({
     }
     setSubmitting(true);
     try {
-      const eligErr = await checkEligibilityOnce();
-      if (eligErr) {
-        toast.error(eligErr);
+      const { error: preErr, profile } = await runPreflight();
+      if (preErr) {
+        toast.error(preErr);
         return;
       }
       setTracks((prev) =>
@@ -357,7 +378,7 @@ export default function ArtistBatchUploadForm({
           failedIds.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
         ),
       );
-      await runPool(failedIds);
+      await runPool(failedIds, profile);
       await onUploaded();
     } finally {
       setSubmitting(false);

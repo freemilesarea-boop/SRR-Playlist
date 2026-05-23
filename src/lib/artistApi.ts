@@ -161,6 +161,23 @@ export async function withTimeout<T>(
 }
 
 /**
+ * 일시적 지연/네트워크 오류로 실패하면 1회(기본 2회 시도) 재시도.
+ * 마지막 시도까지 실패하면 마지막 에러를 그대로 throw (friendly 메시지 유지).
+ */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 2, delayMs = 800): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
  * 업로드 단계 raw 에러를 사용자 친화 메시지로 변환.
  * AbortError / "signal is aborted without reason" / 네트워크 오류가
  * 사용자에게 그대로 노출되지 않도록 한다.
@@ -293,6 +310,16 @@ export interface UploadInput {
    * (submit_artist_release RPC + RLS 가 서버에서 최종 자격을 재검증하므로 안전)
    */
   skipEligibilityCheck?: boolean;
+  /**
+   * 일괄 업로드 최적화: 업로드 시작 시 1회 조회한 아티스트 프로필을 넘기면
+   * 곡마다 fetchMyArtistProfile 를 재호출하지 않는다 (대량 동시 업로드 시 연결 경합 → timeout 방지).
+   */
+  prefetchedProfile?: ArtistProfile | null;
+  /**
+   * 일괄 업로드 최적화: 시작 시 eligibility(get_artist_upload_eligibility, payout 검증 포함)를
+   * 1회 확인했으면 곡별 payout 계좌 재조회를 생략. (서버 RPC/RLS 가 최종 재검증)
+   */
+  skipPayoutCheck?: boolean;
 }
 
 export interface UploadResult {
@@ -475,13 +502,19 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     }
 
     stage = 'profile';
-    log('profile fetch start');
-    const profile = await withTimeout(
-      fetchMyArtistProfile(userId),
-      10_000,
-      '아티스트 프로필 확인 시간이 초과되었습니다.',
-    );
-    log('profile fetch done', { hasProfile: !!profile, status: profile?.approval_status });
+    // 일괄 업로드는 시작 시 1회 조회한 프로필을 재사용 (곡별 재조회로 인한 연결 경합/timeout 방지)
+    let profile = input.prefetchedProfile ?? null;
+    if (!profile) {
+      log('profile fetch start');
+      profile = await withRetry(() =>
+        withTimeout(
+          fetchMyArtistProfile(userId),
+          15_000,
+          '계정 상태 확인이 지연되었습니다. 다시 시도해주세요.',
+        ),
+      );
+    }
+    log('profile fetch done', { hasProfile: !!profile, status: profile?.approval_status, prefetched: !!input.prefetchedProfile });
     if (!profile || profile.approval_status !== 'approved') {
       return { ok: false, error: '승인된 아티스트만 업로드할 수 있습니다' };
     }
@@ -620,24 +653,30 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       uploadDebug.step('cover-upload', 'info', '커버 미첨부');
     }
 
-    // 3) verified payout account 조회
+    // 3) verified payout account 조회 — 일괄 업로드는 시작 시 eligibility 로 1회 검증했으면 생략
     stage = 'payout-check';
-    log('payout check start');
-    let payoutOk = false;
-    try {
-      const { data: payout } = await withTimeout(
-        supabase.from('artist_payout_accounts').select('id, verification_status').eq('user_id', userId).maybeSingle(),
-        10_000,
-        '정산 계좌 확인 시간이 초과되었습니다.',
-      );
-      payoutOk = !!payout && payout.verification_status === 'verified';
-      log('payout check done', { verified: payoutOk });
-    } catch (e) {
-      log('payout check TIMEOUT', { err: e instanceof Error ? e.message : String(e) });
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-    if (!payoutOk) {
-      return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
+    if (input.skipPayoutCheck) {
+      log('payout check skipped (batch pre-checked via eligibility)');
+    } else {
+      log('payout check start');
+      let payoutOk = false;
+      try {
+        const { data: payout } = await withRetry(() =>
+          withTimeout(
+            supabase.from('artist_payout_accounts').select('id, verification_status').eq('user_id', userId).maybeSingle(),
+            15_000,
+            '정산 계좌 정보 확인이 지연되었습니다. 잠시 후 다시 시도해주세요.',
+          ),
+        );
+        payoutOk = !!payout && payout.verification_status === 'verified';
+        log('payout check done', { verified: payoutOk });
+      } catch (e) {
+        log('payout check TIMEOUT', { err: e instanceof Error ? e.message : String(e) });
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      if (!payoutOk) {
+        return { ok: false, error: '정산 계좌 등록/승인 완료 후 업로드 가능합니다' };
+      }
     }
 
     // 4) submit_artist_release RPC
