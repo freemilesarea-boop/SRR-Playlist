@@ -283,6 +283,19 @@ export async function adminWithdrawUser(userId: string, reason?: string) {
   return data as { ok: boolean; canceled_subs: number };
 }
 
+/**
+ * 이미 탈퇴된 회원의 누락 상태 보정 (마스킹/티어/구독취소). 재탈퇴 아님.
+ * withdrawn_at 이 있는 회원에만 동작하며 idempotent.
+ */
+export async function adminRepairWithdrawnUser(userId: string, reason?: string) {
+  const { data, error } = await supabase.rpc('admin_repair_withdrawn_user', {
+    p_user_id: userId,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; pii_masked: boolean; tier_fixed: boolean; canceled_subs: number };
+}
+
 export async function adminMaskUserPii(userId: string) {
   const { data, error } = await supabase.rpc('admin_mask_user_pii', { p_user_id: userId });
   if (error) throw error;
