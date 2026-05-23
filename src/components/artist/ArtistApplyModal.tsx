@@ -24,10 +24,12 @@ export default function ArtistApplyModal({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [email, setEmail] = useState(defaultEmail);
+  const [inviteCode, setInviteCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function validate(): string | null {
+    if (!inviteCode.trim()) return '아티스트 초대코드를 입력해주세요';
     if (!realName.trim()) return '이름을 입력해주세요';
     if (!birthDate) return '생년월일을 입력해주세요';
     if (!artistName.trim()) return '아티스트명을 입력해주세요';
@@ -54,6 +56,7 @@ export default function ArtistApplyModal({
         phone: phone.trim(),
         address: address.trim(),
         email: email.trim(),
+        inviteCode: inviteCode.trim(),
       });
       toast.success('아티스트 지원이 접수됐어요. 관리자 승인 후 음원 업로드가 가능해요.');
       await onDone();
@@ -89,6 +92,15 @@ export default function ArtistApplyModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-2.5">
+          <Field label="아티스트 초대코드 *">
+            <input
+              className="input font-mono"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              placeholder="예: ART-XXXXXXXXXX"
+              disabled={busy}
+            />
+          </Field>
           <Field label="이름 (실명) *">
             <input className="input" value={realName} onChange={(e) => setRealName(e.target.value)} disabled={busy} />
           </Field>

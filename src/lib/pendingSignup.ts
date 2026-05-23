@@ -143,22 +143,8 @@ export async function applyPendingSignupOnLogin(
 
     // 2) type 별 부가 테이블
     if (p.type === 'artist') {
-      const { error: aErr } = await supabase
-        .from('artist_profiles')
-        .upsert({ user_id: userId, ...p.artist }, { onConflict: 'user_id' });
-      if (aErr) {
-        // RLS 403 (42501): 이미 approved 상태로 row 존재 → pending 강제 upsert 불가.
-        // 이미 적용된 것으로 간주하고 localStorage 정리 (무한 403 차단)
-        const code = (aErr as { code?: string }).code;
-        if (code === '42501') {
-          if (import.meta.env.DEV)
-            console.debug('[pendingSignup] artist_profiles 403 — already approved, clearing cache');
-          clearPendingSignup();
-          return { ok: true, skipped: 'already_applied' };
-        }
-        if (import.meta.env.DEV) console.error('[pendingSignup] artist_profiles.upsert failed:', aErr);
-        return { ok: false, error: aErr.message };
-      }
+      // 아티스트 생성은 서버(handle_new_user)가 가입 시 초대코드를 검증·소비해 처리한다.
+      // 클라이언트는 artist_profiles 를 직접 쓰지 않음 (코드 가드 트리거로 차단됨). → no-op.
     } else if (p.type === 'business') {
       const { error: bErr } = await supabase
         .from('business_verification_profiles')

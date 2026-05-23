@@ -26,6 +26,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 추천인(영업인) 코드 — 선택. 입력 시 verify_sales_agent_code 로 검증
@@ -35,6 +36,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [salesAgentChecking, setSalesAgentChecking] = useState(false);
 
   function validate(): string | null {
+    if (!inviteCode.trim()) return '아티스트 초대코드를 입력해주세요 (관리자에게 발급받으세요)';
     if (!realName.trim()) return '이름을 입력해주세요';
     if (!birthDate) return '생년월일을 입력해주세요';
     if (!artistName.trim()) return '아티스트명을 입력해주세요';
@@ -109,6 +111,8 @@ export default function ArtistSignupForm({ onDone }: Props) {
         phone: phone.trim(),
         address: address.trim(),
         artist_name: artistName.trim(),
+        // 서버(handle_new_user)가 이 코드를 검증·1회성 소비한 경우에만 artist 로 생성됨.
+        artist_invite_code: inviteCode.trim(),
       });
 
       // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용.
@@ -150,26 +154,14 @@ export default function ArtistSignupForm({ onDone }: Props) {
         /* noop */
       }
 
-      // 즉시 로그인된 환경(이메일 인증 OFF)이면 명시적 RPC 로 즉시 적용.
-      // 0024 의 submit_artist_signup_profile RPC 는 트리거 동작 여부와 무관하게 본인이
-      // 자신의 artist_profiles 를 생성/보정 가능. 멱등.
+      // 아티스트 생성/승격은 서버(handle_new_user)가 메타데이터의 초대코드를 검증·소비한
+      // 경우에만 수행한다. 클라이언트는 artist_profiles/account_type 을 직접 쓰지 않는다
+      // (코드 가드 트리거로 차단됨). 여기서는 추천인(sales_agent) 연결만 보강.
       const { data: sess } = await supabase.auth.getSession();
       let hasSession = false;
       if (sess.session?.user?.id) {
         hasSession = true;
         const uid = sess.session.user.id;
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc(
-          'submit_artist_signup_profile',
-          {
-            p_real_name: realName.trim(),
-            p_birth_date: birthDate,
-            p_artist_name: artistName.trim(),
-            p_phone: phone.trim(),
-            p_address: address.trim(),
-            p_email: email.trim(),
-          },
-        );
-        // 추천인 연결 — RPC 시그니처 미수정. 별도 users.update 로 sales_agent 컬럼만 set
         if (verifiedAgent) {
           const { error: agErr } = await supabase
             .from('users')
@@ -180,49 +172,6 @@ export default function ArtistSignupForm({ onDone }: Props) {
             .eq('id', uid);
           if (agErr && import.meta.env.DEV) {
             console.warn('[artist-signup] sales_agent update failed:', agErr);
-          }
-        }
-        if (import.meta.env.DEV) {
-          console.log('[artist-signup] submit RPC:', { rpcRes, rpcErr });
-        }
-        if (rpcErr) {
-          // RPC 가 0024 미적용 등으로 없을 수도 있음 — fallback 으로 직접 upsert
-          if (import.meta.env.DEV) {
-            console.warn('[artist-signup] RPC 실패, 직접 upsert fallback:', rpcErr.message);
-          }
-          const { error: uErr } = await supabase
-            .from('users')
-            .update({
-              account_type: 'artist',
-              full_name: realName.trim(),
-              birth_date: birthDate,
-              phone: phone.trim(),
-              address: address.trim(),
-              signup_completed: true,
-              artist_approval_status: 'pending',
-            })
-            .eq('id', uid);
-          if (uErr) console.error('[artist-signup] users.update fallback failed:', uErr);
-          const { error: aErr } = await supabase.from('artist_profiles').upsert(
-            {
-              user_id: uid,
-              real_name: realName.trim(),
-              birth_date: birthDate,
-              artist_name: artistName.trim(),
-              phone: phone.trim(),
-              address: address.trim(),
-              email: email.trim(),
-              approval_status: 'pending',
-            },
-            { onConflict: 'user_id' },
-          );
-          if (aErr) console.error('[artist-signup] artist_profiles.upsert fallback failed:', aErr);
-          // 둘 다 실패한 경우엔 사용자에게 인지시키기 (localStorage 캐시가 다음 로그인 시 재적용)
-          if (uErr && aErr) {
-            toast.error(
-              '가입은 완료됐지만 아티스트 프로필 저장이 지연됐어요. ' +
-                '다시 로그인하면 자동 적용됩니다.',
-            );
           }
         }
       } else {
@@ -257,6 +206,18 @@ export default function ArtistSignupForm({ onDone }: Props) {
           등록이 가능합니다.
         </p>
       </div>
+
+      <Field label="아티스트 초대코드 *" hint="관리자에게 발급받은 코드">
+        <input
+          type="text"
+          required
+          value={inviteCode}
+          onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+          placeholder="예: ART-XXXXXXXXXX"
+          className="input font-mono"
+          autoCapitalize="characters"
+        />
+      </Field>
 
       <Field label="이름 *">
         <input type="text" required value={realName} onChange={(e) => setRealName(e.target.value)} autoComplete="name" className="input" />

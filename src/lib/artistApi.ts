@@ -342,6 +342,7 @@ export async function submitArtistSignupProfile(input: {
   phone: string;
   address: string;
   email: string;
+  inviteCode: string;
 }): Promise<void> {
   const { error } = await supabase.rpc('submit_artist_signup_profile', {
     p_real_name: input.realName,
@@ -350,8 +351,39 @@ export async function submitArtistSignupProfile(input: {
     p_phone: input.phone,
     p_address: input.address,
     p_email: input.email,
+    p_invite_code: input.inviteCode,
   });
   if (error) throw error;
+}
+
+export interface ArtistInviteCode {
+  id: string;
+  code: string;
+  note: string | null;
+  created_by: string | null;
+  used_by: string | null;
+  used_at: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** 관리자: 아티스트 초대코드 발급 */
+export async function adminGenerateArtistInviteCode(note?: string, expiresAt?: string | null): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_generate_artist_invite_code', {
+    p_note: note ?? null,
+    p_expires_at: expiresAt ?? null,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row as { code: string }).code;
+}
+
+/** 관리자: 아티스트 초대코드 목록 */
+export async function adminListArtistInviteCodes(limit = 100): Promise<ArtistInviteCode[]> {
+  const { data, error } = await supabase.rpc('admin_list_artist_invite_codes', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ArtistInviteCode[];
 }
 
 /** 본인 아티스트 프로필 조회 (없으면 null) */
