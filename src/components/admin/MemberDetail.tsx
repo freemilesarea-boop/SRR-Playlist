@@ -503,13 +503,20 @@ export default function MemberDetail({
                 <DangerButton
                   icon={<UserX size={14} />}
                   label="탈퇴 처리 (운영자 대행)"
-                  description="활성 구독 자동 cancel + tier free. 정산/계약 이력은 보존됩니다."
-                  disabled={!!data.user.withdrawn_at}
+                  description="활성 구독 자동 cancel + tier free. 개인정보는 마스킹되고 정산/계약/결제·음원 이력과 식별자는 보존됩니다."
+                  disabled={!!data.user.withdrawn_at || data.user.role === 'admin'}
+                  disabledReason={
+                    data.user.role === 'admin'
+                      ? '관리자 계정은 탈퇴 처리할 수 없습니다'
+                      : data.user.withdrawn_at
+                        ? '이미 탈퇴 처리된 회원입니다'
+                        : undefined
+                  }
                   onClick={() =>
                     setPending({
                       kind: 'withdraw',
                       label: '탈퇴 처리 (운영자 대행)',
-                      description: '활성 구독을 cancel_scheduled 로 전환하고, withdrawn_at 을 기록해요. 사용자는 즉시 모든 서비스에서 차단되며, 정산/계약/결제 이력은 보존됩니다. 강제 로그아웃도 함께 실행됩니다.',
+                      description: '활성 구독을 cancel_scheduled 로 전환하고 계정 접근을 즉시 차단해요. 개인정보(이름·연락처·주소 등)는 마스킹되며, 결제/계약/정산/음원 이력과 식별자(이메일·아티스트명·사업자번호)는 보존됩니다. 강제 로그아웃도 함께 실행됩니다.',
                       irreversible: true,
                       requiresReason: true,
                     })
@@ -569,6 +576,7 @@ function DangerButton({
   description,
   onClick,
   disabled,
+  disabledReason,
   tone = 'danger',
 }: {
   icon: React.ReactNode;
@@ -576,6 +584,7 @@ function DangerButton({
   description: string;
   onClick: () => void;
   disabled?: boolean;
+  disabledReason?: string;
   tone?: 'danger' | 'ok';
 }) {
   return (
@@ -583,6 +592,7 @@ function DangerButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={disabled && disabledReason ? disabledReason : undefined}
       className={`group flex flex-col items-start gap-1 rounded-xl bg-bg-card p-3 text-left ring-1 transition disabled:opacity-40 disabled:pointer-events-none ${
         tone === 'ok'
           ? 'ring-green-500/30 hover:bg-green-500/10 hover:ring-green-500/50'
@@ -597,6 +607,11 @@ function DangerButton({
         {icon} {label}
       </span>
       <span className="text-[11px] leading-relaxed text-ink-mute">{description}</span>
+      {disabled && disabledReason && (
+        <span className="mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">
+          {disabledReason}
+        </span>
+      )}
     </button>
   );
 }
