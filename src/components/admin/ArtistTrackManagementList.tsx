@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
-import { adminListArtistTracks, adminBulkDeleteTracks, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+import { adminListArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
@@ -74,6 +74,7 @@ export default function ArtistTrackManagementList() {
   const [delModal, setDelModal] = useState(false);
   const [delHard, setDelHard] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
+  const [delReason, setDelReason] = useState('');
   const [deletableOnly, setDeletableOnly] = useState(false);
   const [coverBusyId, setCoverBusyId] = useState<string | null>(null);
   const [tagModal, setTagModal] = useState<{ trackId: string; title: string } | null>(null);
@@ -158,55 +159,87 @@ export default function ArtistTrackManagementList() {
       return next;
     });
   }
-  // 상태 기반 삭제 가능 여부 (released/scheduled/approved 는 일반 삭제 불가).
-  // 정산/스트리밍 연결은 서버가 최종 차단 — 클라이언트는 상태 기준으로만 안내.
+  // 발매(released/scheduled/approved) 음원은 물리삭제 불가 → 공개중단(takedown)으로 처리.
+  // 미발매(draft/submitted/rejected 등)는 삭제 가능. 둘 다 선택은 허용한다.
   function isProtected(r: AdminTrackRow): boolean {
     return PROTECTED_STATUSES.includes(r.release_status ?? '');
   }
   const visibleRows = deletableOnly ? rows.filter((r) => !isProtected(r)) : rows;
-  const deletableIds = visibleRows.filter((r) => !isProtected(r)).map((r) => r.track_id);
-  const allDeletableSelected =
-    deletableIds.length > 0 && deletableIds.every((id) => selected.has(id));
+  const allVisibleSelected =
+    visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.track_id));
 
-  // "현재 목록 전체 선택" / 헤더 체크박스 — 삭제 가능한 곡만 토글
+  // 헤더/툴바 전체 선택 — 현재 보이는 모든 곡 토글 (발매곡 포함: takedown 대상)
   function toggleSelectAll() {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allDeletableSelected) deletableIds.forEach((id) => next.delete(id));
-      else deletableIds.forEach((id) => next.add(id));
+      if (allVisibleSelected) visibleRows.forEach((r) => next.delete(r.track_id));
+      else visibleRows.forEach((r) => next.add(r.track_id));
       return next;
     });
   }
-  // "삭제 가능만 선택" — 현재 로드된 삭제 가능 곡 전체 선택
+  // "삭제 가능만 선택" — 미발매(삭제 가능) 곡만 선택
   function selectDeletable() {
     setSelected(new Set(rows.filter((r) => !isProtected(r)).map((r) => r.track_id)));
   }
-  const selectedProtected = rows.filter(
-    (r) => selected.has(r.track_id) && isProtected(r),
-  ).length;
 
-  async function runDelete() {
-    const ids = [...selected];
-    if (ids.length === 0) return;
+  const selectedRows = rows.filter((r) => selected.has(r.track_id));
+  const selectedProtected = selectedRows.filter(isProtected).length; // takedown 대상
+  const selectedDeletable = selectedRows.filter((r) => !isProtected(r)).length; // 삭제 대상
+  const reasonValid = delReason.trim().length >= 5;
+
+  // 선택 처리: 발매곡 → 공개중단(takedown), 미발매곡 → 삭제. 사유 5자 이상 필수.
+  async function runProcess() {
+    const protectedIds = selectedRows.filter(isProtected).map((r) => r.track_id);
+    const deletableIds = selectedRows.filter((r) => !isProtected(r)).map((r) => r.track_id);
+    if (protectedIds.length + deletableIds.length === 0) return;
+    if (!reasonValid) {
+      toast.error('처리 사유를 5자 이상 입력해주세요.');
+      return;
+    }
+    const reason = delReason.trim();
+    if (import.meta.env.DEV) {
+      console.debug('[track-manage] process', { takedown: protectedIds, delete: deletableIds, hard: delHard, reason });
+    }
     setDelBusy(true);
+    let takedownOk = 0;
+    const fails: string[] = [];
     try {
-      const res = await adminBulkDeleteTracks(ids, delHard ? 'hard' : 'soft', '관리자 일괄 삭제');
-      if (res.deleted_count > 0) {
-        toast.success(
-          `${res.deleted_count}곡 삭제 완료${delHard ? ' (완전 삭제)' : ''}` +
-            (res.skipped_count > 0 ? `, ${res.skipped_count}곡은 발매/정산 이력으로 건너뜀` : ''),
-        );
-      } else if (res.skipped_count > 0) {
-        // 전부 차단된 경우 — 사유를 명확히 안내
-        toast.error(`발매/정산 이력이 있는 ${res.skipped_count}곡은 삭제할 수 없습니다.`);
-        toast.info('삭제 가능한 대기/실패/거절 상태의 음원만 삭제할 수 있어요.');
+      // 1) 발매곡 공개중단 (물리삭제 금지 → release_status='removed')
+      for (const id of protectedIds) {
+        try {
+          await adminTakedownTrack(id, reason);
+          takedownOk += 1;
+        } catch (e) {
+          fails.push(`${id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
-      if (res.failed.length > 0) toast.error(`${res.failed.length}곡 처리 실패`);
+      // 2) 미발매곡 삭제
+      let deletedCount = 0;
+      let skippedCount = 0;
+      if (deletableIds.length > 0) {
+        const res = await adminBulkDeleteTracks(deletableIds, delHard ? 'hard' : 'soft', reason);
+        deletedCount = res.deleted_count;
+        skippedCount = res.skipped_count;
+        res.failed.forEach((f) => fails.push(`${f.track_id.slice(0, 8)}: ${f.error}`));
+      }
+
+      const parts: string[] = [];
+      if (takedownOk > 0) parts.push(`공개중단 ${takedownOk}곡`);
+      if (deletedCount > 0) parts.push(`삭제 ${deletedCount}곡${delHard ? '(완전)' : ''}`);
+      if (parts.length > 0) toast.success(parts.join(' · ') + ' 처리됨');
+      if (skippedCount > 0) toast.info(`${skippedCount}곡은 발매/정산 이력으로 건너뜀`);
+      if (fails.length > 0) {
+        toast.error(`${fails.length}곡 처리 실패: ${fails.slice(0, 2).join(' / ')}${fails.length > 2 ? ' …' : ''}`);
+      }
+      if (parts.length === 0 && fails.length === 0 && skippedCount === 0) {
+        toast.info('처리할 항목이 없습니다.');
+      }
       setDelModal(false);
       setDelHard(false);
+      setDelReason('');
       await load();
     } catch (e) {
-      toast.error(`삭제 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`처리 실패: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setDelBusy(false);
     }
@@ -284,18 +317,18 @@ export default function ArtistTrackManagementList() {
       {!loading && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
           <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
-            <input type="checkbox" checked={allDeletableSelected} onChange={toggleSelectAll} />
-            삭제 가능 전체 선택
+            <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+            전체 선택
           </label>
           <button
             onClick={selectDeletable}
             className="rounded-md bg-bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
           >
-            삭제 가능만 선택
+            미발매(삭제 가능)만 선택
           </button>
           <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-[11px] text-ink-mute">
             <input type="checkbox" checked={deletableOnly} onChange={(e) => setDeletableOnly(e.target.checked)} />
-            삭제 가능만 보기
+            미발매만 보기
           </label>
           <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
           <div className="flex-1" />
@@ -304,7 +337,7 @@ export default function ArtistTrackManagementList() {
             disabled={selected.size === 0}
             className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/15 dark:text-red-300"
           >
-            <Trash2 size={12} /> 선택 삭제
+            <Trash2 size={12} /> 선택 처리 (삭제/공개중단)
           </button>
         </div>
       )}
@@ -315,7 +348,7 @@ export default function ArtistTrackManagementList() {
             <thead>
               <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
                 <th className="w-px px-3 py-2.5 text-left font-semibold">
-                  <input type="checkbox" checked={allDeletableSelected} onChange={toggleSelectAll} aria-label="삭제 가능 전체 선택" />
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="전체 선택" />
                 </th>
                 <th className="w-px px-3 py-2.5 text-left font-semibold">커버</th>
                 <th className="px-3 py-2.5 text-left font-semibold">track_code</th>
@@ -359,8 +392,7 @@ export default function ArtistTrackManagementList() {
                         type="checkbox"
                         checked={selected.has(r.track_id)}
                         onChange={() => toggleSelect(r.track_id)}
-                        disabled={protectedRow}
-                        title={protectedRow ? '발매/정산 이력이 있는 곡은 일반 삭제할 수 없습니다.' : '선택'}
+                        title={protectedRow ? '발매곡 — 선택 시 공개 중단(takedown)으로 처리됩니다.' : '선택 — 삭제 대상'}
                         aria-label="선택"
                       />
                     </td>
@@ -530,38 +562,59 @@ export default function ArtistTrackManagementList() {
             className="w-full max-w-md space-y-3 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
           >
             <h3 className="flex items-center gap-2 text-base font-bold">
-              <AlertTriangle size={18} className="text-red-400" /> 음원 일괄 삭제
+              <AlertTriangle size={18} className="text-red-400" /> 음원 선택 처리
             </h3>
             <Alert tone="error">
-              <p>선택한 <b>{selected.size}곡</b>을 삭제합니다. 이 작업은 되돌리기 어렵습니다.</p>
+              <p>선택한 <b>{selected.size}곡</b>을 처리합니다.</p>
               {selectedProtected > 0 && (
                 <p className="mt-1 text-[11px]">
-                  이 중 <b>{selectedProtected}곡</b>은 발매/정산 이력이 있어 삭제되지 않고 건너뜁니다.
+                  · 발매곡 <b>{selectedProtected}곡</b> → <b>공개 중단(takedown)</b> 처리 (정산/계약/권리·데이터 보존, 물리삭제 아님)
+                </p>
+              )}
+              {selectedDeletable > 0 && (
+                <p className="mt-0.5 text-[11px]">
+                  · 미발매곡 <b>{selectedDeletable}곡</b> → <b>삭제</b> 처리
                 </p>
               )}
             </Alert>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-bg-card p-3 text-xs ring-1 ring-line/10">
-              <input
-                type="checkbox"
-                checked={delHard}
-                onChange={(e) => setDelHard(e.target.checked)}
-                className="mt-0.5"
+            <label className="block space-y-1">
+              <span className="text-[11px] font-semibold text-ink-mute">처리 사유 * (5자 이상)</span>
+              <textarea
+                rows={2}
+                value={delReason}
+                onChange={(e) => setDelReason(e.target.value)}
+                placeholder="예: 아티스트 요청으로 공개 중단 / 테스트 업로드 정리"
+                className="input text-sm"
+                disabled={delBusy}
               />
-              <span>
-                <b>완전 삭제 (hard)</b> — DB에서 행을 제거하고 스토리지 파일을 정리 대상으로 표시합니다.
-                해제 시 <b>보관 삭제(soft)</b>: 목록에서 숨기고 복구할 수 있어요. (테스트 데이터는 완전 삭제 권장)
-              </span>
+              {!reasonValid && delReason.length > 0 && (
+                <span className="text-[10px] text-red-500">사유를 5자 이상 입력해주세요.</span>
+              )}
             </label>
+            {selectedDeletable > 0 && (
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-bg-card p-3 text-xs ring-1 ring-line/10">
+                <input
+                  type="checkbox"
+                  checked={delHard}
+                  onChange={(e) => setDelHard(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <b>완전 삭제 (hard)</b> — 미발매곡을 DB에서 제거하고 스토리지 파일을 정리 대상으로 표시.
+                  해제 시 <b>보관 삭제(soft)</b>: 숨기고 복구 가능. (발매곡은 항상 공개중단으로만 처리)
+                </span>
+              </label>
+            )}
             <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setDelModal(false)} disabled={delBusy} className="btn-ghost px-3 py-2 text-xs">
+              <button onClick={() => { setDelModal(false); setDelReason(''); }} disabled={delBusy} className="btn-ghost px-3 py-2 text-xs">
                 취소
               </button>
               <button
-                onClick={() => void runDelete()}
-                disabled={delBusy}
-                className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+                onClick={() => void runProcess()}
+                disabled={delBusy || !reasonValid}
+                className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
               >
-                {delBusy ? '삭제 중…' : `${selected.size}곡 삭제`}
+                {delBusy ? '처리 중…' : `${selected.size}곡 처리`}
               </button>
             </div>
           </div>
