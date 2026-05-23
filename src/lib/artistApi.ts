@@ -331,6 +331,29 @@ export interface UploadResult {
   cover_warning?: string;
 }
 
+/**
+ * 로그인 사용자가 아티스트로 지원(전환). 신규 auth 가입 없이 본인 계정에
+ * artist_profiles(pending) 생성 + users.account_type='artist' 설정. 멱등.
+ */
+export async function submitArtistSignupProfile(input: {
+  realName: string;
+  birthDate: string;
+  artistName: string;
+  phone: string;
+  address: string;
+  email: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc('submit_artist_signup_profile', {
+    p_real_name: input.realName,
+    p_birth_date: input.birthDate,
+    p_artist_name: input.artistName,
+    p_phone: input.phone,
+    p_address: input.address,
+    p_email: input.email,
+  });
+  if (error) throw error;
+}
+
 /** 본인 아티스트 프로필 조회 (없으면 null) */
 export async function fetchMyArtistProfile(userId: string): Promise<ArtistProfile | null> {
   try {

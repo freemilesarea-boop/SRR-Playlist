@@ -28,6 +28,7 @@ import {
   type ArtistProfile,
   type UploadEligibility,
 } from '@/lib/artistApi';
+import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
 import {
   usePlaybackSettingsStore,
   CROSSFADE_OPTIONS,
@@ -186,6 +187,7 @@ export default function ProfilePage() {
       {user?.id && (
         <ArtistManagementCard
           userId={user.id}
+          userEmail={user.email ?? ''}
           accountType={profile?.account_type ?? null}
           usersApproval={profile?.artist_approval_status ?? null}
         />
@@ -298,14 +300,19 @@ function ArtistManagementCard({
   userId,
   accountType,
   usersApproval,
+  userEmail,
 }: {
   userId: string;
+  userEmail: string;
   accountType: string | null;
   usersApproval: 'pending' | 'approved' | 'rejected' | null;
 }) {
   // undefined = 로딩 중, null = 프로필 없음
   const [artistProfile, setArtistProfile] = useState<ArtistProfile | null | undefined>(undefined);
   const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const refreshAuthProfile = useAuthStore((s) => s.refreshProfile);
 
   useEffect(() => {
     let alive = true;
@@ -322,7 +329,13 @@ function ArtistManagementCard({
     return () => {
       alive = false;
     };
-  }, [userId]);
+  }, [userId, reloadKey]);
+
+  async function handleApplied() {
+    setApplyOpen(false);
+    setReloadKey((k) => k + 1);
+    await refreshAuthProfile();
+  }
 
   // 아티스트 컨텍스트 여부: 프로필이 있거나 account_type=artist (둘 다 아니면 일반 리스너 → 숨김)
   const isArtistContext = accountType === 'artist' || artistProfile != null;
@@ -333,7 +346,41 @@ function ArtistManagementCard({
       <div className="h-28 animate-pulse rounded-2xl bg-bg-card" />
     ) : null;
   }
-  if (!isArtistContext) return null;
+
+  // 일반 회원 — 아티스트로 지원(전환)할 수 있는 진입점 제공
+  if (!isArtistContext) {
+    return (
+      <>
+        <section className="rounded-2xl bg-gradient-to-br from-accent/10 to-accent-soft/5 p-4 ring-1 ring-accent/20">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+              <Mic2 size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-bold tracking-tight">아티스트로 활동하고 싶으세요?</h2>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+                음원을 유통하고 정산받는 아티스트로 지원할 수 있어요. 관리자 승인 후 음원 업로드가 시작됩니다.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setApplyOpen(true)}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-accent py-2.5 text-sm font-bold text-bg shadow-sm hover:opacity-90"
+          >
+            아티스트로 지원하기
+            <ChevronRight size={14} />
+          </button>
+        </section>
+        {applyOpen && (
+          <ArtistApplyModal
+            defaultEmail={userEmail}
+            onClose={() => setApplyOpen(false)}
+            onDone={handleApplied}
+          />
+        )}
+      </>
+    );
+  }
 
   // ── 상태 결정 ─────────────────────────────────────────────
   // source of truth = artist_profiles.approval_status
