@@ -8,6 +8,7 @@ import {
   adminDisableUser,
   adminEnableUser,
   adminWithdrawUser,
+  adminRepairWithdrawnUser,
   adminMaskUserPii,
   adminForceSignOutUser,
   adminTriggerPasswordReset,
@@ -19,7 +20,7 @@ import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
 
-type DangerAction = 'disable' | 'enable' | 'withdraw' | 'mask_pii' | 'password_reset' | 'force_signout';
+type DangerAction = 'disable' | 'enable' | 'withdraw' | 'withdraw_repair' | 'mask_pii' | 'password_reset' | 'force_signout';
 interface PendingAction {
   kind: DangerAction;
   label: string;
@@ -111,6 +112,11 @@ export default function MemberDetail({
           const r = await adminWithdrawUser(userId, reason);
           resultMsg = `탈퇴 처리됨 (구독 ${r.canceled_subs}건 cancel_scheduled)`;
           void adminForceSignOutUser(userId).catch(() => {});
+          break;
+        }
+        case 'withdraw_repair': {
+          const r = await adminRepairWithdrawnUser(userId, reason);
+          resultMsg = `탈퇴 상태 정리됨 (마스킹 ${r.pii_masked ? '실행' : '유지'} · tier ${r.tier_fixed ? '보정' : '유지'} · 구독 ${r.canceled_subs}건 정리)`;
           break;
         }
         case 'mask_pii': {
@@ -223,11 +229,30 @@ export default function MemberDetail({
                 )}
               </div>
               {data.user.withdrawn_at && (
-                <Alert
-                  tone="error"
-                  title={`탈퇴 회원 · ${new Date(data.user.withdrawn_at).toLocaleDateString('ko-KR')}`}
-                >
-                  {data.user.withdrawn_reason ? `사유: ${data.user.withdrawn_reason}` : '계정 이용이 중단된 상태예요.'}
+                <Alert tone="error" title={`탈퇴 처리됨 · ${fmtDateTime(data.user.withdrawn_at)}`}>
+                  <div className="space-y-0.5 text-[12px] leading-relaxed">
+                    <p>사유: {data.user.withdrawn_reason ?? '미기재'}</p>
+                    <p>
+                      개인정보 마스킹:{' '}
+                      {data.user.pii_masked_at
+                        ? `완료 (${fmtDateTime(data.user.pii_masked_at)})`
+                        : '미완료 ⚠'}
+                    </p>
+                    <p>
+                      요금제: {data.user.membership_tier ?? 'free'}
+                      {data.user.membership_tier && data.user.membership_tier !== 'free'
+                        ? ' ⚠ (free 아님)'
+                        : ''}
+                    </p>
+                    <p>접근: 로그인·서비스 이용 차단됨</p>
+                    {(!data.user.pii_masked_at ||
+                      (data.user.membership_tier && data.user.membership_tier !== 'free')) && (
+                      <p className="font-semibold text-amber-200">
+                        일부 상태가 누락됐어요. 아래 Danger Zone 의 “탈퇴 상태 정리 / 마스킹 재실행”으로
+                        보정하세요. (정산/계약/결제·음원 이력은 보존됩니다)
+                      </p>
+                    )}
+                  </div>
                 </Alert>
               )}
               {data.user.disabled_at && (
@@ -522,6 +547,25 @@ export default function MemberDetail({
                     })
                   }
                 />
+                {data.user.withdrawn_at &&
+                  (!data.user.pii_masked_at ||
+                    (data.user.membership_tier && data.user.membership_tier !== 'free')) && (
+                    <DangerButton
+                      icon={<UserX size={14} />}
+                      label="탈퇴 상태 정리 / 마스킹 재실행"
+                      description="이미 탈퇴된 회원의 누락된 개인정보 마스킹·요금제·구독취소를 보정합니다. 이력은 보존됩니다."
+                      onClick={() =>
+                        setPending({
+                          kind: 'withdraw_repair',
+                          label: '탈퇴 상태 정리 / 마스킹 재실행',
+                          description:
+                            '이미 탈퇴 처리된 회원의 누락 항목(개인정보 마스킹, 요금제 free, 활성 구독 cancel_scheduled)을 보정해요. 재탈퇴가 아니며, 결제/계약/정산/음원 이력과 식별자는 보존됩니다.',
+                          irreversible: true,
+                          requiresReason: true,
+                        })
+                      }
+                    />
+                  )}
                 <DangerButton
                   icon={<Eye size={14} />}
                   label="개인정보 마스킹"
