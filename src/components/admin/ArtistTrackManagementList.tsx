@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
-import { adminListArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+import { adminListArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
@@ -62,8 +62,9 @@ const PAYOUT_TONE: Record<string, string> = {
   rejected: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
 };
 
-export default function ArtistTrackManagementList() {
+export default function ArtistTrackManagementList({ removedView = false }: { removedView?: boolean } = {}) {
   const [rows, setRows] = useState<AdminTrackRow[]>([]);
+  const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusFilter>('');
@@ -112,6 +113,19 @@ export default function ArtistTrackManagementList() {
     }
   }
 
+  async function restoreTrack(trackId: string) {
+    setRestoreBusyId(trackId);
+    try {
+      await adminRestoreTrack(trackId);
+      toast.success('음원을 복구했어요. (검수/발매 흐름으로 복귀)');
+      await load();
+    } catch (e) {
+      toast.error(`복구 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRestoreBusyId(null);
+    }
+  }
+
   async function replaceCover(trackId: string, file: File | null) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -140,10 +154,14 @@ export default function ArtistTrackManagementList() {
     setError(null);
     try {
       const data = await adminListArtistTracks({
-        status: status || undefined,
+        status: removedView ? 'removed' : status || undefined,
         search: search || undefined,
       });
-      setRows(data);
+      // 음원 관리: removed 제외 / 삭제 음원: removed 만
+      const filtered = removedView
+        ? data.filter((r) => r.release_status === 'removed')
+        : data.filter((r) => r.release_status !== 'removed');
+      setRows(filtered);
       setSelected(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -261,10 +279,12 @@ export default function ArtistTrackManagementList() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
-            <Music size={16} className="text-accent" /> 음원 관리
+            <Music size={16} className="text-accent" /> {removedView ? '삭제 음원' : '음원 관리'}
           </h2>
           <p className="text-xs text-ink-mute">
-            {rows.length}건 · release_status='released' 인 트랙만 정산 대상
+            {removedView
+              ? `${rows.length}건 · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출`
+              : `${rows.length}건 · release_status='released' 인 트랙만 정산 대상`}
           </p>
         </div>
         <button
@@ -313,8 +333,8 @@ export default function ArtistTrackManagementList() {
         </select>
       </div>
 
-      {/* 일괄 선택/삭제 툴바 */}
-      {!loading && rows.length > 0 && (
+      {/* 일괄 선택/삭제 툴바 (삭제 음원 보기에서는 숨김) */}
+      {!removedView && !loading && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
           <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
             <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
@@ -478,6 +498,16 @@ export default function ArtistTrackManagementList() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
+                        {removedView && (
+                          <button
+                            onClick={() => void restoreTrack(r.track_id)}
+                            disabled={restoreBusyId === r.track_id}
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            title="검수/발매 흐름으로 복구"
+                          >
+                            {restoreBusyId === r.track_id ? <Loader2 size={12} className="animate-spin" /> : '복구'}
+                          </button>
+                        )}
                         {/* 0076 — row-level visibility-only 액션 (approve/reject/hide) 제거.
                             release_status 와 어긋난 부정합 발생 방지. 모든 액션은 expand
                             패널 (TrackModerationPanel) 의 release_status 기반 RPC 로 통일. */}
