@@ -29,7 +29,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (!useAuthStore.getState().session) {
-        navigate('/login', { replace: true });
+        navigate('/login?error=oauth_callback_failed', { replace: true });
       }
     }, 8000);
     return () => window.clearTimeout(t);

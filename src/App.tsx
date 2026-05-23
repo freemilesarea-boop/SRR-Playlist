@@ -71,8 +71,10 @@ function RouteFallback() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { session, profile, user, loading, signOut } = useAuthStore();
-  if (loading) {
+  const session = useAuthStore((s) => s.session);
+  const isAuthReady = useAuthStore((s) => s.isAuthReady);
+  // 세션 복원 전에는 절대 /login 으로 보내지 않고 로더 표시 (로그인 루프 방지)
+  if (!isAuthReady) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
         <LogoMark size={44} className="animate-pulse text-accent" />
@@ -81,47 +83,15 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     );
   }
   if (!session) return <Navigate to="/login" replace />;
-  // 탈퇴 회원 차단 — profile 이 아직 안 로드됐으면 통과시켜 다음 렌더에서 검사
-  if (user && profile && profile.withdrawn_at) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-lg font-bold">탈퇴된 계정이에요</p>
-        <p className="text-sm text-ink-mute">
-          이 계정은 회원 탈퇴 처리됐어요. 다시 이용하려면 새로 가입해주세요.
-        </p>
-        <button
-          onClick={() => void signOut()}
-          className="mt-2 rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
-        >
-          로그아웃
-        </button>
-      </div>
-    );
-  }
-  // 0095 — 비활성화 계정 차단 (관리자가 disable 처리)
-  if (user && profile && (profile as { disabled_at?: string | null }).disabled_at) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-lg font-bold">계정이 비활성화됐어요</p>
-        <p className="text-sm text-ink-mute">
-          운영자가 이 계정을 일시 비활성화했어요.<br />
-          문의는 freemilesarea@gmail.com 으로 보내주세요.
-        </p>
-        <button
-          onClick={() => void signOut()}
-          className="mt-2 rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
-        >
-          로그아웃
-        </button>
-      </div>
-    );
-  }
+  // 탈퇴/비활성/프로필 상태는 App 전역 게이트가 라우트 렌더 전에 처리함
   return <>{children}</>;
 }
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { profile, user, loading } = useAuthStore();
-  if (loading || (user && !profile)) {
+  const profile = useAuthStore((s) => s.profile);
+  const isAuthReady = useAuthStore((s) => s.isAuthReady);
+  const isProfileReady = useAuthStore((s) => s.isProfileReady);
+  if (!isAuthReady || !isProfileReady) {
     return (
       <div className="flex h-[60vh] items-center justify-center text-ink-mute">
         권한 확인 중…
@@ -132,9 +102,6 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-2 px-6 text-center">
         <p className="text-sm text-ink-mute">관리자 권한이 필요해요.</p>
-        <p className="text-xs text-ink-dim">
-          관리자 계정 설정 방법은 README.md 의 ‘관리자 계정 설정’ 섹션을 확인하세요.
-        </p>
         <Navigate to="/" replace />
       </div>
     );
@@ -146,8 +113,11 @@ export default function App() {
   const init = useAuthStore((s) => s.init);
   const authUser = useAuthStore((s) => s.user);
   const authProfile = useAuthStore((s) => s.profile);
-  const authLoading = useAuthStore((s) => s.loading);
+  const isAuthReady = useAuthStore((s) => s.isAuthReady);
+  const isProfileReady = useAuthStore((s) => s.isProfileReady);
+  const profileError = useAuthStore((s) => s.profileError);
   const signOut = useAuthStore((s) => s.signOut);
+  const loadProfile = useAuthStore((s) => s.loadProfile);
   const initTheme = useThemeStore((s) => s.init);
   const refreshTimeSlot = useThemeStore((s) => s.refreshTimeSlot);
   const businessMode = useBusinessStore((s) => s.businessMode);
@@ -179,25 +149,59 @@ export default function App() {
     return <ConfigMissingScreen />;
   }
 
-  // 로그인 사용자인데 프로필 로딩 전이면 — 탈퇴/비활성 판정 전이므로 잠깐 로더.
-  // (홈/추천/플레이어가 "탈퇴회원_xxx님" 으로 잠깐 노출되는 것을 방지)
-  const profilePending = !!authUser && !authProfile && authLoading;
-  const isWithdrawn = !!(authUser && authProfile?.withdrawn_at);
-  const isDisabled = !!(authUser && (authProfile as { disabled_at?: string | null } | null)?.disabled_at);
-  // auth 세션은 있는데 public.users 프로필이 없음 (계정 초기화/삭제됨) → 세션 정리 후 재가입 유도
-  const profileMissing = !!authUser && !authProfile && !authLoading;
+  // ── 전역 라우팅 분기 (auth/profile readiness 기반) ──────────────
+  // 원칙: auth 복원 전 → 로더. 세션 있음+profile 로딩 → 로더. 절대 로딩 중 /login·signOut 안 함.
+  const decision: 'loading' | 'withdrawn' | 'disabled' | 'profile_error' | 'profile_missing' | 'app' =
+    !isAuthReady
+      ? 'loading'
+      : authUser
+        ? !isProfileReady
+          ? 'loading'
+          : authProfile?.withdrawn_at
+            ? 'withdrawn'
+            : (authProfile as { disabled_at?: string | null } | null)?.disabled_at
+              ? 'disabled'
+              : !authProfile && profileError
+                ? 'profile_error'
+                : !authProfile
+                  ? 'profile_missing'
+                  : 'app'
+        : 'app'; // 비로그인: public 허용, private 은 RequireAuth 가 /login 처리
+
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug('[auth-route]', {
+      path: window.location.pathname,
+      isAuthReady, isProfileReady,
+      hasSession: !!authUser, userId: authUser?.id?.slice(0, 8) ?? null,
+      hasProfile: !!authProfile,
+      withdrawn: !!authProfile?.withdrawn_at,
+      signupCompleted: (authProfile as { signup_completed?: boolean } | null)?.signup_completed ?? null,
+      profileError,
+      decision,
+    });
+  }
 
   return (
     <>
       <Toaster />
-      {profilePending ? (
+      {decision === 'loading' ? (
         <AccountStatusLoader />
-      ) : isWithdrawn ? (
+      ) : decision === 'withdrawn' ? (
         <WithdrawnAccountScreen onSignOut={() => void signOut()} />
-      ) : isDisabled ? (
+      ) : decision === 'disabled' ? (
         <DisabledAccountScreen onSignOut={() => void signOut()} />
-      ) : profileMissing ? (
-        <ProfileMissingScreen onSignOut={signOut} />
+      ) : decision === 'profile_error' ? (
+        <ProfileErrorScreen
+          onRetry={() => authUser && void loadProfile(authUser.id)}
+          onSignOut={signOut}
+        />
+      ) : decision === 'profile_missing' ? (
+        <ProfileBootstrapScreen
+          userId={authUser?.id ?? ''}
+          onReload={loadProfile}
+          onSignOut={signOut}
+        />
       ) : (
         <>
           <GlobalGate />
@@ -298,23 +302,88 @@ function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
-// auth 세션은 있으나 public.users 프로필이 없는 경우(계정 초기화/삭제됨):
-// 홈/닉네임/플레이어가 렌더되기 전에 세션을 정리하고 재가입 화면으로 보낸다.
-function ProfileMissingScreen({ onSignOut }: { onSignOut: () => Promise<void> }) {
-  useEffect(() => {
-    let alive = true;
-    void onSignOut().finally(() => {
-      if (alive) window.setTimeout(() => window.location.replace('/login'), 60);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [onSignOut]);
+// 프로필 조회가 에러(네트워크 등)로 실패한 경우 — 절대 자동 signOut 하지 않고 재시도 제공.
+function ProfileErrorScreen({ onRetry, onSignOut }: { onRetry: () => void; onSignOut: () => Promise<void> }) {
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className="text-accent" />
-      <p className="text-lg font-bold">가입 정보가 초기화되었습니다.</p>
-      <p className="text-sm text-ink-mute">다시 가입해주세요. 로그인 화면으로 이동합니다…</p>
+      <p className="text-lg font-bold">정보를 불러오지 못했어요</p>
+      <p className="text-sm text-ink-mute">네트워크 상태를 확인하고 다시 시도해주세요.</p>
+      <div className="mt-2 flex gap-2">
+        <button onClick={onRetry} className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90">
+          다시 시도
+        </button>
+        <button onClick={() => void onSignOut()} className="rounded-xl bg-bg-card px-4 py-2 text-sm font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink">
+          로그아웃
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// auth 세션은 있으나 public.users 프로필이 아직 없음 (가입 트리거 지연/초기화).
+// 자동 signOut 하지 않는다 — 트리거 지연을 대비해 잠깐 재조회하고, 그래도 없으면 수동 선택 제공.
+function ProfileBootstrapScreen({
+  userId,
+  onReload,
+  onSignOut,
+}: {
+  userId: string;
+  onReload: (uid: string) => Promise<void>;
+  onSignOut: () => Promise<void>;
+}) {
+  const [exhausted, setExhausted] = useState(false);
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    let attempts = 0;
+    const tick = () => {
+      attempts += 1;
+      void onReload(userId).finally(() => {
+        if (!alive) return;
+        if (attempts >= 3) setExhausted(true);
+      });
+    };
+    // 트리거 지연 대비 1.2초 간격 재조회 (자동 signOut 없음)
+    const id = window.setInterval(() => {
+      if (attempts >= 3) {
+        window.clearInterval(id);
+        return;
+      }
+      tick();
+    }, 1200);
+    tick();
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [userId, onReload]);
+
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+      <LogoMark size={40} className={exhausted ? 'text-accent' : 'animate-pulse text-accent'} />
+      <p className="text-lg font-bold">계정을 준비하고 있어요</p>
+      <p className="text-sm text-ink-mute">
+        {exhausted
+          ? '가입 정보를 불러오지 못했어요. 다시 시도하거나 로그아웃 후 다시 로그인해주세요.'
+          : '잠시만 기다려주세요…'}
+      </p>
+      {exhausted && (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => userId && void onReload(userId)}
+            className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-bg hover:opacity-90"
+          >
+            다시 시도
+          </button>
+          <button
+            onClick={() => void onSignOut()}
+            className="rounded-xl bg-bg-card px-4 py-2 text-sm font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink"
+          >
+            로그아웃
+          </button>
+        </div>
+      )}
     </div>
   );
 }
