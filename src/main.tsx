@@ -4,9 +4,13 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { initSentry } from './lib/sentry';
+import { purgeBadAudioCaches } from './lib/swCache';
 
 // 0093 — Sentry 초기화 (DSN 없으면 silent skip, production 만 활성)
 void initSentry();
+
+// 과거 SW 가 오디오 Range 요청을 opaque 로 잘못 캐싱한 캐시를 시작 시 1회 정리(모바일 재생 복구).
+void purgeBadAudioCaches();
 
 // PWA 새 SW 가 활성화되면 (autoUpdate 가 백그라운드 swap 후 controllerchange fire)
 // 같은 탭의 옛 SW 가 캐시한 옛 chunk 가 안 잡히도록 1회 reload.

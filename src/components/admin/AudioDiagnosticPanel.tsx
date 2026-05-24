@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Stethoscope, RefreshCw, Play, CheckCircle2, XCircle, Smartphone, Activity } from 'lucide-react';
 import { fetchTracks } from '@/lib/api';
 import { probeTrackAudio, capturePlaybackTimeline, mediaErrName, type AudioProbe, type PlaybackEvent } from '@/lib/audioDiagnostics';
+import { getSwDiagnostics, resetServiceWorkerAndCaches, type SwDiagnostics } from '@/lib/swCache';
 import type { TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -20,6 +21,9 @@ export default function AudioDiagnosticPanel() {
   const [probes, setProbes] = useState<Record<string, AudioProbe | 'running'>>({});
   const [timelines, setTimelines] = useState<Record<string, { timeline: PlaybackEvent[]; outcome: string; errorCode: number | null } | 'running'>>({});
   const [running, setRunning] = useState(false);
+  const [sw, setSw] = useState<SwDiagnostics | null>(null);
+
+  useEffect(() => { void getSwDiagnostics().then(setSw); }, []);
 
   async function runTimeline(r: Row) {
     setTimelines((p) => ({ ...p, [r.id]: 'running' }));
@@ -95,6 +99,26 @@ export default function AudioDiagnosticPanel() {
           duration 이 0:00 이거나 디코딩 실패면 그 기기에서 재생 불가입니다. (헤더는 CORS 노출 범위 내에서만 표시)
         </p>
       </Alert>
+
+      {/* Service Worker 상태 + 초기화 (오디오 가로채기/잘못된 캐시 점검) */}
+      <div className="space-y-2 rounded-xl bg-bg-soft/50 p-3 text-[11px] ring-1 ring-line/10">
+        <p className="font-bold text-ink">Service Worker / 캐시 상태</p>
+        {sw ? (
+          <div className="space-y-0.5 font-mono text-ink-mute">
+            <p>controller(제어중): <b className={sw.controlled ? 'text-amber-500' : 'text-emerald-500'}>{String(sw.controlled)}</b> · 등록 {sw.registrations}개</p>
+            <p className="break-all">activeSW: {sw.controllerScriptURL ?? '(없음)'}</p>
+            <p className="break-all">cacheKeys: {sw.cacheKeys.length ? sw.cacheKeys.join(', ') : '(없음)'}</p>
+            {sw.hasAudioCache && <p className="font-bold text-red-500">⚠ 오디오 관련 캐시 존재 — 초기화 권장(오디오 Range 가로채기 원인)</p>}
+          </div>
+        ) : <p className="text-ink-mute">확인 중…</p>}
+        <button
+          onClick={() => { void resetServiceWorkerAndCaches(); }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+        >
+          캐시/SW 초기화 후 새로고침
+        </button>
+        <p className="text-ink-dim">기존 SW 등록 해제 + 모든 캐시 삭제 후 새로고침합니다. 모바일에서 재생이 안 되면 이 버튼을 누른 뒤 다시 시도하세요.</p>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={probeAll} disabled={running || rows.length === 0}
