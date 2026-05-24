@@ -15,6 +15,7 @@ import {
   FileSignature,
   Ticket,
   Smartphone,
+  Stethoscope,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -40,6 +41,7 @@ import PromotionCodes from '@/components/admin/PromotionCodes';
 import AutoPlaylistManager from '@/components/admin/AutoPlaylistManager';
 import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import AudioReencodePanel from '@/components/admin/AudioReencodePanel';
+import AudioDiagnosticPanel from '@/components/admin/AudioDiagnosticPanel';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
@@ -60,6 +62,7 @@ type Tab =
   | 'artist-tracks'
   | 'deleted-tracks'
   | 'audio-reencode'
+  | 'audio-diagnostics'
   | 'artist-settlements'
   | 'operation-logs'
   | 'recommendation';
@@ -83,6 +86,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'artist-tracks', label: '음원 관리', icon: <Music size={14} /> },
   { key: 'deleted-tracks', label: '삭제 음원', icon: <Trash2 size={14} /> },
   { key: 'audio-reencode', label: '오디오 변환(iOS)', icon: <Smartphone size={14} /> },
+  { key: 'audio-diagnostics', label: '오디오 진단', icon: <Stethoscope size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
 ];
@@ -159,6 +163,7 @@ export default function AdminPage() {
         {tab === 'artist-tracks' && <ArtistTrackManagementList />}
         {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
         {tab === 'audio-reencode' && <AudioReencodePanel />}
+        {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
       </AdminErrorBoundary>

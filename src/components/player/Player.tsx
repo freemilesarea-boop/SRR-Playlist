@@ -266,6 +266,11 @@ export default function Player() {
   // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
   // 마운트 해제 후 stale next() 발화를 막는다.
   const nextTimerRef = useRef<number | null>(null);
+  // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
+  const metaTimerRef = useRef<number | null>(null);
+  function clearMetaTimer() {
+    if (metaTimerRef.current !== null) { window.clearTimeout(metaTimerRef.current); metaTimerRef.current = null; }
+  }
   function scheduleNext(delayMs: number) {
     if (nextTimerRef.current !== null) window.clearTimeout(nextTimerRef.current);
     nextTimerRef.current = window.setTimeout(() => {
@@ -279,6 +284,7 @@ export default function Player() {
         window.clearTimeout(nextTimerRef.current);
         nextTimerRef.current = null;
       }
+      clearMetaTimer();
     };
   }, []);
 
@@ -429,8 +435,26 @@ export default function Player() {
       audio.src = current.audio_url;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
+      clearMetaTimer();
       if (playing) {
         try { audio.load(); } catch { /* noop */ }
+        // 메타데이터 로딩 타임아웃 — 12초 안에 loadedmetadata 가 없으면(duration 0:00 고착)
+        // 재생 불가로 처리(iOS 가 디코딩 못 하는 WAV 등). onLoadedMetadata 에서 해제.
+        const trackId = current.id;
+        metaTimerRef.current = window.setTimeout(() => {
+          const a = activeRef();
+          const dur = a?.duration;
+          if (usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id === trackId
+              && (!a || !Number.isFinite(dur) || (dur ?? 0) <= 0)) {
+            // eslint-disable-next-line no-console
+            console.warn('[audio] metadata timeout — duration 0:00, 재생 불가 처리', {
+              id: trackId, title: current.title, src: a?.currentSrc, readyState: a?.readyState, networkState: a?.networkState,
+            });
+            usePlaybackHealthStore.getState().reportPlaybackError('META_TIMEOUT');
+            setErrored(true);
+            pause();
+          }
+        }, 12000);
       }
       audio.currentTime = 0;
       audio.volume = volume;
@@ -686,6 +710,8 @@ export default function Player() {
     const target = e.currentTarget;
     if (target !== activeRef()) return;
     const d = target.duration;
+    // 메타데이터가 정상 로드됨(유한 duration) → 타임아웃 가드 해제
+    if (Number.isFinite(d) && d > 0) clearMetaTimer();
     if (Number.isFinite(d)) setDuration(d);
     // 세션 복원 직후 한 번만 seek (queue/index 유지된 새로고침 케이스)
     if (
