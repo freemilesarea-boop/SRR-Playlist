@@ -744,6 +744,24 @@ function ArtistUploadForm({
     return null;
   }
 
+  /** 누락된 필수값을 한 번에 보여주기 위한 목록 (제출 버튼 비활성화 + 안내용). */
+  function missingList(): string[] {
+    const out: string[] = [];
+    if (!isEditing && !audioFile) out.push('음원 파일');
+    if (!title.trim()) out.push('곡명');
+    if (!albumName.trim()) out.push('앨범명');
+    if (!coverFile && !(isEditing && editingTrack?.cover_url)) out.push('앨범 자켓');
+    if (!releaseType) out.push('발매 유형');
+    if (!releaseDate) out.push('발매일');
+    if (meta.genre_tags.length === 0) out.push('장르');
+    if (meta.mood_tags.length === 0) out.push('분위기');
+    if (meta.business_type_tags.length === 0) out.push('추천 매장');
+    if (!meta.vocal_type) out.push('보컬 타입');
+    if (meta.recommended_dayparts.length === 0) out.push('추천 시간대');
+    if (!rightsConfirmed) out.push('유통 동의/권리 확인');
+    return out;
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const m = missing();
@@ -989,7 +1007,31 @@ function ArtistUploadForm({
         </span>
       </label>
 
-      <button type="submit" disabled={busy || !rightsConfirmed} className="btn-primary w-full py-2.5">
+      {(() => {
+        const miss = missingList();
+        if (miss.length === 0) return null;
+        return (
+          <div className="rounded-xl bg-red-100 p-3 text-[12px] text-red-900 ring-1 ring-red-400/30 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20">
+            <p className="font-bold">아래 필수 항목을 입력해야 음원 유통 신청이 가능합니다.</p>
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {miss.map((m) => (
+                <li key={m} className="rounded-full bg-red-200/70 px-2 py-0.5 text-[11px] font-semibold dark:bg-red-500/20">
+                  {m === '앨범 자켓' ? '앨범 자켓 (필수)' : m}
+                </li>
+              ))}
+            </ul>
+            {miss.includes('앨범 자켓') && (
+              <p className="mt-1.5 font-semibold">앨범 자켓을 등록해야 음원 유통 신청이 가능합니다.</p>
+            )}
+          </div>
+        );
+      })()}
+
+      <button
+        type="submit"
+        disabled={busy || missingList().length > 0}
+        className="btn-primary w-full py-2.5 disabled:opacity-50"
+      >
         {busy ? '업로드 중…' : '업로드 신청'}
       </button>
       <p className="text-[11px] text-ink-dim">
