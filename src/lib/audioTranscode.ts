@@ -24,53 +24,75 @@
 
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
-/** 단일 스레드 ffmpeg-core 버전 — SharedArrayBuffer 불필요 */
-const FFMPEG_CORE_VERSION = '0.12.6';
-const FFMPEG_CORE_BASES = [
-  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
-  `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
-];
+/**
+ * 단일 스레드 ffmpeg-core (SharedArrayBuffer 불필요).
+ * CDN(unpkg/jsdelivr) 제거 — 앱 내부 self-hosting(public/ffmpeg/) 만 사용.
+ * CSP/connect-src/모듈 import 문제를 원천 차단(전부 same-origin).
+ */
+function ffmpegBase(): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}/ffmpeg`;
+}
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
 
-/** 인스턴스 1회만 로드. 동시 호출은 같은 promise 공유. CDN 실패 시 폴백 CDN 재시도. */
+/** 인스턴스 1회만 로드. 동시 호출은 같은 promise 공유. 로컬 asset 만 사용(단계별 에러 메시지). */
 async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
-      import('@ffmpeg/ffmpeg'),
-      import('@ffmpeg/util'),
-    ]);
+    const base = ffmpegBase();
+    let FFmpeg: typeof import('@ffmpeg/ffmpeg').FFmpeg;
+    let toBlobURL: typeof import('@ffmpeg/util').toBlobURL;
+    try {
+      ({ FFmpeg } = await import('@ffmpeg/ffmpeg'));
+      ({ toBlobURL } = await import('@ffmpeg/util'));
+    } catch (e) {
+      throw new Error(`ffmpeg 모듈 import 실패: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     const ff = new FFmpeg();
-    if (onLog) {
-      ff.on('log', ({ message }: { message: string }) => onLog(message));
+    if (onLog) ff.on('log', ({ message }: { message: string }) => onLog(message));
+
+    // 1) core.js (same-origin) — 없으면 local asset missing
+    let coreURL: string;
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] fetch core.js start', { url: `${base}/ffmpeg-core.js` });
+      coreURL = await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript');
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] core.js loaded');
+    } catch (e) {
+      throw new Error(`ffmpeg core.js 로드 실패 (local asset missing: ${base}/ffmpeg-core.js): ${e instanceof Error ? e.message : String(e)}`);
     }
-    let lastErr: unknown = null;
-    for (const base of FFMPEG_CORE_BASES) {
-      try {
-        // eslint-disable-next-line no-console
-        console.info('[ffmpeg] load start', { core: base });
-        const [coreURL, wasmURL] = await Promise.all([
-          toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-          toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-        ]);
-        await ff.load({ coreURL, wasmURL });
-        // eslint-disable-next-line no-console
-        console.info('[ffmpeg] load success', { core: base });
-        ffmpegInstance = ff;
-        return ff;
-      } catch (e) {
-        lastErr = e;
-        // eslint-disable-next-line no-console
-        console.warn('[ffmpeg] load FAIL', { core: base, error: e instanceof Error ? e.message : String(e) });
-      }
+
+    // 2) core.wasm (same-origin)
+    let wasmURL: string;
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] fetch wasm start', { url: `${base}/ffmpeg-core.wasm` });
+      wasmURL = await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm');
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] wasm loaded');
+    } catch (e) {
+      throw new Error(`ffmpeg wasm fetch 실패 (${base}/ffmpeg-core.wasm): ${e instanceof Error ? e.message : String(e)}`);
     }
-    throw new Error(
-      `ffmpeg core 로드 실패(모든 CDN) — 네트워크/CSP(connect-src unpkg.com·jsdelivr.net) 확인 필요: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
-    );
+
+    // 3) load (worker 생성 + core importScripts)
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] load() start (worker 생성)');
+      await ff.load({ coreURL, wasmURL });
+      // eslint-disable-next-line no-console
+      console.info('[ffmpeg] load success (core.js + wasm + worker)');
+    } catch (e) {
+      throw new Error(`ffmpeg worker/core 초기화 실패: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    ffmpegInstance = ff;
+    return ff;
   })();
 
   try {
