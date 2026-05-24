@@ -4,6 +4,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
 import { saveContinueListeningFull } from '@/lib/libraryApi';
+import { supabase } from '@/lib/supabase';
 
 /**
  * Continue Listening Phase 2 — full session snapshot.
@@ -134,6 +135,44 @@ export function restorePlayerSessionToStore(): PlayerSnapshot | null {
   }
 
   return snap;
+}
+
+/**
+ * 복원된 큐를 DB 현재 상태와 대조해 삭제/미노출(removed/hidden/자켓없음) 트랙을 제거한다.
+ * localStorage 스냅샷은 과거 시점이라, 그 사이 관리자가 삭제한 트랙이 남아있을 수 있음.
+ * 명시적 공개 필터로 조회하므로 관리자 계정(전체 SELECT 가능)에서도 정확히 동작.
+ * best-effort: 네트워크 실패 시 큐 유지.
+ */
+export async function revalidateRestoredQueue(): Promise<void> {
+  const st = usePlayerStore.getState();
+  const ids = st.queue.map((t) => t.id).filter(Boolean);
+  if (ids.length === 0) return;
+  try {
+    const { data, error } = await supabase
+      .from('tracks')
+      .select('id')
+      .in('id', ids)
+      .eq('visibility_status', 'approved')
+      .is('removed_at', null)
+      .not('cover_url', 'is', null)
+      .not('audio_url', 'is', null);
+    if (error) return;
+    const valid = new Set((data ?? []).map((r) => (r as { id: string }).id));
+    const cur = usePlayerStore.getState();
+    const filtered = cur.queue.filter((t) => valid.has(t.id));
+    if (filtered.length === cur.queue.length) return; // 변경 없음
+    if (filtered.length === 0) {
+      usePlayerStore.setState({ queue: [], index: 0, playing: false, currentTime: 0, pendingSeekSec: null });
+      clearPlayerSession();
+      return;
+    }
+    const curId = cur.queue[cur.index]?.id;
+    let newIndex = filtered.findIndex((t) => t.id === curId);
+    if (newIndex < 0) newIndex = 0; // 현재 곡이 삭제됨 → 첫 곡으로
+    usePlayerStore.setState({ queue: filtered, index: newIndex });
+  } catch {
+    /* best-effort */
+  }
 }
 
 /**

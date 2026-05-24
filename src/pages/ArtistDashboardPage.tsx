@@ -726,6 +726,10 @@ function ArtistUploadForm({
     if (!isEditing && !audioFile) return '음원 파일을 선택해주세요';
     if (!title.trim()) return '곡 제목을 입력해주세요';
     if (!albumName.trim()) return '앨범명을 입력해주세요';
+    // 앨범 자켓 필수 — 신규는 파일 필수, 재제출은 기존 자켓이 있으면 허용
+    if (!coverFile && !(isEditing && editingTrack?.cover_url)) {
+      return '앨범 자켓 이미지를 등록해주세요';
+    }
     if (!releaseDate) return '발매일을 선택해주세요';
     // 발매일 today + 3 days 검증
     const min = new Date();

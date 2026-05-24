@@ -305,7 +305,10 @@ export async function fetchRecentlyPlayedTracks(
       .in(
         'id',
         local.map((r) => r.track_id),
-      );
+      )
+      .eq('visibility_status', 'approved')
+      .is('removed_at', null)
+      .not('cover_url', 'is', null);
     const map = new Map(((data ?? []) as TrackRow[]).map((t) => [t.id, t]));
     return applyDemoMode(local.map((r) => map.get(r.track_id)).filter((t): t is TrackRow => !!t));
   }
@@ -322,6 +325,9 @@ export async function fetchRecentlyPlayedTracks(
     const out: TrackRow[] = [];
     for (const r of rows) {
       if (!r.tracks || seen.has(r.tracks.id)) continue;
+      // 삭제/미노출/자켓없음 트랙은 최근 재생에서도 제외 (관리자 전체 SELECT 우회 방어)
+      const tk = r.tracks as TrackRow & { visibility_status?: string | null; removed_at?: string | null };
+      if (tk.visibility_status !== 'approved' || tk.removed_at != null || !tk.cover_url) continue;
       seen.add(r.tracks.id);
       out.push(r.tracks);
       if (out.length >= limit) break;

@@ -35,6 +35,11 @@ async function fetchFallbackTracks(limit: number): Promise<ChartTrack[]> {
   const { data, error } = await supabase
     .from('tracks')
     .select('id, title, artist, genre, mood, cover_url, audio_url, duration, created_at')
+    // 공개 노출 기준 — removed/hidden/자켓없음 제외 (관리자 전체 SELECT 우회 방어 포함)
+    .eq('visibility_status', 'approved')
+    .is('removed_at', null)
+    .not('cover_url', 'is', null)
+    .not('audio_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -108,6 +113,10 @@ export async function fetchTrackChartByGenre(
     const { data: t, error: terr } = await supabase
       .from('tracks')
       .select('id, title, artist, genre, mood, cover_url, audio_url, duration, created_at')
+      .eq('visibility_status', 'approved')
+      .is('removed_at', null)
+      .not('cover_url', 'is', null)
+      .not('audio_url', 'is', null)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (terr) throw terr;
