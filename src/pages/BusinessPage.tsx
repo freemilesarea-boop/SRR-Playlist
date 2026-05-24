@@ -9,7 +9,10 @@ import {
   Clock,
   Radio,
   AlertCircle,
+  MonitorSmartphone,
+  Maximize2,
 } from 'lucide-react';
+import InstallAppButton from '@/components/InstallAppButton';
 import { BUSINESS_CATEGORIES } from '@/lib/constants';
 import { fetchPlaylists, fetchPlaylistTracks, fetchPlaylistCounts, logRecentPlay } from '@/lib/api';
 import { useBusinessStore } from '@/store/businessStore';
@@ -187,6 +190,30 @@ export default function BusinessPage() {
           홈 화면에 추가하면 앱처럼 사용할 수 있어요.
         </p>
       </header>
+
+      {/* 매장 재생 모드 진입 (전체화면 키오스크) */}
+      <section className="space-y-3 rounded-3xl bg-gradient-to-br from-accent/15 to-bg-card p-4 ring-1 ring-accent/20 sm:p-5">
+        <div className="flex items-center gap-2">
+          <MonitorSmartphone size={18} className="text-accent" />
+          <h3 className="text-sm font-bold sm:text-base">매장 재생 모드 (전체화면)</h3>
+        </div>
+        <p className="text-xs leading-relaxed text-ink-mute">
+          큰 재생 버튼·다음 곡·네트워크 상태·화면 꺼짐 방지까지, 장시간 매장 재생에 최적화된 전체화면 모드예요.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => navigate('/business/player')}
+            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-bold text-black hover:bg-accent/90"
+          >
+            <Maximize2 size={16} /> 매장 재생 모드 열기
+          </button>
+          <InstallAppButton variant="ghost" />
+        </div>
+        <p className="text-[11px] leading-relaxed text-ink-dim">
+          브라우저를 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-ink-mute">창을 완전히 닫으면 음악은 중단됩니다.</b>
+          {' '}PC/태블릿에 앱처럼 설치하면 더 안정적이에요.
+        </p>
+      </section>
 
       {/* 미니 통계 (대시보드 느낌) */}
       <section className="grid grid-cols-3 gap-2">

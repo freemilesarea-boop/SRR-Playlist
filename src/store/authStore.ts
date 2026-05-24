@@ -215,6 +215,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    // 명시적 로그아웃 — 재생 중이어도 unload 경고 띄우지 않음
+    try {
+      const { suppressUnloadWarningOnce } = await import('@/lib/playbackGuard');
+      suppressUnloadWarningOnce();
+    } catch { /* noop */ }
     await supabase.auth.signOut();
     set({
       session: null, user: null, profile: null, profileError: null,

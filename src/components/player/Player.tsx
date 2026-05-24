@@ -19,6 +19,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
+import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -276,6 +277,31 @@ export default function Player() {
     };
   }, []);
 
+  // 네트워크 끊김/복귀 처리 — offline 표시, online 복귀 시 재생 자동 재시도 (매장 무중단)
+  useEffect(() => {
+    const setOnline = usePlaybackHealthStore.getState().setOnline;
+    function onOffline() {
+      setOnline(false);
+    }
+    function onOnline() {
+      setOnline(true);
+      // 재생 의도가 있는데 멈춰 있으면 현재 트랙을 다시 로드 후 재생 시도
+      const audio = activeRef();
+      if (audio && usePlayerStore.getState().playing && isPlayableUrl(usePlayerStore.getState().queue[usePlayerStore.getState().index]?.audio_url)) {
+        try { audio.load(); } catch { /* noop */ }
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay 정책 등 — 무시 */ });
+      }
+    }
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdx]);
+
   // 0102 — 플레이리스트 청취 조회수 누적 (10분 = 1 view, 컨텍스트 단위 합산)
   const pvCtxKeyRef = useRef<string | null>(null);
   const pvSecondsRef = useRef(0);
@@ -287,6 +313,7 @@ export default function Player() {
     if (startedTrackIdRef.current === current.id) return;
     startedTrackIdRef.current = current.id;
     milestoneSentRef.current = false;
+    usePlaybackHealthStore.getState().incTodayPlay();
     void trackStream({
       user_id: userId,
       track_id: current.id,
@@ -797,6 +824,8 @@ export default function Player() {
         playing,
       });
     }
+
+    usePlaybackHealthStore.getState().reportPlaybackError(codeName);
 
     // 디코딩/포맷 문제로 확정된 트랙은 세션 동안 재시도 금지
     const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
