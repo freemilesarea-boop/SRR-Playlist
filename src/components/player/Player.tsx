@@ -368,6 +368,10 @@ export default function Player() {
       player_volume: volume,
       player_muted: volume === 0,
     });
+    // AI 큐레이션 behavior — play 이벤트(정산 stream_events 와 분리). 카탈로그 플리에서만.
+    if (playlistContext?.type === 'catalog') {
+      void recordPlayEvent({ trackId: current.id, playlistId: playlistContext.id, eventType: 'play', duration: current.duration ?? null, anonId: getAnonymousId() });
+    }
   }, [current?.id, playable, playing, userId, playlist?.id, current]);
 
   useEffect(() => {

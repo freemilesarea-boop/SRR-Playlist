@@ -218,3 +218,45 @@ export async function recordPlayEvent(input: PlayEventInput): Promise<void> {
     /* fire-and-forget */
   }
 }
+
+// 운영 성과 대시보드 (track_play_events 기반, 정산 stream_events 와 분리)
+export interface PlayEventStats {
+  total_plays: number; total_skips: number; total_completes: number;
+  total_likes: number; total_errors: number;
+  avg_completion_rate: number; avg_skip_rate: number; days: number;
+}
+export async function playEventStats(days = 30): Promise<PlayEventStats> {
+  const { data, error } = await supabase.rpc('admin_play_event_stats', { p_days: days });
+  if (error) throw error;
+  return data as PlayEventStats;
+}
+
+export interface TrackPerformanceRow {
+  track_id: string; playlist_id: string | null; title: string | null; artist: string | null; playlist_title: string | null;
+  play_count: number; skip_count: number; complete_count: number; like_count: number; error_count: number;
+  avg_played_seconds: number; skip_rate: number; completion_rate: number; like_rate: number;
+  behavior_score: number; fit_score: number | null; mismatch_score: number | null;
+}
+export type PerfSort = 'skip_rate' | 'completion_rate' | 'fit_low' | 'mismatch';
+export async function trackPerformance(days = 30, sort: PerfSort = 'skip_rate', limit = 100): Promise<TrackPerformanceRow[]> {
+  const { data, error } = await supabase.rpc('admin_track_performance', { p_days: days, p_sort: sort, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as TrackPerformanceRow[];
+}
+
+export interface PlaylistPerformanceRow {
+  playlist_id: string; playlist_title: string | null;
+  total_plays: number; total_skips: number; total_completes: number;
+  avg_skip_rate: number; avg_completion_rate: number; review_needed_count: number;
+}
+export async function playlistPerformance(days = 30): Promise<PlaylistPerformanceRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_performance', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as PlaylistPerformanceRow[];
+}
+
+export async function registerSkipViolations(): Promise<{ registered: number }> {
+  const { data, error } = await supabase.rpc('admin_register_skip_violations');
+  if (error) throw error;
+  return data as { registered: number };
+}

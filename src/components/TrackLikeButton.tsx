@@ -3,6 +3,8 @@ import { Heart } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { toggleTrackLike } from '@/lib/libraryApi';
+import { recordPlayEvent } from '@/lib/aiCuration';
+import { getAnonymousId } from '@/lib/analytics';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 
@@ -48,6 +50,8 @@ export default function TrackLikeButton({
     try {
       const target: TrackRow | { id: string } = track ?? { id: trackId };
       const res = await toggleTrackLike(target, next, userId);
+      // AI 큐레이션 behavior — like/unlike (정산 미영향)
+      void recordPlayEvent({ trackId, eventType: next ? 'like' : 'unlike', anonId: getAnonymousId() });
       if (res.warning) {
         // DB 실패했지만 localStorage 에 저장됨 — 한 번만 안내
         toast.info(
