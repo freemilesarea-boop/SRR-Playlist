@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '@/lib/supabase';
+import { safeExtension } from '@/lib/storagePath';
 import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
 import { fetchAllCurators, setPlaylistCurator, type CuratorListItem } from '@/lib/curatorApi';
 import { updateCuratorPlaylistThumbnail } from '@/lib/curatorStudioApi';
@@ -145,7 +146,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
     }
     setThumbBusy(true);
     try {
-      const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase();
+      const ext = safeExtension(file.name, 'jpg');
       const path = `${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('covers').upload(path, file, {
         cacheControl: '31536000',
