@@ -30,6 +30,7 @@ import {
   clearContinueListening,
 } from '@/lib/libraryApi';
 import { recommendSimilarTracks } from '@/lib/recommendationApi';
+import { recordTrackSkip, type SkipReason } from '@/lib/skipApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
@@ -169,6 +170,18 @@ export default function Player() {
   useEffect(() => {
     if (playable) skipChainRef.current = 0;
   }, [current?.id, playable]);
+
+  /* ---------- 스킵률 기반 메타데이터 위반 감지 (silent, fire-and-forget) ---------- */
+  // 직전 트랙의 재생 진행도 스냅샷 (onTimeUpdate 가 갱신). 트랙 변경 시 스킵 판정에 사용.
+  const skipProgressRef = useRef<{ id: string; played: number; duration: number } | null>(null);
+  // 자연 종료(onEnded)로 넘어간 트랙 id — 스킵 아님.
+  const naturalEndRef = useRef<string | null>(null);
+  // 이전 버튼으로 넘어간 경우 — 스킵 아님 (one-shot).
+  const prevPressedRef = useRef(false);
+  // 다음 트랙 변경의 스킵 사유 (다음 버튼=manual_skip / 큐에서 다른 곡 선택=select_other).
+  const skipReasonRef = useRef<SkipReason>('manual_skip');
+  // 스킵 판정 중복 방지용 — 현재 트랙 id 기준으로 직전 트랙 1회만 평가.
+  const prevTrackIdForSkipRef = useRef<string | null>(null);
 
   useEffect(() => {
     setErrored(false);
@@ -405,6 +418,14 @@ export default function Player() {
   useEffect(() => {
     const audio = activeRef();
     if (!audio || !current) return;
+
+    // 스킵 판정: 현재 트랙으로 바뀌었으면 직전 트랙을 1회 평가 (재생불가 새 트랙으로
+    // 바뀌어 아래에서 early-return 되더라도 직전 스킵을 놓치지 않도록 최상단에서 처리).
+    const skipOutgoing = prevTrackIdForSkipRef.current;
+    if (skipOutgoing !== current.id) {
+      if (skipOutgoing) evaluateSkip(skipOutgoing);
+      prevTrackIdForSkipRef.current = current.id;
+    }
 
     // 세션 내 이미 재생 실패(DECODE/SRC_NOT_SUPPORTED)로 확정된 트랙 →
     // 자동으로 다음 곡으로 넘기지 않고 현재 곡에서 정지(에러 표시). 재생 실패는 "곡 종료"가 아니다.
@@ -663,6 +684,39 @@ export default function Player() {
     setCurrentTime(t);
     accumulatePlaylistView(t);
     enforcePreviewLimit(t);
+    // 스킵 판정용 진행도 스냅샷 (트랙 변경 시 직전 트랙의 played/duration 으로 사용)
+    if (current) {
+      const dur = target.duration;
+      skipProgressRef.current = {
+        id: current.id,
+        played: t,
+        duration: Number.isFinite(dur) ? dur : 0,
+      };
+    }
+  }
+
+  // 직전 트랙이 "스킵"인지 판정해 silent 하게 기록. (다음/다른곡선택/중도이탈 = 스킵)
+  // 자연 종료(onEnded·crossfade), 이전 버튼, 재생 실패 트랙, 비-카탈로그 컨텍스트는 제외.
+  function evaluateSkip(outgoingId: string) {
+    const reason = skipReasonRef.current;
+    const wasNaturalEnd =
+      naturalEndRef.current === outgoingId || triggeredAtTrackIdRef.current === outgoingId;
+    const wasPrev = prevPressedRef.current;
+    // one-shot 신호 리셋
+    naturalEndRef.current = null;
+    prevPressedRef.current = false;
+    skipReasonRef.current = 'manual_skip';
+
+    if (wasNaturalEnd) return; // 끝까지 들음(자동 advance / crossfade)
+    if (wasPrev) return; // 이전 버튼
+    if (sessionFailedTrackIds.has(outgoingId)) return; // 재생 실패(에러)
+    const ctx = playlistContext;
+    if (!ctx || ctx.type !== 'catalog') return; // 카탈로그 플레이리스트에서만 집계
+
+    const prog = skipProgressRef.current;
+    if (!prog || prog.id !== outgoingId) return; // 진행도 스냅샷 없음 → 미재생 간주
+    const dur = prog.duration > 0 ? prog.duration : null;
+    void recordTrackSkip(ctx.id, outgoingId, prog.played, dur, reason);
   }
 
   // 0104 — 무료회원 25초 미리듣기 강제. 실제 청취 delta 누적 (seek 점프/뮤트/일시정지 제외).
@@ -817,6 +871,9 @@ export default function Player() {
     if (e.currentTarget !== activeRef()) return;
     if (crossfading) return; // crossfade 가 swap 처리
 
+    // 자연 종료 — 다음 트랙 변경 시 스킵으로 집계하지 않도록 표시.
+    if (current) naturalEndRef.current = current.id;
+
     if (current) {
       void trackStream({
         user_id: userId,
@@ -953,10 +1010,12 @@ export default function Player() {
   }
 
   function handlePrev() {
+    prevPressedRef.current = true; // 이전 버튼 = 스킵 아님
     cancelCrossfade();
     prev();
   }
   function handleNext() {
+    skipReasonRef.current = 'manual_skip'; // 다음 버튼 = 스킵
     cancelCrossfade();
     next();
   }
@@ -1282,6 +1341,7 @@ export default function Player() {
                     <li
                       key={t.id}
                       onClick={() => {
+                        if (i !== index) skipReasonRef.current = 'select_other'; // 다른 곡 선택 = 스킵
                         cancelCrossfade();
                         jumpTo(i);
                         setShowQueue(false);
