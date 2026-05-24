@@ -109,7 +109,8 @@ async function transcodeToMp3(c: ReencodeCandidate, file: File, onRatio: (r: num
     throw new Error(`ffmpeg 모듈 import 실패: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  log(c.track_id, c.title, 'transcode start', { inputSize: file.size });
+  const mb = (file.size / 1024 / 1024).toFixed(1);
+  log(c.track_id, c.title, 'transcode start', { inputSize: file.size, sizeMB: mb });
   let mp3: File;
   try {
     mp3 = await transcodeToStandardMp3(file, {
@@ -118,8 +119,11 @@ async function transcodeToMp3(c: ReencodeCandidate, file: File, onRatio: (r: num
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // ffmpeg core 로드 실패는 메시지에 'load'/'core'/'network' 가 흔히 포함됨
-    throw new Error(`MP3 변환 실패(ffmpeg): ${msg}`);
+    // memory access out of bounds / RuntimeError / abort → wasm 메모리 한계(대용량·비표준 WAV)
+    if (/out of bounds|memory|runtimeerror|abort|oom/i.test(msg)) {
+      throw new Error(`브라우저 변환 메모리 한계 또는 비표준 WAV (약 ${mb}MB) — 원본 재업로드 또는 MP3 직접 업로드 교체를 권장합니다`);
+    }
+    throw new Error(`MP3 변환 실패(ffmpeg, 약 ${mb}MB): ${msg}`);
   }
 
   log(c.track_id, c.title, 'transcode success', { outputSize: mp3.size });
@@ -185,5 +189,20 @@ export async function reencodeTrackToMp3(
 
   onProgress?.({ phase: 'done' });
   log(c.track_id, c.title, 'done', { newUrl });
+  return newUrl;
+}
+
+/**
+ * 관리자 수동 교체 — 로컬/서버에서 변환한 MP3 파일을 직접 업로드해 audio_url 교체.
+ * 브라우저 ffmpeg 로 변환 불가한 대용량/비표준 WAV(예: Easy With You) 대응. 원본 WAV 는 보존.
+ */
+export async function replaceTrackAudioWithMp3(c: ReencodeCandidate, file: File): Promise<string> {
+  const isMp3 = file.type === 'audio/mpeg' || /\.mp3$/i.test(file.name);
+  if (!isMp3) throw new Error('MP3 파일만 업로드할 수 있어요 (.mp3 / audio/mpeg)');
+  if (file.size === 0) throw new Error('빈 파일입니다');
+  log(c.track_id, c.title, 'manual mp3 upload start', { size: file.size, name: file.name });
+  const newUrl = await uploadMp3(c, file);
+  await replaceTrackAudio(c, newUrl);
+  log(c.track_id, c.title, 'manual replace done', { newUrl });
   return newUrl;
 }
