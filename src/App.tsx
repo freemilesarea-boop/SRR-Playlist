@@ -9,6 +9,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
+import { installUnloadGuard } from '@/lib/playbackGuard';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
@@ -46,6 +47,7 @@ const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPassw
 const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'));
 const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
 const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
+const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -142,6 +144,9 @@ export default function App() {
     clearChunkReloadFlag();
   }, [init]);
 
+  // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
+  useEffect(() => installUnloadGuard(), []);
+
   useWakeLock(businessMode && playing);
   useTrackVisit();
 
@@ -233,6 +238,7 @@ export default function App() {
                 <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
                 <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
                 <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
+                <Route path="/business/player" element={<RequireAuth><StorePlayerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

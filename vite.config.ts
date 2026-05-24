@@ -17,15 +17,26 @@ export default defineConfig({
         'og-image.png',
       ],
       manifest: {
+        id: '/',
         name: '듣다',
         short_name: '듣다',
         description: '상황 기반 감성 플레이리스트 + 매장 BGM',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
-        orientation: 'portrait',
+        // 매장 PC/태블릿(가로) 지원 — kiosk 재생 모드에서 방향 제약 없음
+        orientation: 'any',
         scope: '/',
         start_url: '/',
+        // 설치 앱 바로가기: 매장 재생 모드로 바로 진입
+        shortcuts: [
+          {
+            name: '매장 재생 모드',
+            short_name: '매장 재생',
+            description: '전체화면 매장 BGM 플레이어로 바로 가기',
+            url: '/business/player',
+          },
+        ],
         icons: [
           {
             src: 'pwa-192x192.png',
