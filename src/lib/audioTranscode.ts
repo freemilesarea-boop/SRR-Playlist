@@ -80,15 +80,21 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
       throw new Error(`ffmpeg wasm fetch 실패 (${base}/ffmpeg-core.wasm): ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // 3) load (worker 생성 + core importScripts)
+    // 3) load — @ffmpeg/ffmpeg 워커는 type:'module' 로 생성되어 importScripts 가 막히고
+    //    내부적으로 `import(coreURL).default` 로 ESM core 를 로드한다. 따라서 ESM 빌드
+    //    (public/ffmpeg/ffmpeg-core.js = export default createFFmpegCore) 를 사용해야 한다.
     try {
       // eslint-disable-next-line no-console
-      console.info('[ffmpeg] load() start (worker 생성)');
+      console.info('[ffmpeg] load() start (module worker 생성 + ESM core import)');
       await ff.load({ coreURL, wasmURL });
       // eslint-disable-next-line no-console
-      console.info('[ffmpeg] load success (core.js + wasm + worker)');
+      console.info('[ffmpeg] load success (worker + ESM core + wasm)');
     } catch (e) {
-      throw new Error(`ffmpeg worker/core 초기화 실패: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `ffmpeg worker/core 초기화 실패 (module worker 의 ESM core import 단계): ${msg} ` +
+          '— public/ffmpeg/ffmpeg-core.js 가 ESM(export default) 빌드인지 확인',
+      );
     }
 
     ffmpegInstance = ff;
