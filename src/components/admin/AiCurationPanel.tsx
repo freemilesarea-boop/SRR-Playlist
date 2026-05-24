@@ -17,6 +17,9 @@ import {
   playlistPerformance,
   registerSkipViolations,
   recomputeTrackFitScores,
+  listStoreProfiles,
+  setPlaylistStoreKey,
+  type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
   type FitScoreRow,
@@ -36,8 +39,13 @@ type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
-  cafe_morning: '카페(오전)', cafe_afternoon: '카페(오후)', winebar_evening: '와인바',
-  lounge: '라운지', gym: '헬스장', salon: '미용실', office: '사무실', restaurant: '식당',
+  gym: '헬스장', pilates: '필라테스', yoga: '요가', hospital: '병원',
+  cafe_independent: '카페_개인', cafe_franchise: '카페_프차', winebar: '와인바', cocktail_bar: '칵테일바',
+  restaurant: '식당', korean_restaurant: '한식당', brunch_cafe: '브런치', office: '사무실',
+  coworking: '코워킹', salon: '미용실', nail_shop: '네일샵', hotel_lobby: '호텔로비',
+  select_shop: '편집샵', clothing_store: '의류매장', kids_cafe: '키즈카페', dog_cafe: '애견카페',
+  pc_bang: 'PC방', fine_dining: '파인다이닝',
+  cafe_morning: '카페(오전)', cafe_afternoon: '카페(오후)', winebar_evening: '와인바', lounge: '라운지',
 };
 
 export default function AiCurationPanel() {
@@ -196,7 +204,7 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
 
   const FILTERS: [CurationFilter, string][] = reviewOnly
     ? [['review_needed', '검토 필요'], ['mismatch_high', '불일치 높음'], ['failed', '분석 실패']]
-    : [['analyzed', '분석됨'], ['mismatch_high', '불일치 높음'], ['gym_unfit', '헬스장 부적합'], ['cafe_fit', '카페 적합'], ['failed', '실패'], ['all', '전체']];
+    : [['analyzed', '분석됨'], ['mismatch_high', '불일치 높음'], ['gym_fit', '헬스장 적합'], ['gym_unfit', '헬스장 부적합'], ['cafe_fit', '카페 적합'], ['yoga_hospital_unfit', '요가/병원 부적합'], ['kids_risk', '키즈카페 위험'], ['failed', '실패'], ['all', '전체']];
 
   return (
     <div className="space-y-3">
@@ -300,10 +308,27 @@ function FitTab() {
   const [pid, setPid] = useState<string>('');
   const [rows, setRows] = useState<FitScoreRow[]>([]);
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
+  const [storeProfiles, setStoreProfiles] = useState<StoreProfileOption[]>([]);
+  const [storeKey, setStoreKey] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { fetchPlaylists().then((p) => { setPlaylists(p); if (p[0]) setPid(p[0].id); }).catch(() => {}); }, []);
+  useEffect(() => { listStoreProfiles().then(setStoreProfiles).catch(() => {}); }, []);
+  useEffect(() => {
+    const pl = playlists.find((p) => p.id === pid) as (PlaylistRow & { ai_store_key?: string | null }) | undefined;
+    setStoreKey(pl?.ai_store_key ?? '');
+  }, [pid, playlists]);
+
+  async function saveStoreKey(key: string) {
+    setStoreKey(key);
+    if (!pid) return;
+    try {
+      await setPlaylistStoreKey(pid, key || null);
+      toast.success(key ? `매장 유형을 ${key} 로 지정했어요.` : '매장 유형 지정 해제');
+      await recompute();
+    } catch (e) { toast.error(`지정 실패: ${(e as Error).message}`); }
+  }
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -350,6 +375,11 @@ function FitTab() {
         <select value={pid} onChange={(e) => setPid(e.target.value)}
           className="rounded-lg bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
           {playlists.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+        </select>
+        <select value={storeKey} onChange={(e) => void saveStoreKey(e.target.value)} title="매장 유형 (fit 계산 기준)"
+          className="rounded-lg bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
+          <option value="">매장 유형: 자동</option>
+          {storeProfiles.map((s) => <option key={s.store_key} value={s.store_key}>{s.store_label}</option>)}
         </select>
         <button onClick={() => void recompute()} disabled={busy || !pid}
           className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-black disabled:opacity-50">
