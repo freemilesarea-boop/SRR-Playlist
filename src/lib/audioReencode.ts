@@ -11,12 +11,22 @@ export interface ReencodeCandidate {
   audio_health_error?: string | null;
 }
 
-/** 변환 실패를 DB 에 영속화 (사용자 노출 제외 + 관리자 사유 표시). best-effort. */
+/** 변환 실패를 DB 에 영속화 (사용자 노출 제외 + 관리자 사유 표시). best-effort + 상세 로깅. */
 export async function markConversionFailed(trackId: string, reason: string): Promise<void> {
   try {
-    await supabase.rpc('admin_mark_audio_conversion_failed', { p_track_id: trackId, p_reason: reason.slice(0, 480) });
-  } catch {
-    /* best-effort */
+    const { error } = await supabase.rpc('admin_mark_audio_conversion_failed', {
+      p_track_id: trackId,
+      p_reason: reason.slice(0, 480),
+    });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[reencode:markFailed] RPC error', {
+        track_id: trackId, code: error.code, message: error.message, details: error.details, hint: error.hint,
+      });
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[reencode:markFailed] threw', e);
   }
 }
 
@@ -100,7 +110,13 @@ export async function reencodeTrackToMp3(
     p_audio_sha256: null,
     p_content_type: 'audio/mpeg',
   });
-  if (rpcErr) throw new Error(`audio_url 교체 실패: ${rpcErr.message}`);
+  if (rpcErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[reencode:replaceAudio] RPC error', {
+      track_id: c.track_id, code: rpcErr.code, message: rpcErr.message, details: rpcErr.details, hint: rpcErr.hint,
+    });
+    throw new Error(`audio_url 교체 실패: ${rpcErr.message}${rpcErr.hint ? ` (${rpcErr.hint})` : ''}`);
+  }
 
   onProgress?.({ phase: 'done' });
   return newUrl;
