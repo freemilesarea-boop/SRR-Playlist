@@ -110,6 +110,34 @@ export interface PendingReviewTrackRow {
   submitted_at?: string | null;
   review_started_at?: string | null;
   changes_requested_reason?: string | null;
+  /** 0155 — 검수 페이지 재생 가능/발매 게이트 진단용 audio 메타 */
+  storage_path?: string | null;
+  audio_content_type?: string | null;
+  duration?: number | null;
+  audio_content_length?: number | null;
+  audio_health_status?: string | null;
+}
+
+/**
+ * 0155 — 관리자 검수 self-heal: 브라우저에서 추출한 duration/content_type 을 트랙에 백필.
+ * duration 미기록으로 발매 게이트에 막힌 곡을 검수 페이지에서 자동 복구한다.
+ */
+export async function adminBackfillTrackAudioMeta(input: {
+  trackId: string;
+  duration?: number | null;
+  contentType?: string | null;
+  contentLength?: number | null;
+  health?: string | null;
+}): Promise<{ ok: boolean; duration: number | null; content_type: string | null; audio_health_status: string | null }> {
+  const { data, error } = await supabase.rpc('admin_backfill_track_audio_meta', {
+    p_track_id: input.trackId,
+    p_duration: input.duration ?? null,
+    p_content_type: input.contentType ?? null,
+    p_content_length: input.contentLength ?? null,
+    p_health: input.health ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; duration: number | null; content_type: string | null; audio_health_status: string | null };
 }
 
 export interface AdminTrackRow {
