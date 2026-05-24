@@ -7,6 +7,17 @@ export interface ReencodeCandidate {
   audio_url: string;
   release_status: string | null;
   audio_content_type: string | null;
+  audio_health_status?: string | null;
+  audio_health_error?: string | null;
+}
+
+/** 변환 실패를 DB 에 영속화 (사용자 노출 제외 + 관리자 사유 표시). best-effort. */
+export async function markConversionFailed(trackId: string, reason: string): Promise<void> {
+  try {
+    await supabase.rpc('admin_mark_audio_conversion_failed', { p_track_id: trackId, p_reason: reason.slice(0, 480) });
+  } catch {
+    /* best-effort */
+  }
 }
 
 /** iOS 비호환(.wav 등 non-mp3) 트랙 목록 — 관리자 전용. */
