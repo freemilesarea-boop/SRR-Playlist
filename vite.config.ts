@@ -58,23 +58,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'supabase-audio-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-              rangeRequests: true,
-            },
-          },
-        ],
+        // 오디오는 절대 SW 가 가로채지 않는다. (이전 supabase storage CacheFirst 규칙이 오디오
+        // Range 요청을 opaque 로 캐싱 → 206 깨짐/416 → 모바일 재생 실패의 직접 원인이었음)
+        // runtimeCaching 제거 → 오디오/스토리지 요청은 매칭 라우트가 없어 브라우저 네이티브로 처리
+        // (Range 206 정상). 커버 이미지는 브라우저 HTTP 캐시(cacheControl) 로 충분.
+        runtimeCaching: [],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ],
