@@ -815,15 +815,23 @@ export default function Player() {
     const target = e.currentTarget;
     const err = target.error;
     const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
-    if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
-      console.error('[audio] error', {
-        id: current?.id, title: current?.title, audio_url: current?.audio_url,
-        code: err?.code, codeName, message: err?.message,
-        networkState: target.networkState, readyState: target.readyState, src: target.src,
-        playing,
-      });
-    }
+    // iOS Safari 실기기 원격 디버깅용 — 프로덕션에서도 항상 상세 로그(에러는 드물어 spam 아님).
+    // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
+    // eslint-disable-next-line no-console
+    console.warn('[audio:error]', {
+      id: current?.id,
+      title: current?.title,
+      audio_url: current?.audio_url,
+      code: err?.code,
+      codeName,
+      message: err?.message,
+      networkState: target.networkState, // 3=NO_SOURCE
+      readyState: target.readyState,     // 0=HAVE_NOTHING
+      currentSrc: target.currentSrc || target.src,
+      online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      playing,
+    });
 
     usePlaybackHealthStore.getState().reportPlaybackError(codeName);
 
