@@ -3,6 +3,7 @@ import { Music, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Smartphone
 import {
   listReencodeCandidates,
   reencodeTrackToMp3,
+  markConversionFailed,
   type ReencodeCandidate,
   type ReencodeProgress,
 } from '@/lib/audioReencode';
@@ -53,7 +54,10 @@ export default function AudioReencodePanel() {
       setStatus(c.track_id, { kind: 'done' });
       return true;
     } catch (e) {
-      setStatus(c.track_id, { kind: 'error', message: e instanceof Error ? e.message : String(e) });
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(c.track_id, { kind: 'error', message: msg });
+      // 실패 영속화 → 사용자 플레이리스트/추천에서 제외 + 관리자 사유 표시
+      await markConversionFailed(c.track_id, msg);
       return false;
     }
   }
@@ -131,7 +135,12 @@ export default function AudioReencodePanel() {
         ) : (
           <ul className="divide-y divide-line/10">
             {list.map((c) => {
-              const st = statuses[c.track_id] ?? { kind: 'idle' as const };
+              // 메모리 상태 우선, 없으면 DB 의 이전 변환 실패 상태를 표시
+              const st: RowStatus =
+                statuses[c.track_id] ??
+                (c.audio_health_status === 'conversion_failed'
+                  ? { kind: 'error', message: c.audio_health_error ?? '이전 변환 실패' }
+                  : { kind: 'idle' });
               return (
                 <li key={c.track_id} className="flex items-center gap-3 p-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-hover text-ink-dim">
@@ -144,13 +153,13 @@ export default function AudioReencodePanel() {
                     </p>
                   </div>
                   <div className="shrink-0 text-right text-[11px]">
-                    {st.kind === 'idle' && (
+                    {(st.kind === 'idle' || st.kind === 'error') && (
                       <button
                         onClick={() => void runOne(c)}
                         disabled={running}
                         className="rounded-md bg-bg-soft px-2.5 py-1 font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-50"
                       >
-                        재인코딩
+                        {st.kind === 'error' ? '재시도' : '재인코딩'}
                       </button>
                     )}
                     {st.kind === 'working' && (

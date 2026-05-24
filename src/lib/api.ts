@@ -31,10 +31,13 @@ type PlayableCheckTrack = TrackRow & {
   visibility_status?: string | null;
   removed_at?: string | null;
   source_type?: string | null;
+  audio_health_status?: string | null;
 };
 function isPublicPlayableTrack(t: PlayableCheckTrack | null | undefined): boolean {
   if (!t) return false;
   if (t.removed_at) return false;
+  // MP3 변환 실패로 표시된 트랙은 사용자 플레이리스트에서 제외 (요구사항 #4)
+  if (t.audio_health_status === 'conversion_failed') return false;
   if (t.visibility_status && t.visibility_status !== 'approved') return false;
   const releasedOrCatalog = t.release_status === 'released' || t.source_type === 'admin_upload';
   if (t.release_status != null && !releasedOrCatalog) return false;
@@ -84,7 +87,7 @@ export async function fetchPlaylistCounts(): Promise<
 > {
   const { data, error } = await supabase
     .from('playlist_tracks')
-    .select('playlist_id, tracks(audio_url, cover_url, release_status, visibility_status, removed_at, source_type)');
+    .select('playlist_id, tracks(audio_url, cover_url, release_status, visibility_status, removed_at, source_type, audio_health_status)');
   if (error) throw error;
 
   const map = new Map<string, { total: number; playable: number }>();
