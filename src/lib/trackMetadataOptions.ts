@@ -2,11 +2,27 @@ import { supabase } from './supabase';
 
 export interface Option { value: string; label: string; }
 
-/** 장르 (복수, 최대 3). value 는 표준 태그(소문자 비교로 플리 genre_tags 와 매칭). */
-export const GENRE_OPTIONS: Option[] = [
-  'K-POP','POP','R&B','Hip-Hop','Lo-fi','Jazz','Acoustic','Ballad',
-  'Electronic','Ambient','House','Funk','City Pop','Instrumental','Classical',
-].map((g) => ({ value: g, label: g }));
+/**
+ * 장르 그룹 — UI collapse/expand + 검색용. value 는 표준 태그(소문자 비교로 플리 genre_tags 와 매칭).
+ * DB 는 자유 텍스트(enum/CHECK 없음)라 additive 확장이 안전하며, 추천 엔진은 genre_tags overlap +
+ * main_genre 매칭으로 즉시 활용한다.
+ */
+export const GENRE_GROUPS: { label: string; genres: string[] }[] = [
+  { label: 'K-콘텐츠', genres: ['K-POP', 'K-R&B', 'K-HipHop', 'Trot', 'OST', 'Ballad'] },
+  { label: '팝 / 록', genres: ['POP', 'Retro Pop', 'Rock', 'Alternative', 'Indie Pop', 'Indie Rock', 'Band', 'Disco'] },
+  { label: 'J / 애니 / 게임', genres: ['J-Pop', 'J-Rock', 'Anime', 'Game Music'] },
+  { label: '힙합 / R&B / 소울', genres: ['Hip-Hop', 'R&B', 'Soul', 'Blues', 'Funk', 'Gospel'] },
+  { label: '일렉트로닉', genres: ['Electronic', 'House', 'Synthwave', 'Drum & Bass', 'UK Garage', 'Phonk'] },
+  { label: '로파이 / 칠', genres: ['Lo-fi', 'Chillhop', 'Jazzhop', 'Lounge', 'City Pop'] },
+  { label: '재즈 / 어쿠스틱 / 클래식', genres: ['Jazz', 'Acoustic', 'Folk', 'Classical', 'Piano', 'Instrumental'] },
+  { label: '무드 / 휴식', genres: ['Ambient', 'Meditation', 'Sleep', 'Cafe Music'] },
+  { label: '월드', genres: ['Latin', 'Reggaeton', 'Afrobeats'] },
+];
+
+/** 장르 (복수, 최대 3) — 그룹에서 평탄화(중복 제거). */
+export const GENRE_OPTIONS: Option[] = Array.from(
+  new Set(GENRE_GROUPS.flatMap((g) => g.genres)),
+).map((g) => ({ value: g, label: g }));
 
 /** 분위기/무드 (복수, 최대 5) */
 export const MOOD_OPTIONS: Option[] = [
@@ -32,12 +48,24 @@ export const BUSINESS_OPTIONS: Option[] = [
   { value: '쇼룸', label: '쇼룸' },
 ];
 
-/** 보컬 여부 (단일) */
+/** 보컬 타입 (단일) — 추천/큐레이션 해상도용 세분화. */
 export const VOCAL_OPTIONS: Option[] = [
-  { value: 'vocal', label: '보컬 있음' },
+  { value: 'male_vocal', label: '남성 보컬' },
+  { value: 'female_vocal', label: '여성 보컬' },
+  { value: 'mixed_vocal', label: '혼성' },
   { value: 'instrumental', label: '인스트루멘탈' },
-  { value: 'low_vocal', label: '보컬 적음' },
-  { value: 'chorus', label: '코러스/허밍 중심' },
+  { value: 'chorus', label: '코러스 중심' },
+  { value: 'rap', label: '랩 중심' },
+];
+
+/** 언어권 (단일, 선택). 추천/차트 필터 활용 대비. */
+export const LANGUAGE_OPTIONS: Option[] = [
+  { value: 'ko', label: '한국어' },
+  { value: 'en', label: '영어' },
+  { value: 'ja', label: '일본어' },
+  { value: 'zh', label: '중국어' },
+  { value: 'instrumental', label: '무언어/허밍' },
+  { value: 'multi', label: '다국어' },
 ];
 
 /** 추천 시간대 (복수, 최대 3). value 는 플리 daypart 와 매칭. */
@@ -58,13 +86,15 @@ export interface SelectedMeta {
   business_type_tags: string[];
   vocal_type: string;
   recommended_dayparts: string[];
+  /** 언어권 (선택) */
+  language?: string;
 }
 
 export function emptySelectedMeta(): SelectedMeta {
-  return { genre_tags: [], mood_tags: [], business_type_tags: [], vocal_type: '', recommended_dayparts: [] };
+  return { genre_tags: [], mood_tags: [], business_type_tags: [], vocal_type: '', recommended_dayparts: [], language: '' };
 }
 
-/** 제출 전 검증 — 누락 시 메시지 반환, 통과 시 null */
+/** 제출 전 검증 — 누락 시 메시지 반환, 통과 시 null. (언어는 선택 항목 — 검증 제외) */
 export function validateSelectedMeta(m: SelectedMeta): string | null {
   if (m.genre_tags.length === 0) return '장르를 1개 이상 선택해주세요';
   if (m.genre_tags.length > META_CAPS.genre) return `장르는 최대 ${META_CAPS.genre}개`;
@@ -90,6 +120,7 @@ export async function setTrackSelectedMetadata(trackId: string, m: SelectedMeta)
     p_business_type_tags: m.business_type_tags,
     p_vocal_type: m.vocal_type,
     p_dayparts: m.recommended_dayparts,
+    p_language: m.language || null,
   });
   if (error) throw error;
 }
@@ -105,6 +136,7 @@ export async function adminGetTrackTags(trackId: string): Promise<SelectedMeta &
     business_type_tags: (d.business_type_tags as string[]) ?? [],
     vocal_type: (d.vocal_type as string) ?? '',
     recommended_dayparts: (d.recommended_dayparts as string[]) ?? [],
+    language: (d.language as string) ?? '',
     metadata_source: (d.metadata_source as string) ?? '',
   };
 }
@@ -117,6 +149,7 @@ export async function adminUpdateTrackTags(trackId: string, m: SelectedMeta): Pr
     p_business_type_tags: m.business_type_tags,
     p_vocal_type: m.vocal_type,
     p_dayparts: m.recommended_dayparts,
+    p_language: m.language || null,
   });
   if (error) throw error;
 }
