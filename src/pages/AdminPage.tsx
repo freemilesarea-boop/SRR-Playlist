@@ -17,6 +17,7 @@ import {
   Smartphone,
   Stethoscope,
   AlertTriangle,
+  HardDrive,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -44,6 +45,7 @@ import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import AudioReencodePanel from '@/components/admin/AudioReencodePanel';
 import AudioDiagnosticPanel from '@/components/admin/AudioDiagnosticPanel';
 import MetadataViolationsList from '@/components/admin/MetadataViolationsList';
+import UploadAuditPanel from '@/components/admin/UploadAuditPanel';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
@@ -66,6 +68,7 @@ type Tab =
   | 'audio-reencode'
   | 'audio-diagnostics'
   | 'metadata-violations'
+  | 'upload-audit'
   | 'artist-settlements'
   | 'operation-logs'
   | 'recommendation';
@@ -91,6 +94,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'audio-reencode', label: '오디오 변환(iOS)', icon: <Smartphone size={14} /> },
   { key: 'audio-diagnostics', label: '오디오 진단', icon: <Stethoscope size={14} /> },
   { key: 'metadata-violations', label: '메타데이터 위반 의심', icon: <AlertTriangle size={14} /> },
+  { key: 'upload-audit', label: '업로드/스토리지 점검', icon: <HardDrive size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
 ];
@@ -169,6 +173,7 @@ export default function AdminPage() {
         {tab === 'audio-reencode' && <AudioReencodePanel />}
         {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
         {tab === 'metadata-violations' && <MetadataViolationsList />}
+        {tab === 'upload-audit' && <UploadAuditPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
       </AdminErrorBoundary>

@@ -1,0 +1,71 @@
+/**
+ * uploadAudit.ts — 관리자 업로드/스토리지 점검 도구.
+ * admin_upload_audit RPC(read-only) 로 orphan/missing/변환실패/오래된 pending 을 조회하고,
+ * orphan storage object 는 storage API 로 명시적 선택 후 삭제한다.
+ */
+import { supabase } from '@/lib/supabase';
+
+export interface OrphanAudio {
+  name: string;
+  size: number | null;
+  created_at: string;
+}
+export interface OrphanCover {
+  name: string;
+  created_at: string;
+}
+export interface MissingAudioTrack {
+  id: string;
+  title: string | null;
+  release_status: string | null;
+  storage_path: string | null;
+  audio_url: string | null;
+}
+export interface ConversionFailedTrack {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  audio_health_status: string | null;
+  audio_health_checked_at: string | null;
+}
+export interface StalePendingTrack {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  release_status: string | null;
+  submitted_at: string | null;
+  created_at: string | null;
+}
+
+export interface UploadAudit {
+  orphan_audio_count: number;
+  orphan_cover_count: number;
+  missing_audio_count: number;
+  conversion_failed_count: number;
+  stale_pending_count: number;
+  orphan_audio: OrphanAudio[];
+  orphan_cover: OrphanCover[];
+  missing_audio: MissingAudioTrack[];
+  conversion_failed: ConversionFailedTrack[];
+  stale_pending: StalePendingTrack[];
+}
+
+export async function fetchUploadAudit(): Promise<UploadAudit> {
+  const { data, error } = await supabase.rpc('admin_upload_audit');
+  if (error) throw error;
+  return data as UploadAudit;
+}
+
+/**
+ * orphan storage object 삭제 — 어떤 track 도 참조하지 않는 파일만 (audit 결과 기준).
+ * storage API(remove)로 실제 바이너리까지 삭제. 관리자가 명시적으로 선택/확인한 것만.
+ */
+export async function deleteOrphanObjects(
+  bucket: 'audio' | 'covers',
+  names: string[],
+): Promise<{ removed: number }> {
+  if (names.length === 0) return { removed: 0 };
+  const { error } = await supabase.storage.from(bucket).remove(names);
+  if (error) throw error;
+  return { removed: names.length };
+}

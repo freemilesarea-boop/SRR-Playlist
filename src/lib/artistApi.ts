@@ -433,18 +433,73 @@ export function formatEligibilityError(reasons: string[]): string {
 }
 
 /** 파일 확장자 검증 */
-const ALLOWED_AUDIO_EXT = ['mp3', 'wav', 'm4a', 'flac'];
+const ALLOWED_AUDIO_EXT = ['mp3', 'wav', 'm4a', 'aac', 'flac'];
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024; // 100MB
+
+// 확장자 ↔ 허용 MIME 매핑 (불일치 검사용). 빈 type 은 브라우저가 못 정한 것이므로 통과.
+const EXT_MIME_OK: Record<string, RegExp> = {
+  mp3: /^audio\/(mpeg|mp3)$/i,
+  wav: /^audio\/(wav|x-wav|wave|vnd\.wave)$/i,
+  m4a: /^audio\/(mp4|x-m4a|m4a|aac)$/i,
+  aac: /^audio\/(aac|mp4|x-aac)$/i,
+  flac: /^audio\/(flac|x-flac)$/i,
+};
 
 export function validateArtistAudioFile(file: File): { ok: boolean; error?: string } {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
   if (!ALLOWED_AUDIO_EXT.includes(ext)) {
     return { ok: false, error: `허용된 확장자: ${ALLOWED_AUDIO_EXT.join(', ')}` };
   }
+  if (file.size === 0) {
+    return { ok: false, error: '빈 파일(0바이트)입니다. 다른 파일을 선택해주세요.' };
+  }
   if (file.size > MAX_AUDIO_BYTES) {
     return { ok: false, error: '파일 크기는 100MB 이하여야 합니다' };
   }
+  // MIME/확장자 불일치 — type 이 비어있으면(브라우저가 모름) 통과, 명백히 다르면 차단.
+  const expect = EXT_MIME_OK[ext];
+  if (file.type && expect && !expect.test(file.type)) {
+    return {
+      ok: false,
+      error: `파일 형식이 확장자(.${ext})와 일치하지 않아요 (감지된 형식: ${file.type}). 올바른 파일인지 확인해주세요.`,
+    };
+  }
   return { ok: true };
+}
+
+/**
+ * 오디오 파일의 재생 길이(초)를 브라우저에서 추출. 추출 불가/손상 파일이면 null.
+ * 발매 게이트(duration 필수)에 사용. best-effort — 10초 timeout.
+ */
+export async function extractAudioDuration(file: File): Promise<number | null> {
+  if (typeof document === 'undefined') return null;
+  return new Promise<number | null>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    let done = false;
+    const cleanup = () => {
+      try { URL.revokeObjectURL(url); } catch { /* noop */ }
+      audio.removeAttribute('src');
+    };
+    const finish = (v: number | null) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(v);
+    };
+    const timer = window.setTimeout(() => finish(null), 10_000);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      window.clearTimeout(timer);
+      const d = audio.duration;
+      finish(Number.isFinite(d) && d > 0 ? Math.round(d * 100) / 100 : null);
+    };
+    audio.onerror = () => {
+      window.clearTimeout(timer);
+      finish(null);
+    };
+    audio.src = url;
+  });
 }
 
 /**
@@ -557,6 +612,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let audioStoragePath: string | null = null;
     let coverStoragePathVal: string | null = null;
     const originalFilename = input.audioFile?.name ?? null;
+    // 0154 — 발매 게이트(duration 필수)용 메타. 업로드 후 set_artist_track_audio_meta 로 기록.
+    let audioDurationVal: number | null = null;
+    let audioContentTypeVal: string | null = null;
+    let audioContentLengthVal: number | null = null;
     if (input.audioFile) {
       stage = 'sha256';
       log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
@@ -635,6 +694,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac',
       };
       const audioContentType = mimeMap[audioExt] ?? fileToUpload.type ?? 'application/octet-stream';
+      audioContentTypeVal = audioContentType;
+      audioContentLengthVal = fileToUpload.size || null;
+      // 재생 길이 추출 (best-effort) — 발매 게이트(duration 필수)에 사용
+      try {
+        audioDurationVal = await withTimeout(extractAudioDuration(fileToUpload), 12_000, 'duration 추출 시간 초과');
+      } catch {
+        audioDurationVal = null;
+      }
+      log('audio meta', { durationSec: audioDurationVal, contentType: audioContentType });
       log('audio upload start', { path: audioPath, sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
       let audioUpRes;
       try {
@@ -778,6 +846,25 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       log('submit_artist_release RPC ok', { trackId });
       uploadDebug.patch({ rpcStatus: 'ok', trackId });
       uploadDebug.step('submit-rpc', 'ok', trackId);
+
+      // 0154 — duration / content_type 기록 (발매 게이트). best-effort, 실패해도 업로드는 성공.
+      if (trackId && (audioDurationVal != null || audioContentTypeVal)) {
+        try {
+          await withTimeout(
+            supabase.rpc('set_artist_track_audio_meta', {
+              p_track_id: trackId,
+              p_duration: audioDurationVal,
+              p_content_type: audioContentTypeVal,
+              p_content_length: audioContentLengthVal,
+            }),
+            10_000,
+            'audio meta 저장 시간 초과',
+          );
+          log('audio meta saved', { trackId, duration: audioDurationVal });
+        } catch (e) {
+          log('audio meta save skip (계속)', { err: e instanceof Error ? e.message : String(e) });
+        }
+      }
     } catch (e) {
       const err = e as { message?: string; hint?: string; details?: string; code?: string };
       const msg = err.message ?? String(e);
