@@ -268,6 +268,8 @@ export default function Player() {
   const nextTimerRef = useRef<number | null>(null);
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
+  // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
+  const networkRetriedRef = useRef<Set<string>>(new Set());
   function clearMetaTimer() {
     if (metaTimerRef.current !== null) { window.clearTimeout(metaTimerRef.current); metaTimerRef.current = null; }
   }
@@ -854,6 +856,30 @@ export default function Player() {
 
     usePlaybackHealthStore.getState().reportPlaybackError(codeName);
 
+    // NETWORK(코드2): 스트리밍 중간 끊김 → 곡당 1회만 자동 재시도(load + 위치 복원 + play).
+    // 자동 다음곡/토스트 없이 조용히 복구 시도. 재시도 후에도 실패하면 아래 정지 로직으로.
+    if (err?.code === 2 && current && playing && !networkRetriedRef.current.has(current.id)) {
+      networkRetriedRef.current.add(current.id);
+      const resumeAt = target.currentTime || currentTime || 0;
+      // eslint-disable-next-line no-console
+      console.warn('[audio] NETWORK 오류 — 1회 자동 재시도', { id: current.id, title: current.title, resumeAt });
+      try {
+        target.load();
+        const onceCanPlay = () => {
+          target.removeEventListener('canplay', onceCanPlay);
+          try {
+            if (resumeAt > 0 && Number.isFinite(target.duration) && resumeAt < target.duration) {
+              target.currentTime = resumeAt;
+            }
+          } catch { /* noop */ }
+          const pr = target.play();
+          if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 onError 가 처리 */ });
+        };
+        target.addEventListener('canplay', onceCanPlay, { once: true });
+      } catch { /* noop */ }
+      return; // 정지/토스트 없이 재시도
+    }
+
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
     if (current && isPermanent) {
@@ -878,6 +904,8 @@ export default function Player() {
             ? `이 음원은 브라우저에서 재생할 수 없는 형식이거나 업로드 문제입니다. 재업로드/재검수가 필요합니다. [${codeName}]`
             : '이 음원을 재생할 수 없어요. ▶ 다시 누르면 재시도하거나 다른 곡을 선택해주세요.',
         );
+      } else if (err?.code === 2) {
+        toast.error('네트워크/파일 접근 오류로 재생이 중단됐어요. ▶ 다시 누르면 재시도해요.');
       } else {
         toast.error(`재생에 실패했어요 (${codeName}). ▶ 다시 누르면 재시도해요.`);
       }
@@ -899,6 +927,7 @@ export default function Player() {
     // 에러 상태에서 ▶ 다시 누르면 동일 곡 재시도 (실패 마크 해제 + 강제 재로드).
     if (errored) {
       sessionFailedTrackIds.delete(current.id);
+      networkRetriedRef.current.delete(current.id); // 수동 재시도 시 네트워크 자동재시도 한도 초기화
       setErrored(false);
       lastTrackIdRef.current = null; // 트랙 변경으로 간주 → src 재설정/load/재생
       play();
