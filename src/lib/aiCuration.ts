@@ -16,6 +16,8 @@ export type CurationFilter =
   | 'cafe_fit'
   | 'yoga_hospital_unfit'
   | 'kids_risk'
+  | 'heuristic'
+  | 'real_dsp'
   | 'review_needed';
 
 export interface StoreProfileOption { store_key: string; store_label: string; }
@@ -45,6 +47,7 @@ export interface AiCurationRow {
   registrant_bpm: number | null;
   feature_status: string | null;
   analyzer: string | null;
+  analysis_version: string | null;
   bpm: number | null;
   energy: number | null;
   danceability: number | null;
@@ -53,6 +56,10 @@ export interface AiCurationRow {
   vocal_presence: number | null;
   brightness: number | null;
   tempo_stability: number | null;
+  spectral_centroid: number | null;
+  loudness: number | null;
+  dynamic_range: number | null;
+  raw_features: Record<string, number> | null;
   error_message: string | null;
   ai_status: string | null;
   ai_energy_level: string | null;

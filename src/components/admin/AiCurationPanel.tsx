@@ -204,7 +204,7 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
 
   const FILTERS: [CurationFilter, string][] = reviewOnly
     ? [['review_needed', '검토 필요'], ['mismatch_high', '불일치 높음'], ['failed', '분석 실패']]
-    : [['analyzed', '분석됨'], ['mismatch_high', '불일치 높음'], ['gym_fit', '헬스장 적합'], ['gym_unfit', '헬스장 부적합'], ['cafe_fit', '카페 적합'], ['yoga_hospital_unfit', '요가/병원 부적합'], ['kids_risk', '키즈카페 위험'], ['failed', '실패'], ['all', '전체']];
+    : [['analyzed', '분석됨'], ['real_dsp', '실 DSP'], ['heuristic', 'heuristic/mock'], ['mismatch_high', '불일치 높음'], ['gym_fit', '헬스장 적합'], ['gym_unfit', '헬스장 부적합'], ['cafe_fit', '카페 적합'], ['yoga_hospital_unfit', '요가/병원 부적합'], ['kids_risk', '키즈카페 위험'], ['failed', '실패'], ['all', '전체']];
 
   return (
     <div className="space-y-3">
@@ -235,7 +235,11 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
                       <span className="text-sm text-ink-mute">· {r.artist ?? ''}</span>
                       {r.feature_status === 'failed' && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">분석 실패</span>}
                       {r.ai_status === 'reviewed' && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600">검수됨</span>}
-                      {r.analyzer && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-dim">{r.analyzer}</span>}
+                      {r.analyzer && (
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${r.analyzer.startsWith('webaudio') || r.analyzer.startsWith('essentia') ? 'bg-sky-500/15 text-sky-600' : 'bg-ink/5 text-ink-dim'}`}>
+                          {r.analyzer}{r.analysis_version ? ` · ${r.analysis_version}` : ''}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-[11px] text-ink-dim">
                       등록자: 장르 {r.main_genre ?? '-'} · 무드 {r.mood ?? '-'} · 매장 {(r.business_type_tags ?? []).join(',') || '-'}
@@ -260,7 +264,19 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
                     {r.instrumentalness != null && <Metric label="instr" v={r.instrumentalness} />}
                     {r.vocal_presence != null && <Metric label="vocal" v={r.vocal_presence} />}
                     {r.brightness != null && <Metric label="bright" v={r.brightness} />}
+                    {r.spectral_centroid != null && <Metric label="centroid" v={Math.round(r.spectral_centroid)} />}
+                    {r.loudness != null && <Metric label="LUFS≈" v={r.loudness} />}
+                    {r.dynamic_range != null && <Metric label="DR" v={r.dynamic_range} />}
                   </div>
+                )}
+
+                {r.raw_features && Object.keys(r.raw_features).length > 0 && (
+                  <details className="mt-1 text-[10px] text-ink-dim">
+                    <summary className="cursor-pointer select-none">raw features 보기</summary>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {Object.entries(r.raw_features).map(([k, v]) => <Metric key={k} label={k} v={v} />)}
+                    </div>
+                  </details>
                 )}
 
                 {topStores.length > 0 && (
