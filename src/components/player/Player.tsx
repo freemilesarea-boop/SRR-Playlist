@@ -260,13 +260,14 @@ export default function Player() {
   // 잠금화면 진행바(스크러버) — duration/position 동기화. floor(currentTime) 의존 → ~1초마다 갱신.
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
-    const ms = navigator.mediaSession as MediaSession & { setPositionState?: (s: MediaPositionState) => void };
+    const ms = navigator.mediaSession as MediaSession & { setPositionState?: (s?: MediaPositionState) => void };
     if (typeof ms.setPositionState !== 'function') return;
     try {
       if (current && Number.isFinite(duration) && duration > 0) {
         ms.setPositionState({ duration, position: Math.min(Math.max(currentTime, 0), duration), playbackRate: 1 });
       } else {
-        ms.setPositionState({});
+        // 인자 없이 호출해야 상태가 초기화됨 ({} 는 duration 누락으로 TypeError)
+        ms.setPositionState();
       }
     } catch { /* noop */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
