@@ -65,6 +65,10 @@ const sessionFailedTrackIds = new Set<string>();
 const recentErrorToasts = new Map<string, number>();
 const TOAST_DEDUP_MS = 30_000;
 
+/** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
+let lastErrorToastAt = 0;
+const ERROR_TOAST_DEBOUNCE_MS = 3_000;
+
 /**
  * 0091-fix — 추천 toast dedup (세션 / 10분).
  * 큐 끝 → 추천 추가 → 다시 끝 → 또 추가 시 toast 폭주 방지.
@@ -112,6 +116,7 @@ export default function Player() {
     duration,
     shuffleOrder,
     pendingSeekSec,
+    play,
     pause,
     toggle,
     next,
@@ -377,37 +382,20 @@ export default function Player() {
     const audio = activeRef();
     if (!audio || !current) return;
 
-    // 세션 내 이미 SRC_NOT_SUPPORTED / DECODE 로 실패한 트랙 → 즉시 스킵
+    // 세션 내 이미 재생 실패(DECODE/SRC_NOT_SUPPORTED)로 확정된 트랙 →
+    // 자동으로 다음 곡으로 넘기지 않고 현재 곡에서 정지(에러 표시). 재생 실패는 "곡 종료"가 아니다.
+    // (플레이리스트 전체가 자동 스킵되며 토스트가 쌓이던 문제 차단)
     if (playing && sessionFailedTrackIds.has(current.id)) {
-      skipChainRef.current += 1;
-      const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
-      if (skipChainRef.current >= cap) {
-        pause();
-        toast.error('아직 재생 가능한 곡이 없어요.');
-        skipChainRef.current = 0;
-        return;
-      }
-      const t = window.setTimeout(() => next(), 300);
-      return () => window.clearTimeout(t);
+      setErrored(true);
+      pause();
+      return;
     }
 
     if (!playable) {
+      // audio_url 누락/형식 이상 → 자동 스킵 금지. 재생 시도 중이면 정지 + 에러 표시.
       if (playing) {
-        skipChainRef.current += 1;
-        // 무한 스킵 방지: queue.length 와 MAX_SKIP_ATTEMPTS 중 작은 값에서 정지
-        const cap = Math.min(MAX_SKIP_ATTEMPTS, queue.length);
-        if (skipChainRef.current >= cap) {
-          pause();
-          toast.error('아직 재생 가능한 곡이 없어요.');
-          skipChainRef.current = 0;
-          return;
-        }
-        // 첫 번째 스킵만 toast — 폭주 방지
-        if (skipChainRef.current === 1) {
-          toast.info('재생 불가 트랙은 건너뛸게요');
-        }
-        const t = window.setTimeout(() => next(), 600);
-        return () => window.clearTimeout(t);
+        setErrored(true);
+        pause();
       }
       return;
     }
@@ -818,6 +806,7 @@ export default function Player() {
     // iOS Safari 실기기 원격 디버깅용 — 프로덕션에서도 항상 상세 로그(에러는 드물어 spam 아님).
     // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
     // eslint-disable-next-line no-console
+    // iOS Safari 실기기 디버깅용 상세 로그 (track/src/code/networkState/readyState/시간/상태/UA)
     console.warn('[audio:error]', {
       id: current?.id,
       title: current?.title,
@@ -827,6 +816,10 @@ export default function Player() {
       message: err?.message,
       networkState: target.networkState, // 3=NO_SOURCE
       readyState: target.readyState,     // 0=HAVE_NOTHING
+      currentTime: target.currentTime,
+      duration: target.duration,
+      paused: target.paused,
+      ended: target.ended,
       currentSrc: target.currentSrc || target.src,
       online: typeof navigator !== 'undefined' ? navigator.onLine : null,
       ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -835,47 +828,35 @@ export default function Player() {
 
     usePlaybackHealthStore.getState().reportPlaybackError(codeName);
 
-    // 디코딩/포맷 문제로 확정된 트랙은 세션 동안 재시도 금지
+    // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
     if (current && isPermanent) {
       sessionFailedTrackIds.add(current.id);
     }
 
-    // 0077-hotfix — 사용자가 재생을 시도하지 않은 상태 (preload 에러) 면 silent skip.
-    // 메인페이지 진입 시 preload 만으로 onError 가 발화되어 toast 폭주하는 문제를 차단.
-    if (!playing) {
-      setErrored(true);
-      // 자동 next 도 호출하지 않음 — 사용자 의도 없이 큐를 진행시키지 않음.
-      return;
-    }
-
+    // 재생 에러 = "곡 종료"가 아니다 → 다음 곡으로 자동 이동하지 않고 현재 곡에서 정지.
+    // (preload 단계 !playing 에러는 조용히 에러 표시만)
     setErrored(true);
-    pause();
+    if (playing) pause();
+    if (!playing) return;
 
-    // 0077-hotfix — 같은 트랙+코드 30초 dedup
-    const dedupKey = `${current?.id ?? 'unknown'}:${err?.code ?? 0}`;
+    // 에러 토스트는 3초 디바운스로 1개만 노출 (연속 실패해도 토스트 스택 안 쌓임)
     const now = Date.now();
-    const last = recentErrorToasts.get(dedupKey);
-    if (!last || now - last >= TOAST_DEDUP_MS) {
-      recentErrorToasts.set(dedupKey, now);
-      // 0077 — route-aware 메시지: admin/artist 화면이면 운영자용 상세 / 그 외 public 은 짧게
+    if (now - lastErrorToastAt >= ERROR_TOAST_DEBOUNCE_MS) {
+      lastErrorToastAt = now;
       const path = typeof window !== 'undefined' ? window.location.pathname : '';
       const isOperatorContext = /^\/(admin|artist)/.test(path);
       if (isPermanent) {
-        if (isOperatorContext) {
-          toast.error(
-            `이 음원은 브라우저에서 재생할 수 없는 파일 형식이거나 업로드 중 문제가 발생했습니다. 재업로드 후 재검수가 필요합니다. [${codeName}]`,
-          );
-        } else {
-          toast.error('이 음원을 재생할 수 없습니다. 다른 곡을 선택해주세요.');
-        }
+        toast.error(
+          isOperatorContext
+            ? `이 음원은 브라우저에서 재생할 수 없는 형식이거나 업로드 문제입니다. 재업로드/재검수가 필요합니다. [${codeName}]`
+            : '이 음원을 재생할 수 없어요. ▶ 다시 누르면 재시도하거나 다른 곡을 선택해주세요.',
+        );
       } else {
-        toast.error(`재생 실패 (${codeName})`);
+        toast.error(`재생에 실패했어요 (${codeName}). ▶ 다시 누르면 재시도해요.`);
       }
     }
-
-    // 자동 next — 단 다음 트랙도 sessionFailedTrackIds 에 있으면 추가 스킵 (Player 메인 effect 가 처리)
-    scheduleNext(600);
+    // 자동 next 제거 — 현재 곡 정지 유지(플레이리스트 자동 스킵 방지).
   }
 
   function cycleRepeat() {
@@ -883,9 +864,18 @@ export default function Player() {
   }
 
   function handlePlayBtn() {
+    if (!current) return;
     if (!playable) {
+      // 자동으로 다음 곡으로 넘기지 않음 — 사용자가 직접 곡을 선택하게 안내만.
       toast.info('이 트랙은 음원이 등록되지 않았어요.');
-      next();
+      return;
+    }
+    // 에러 상태에서 ▶ 다시 누르면 동일 곡 재시도 (실패 마크 해제 + 강제 재로드).
+    if (errored) {
+      sessionFailedTrackIds.delete(current.id);
+      setErrored(false);
+      lastTrackIdRef.current = null; // 트랙 변경으로 간주 → src 재설정/load/재생
+      play();
       return;
     }
     toggle();
