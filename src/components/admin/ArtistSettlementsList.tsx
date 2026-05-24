@@ -350,7 +350,10 @@ function GenerateModal({
             </p>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <Kv label="플랫폼 매출" value={fmtKrw(dryResult.platform_revenue)} />
-              <Kv label="분배 풀 (70%)" value={fmtKrw(dryResult.pool_revenue)} />
+              <Kv
+                label={`분배 풀${dryResult.platform_revenue > 0 ? ` (${Math.round((dryResult.pool_revenue / dryResult.platform_revenue) * 100)}%)` : ''}`}
+                value={fmtKrw(dryResult.pool_revenue)}
+              />
               <Kv label="총 유효 스트림" value={dryResult.total_pool_streams.toLocaleString() + '건'} />
               <Kv label="신규 생성" value={`${dryResult.generated}건`} />
               <Kv label="덮어쓰기 (pending)" value={`${dryResult.overwritten}건`} />
