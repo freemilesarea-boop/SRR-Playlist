@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight } from 'lucide-react';
+import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
+import { applyAiMetadata } from '@/lib/aiCuration';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -127,6 +128,19 @@ export default function TrackReviewList() {
   useEffect(() => {
     if (page > 0 && page >= pageCount) setPage(pageCount - 1);
   }, [page, pageCount]);
+
+  async function overwriteWithAi(r: PendingReviewTrackRow) {
+    setBusyId(r.track_id);
+    try {
+      await applyAiMetadata(r.track_id, { moods: r.ai_moods ?? null });
+      toast.success('AI 추천 메타데이터로 덮어썼어요. (적합도 재계산 완료)');
+      await load();
+    } catch (e) {
+      toast.error(`적용 실패: ${(e as Error).message}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function handleConfirm(
     reason: string,
@@ -488,6 +502,35 @@ export default function TrackReviewList() {
                       label={`health: ${r.audio_health_status ?? 'unknown'}`}
                     />
                   </div>
+
+                  {/* 0161 — AI 큐레이션 판정 연결 */}
+                  {r.ai_status && r.ai_status !== 'pending' && (
+                    <div className={`rounded-md p-2 text-[11px] ${(r.mismatch_score ?? 0) >= 0.5 ? 'bg-rose-500/10 ring-1 ring-rose-500/20' : 'bg-bg-hover/40'}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold">
+                          AI: 에너지 {r.ai_energy_level ?? '-'} · 무드 {(r.ai_moods ?? []).join(',') || '-'}
+                          {r.mismatch_score != null && (
+                            <span className={`ml-2 ${(r.mismatch_score) >= 0.5 ? 'text-rose-600' : 'text-ink-mute'}`}>
+                              불일치 {Math.round(r.mismatch_score * 100)}%
+                            </span>
+                          )}
+                        </span>
+                        {(r.mismatch_score ?? 0) >= 0.4 && (
+                          <button
+                            onClick={() => void overwriteWithAi(r)}
+                            disabled={busyId === r.track_id}
+                            className="inline-flex items-center gap-1 rounded bg-accent/15 px-2 py-1 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
+                          >
+                            <Wand2 size={10} /> AI 추천값으로 덮어쓰기
+                          </button>
+                        )}
+                      </div>
+                      {(r.mismatch_score ?? 0) >= 0.5 && (
+                        <p className="mt-1 font-semibold text-rose-600">⚠ 등록 메타데이터와 실제 음원 특성이 크게 다릅니다. 승인 전 확인하세요.</p>
+                      )}
+                      {r.ai_explanation && <p className="mt-1 text-ink-mute">{r.ai_explanation}</p>}
+                    </div>
+                  )}
 
                   {r.lyrics && (
                     <div className="rounded-md bg-bg-hover/40 p-2">

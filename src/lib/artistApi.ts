@@ -116,6 +116,14 @@ export interface PendingReviewTrackRow {
   duration?: number | null;
   audio_content_length?: number | null;
   audio_health_status?: string | null;
+  /** 0161 — AI 큐레이션 판정 (검수 화면 연결) */
+  ai_status?: string | null;
+  ai_energy_level?: string | null;
+  ai_store_fit?: Record<string, number> | null;
+  ai_moods?: string[] | null;
+  mismatch_score?: number | null;
+  mismatch_reasons?: string[] | null;
+  ai_explanation?: string | null;
 }
 
 /**
