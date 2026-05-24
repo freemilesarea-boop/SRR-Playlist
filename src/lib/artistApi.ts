@@ -553,6 +553,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     // 1) audio 업로드 — 새 파일이 있을 때만 + SHA-256 계산 (중복 방지)
     let audioUrl: string;
     let audioSha256: string | null = null;
+    // 0153 — 원본 파일명/실제 storage key 분리 기록 (storage key 에는 한국어 미포함)
+    let audioStoragePath: string | null = null;
+    let coverStoragePathVal: string | null = null;
+    const originalFilename = input.audioFile?.name ?? null;
     if (input.audioFile) {
       stage = 'sha256';
       log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
@@ -626,6 +630,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       // 절대 path 에 넣지 않고 UUID 기반으로 생성. 제목은 DB(title)로만 관리.
       const audioExt = safeExtension(fileToUpload.name, 'mp3');
       const audioPath = generateSafeStoragePath({ prefix: 'artist_uploads', userId, ext: audioExt });
+      audioStoragePath = audioPath;
       const mimeMap: Record<string, string> = {
         mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac',
       };
@@ -674,6 +679,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     if (input.coverFile) {
       const coverExt = safeExtension(input.coverFile.name, 'jpg');
       const coverPath = generateSafeStoragePath({ prefix: 'artist_uploads', userId, ext: coverExt, suffix: 'cover' });
+      coverStoragePathVal = coverPath;
       log('cover upload start', { path: coverPath, sizeKB: (input.coverFile.size / 1024).toFixed(0) });
       try {
         const { error: coverUpErr } = await withTimeout(
@@ -762,6 +768,9 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           audioUrl,
           coverUrl,
           rightsConfirmed: input.rightsConfirmed,
+          originalFilename,
+          storagePath: audioStoragePath,
+          coverStoragePath: coverStoragePathVal,
         }),
         45_000,
         '음원 등록 서버 응답 시간이 초과되었습니다 (45초). 잠시 후 다시 시도해주세요.',
@@ -1168,6 +1177,12 @@ export interface SubmitReleaseInput {
   rightsConfirmed: boolean;
   /** 0065 — 클라이언트가 계산한 audio 파일 SHA-256 (hex). 중복 업로드 방지용 */
   audioSha256?: string | null;
+  /** 0153 — 원본 파일명(표시용). storage key 와 분리 저장. */
+  originalFilename?: string | null;
+  /** 0153 — audio 버킷 실제 object key (ASCII-safe UUID). */
+  storagePath?: string | null;
+  /** 0153 — covers 버킷 실제 object key (ASCII-safe UUID). */
+  coverStoragePath?: string | null;
 }
 
 /** Web Crypto API 로 파일 SHA-256 hex 계산. 대용량 파일 안전. */
@@ -1201,6 +1216,9 @@ export async function submitArtistRelease(input: SubmitReleaseInput): Promise<st
     p_cover_url: input.coverUrl ?? null,
     p_rights_confirmed: input.rightsConfirmed,
     p_audio_sha256: input.audioSha256 ?? null,
+    p_original_filename: input.originalFilename ?? null,
+    p_storage_path: input.storagePath ?? null,
+    p_cover_storage_path: input.coverStoragePath ?? null,
   });
   if (error) throw error;
   return data as string;
