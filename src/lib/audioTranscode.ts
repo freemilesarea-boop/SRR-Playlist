@@ -26,12 +26,15 @@ import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 /** 단일 스레드 ffmpeg-core 버전 — SharedArrayBuffer 불필요 */
 const FFMPEG_CORE_VERSION = '0.12.6';
-const FFMPEG_CORE_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+const FFMPEG_CORE_BASES = [
+  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
+  `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
+];
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
 
-/** 인스턴스 1회만 로드. 동시 호출은 같은 promise 공유. */
+/** 인스턴스 1회만 로드. 동시 호출은 같은 promise 공유. CDN 실패 시 폴백 CDN 재시도. */
 async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
   if (loadPromise) return loadPromise;
@@ -45,12 +48,29 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     if (onLog) {
       ff.on('log', ({ message }: { message: string }) => onLog(message));
     }
-    await ff.load({
-      coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    ffmpegInstance = ff;
-    return ff;
+    let lastErr: unknown = null;
+    for (const base of FFMPEG_CORE_BASES) {
+      try {
+        // eslint-disable-next-line no-console
+        console.info('[ffmpeg] load start', { core: base });
+        const [coreURL, wasmURL] = await Promise.all([
+          toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+          toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+        ]);
+        await ff.load({ coreURL, wasmURL });
+        // eslint-disable-next-line no-console
+        console.info('[ffmpeg] load success', { core: base });
+        ffmpegInstance = ff;
+        return ff;
+      } catch (e) {
+        lastErr = e;
+        // eslint-disable-next-line no-console
+        console.warn('[ffmpeg] load FAIL', { core: base, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    throw new Error(
+      `ffmpeg core 로드 실패(모든 CDN) — 네트워크/CSP(connect-src unpkg.com·jsdelivr.net) 확인 필요: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+    );
   })();
 
   try {
