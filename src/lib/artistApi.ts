@@ -592,20 +592,46 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       }
 
       stage = 'audio-upload';
-      const audioExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? 'mp3';
-      const safeName = input.audioFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
+      // iOS Safari 는 비압축 WAV/FLAC(특히 24/32bit·float PCM)을 스트리밍 재생하지 못하는 경우가 많다
+      // (Chrome 데스크탑은 디코딩 가능 → "PC는 되는데 아이폰만 안됨"의 전형). 전 기기 호환을 위해
+      // 업로드 전 mp3 가 아니면 표준 MP3(libmp3lame 192k/44.1k/stereo)로 변환한다.
+      let fileToUpload: File = input.audioFile;
+      const origExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? '';
+      const isMp3 = origExt === 'mp3' || input.audioFile.type === 'audio/mpeg';
+      if (!isMp3) {
+        stage = 'transcode';
+        log('transcode→mp3 start', { from: origExt || input.audioFile.type });
+        uploadDebug.step('transcode', 'info', `mp3 변환 (${origExt || 'unknown'})`);
+        try {
+          const { transcodeToStandardMp3 } = await import('@/lib/audioTranscode');
+          fileToUpload = await withTimeout(
+            transcodeToStandardMp3(input.audioFile),
+            600_000,
+            'MP3 변환 시간이 초과되었습니다.',
+          );
+          log('transcode→mp3 ok', { sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2) });
+          uploadDebug.step('transcode', 'ok', `${(fileToUpload.size / 1024 / 1024).toFixed(1)}MB`);
+        } catch (e) {
+          // 변환 실패 시 업로드 자체는 막지 않고 원본 업로드(추후 재인코딩 필요). 콘솔/디버그에 기록.
+          log('transcode→mp3 FAIL (원본 업로드)', { err: e instanceof Error ? e.message : String(e) });
+          uploadDebug.step('transcode', 'warn', e instanceof Error ? e.message : String(e));
+          fileToUpload = input.audioFile;
+        }
+      }
+      const audioExt = fileToUpload.name.split('.').pop()?.toLowerCase() ?? 'mp3';
+      const safeName = fileToUpload.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
       const audioPath = `artist_uploads/${userId}/${ts}_${rand}_${safeName}`;
       const mimeMap: Record<string, string> = {
         mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac',
       };
-      const audioContentType = mimeMap[audioExt] ?? input.audioFile.type ?? 'application/octet-stream';
-      log('audio upload start', { path: audioPath, sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
+      const audioContentType = mimeMap[audioExt] ?? fileToUpload.type ?? 'application/octet-stream';
+      log('audio upload start', { path: audioPath, sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
       let audioUpRes;
       try {
         // 업로드는 글로벌 fetch timeout 미적용(supabase.ts) + 앱 단 상한 10분.
         // Slow 3G 대용량(100MB)도 완주하도록 넉넉히 둔다.
         audioUpRes = await withTimeout(
-          supabase.storage.from('audio').upload(audioPath, input.audioFile, {
+          supabase.storage.from('audio').upload(audioPath, fileToUpload, {
             cacheControl: '31536000', upsert: false, contentType: audioContentType,
           }),
           600_000,
