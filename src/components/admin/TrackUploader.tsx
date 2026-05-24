@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Upload, X, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { safeExtension } from '@/lib/storagePath';
 import { toast } from '@/store/toastStore';
 import {
   MAIN_GENRES,
@@ -137,7 +138,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
   }
 
   async function uploadToBucket(bucket: 'audio' | 'covers', file: File): Promise<string> {
-    const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
+    const ext = safeExtension(file.name, 'bin');
     const path = `${crypto.randomUUID()}.${ext}`;
     // contentType 강제 — mp3 가 'application/octet-stream' 으로 저장되면 재생 X
     const contentType =

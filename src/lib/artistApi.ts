@@ -11,6 +11,7 @@
 import { supabase, supabaseProjectRef } from './supabase';
 import { useAuthStore } from '@/store/authStore';
 import { uploadDebug } from '@/store/uploadDebugStore';
+import { generateSafeStoragePath, safeExtension } from './storagePath';
 
 export interface ArtistProfile {
   user_id: string;
@@ -209,6 +210,11 @@ export function friendlyUploadError(e: unknown): string {
     lower.includes('413')
   ) {
     return '파일 용량이 업로드 한도를 초과했어요. (현재 플랜의 곡당 업로드 한도를 확인해주세요)';
+  }
+  // storage key/path 관련 오류는 사용자에게 원인을 노출하지 않고 자연스럽게 안내.
+  // (정상 흐름에서는 path 를 UUID 로 생성하므로 발생하지 않지만, 안전망으로 둔다.)
+  if (lower.includes('invalid key') || lower.includes('invalid_key') || lower.includes('key is not valid')) {
+    return '파일 업로드에 실패했어요. 잠시 후 다시 시도해주세요.';
   }
   // 의미 있는 서버 메시지는 살리되, 빈/모호한 raw 는 일반 안내로 대체
   return raw.trim() ? `업로드 실패: ${raw}` : '파일 업로드에 실패했어요. 다시 시도해주세요.';
@@ -443,8 +449,8 @@ export function validateArtistAudioFile(file: File): { ok: boolean; error?: stri
 
 /**
  * 아티스트 업로드:
- *   1) audio bucket 에 artist_uploads/{user_id}/{ts}_{filename} 경로로 업로드
- *   2) cover image 있으면 covers bucket 에 동일 패턴
+ *   1) audio bucket 에 artist_uploads/{user_id}/{uuid}.{ext} 경로로 업로드 (URL-safe)
+ *   2) cover image 있으면 covers bucket 에 동일 패턴 ({uuid}_cover.{ext})
  *   3) tracks INSERT — RLS 가 owner_user_id/source_type/visibility_status/승인상태 모두 검증
  */
 export async function uploadArtistTrack(input: UploadInput): Promise<UploadResult> {
@@ -547,8 +553,6 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     // 1) audio 업로드 — 새 파일이 있을 때만 + SHA-256 계산 (중복 방지)
     let audioUrl: string;
     let audioSha256: string | null = null;
-    const ts = Date.now();
-    const rand = Math.random().toString(36).slice(2, 10);
     if (input.audioFile) {
       stage = 'sha256';
       log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
@@ -618,9 +622,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           fileToUpload = input.audioFile;
         }
       }
-      const audioExt = fileToUpload.name.split('.').pop()?.toLowerCase() ?? 'mp3';
-      const safeName = fileToUpload.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
-      const audioPath = `artist_uploads/${userId}/${ts}_${rand}_${safeName}`;
+      // storage key 는 URL-safe ASCII 만 허용 — 사용자 파일명(한국어/공백/특수문자)은
+      // 절대 path 에 넣지 않고 UUID 기반으로 생성. 제목은 DB(title)로만 관리.
+      const audioExt = safeExtension(fileToUpload.name, 'mp3');
+      const audioPath = generateSafeStoragePath({ prefix: 'artist_uploads', userId, ext: audioExt });
       const mimeMap: Record<string, string> = {
         mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac',
       };
@@ -667,8 +672,8 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let coverUrl: string | null = input.existingCoverUrl ?? null;
     let coverWarning: string | undefined;
     if (input.coverFile) {
-      const coverSafe = input.coverFile.name.replace(/[^\w가-힣.\-_]/g, '_').slice(0, 80);
-      const coverPath = `artist_uploads/${userId}/${ts}_${rand}_cover_${coverSafe}`;
+      const coverExt = safeExtension(input.coverFile.name, 'jpg');
+      const coverPath = generateSafeStoragePath({ prefix: 'artist_uploads', userId, ext: coverExt, suffix: 'cover' });
       log('cover upload start', { path: coverPath, sizeKB: (input.coverFile.size / 1024).toFixed(0) });
       try {
         const { error: coverUpErr } = await withTimeout(
@@ -962,7 +967,7 @@ export async function adminBulkDeleteTracks(
 /** 관리자: 커버 이미지를 covers 버킷에 업로드하고 public URL 반환 */
 export async function uploadAdminTrackCover(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
   try {
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const ext = safeExtension(file.name, 'jpg');
     const path = `admin_covers/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('covers').upload(path, file, {
       cacheControl: '31536000', upsert: false, contentType: file.type || undefined,
