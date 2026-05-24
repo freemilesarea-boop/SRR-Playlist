@@ -151,6 +151,11 @@ export default function AudioReencodePanel() {
                     <p className="truncate text-[11px] text-ink-mute">
                       {c.artist ?? '—'} · {c.release_status} · {c.audio_url.split('/').pop()}
                     </p>
+                    {st.kind === 'error' && (
+                      <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold text-red-500" title={st.message}>
+                        ⚠ {st.message}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right text-[11px]">
                     {(st.kind === 'idle' || st.kind === 'error') && (
