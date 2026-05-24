@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Smartphone } from 'lucide-react';
+import { Music, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Smartphone, Upload, Ban } from 'lucide-react';
 import {
   listReencodeCandidates,
   reencodeTrackToMp3,
+  replaceTrackAudioWithMp3,
   markConversionFailed,
   type ReencodeCandidate,
   type ReencodeProgress,
@@ -60,6 +61,28 @@ export default function AudioReencodePanel() {
       await markConversionFailed(c.track_id, msg);
       return false;
     }
+  }
+
+  // 수동 MP3 교체 (브라우저 변환 불가한 대용량/비표준 WAV 대응)
+  async function manualReplace(c: ReencodeCandidate, file: File) {
+    setStatus(c.track_id, { kind: 'working', phase: 'upload' });
+    try {
+      await replaceTrackAudioWithMp3(c, file);
+      setStatus(c.track_id, { kind: 'done' });
+      toast.success(`"${c.title}" MP3 교체 완료`);
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(c.track_id, { kind: 'error', message: msg });
+      toast.error(`MP3 교체 실패: ${msg}`);
+    }
+  }
+
+  // 이 곡 제외 (사용자 노출에서 제외 + 사유 기록)
+  async function excludeTrack(c: ReencodeCandidate) {
+    await markConversionFailed(c.track_id, '관리자 제외 — 브라우저 변환 불가(수동 MP3 교체 대기)');
+    setStatus(c.track_id, { kind: 'error', message: '관리자 제외 — 사용자 노출 제외됨' });
+    toast.info(`"${c.title}" 사용자 노출에서 제외했어요`);
   }
 
   async function runAll() {
@@ -157,15 +180,43 @@ export default function AudioReencodePanel() {
                       </p>
                     )}
                   </div>
-                  <div className="shrink-0 text-right text-[11px]">
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
                     {(st.kind === 'idle' || st.kind === 'error') && (
-                      <button
-                        onClick={() => void runOne(c)}
-                        disabled={running}
-                        className="rounded-md bg-bg-soft px-2.5 py-1 font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-50"
-                      >
-                        {st.kind === 'error' ? '재시도' : '재인코딩'}
-                      </button>
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {st.kind === 'error' && (
+                          <span className="inline-flex items-center gap-1 font-semibold text-red-500" title={st.message}>
+                            <AlertTriangle size={13} /> 실패
+                          </span>
+                        )}
+                        <button
+                          onClick={() => void runOne(c)}
+                          disabled={running}
+                          className="rounded-md bg-bg-soft px-2 py-1 font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-50"
+                        >
+                          {st.kind === 'error' ? '재시도' : '재인코딩'}
+                        </button>
+                        <label className={`inline-flex cursor-pointer items-center gap-1 rounded-md bg-bg-soft px-2 py-1 font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover ${running ? 'pointer-events-none opacity-50' : ''}`}>
+                          <Upload size={12} /> MP3 교체
+                          <input
+                            type="file"
+                            accept="audio/mpeg,.mp3"
+                            className="hidden"
+                            disabled={running}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = '';
+                              if (f) void manualReplace(c, f);
+                            }}
+                          />
+                        </label>
+                        <button
+                          onClick={() => void excludeTrack(c)}
+                          disabled={running}
+                          className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 font-semibold text-red-700 ring-1 ring-red-300/30 hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/15 dark:text-red-300"
+                        >
+                          <Ban size={12} /> 제외
+                        </button>
+                      </div>
                     )}
                     {st.kind === 'working' && (
                       <span className="font-semibold text-accent">
@@ -179,11 +230,6 @@ export default function AudioReencodePanel() {
                     {st.kind === 'done' && (
                       <span className="inline-flex items-center gap-1 font-semibold text-emerald-500">
                         <CheckCircle2 size={13} /> 완료
-                      </span>
-                    )}
-                    {st.kind === 'error' && (
-                      <span className="inline-flex items-center gap-1 font-semibold text-red-500" title={st.message}>
-                        <AlertTriangle size={13} /> 실패
                       </span>
                     )}
                   </div>

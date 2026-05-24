@@ -173,9 +173,10 @@ export async function transcodeToStandardMp3(
       throw new Error('ffmpeg readFile returned non-binary data');
     }
 
-    // ffmpeg FS 정리
+    // ffmpeg FS 정리 (성공 경로)
     try { await ff.deleteFile(inputName); } catch { /* noop */ }
     try { await ff.deleteFile(outputName); } catch { /* noop */ }
+    try { ff.off('progress', progressHandler); } catch { /* noop */ }
 
     const baseName = file.name.replace(/\.[^.]+$/, '') || 'audio';
     // 파일명 안전화 (영문/한글/숫자/하이픈/언더스코어만)
@@ -185,8 +186,12 @@ export async function transcodeToStandardMp3(
     const cleanBytes = new Uint8Array(data.byteLength);
     cleanBytes.set(data);
     return new File([cleanBytes], `${safeBase}_standard.mp3`, { type: 'audio/mpeg' });
-  } finally {
+  } catch (e) {
+    // 'memory access out of bounds' 등 RuntimeError 후엔 wasm 메모리가 손상되어
+    // 같은 인스턴스로 다음 곡을 변환하면 연쇄 실패한다 → 인스턴스를 폐기(다음 곡은 새 인스턴스).
     try { ff.off('progress', progressHandler); } catch { /* noop */ }
+    await cancelTranscode();
+    throw e;
   }
 }
 
