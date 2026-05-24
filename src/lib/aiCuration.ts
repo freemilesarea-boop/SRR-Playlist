@@ -11,9 +11,23 @@ export type CurationFilter =
   | 'analyzed'
   | 'failed'
   | 'mismatch_high'
+  | 'gym_fit'
   | 'gym_unfit'
   | 'cafe_fit'
+  | 'yoga_hospital_unfit'
+  | 'kids_risk'
   | 'review_needed';
+
+export interface StoreProfileOption { store_key: string; store_label: string; }
+export async function listStoreProfiles(): Promise<StoreProfileOption[]> {
+  const { data, error } = await supabase.rpc('admin_list_store_profiles');
+  if (error) throw error;
+  return (data ?? []) as StoreProfileOption[];
+}
+export async function setPlaylistStoreKey(playlistId: string, storeKey: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_playlist_store_key', { p_playlist_id: playlistId, p_store_key: storeKey });
+  if (error) throw error;
+}
 
 export interface AiCurationRow {
   track_id: string;
