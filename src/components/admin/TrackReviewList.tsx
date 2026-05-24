@@ -13,6 +13,7 @@ import {
   dispatchTrackModerationEmails,
   dispatchAllModerationEmails,
   getAdminSetting,
+  adminBackfillTrackAudioMeta,
   type PendingReviewTrackRow,
   type PendingReviewCounts,
 } from '@/lib/artistApi';
@@ -74,6 +75,48 @@ export default function TrackReviewList() {
 
   useFreshFetch(load, [page, artistId]);
 
+  // 0155 — 검수 self-heal: 플레이어가 메타데이터를 읽으면 duration/content_type 을 트랙에 백필.
+  // 업로드 시 duration 이 기록되지 않아 발매 게이트(duration>0)에 막힌 곡을 자동 복구한다.
+  const [healedIds, setHealedIds] = useState<Set<string>>(new Set());
+  const healAudioMeta = useCallback(
+    async (row: PendingReviewTrackRow, durationSec: number) => {
+      if (healedIds.has(row.track_id)) return;
+      if (!Number.isFinite(durationSec) || durationSec <= 0) return;
+      // 이미 duration 이 있고 content_type 도 mp3 면 백필 불필요
+      if ((row.duration ?? 0) > 0 && row.audio_content_type === 'audio/mpeg') return;
+      setHealedIds((s) => new Set(s).add(row.track_id));
+      try {
+        const isMp3 = !!row.audio_url && /\.mp3(\?|$)/i.test(row.audio_url);
+        const res = await adminBackfillTrackAudioMeta({
+          trackId: row.track_id,
+          duration: Math.round(durationSec),
+          contentType: isMp3 ? 'audio/mpeg' : null,
+        });
+        setRows((prev) =>
+          prev.map((t) =>
+            t.track_id === row.track_id
+              ? {
+                  ...t,
+                  duration: res.duration ?? Math.round(durationSec),
+                  audio_content_type: res.content_type ?? t.audio_content_type,
+                  audio_health_status: res.audio_health_status ?? t.audio_health_status,
+                }
+              : t,
+          ),
+        );
+      } catch (e) {
+        // 실패해도 조용히 — 다음 로드/수동 재분석에서 재시도
+        setHealedIds((s) => {
+          const n = new Set(s);
+          n.delete(row.track_id);
+          return n;
+        });
+        console.warn('[review] audio meta backfill 실패', (e as Error).message);
+      }
+    },
+    [healedIds],
+  );
+
   // 필터 기준 총건수 (아티스트 필터 시 해당 아티스트 건수, 아니면 전체)
   const filteredTotal = artistId
     ? counts.by_artist.find((a) => a.owner_user_id === artistId)?.n ?? 0
@@ -126,8 +169,12 @@ export default function TrackReviewList() {
       setModal(null);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`처리 실패: ${msg}`);
+      // 서버 게이트 거절 사유를 명확히 표시 (PostgREST: message + hint + details)
+      const err = e as { message?: string; hint?: string; details?: string; code?: string };
+      const msg = err.message ?? String(e);
+      const reasonText = err.hint || err.details || msg;
+      console.error('[review] action failed', { kind, track_id: track.track_id, code: err.code, message: msg, hint: err.hint, details: err.details });
+      toast.error(`처리 실패: ${reasonText}`);
     } finally {
       setBusyId(null);
     }
@@ -324,6 +371,12 @@ export default function TrackReviewList() {
               if (!r.title || r.title.trim() === '') missingMeta.push('제목');
               if (!r.album_name || r.album_name.trim() === '') missingMeta.push('앨범명');
               if (!r.release_date) missingMeta.push('발매일');
+              // 0155 — 오디오 재생 가능/발매 게이트 (서버 admin_approve_artist_release 와 동일)
+              const hasAudio = !!((r.audio_url && r.audio_url.trim()) || (r.storage_path && r.storage_path.trim()));
+              if (!hasAudio) missingMeta.push('음원 파일');
+              if (r.audio_health_status === 'conversion_failed') missingMeta.push('MP3 변환 실패');
+              if (r.audio_content_type && r.audio_content_type !== 'audio/mpeg') missingMeta.push('비-MP3 음원');
+              if (!r.duration || r.duration <= 0) missingMeta.push('재생 길이(메타 추출 중)');
               const canApprove = missingMeta.length === 0;
               return (
                 <li key={r.track_id} className="space-y-2 p-3">
@@ -407,8 +460,34 @@ export default function TrackReviewList() {
                   )}
 
                   {r.audio_url && (
-                    <audio src={r.audio_url} controls preload="none" className="h-8 w-full" />
+                    <audio
+                      src={r.audio_url}
+                      controls
+                      preload="metadata"
+                      className="h-8 w-full"
+                      onLoadedMetadata={(e) => {
+                        const d = e.currentTarget.duration;
+                        if (Number.isFinite(d) && d > 0) void healAudioMeta(r, d);
+                      }}
+                    />
                   )}
+
+                  {/* 0155 — 재생 가능/발매 게이트 진단 */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                    <DiagChip ok={hasAudio} label={hasAudio ? '음원 O' : '음원 X'} />
+                    <DiagChip
+                      ok={!!r.duration && r.duration > 0}
+                      label={r.duration && r.duration > 0 ? `재생 ${Math.floor(r.duration / 60)}:${String(Math.floor(r.duration % 60)).padStart(2, '0')}` : '재생 길이 추출 중…'}
+                    />
+                    <DiagChip
+                      ok={!r.audio_content_type || r.audio_content_type === 'audio/mpeg'}
+                      label={r.audio_content_type ? (r.audio_content_type === 'audio/mpeg' ? 'MP3' : r.audio_content_type) : 'type ?'}
+                    />
+                    <DiagChip
+                      ok={r.audio_health_status !== 'conversion_failed'}
+                      label={`health: ${r.audio_health_status ?? 'unknown'}`}
+                    />
+                  </div>
 
                   {r.lyrics && (
                     <div className="rounded-md bg-bg-hover/40 p-2">
@@ -766,6 +845,21 @@ function Tag({ label, value, tone }: { label: string; value: string; tone: strin
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${tone}`}>
       <span className="text-[9px] uppercase tracking-wider opacity-70">{label}</span>
       {value}
+    </span>
+  );
+}
+
+// 0155 — 검수 페이지 재생 가능/발매 게이트 진단 칩
+function DiagChip({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${
+        ok
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+          : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+      }`}
+    >
+      {ok ? '✓' : '⏳'} {label}
     </span>
   );
 }
