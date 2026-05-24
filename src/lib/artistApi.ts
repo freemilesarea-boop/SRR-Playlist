@@ -1353,7 +1353,7 @@ export async function adminGetMonthlyStreamingSummary(
     unique_artists: Number(d.unique_artists ?? 0),
     estimated_revenue: Number(d.estimated_revenue ?? 0),
     settlement_ready_amount: Number(d.settlement_ready_amount ?? 0),
-    pool_revenue_ratio: Number(d.pool_revenue_ratio ?? 0.7),
+    pool_revenue_ratio: Number(d.pool_revenue_ratio ?? 0.5),
   };
 }
 
