@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Stethoscope, RefreshCw, Play, CheckCircle2, XCircle, Smartphone } from 'lucide-react';
+import { Stethoscope, RefreshCw, Play, CheckCircle2, XCircle, Smartphone, Activity } from 'lucide-react';
 import { fetchTracks } from '@/lib/api';
-import { probeTrackAudio, mediaErrName, type AudioProbe } from '@/lib/audioDiagnostics';
+import { probeTrackAudio, capturePlaybackTimeline, mediaErrName, type AudioProbe, type PlaybackEvent } from '@/lib/audioDiagnostics';
 import type { TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -18,7 +18,16 @@ export default function AudioDiagnosticPanel() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [probes, setProbes] = useState<Record<string, AudioProbe | 'running'>>({});
+  const [timelines, setTimelines] = useState<Record<string, { timeline: PlaybackEvent[]; outcome: string; errorCode: number | null } | 'running'>>({});
   const [running, setRunning] = useState(false);
+
+  async function runTimeline(r: Row) {
+    setTimelines((p) => ({ ...p, [r.id]: 'running' }));
+    const res = await capturePlaybackTimeline(r.audio_url);
+    setTimelines((p) => ({ ...p, [r.id]: res }));
+    // eslint-disable-next-line no-console
+    console.info(`[audio-diag:timeline] "${r.title}"`, { ...res, userAgent: navigator.userAgent, url: r.audio_url });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -136,17 +145,49 @@ export default function AudioDiagnosticPanel() {
                         <span>duration: <b className={p.durationSec ? 'text-ink' : 'text-red-500'}>{p.durationSec ? `${p.durationSec.toFixed(1)}s` : (p.metaResult)}</b></span>
                         <span>err: {mediaErrName(p.errorCode)}</span>
                         <span>HEAD: {p.headStatus ?? 'N/A'}</span>
-                        <span>Range: {p.rangeStatus ?? 'N/A'}</span>
+                        <span>GET: {p.getStatus ?? 'N/A'}</span>
+                        <span>Range: <b className={p.rangeStatus === 206 ? 'text-emerald-500' : 'text-red-500'}>{p.rangeStatus ?? 'N/A'}</b></span>
                         <span>type: {p.contentType ?? 'N/A'}</span>
                         <span>len: {p.contentLength ?? 'N/A'}</span>
                         <span>accept-ranges: {p.acceptRanges ?? 'N/A'}</span>
                         <span>content-range: {p.contentRange ?? 'N/A'}</span>
+                        <span>resp.type: {p.responseType ?? 'N/A'}</span>
+                        <span>redirected: {p.redirected == null ? 'N/A' : String(p.redirected)}</span>
                       </div>
+                      {p.fetchError && <p className="mt-1 text-[11px] font-semibold text-red-500">fetch 오류: {p.fetchError}</p>}
                       {p.notes.length > 0 && (
                         <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-amber-600 dark:text-amber-400">
                           {p.notes.map((n, i) => <li key={i}>{n}</li>)}
                         </ul>
                       )}
+                      {/* 재생 타임라인 — "0:02 에서 NETWORK" 같은 스트리밍 실패 시점 캡처 */}
+                      <div className="mt-1.5">
+                        <button
+                          onClick={() => void runTimeline(r)}
+                          disabled={timelines[r.id] === 'running'}
+                          className="inline-flex items-center gap-1 rounded-md bg-bg-card px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-50"
+                        >
+                          <Activity size={11} /> {timelines[r.id] === 'running' ? '재생 테스트 중…' : '재생 테스트(타임라인)'}
+                        </button>
+                        {timelines[r.id] && timelines[r.id] !== 'running' && (() => {
+                          const tl = timelines[r.id] as { timeline: PlaybackEvent[]; outcome: string; errorCode: number | null };
+                          return (
+                            <div className="mt-1 rounded bg-bg-deep/40 p-1.5 font-mono text-[10px] leading-relaxed">
+                              <p className="font-bold text-ink">
+                                결과: <span className={tl.outcome === 'still-playing' || tl.outcome === 'ended' ? 'text-emerald-500' : 'text-red-500'}>{tl.outcome}</span>
+                                {tl.errorCode != null && ` · err=${mediaErrName(tl.errorCode)}`}
+                              </p>
+                              <div className="mt-0.5 max-h-32 overflow-y-auto">
+                                {tl.timeline.map((e, i) => (
+                                  <div key={i} className={e.event === 'error' ? 'text-red-500' : e.event.startsWith('play-rejected') ? 'text-amber-500' : 'text-ink-mute'}>
+                                    {e.t}ms · {e.event} · cur={e.currentTime}s · rs={e.readyState} · ns={e.networkState}{e.errorCode != null ? ` · errc=${e.errorCode}` : ''}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   )}
                 </li>
