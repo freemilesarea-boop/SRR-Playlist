@@ -33,7 +33,11 @@ export default function TrackSharePage() {
       const { data, error } = await supabase
         .from('tracks')
         .select('*')
+        // 공개 음원만 — 삭제/미노출/자켓없음은 직접 URL 접근 차단
         .eq('id', id)
+        .eq('visibility_status', 'approved')
+        .is('removed_at', null)
+        .not('cover_url', 'is', null)
         .maybeSingle();
       if (!alive) return;
       if (error || !data) {
@@ -50,6 +54,9 @@ export default function TrackSharePage() {
           .select('*')
           .eq('genre', t.genre)
           .neq('id', t.id)
+          .eq('visibility_status', 'approved')
+          .is('removed_at', null)
+          .not('cover_url', 'is', null)
           .limit(6);
         if (alive) setRelated(applyDemoMode((rel ?? []) as TrackRow[]));
       }
@@ -81,7 +88,7 @@ export default function TrackSharePage() {
     return (
       <div className="space-y-3 px-4 py-12 text-center sm:px-6">
         <Music size={28} className="mx-auto text-ink-dim" />
-        <p className="text-sm text-ink-mute">곡을 찾을 수 없어요.</p>
+        <p className="text-sm text-ink-mute">삭제되었거나 이용할 수 없는 음원입니다.</p>
         <Link to="/" className="inline-flex rounded-full bg-bg-card px-3 py-1.5 text-xs hover:bg-bg-hover">
           홈으로
         </Link>

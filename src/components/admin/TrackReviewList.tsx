@@ -109,7 +109,7 @@ export default function TrackReviewList() {
           return;
         }
         await adminRejectArtistRelease(track.track_id, combinedReason);
-        toast.success('반려 처리 완료 — 아티스트에게 사유가 전달됩니다');
+        toast.success('거절·삭제 완료 — 서비스에서 즉시 미노출되고 "삭제 음원" 탭으로 이동했습니다');
       } else if (kind === 'changes') {
         if (!combinedReason) {
           toast.error('수정 요청 사유를 입력해주세요');
@@ -317,6 +317,14 @@ export default function TrackReviewList() {
               const payoutTone = PAYOUT_TONE[payoutKey] ?? PAYOUT_TONE.pending;
               const payoutLabel = PAYOUT_LABEL[payoutKey] ?? '계좌 미등록';
               const lyricsOpen = openLyricsId === r.track_id;
+              // 승인(발매) 전 필수값 게이트 — 누락 시 승인 버튼 비활성화 (서버 RPC 도 동일 검증)
+              const missingMeta: string[] = [];
+              if (!r.cover_url || r.cover_url.trim() === '') missingMeta.push('앨범 자켓');
+              if (!r.main_genre || r.main_genre.trim() === '') missingMeta.push('장르');
+              if (!r.title || r.title.trim() === '') missingMeta.push('제목');
+              if (!r.album_name || r.album_name.trim() === '') missingMeta.push('앨범명');
+              if (!r.release_date) missingMeta.push('발매일');
+              const canApprove = missingMeta.length === 0;
               return (
                 <li key={r.track_id} className="space-y-2 p-3">
                   <div className="flex items-start gap-3">
@@ -421,10 +429,17 @@ export default function TrackReviewList() {
                     </div>
                   )}
 
+                  {!canApprove && (
+                    <p className="rounded bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-900 dark:bg-red-500/15 dark:text-red-300">
+                      ⚠ 필수값 누락: {missingMeta.join(', ')} — 보완 전까지 승인 불가
+                    </p>
+                  )}
+
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <button
                       onClick={() => setModal({ kind: 'approve', track: r })}
-                      disabled={busyId === r.track_id}
+                      disabled={busyId === r.track_id || !canApprove}
+                      title={canApprove ? undefined : `필수값 누락: ${missingMeta.join(', ')}`}
                       className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
                     >
                       <Check size={11} /> 승인
@@ -434,7 +449,7 @@ export default function TrackReviewList() {
                       disabled={busyId === r.track_id}
                       className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
                     >
-                      <X size={11} /> 거절
+                      <X size={11} /> 거절·삭제
                     </button>
                     <button
                       onClick={() => setModal({ kind: 'changes', track: r })}
@@ -628,7 +643,7 @@ function ReviewActionModal({
 
   const titles: Record<ActionKind, string> = {
     approve: '승인 처리',
-    reject: '반려 처리',
+    reject: '거절·삭제 처리',
     changes: '수정 요청',
   };
   const tones: Record<ActionKind, 'success' | 'error' | 'warning'> = {
@@ -667,7 +682,9 @@ function ReviewActionModal({
         {(kind === 'reject' || kind === 'changes') && (
           <label className="block space-y-1">
             <span className="text-xs font-semibold text-ink-mute">
-              {kind === 'reject' ? '아티스트에게 노출될 반려 사유' : '아티스트에게 노출될 수정 요청 사유'}
+              {kind === 'reject'
+                ? '거절 사유 (거절 시 즉시 서비스 미노출 → "삭제 음원" 탭으로 이동)'
+                : '아티스트에게 노출될 수정 요청 사유'}
             </span>
             <textarea
               rows={3}

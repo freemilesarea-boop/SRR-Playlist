@@ -223,8 +223,13 @@ export default function ArtistBatchUploadForm({
     const metaErr = validateSelectedMeta(meta);
     if (metaErr) return `공통 메타데이터: ${metaErr}`;
     if (!rightsConfirmed) return '권리 확인 체크박스를 동의해주세요';
+    const hasCommonCover = !!common.coverFile;
     for (const t of tracks) {
       if (!t.title.trim()) return `곡 제목 미입력: ${t.file.name}`;
+      // 앨범 자켓 필수 — 개별 자켓 또는 공통 자켓 중 하나는 있어야 검수 제출 가능
+      if (!(t.coverFile || hasCommonCover)) {
+        return `앨범 자켓 미등록: ${t.file.name} (공통 자켓을 올리거나 개별 자켓을 지정해주세요)`;
+      }
     }
     return null;
   }

@@ -223,6 +223,8 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
     e.preventDefault();
     if (!audioFile) { toast.error('음원 파일을 선택해주세요.'); return; }
     if (!title.trim()) { toast.error('곡 제목을 입력해주세요.'); return; }
+    if (!coverFile) { toast.error('앨범 자켓 이미지를 등록해주세요.'); return; }
+    if (!(genre.trim() || mainGenre)) { toast.error('장르를 선택해주세요.'); return; }
     setBusy(true);
     try {
       // ============ 1) 원본 파일 decode smoke test ============
