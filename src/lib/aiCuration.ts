@@ -125,6 +125,71 @@ export async function getTracksNeedingAiReview(): Promise<unknown[]> {
   return (data ?? []) as unknown[];
 }
 
+// #8 — 자동배치 안전장치: pending 제안 → 관리자 승인 시에만 playlist_tracks 추가
+export interface AiSuggestion {
+  id: string;
+  track_id: string;
+  fit_score: number;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  title: string | null;
+  artist: string | null;
+  cover_url: string | null;
+}
+export async function generateAiSuggestions(playlistId: string): Promise<{ suggestions: number }> {
+  const { data, error } = await supabase.rpc('admin_generate_ai_suggestions', { p_playlist_id: playlistId });
+  if (error) throw error;
+  return data as { suggestions: number };
+}
+export async function listAiSuggestions(playlistId: string, status = 'pending'): Promise<AiSuggestion[]> {
+  const { data, error } = await supabase.rpc('admin_list_ai_suggestions', { p_playlist_id: playlistId, p_status: status });
+  if (error) throw error;
+  return (data ?? []) as AiSuggestion[];
+}
+export async function decideAiSuggestion(id: string, approve: boolean): Promise<void> {
+  const { error } = await supabase.rpc('admin_decide_ai_suggestion', { p_id: id, p_approve: approve });
+  if (error) throw error;
+}
+
+// #6 — 통합 위반 (skip + AI mismatch)
+export interface UnifiedViolation {
+  id: string;
+  source: 'skip' | 'ai';
+  track_id: string;
+  playlist_id: string | null;
+  title: string | null;
+  artist: string | null;
+  violation_type: string;
+  severity: 'low' | 'medium' | 'high';
+  skip_count: number | null;
+  mismatch_score: number | null;
+  status: string;
+  reason: string | null;
+  detected_at: string | null;
+  admin_note: string | null;
+}
+export async function listUnifiedViolations(limit = 200): Promise<UnifiedViolation[]> {
+  const { data, error } = await supabase.rpc('admin_list_unified_violations', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as UnifiedViolation[];
+}
+
+// #7 — 가중치 설정
+export interface AiScoringConfig {
+  fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  mismatch_threshold: number; fit_recommend_cutoff: number; fit_exclude_cutoff: number; store_exclude_threshold: number;
+}
+export async function getAiScoringConfig(): Promise<AiScoringConfig> {
+  const { data, error } = await supabase.rpc('get_ai_scoring_config');
+  if (error) throw error;
+  return data as AiScoringConfig;
+}
+export async function updateAiScoringConfig(patch: Partial<AiScoringConfig>): Promise<AiScoringConfig> {
+  const { data, error } = await supabase.rpc('admin_update_ai_scoring_config', { p_patch: patch });
+  if (error) throw error;
+  return data as AiScoringConfig;
+}
+
 export interface PlayEventInput {
   trackId: string;
   playlistId?: string | null;

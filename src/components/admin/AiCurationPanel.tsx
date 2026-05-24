@@ -8,9 +8,15 @@ import {
   recomputePlaylistFitScores,
   getAiRecommendedTracksForPlaylist,
   applyAiMetadata,
+  generateAiSuggestions,
+  listAiSuggestions,
+  decideAiSuggestion,
+  listUnifiedViolations,
   type AiCurationRow,
   type CurationFilter,
   type FitScoreRow,
+  type AiSuggestion,
+  type UnifiedViolation,
 } from '@/lib/aiCuration';
 import { analyzeAudioFromUrl, generateMockFeatures } from '@/lib/audioAnalysis';
 import { fetchPlaylists } from '@/lib/api';
@@ -48,7 +54,7 @@ export default function AiCurationPanel() {
       {sub === 'pending' && <PendingTab />}
       {sub === 'results' && <ResultsTab />}
       {sub === 'fit' && <FitTab />}
-      {sub === 'review' && <ResultsTab reviewOnly />}
+      {sub === 'review' && <UnifiedViolationsTab />}
     </div>
   );
 }
@@ -283,6 +289,7 @@ function FitTab() {
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [pid, setPid] = useState<string>('');
   const [rows, setRows] = useState<FitScoreRow[]>([]);
+  const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -291,8 +298,10 @@ function FitTab() {
   const load = useCallback(async () => {
     if (!pid) return;
     setLoading(true);
-    try { setRows(await getAiRecommendedTracksForPlaylist(pid, 100)); }
-    catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
+    try {
+      const [recs, sugs] = await Promise.all([getAiRecommendedTracksForPlaylist(pid, 100), listAiSuggestions(pid, 'pending')]);
+      setRows(recs); setSuggestions(sugs);
+    } catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, [pid]);
   useEffect(() => { void load(); }, [load]);
@@ -307,6 +316,23 @@ function FitTab() {
     } catch (e) { toast.error(`재계산 실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   }
+  async function genSuggestions() {
+    if (!pid) return;
+    setBusy(true);
+    try {
+      const res = await generateAiSuggestions(pid);
+      toast.success(`추천 제안 ${res.suggestions}건 생성 (승인 전까지 공개 안 됨)`);
+      await load();
+    } catch (e) { toast.error(`제안 생성 실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  async function decide(id: string, approve: boolean) {
+    try {
+      await decideAiSuggestion(id, approve);
+      toast.success(approve ? '승인 — 플레이리스트에 추가했어요.' : '제외했어요.');
+      await load();
+    } catch (e) { toast.error(`처리 실패: ${(e as Error).message}`); }
+  }
 
   return (
     <div className="space-y-3">
@@ -319,11 +345,33 @@ function FitTab() {
           className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-black disabled:opacity-50">
           <ListMusic size={13} /> 적합도 재계산
         </button>
+        <button onClick={() => void genSuggestions()} disabled={busy || !pid}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-bg-card px-3 py-2 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">
+          <Wand2 size={13} /> 추천 제안 생성
+        </button>
         <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-2 text-xs font-semibold hover:bg-bg-hover">
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
         </button>
       </div>
-      <p className="text-[11px] text-ink-dim">fit_score ≥ 70 추천 후보만 표시됩니다. (재계산은 released/approved 곡 전체 대상)</p>
+      <p className="text-[11px] text-ink-dim">fit_score ≥ 70 추천 후보만 표시됩니다. 자동 공개되지 않으며, "추천 제안 생성" 후 아래에서 승인해야 플레이리스트에 추가됩니다.</p>
+
+      {suggestions.length > 0 && (
+        <div className="rounded-xl bg-accent/5 p-3 ring-1 ring-accent/15">
+          <h4 className="mb-2 text-xs font-bold text-accent">승인 대기 제안 ({suggestions.length}) — 승인 전까지 비공개</h4>
+          <ul className="space-y-1">
+            {suggestions.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate">{s.title ?? '(제목없음)'} · <span className="text-ink-dim">{s.artist ?? ''}</span></span>
+                <span className="shrink-0 font-bold tabular-nums text-emerald-600">{s.fit_score}</span>
+                <span className="flex shrink-0 gap-1">
+                  <button onClick={() => void decide(s.id, true)} className="rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25">승인</button>
+                  <button onClick={() => void decide(s.id, false)} className="rounded bg-ink/5 px-2 py-1 text-[10px] font-semibold text-ink-mute hover:bg-ink/10">제외</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {rows.length === 0 ? (
         <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '추천 후보가 없어요. (재계산을 눌러보세요)'}</p>
       ) : (
@@ -333,6 +381,65 @@ function FitTab() {
               <span className="min-w-0 truncate">{r.title ?? '(제목없음)'} · <span className="text-ink-dim">{r.artist ?? ''}</span></span>
               <span className="shrink-0 text-[10px] text-ink-dim">{r.reason}</span>
               <span className="shrink-0 font-bold tabular-nums text-emerald-600">{r.fit_score}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const VIOLATION_LABELS: Record<string, string> = {
+  high_skip_rate: '스킵 과다', ai_mismatch: 'AI 불일치', wrong_store_fit: '매장 부적합', wrong_energy: '에너지 불일치',
+};
+
+function UnifiedViolationsTab() {
+  const [rows, setRows] = useState<UnifiedViolation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sev, setSev] = useState<'all' | 'high' | 'medium'>('all');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRows(await listUnifiedViolations(200)); }
+    catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const shown = rows.filter((r) => sev === 'all' || r.severity === sev);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(['all', 'high', 'medium'] as const).map((s) => (
+          <button key={s} onClick={() => setSev(s)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${sev === s ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
+            {s === 'all' ? '전체' : s === 'high' ? '심각' : '보통'}
+          </button>
+        ))}
+        <button onClick={() => void load()} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
+        </button>
+      </div>
+      <p className="text-[11px] text-ink-dim">스킵 과다 + AI 불일치(매장 부적합/에너지 불일치)를 한 화면에서 검토합니다.</p>
+      {shown.length === 0 ? (
+        <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '위반/검토 후보가 없어요.'}</p>
+      ) : (
+        <ul className="space-y-2">
+          {shown.map((r) => (
+            <li key={r.id} className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''}</span></span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.severity === 'high' ? 'bg-rose-500/15 text-rose-600' : r.severity === 'medium' ? 'bg-amber-500/15 text-amber-600' : 'bg-ink/10 text-ink-mute'}`}>
+                    {VIOLATION_LABELS[r.violation_type] ?? r.violation_type}
+                  </span>
+                  <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-dim">{r.source === 'skip' ? '스킵' : 'AI'}</span>
+                  {r.skip_count != null && <span className="text-[10px] text-ink-dim">스킵 {r.skip_count}</span>}
+                  {r.mismatch_score != null && <span className="text-[10px] text-ink-dim">불일치 {Math.round(r.mismatch_score * 100)}%</span>}
+                </span>
+              </div>
+              {r.reason && <p className="mt-1 text-[11px] text-ink-mute">{r.reason}</p>}
             </li>
           ))}
         </ul>

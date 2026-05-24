@@ -23,7 +23,7 @@ import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
-import { trackStream, recordPlaylistQualifiedView } from '@/lib/analytics';
+import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/analytics';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -31,6 +31,7 @@ import {
 } from '@/lib/libraryApi';
 import { recommendSimilarTracks } from '@/lib/recommendationApi';
 import { recordTrackSkip, type SkipReason } from '@/lib/skipApi';
+import { recordPlayEvent } from '@/lib/aiCuration';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
@@ -717,6 +718,8 @@ export default function Player() {
     if (!prog || prog.id !== outgoingId) return; // 진행도 스냅샷 없음 → 미재생 간주
     const dur = prog.duration > 0 ? prog.duration : null;
     void recordTrackSkip(ctx.id, outgoingId, prog.played, dur, reason);
+    // AI 큐레이션 behavior 이벤트 (정산용 stream_events 와 분리) — skip
+    void recordPlayEvent({ trackId: outgoingId, playlistId: ctx.id, eventType: 'skip', played: prog.played, duration: dur, skipReason: reason, anonId: getAnonymousId() });
   }
 
   // 0104 — 무료회원 25초 미리듣기 강제. 실제 청취 delta 누적 (seek 점프/뮤트/일시정지 제외).
@@ -873,6 +876,11 @@ export default function Player() {
 
     // 자연 종료 — 다음 트랙 변경 시 스킵으로 집계하지 않도록 표시.
     if (current) naturalEndRef.current = current.id;
+
+    // AI 큐레이션 behavior 이벤트 — complete (자연 종료만; network error 는 onError 라 여기 안 옴)
+    if (current && playlistContext?.type === 'catalog') {
+      void recordPlayEvent({ trackId: current.id, playlistId: playlistContext.id, eventType: 'complete', played: duration || currentTime || 0, duration: duration || null, anonId: getAnonymousId() });
+    }
 
     if (current) {
       void trackStream({
