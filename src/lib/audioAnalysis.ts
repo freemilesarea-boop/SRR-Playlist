@@ -26,7 +26,9 @@ export interface AudioFeatureValues {
   vocal_presence?: number | null;
   brightness?: number | null;
   tempo_stability?: number | null;
+  spectral_centroid?: number | null;
   duration_seconds?: number | null;
+  raw_features?: Record<string, number> | null;
   analyzer?: string;
   analysis_version?: string;
 }
@@ -63,130 +65,68 @@ export function generateMockFeatures(seed: string, durationSeconds?: number | nu
   };
 }
 
+const ANALYZE_TIMEOUT_MS = 90_000;
+
 /**
- * v1 실분석(beta) — 브라우저 Web Audio 로 오디오를 디코드해 기초 피처를 추출한다.
- * 추출: duration, rms, peak, dynamic_range, energy(=rms 기반), brightness(고역/전역 에너지비),
- *       bpm(에너지 플럭스 자기상관), tempo_stability, danceability(휴리스틱).
- * key/mode/vocal 정밀 분석은 미지원(2차) — vocal_presence/acousticness/instrumentalness 는 휴리스틱.
- * 실패 시 throw.
+ * 실 DSP 분석 v1 (analyzer='webaudio-dsp-v1').
+ * 메인 스레드: fetch → decodeAudioData → mono 다운믹스. 무거운 framewise FFT/피처는 WebWorker 에서.
+ * 외부 의존성 없음(Essentia/Meyda 미사용 — iOS WASM 리스크 회피). 실패/timeout 시 throw + 정리.
  */
 export async function analyzeAudioFromUrl(
   url: string,
   durationSeconds?: number | null,
 ): Promise<AudioFeatureValues> {
-  if (typeof window === 'undefined' || !(window.AudioContext || (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext)) {
-    throw new Error('이 브라우저는 Web Audio 분석을 지원하지 않습니다.');
-  }
+  const Ctx =
+    typeof window !== 'undefined'
+      ? window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      : undefined;
+  if (!Ctx) throw new Error('이 브라우저는 Web Audio 분석을 지원하지 않습니다.');
+
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`오디오 fetch 실패: HTTP ${resp.status}`);
   const buf = await resp.arrayBuffer();
 
-  const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
   const ctx = new Ctx();
   let audio: AudioBuffer;
   try {
     audio = await ctx.decodeAudioData(buf.slice(0));
+  } catch (e) {
+    throw new Error(`오디오 디코드 실패: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     void ctx.close();
   }
 
-  const ch = audio.getChannelData(0);
+  // mono 다운믹스 (다중 채널 평균)
   const sr = audio.sampleRate;
-  const dur = audio.duration;
-
-  // RMS / peak
-  let sumSq = 0;
-  let peak = 0;
-  const step = Math.max(1, Math.floor(ch.length / 500_000)); // 대용량 다운샘플
-  let n = 0;
-  for (let i = 0; i < ch.length; i += step) {
-    const v = ch[i];
-    sumSq += v * v;
-    const a = Math.abs(v);
-    if (a > peak) peak = a;
-    n++;
+  const len = audio.length;
+  const mono = new Float32Array(len);
+  for (let c = 0; c < audio.numberOfChannels; c++) {
+    const cd = audio.getChannelData(c);
+    for (let i = 0; i < len; i++) mono[i] += cd[i];
   }
-  const rms = Math.sqrt(sumSq / Math.max(1, n));
-  const dynamic_range = peak > 0 ? 20 * Math.log10(peak / Math.max(rms, 1e-6)) : 0;
-  const loudness = 20 * Math.log10(Math.max(rms, 1e-6));
-  const energy = clamp01(rms * 3.2); // rms→energy 매핑(경험적)
+  if (audio.numberOfChannels > 1) for (let i = 0; i < len; i++) mono[i] /= audio.numberOfChannels;
 
-  // brightness: 1차 차분(고역 에너지) / 전체 에너지 비
-  let hi = 0;
-  let lo = 0;
-  for (let i = 1; i < ch.length; i += step) {
-    const d = ch[i] - ch[i - 1];
-    hi += d * d;
-    lo += ch[i] * ch[i];
-  }
-  const brightness = clamp01(Math.sqrt(hi / Math.max(lo, 1e-9)) * 0.8);
-
-  // BPM: 에너지 플럭스 onset envelope 자기상관 (60~180 BPM)
-  const bpm = estimateBpm(ch, sr);
-
-  // 휴리스틱(2차에서 ML 로 대체)
-  const danceability = clamp01(0.3 + energy * 0.4 + (bpm && bpm >= 100 && bpm <= 130 ? 0.2 : 0));
-  const acousticness = clamp01(1 - brightness * 0.6 - energy * 0.3);
-  const vocal_presence = clamp01(0.3 + brightness * 0.4);
-  const instrumentalness = clamp01(1 - vocal_presence);
-  const tempo_stability = 0.6; // 단일 패스 추정 — 2차에서 정밀화
-
-  return {
-    bpm: bpm ?? null,
-    energy,
-    danceability,
-    acousticness,
-    instrumentalness,
-    speechiness: clamp01(vocal_presence * 0.3),
-    vocal_presence,
-    brightness,
-    tempo_stability,
-    loudness: Math.round(loudness * 10) / 10,
-    rms: Math.round(rms * 1000) / 1000,
-    peak: Math.round(peak * 1000) / 1000,
-    dynamic_range: Math.round(dynamic_range * 10) / 10,
-    key_name: null,
-    duration_seconds: durationSeconds ?? Math.round(dur),
-    analyzer: 'webaudio-v1',
-    analysis_version: 'v1',
-  };
-}
-
-/** 에너지 플럭스 onset envelope 자기상관으로 BPM 추정. 실패 시 null. */
-function estimateBpm(ch: Float32Array, sr: number): number | null {
+  // WebWorker 로 오프로드 (transfer)
+  const worker = new Worker(new URL('./audioAnalysisWorker.ts', import.meta.url), { type: 'module' });
   try {
-    const hop = 512;
-    const frames = Math.floor(ch.length / hop);
-    if (frames < 8) return null;
-    const env = new Float32Array(frames);
-    let prev = 0;
-    for (let f = 0; f < frames; f++) {
-      let e = 0;
-      const base = f * hop;
-      for (let i = 0; i < hop; i++) e += Math.abs(ch[base + i] || 0);
-      const flux = Math.max(0, e - prev);
-      env[f] = flux;
-      prev = e;
-    }
-    const envSr = sr / hop;
-    const minBpm = 60;
-    const maxBpm = 180;
-    const minLag = Math.floor((60 / maxBpm) * envSr);
-    const maxLag = Math.floor((60 / minBpm) * envSr);
-    let bestLag = -1;
-    let bestVal = 0;
-    for (let lag = minLag; lag <= maxLag; lag++) {
-      let sum = 0;
-      for (let i = 0; i + lag < frames; i++) sum += env[i] * env[i + lag];
-      if (sum > bestVal) {
-        bestVal = sum;
-        bestLag = lag;
-      }
-    }
-    if (bestLag <= 0) return null;
-    const bpm = (60 * envSr) / bestLag;
-    return Math.round(Math.max(minBpm, Math.min(maxBpm, bpm)));
-  } catch {
-    return null;
+    const features = await new Promise<AudioFeatureValues>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('오디오 분석 시간 초과')), ANALYZE_TIMEOUT_MS);
+      worker.onmessage = (ev: MessageEvent<{ ok: boolean; features?: AudioFeatureValues; error?: string }>) => {
+        window.clearTimeout(timer);
+        if (ev.data.ok && ev.data.features) resolve(ev.data.features);
+        else reject(new Error(ev.data.error || '분석 실패'));
+      };
+      worker.onerror = (err) => {
+        window.clearTimeout(timer);
+        reject(new Error(`worker 오류: ${err.message}`));
+      };
+      worker.postMessage({ pcm: mono, sampleRate: sr }, [mono.buffer]);
+    });
+    return {
+      ...features,
+      duration_seconds: durationSeconds ?? features.duration_seconds ?? Math.round(audio.duration),
+    };
+  } finally {
+    worker.terminate();
   }
 }
