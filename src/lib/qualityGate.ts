@@ -50,23 +50,38 @@ export function evaluateQuality(r: LoudnessResult, th: QualityThresholds): { pas
   return { passed: true, reason: null };
 }
 
-/** 실패 사유 → 사용자 안내 메시지 (측정값 포함). */
+/** 실패 사유 → 사용자 안내 메시지 (플랫폼 품질 기준 안내 톤, 측정값 포함). */
 export function buildQualityMessage(r: QualityResult, th: QualityThresholds): string {
   if (r.passed) return '음질 검사를 통과했어요.';
-  const lufs = r.integrated_lufs != null ? `${r.integrated_lufs} LUFS` : '측정불가';
-  const tp = r.true_peak_dbtp != null ? `${r.true_peak_dbtp} dBTP` : '측정불가';
+
+  // 분석 자체가 불가한 경우 — 측정값 없이 안내
   if (r.failure_reason === 'analysis_failed') {
-    return '음원 분석에 실패했어요. 파일이 손상되지 않았는지 확인 후 다시 시도해주세요.';
+    return (
+      '음원 분석에 실패했습니다.\n\n' +
+      '파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.\n' +
+      '확인 후 다시 업로드해주세요.'
+    );
   }
-  if (r.failure_reason === 'clipping') {
-    return `음원에 클리핑(왜곡)이 감지됐어요. (True Peak ${tp})\n매장 재생 품질을 위해 클리핑 없는 음원만 등록 가능합니다.\n권장: Louver Mastering AI 로 마스터링 후 다시 업로드해주세요.`;
-  }
+
+  const lufs = r.integrated_lufs != null ? `${r.integrated_lufs} LUFS` : '측정 실패';
+  const tp = r.true_peak_dbtp != null ? `${r.true_peak_dbtp} dBTP` : '측정 실패';
+  // 측정값 블록 — LUFS/True Peak 는 항상, Loudness Range 는 값이 있을 때만 표시
+  const lines = [`• Integrated LUFS: ${lufs}`, `• True Peak: ${tp}`];
+  if (r.loudness_range != null) lines.push(`• Loudness Range: ${r.loudness_range} LU`);
+
   return (
-    `음원 볼륨이 플랫폼 기준에 부합하지 않습니다.\n\n` +
-    `현재 측정값:\n· Integrated LUFS: ${lufs}\n· True Peak: ${tp}` +
-    (r.loudness_range != null ? `\n· Loudness Range: ${r.loudness_range} LU` : '') +
-    `\n\n듣다는 매장 내 일관된 청취 경험을 위해 ${th.lufs_min} ~ ${th.lufs_max} LUFS · True Peak ≤ ${th.true_peak_max} dBTP 음원만 등록 가능합니다.\n` +
-    `권장: Louver Mastering AI 로 마스터링 후 다시 업로드해주세요.`
+    '음원 볼륨이 플랫폼 등록 기준에 부합하지 않습니다.\n\n' +
+    '현재 측정값\n' +
+    lines.join('\n') +
+    '\n\n' +
+    '듣다는 매장 내 일관된 청취 경험과\n' +
+    '플레이리스트 품질 유지를 위해\n' +
+    `${th.lufs_min} ~ ${th.lufs_max} LUFS / True Peak ≤ ${th.true_peak_max} dBTP\n` +
+    '기준을 충족한 음원만 등록 가능합니다.\n\n' +
+    '※ 기준을 충족하지 않은 음원은\n' +
+    '매장 환경에서 청취 볼륨 편차가 발생할 수 있습니다.\n\n' +
+    '마스터링 및 음원 볼륨 작업 후\n' +
+    '다시 업로드해주세요.'
   );
 }
 
