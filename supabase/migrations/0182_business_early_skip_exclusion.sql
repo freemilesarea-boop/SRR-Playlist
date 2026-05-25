@@ -89,7 +89,7 @@ begin
   if v_sk is null then return jsonb_build_object('ok', true, 'recorded', true, 'excluded', false, 'note', 'no_store_key'); end if;
   select count(*), count(distinct business_user_id) into v_cnt, v_uniq
   from public.business_early_skip_events
-  where track_id = p_track_id and playlist_store_key = v_sk and created_at > now() - interval '90 days';
+  where track_id = p_track_id and playlist_store_key = v_sk and created_at > now() - interval '30 days';
 
   if v_cnt >= 3 and v_uniq >= 2 then
     insert into public.business_track_playlist_exclusions(track_id, playlist_store_key, store_group_key, skip_count, unique_business_skip_count, status, reason, first_detected_at, last_detected_at)
