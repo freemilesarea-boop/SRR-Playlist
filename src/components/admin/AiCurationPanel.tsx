@@ -44,6 +44,7 @@ import {
   rereviewQueue,
   rereviewTrackDetail,
   rereviewAction,
+  applyAiMetadataAndRecompute,
   type EmbeddingPendingRow,
   type EmbeddingImportResult,
   type EmbeddingReviewRow,
@@ -56,6 +57,7 @@ import {
   type RereviewQueueRow,
   type RereviewDetail,
   type RereviewActionType,
+  type RecomputeResult,
   type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
@@ -1165,6 +1167,8 @@ function RereviewTab() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<RereviewDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [autoResolve, setAutoResolve] = useState(true);
+  const [results, setResults] = useState<Record<string, RecomputeResult>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1202,6 +1206,36 @@ function RereviewTab() {
     try { const r = await rereviewAction(trackIds, action, storeKey, note); toast.success(`처리됨 (${r.affected}곡)`); await load(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
+  }
+  // AI 메타 적용 + 자동 재평가 파이프라인 (개별) — diff 패널 표시
+  async function applyMetaOne(trackId: string) {
+    setBusy(true);
+    try {
+      const res = await applyAiMetadataAndRecompute(trackId, { autoResolve });
+      setResults((p) => ({ ...p, [trackId]: res }));
+      toast.success(res.warning ? `적용됨 — 경고 있음` : `적용 + 재평가 완료`);
+      const [s, q] = await Promise.all([rereviewSummary(), rereviewQueue(filter, 300)]);
+      setSummary(s); setRows(q);
+    } catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  // AI 메타 적용 + 재평가 (일괄) — 곡별 파이프라인, 실패 격리, 진행률
+  async function bulkApplyMeta() {
+    const ids = [...selected];
+    if (ids.length === 0) { toast.error('선택된 곡이 없어요.'); return; }
+    setBusy(true);
+    let ok = 0; let fail = 0; const acc: Record<string, RecomputeResult> = {};
+    for (let i = 0; i < ids.length; i++) {
+      setProgress(`AI 메타 적용 + 재평가… ${i + 1}/${ids.length} (성공 ${ok} · 실패 ${fail})`);
+      try { acc[ids[i]] = await applyAiMetadataAndRecompute(ids[i], { autoResolve }); ok += 1; }
+      catch { fail += 1; }
+    }
+    setResults((p) => ({ ...p, ...acc }));
+    toast[fail ? 'error' : 'success'](`일괄 적용 완료 — 성공 ${ok} · 실패 ${fail}`);
+    setProgress(null);
+    try { const [s, q] = await Promise.all([rereviewSummary(), rereviewQueue(filter, 300)]); setSummary(s); setRows(q); }
+    catch { /* noop */ }
+    setBusy(false);
   }
   // 선택 곡들의 "등록 매장 충돌" 태그를 곡별로 제거
   async function bulkRemoveConflicts() {
@@ -1269,8 +1303,9 @@ function RereviewTab() {
       <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-bg-soft px-3 py-2 text-[11px]">
         <button onClick={selAll} className="rounded bg-bg-card px-2 py-1 font-semibold hover:bg-bg-hover">{selected.size === rows.length && rows.length > 0 ? '전체 해제' : '전체 선택'}</button>
         <span className="text-ink-dim">{selected.size}곡 선택</span>
+        <label className="flex items-center gap-1 text-ink-mute"><input type="checkbox" checked={autoResolve} onChange={(e) => setAutoResolve(e.target.checked)} className="h-3 w-3 accent-accent" /> 충돌 해소 시 자동 resolve</label>
         <span className="mx-1 h-3 w-px bg-line" />
-        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'apply_ai_meta')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void bulkApplyMeta()} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
         <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">충돌 매장 태그 제거</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
@@ -1309,7 +1344,7 @@ function RereviewTab() {
 
               {/* 개별 빠른 액션 */}
               <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
-                <button disabled={busy} onClick={() => void act([r.track_id], 'apply_ai_meta')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용</button>
+                <button disabled={busy} onClick={() => void applyMetaOne(r.track_id)} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
                 {(r.blocked_declared_stores ?? []).map((sk) => (
                   <span key={sk} className="inline-flex items-center gap-0.5">
                     <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
@@ -1319,6 +1354,9 @@ function RereviewTab() {
                 <button disabled={busy} onClick={() => void act([r.track_id], 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
                 <button disabled={busy} onClick={() => void act([r.track_id], 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
               </div>
+
+              {/* AI 메타 적용 후 재평가 diff */}
+              {results[r.track_id] && <RecomputeDiffPanel res={results[r.track_id]} onClose={() => setResults((p) => { const n = { ...p }; delete n[r.track_id]; return n; })} />}
 
               {/* 확장: 등록 메타 vs AI 메타 + guardrail breakdown */}
               {expanded === r.track_id && (
@@ -1366,6 +1404,44 @@ function RereviewTab() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function RecomputeDiffPanel({ res, onClose }: { res: RecomputeResult; onClose: () => void }) {
+  const arrow = (d: number) => d > 0 ? <span className="text-emerald-600">▲ +{d}</span> : d < 0 ? <span className="text-rose-600">▼ {d}</span> : <span className="text-ink-dim">―</span>;
+  const changed = res.fit_diff.filter((d) => d.delta !== 0);
+  return (
+    <div className="mt-3 rounded-lg border border-accent/30 bg-accent/5 p-3 text-[10px]">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-bold text-accent">AI 메타 적용 후 재평가 결과</span>
+        <button onClick={onClose} className="rounded bg-bg-card px-2 py-0.5 text-[10px] text-ink-mute hover:bg-bg-hover">닫기</button>
+      </div>
+      {res.warning && <p className="mb-2 rounded bg-rose-500/10 px-2 py-1 font-semibold text-rose-600">⚠ {res.warning}</p>}
+      <div className="mb-2 flex flex-wrap gap-3">
+        <span>위험도: <b>{res.risk_before}</b> → <b className={res.risk_reduced ? 'text-emerald-600' : ''}>{res.risk_after}</b>{res.risk_reduced && ' ✓감소'}</span>
+        <span>불일치: <b>{res.mismatch_before}</b> → <b className={res.mismatch_reduced ? 'text-emerald-600' : ''}>{res.mismatch_after}</b>{res.mismatch_reduced && ' ✓감소'}</span>
+      </div>
+      {res.top_gains.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 font-bold text-ink-mute">추천 상승 매장 TOP5</p>
+          <div className="flex flex-wrap gap-1">
+            {res.top_gains.map((g) => <span key={g.store_key} className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600">{g.store_label} {g.before ?? 0}→{g.after ?? 0} (+{g.delta})</span>)}
+          </div>
+        </div>
+      )}
+      {res.unblocked_stores.length > 0 && <p className="mb-1">차단 해제: {res.unblocked_stores.map(storeLabel).join(', ')}</p>}
+      {res.newly_blocked_stores.length > 0 && <p className="mb-1 text-rose-600">신규 차단: {res.newly_blocked_stores.map(storeLabel).join(', ')}</p>}
+      {res.removed_conflicts.length > 0 && <p className="mb-1 text-emerald-600">충돌 해소: {res.removed_conflicts.map(storeLabel).join(', ')}</p>}
+      {changed.length > 0 && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-ink-dim">매장별 fit 변화 ({changed.length})</summary>
+          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 sm:grid-cols-3">
+            {changed.map((d) => <span key={d.store_key}>{d.store_label}: {d.before ?? 0}→{d.after ?? 0} {arrow(d.delta)}</span>)}
+          </div>
+        </details>
+      )}
+      {changed.length === 0 && res.top_gains.length === 0 && <p className="text-ink-dim">fit 변화 없음 (메타가 이미 일치) — 상태 동기화만 수행됨.</p>}
     </div>
   );
 }

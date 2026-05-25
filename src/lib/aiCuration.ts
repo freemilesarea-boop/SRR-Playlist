@@ -480,3 +480,23 @@ export async function rereviewAction(trackIds: string[], action: RereviewActionT
   const { data, error } = await supabase.rpc('admin_rereview_action', { p_track_ids: trackIds, p_action: action, p_store_key: storeKey ?? null, p_note: note ?? null });
   if (error) throw error; return data as { affected: number };
 }
+
+// AI 메타 적용 + 자동 재평가 파이프라인 (self-healing) — before/after diff 반환
+export interface RecomputeFitDelta { store_key: string; store_label: string; before: number | null; after: number | null; delta: number; }
+export interface RecomputeResult {
+  ok: boolean; track_id: string; declared_stores: string[] | null;
+  fit_before: Record<string, number>; fit_after: Record<string, number>;
+  fit_diff: RecomputeFitDelta[]; top_gains: RecomputeFitDelta[];
+  blocked_before: string[]; blocked_after: string[];
+  unblocked_stores: string[]; newly_blocked_stores: string[];
+  removed_conflicts: string[]; remaining_conflicts: string[];
+  mismatch_before: number; mismatch_after: number; mismatch_reduced: boolean;
+  risk_before: string; risk_after: string; risk_reduced: boolean;
+  open_flags_after: string[]; warning: string | null;
+}
+export async function applyAiMetadataAndRecompute(trackId: string, opts: { autoResolve?: boolean } = {}): Promise<RecomputeResult> {
+  const { data, error } = await supabase.rpc('admin_apply_ai_metadata_and_recompute', {
+    p_track_id: trackId, p_options: { auto_resolve: opts.autoResolve ?? false },
+  });
+  if (error) throw error; return data as RecomputeResult;
+}
