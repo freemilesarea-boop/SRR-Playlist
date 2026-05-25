@@ -396,3 +396,25 @@ export async function bulkGuardrailClear(trackIds: string[], reason?: string): P
 export async function bulkApplyAiMetadata(trackIds: string[]): Promise<void> {
   for (const id of trackIds) { await applyAiMetadata(id, {}); }
 }
+
+// 고위험 검수 + 업로더 상세
+export interface HighRiskTrack {
+  track_id: string; title: string | null; artist: string | null; release_status: string | null;
+  trust_score: number; trust_tier: string; low_trust: boolean; guardrail_hard: boolean;
+  ai_mismatch_high: boolean; embedding_disagree_high: boolean; lufs_boundary: boolean;
+  hard_stores: number; mismatch_score: number | null; owner_name: string | null; owner_user_id: string; risk_score: number;
+}
+export async function listHighRiskTracks(limit = 200): Promise<HighRiskTrack[]> {
+  const { data, error } = await supabase.rpc('admin_list_high_risk_tracks', { p_limit: limit });
+  if (error) throw error; return (data ?? []) as HighRiskTrack[];
+}
+export interface UploaderDetail {
+  user_id: string; artist_name: string | null; trust_score: number; tier: string;
+  violation_tracks: Array<{ track_id: string; title: string | null; main_genre: string | null; hard_stores: number; blocked_stores: string[] | null }>;
+  trust_history: Array<{ old_score: number | null; new_score: number | null; reason: string | null; created_at: string }>;
+  notice_message: string;
+}
+export async function getUploaderDetail(userId: string): Promise<UploaderDetail> {
+  const { data, error } = await supabase.rpc('admin_get_uploader_detail', { p_user_id: userId });
+  if (error) throw error; return data as UploaderDetail;
+}
