@@ -447,6 +447,26 @@ export default function TrackReviewList() {
                         <Wallet size={9} />
                         {payoutLabel}
                       </span>
+                      {r.owner_trust_tier && (
+                        <span
+                          title={r.owner_trust_tier === 'low'
+                            ? '주의 업로더 — 자동배치 제외 · AI 추천 메타 우선 · 직접 메타 반영 금지 권장'
+                            : r.owner_trust_tier === 'medium'
+                              ? '일반 검수 (불일치/guardrail 시 경고 강화)'
+                              : 'AI 메타 일치 시 빠른 승인 가능'}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            r.owner_trust_tier === 'low'
+                              ? 'bg-rose-100 text-rose-900 dark:bg-rose-500/15 dark:text-rose-300'
+                              : r.owner_trust_tier === 'medium'
+                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300'
+                          }`}
+                        >
+                          신뢰도 {r.owner_trust_score ?? 100}
+                          {r.owner_trust_tier === 'low' && ' · 주의'}
+                          {r.owner_trust_tier === 'high' && (r.mismatch_score ?? 0) < 0.3 && !r.q_clipping && ' · 빠른승인 가능'}
+                        </span>
+                      )}
                     </div>
                   </div>
 
