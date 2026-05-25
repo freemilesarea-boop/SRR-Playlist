@@ -41,8 +41,9 @@ import {
   rereviewBatch,
   finalizeRereview,
   rereviewSummary,
-  listRereviewFlags,
-  resolveRereviewFlag,
+  rereviewQueue,
+  rereviewTrackDetail,
+  rereviewAction,
   type EmbeddingPendingRow,
   type EmbeddingImportResult,
   type EmbeddingReviewRow,
@@ -52,7 +53,9 @@ import {
   type GuardrailViolationTrack,
   type HighRiskTrack,
   type RereviewSummary,
-  type RereviewFlag,
+  type RereviewQueueRow,
+  type RereviewDetail,
+  type RereviewActionType,
   type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
@@ -1141,20 +1144,36 @@ function HighRiskTab() {
   );
 }
 
+const REREVIEW_STORE_LABELS: Record<string, string> = {
+  gym: '헬스장', pilates: '필라테스', yoga: '요가', hospital: '병원', cafe_independent: '카페_개인',
+  cafe_franchise: '카페_프렌차이즈', winebar: '와인바', cocktail_bar: '칵테일바', restaurant: '식당',
+  korean_restaurant: '한식당', brunch_cafe: '브런치카페', office: '사무실', coworking: '코워킹스페이스',
+  salon: '미용실', nail_shop: '네일샵', hotel_lobby: '호텔로비', select_shop: '편집샵',
+  clothing_store: '의류매장', kids_cafe: '키즈카페', dog_cafe: '애견카페', pc_bang: 'PC방', fine_dining: '파인다이닝',
+};
+const storeLabel = (k: string) => REREVIEW_STORE_LABELS[k] ?? k;
+
 function RereviewTab() {
   const [summary, setSummary] = useState<RereviewSummary | null>(null);
-  const [flags, setFlags] = useState<RereviewFlag[]>([]);
-  const [flagType, setFlagType] = useState('needs_re_review');
+  const [rows, setRows] = useState<RereviewQueueRow[]>([]);
+  const [filter, setFilter] = useState('needs_re_review');
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [detail, setDetail] = useState<RereviewDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const [s, f] = await Promise.all([rereviewSummary(), listRereviewFlags(flagType, 200)]); setSummary(s); setFlags(f); }
-    catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
+    try {
+      const [s, q] = await Promise.all([rereviewSummary(), rereviewQueue(filter, 300)]);
+      setSummary(s); setRows(q); setSelected(new Set());
+    } catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
-  }, [flagType]);
+  }, [filter]);
   useEffect(() => { void load(); }, [load]);
 
   async function runFull() {
@@ -1162,7 +1181,6 @@ function RereviewTab() {
     setRunning(true);
     try {
       let offset = 0; let total = 0; let processed = 0;
-      // 배치 (20곡씩) — AI 메타 재계산
       for (;;) {
         const r = await rereviewBatch(offset, 20);
         total = r.total; processed += r.processed;
@@ -1177,12 +1195,49 @@ function RereviewTab() {
     } catch (e) { toast.error(`재검수 실패: ${(e as Error).message}`); }
     finally { setRunning(false); setProgress(null); }
   }
-  async function resolve(t: RereviewFlag, status: string) {
-    try { await resolveRereviewFlag(t.track_id, t.flag_type, status); toast.success('처리됨'); await load(); }
+
+  async function act(trackIds: string[], action: RereviewActionType, storeKey?: string, note?: string) {
+    if (trackIds.length === 0) { toast.error('선택된 곡이 없어요.'); return; }
+    setBusy(true);
+    try { const r = await rereviewAction(trackIds, action, storeKey, note); toast.success(`처리됨 (${r.affected}곡)`); await load(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  // 선택 곡들의 "등록 매장 충돌" 태그를 곡별로 제거
+  async function bulkRemoveConflicts() {
+    const targets = rows.filter((r) => selected.has(r.track_id) && (r.blocked_declared_stores?.length ?? 0) > 0);
+    if (targets.length === 0) { toast.error('충돌 매장이 있는 선택 곡이 없어요.'); return; }
+    setBusy(true);
+    try {
+      let n = 0;
+      for (const r of targets) {
+        for (const sk of r.blocked_declared_stores ?? []) { await rereviewAction([r.track_id], 'remove_declared_store', sk); }
+        n += 1;
+      }
+      toast.success(`충돌 태그 제거 완료 (${n}곡)`); await load();
+    } catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
   }
 
-  const FT: [string, string][] = [['needs_re_review', '재검수 필요'], ['high_risk', '고위험'], ['quality_review_required', '품질 재검수'], ['guardrail_hard', '매장 차단'], ['all', '전체']];
+  async function toggleExpand(id: string) {
+    if (expanded === id) { setExpanded(null); setDetail(null); return; }
+    setExpanded(id); setDetail(null); setDetailLoading(true);
+    try { setDetail(await rereviewTrackDetail(id)); }
+    catch (e) { toast.error(`상세 실패: ${(e as Error).message}`); }
+    finally { setDetailLoading(false); }
+  }
+
+  function toggleSel(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function selAll() { setSelected((p) => p.size === rows.length ? new Set() : new Set(rows.map((r) => r.track_id))); }
+  const selIds = [...selected];
+
+  const FILTERS: [string, string][] = [
+    ['needs_re_review', '재검수 필요'], ['high_risk', '고위험'], ['quality_review_required', '품질 재검수'],
+    ['guardrail_hard', '매장 차단'], ['mismatch_high', '불일치 high'], ['low_trust', '저신뢰'],
+    ['store:hospital', '병원 충돌'], ['store:gym', '헬스장 충돌'], ['store:yoga', '요가 충돌'], ['store:kids_cafe', '키즈카페 충돌'],
+    ['all', '전체'],
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -1191,37 +1246,122 @@ function RereviewTab() {
         <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-2 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
         {progress && <span className="text-xs text-ink-mute">{progress}</span>}
       </div>
-      <p className="text-[11px] text-ink-dim">released/approved/pending 전체에 큐레이션/guardrail/trust 재적용 → 문제 곡을 플래그. 자동 삭제·비공개 없음. 오디오 품질/DSP 분석은 "분석 대기" 탭에서 실행.</p>
+      <p className="text-[11px] text-ink-dim">재검수 대상 곡을 듣고 등록 메타 vs AI 추천을 비교해 개별/일괄 처리합니다. 자동 삭제·비공개 없음 — 메타/태그/플래그만 변경. 오디오 품질/DSP 분석은 "분석 대기" 탭에서 실행.</p>
 
       {summary && (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           <PStat label="대상 곡" v={summary.total_target} />
-          <PStat label="분석 완료" v={summary.features_done} />
           <PStat label="재검수 필요" v={summary.needs_re_review} />
           <PStat label="고위험" v={summary.high_risk_flags} />
           <PStat label="불일치 high" v={summary.mismatch_high} />
-          <PStat label="매장차단(스냅샷)" v={summary.guardrail_hard_tracks} />
           <PStat label="품질 재검수" v={summary.quality_review_required} />
-          <PStat label="분석 실패" v={summary.features_failed} />
           <PStat label="저신뢰 업로더" v={summary.low_trust_uploaders} />
+          <PStat label="수정요청 대기" v={summary.fix_requested} />
+          <PStat label="처리완료" v={summary.resolved_total} />
         </div>
       )}
 
       <div className="flex flex-wrap gap-1.5">
-        {FT.map(([f, l]) => <button key={f} onClick={() => setFlagType(f)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${flagType === f ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>{l}</button>)}
+        {FILTERS.map(([f, l]) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === f ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>{l}</button>)}
       </div>
-      {flags.length === 0 ? (
-        <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '해당 플래그 곡이 없어요.'}</p>
+
+      {/* 일괄 처리 바 */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-bg-soft px-3 py-2 text-[11px]">
+        <button onClick={selAll} className="rounded bg-bg-card px-2 py-1 font-semibold hover:bg-bg-hover">{selected.size === rows.length && rows.length > 0 ? '전체 해제' : '전체 선택'}</button>
+        <span className="text-ink-dim">{selected.size}곡 선택</span>
+        <span className="mx-1 h-3 w-px bg-line" />
+        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'apply_ai_meta')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">충돌 매장 태그 제거</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '해당 조건의 곡이 없어요.'}</p>
       ) : (
-        <ul className="space-y-1">
-          {flags.map((t) => (
-            <li key={t.track_id + t.flag_type} className="flex items-center justify-between gap-2 rounded-lg bg-bg-card px-3 py-2 text-[11px]">
-              <span className="min-w-0 truncate"><b>{t.title ?? '(제목없음)'}</b> · <span className="text-ink-dim">{t.artist ?? ''} · {t.release_status}</span></span>
-              <span className="flex shrink-0 items-center gap-1">
-                <span className="text-[10px] text-ink-dim" title={t.reason ?? ''}>{t.reason ? t.reason.slice(0, 24) : ''}</span>
-                <button onClick={() => void resolve(t, 'resolved')} className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">유지/완료</button>
-                <button onClick={() => void resolve(t, 'dismissed')} className="rounded bg-ink/5 px-2 py-0.5 text-[10px] font-semibold text-ink-mute">무시</button>
-              </span>
+        <ul className="space-y-2">
+          {rows.map((r) => (
+            <li key={r.track_id} className="rounded-xl bg-bg-card p-3">
+              <div className="flex items-start gap-2">
+                <input type="checkbox" checked={selected.has(r.track_id)} onChange={() => toggleSel(r.track_id)} className="mt-1 h-4 w-4 accent-accent" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <b className="truncate">{r.title ?? '(제목없음)'}</b>
+                    <span className="text-ink-dim">{r.artist ?? ''} · {r.release_status}</span>
+                    {r.trust_score < 50 && <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">trust {r.trust_score}</span>}
+                    {r.needs_fix && <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">수정요청</span>}
+                    {r.disposition && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-mute">{r.disposition}</span>}
+                  </div>
+                  <p className="mt-1 text-[11px] font-medium text-amber-600">{r.problem_summary}</p>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                    {(r.open_flags ?? []).map((f) => <span key={f} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-600">{f}</span>)}
+                  </div>
+                  {r.audio_url && <audio src={r.audio_url} controls preload="none" className="mt-2 h-8 w-full" />}
+                </div>
+                <button onClick={() => void toggleExpand(r.track_id)} className="shrink-0 rounded bg-bg-soft px-2 py-1 text-[10px] font-semibold text-ink-mute hover:bg-bg-hover">{expanded === r.track_id ? '접기' : '비교/상세'}</button>
+              </div>
+
+              {/* 선언 vs 차단 매장 요약 */}
+              <div className="mt-2 grid grid-cols-1 gap-1.5 text-[10px] sm:grid-cols-2">
+                <div><span className="text-ink-dim">등록 매장: </span>{(r.declared_stores ?? []).length ? (r.declared_stores ?? []).map((s) => <span key={s} className="mr-1 rounded bg-bg-soft px-1.5 py-0.5">{storeLabel(s)}</span>) : <span className="text-ink-dim">없음</span>}</div>
+                <div><span className="text-ink-dim">차단 매장: </span>{(r.blocked_stores ?? []).length ? (r.blocked_stores ?? []).map((s) => <span key={s} className={`mr-1 rounded px-1.5 py-0.5 ${(r.blocked_declared_stores ?? []).includes(s) ? 'bg-rose-500/15 font-semibold text-rose-600' : 'bg-bg-soft text-ink-mute'}`}>{storeLabel(s)}</span>) : <span className="text-ink-dim">없음</span>}</div>
+              </div>
+
+              {/* 개별 빠른 액션 */}
+              <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
+                <button disabled={busy} onClick={() => void act([r.track_id], 'apply_ai_meta')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용</button>
+                {(r.blocked_declared_stores ?? []).map((sk) => (
+                  <span key={sk} className="inline-flex items-center gap-0.5">
+                    <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
+                    <button disabled={busy} onClick={() => void act([r.track_id], 'exclude_store', sk)} className="rounded bg-rose-500/15 px-2 py-1 font-semibold text-rose-600 disabled:opacity-40">{storeLabel(sk)} 제외</button>
+                  </span>
+                ))}
+                <button disabled={busy} onClick={() => void act([r.track_id], 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
+                <button disabled={busy} onClick={() => void act([r.track_id], 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
+              </div>
+
+              {/* 확장: 등록 메타 vs AI 메타 + guardrail breakdown */}
+              {expanded === r.track_id && (
+                <div className="mt-3 rounded-lg bg-bg-soft p-3 text-[10px]">
+                  {detailLoading || !detail ? <p className="text-ink-dim">{detailLoading ? '불러오는 중…' : ''}</p> : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="mb-1 font-bold text-ink-mute">등록자 입력</p>
+                          <p>장르: {(detail.declared_genres ?? []).join(', ') || '—'}</p>
+                          <p>무드: {(detail.declared_moods ?? []).join(', ') || '—'}</p>
+                          <p>상황: {(detail.declared_situations ?? []).join(', ') || '—'}</p>
+                          <p>매장 태그: {(detail.declared_store_tags ?? []).join(', ') || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="mb-1 font-bold text-accent">AI 추천</p>
+                          <p>장르: {(detail.ai_genres ?? []).join(', ') || '—'}</p>
+                          <p>무드: {(detail.ai_moods ?? []).join(', ') || '—'}</p>
+                          <p>상황: {(detail.ai_situations ?? []).join(', ') || '—'}</p>
+                          <p>에너지: {detail.ai_energy_level ?? '—'} · 보컬: {detail.ai_vocal_type ?? '—'}</p>
+                          <p>불일치: {detail.mismatch_score != null ? detail.mismatch_score.toFixed(2) : '—'}</p>
+                        </div>
+                      </div>
+                      {detail.ai_explanation && <p className="rounded bg-bg-card px-2 py-1 text-ink-mute">{detail.ai_explanation}</p>}
+                      {(detail.mismatch_reasons ?? []).length > 0 && (
+                        <ul className="list-disc space-y-0.5 pl-4 text-ink-dim">{(detail.mismatch_reasons ?? []).map((m, i) => <li key={i}>{m}</li>)}</ul>
+                      )}
+                      {detail.guardrails.length > 0 && (
+                        <div>
+                          <p className="mb-1 font-bold text-ink-mute">매장별 금지규칙</p>
+                          <div className="flex flex-wrap gap-1">
+                            {detail.guardrails.map((g) => (
+                              <span key={g.store_key} className={`rounded px-1.5 py-0.5 ${g.is_declared && g.severity === 'hard_block' ? 'bg-rose-500/15 font-semibold text-rose-600' : g.severity === 'hard_block' ? 'bg-amber-500/10 text-amber-600' : 'bg-bg-card text-ink-mute'}`} title={(g.rules ?? []).join(', ')}>{g.store_label}{g.is_declared ? '✓' : ''} · {g.severity}</span>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-ink-dim">✓ = 등록자가 선언한 매장 · 빨강 = 선언 매장에서 hard_block(검수 필요)</p>
+                        </div>
+                      )}
+                      {(detail.ai_exclusions ?? []).length > 0 && <p className="text-ink-dim">제외 매장: {(detail.ai_exclusions ?? []).map(storeLabel).join(', ')}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
