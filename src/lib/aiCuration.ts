@@ -298,3 +298,45 @@ export async function importTrackEmbeddings(rows: unknown[], dryRun: boolean): P
   if (error) throw error;
   return data as EmbeddingImportResult;
 }
+
+// 임베딩 검증 (heuristic vs embedding 비교 + 리뷰 액션)
+export interface EmbeddingReviewRow {
+  track_id: string; title: string | null; artist: string | null; cover_url: string | null; created_at: string;
+  embedding_status: string; model_name: string | null; model_version: string | null; embedding_dim: number | null;
+  error_message: string | null; ai_status: string | null; disagreement_score: number | null;
+  has_embedding: boolean | null; review_status: string | null;
+}
+export interface EmbeddingComparison {
+  track_id: string; embedding_status: string; model_name: string | null; model_version: string | null;
+  embedding_dim: number | null; confidence: number | null; error_message: string | null; embedded_at: string | null;
+  has_embedding: boolean; disagreement_score: number | null; suspected_issues: string[];
+  heuristic_top5: Array<{ store_key: string; score: number }>;
+  embedding_top5: Array<{ store_key: string; similarity: number }>;
+  ai_status: string | null;
+}
+export async function listEmbeddingReviewTracks(filter = 'all', model = 'openl3', limit = 150): Promise<EmbeddingReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_embedding_review_tracks', { p_filter: filter, p_model: model, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EmbeddingReviewRow[];
+}
+export async function getEmbeddingComparison(trackId: string, model = 'openl3'): Promise<EmbeddingComparison> {
+  const { data, error } = await supabase.rpc('admin_get_embedding_comparison', { p_track_id: trackId, p_model: model });
+  if (error) throw error;
+  return data as EmbeddingComparison;
+}
+export async function markEmbeddingReviewed(trackId: string, model = 'openl3', note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_mark_embedding_reviewed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
+  if (error) throw error;
+}
+export async function markEmbeddingReanalysisNeeded(trackId: string, model = 'openl3', note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_mark_embedding_reanalysis_needed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
+  if (error) throw error;
+}
+export async function addStoreSeedCandidate(trackId: string, storeKey: string, model = 'openl3'): Promise<void> {
+  const { error } = await supabase.rpc('admin_add_store_seed_candidate', { p_track_id: trackId, p_store_key: storeKey, p_model: model });
+  if (error) throw error;
+}
+export async function applyEmbeddingToAiMetadata(trackId: string, model = 'openl3'): Promise<void> {
+  const { error } = await supabase.rpc('admin_apply_embedding_to_ai_metadata', { p_track_id: trackId, p_model: model });
+  if (error) throw error;
+}
