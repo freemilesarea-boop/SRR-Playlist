@@ -530,3 +530,46 @@ export async function getPlaylistFlow(playlistId: string): Promise<FlowDetail> {
   const { data, error } = await supabase.rpc('admin_get_playlist_flow', { p_playlist_id: playlistId });
   if (error) throw error; return data as FlowDetail;
 }
+
+// Playlist Auto Reordering — Flow Score 기반 순서 최적화 "제안" (자동 적용 없음, 관리자 승인 필요)
+export interface ReorderMetrics {
+  flow_score: number | null; n_transitions: number; avg_transition?: number;
+  rough_transitions?: number; repetitive_count?: number; drop_shock_count?: number;
+  mood_collision_count?: number; fatigue_index?: number; monotony_index?: number; emotional_continuity?: number;
+}
+export interface ReorderProposalRow {
+  id: string; playlist_id: string; title: string | null; status: string;
+  current_score: number | null; proposed_score: number | null; improvement: number | null;
+  n_tracks: number; created_at: string; metrics_before: ReorderMetrics; metrics_after: ReorderMetrics;
+}
+export interface ReorderListEntry { position: number; track_id: string; title: string | null; moved?: boolean; }
+export interface ReorderDetail {
+  ok: boolean; proposal_id?: string; playlist_id?: string; title?: string | null; status?: string;
+  current_score?: number | null; proposed_score?: number | null; improvement?: number | null;
+  metrics_before?: ReorderMetrics; metrics_after?: ReorderMetrics;
+  current_list?: ReorderListEntry[]; proposed_list?: ReorderListEntry[]; note?: string;
+}
+export async function generateAllReorders(): Promise<{ proposals: number; with_improvement: number }> {
+  const { data, error } = await supabase.rpc('admin_generate_all_reorders');
+  if (error) throw error; return data as { proposals: number; with_improvement: number };
+}
+export async function generatePlaylistReorder(playlistId: string): Promise<unknown> {
+  const { data, error } = await supabase.rpc('admin_generate_playlist_reorder', { p_playlist_id: playlistId });
+  if (error) throw error; return data;
+}
+export async function listReorderProposals(): Promise<ReorderProposalRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_reorder_proposals');
+  if (error) throw error; return (data ?? []) as ReorderProposalRow[];
+}
+export async function getReorderProposal(playlistId: string): Promise<ReorderDetail> {
+  const { data, error } = await supabase.rpc('admin_get_reorder_proposal', { p_playlist_id: playlistId });
+  if (error) throw error; return data as ReorderDetail;
+}
+export async function applyPlaylistReorder(proposalId: string): Promise<{ reordered: number }> {
+  const { data, error } = await supabase.rpc('admin_apply_playlist_reorder', { p_proposal_id: proposalId });
+  if (error) throw error; return data as { reordered: number };
+}
+export async function rejectPlaylistReorder(proposalId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reject_playlist_reorder', { p_proposal_id: proposalId });
+  if (error) throw error;
+}
