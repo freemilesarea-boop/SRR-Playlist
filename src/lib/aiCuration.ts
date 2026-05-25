@@ -340,6 +340,15 @@ export async function applyEmbeddingToAiMetadata(trackId: string, model = 'openl
   const { error } = await supabase.rpc('admin_apply_embedding_to_ai_metadata', { p_track_id: trackId, p_model: model });
   if (error) throw error;
 }
+export interface EmbeddingStatus { model: string; track_embeddings: number; store_archetypes: number; pending: number; embedding_dim: number | null; }
+export async function embeddingStatus(model = 'openl3'): Promise<EmbeddingStatus> {
+  const { data, error } = await supabase.rpc('admin_embedding_status', { p_model: model });
+  if (error) throw error; return data as EmbeddingStatus;
+}
+export async function buildStoreArchetypes(model = 'openl3', top = 8): Promise<{ built: number; skipped: unknown[] }> {
+  const { data, error } = await supabase.rpc('admin_build_store_archetypes', { p_model: model, p_top: top });
+  if (error) throw error; return data as { built: number; skipped: unknown[] };
+}
 
 // Hard Guardrails — 매장별 절대 금지 규칙 위반/차단 + 관리자 override
 export interface GuardrailViolation { rule_key: string; severity: 'warning' | 'soft_block' | 'hard_block'; reason: string | null; }

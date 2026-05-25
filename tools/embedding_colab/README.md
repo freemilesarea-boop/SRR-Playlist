@@ -17,7 +17,10 @@
    ④ generated_embeddings.json 업로드 → "dry-run 검증" → "임포트 실행"
         │  (admin_import_track_embeddings: track_id/dim 검증, 실패 row skip)
         ▼
-[검증]  recommend_stores_for_track 로 곡↔매장 cosine 유사도 확인
+   ⑤ "매장 아키타입 생성/갱신" (임베딩 탭 ④ 블록)
+        │  admin_build_store_archetypes — 매장별 대표 벡터 생성 (추천 작동에 필수)
+        ▼
+[검증]  임베딩 검증 탭 / recommend_stores_for_track 로 곡↔매장 cosine TOP5 확인
         (자동 추천/차트/정산에는 반영되지 않음 — 관리자 검증용)
 ```
 
@@ -37,6 +40,12 @@
 - **dry-run 검증** → 성공/건너뜀(사유) 확인 → 문제없으면 **임포트 실행**.
 - 검증 항목: `track_id` 존재, `embedding` 배열, `embedding_dim == 길이`, model 필드.
 - 실패 row 는 건너뛰고 사유 표시. 기존 임베딩은 upsert.
+
+## ⑤ 매장 아키타입 생성 (추천 작동에 필수)
+- 임베딩(PoC) 탭 **④ 매장 아키타입 생성** 블록에서 **매장 아키타입 생성/갱신** 클릭.
+- 각 매장의 대표 벡터를 (승인된 seed 곡 → 없으면 `ai_store_fit` 상위 곡의 임베딩 평균으로) 생성.
+- **이 단계 없이는 `recommend_stores_for_track` 가 빈 결과를 반환**(store_archetype_embeddings 0건).
+- 곡 임베딩을 새로 추가/재적재한 뒤에는 다시 한 번 실행해 아키타입을 갱신.
 
 ## 보안 / 안전
 - **service_role key 를 notebook 에 절대 하드코딩하지 않음.** 임포트는 관리자 앱(관리자 로그인 세션)으로 수행.
