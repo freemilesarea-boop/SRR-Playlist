@@ -500,3 +500,33 @@ export async function applyAiMetadataAndRecompute(trackId: string, opts: { autoR
   });
   if (error) throw error; return data as RecomputeResult;
 }
+
+// Playlist Flow AI 엔진 — 곡↔곡 전환 흐름 평가
+export interface FlowSummaryRow {
+  playlist_id: string; title: string | null; flow_score: number | null; n_tracks: number; n_transitions: number;
+  avg_transition: number | null; rough_transitions: number; fatigue_index: number; monotony_index: number;
+  repetitive_count: number; drop_shock_count: number; mood_collision_count: number; emotional_continuity: number | null;
+  computed_at: string;
+}
+export interface FlowTransition {
+  position: number; from_track_id: string | null; to_track_id: string | null; from_title: string | null; to_title: string | null;
+  bpm_jump: number | null; energy_jump: number | null; brightness_jump: number | null; vocal_jump: number | null;
+  energy_drop: number | null; transition_score: number | null; issues: string[];
+}
+export interface FlowDetail { score: (FlowSummaryRow & { breakdown: Record<string, number> }) | null; transitions: FlowTransition[]; }
+export async function computeAllPlaylistFlows(): Promise<{ playlists_scored: number }> {
+  const { data, error } = await supabase.rpc('admin_compute_all_playlist_flows');
+  if (error) throw error; return data as { playlists_scored: number };
+}
+export async function computePlaylistFlow(playlistId: string): Promise<FlowSummaryRow> {
+  const { data, error } = await supabase.rpc('admin_compute_playlist_flow', { p_playlist_id: playlistId });
+  if (error) throw error; return data as FlowSummaryRow;
+}
+export async function playlistFlowSummary(): Promise<FlowSummaryRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_flow_summary');
+  if (error) throw error; return (data ?? []) as FlowSummaryRow[];
+}
+export async function getPlaylistFlow(playlistId: string): Promise<FlowDetail> {
+  const { data, error } = await supabase.rpc('admin_get_playlist_flow', { p_playlist_id: playlistId });
+  if (error) throw error; return data as FlowDetail;
+}
