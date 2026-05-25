@@ -418,3 +418,31 @@ export async function getUploaderDetail(userId: string): Promise<UploaderDetail>
   const { data, error } = await supabase.rpc('admin_get_uploader_detail', { p_user_id: userId });
   if (error) throw error; return data as UploaderDetail;
 }
+
+// 전체 재검수 배치
+export interface RereviewSummary {
+  total_target: number; features_done: number; features_missing: number; features_failed: number;
+  quality_review_required: number; guardrail_hard_tracks: number; mismatch_high: number;
+  high_risk_flags: number; needs_re_review: number; low_trust_uploaders: number;
+}
+export async function rereviewBatch(offset: number, limit = 20): Promise<{ total: number; processed: number; failed: number; next_offset: number; has_more: boolean }> {
+  const { data, error } = await supabase.rpc('admin_rereview_batch', { p_offset: offset, p_limit: limit });
+  if (error) throw error; return data as { total: number; processed: number; failed: number; next_offset: number; has_more: boolean };
+}
+export async function finalizeRereview(): Promise<{ flags_upserted: number }> {
+  const { data, error } = await supabase.rpc('admin_finalize_rereview');
+  if (error) throw error; return data as { flags_upserted: number };
+}
+export async function rereviewSummary(): Promise<RereviewSummary> {
+  const { data, error } = await supabase.rpc('admin_rereview_summary');
+  if (error) throw error; return data as RereviewSummary;
+}
+export interface RereviewFlag { track_id: string; flag_type: string; status: string; reason: string | null; created_at: string; title: string | null; artist: string | null; release_status: string | null; }
+export async function listRereviewFlags(flagType = 'needs_re_review', limit = 200): Promise<RereviewFlag[]> {
+  const { data, error } = await supabase.rpc('admin_list_rereview_flags', { p_flag_type: flagType, p_limit: limit });
+  if (error) throw error; return (data ?? []) as RereviewFlag[];
+}
+export async function resolveRereviewFlag(trackId: string, flagType: string, status = 'resolved', note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_resolve_rereview_flag', { p_track_id: trackId, p_flag_type: flagType, p_status: status, p_note: note ?? null });
+  if (error) throw error;
+}

@@ -38,6 +38,11 @@ import {
   bulkApplyAiMetadata,
   listHighRiskTracks,
   getUploaderDetail,
+  rereviewBatch,
+  finalizeRereview,
+  rereviewSummary,
+  listRereviewFlags,
+  resolveRereviewFlag,
   type EmbeddingPendingRow,
   type EmbeddingImportResult,
   type EmbeddingReviewRow,
@@ -46,6 +51,8 @@ import {
   type GuardrailDashboard,
   type GuardrailViolationTrack,
   type HighRiskTrack,
+  type RereviewSummary,
+  type RereviewFlag,
   type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
@@ -62,7 +69,7 @@ import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
-type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk';
+type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -88,7 +95,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
+        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -104,6 +111,7 @@ export default function AiCurationPanel() {
       {sub === 'embed_review' && <EmbeddingReviewTab />}
       {sub === 'guardrail' && <GuardrailDashboardTab />}
       {sub === 'highrisk' && <HighRiskTab />}
+      {sub === 'rereview' && <RereviewTab />}
     </div>
   );
 }
@@ -1125,6 +1133,95 @@ function HighRiskTab() {
                 )}
                 <button onClick={() => void copyNotice(r.owner_user_id)} className="rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">업로더 안내문구 복사</button>
               </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RereviewTab() {
+  const [summary, setSummary] = useState<RereviewSummary | null>(null);
+  const [flags, setFlags] = useState<RereviewFlag[]>([]);
+  const [flagType, setFlagType] = useState('needs_re_review');
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const [s, f] = await Promise.all([rereviewSummary(), listRereviewFlags(flagType, 200)]); setSummary(s); setFlags(f); }
+    catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, [flagType]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function runFull() {
+    if (!window.confirm('전체 재검수를 실행할까요? (진단/플래그만 — 자동 삭제·비공개 없음)')) return;
+    setRunning(true);
+    try {
+      let offset = 0; let total = 0; let processed = 0;
+      // 배치 (20곡씩) — AI 메타 재계산
+      for (;;) {
+        const r = await rereviewBatch(offset, 20);
+        total = r.total; processed += r.processed;
+        setProgress(`AI 메타 재계산… ${Math.min(offset + 20, total)}/${total}`);
+        if (!r.has_more) break;
+        offset = r.next_offset;
+      }
+      setProgress('guardrail/trust/플래그 생성 중…');
+      const fin = await finalizeRereview();
+      toast.success(`재검수 완료 — ${processed}곡 처리, 플래그 ${fin.flags_upserted}건`);
+      await load();
+    } catch (e) { toast.error(`재검수 실패: ${(e as Error).message}`); }
+    finally { setRunning(false); setProgress(null); }
+  }
+  async function resolve(t: RereviewFlag, status: string) {
+    try { await resolveRereviewFlag(t.track_id, t.flag_type, status); toast.success('처리됨'); await load(); }
+    catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+  }
+
+  const FT: [string, string][] = [['needs_re_review', '재검수 필요'], ['high_risk', '고위험'], ['quality_review_required', '품질 재검수'], ['guardrail_hard', '매장 차단'], ['all', '전체']];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => void runFull()} disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-black disabled:opacity-50">{running ? '실행 중…' : '전체 재검수 실행'}</button>
+        <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-2 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
+        {progress && <span className="text-xs text-ink-mute">{progress}</span>}
+      </div>
+      <p className="text-[11px] text-ink-dim">released/approved/pending 전체에 큐레이션/guardrail/trust 재적용 → 문제 곡을 플래그. 자동 삭제·비공개 없음. 오디오 품질/DSP 분석은 "분석 대기" 탭에서 실행.</p>
+
+      {summary && (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <PStat label="대상 곡" v={summary.total_target} />
+          <PStat label="분석 완료" v={summary.features_done} />
+          <PStat label="재검수 필요" v={summary.needs_re_review} />
+          <PStat label="고위험" v={summary.high_risk_flags} />
+          <PStat label="불일치 high" v={summary.mismatch_high} />
+          <PStat label="매장차단(스냅샷)" v={summary.guardrail_hard_tracks} />
+          <PStat label="품질 재검수" v={summary.quality_review_required} />
+          <PStat label="분석 실패" v={summary.features_failed} />
+          <PStat label="저신뢰 업로더" v={summary.low_trust_uploaders} />
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5">
+        {FT.map(([f, l]) => <button key={f} onClick={() => setFlagType(f)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${flagType === f ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>{l}</button>)}
+      </div>
+      {flags.length === 0 ? (
+        <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '해당 플래그 곡이 없어요.'}</p>
+      ) : (
+        <ul className="space-y-1">
+          {flags.map((t) => (
+            <li key={t.track_id + t.flag_type} className="flex items-center justify-between gap-2 rounded-lg bg-bg-card px-3 py-2 text-[11px]">
+              <span className="min-w-0 truncate"><b>{t.title ?? '(제목없음)'}</b> · <span className="text-ink-dim">{t.artist ?? ''} · {t.release_status}</span></span>
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="text-[10px] text-ink-dim" title={t.reason ?? ''}>{t.reason ? t.reason.slice(0, 24) : ''}</span>
+                <button onClick={() => void resolve(t, 'resolved')} className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">유지/완료</button>
+                <button onClick={() => void resolve(t, 'dismissed')} className="rounded bg-ink/5 px-2 py-0.5 text-[10px] font-semibold text-ink-mute">무시</button>
+              </span>
             </li>
           ))}
         </ul>
