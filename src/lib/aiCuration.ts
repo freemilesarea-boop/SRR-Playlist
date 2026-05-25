@@ -340,3 +340,19 @@ export async function applyEmbeddingToAiMetadata(trackId: string, model = 'openl
   const { error } = await supabase.rpc('admin_apply_embedding_to_ai_metadata', { p_track_id: trackId, p_model: model });
   if (error) throw error;
 }
+
+// Hard Guardrails — 매장별 절대 금지 규칙 위반/차단 + 관리자 override
+export interface GuardrailViolation { rule_key: string; severity: 'warning' | 'soft_block' | 'hard_block'; reason: string | null; }
+export interface GuardrailStoreResult {
+  store_key: string;
+  gr: { passed: boolean; blocked: boolean; severity: string | null; violations: GuardrailViolation[]; penalty_score: number; overridden?: boolean };
+}
+export async function getTrackGuardrails(trackId: string): Promise<GuardrailStoreResult[]> {
+  const { data, error } = await supabase.rpc('admin_get_track_guardrails', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as GuardrailStoreResult[];
+}
+export async function setGuardrailOverride(trackId: string, storeKey: string, enable: boolean, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_guardrail_override', { p_track_id: trackId, p_store_key: storeKey, p_enable: enable, p_reason: reason ?? null });
+  if (error) throw error;
+}
