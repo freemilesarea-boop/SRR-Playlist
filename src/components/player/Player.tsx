@@ -30,7 +30,7 @@ import {
   clearContinueListening,
 } from '@/lib/libraryApi';
 import { recommendSimilarTracks } from '@/lib/recommendationApi';
-import { recordTrackSkip, type SkipReason } from '@/lib/skipApi';
+import { recordTrackSkip, recordBusinessEarlySkip, type SkipReason } from '@/lib/skipApi';
 import { recordPlayEvent } from '@/lib/aiCuration';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
@@ -724,6 +724,8 @@ export default function Player() {
     void recordTrackSkip(ctx.id, outgoingId, prog.played, dur, reason);
     // AI 큐레이션 behavior 이벤트 (정산용 stream_events 와 분리) — skip
     void recordPlayEvent({ trackId: outgoingId, playlistId: ctx.id, eventType: 'skip', played: prog.played, duration: dur, skipReason: reason, anonId: getAnonymousId() });
+    // 사업자 회원 30초 이내 수동 스킵 → 자동 제외 후보 집계 (비사업자는 서버에서 무시). 정산 무관.
+    if (prog.played <= 30) void recordBusinessEarlySkip(ctx.id, outgoingId, prog.played, dur, reason);
   }
 
   // 0104 — 무료회원 25초 미리듣기 강제. 실제 청취 delta 누적 (seek 점프/뮤트/일시정지 제외).
