@@ -27,6 +27,9 @@ import {
   markEmbeddingReanalysisNeeded,
   addStoreSeedCandidate,
   applyEmbeddingToAiMetadata,
+  embeddingStatus,
+  buildStoreArchetypes,
+  type EmbeddingStatus,
   getTrackGuardrails,
   setGuardrailOverride,
   recomputeGuardrailFlags,
@@ -711,14 +714,25 @@ function EmbeddingTab() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<EmbeddingImportResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<EmbeddingStatus | null>(null);
 
   const loadPending = useCallback(async () => {
     setLoading(true);
-    try { setPending(await exportEmbeddingPending('openl3', 500)); }
+    try {
+      const [p, st] = await Promise.all([exportEmbeddingPending('openl3', 500), embeddingStatus('openl3').catch(() => null)]);
+      setPending(p); setStatus(st);
+    }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void loadPending(); }, [loadPending]);
+
+  async function buildArchetypes() {
+    setBusy(true);
+    try { const r = await buildStoreArchetypes('openl3', 8); toast.success(`매장 아키타입 생성 — ${r.built}개 매장`); await loadPending(); }
+    catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
 
   function downloadCsv() {
     const header = 'track_id,audio_url,title,artist,duration';
@@ -807,6 +821,27 @@ function EmbeddingTab() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl bg-bg-card p-3">
+        <h3 className="mb-2 text-xs font-bold">④ 매장 아키타입 생성 (추천 작동에 필수)</h3>
+        <p className="mb-2 text-[10px] text-ink-dim">
+          곡 임베딩 적재 후 실행하세요. 각 매장의 대표 벡터를 (승인된 seed 곡 또는 ai_store_fit 상위 곡의 임베딩 평균으로) 생성합니다.
+          이게 있어야 "임베딩 검증" 탭의 TOP5 매장 추천(recommend_stores_for_track)이 작동합니다.
+        </p>
+        {status && (
+          <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <PStat label="곡 임베딩" v={status.track_embeddings} />
+            <PStat label="매장 아키타입" v={status.store_archetypes} />
+            <PStat label="미적재(대기)" v={status.pending} />
+            <PStat label="차원" v={status.embedding_dim ?? '-'} />
+          </div>
+        )}
+        <button onClick={() => void buildArchetypes()} disabled={busy || (status?.track_embeddings ?? 0) === 0}
+          className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
+          매장 아키타입 생성/갱신
+        </button>
+        {status && status.track_embeddings === 0 && <p className="mt-1 text-[10px] text-amber-600">곡 임베딩이 아직 0건입니다 — 먼저 ②③ 임포트를 완료하세요.</p>}
       </div>
     </div>
   );
