@@ -281,3 +281,20 @@ export async function registerSkipViolations(): Promise<{ registered: number }> 
   if (error) throw error;
   return data as { registered: number };
 }
+
+// 임베딩 PoC — export(pending) / import(검증 후 upsert, dry-run 지원)
+export interface EmbeddingPendingRow { track_id: string; title: string | null; artist: string | null; audio_url: string | null; duration: number | null; }
+export async function exportEmbeddingPending(model = 'openl3', limit = 500): Promise<EmbeddingPendingRow[]> {
+  const { data, error } = await supabase.rpc('admin_export_embedding_pending_tracks', { p_model: model, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EmbeddingPendingRow[];
+}
+export interface EmbeddingImportResult {
+  ok: boolean; dry_run: boolean; imported: number; skipped: number;
+  errors: Array<{ track_id: string; reason: string }>;
+}
+export async function importTrackEmbeddings(rows: unknown[], dryRun: boolean): Promise<EmbeddingImportResult> {
+  const { data, error } = await supabase.rpc('admin_import_track_embeddings', { p_rows: rows, p_dry_run: dryRun });
+  if (error) throw error;
+  return data as EmbeddingImportResult;
+}

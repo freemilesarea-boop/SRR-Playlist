@@ -19,6 +19,10 @@ import {
   recomputeTrackFitScores,
   listStoreProfiles,
   setPlaylistStoreKey,
+  exportEmbeddingPending,
+  importTrackEmbeddings,
+  type EmbeddingPendingRow,
+  type EmbeddingImportResult,
   type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
@@ -35,7 +39,7 @@ import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
-type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review';
+type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -61,7 +65,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보']] as [SubTab, string][]).map(([k, label]) => (
+        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -73,6 +77,7 @@ export default function AiCurationPanel() {
       {sub === 'results' && <ResultsTab />}
       {sub === 'fit' && <FitTab />}
       {sub === 'review' && <UnifiedViolationsTab />}
+      {sub === 'embedding' && <EmbeddingTab />}
     </div>
   );
 }
@@ -629,6 +634,114 @@ function PStat({ label, v }: { label: string; v: number | string }) {
     <div className="rounded-lg bg-bg-soft/40 p-2 text-center">
       <div className="text-lg font-extrabold tabular-nums">{v}</div>
       <div className="text-[10px] text-ink-mute">{label}</div>
+    </div>
+  );
+}
+
+function EmbeddingTab() {
+  const [pending, setPending] = useState<EmbeddingPendingRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [parsed, setParsed] = useState<unknown[] | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [result, setResult] = useState<EmbeddingImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const loadPending = useCallback(async () => {
+    setLoading(true);
+    try { setPending(await exportEmbeddingPending('openl3', 500)); }
+    catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void loadPending(); }, [loadPending]);
+
+  function downloadCsv() {
+    const header = 'track_id,audio_url,title,artist,duration';
+    const esc = (s: unknown) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+    const body = pending.map((r) => [r.track_id, r.audio_url, r.title, r.artist, r.duration].map(esc).join(',')).join('\n');
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'embedding_pending.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    setResult(null);
+    if (!f) return;
+    setFileName(f.name);
+    try {
+      const json = JSON.parse(await f.text());
+      const arr = Array.isArray(json) ? json : Array.isArray((json as { embeddings?: unknown[] }).embeddings) ? (json as { embeddings: unknown[] }).embeddings : null;
+      if (!arr) throw new Error('JSON 은 배열 또는 {embeddings:[...]} 형식이어야 합니다.');
+      setParsed(arr);
+      toast.info(`${arr.length}개 row 파싱됨. dry-run 으로 검증하세요.`);
+    } catch (err) {
+      setParsed(null);
+      toast.error(`JSON 파싱 실패: ${(err as Error).message}`);
+    }
+  }
+
+  async function runImport(dryRun: boolean) {
+    if (!parsed) { toast.info('먼저 generated_embeddings.json 을 선택하세요.'); return; }
+    setBusy(true);
+    try {
+      const res = await importTrackEmbeddings(parsed, dryRun);
+      setResult(res);
+      toast.success(`${dryRun ? '검증(dry-run)' : '임포트'} 완료 — 성공 ${res.imported} / 건너뜀 ${res.skipped}`);
+      if (!dryRun) await loadPending();
+    } catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11px] text-ink-mute">
+        Mac mini 없이 Colab/로컬에서 OpenL3 임베딩을 생성하는 수동 파이프라인입니다.
+        ① pending CSV 내보내기 → ② Colab 에서 임베딩 생성(generated_embeddings.json) → ③ 여기서 dry-run 검증 후 임포트.
+        자동 추천에는 반영되지 않습니다(관리자 검증용).
+      </p>
+
+      <div className="rounded-xl bg-bg-card p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold">① 분석 대기 ({pending.length})</h3>
+          <div className="flex gap-1.5">
+            <button onClick={() => void loadPending()} className="inline-flex items-center gap-1 rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
+            </button>
+            <button onClick={downloadCsv} disabled={pending.length === 0} className="inline-flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-bold text-black disabled:opacity-50">
+              embedding_pending.csv 다운로드
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-ink-dim">CSV 컬럼: track_id, audio_url, title, artist, duration</p>
+      </div>
+
+      <div className="rounded-xl bg-bg-card p-3">
+        <h3 className="mb-2 text-xs font-bold">② → ③ generated_embeddings.json 임포트</h3>
+        <input type="file" accept="application/json,.json" onChange={onFile} className="block w-full text-xs text-ink-mute file:mr-2 file:rounded file:border-0 file:bg-bg-soft file:px-2 file:py-1 file:text-xs" />
+        {fileName && <p className="mt-1 text-[10px] text-ink-dim">{fileName}{parsed ? ` · ${parsed.length} rows` : ''}</p>}
+        <div className="mt-2 flex gap-1.5">
+          <button onClick={() => void runImport(true)} disabled={busy || !parsed} className="inline-flex items-center gap-1 rounded-lg bg-bg-soft/60 px-3 py-1.5 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">
+            dry-run 검증
+          </button>
+          <button onClick={() => void runImport(false)} disabled={busy || !parsed} className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
+            임포트 실행
+          </button>
+        </div>
+        {result && (
+          <div className="mt-2 rounded-lg bg-bg-soft/40 p-2 text-[11px]">
+            <p className={result.skipped > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+              {result.dry_run ? '검증' : '임포트'}: 성공 <b>{result.imported}</b> · 건너뜀 <b>{result.skipped}</b>
+            </p>
+            {result.errors.length > 0 && (
+              <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-[10px] text-rose-600">
+                {result.errors.slice(0, 50).map((er, i) => <li key={i}>· {er.track_id}: {er.reason}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
