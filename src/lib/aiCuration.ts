@@ -424,6 +424,7 @@ export interface RereviewSummary {
   total_target: number; features_done: number; features_missing: number; features_failed: number;
   quality_review_required: number; guardrail_hard_tracks: number; mismatch_high: number;
   high_risk_flags: number; needs_re_review: number; low_trust_uploaders: number;
+  fix_requested: number; resolved_total: number;
 }
 export async function rereviewBatch(offset: number, limit = 20): Promise<{ total: number; processed: number; failed: number; next_offset: number; has_more: boolean }> {
   const { data, error } = await supabase.rpc('admin_rereview_batch', { p_offset: offset, p_limit: limit });
@@ -445,4 +446,37 @@ export async function listRereviewFlags(flagType = 'needs_re_review', limit = 20
 export async function resolveRereviewFlag(trackId: string, flagType: string, status = 'resolved', note?: string): Promise<void> {
   const { error } = await supabase.rpc('admin_resolve_rereview_flag', { p_track_id: trackId, p_flag_type: flagType, p_status: status, p_note: note ?? null });
   if (error) throw error;
+}
+
+// 재검수 빠른 처리 큐 — 등록 vs AI 메타 비교 + 선언/차단 매장 + 한줄 요약 + 처리상태
+export interface RereviewQueueRow {
+  track_id: string; title: string | null; artist: string | null; release_status: string | null;
+  audio_url: string | null; duration: number | null;
+  declared_genres: string[] | null; declared_moods: string[] | null; declared_situations: string[] | null;
+  declared_store_tags: string[] | null; declared_stores: string[] | null;
+  ai_genres: string[] | null; ai_moods: string[] | null; ai_situations: string[] | null; ai_energy_level: string | null;
+  mismatch_score: number | null; mismatch_reasons: string[] | null; ai_explanation: string | null;
+  blocked_stores: string[] | null; blocked_declared_stores: string[] | null;
+  lufs: number | null; qpass: boolean | null;
+  trust_score: number; owner_name: string | null; owner_user_id: string;
+  open_flags: string[] | null; disposition: string | null; needs_fix: boolean | null;
+  problem_summary: string;
+}
+// p_filter: needs_re_review | high_risk | quality_review_required | guardrail_hard | all | mismatch_high | low_trust | store:<key>
+export async function rereviewQueue(filter = 'needs_re_review', limit = 200): Promise<RereviewQueueRow[]> {
+  const { data, error } = await supabase.rpc('admin_rereview_queue', { p_filter: filter, p_limit: limit });
+  if (error) throw error; return (data ?? []) as RereviewQueueRow[];
+}
+export interface RereviewGuardrail { store_key: string; store_label: string; severity: string; rules: string[] | null; is_declared: boolean; }
+export interface RereviewDetail extends Omit<RereviewQueueRow, 'open_flags' | 'disposition' | 'needs_fix' | 'problem_summary' | 'owner_name' | 'owner_user_id' | 'trust_score'> {
+  ai_vocal_type: string | null; ai_exclusions: string[] | null; guardrails: RereviewGuardrail[]; open_flags: string[] | null;
+}
+export async function rereviewTrackDetail(trackId: string): Promise<RereviewDetail> {
+  const { data, error } = await supabase.rpc('admin_rereview_track_detail', { p_track_id: trackId });
+  if (error) throw error; return data as RereviewDetail;
+}
+export type RereviewActionType = 'apply_ai_meta' | 'remove_declared_store' | 'exclude_store' | 'no_problem' | 'request_fix';
+export async function rereviewAction(trackIds: string[], action: RereviewActionType, storeKey?: string, note?: string): Promise<{ affected: number }> {
+  const { data, error } = await supabase.rpc('admin_rereview_action', { p_track_ids: trackIds, p_action: action, p_store_key: storeKey ?? null, p_note: note ?? null });
+  if (error) throw error; return data as { affected: number };
 }
