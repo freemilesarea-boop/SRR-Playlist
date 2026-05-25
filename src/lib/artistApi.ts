@@ -12,6 +12,7 @@ import { supabase, supabaseProjectRef } from './supabase';
 import { useAuthStore } from '@/store/authStore';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
+import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
 
 export interface ArtistProfile {
   user_id: string;
@@ -124,6 +125,12 @@ export interface PendingReviewTrackRow {
   mismatch_score?: number | null;
   mismatch_reasons?: string[] | null;
   ai_explanation?: string | null;
+  /** 0167 — Loudness 품질 게이트 측정값 */
+  q_integrated_lufs?: number | null;
+  q_true_peak?: number | null;
+  q_loudness_range?: number | null;
+  q_clipping?: boolean | null;
+  q_passed?: boolean | null;
 }
 
 /**
@@ -652,6 +659,8 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let audioDurationVal: number | null = null;
     let audioContentTypeVal: string | null = null;
     let audioContentLengthVal: number | null = null;
+    // 0167 — Loudness 품질 게이트 결과(통과 시 insert 후 track_id 와 함께 기록)
+    let qualityResult: QualityResult | null = null;
     if (input.audioFile) {
       stage = 'sha256';
       log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
@@ -739,6 +748,36 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         audioDurationVal = null;
       }
       log('audio meta', { durationSec: audioDurationVal, contentType: audioContentType });
+
+      // 0167 — Loudness 품질 게이트: "분석 → 통과 → 업로드". 미달 시 storage 업로드/insert 차단.
+      // 자동 normalize 금지. 통과 음원만 등록·검수 진입.
+      stage = 'quality-gate';
+      try {
+        const th = await fetchQualityThresholds();
+        if (th.enabled) {
+          uploadDebug.step('quality-gate', 'info', 'loudness 분석 중…');
+          const q = await withTimeout(
+            analyzeAudioQuality(fileToUpload, th),
+            75_000,
+            '음질 분석 시간이 초과되었어요. 잠시 후 다시 시도해주세요.',
+          );
+          log('quality gate', { lufs: q.integrated_lufs, tp: q.true_peak_dbtp, passed: q.passed, reason: q.failure_reason });
+          if (!q.passed) {
+            // 실패 음원은 storage 업로드 전에 차단 — 로그만 남김(track_id 없음)
+            void recordAudioQuality({ originalFilename, result: q });
+            uploadDebug.step('quality-gate', 'error', `${q.failure_reason} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
+            uploadDebug.finish({ ok: false, audioStatus: 'error', error: `quality-gate: ${q.failure_reason}` });
+            return { ok: false, error: q.message ?? '음질 기준 미달로 등록할 수 없어요.' };
+          }
+          qualityResult = q; // 통과 — insert 후 track_id 와 함께 기록
+          uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
+        }
+      } catch (e) {
+        // 분석 자체 timeout/예외 — 통과 음원을 막지 않도록 게이트는 통과시키되 경고 로그.
+        log('quality gate skip (분석 예외, 통과 처리)', { err: e instanceof Error ? e.message : String(e) });
+        uploadDebug.step('quality-gate', 'warn', '분석 지연/예외 — 게이트 우회');
+      }
+
       log('audio upload start', { path: audioPath, sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
       let audioUpRes;
       try {
@@ -900,6 +939,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         } catch (e) {
           log('audio meta save skip (계속)', { err: e instanceof Error ? e.message : String(e) });
         }
+      }
+      // 0167 — 통과한 품질 측정값을 track_id 와 함께 기록(검수 화면 표시용)
+      if (trackId && qualityResult) {
+        void recordAudioQuality({ trackId, originalFilename, result: qualityResult });
       }
     } catch (e) {
       const err = e as { message?: string; hint?: string; details?: string; code?: string };

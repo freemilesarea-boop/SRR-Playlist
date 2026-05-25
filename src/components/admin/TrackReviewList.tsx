@@ -503,6 +503,17 @@ export default function TrackReviewList() {
                     />
                   </div>
 
+                  {/* 0167 — Loudness 품질 게이트 측정값 */}
+                  {r.q_integrated_lufs != null && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                      <DiagChip ok={!!r.q_passed} label={r.q_passed ? '품질 Pass' : '품질 Fail'} />
+                      <DiagChip ok={r.q_integrated_lufs >= -14 && r.q_integrated_lufs <= -10} label={`${r.q_integrated_lufs} LUFS`} />
+                      <DiagChip ok={r.q_true_peak == null || r.q_true_peak <= -1} label={`${r.q_true_peak ?? '?'} dBTP`} />
+                      {r.q_loudness_range != null && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">LRA {r.q_loudness_range}</span>}
+                      <DiagChip ok={!r.q_clipping} label={r.q_clipping ? 'clipping' : 'no clip'} />
+                    </div>
+                  )}
+
                   {/* 0161 — AI 큐레이션 판정 연결 */}
                   {r.ai_status && r.ai_status !== 'pending' && (
                     <div className={`rounded-md p-2 text-[11px] ${(r.mismatch_score ?? 0) >= 0.5 ? 'bg-rose-500/10 ring-1 ring-rose-500/20' : 'bg-bg-hover/40'}`}>
