@@ -573,3 +573,43 @@ export async function rejectPlaylistReorder(proposalId: string): Promise<void> {
   const { error } = await supabase.rpc('admin_reject_playlist_reorder', { p_proposal_id: proposalId });
   if (error) throw error;
 }
+
+// 사업자 30초내 스킵 기반 자동 제외 — 관리자
+export interface BusinessSkipSummary {
+  active: number; restored: number; ignored: number; skip_events_7d: number; skip_events_30d: number;
+  by_store: Array<{ store_key: string; store_label: string; n: number }>;
+}
+export interface BusinessExclusionRow {
+  id: string; track_id: string; title: string | null; artist: string | null;
+  playlist_store_key: string; store_group_key: string | null; store_label: string;
+  skip_count: number; unique_business_skip_count: number; status: string; reason: string | null;
+  first_detected_at: string | null; last_detected_at: string | null; created_at: string; admin_note: string | null;
+}
+export async function businessSkipSummary(): Promise<BusinessSkipSummary> {
+  const { data, error } = await supabase.rpc('admin_business_skip_summary');
+  if (error) throw error; return data as BusinessSkipSummary;
+}
+export async function listBusinessExclusions(store = 'all', days = 0, status = 'all'): Promise<BusinessExclusionRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_business_exclusions', { p_store: store, p_days: days, p_status: status });
+  if (error) throw error; return (data ?? []) as BusinessExclusionRow[];
+}
+export async function restoreBusinessExclusion(id: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_restore_business_exclusion', { p_id: id, p_note: note ?? null });
+  if (error) throw error;
+}
+export async function ignoreBusinessExclusion(id: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_ignore_business_exclusion', { p_id: id, p_note: note ?? null });
+  if (error) throw error;
+}
+export async function reactivateBusinessExclusion(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reactivate_business_exclusion', { p_id: id });
+  if (error) throw error;
+}
+export async function excludeTrackStore(trackId: string, storeKey: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_exclude_track_store', { p_track_id: trackId, p_store_key: storeKey, p_note: note ?? null });
+  if (error) throw error;
+}
+export async function excludeTrackGroup(trackId: string, groupKey: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_exclude_track_group', { p_track_id: trackId, p_group_key: groupKey, p_note: note ?? null });
+  if (error) throw error;
+}

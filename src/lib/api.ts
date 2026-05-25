@@ -46,14 +46,11 @@ function isPublicPlayableTrack(t: PlayableCheckTrack | null | undefined): boolea
 }
 
 export async function fetchPlaylistTracks(playlistId: string): Promise<TrackRow[]> {
-  const { data, error } = await supabase
-    .from('playlist_tracks')
-    .select('order_index, tracks(*)')
-    .eq('playlist_id', playlistId)
-    .order('order_index', { ascending: true });
+  // 0182 — 서버 RPC 가 사업자 early_skip 자동제외(store_key scope) + 재생가능 필터를 적용해
+  // order_index 순으로 반환한다. (playlist_tracks 물리삭제 없음 — 조회 시 exclusion layer)
+  const { data, error } = await supabase.rpc('get_playlist_tracks', { p_playlist_id: playlistId });
   if (error) throw error;
-  const tracks = ((data ?? []) as unknown as Array<{ order_index: number; tracks: TrackRow }>)
-    .map((row) => row.tracks)
+  const tracks = ((data ?? []) as TrackRow[])
     .filter(Boolean)
     // 삭제/미발매/자켓없음 트랙 제외 (관리자 RLS 우회·stale 링크 방어). 제외 사유는 dev 로그.
     .filter((t) => {

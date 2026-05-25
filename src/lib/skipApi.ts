@@ -41,6 +41,43 @@ export async function recordTrackSkip(
   }
 }
 
+// 앱 로드 단위 세션 ID — 사업자 early_skip 중복 집계 방지(같은 세션 동일곡 1회).
+let PLAYER_SESSION_ID: string | null = null;
+function playerSessionId(): string {
+  if (!PLAYER_SESSION_ID) {
+    try { PLAYER_SESSION_ID = crypto.randomUUID(); } catch { PLAYER_SESSION_ID = `s_${Date.now()}_${Math.random().toString(36).slice(2)}`; }
+  }
+  return PLAYER_SESSION_ID;
+}
+
+/**
+ * 사업자 회원의 30초 이내 수동 스킵 기록 (fire-and-forget).
+ * 서버 RPC 가 사업자 여부/30초/사유를 재검증하고, 비사업자면 조용히 무시한다.
+ * 사용자에게 어떤 문구도 노출하지 않는다.
+ */
+export async function recordBusinessEarlySkip(
+  playlistId: string,
+  trackId: string,
+  playedSeconds: number,
+  trackDuration: number | null,
+  reason: SkipReason = 'manual_skip',
+): Promise<void> {
+  if (!playlistId || !trackId) return;
+  if (playedSeconds > 30) return; // 클라 1차 필터 (서버 재검증)
+  try {
+    await supabase.rpc('record_business_early_skip', {
+      p_playlist_id: playlistId,
+      p_track_id: trackId,
+      p_played_seconds: Math.max(0, playedSeconds || 0),
+      p_duration: trackDuration && trackDuration > 0 ? trackDuration : null,
+      p_session_id: playerSessionId(),
+      p_skip_reason: reason,
+    });
+  } catch {
+    /* fire-and-forget */
+  }
+}
+
 export interface MetadataViolation {
   id: string;
   playlist_id: string;
