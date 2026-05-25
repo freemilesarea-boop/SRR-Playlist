@@ -27,10 +27,13 @@ import {
   markEmbeddingReanalysisNeeded,
   addStoreSeedCandidate,
   applyEmbeddingToAiMetadata,
+  getTrackGuardrails,
+  setGuardrailOverride,
   type EmbeddingPendingRow,
   type EmbeddingImportResult,
   type EmbeddingReviewRow,
   type EmbeddingComparison,
+  type GuardrailStoreResult,
   type StoreProfileOption,
   type AiCurationRow,
   type CurationFilter,
@@ -309,6 +312,8 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
 
                 {r.explanation && <p className="mt-2 rounded-lg bg-bg-soft/40 px-2.5 py-1.5 text-[11px] text-ink-mute">{r.explanation}</p>}
                 {r.error_message && <p className="mt-1 text-[11px] text-rose-600">오류: {r.error_message}</p>}
+
+                <GuardrailBadges trackId={r.track_id} ready={r.feature_status === 'done'} />
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button onClick={() => void apply(r)} disabled={busyId === r.track_id || r.feature_status !== 'done'}
@@ -888,6 +893,55 @@ function EmbeddingReviewTab() {
             );
           })}
         </ul>
+      )}
+    </div>
+  );
+}
+
+function GuardrailBadges({ trackId, ready }: { trackId: string; ready: boolean }) {
+  const [rows, setRows] = useState<GuardrailStoreResult[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    try { setRows(await getTrackGuardrails(trackId)); setOpen(true); }
+    catch (e) { toast.error(`guardrail 조회 실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  async function override(storeKey: string) {
+    try { await setGuardrailOverride(trackId, storeKey, true, '관리자 override'); toast.success(`${storeKey} guardrail override`); setRows(await getTrackGuardrails(trackId)); }
+    catch (e) { toast.error(`override 실패: ${(e as Error).message}`); }
+  }
+  if (!ready) return null;
+  const blocked = rows?.filter((r) => r.gr.blocked) ?? [];
+  const soft = rows?.filter((r) => !r.gr.blocked && r.gr.severity === 'soft_block') ?? [];
+  const warn = rows?.filter((r) => !r.gr.blocked && r.gr.severity === 'warning') ?? [];
+  return (
+    <div className="mt-2">
+      {!open ? (
+        <button onClick={() => void load()} disabled={busy} className="rounded bg-ink/5 px-2 py-1 text-[10px] font-semibold text-ink-mute hover:bg-ink/10 disabled:opacity-50">
+          {busy ? '조회 중…' : '🛡 매장 금지규칙 검사'}
+        </button>
+      ) : (rows && rows.length === 0) ? (
+        <p className="text-[10px] text-emerald-600">금지규칙 위반 없음 (모든 매장 통과)</p>
+      ) : (
+        <div className="space-y-1">
+          {blocked.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[10px] font-bold text-rose-600">차단:</span>
+              {blocked.map((b) => (
+                <span key={b.store_key} className="inline-flex items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600"
+                  title={b.gr.violations.map((v) => v.reason).join(', ')}>
+                  {STORE_LABELS[b.store_key] ?? b.store_key}
+                  <button onClick={() => void override(b.store_key)} className="ml-0.5 rounded bg-rose-500/20 px-1 text-[9px] hover:bg-rose-500/30">override</button>
+                </span>
+              ))}
+            </div>
+          )}
+          {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-600">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
+          {warn.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-yellow-600">주의:</span>{warn.map((w) => <span key={w.store_key} className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] text-yellow-700">{STORE_LABELS[w.store_key] ?? w.store_key}</span>)}</div>}
+        </div>
       )}
     </div>
   );
