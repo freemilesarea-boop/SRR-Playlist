@@ -356,3 +356,43 @@ export async function setGuardrailOverride(trackId: string, storeKey: string, en
   const { error } = await supabase.rpc('admin_set_guardrail_override', { p_track_id: trackId, p_store_key: storeKey, p_enable: enable, p_reason: reason ?? null });
   if (error) throw error;
 }
+
+// Guardrail 위반 대시보드 / 일괄 처리 / 업로더 trust
+export interface GuardrailDashboard {
+  total_violating_tracks: number; hard_block_tracks: number;
+  by_severity: Record<string, number>;
+  by_store: Array<{ store_key: string; total: number; hard_count: number }>;
+  top_rules: Array<{ rule_key: string; cnt: number }>;
+  uploaders: Array<{ user_id: string; artist_name: string | null; metadata_trust_score: number | null; total_tracks: number; hard_tracks: number; violation_rate: number | null }>;
+}
+export interface GuardrailViolationTrack {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null;
+  hard_stores: number; soft_stores: number; blocked_stores: string[] | null; rules: string[] | null;
+}
+export async function recomputeGuardrailFlags(): Promise<{ flags: number }> {
+  const { data, error } = await supabase.rpc('admin_recompute_guardrail_flags');
+  if (error) throw error; return data as { flags: number };
+}
+export async function guardrailDashboard(): Promise<GuardrailDashboard> {
+  const { data, error } = await supabase.rpc('admin_guardrail_dashboard');
+  if (error) throw error; return data as GuardrailDashboard;
+}
+export async function listGuardrailViolationTracks(severity = 'hard_block', storeKey: string | null = null, limit = 200): Promise<GuardrailViolationTrack[]> {
+  const { data, error } = await supabase.rpc('admin_list_guardrail_violation_tracks', { p_severity: severity, p_store_key: storeKey, p_limit: limit });
+  if (error) throw error; return (data ?? []) as GuardrailViolationTrack[];
+}
+export async function recomputeMetadataTrust(): Promise<{ updated: number }> {
+  const { data, error } = await supabase.rpc('admin_recompute_metadata_trust');
+  if (error) throw error; return data as { updated: number };
+}
+export async function bulkGuardrailOverride(trackIds: string[], storeKey: string, reason?: string): Promise<{ overridden: number }> {
+  const { data, error } = await supabase.rpc('admin_bulk_guardrail_override', { p_track_ids: trackIds, p_store_key: storeKey, p_reason: reason ?? null });
+  if (error) throw error; return data as { overridden: number };
+}
+export async function bulkGuardrailClear(trackIds: string[], reason?: string): Promise<{ cleared: number }> {
+  const { data, error } = await supabase.rpc('admin_bulk_guardrail_clear', { p_track_ids: trackIds, p_reason: reason ?? null });
+  if (error) throw error; return data as { cleared: number };
+}
+export async function bulkApplyAiMetadata(trackIds: string[]): Promise<void> {
+  for (const id of trackIds) { await applyAiMetadata(id, {}); }
+}
