@@ -131,6 +131,9 @@ export interface PendingReviewTrackRow {
   q_loudness_range?: number | null;
   q_clipping?: boolean | null;
   q_passed?: boolean | null;
+  /** 0175 — 업로더 metadata 신뢰도 */
+  owner_trust_score?: number | null;
+  owner_trust_tier?: 'high' | 'medium' | 'low' | null;
 }
 
 /**
@@ -2002,5 +2005,16 @@ export async function fetchArtistDailyStreams(days = 30): Promise<ArtistDailyStr
     }));
   } catch {
     return [];
+  }
+}
+
+/** 0175 — 아티스트 본인 metadata 신뢰도(업로드 화면 안내). */
+export async function getMyMetadataTrust(): Promise<{ trust_score: number; tier: 'high' | 'medium' | 'low'; guidance: string } | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_my_metadata_trust');
+    if (error || !data) return null;
+    return data as { trust_score: number; tier: 'high' | 'medium' | 'low'; guidance: string };
+  } catch {
+    return null;
   }
 }

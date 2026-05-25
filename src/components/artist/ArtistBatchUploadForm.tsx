@@ -20,6 +20,7 @@ import {
   fetchMyArtistProfile,
   getCurrentUserFast,
   formatEligibilityError,
+  getMyMetadataTrust,
   type ReleaseType,
   type ArtistProfile,
 } from '@/lib/artistApi';
@@ -112,6 +113,8 @@ export default function ArtistBatchUploadForm({
 }) {
   const [common, setCommon] = useState<CommonMeta>(initialCommon);
   const [meta, setMeta] = useState<SelectedMeta>(emptySelectedMeta);
+  const [trust, setTrust] = useState<{ trust_score: number; tier: 'high' | 'medium' | 'low'; guidance: string } | null>(null);
+  useEffect(() => { getMyMetadataTrust().then(setTrust).catch(() => {}); }, []);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -398,6 +401,12 @@ export default function ArtistBatchUploadForm({
       }}
       className="space-y-4 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10"
     >
+      {trust && trust.tier !== 'high' && (
+        <div className={`rounded-xl p-3 text-[11px] leading-relaxed ${trust.tier === 'low' ? 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-400/20' : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-400/20'}`}>
+          <b>메타데이터 정확도 안내 (신뢰도 {trust.trust_score})</b>
+          <p className="mt-0.5">{trust.guidance}</p>
+        </div>
+      )}
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-1.5 text-sm font-bold">
           <Upload size={14} className="text-accent" /> 일괄 업로드 (최대 {MAX_TRACKS}곡)
