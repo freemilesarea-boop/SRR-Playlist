@@ -282,8 +282,8 @@ function EmptyState() {
   return (
     <div className="space-y-2 px-6 py-12 text-center">
       <BarChart3 size={28} className="mx-auto text-ink-dim" />
-      <p className="text-sm font-semibold text-ink">아직 차트 데이터가 부족해요</p>
-      <p className="text-xs text-ink-mute">곡을 재생하면 차트가 자동으로 생성돼요.</p>
+      <p className="text-sm font-semibold text-ink">아직 충분한 재생 기록이 없어 차트를 준비 중입니다.</p>
+      <p className="text-xs text-ink-mute">곡을 30초 이상 들으면 차트에 반영됩니다.</p>
     </div>
   );
 }
