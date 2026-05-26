@@ -18,6 +18,7 @@ import {
   Stethoscope,
   AlertTriangle,
   HardDrive,
+  ShieldCheck,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -28,6 +29,8 @@ import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
 import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
 import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
 import SalesAgentsList from '@/components/admin/SalesAgentsList';
+import AdminUsersList from '@/components/admin/AdminUsersList';
+import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -73,9 +76,10 @@ type Tab =
   | 'ai-curation'
   | 'artist-settlements'
   | 'operation-logs'
+  | 'admins'
   | 'recommendation';
 
-const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
+const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
@@ -100,12 +104,17 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
   { key: 'ai-curation', label: 'AI 큐레이션', icon: <Sparkles size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
+  { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
+  const [perms, setPerms] = useState<AdminPermissions | null>(null);
+
+  useEffect(() => { fetchMyAdminPermissions().then(setPerms).catch(() => {}); }, []);
+  const visibleTabs = TABS.filter((t) => !t.superOnly || perms?.is_super_admin);
 
   // OnboardingChecklist 용
   useEffect(() => {
@@ -136,7 +145,7 @@ export default function AdminPage() {
 
       <nav className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
         <div className="flex gap-1.5 pb-1 no-scrollbar">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
@@ -180,6 +189,7 @@ export default function AdminPage() {
         {tab === 'ai-curation' && <AiCurationPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
+        {tab === 'admins' && <AdminUsersList />}
       </AdminErrorBoundary>
     </div>
   );
