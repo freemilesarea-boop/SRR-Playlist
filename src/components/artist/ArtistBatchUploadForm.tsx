@@ -464,13 +464,16 @@ export default function ArtistBatchUploadForm({
         toast.error(preErr);
         return;
       }
-      setTracks((prev) =>
-        prev.map((t) =>
-          targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
-        ),
-      );
       setIntegrityWarn(null);
       const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
+      // 0196 — 업로드 "시작 시점"에 복구 manifest 저장: 업로드 중 새로고침 시 복구 가능하도록.
+      setTracks((prev) => {
+        const next = prev.map((t) =>
+          targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
+        );
+        saveRecoveryManifest(batchId, next);
+        return next;
+      });
       // 0196 — 업로드 전 batch 내 동일 콘텐츠 사전 차단
       const { uploadIds, shaById } = await hashAndDedup(targets, batchId);
       if (uploadIds.length > 0) await runPool(uploadIds, profile, batchId, shaById);
@@ -528,14 +531,18 @@ export default function ArtistBatchUploadForm({
         toast.error(preErr);
         return;
       }
-      setTracks((prev) =>
-        prev.map((t) =>
-          failedIds.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
-        ),
-      );
       const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
+      setTracks((prev) => {
+        const next = prev.map((t) =>
+          failedIds.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
+        );
+        saveRecoveryManifest(batchId, next);
+        return next;
+      });
       const { uploadIds, shaById } = await hashAndDedup(failedIds, batchId);
       if (uploadIds.length > 0) await runPool(uploadIds, profile, batchId, shaById);
+      // 완료 후 최신 상태로 manifest 갱신
+      setTracks((prev) => { saveRecoveryManifest(batchId, prev); return prev; });
       await onUploaded();
     } finally {
       setSubmitting(false);
