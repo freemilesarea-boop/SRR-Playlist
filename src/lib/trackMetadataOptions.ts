@@ -204,3 +204,14 @@ export async function adminUpdateMetadataAndApprove(
   });
   if (error) throw error; return data as MetaApproveResult;
 }
+
+export interface MetadataAuditChange { field: string; label: string; from: unknown; to: unknown; }
+export interface MetadataAuditEntry {
+  id: string; track_id: string; title: string | null; changed_at: string;
+  changes: MetadataAuditChange[]; source: string | null; reason: string | null;
+  editor: string | null; editor_email: string | null;
+}
+export async function fetchMetadataAudit(trackId?: string, limit = 100): Promise<MetadataAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_metadata_audit', { p_track_id: trackId ?? null, p_limit: limit });
+  if (error) throw error; return (data ?? []) as MetadataAuditEntry[];
+}

@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, History } from 'lucide-react';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import {
-  adminGetTrackTags, adminUpdateTrackTags, adminUpdateMetadataAndApprove,
-  validateSelectedMeta, emptySelectedMeta, type SelectedMeta, type MetaApproveResult,
+  adminGetTrackTags, adminUpdateTrackTags, adminUpdateMetadataAndApprove, fetchMetadataAudit,
+  validateSelectedMeta, emptySelectedMeta, type SelectedMeta, type MetaApproveResult, type MetadataAuditEntry,
 } from '@/lib/trackMetadataOptions';
 import { toast } from '@/store/toastStore';
+
+const TEMPO_KO: Record<string, string> = { slow: '느림', medium: '보통', fast: '빠름' };
+const VOCAL_KO: Record<string, string> = { male_vocal: '남성보컬', female_vocal: '여성보컬', mixed_vocal: '혼성', instrumental: '인스트루멘탈', chorus: '코러스', rap: '랩' };
+function fmtVal(field: string, v: unknown): string {
+  if (v === null || v === undefined || v === '') return '없음';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '없음';
+  const s = String(v);
+  if (field === 'tempo') return TEMPO_KO[s] ?? s;
+  if (field === 'vocal') return VOCAL_KO[s] ?? s;
+  return s;
+}
 
 /**
  * 관리자 메타 수정 + 승인 모달 (검수/재검수/고위험/음원관리 공용).
@@ -22,14 +33,17 @@ export default function MetaApproveModal({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<MetaApproveResult | null>(null);
+  const [audit, setAudit] = useState<MetadataAuditEntry[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setResult(null);
+    setLoading(true); setResult(null); setShowAudit(false);
     adminGetTrackTags(trackId)
       .then((t) => { if (alive) setMeta({ genre_tags: t.genre_tags, mood_tags: t.mood_tags, business_type_tags: t.business_type_tags, vocal_type: t.vocal_type, recommended_dayparts: t.recommended_dayparts, language: t.language, tempo_feel: t.tempo_feel }); })
       .catch((e) => toast.error(`불러오기 실패: ${(e as Error).message}`))
       .finally(() => alive && setLoading(false));
+    fetchMetadataAudit(trackId, 30).then((a) => { if (alive) setAudit(a); }).catch(() => { /* noop */ });
     return () => { alive = false; };
   }, [trackId]);
 
@@ -87,6 +101,26 @@ export default function MetaApproveModal({
                 {result.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-600">{w}</p>)}
                 {blocked.length > 0 && canApprove && (
                   <button disabled={busy} onClick={() => void saveAndApprove(true)} className="mt-1 rounded-lg bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-600 disabled:opacity-50">경고 무시하고 강제 승인</button>
+                )}
+              </div>
+            )}
+
+            {audit.length > 0 && (
+              <div className="mt-3">
+                <button onClick={() => setShowAudit((v) => !v)} className="flex items-center gap-1 text-[11px] font-semibold text-ink-mute hover:text-ink">
+                  <History size={12} /> 수정 이력 {audit.length}건 {showAudit ? '▲' : '▼'}
+                </button>
+                {showAudit && (
+                  <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-xl bg-bg-soft/50 p-2.5 text-[10px]">
+                    {audit.map((a) => (
+                      <li key={a.id} className="border-b border-line/10 pb-1.5 last:border-0">
+                        <p className="text-ink-dim">{new Date(a.changed_at).toLocaleString('ko-KR')} · <b className="text-ink-mute">{a.editor_email ?? a.editor ?? '시스템'}</b></p>
+                        {a.changes.map((c, i) => (
+                          <p key={i}><span className="text-ink-dim">{c.label}:</span> {fmtVal(c.field, c.from)} <span className="text-accent">→</span> {fmtVal(c.field, c.to)}</p>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}
