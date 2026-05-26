@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
+import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil } from 'lucide-react';
 import { applyAiMetadata } from '@/lib/aiCuration';
+import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -53,6 +54,7 @@ export default function TrackReviewList() {
     kind: ActionKind;
     track: PendingReviewTrackRow;
   } | null>(null);
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null } | null>(null);
   // 일괄 선택/처리
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulk, setBulk] = useState<'approve' | 'reject' | 'approveAll' | null>(null);
@@ -590,6 +592,13 @@ export default function TrackReviewList() {
 
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <button
+                      onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })}
+                      disabled={busyId === r.track_id}
+                      className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25"
+                    >
+                      <Pencil size={11} /> 메타 수정/승인
+                    </button>
+                    <button
                       onClick={() => setModal({ kind: 'approve', track: r })}
                       disabled={busyId === r.track_id || !canApprove}
                       title={canApprove ? undefined : `필수값 누락: ${missingMeta.join(', ')}`}
@@ -658,6 +667,16 @@ export default function TrackReviewList() {
           busy={busyId === modal.track.track_id}
           onCancel={() => setModal(null)}
           onConfirm={handleConfirm}
+        />
+      )}
+
+      {metaModal && (
+        <MetaApproveModal
+          trackId={metaModal.track_id}
+          title={metaModal.title}
+          canApprove={true}
+          onClose={() => setMetaModal(null)}
+          onDone={() => { setMetaModal(null); void load(); }}
         />
       )}
 
