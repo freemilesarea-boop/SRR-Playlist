@@ -70,6 +70,7 @@ interface CommonMeta {
 interface TrackRow {
   id: string;
   file: File;
+  fingerprint: string;
   title: string;
   artist: string;
   isrc: string;
@@ -103,7 +104,13 @@ function initialCommon(): CommonMeta {
 
 let _idSeq = 0;
 function newRowId(): string {
-  return `t_${Date.now()}_${++_idSeq}`;
+  // 불변 client_track_id — 비동기 업로드/변환/insert 결과 매핑은 index 가 아닌 이 id 기준.
+  try { return crypto.randomUUID(); } catch { return `t_${Date.now()}_${++_idSeq}_${Math.random().toString(36).slice(2)}`; }
+}
+
+/** 파일 지문(중복 선택 감지/디버깅용): 이름|크기|수정시각. */
+function fileFingerprint(f: File): string {
+  return `${f.name}|${f.size}|${f.lastModified}`;
 }
 
 export default function ArtistBatchUploadForm({
@@ -153,15 +160,21 @@ export default function ArtistBatchUploadForm({
     }
     const rows: TrackRow[] = [];
     const rejected: string[] = [];
+    const dupNames: string[] = [];
+    const seen = new Set(tracks.map((t) => t.fingerprint));
     for (const f of arr) {
       const v = validateArtistAudioFile(f);
       if (!v.ok) {
         rejected.push(`${f.name}: ${v.error}`);
         continue;
       }
+      const fp = fileFingerprint(f);
+      if (seen.has(fp)) { dupNames.push(f.name); continue; } // 같은 파일 중복 선택 차단
+      seen.add(fp);
       rows.push({
         id: newRowId(),
         file: f,
+        fingerprint: fp,
         title: titleFromFilename(f.name),
         artist: '',
         isrc: '',
@@ -175,6 +188,9 @@ export default function ArtistBatchUploadForm({
     }
     if (rejected.length > 0) {
       toast.warning(`${rejected.length}개 파일 제외:\n${rejected.slice(0, 3).join('\n')}${rejected.length > 3 ? '\n…' : ''}`);
+    }
+    if (dupNames.length > 0) {
+      toast.warning(`동일한 파일이 이미 선택되어 제외했어요 (${dupNames.length}개): ${dupNames.slice(0, 3).join(', ')}`);
     }
     if (rows.length > 0) setTracks((prev) => [...prev, ...rows]);
     if (fileRef.current) fileRef.current.value = '';
