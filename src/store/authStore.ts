@@ -110,7 +110,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           try {
             const { applyPendingSignupOnLogin } = await import('@/lib/pendingSignup');
             const r = await applyPendingSignupOnLogin(nextUserId);
-            if (r.ok && r.type) await get().refreshProfile();
+            if (r.ok && r.type) {
+              await get().refreshProfile();
+              // pendingSignup 으로 sales_agent_code 가 막 적용된 직후에도 체험 자동 시작 시도.
+              try {
+                const { maybeAutoStartTrial } = await import('@/lib/trialApi');
+                await maybeAutoStartTrial(get().profile, () => void get().refreshProfile());
+              } catch { /* noop */ }
+            }
           } catch (e) {
             if (import.meta.env.DEV) console.error('[auth] applyPendingSignup error:', e);
           }
@@ -147,7 +154,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ profile: null, profileError: error.message, isProfileReady: true, loading: false });
         return;
       }
-      set({ profile: (data as UserRow | null) ?? null, profileError: null, isProfileReady: true, loading: false });
+      const loaded = (data as UserRow | null) ?? null;
+      set({ profile: loaded, profileError: null, isProfileReady: true, loading: false });
+      // 영업인 코드 연결된 사업자에 한해 3일 무료 체험 자동 시작 (서버가 악용/중복 차단).
+      void (async () => {
+        try {
+          const { maybeAutoStartTrial } = await import('@/lib/trialApi');
+          await maybeAutoStartTrial(loaded, () => void get().refreshProfile());
+        } catch { /* noop */ }
+      })();
     } catch (e) {
       set({
         profile: null,

@@ -59,6 +59,24 @@ export async function fetchSalespersonTrends(): Promise<SalespersonTrends> {
   if (error) throw error; return data as SalespersonTrends;
 }
 
+export interface SalespersonTrialStats {
+  is_agent: boolean;
+  trial_active?: number;
+  trial_started_this_month?: number;
+  trial_total_started?: number;
+  converted?: number;
+  converted_this_month?: number;
+  conversion_rate?: number;
+  ending_soon?: number;
+  trial_unpaid?: number;
+}
+/** 영업인 본인 무료 체험 통계 (0195). 체험중/이번달 시작/유료전환/전환율/종료예정/미결제. */
+export async function fetchSalespersonTrialStats(): Promise<SalespersonTrialStats> {
+  const { data, error } = await supabase.rpc('salesperson_my_trial_stats');
+  if (error) throw error;
+  return data as SalespersonTrialStats;
+}
+
 /** 매장 위험도 계산 (최근 14일 급감/무사용/결제문제/0회). 클라이언트 파생. */
 export function storeRisk(s: SalespersonStore): { level: 'risk' | 'warn' | 'ok'; reason: string | null } {
   const payBad = s.payment_status === 'failed' || s.payment_status === 'canceled' || s.subscription_status === 'canceled';

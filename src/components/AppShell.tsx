@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
+import TrialBanner from './TrialBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
 import Footer from './common/Footer';
@@ -35,6 +36,9 @@ export default function AppShell() {
       {/* main + footer 영역을 사이드바 우측 영역에 두고, 그 안에서 max-w 컨텐츠를 mx-auto 로 중앙 정렬 */}
       <div className="flex-1 lg:pl-60">
         <main className="mx-auto w-full max-w-[1500px]">
+          <div className="px-4 pt-3 sm:px-6">
+            <TrialBanner />
+          </div>
           <Outlet />
         </main>
         {/* Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한 padding-bottom 으로 마지막 줄 보호 */}

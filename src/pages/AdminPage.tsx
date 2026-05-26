@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   HardDrive,
   ShieldCheck,
+  Gift,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -29,6 +30,7 @@ import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
 import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
 import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
 import SalesAgentsList from '@/components/admin/SalesAgentsList';
+import FreeTrialsPanel from '@/components/admin/FreeTrialsPanel';
 import AdminUsersList from '@/components/admin/AdminUsersList';
 import UploadIntegrityPanel from '@/components/admin/UploadIntegrityPanel';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
@@ -57,6 +59,7 @@ type Tab =
   | 'dashboard'
   | 'members'
   | 'sales-agents'
+  | 'free-trials'
   | 'streaming'
   | 'revenue'
   | 'subscriptions'
@@ -85,6 +88,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
+  { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
@@ -171,6 +175,7 @@ export default function AdminPage() {
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'members' && <MembersList />}
         {tab === 'sales-agents' && <SalesAgentsList />}
+        {tab === 'free-trials' && <FreeTrialsPanel />}
         {tab === 'streaming' && <StreamingAnalytics />}
         {tab === 'revenue' && <RevenueManagement />}
         {tab === 'subscriptions' && <SubscriptionRequests />}

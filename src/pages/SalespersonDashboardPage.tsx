@@ -8,8 +8,9 @@ import {
 } from 'recharts';
 import {
   fetchMySalespersonProfile, fetchSalespersonSummary, fetchSalespersonStores, fetchSalespersonStoreDetail,
-  fetchSalespersonTrends, storeRisk,
+  fetchSalespersonTrends, fetchSalespersonTrialStats, storeRisk,
   type SalespersonSummary, type SalespersonStore, type SalespersonStoreDetail, type SalespersonTrends,
+  type SalespersonTrialStats,
 } from '@/lib/salespersonApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
@@ -23,6 +24,7 @@ export default function SalespersonDashboardPage() {
   const [summary, setSummary] = useState<SalespersonSummary | null>(null);
   const [stores, setStores] = useState<SalespersonStore[]>([]);
   const [trends, setTrends] = useState<SalespersonTrends | null>(null);
+  const [trial, setTrial] = useState<SalespersonTrialStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [riskOnly, setRiskOnly] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -35,8 +37,11 @@ export default function SalespersonDashboardPage() {
     try {
       const prof = await fetchMySalespersonProfile();
       if (!prof.is_salesperson) { setSummary({ is_agent: false }); return; }
-      const [s, st, tr] = await Promise.all([fetchSalespersonSummary(), fetchSalespersonStores(), fetchSalespersonTrends()]);
-      setSummary(s); setStores(st); setTrends(tr);
+      const [s, st, tr, tt] = await Promise.all([
+        fetchSalespersonSummary(), fetchSalespersonStores(), fetchSalespersonTrends(),
+        fetchSalespersonTrialStats().catch(() => null),
+      ]);
+      setSummary(s); setStores(st); setTrends(tr); setTrial(tt);
     } catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, []);
@@ -130,6 +135,23 @@ export default function SalespersonDashboardPage() {
         <Kpi label="미정산 수수료" value={won(summary.unsettled_commission)} />
         <Kpi label="이번 달 신규 가입" value={`${newThisMonth}곳`} />
       </div>
+
+      {/* 무료 체험 (영업) 현황 */}
+      {trial?.is_agent && (
+        <section className="rounded-3xl bg-gradient-to-br from-accent/10 to-bg-card p-4 ring-1 ring-accent/15">
+          <div className="mb-3 flex items-center gap-1.5">
+            <h2 className="text-sm font-bold">3일 무료 체험 현황</h2>
+            <span className="text-[11px] text-ink-dim">이번 달 시작 {trial.trial_started_this_month ?? 0}개 · 유료 전환 {trial.converted ?? 0}개 · 전환율 {trial.conversion_rate ?? 0}%</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <Kpi label="체험중" value={`${trial.trial_active ?? 0}개`} tone="accent" />
+            <Kpi label="이번 달 체험 시작" value={`${trial.trial_started_this_month ?? 0}개`} />
+            <Kpi label="유료 전환" value={`${trial.converted ?? 0}개`} tone="emerald" sub={`전환율 ${trial.conversion_rate ?? 0}%`} />
+            <Kpi label="종료 예정 (24h)" value={`${trial.ending_soon ?? 0}개`} tone={trial.ending_soon ? 'rose' : undefined} />
+            <Kpi label="체험 후 미결제" value={`${trial.trial_unpaid ?? 0}개`} tone={trial.trial_unpaid ? 'rose' : undefined} />
+          </div>
+        </section>
+      )}
 
       {/* 차트 */}
       {trends && (

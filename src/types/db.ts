@@ -18,6 +18,13 @@ export interface UserRow {
   // 0054 — 영업인 추적
   sales_agent_id?: string | null;
   sales_agent_code?: string | null;
+  // 0195 — 영업인 코드 3일 무료 체험 (서버 기준 판정)
+  free_trial_started_at?: string | null;
+  free_trial_ends_at?: string | null;
+  trial_source?: 'sales_agent' | null;
+  trial_sales_agent_id?: string | null;
+  is_trial_active?: boolean | null;
+  playback_enabled?: boolean | null;
   // 0056 — 회원 탈퇴
   withdrawn_at?: string | null;
   withdrawn_reason?: string | null;

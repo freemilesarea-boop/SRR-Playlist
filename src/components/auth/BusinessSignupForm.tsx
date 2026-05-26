@@ -344,9 +344,14 @@ export default function BusinessSignupForm({ onDone }: Props) {
           <p className={`mt-1 text-[11px] ${inlineToneClass.error}`}>{salesAgentError}</p>
         )}
         {salesAgent && (
-          <p className={`mt-1 text-[11px] ${inlineToneClass.success}`}>
-            담당 영업인: {salesAgent.name} ({salesAgent.code})
-          </p>
+          <>
+            <p className={`mt-1 text-[11px] ${inlineToneClass.success}`}>
+              담당 영업인: {salesAgent.name} ({salesAgent.code})
+            </p>
+            <p className="mt-1 text-[11px] text-accent">
+              가입 후 첫 로그인 시 <b>3일 무료 체험</b>이 자동으로 시작돼요. 결제 없이 매장에서 바로 재생할 수 있어요.
+            </p>
+          </>
         )}
       </Field>
 
