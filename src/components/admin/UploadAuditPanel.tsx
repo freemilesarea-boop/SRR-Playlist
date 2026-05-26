@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, HardDrive, AlertTriangle, Trash2, FileWarning, Clock } from 'lucide-react';
+import { RefreshCw, HardDrive, AlertTriangle, Trash2, FileWarning, Clock, Boxes, Search } from 'lucide-react';
 import {
   fetchUploadAudit,
   deleteOrphanObjects,
+  adminFetchBatchIntegrity,
   type UploadAudit,
+  type BatchIntegrityDetail,
+  type BatchListItem,
 } from '@/lib/uploadAudit';
 import { toast } from '@/store/toastStore';
 
@@ -224,7 +227,105 @@ export default function UploadAuditPanel() {
             점검 결과 이상 없음 — orphan/누락/변환실패/오래된 대기 곡이 없습니다.
           </p>
         )}
+
+      <BatchIntegritySection />
     </div>
+  );
+}
+
+function BatchIntegritySection() {
+  const [query, setQuery] = useState('');
+  const [detail, setDetail] = useState<BatchIntegrityDetail | null>(null);
+  const [batches, setBatches] = useState<BatchListItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadRecent = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminFetchBatchIntegrity({});
+      if ('batches' in res) { setBatches(res.batches); setDetail(null); }
+    } catch (e) {
+      toast.error(`배치 목록 조회 실패: ${(e as Error).message}`);
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void loadRecent(); }, [loadRecent]);
+
+  async function lookup(value: string) {
+    const v = value.trim();
+    if (!v) { void loadRecent(); return; }
+    setLoading(true);
+    try {
+      // uuid 면 batch 우선, track 둘 다 시도(서버가 batch_id 없으면 track 의 batch 로 resolve)
+      const res = await adminFetchBatchIntegrity({ batchId: v, trackId: v });
+      if ('logs' in res) { setDetail(res); }
+      else { setBatches(res.batches); setDetail(null); toast.info('해당 batch/track 의 무결성 기록이 없어요.'); }
+    } catch (e) {
+      toast.error(`조회 실패: ${(e as Error).message}`);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Section title="업로드 무결성 (batch 추적)" icon={<Boxes size={15} className="text-accent" />}>
+      <p className="mb-2 text-[11px] text-ink-dim">
+        batch_id 또는 track_id 로 업로드 무결성 로그(곡별 단계/변환/실패 사유/생성 트랙)를 조회합니다.
+        무결성 점검(integrity_failed) 배치는 아래에서 확인할 수 있어요.
+      </p>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-1 items-center gap-1.5 rounded-lg bg-bg-soft px-2.5 py-1.5 ring-1 ring-line/10">
+          <Search size={13} className="text-ink-dim" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void lookup(query); }}
+            placeholder="batch_id 또는 track_id (UUID)" className="flex-1 bg-transparent text-xs outline-none" />
+        </div>
+        <button onClick={() => void lookup(query)} className="rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25">조회</button>
+        <button onClick={() => { setQuery(''); void loadRecent(); }} className="inline-flex items-center gap-1 rounded-lg bg-bg-soft px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 최근 배치
+        </button>
+      </div>
+
+      {detail ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <code className="font-mono text-accent">{detail.batch?.id?.slice(0, 8)}…</code>
+            <span className={`rounded px-1.5 py-0.5 font-semibold ${detail.batch?.status === 'integrity_failed' ? 'bg-rose-500/15 text-rose-600' : detail.batch?.status === 'completed' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-ink/10 text-ink-mute'}`}>
+              {detail.batch?.status ?? '?'}
+            </span>
+            <span className="text-ink-dim">{detail.owner_email ?? ''} · {detail.batch?.total_tracks ?? 0}곡</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px]">
+              <thead className="text-ink-dim"><tr className="text-left">
+                <th className="py-1 pr-2">파일</th><th>상태</th><th>변환</th><th>실패사유</th><th>retry</th><th>트랙</th><th>sha</th>
+              </tr></thead>
+              <tbody>
+                {detail.logs.map((l) => (
+                  <tr key={l.client_track_id} className="border-t border-line/10">
+                    <td className="max-w-[160px] truncate py-1 pr-2">{l.original_filename ?? l.client_track_id.slice(0, 8)}</td>
+                    <td>{l.upload_status ?? '-'}</td>
+                    <td>{l.transcode_status ?? '-'}</td>
+                    <td className={l.failure_reason ? 'text-rose-600' : ''}>{l.failure_reason ?? '-'}</td>
+                    <td className="tabular-nums">{l.retry_count}</td>
+                    <td>{l.track_status ? `${l.track_status}` : (l.created_track_id ? l.created_track_id.slice(0, 8) : '-')}</td>
+                    <td className="font-mono">{l.sha256 ? l.sha256.slice(0, 8) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <ul className="space-y-1 text-xs">
+          {batches.length === 0 ? (
+            <li className="py-4 text-center text-ink-dim">{loading ? '불러오는 중…' : '최근 배치가 없어요.'}</li>
+          ) : batches.map((b) => (
+            <li key={b.batch_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-bg-soft/40 px-2.5 py-1.5">
+              <button onClick={() => void lookup(b.batch_id)} className="font-mono text-[10px] text-accent hover:underline">{b.batch_id.slice(0, 8)}…</button>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${b.status === 'integrity_failed' ? 'bg-rose-500/15 text-rose-600' : b.status === 'completed' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-ink/10 text-ink-mute'}`}>{b.status}</span>
+              <span className="text-[10px] text-ink-dim">{b.owner_email ?? ''} · {b.total_tracks}곡 · {fmtTime(b.created_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 

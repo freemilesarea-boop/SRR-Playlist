@@ -56,6 +56,42 @@ export async function fetchUploadAudit(): Promise<UploadAudit> {
   return data as UploadAudit;
 }
 
+// ---- 0195 업로드 무결성(batch) 조회 ----
+export interface BatchIntegrityLog {
+  client_track_id: string;
+  original_filename: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  sha256: string | null;
+  transcode_status: string | null;
+  upload_status: string | null;
+  failure_reason: string | null;
+  created_track_id: string | null;
+  retry_count: number;
+  track_title: string | null;
+  track_status: string | null;
+  audio_url: string | null;
+  storage_path: string | null;
+}
+export interface BatchIntegrityDetail {
+  batch: { id: string; status: string; total_tracks: number; integrity: unknown; created_at: string } | null;
+  owner_email: string | null;
+  logs: BatchIntegrityLog[];
+}
+export interface BatchListItem {
+  batch_id: string; status: string; total_tracks: number; created_at: string; integrity: unknown; owner_email: string | null;
+}
+
+export async function adminFetchBatchIntegrity(opts: { batchId?: string; trackId?: string }): Promise<BatchIntegrityDetail | { batches: BatchListItem[] }> {
+  const { data, error } = await supabase.rpc('admin_upload_batch_integrity', {
+    p_batch_id: opts.batchId ?? null,
+    p_track_id: opts.trackId ?? null,
+    p_limit: 50,
+  });
+  if (error) throw error;
+  return data as BatchIntegrityDetail | { batches: BatchListItem[] };
+}
+
 /**
  * orphan storage object 삭제 — 어떤 track 도 참조하지 않는 파일만 (audit 결과 기준).
  * storage API(remove)로 실제 바이너리까지 삭제. 관리자가 명시적으로 선택/확인한 것만.

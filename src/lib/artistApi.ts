@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
+import type { UploadStatus, TranscodeStatus, FailureReason } from './uploadIntegrity';
 
 export interface ArtistProfile {
   user_id: string;
@@ -372,6 +373,23 @@ export interface UploadInput {
    * 1회 확인했으면 곡별 payout 계좌 재조회를 생략. (서버 RPC/RLS 가 최종 재검증)
    */
   skipPayoutCheck?: boolean;
+  /**
+   * 0195 무결성 레이어 — 비-React 컨텍스트에서 단계 전이를 호출자(폼)로 통지.
+   * 폼은 이 콜백에서 UI 상태 갱신 + record_upload_integrity 호출(곡별 추적).
+   */
+  onStage?: (stage: UploadStageEvent) => void;
+  /** 사전 검사 결과(파일 선택 시 1회 계산). mp3 safe pass-through 판정에 사용. */
+  preflightPassThrough?: boolean;
+  /** 최종 업로드된 파일의 sha256 을 호출자에 전달(무결성 기록용). */
+  sha256?: string | null;
+}
+
+/** 0195 — 곡별 업로드 단계 전이 이벤트 (무결성 추적/UI). */
+export interface UploadStageEvent {
+  status: UploadStatus;
+  transcodeStatus?: TranscodeStatus;
+  sha256?: string | null;
+  detail?: Record<string, unknown>;
 }
 
 export interface UploadResult {
@@ -379,6 +397,12 @@ export interface UploadResult {
   track_id?: string;
   track_code?: string;
   error?: string;
+  /** 0195 — 실패 사유 코드(무결성 기록/UI 표시). */
+  failure_reason?: FailureReason;
+  /** 0195 — 변환 결과(skipped/passthrough/transcoded/failed). */
+  transcode_status?: TranscodeStatus;
+  /** 0195 — 업로드된 최종 파일(또는 원본)의 sha256. */
+  sha256?: string | null;
   /** 커버를 첨부했으나 업로드 실패 → 음원은 등록됨. UI 가 "커버 재등록 안내" 표시용 */
   cover_warning?: string;
 }
@@ -572,8 +596,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     cover: fileMeta(input.coverFile) ?? 'none',
   });
 
+  // 0195 — 단계 전이 통지 + transcode 결과 추적
+  let transcodeStatus: TranscodeStatus = 'pending';
+  const notify = (status: UploadStatus, detail?: Record<string, unknown>) => {
+    try { input.onStage?.({ status, transcodeStatus, detail }); } catch { /* noop */ }
+  };
+
   let stage = 'init';
   try {
+    notify('preparing');
     stage = 'session';
     log('session start');
     // 0077-hotfix — getSession 무한 pending 방지: getCurrentUserFast 가 cache→getUser→
@@ -695,9 +726,13 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           );
           if (existing && !input.trackId) {
             log('dup-check found', { id: existing.id });
+            notify('failed', { reason: 'duplicate', stage: 'dup-check', existing_track_id: existing.id });
             return {
               ok: false,
               error: `이미 같은 음원 파일을 업로드하셨어요 (${(existing as { track_code?: string | null }).track_code ?? existing.id.slice(0, 8)}). 내 음원 목록에서 수정해주세요.`,
+              failure_reason: 'duplicate',
+              transcode_status: transcodeStatus,
+              sha256: audioSha256,
             };
           }
           log('dup-check none');
@@ -707,14 +742,23 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       }
 
       stage = 'audio-upload';
-      // iOS Safari 는 비압축 WAV/FLAC(특히 24/32bit·float PCM)을 스트리밍 재생하지 못하는 경우가 많다
-      // (Chrome 데스크탑은 디코딩 가능 → "PC는 되는데 아이폰만 안됨"의 전형). 전 기기 호환을 위해
-      // 업로드 전 mp3 가 아니면 표준 MP3(libmp3lame 192k/44.1k/stereo)로 변환한다.
+      // iOS Safari 는 비압축 WAV/FLAC(특히 24/32bit·float PCM)을 스트리밍 재생하지 못하는 경우가 많다.
+      // 전 기기 호환 + 정규화 일관성(LUFS/Embedding/Flow) + 데이터셋 오염 방지를 위해
+      // "표준 MP3(44.1/48k · stereo · 128~320k)" 가 아니면 ffmpeg 으로 표준 MP3 변환한다.
+      // 0195 결정: 변환 실패/타임아웃은 원본 fallback 금지 → 해당 곡만 격리 failed.
       let fileToUpload: File = input.audioFile;
       const origExt = input.audioFile.name.split('.').pop()?.toLowerCase() ?? '';
       const isMp3 = origExt === 'mp3' || input.audioFile.type === 'audio/mpeg';
-      if (!isMp3) {
+      // mp3 면서 사전검사(preflight)에서 표준 사양으로 판정된 경우만 재인코딩 생략(safe pass-through).
+      // preflight 정보가 없는 경로(단일 업로드/재제출)는 기존 동작 유지(mp3 = pass-through).
+      const mp3PassThrough = isMp3 && input.preflightPassThrough !== false;
+      if (mp3PassThrough) {
+        transcodeStatus = 'passthrough';
+        log('transcode skip (mp3 safe pass-through)', { ext: origExt });
+        uploadDebug.step('transcode', 'ok', 'mp3 pass-through');
+      } else {
         stage = 'transcode';
+        notify('transcoding');
         log('transcode→mp3 start', { from: origExt || input.audioFile.type });
         uploadDebug.step('transcode', 'info', `mp3 변환 (${origExt || 'unknown'})`);
         try {
@@ -722,15 +766,28 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           fileToUpload = await withTimeout(
             transcodeToStandardMp3(input.audioFile),
             600_000,
-            'MP3 변환 시간이 초과되었습니다.',
+            'MP3 변환 시간이 초과되었습니다 (timeout).',
           );
+          transcodeStatus = 'transcoded';
           log('transcode→mp3 ok', { sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2) });
           uploadDebug.step('transcode', 'ok', `${(fileToUpload.size / 1024 / 1024).toFixed(1)}MB`);
         } catch (e) {
-          // 변환 실패 시 업로드 자체는 막지 않고 원본 업로드(추후 재인코딩 필요). 콘솔/디버그에 기록.
-          log('transcode→mp3 FAIL (원본 업로드)', { err: e instanceof Error ? e.message : String(e) });
-          uploadDebug.step('transcode', 'warn', e instanceof Error ? e.message : String(e));
-          fileToUpload = input.audioFile;
+          // 0195: 변환 실패 = 해당 곡만 격리 failed (원본 업로드 금지). 사유 코드 분류.
+          const { classifyTranscodeError } = await import('@/lib/audioTranscode');
+          const reason = classifyTranscodeError(e);
+          transcodeStatus = 'failed';
+          const emsg = e instanceof Error ? e.message : String(e);
+          log('transcode→mp3 FAIL (격리)', { reason, err: emsg });
+          uploadDebug.step('transcode', 'error', `${reason}: ${emsg}`);
+          uploadDebug.finish({ ok: false, audioStatus: 'error', error: `transcode: ${reason}` });
+          notify('failed', { reason, stage: 'transcode' });
+          return {
+            ok: false,
+            error: `MP3 변환 실패 (${reason}) — 파일 코덱/손상 여부를 확인 후 다시 시도해주세요.`,
+            failure_reason: reason,
+            transcode_status: 'failed',
+            sha256: audioSha256,
+          };
         }
       }
       // storage key 는 URL-safe ASCII 만 허용 — 사용자 파일명(한국어/공백/특수문자)은
@@ -755,6 +812,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       // 0167 — Loudness 품질 게이트: "분석 → 통과 → 업로드". 미달 시 storage 업로드/insert 차단.
       // 자동 normalize 금지. 통과 음원만 등록·검수 진입.
       stage = 'quality-gate';
+      notify('quality_checking');
       try {
         const th = await fetchQualityThresholds();
         if (th.enabled) {
@@ -770,7 +828,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
             void recordAudioQuality({ originalFilename, result: q });
             uploadDebug.step('quality-gate', 'error', `${q.failure_reason} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
             uploadDebug.finish({ ok: false, audioStatus: 'error', error: `quality-gate: ${q.failure_reason}` });
-            return { ok: false, error: q.message ?? '음질 기준 미달로 등록할 수 없어요.' };
+            // analysis_failed(디코드 불가)은 손상/미지원으로 분류, 그 외는 음질 미달
+            const qReason: FailureReason = q.failure_reason === 'analysis_failed' ? 'decode_failed' : 'quality_failed';
+            notify('failed', { reason: qReason, stage: 'quality-gate', lufs: q.integrated_lufs, true_peak: q.true_peak_dbtp });
+            return { ok: false, error: q.message ?? '음질 기준 미달로 등록할 수 없어요.', failure_reason: qReason, transcode_status: transcodeStatus, sha256: audioSha256 };
           }
           qualityResult = q; // 통과 — insert 후 track_id 와 함께 기록
           uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
@@ -781,6 +842,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         uploadDebug.step('quality-gate', 'warn', '분석 지연/예외 — 게이트 우회');
       }
 
+      notify('uploading');
       log('audio upload start', { path: audioPath, sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2), contentType: audioContentType });
       let audioUpRes;
       try {
@@ -798,14 +860,16 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         log('audio upload error', { err: e instanceof Error ? e.message : String(e) });
         uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${msg}` });
         uploadDebug.step('audio-upload', 'error', msg);
-        return { ok: false, error: msg };
+        notify('failed', { reason: 'upload_failed', stage: 'audio-upload' });
+        return { ok: false, error: msg, failure_reason: 'upload_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
       }
       if (audioUpRes.error) {
         const msg = friendlyUploadError(audioUpRes.error);
         log('audio upload fail', { msg: audioUpRes.error.message });
         uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${audioUpRes.error.message}` });
         uploadDebug.step('audio-upload', 'error', audioUpRes.error.message);
-        return { ok: false, error: msg };
+        notify('failed', { reason: 'upload_failed', stage: 'audio-upload' });
+        return { ok: false, error: msg, failure_reason: 'upload_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
       }
       const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
       audioUrl = audioPub.publicUrl;
@@ -889,6 +953,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
 
     // 4) submit_artist_release RPC
     stage = 'submit-rpc';
+    notify('submitting');
     log('submit_artist_release RPC start');
     let trackId: string;
     try {
@@ -956,20 +1021,22 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       const tailDbg = [err.code, err.details, err.hint].filter(Boolean).join(' | ');
       uploadDebug.finish({ ok: false, rpcStatus: 'error', error: `submit-rpc: ${msg}${tailDbg ? ` (${tailDbg})` : ''}` });
       uploadDebug.step('submit-rpc', 'error', `${msg}${tailDbg ? ` (${tailDbg})` : ''}`);
+      notify('failed', { reason: 'submit_failed', stage: 'submit-rpc', code: err.code });
       if (msg.includes('row-level security') || err.code === '42501') {
         const recheck = await fetchArtistUploadEligibility().catch(() => null);
         if (recheck && !recheck.can_upload) {
-          return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}` };
+          return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}`, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
         }
       }
       if (err.code === 'PGRST203' || err.code === 'PGRST202') {
         return {
           ok: false,
           error: '음원 등록 함수 호출 실패 (서버 함수 시그니처 불일치). 잠시 후 다시 시도해주시고, 문제가 지속되면 관리자에게 문의해주세요.',
+          failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256,
         };
       }
       const tail = err.hint ?? err.details;
-      return { ok: false, error: tail ? `${msg} (${tail})` : msg };
+      return { ok: false, error: tail ? `${msg} (${tail})` : msg, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
     }
 
     // 5) track_code 조회 — 실패해도 OK, 트랙 저장은 이미 성공
@@ -1002,13 +1069,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     log('SUCCESS', { trackId, trackCode, coverWarning, elapsedMs: Date.now() - startedAt });
     uploadDebug.finish({ ok: true, trackId, error: coverWarning });
     uploadDebug.step('done', coverWarning ? 'warn' : 'ok', coverWarning ?? '업로드 완료');
-    return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning };
+    notify('submitted', { track_id: trackId });
+    return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning, transcode_status: transcodeStatus, sha256: audioSha256 };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('FATAL at stage=' + stage, { err: msg });
+    notify('failed', { reason: 'unknown', stage });
     uploadDebug.finish({ ok: false, error: `${stage} 단계 실패 — ${msg}` });
     uploadDebug.step(stage, 'error', msg);
-    return { ok: false, error: `${stage} 단계 실패 — ${msg}` };
+    return { ok: false, error: `${stage} 단계 실패 — ${msg}`, failure_reason: 'unknown', transcode_status: transcodeStatus };
   } finally {
     log('finally', { stage, elapsedMs: Date.now() - startedAt });
   }

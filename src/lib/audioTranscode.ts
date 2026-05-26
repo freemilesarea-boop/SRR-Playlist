@@ -23,6 +23,23 @@
  */
 
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
+import type { FailureReason } from '@/lib/uploadIntegrity';
+
+/**
+ * transcode 단계 오류를 무결성 사유 코드로 분류한다.
+ *  - ffmpeg_timeout: 변환 시간 초과
+ *  - decode_failed / corrupted_audio: 디코드 불가/손상
+ *  - unsupported_codec: 미지원 코덱
+ *  - transcoding_failed: 그 외 exec 실패
+ */
+export function classifyTranscodeError(e: unknown): FailureReason {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  if (msg.includes('초과') || msg.includes('timeout') || msg.includes('timed out')) return 'ffmpeg_timeout';
+  if (msg.includes('invalid data') || msg.includes('decod') || msg.includes('moov') || msg.includes('header missing')) return 'decode_failed';
+  if (msg.includes('corrupt') || msg.includes('truncat')) return 'corrupted_audio';
+  if (msg.includes('codec') || msg.includes('unsupported') || msg.includes('no such')) return 'unsupported_codec';
+  return 'transcoding_failed';
+}
 
 /**
  * 단일 스레드 ffmpeg-core (SharedArrayBuffer 불필요).
