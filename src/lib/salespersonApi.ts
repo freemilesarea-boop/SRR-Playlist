@@ -31,6 +31,16 @@ export async function fetchSalespersonSummary(): Promise<SalespersonSummary> {
   const { data, error } = await supabase.rpc('salesperson_my_summary');
   if (error) throw error; return data as SalespersonSummary;
 }
+
+export interface MySalespersonProfile {
+  is_salesperson: boolean;
+  sales_agent_id?: string; code?: string; commission_rate?: number; name?: string;
+}
+/** 영업인 여부 식별 + (미연결 시) 이메일 기준 자동 연결. 메뉴 노출/대시보드 게이트에 사용. */
+export async function fetchMySalespersonProfile(): Promise<MySalespersonProfile> {
+  const { data, error } = await supabase.rpc('get_my_salesperson_profile');
+  if (error) throw error; return data as MySalespersonProfile;
+}
 export async function fetchSalespersonStores(): Promise<SalespersonStore[]> {
   const { data, error } = await supabase.rpc('salesperson_my_stores');
   if (error) throw error; return (data ?? []) as SalespersonStore[];
