@@ -120,21 +120,33 @@ export interface TranscodeOptions {
 }
 
 /**
+ * 변환 직렬화 뮤텍스.
+ * ffmpeg.wasm 은 단일 인스턴스/단일 워커/단일 가상 FS 이므로 동시 변환이 불가능하다.
+ * 대량 업로드(CONCURRENCY>1)에서 동시에 transcode 가 호출되면 같은 FS 파일(input/output)을
+ * 서로 덮어써서 "다른 곡인데 동일한 변환 결과"가 반환되는 데이터 무결성 버그가 발생한다.
+ * → 변환은 반드시 한 번에 하나씩만 실행되도록 promise 체인으로 직렬화한다.
+ */
+let transcodeMutex: Promise<unknown> = Promise.resolve();
+
+/**
  * 임의 입력 오디오 → 표준 MP3 File 반환.
- * 실패 시 throw.
+ * 실패 시 throw. ffmpeg.wasm 단일 인스턴스 특성상 호출은 내부에서 직렬화된다.
  */
 export async function transcodeToStandardMp3(
   file: File,
   options: TranscodeOptions = {},
 ): Promise<File> {
-  const {
-    onProgress,
-    onLog,
-    bitrateKbps = 192,
-    sampleRate = 44100,
-    channels = 2,
-  } = options;
+  // 직렬화: 직전 변환이 끝난 뒤에야 실행(성공/실패 무관하게 체인 유지).
+  const result = transcodeMutex.then(
+    () => _transcodeOne(file, options),
+    () => _transcodeOne(file, options),
+  );
+  transcodeMutex = result.catch(() => undefined);
+  return result;
+}
 
+async function _transcodeOne(file: File, options: TranscodeOptions): Promise<File> {
+  const { onProgress, onLog, bitrateKbps = 192, sampleRate = 44100, channels = 2 } = options;
   const { fetchFile } = await import('@ffmpeg/util');
   const ff = await getFfmpeg(onLog);
 
@@ -143,9 +155,11 @@ export async function transcodeToStandardMp3(
   };
   ff.on('progress', progressHandler);
 
+  // 가상 FS 파일명을 호출마다 유니크하게(방어적 — 직렬화와 별개로 잔여 파일 충돌 차단).
+  const token = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())).replace(/[^a-z0-9]/gi, '').slice(0, 12);
   const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
-  const inputName = `input.${ext.replace(/[^a-z0-9]/g, '') || 'bin'}`;
-  const outputName = 'output.mp3';
+  const inputName = `in_${token}.${ext.replace(/[^a-z0-9]/g, '') || 'bin'}`;
+  const outputName = `out_${token}.mp3`;
 
   try {
     await ff.writeFile(inputName, await fetchFile(file));
