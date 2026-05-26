@@ -15,7 +15,7 @@ export interface SalespersonSummary {
 export interface SalespersonStore {
   store_user_id: string; store_name: string; owner_name: string | null; joined_at: string;
   subscription_status: string | null; payment_status: string | null;
-  last_play_at: string | null; plays_30d: number; recent_playlists: string[];
+  last_play_at: string | null; plays_30d: number; plays_14d: number; plays_prev_14d: number; recent_playlists: string[];
   monthly_amount: number; est_commission: number;
 }
 export interface SalespersonStoreDetail {
@@ -48,4 +48,24 @@ export async function fetchSalespersonStores(): Promise<SalespersonStore[]> {
 export async function fetchSalespersonStoreDetail(storeUserId: string): Promise<SalespersonStoreDetail> {
   const { data, error } = await supabase.rpc('salesperson_store_detail', { p_store_user_id: storeUserId });
   if (error) throw error; return data as SalespersonStoreDetail;
+}
+
+export interface SalespersonTrends {
+  daily_plays: Array<{ d: string; n: number }>;
+  monthly: Array<{ m: string; revenue: number; commission: number; new_stores: number; cumulative_stores: number }>;
+}
+export async function fetchSalespersonTrends(): Promise<SalespersonTrends> {
+  const { data, error } = await supabase.rpc('salesperson_my_trends');
+  if (error) throw error; return data as SalespersonTrends;
+}
+
+/** 매장 위험도 계산 (최근 14일 급감/무사용/결제문제/0회). 클라이언트 파생. */
+export function storeRisk(s: SalespersonStore): { level: 'risk' | 'warn' | 'ok'; reason: string | null } {
+  const payBad = s.payment_status === 'failed' || s.payment_status === 'canceled' || s.subscription_status === 'canceled';
+  if (s.plays_30d === 0) return { level: 'risk', reason: '30일 재생 없음' };
+  if (payBad) return { level: 'risk', reason: '결제/구독 문제' };
+  if (s.plays_14d === 0) return { level: 'risk', reason: '최근 14일 사용 없음' };
+  if (s.plays_prev_14d >= 4 && s.plays_14d < s.plays_prev_14d * 0.5) return { level: 'warn', reason: '사용량 급감' };
+  if (s.subscription_status === 'pending') return { level: 'warn', reason: '결제 대기' };
+  return { level: 'ok', reason: null };
 }
