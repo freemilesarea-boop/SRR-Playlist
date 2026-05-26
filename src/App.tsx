@@ -48,6 +48,7 @@ const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'
 const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
 const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
 const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
+const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/SalespersonDashboardPage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -244,6 +245,7 @@ export default function App() {
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
                 <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
                 <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
+                <Route path="/sales" element={<RequireAuth><SalespersonDashboardPage /></RequireAuth>} />
                 <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
                 <Route
                   path="/admin"

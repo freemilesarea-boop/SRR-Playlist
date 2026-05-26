@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { Save, ExternalLink, CheckCircle2, Upload, X } from 'lucide-react';
 import {
   fetchMyCuratorProfile,
   upsertCuratorProfile,
@@ -8,6 +8,7 @@ import {
   isHandleAvailable,
   type CuratorProfilePayload,
 } from '@/lib/curatorApi';
+import { uploadImage } from '@/lib/imageUpload';
 import { toast } from '@/store/toastStore';
 
 interface Props {
@@ -168,14 +169,14 @@ export default function CuratorProfileEditor({ userId }: Props) {
         />
       </Field>
 
-      <Field label="프로필 이미지 URL">
-        <input
-          type="url"
+      <div className="block space-y-1">
+        <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-mute">프로필 이미지</span>
+        <ImageUploadField
           value={form.profile_image_url ?? ''}
-          onChange={(e) => setForm((f) => ({ ...f, profile_image_url: e.target.value }))}
-          placeholder="https://…"
+          onChange={(url) => setForm((f) => ({ ...f, profile_image_url: url }))}
         />
-      </Field>
+        <p className="text-[11px] text-ink-dim">JPG/PNG/WEBP · 최대 5MB. 파일을 선택하면 자동 업로드됩니다.</p>
+      </div>
 
       <Field label="협업 문의 이메일" hint="협업 문의 버튼이 이 메일로 mailto 생성">
         <input
@@ -241,6 +242,48 @@ export default function CuratorProfileEditor({ userId }: Props) {
         )}
       </div>
     </form>
+  );
+}
+
+export function ImageUploadField({
+  value, onChange, prefix = 'profile_images',
+}: {
+  value: string; onChange: (url: string) => void; prefix?: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ''; // 같은 파일 재선택 허용
+    if (!f) return;
+    setErr(null); setUploading(true);
+    const res = await uploadImage(f, prefix);
+    setUploading(false);
+    if (!res.ok || !res.url) { setErr(res.error ?? '업로드 실패'); toast.error(res.error ?? '업로드 실패'); return; }
+    onChange(res.url);
+    toast.success('이미지가 업로드됐어요');
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        {value ? (
+          <div className="relative">
+            <img src={value} alt="프로필 미리보기" className="h-16 w-16 rounded-full object-cover ring-1 ring-line/20" />
+            <button type="button" onClick={() => onChange('')} title="이미지 제거"
+              className="absolute -right-1 -top-1 rounded-full bg-ink/80 p-0.5 text-bg hover:bg-ink"><X size={11} /></button>
+          </div>
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-bg-deep text-[10px] text-ink-dim ring-1 ring-line/15">없음</div>
+        )}
+        <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold ${uploading ? 'bg-ink/5 text-ink-dim' : 'bg-ink/5 hover:bg-ink/10'}`}>
+          <Upload size={13} /> {uploading ? '업로드 중…' : (value ? '이미지 교체' : '이미지 선택')}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onFile} disabled={uploading} className="hidden" />
+        </label>
+      </div>
+      {err && <p className="text-[11px] text-red-400">{err}</p>}
+    </div>
   );
 }
 
