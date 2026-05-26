@@ -30,13 +30,21 @@ export const MOOD_OPTIONS: Option[] = [
   '활기찬','로맨틱한','집중되는','편안한','세련된','저자극','신나는',
 ].map((m) => ({ value: m, label: m }));
 
-/** 추천 매장/업종 (복수, 최대 5). value 는 플리 business_category 와 정렬되도록 정규화. */
+/** 추천 매장/업종 (복수). value 는 플리 business_category 와 정렬되도록 정규화.
+ * 0189 — "음식점"(식당) deprecated → 한식/일식/중식/양식/다이닝/이자카야/술집 으로 세분화.
+ * 기존 식당 데이터는 매핑 유지(레거시), 신규 선택은 불가. */
 export const BUSINESS_OPTIONS: Option[] = [
   { value: '병원', label: '병원/클리닉' },
   { value: '카페', label: '카페' },
   { value: '편집샵', label: '편집샵' },
   { value: '미용실', label: '미용실' },
-  { value: '식당', label: '음식점' },
+  { value: '한식', label: '한식' },
+  { value: '일식', label: '일식' },
+  { value: '중식', label: '중식' },
+  { value: '양식', label: '양식' },
+  { value: '다이닝', label: '다이닝/파인다이닝' },
+  { value: '이자카야', label: '이자카야' },
+  { value: '술집', label: '술집/펍' },
   { value: '와인바', label: '와인바' },
   { value: '헬스장', label: '헬스장' },
   { value: '호텔', label: '호텔/라운지' },
