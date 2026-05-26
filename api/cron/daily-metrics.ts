@@ -40,6 +40,23 @@ export default async function handler(req: VercelRequest) {
 
   const results: Record<string, unknown> = {};
 
+  // 만료된 무료 체험 일괄 종료 (재생 권한 회수 + 원장 상태 갱신). 멱등.
+  try {
+    const expireRes = await fetch(`${url}/rest/v1/rpc/expire_free_trials`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+      },
+      body: '{}',
+    });
+    const expireTxt = await expireRes.text();
+    results['expired_free_trials'] = expireRes.ok ? JSON.parse(expireTxt) : { error: expireTxt, status: expireRes.status };
+  } catch (e) {
+    results['expired_free_trials'] = { error: e instanceof Error ? e.message : 'unknown' };
+  }
+
   for (const date of [yesterdayKst, todayKst]) {
     const res = await fetch(`${url}/rest/v1/rpc/admin_compute_daily_metrics`, {
       method: 'POST',
