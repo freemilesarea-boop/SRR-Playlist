@@ -1,21 +1,23 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Search, Sparkles } from 'lucide-react';
 import {
-  GENRE_GROUPS, MOOD_OPTIONS, BUSINESS_OPTIONS, VOCAL_OPTIONS, DAYPART_OPTIONS, LANGUAGE_OPTIONS,
+  GENRE_GROUPS, MOOD_OPTIONS, BUSINESS_OPTIONS, VOCAL_OPTIONS, DAYPART_OPTIONS, LANGUAGE_OPTIONS, TEMPO_OPTIONS,
   META_CAPS, type Option, type SelectedMeta,
 } from '@/lib/trackMetadataOptions';
+import { toast } from '@/store/toastStore';
 
 /** pill 형태 다중 선택 (max 제한) */
 function PillMulti({
-  label, options, selected, max, onChange, disabled,
+  label, options, selected, max, onChange, disabled, overMessage,
 }: {
   label: string; options: Option[]; selected: string[]; max: number;
-  onChange: (next: string[]) => void; disabled?: boolean;
+  onChange: (next: string[]) => void; disabled?: boolean; overMessage?: string;
 }) {
   function toggle(v: string) {
     if (disabled) return;
     if (selected.includes(v)) onChange(selected.filter((x) => x !== v));
     else if (selected.length < max) onChange([...selected, v]);
+    else if (overMessage) toast.warning(overMessage);
   }
   return (
     <div className="space-y-1.5">
@@ -31,7 +33,7 @@ function PillMulti({
               key={o.value}
               type="button"
               onClick={() => toggle(o.value)}
-              disabled={disabled || atMax}
+              disabled={disabled}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 on ? 'bg-accent text-black ring-1 ring-accent' : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover'
               } ${atMax ? 'opacity-40' : ''}`}
@@ -89,6 +91,8 @@ function GenrePicker({
     if (disabled) return;
     if (selected.includes(v)) onChange(selected.filter((x) => x !== v));
     else if (selected.length < max) onChange([...selected, v]);
+    else if (max === 1) onChange([v]); // 단일 선택: 기존 해제 후 교체
+    else toast.warning('장르는 1개만 선택할 수 있습니다');
   }
 
   const groups = useMemo(
@@ -156,13 +160,13 @@ function GenrePicker({
                 <div className="flex flex-wrap gap-1.5 px-2 pb-2 pt-1">
                   {g.matches.map((v) => {
                     const on = selected.includes(v);
-                    const atMax = !on && selected.length >= max;
+                    const atMax = !on && selected.length >= max && max > 1;
                     return (
                       <button
                         key={v}
                         type="button"
                         onClick={() => toggle(v)}
-                        disabled={disabled || atMax}
+                        disabled={disabled}
                         className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                           on ? 'bg-accent text-black ring-1 ring-accent' : 'bg-bg-card text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover'
                         } ${atMax ? 'opacity-40' : ''}`}
@@ -195,23 +199,28 @@ export default function TrackMetaSelectors({
       <div className="flex items-start gap-2 rounded-lg bg-accent/10 p-2.5 ring-1 ring-accent/15">
         <Sparkles size={14} className="mt-0.5 shrink-0 text-accent" />
         <p className="text-[11px] leading-relaxed text-ink-mute">
-          <b className="text-ink">추천용 메타데이터</b>예요. 장르·분위기·매장·시간대·언어를 정확히 많이 선택할수록
-          유사곡 추천·자동 플레이리스트·매장 큐레이션·차트 노출 정확도가 올라갑니다.
+          <b className="text-ink">추천용 메타데이터</b>예요. 정확하게 선택할수록 유사곡 추천·매장 큐레이션·차트 노출 정확도가 올라갑니다.
+          <br />노출을 위해 관련 없는 매장을 선택하면 관리자 검수에서 제외될 수 있습니다.
         </p>
       </div>
 
       <GenrePicker selected={value.genre_tags} max={META_CAPS.genre}
         onChange={(v) => onChange({ ...value, genre_tags: v })} disabled={disabled} />
       <PillMulti label="분위기/무드 *" options={MOOD_OPTIONS} selected={value.mood_tags} max={META_CAPS.mood}
-        onChange={(v) => onChange({ ...value, mood_tags: v })} disabled={disabled} />
+        overMessage="분위기는 최대 2개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, mood_tags: v })} disabled={disabled} />
       <PillMulti label="추천 매장/업종 *" options={BUSINESS_OPTIONS} selected={value.business_type_tags} max={META_CAPS.business}
-        onChange={(v) => onChange({ ...value, business_type_tags: v })} disabled={disabled} />
+        overMessage="추천 매장은 최대 3개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, business_type_tags: v })} disabled={disabled} />
       <PillSingle label="보컬 타입 *" options={VOCAL_OPTIONS} value={value.vocal_type}
         onChange={(v) => onChange({ ...value, vocal_type: v })} disabled={disabled} />
+      <div className="space-y-1.5">
+        <PillSingle label="체감 템포 *" options={TEMPO_OPTIONS} value={value.tempo_feel ?? ''}
+          onChange={(v) => onChange({ ...value, tempo_feel: v })} disabled={disabled} />
+        <p className="text-[10px] text-ink-dim">곡의 체감 템포를 선택해주세요. 실제 BPM과 다를 수 있으며, 큐레이션 참고값으로 사용됩니다.</p>
+      </div>
       <PillSingle label="언어권" options={LANGUAGE_OPTIONS} value={value.language ?? ''} optional
         onChange={(v) => onChange({ ...value, language: v })} disabled={disabled} />
       <PillMulti label="추천 시간대 *" options={DAYPART_OPTIONS} selected={value.recommended_dayparts} max={META_CAPS.daypart}
-        onChange={(v) => onChange({ ...value, recommended_dayparts: v })} disabled={disabled} />
+        overMessage="추천 시간대는 최대 3개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, recommended_dayparts: v })} disabled={disabled} />
     </div>
   );
 }
