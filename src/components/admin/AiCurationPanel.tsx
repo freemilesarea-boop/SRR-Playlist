@@ -98,6 +98,10 @@ import { analyzeAudioFromUrl, generateMockFeatures } from '@/lib/audioAnalysis';
 import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
+import MetaApproveModal from '@/components/admin/MetaApproveModal';
+
+const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
+const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
 
 type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business';
 const BATCH = 15;
@@ -1041,6 +1045,7 @@ function GuardrailDashboardTab() {
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1132,11 +1137,16 @@ function GuardrailDashboardTab() {
                 <span className="min-w-0 flex-1 truncate"><b>{t.title ?? '(제목없음)'}</b> · <span className="text-ink-dim">{t.artist ?? ''}</span> · {t.main_genre ?? '-'}</span>
                 <span className="shrink-0 text-rose-600">차단 {t.hard_stores}</span>
                 <span className="hidden shrink-0 truncate text-[10px] text-ink-dim sm:block" title={(t.blocked_stores ?? []).join(', ')}>{(t.blocked_stores ?? []).slice(0, 4).map((s) => STORE_LABELS[s] ?? s).join(',')}</span>
+                <button onClick={() => setMetaModal({ track_id: t.track_id, title: t.title })} className="shrink-0 rounded bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">메타 수정</button>
               </li>
             ))}
           </ul>
         )}
       </div>
+      {metaModal && (
+        <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={false}
+          onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
+      )}
     </div>
   );
 }
@@ -1145,6 +1155,7 @@ function HighRiskTab() {
   const [rows, setRows] = useState<HighRiskTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null; canApprove: boolean } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1196,11 +1207,17 @@ function HighRiskTab() {
                   <button onClick={() => void act(r.track_id, () => bulkGuardrailClear([r.track_id], '고위험 검수 - 문제없음'), '문제 없음(차단 해제)')} disabled={busyId === r.track_id}
                     className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 disabled:opacity-50">문제 없음</button>
                 )}
+                <button onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} disabled={busyId === r.track_id}
+                  className="rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">메타 수정/승인</button>
                 <button onClick={() => void copyNotice(r.owner_user_id)} className="rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">업로더 안내문구 복사</button>
               </div>
             </li>
           ))}
         </ul>
+      )}
+      {metaModal && (
+        <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={metaModal.canApprove}
+          onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
       )}
     </div>
   );
@@ -1229,6 +1246,7 @@ function RereviewTab() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [autoResolve, setAutoResolve] = useState(true);
   const [results, setResults] = useState<Record<string, RecomputeResult>>({});
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null; canApprove: boolean } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1405,6 +1423,7 @@ function RereviewTab() {
               {/* 개별 빠른 액션 */}
               <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
                 <button disabled={busy} onClick={() => void applyMetaOne(r.track_id)} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
+                <button disabled={busy} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정/승인</button>
                 {(r.blocked_declared_stores ?? []).map((sk) => (
                   <span key={sk} className="inline-flex items-center gap-0.5">
                     <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
@@ -1463,6 +1482,10 @@ function RereviewTab() {
             </li>
           ))}
         </ul>
+      )}
+      {metaModal && (
+        <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={metaModal.canApprove}
+          onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
       )}
     </div>
   );
@@ -1726,6 +1749,7 @@ function BusinessReactionTab() {
   const [status, setStatus] = useState('active');
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1790,6 +1814,7 @@ function BusinessReactionTab() {
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, () => restoreBusinessExclusion(r.id), '복구됨')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">복구</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, () => ignoreBusinessExclusion(r.id), '무시 처리')} className="rounded bg-ink/5 px-2 py-1 font-semibold text-ink-mute disabled:opacity-40">무시</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, async () => { await applyAiMetadataAndRecompute(r.track_id, { autoResolve: false }); }, 'AI 메타 재적용 완료')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 재적용</button>
+                    <button disabled={busyId === r.id} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정</button>
                     {!r.store_group_key && r.playlist_store_key.startsWith('cafe') && (
                       <button disabled={busyId === r.id} onClick={() => void act(r.id, () => excludeTrackGroup(r.track_id, 'cafe'), '카페 그룹 전체 제외')} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">카페그룹 전체 제외</button>
                     )}
@@ -1801,6 +1826,10 @@ function BusinessReactionTab() {
             </li>
           ))}
         </ul>
+      )}
+      {metaModal && (
+        <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={false}
+          onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
       )}
     </div>
   );

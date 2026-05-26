@@ -6,6 +6,9 @@ import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
 import TrackModerationPanel from './TrackModerationPanel';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import MetaApproveModal from '@/components/admin/MetaApproveModal';
+
+const APPROVABLE_RS = ['submitted', 'review_pending', 'changes_requested'];
 import {
   adminGetTrackTags, adminUpdateTrackTags, validateSelectedMeta, emptySelectedMeta,
   type SelectedMeta,
@@ -79,6 +82,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
   const [deletableOnly, setDeletableOnly] = useState(false);
   const [coverBusyId, setCoverBusyId] = useState<string | null>(null);
   const [tagModal, setTagModal] = useState<{ trackId: string; title: string } | null>(null);
+  const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null; canApprove: boolean } | null>(null);
   const [tagMeta, setTagMeta] = useState<SelectedMeta>(emptySelectedMeta);
   const [tagBusy, setTagBusy] = useState(false);
 
@@ -527,6 +531,13 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                         >
                           태그
                         </button>
+                        <button
+                          onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: APPROVABLE_RS.includes(r.release_status ?? '') })}
+                          className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-line/10 hover:bg-indigo-500/25"
+                          title="메타 수정 + (가능 시)승인"
+                        >
+                          메타/승인
+                        </button>
                         <label
                           className="inline-flex cursor-pointer items-center rounded p-1.5 text-ink-mute hover:bg-ink/10"
                           title={r.cover_url ? '커버 교체' : '커버 등록'}
@@ -669,6 +680,10 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
             </div>
           </div>
         </div>
+      )}
+      {metaModal && (
+        <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={metaModal.canApprove}
+          onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
       )}
     </div>
   );
