@@ -356,6 +356,10 @@ export interface UploadInput {
   /** 재제출 시 기존 audio_url (새 파일 미업로드 시 그대로 유지) */
   existingAudioUrl?: string | null;
   existingCoverUrl?: string | null;
+  /** 0194 — 업로드 무결성 추적: 배치 ID / 불변 client_track_id / 파일 fingerprint */
+  batchId?: string | null;
+  clientTrackId?: string | null;
+  sourceFingerprint?: string | null;
   /**
    * 일괄 업로드 최적화: 호출 전에 eligibility 를 한 번 확인했으면 true.
    * 파일마다 eligibility RPC 를 반복 호출(30곡=30 RPC)하지 않도록 내부 검사를 건너뜀.
@@ -657,6 +661,9 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     // 0153 — 원본 파일명/실제 storage key 분리 기록 (storage key 에는 한국어 미포함)
     let audioStoragePath: string | null = null;
     let coverStoragePathVal: string | null = null;
+    // 0194 — 업로드 무결성: 최종 업로드(변환 후) 바이트 sha + 변환 여부
+    let finalAudioSha: string | null = null;
+    let wasTranscoded = false;
     const originalFilename = input.audioFile?.name ?? null;
     // 0154 — 발매 게이트(duration 필수)용 메타. 업로드 후 set_artist_track_audio_meta 로 기록.
     let audioDurationVal: number | null = null;
@@ -733,6 +740,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           fileToUpload = input.audioFile;
         }
       }
+      // 0194 — 최종 업로드 바이트(변환 후) 무결성 sha. 변환 race 검출/감사용. best-effort.
+      wasTranscoded = fileToUpload !== input.audioFile;
+      try { finalAudioSha = await withTimeout(computeAudioSha256(fileToUpload), 45_000, 'final sha timeout'); }
+      catch { finalAudioSha = null; }
       // storage key 는 URL-safe ASCII 만 허용 — 사용자 파일명(한국어/공백/특수문자)은
       // 절대 path 에 넣지 않고 UUID 기반으로 생성. 제목은 DB(title)로만 관리.
       const audioExt = safeExtension(fileToUpload.name, 'mp3');
@@ -946,6 +957,17 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       // 0167 — 통과한 품질 측정값을 track_id 와 함께 기록(검수 화면 표시용)
       if (trackId && qualityResult) {
         void recordAudioQuality({ trackId, originalFilename, result: qualityResult });
+      }
+      // 0194 — 업로드 무결성 로그(최종 업로드 콘텐츠 sha). best-effort, 실패해도 업로드 성공 유지.
+      if (trackId) {
+        try {
+          await supabase.rpc('record_upload_integrity', {
+            p_batch_id: input.batchId ?? null, p_client_track_id: input.clientTrackId ?? null, p_track_id: trackId,
+            p_original_filename: originalFilename, p_source_fingerprint: input.sourceFingerprint ?? null,
+            p_original_sha256: audioSha256, p_final_sha256: finalAudioSha, p_storage_path: audioStoragePath,
+            p_duration: audioDurationVal, p_transcoded: wasTranscoded, p_status: 'success', p_error: null,
+          });
+        } catch (e) { log('integrity log skip', { err: e instanceof Error ? e.message : String(e) }); }
       }
     } catch (e) {
       const err = e as { message?: string; hint?: string; details?: string; code?: string };

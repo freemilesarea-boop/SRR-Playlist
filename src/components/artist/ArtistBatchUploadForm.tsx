@@ -25,6 +25,7 @@ import {
   type ArtistProfile,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
+import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import {
@@ -256,8 +257,12 @@ export default function ArtistBatchUploadForm({
   async function uploadOne(
     t: TrackRow,
     profile: ArtistProfile | null,
+    batchId: string,
   ): Promise<{ ok: boolean; error?: string; track_id?: string; track_code?: string; cover_warning?: string }> {
     return uploadArtistTrack({
+      batchId,
+      clientTrackId: t.id,
+      sourceFingerprint: t.fingerprint,
       title: t.title.trim(),
       artist: (t.artist.trim() || common.artist.trim()) || undefined,
       album_name: common.albumName.trim(),
@@ -308,7 +313,7 @@ export default function ArtistBatchUploadForm({
     }
   }
 
-  async function runPool(ids: string[], profile: ArtistProfile | null) {
+  async function runPool(ids: string[], profile: ArtistProfile | null, batchId: string) {
     const queue = [...ids];
     const worker = async () => {
       while (queue.length > 0) {
@@ -318,7 +323,7 @@ export default function ArtistBatchUploadForm({
         if (!t) continue;
         patchTrack(id, { status: 'uploading', error: undefined });
         try {
-          const res = await uploadOne(t, profile);
+          const res = await uploadOne(t, profile, batchId);
           if (res.ok) {
             // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
             if (res.track_id) {
@@ -364,7 +369,8 @@ export default function ArtistBatchUploadForm({
           targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
         ),
       );
-      await runPool(targets, profile);
+      const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
+      await runPool(targets, profile, batchId);
       // 결과 요약 (state 가 최신이 아닐 수 있으므로 ref 대신 setter 콜백 사용)
       setTracks((prev) => {
         const ok = prev.filter((t) => t.status === 'success').length;
@@ -376,6 +382,14 @@ export default function ArtistBatchUploadForm({
         }
         return prev;
       });
+      // 0194 — 업로드 무결성 self-check: 성공곡 = distinct(콘텐츠 sha) = distinct(path) 검증
+      try {
+        const { data } = await supabase.rpc('check_batch_integrity', { p_batch_id: batchId });
+        const r = data as { ok?: boolean; success_count?: number; distinct_sha?: number } | null;
+        if (r && r.success_count && r.ok === false) {
+          toast.error('업로드 무결성 오류가 감지되었습니다 (오디오 콘텐츠 중복 의심). 관리자에게 문의하거나 다시 시도해주세요.');
+        }
+      } catch { /* best-effort */ }
       await onUploaded();
     } finally {
       setSubmitting(false);
@@ -402,7 +416,8 @@ export default function ArtistBatchUploadForm({
           failedIds.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
         ),
       );
-      await runPool(failedIds, profile);
+      const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
+      await runPool(failedIds, profile, batchId);
       await onUploaded();
     } finally {
       setSubmitting(false);
