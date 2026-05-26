@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCw, Store, AlertTriangle, X } from 'lucide-react';
 import {
-  fetchSalespersonSummary, fetchSalespersonStores, fetchSalespersonStoreDetail,
+  fetchMySalespersonProfile, fetchSalespersonSummary, fetchSalespersonStores, fetchSalespersonStoreDetail,
   type SalespersonSummary, type SalespersonStore, type SalespersonStoreDetail,
 } from '@/lib/salespersonApi';
+import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 
 const won = (n: number | null | undefined) => `${(n ?? 0).toLocaleString('ko-KR')}원`;
@@ -16,10 +18,14 @@ export default function SalespersonDashboardPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SalespersonStoreDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const isAdmin = useAuthStore((s) => s.profile?.role === 'admin');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // 영업인 식별 + (미연결 시) 이메일 자동 연결 → 이후 summary/stores 가 본인 매장을 인식
+      const prof = await fetchMySalespersonProfile();
+      if (!prof.is_salesperson) { setSummary({ is_agent: false }); return; }
       const s = await fetchSalespersonSummary();
       setSummary(s);
       if (s.is_agent) setStores(await fetchSalespersonStores());
@@ -40,8 +46,13 @@ export default function SalespersonDashboardPage() {
   if (!summary?.is_agent) {
     return (
       <div className="mx-auto max-w-5xl p-4">
-        <div className="rounded-2xl bg-bg-card p-8 text-center text-sm text-ink-mute">
-          영업인 계정이 아니거나 영업인 코드가 연결되지 않았어요. 관리자에게 문의해주세요.
+        <div className="space-y-3 rounded-2xl bg-bg-card p-8 text-center text-sm text-ink-mute">
+          <p>영업인 계정만 접근할 수 있습니다.</p>
+          {isAdmin && (
+            <p className="text-[12px]">
+              관리자는 <Link to="/admin" className="font-semibold text-accent underline">관리자 페이지</Link>의 영업인 관리에서 전체 영업인·매출을 조회할 수 있어요.
+            </p>
+          )}
         </div>
       </div>
     );

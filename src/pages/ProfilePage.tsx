@@ -46,8 +46,8 @@ export default function ProfilePage() {
   useEffect(() => {
     let alive = true;
     import('@/lib/salespersonApi')
-      .then((m) => m.fetchSalespersonSummary())
-      .then((s) => { if (alive) setIsAgent(!!s.is_agent); })
+      .then((m) => m.fetchMySalespersonProfile())
+      .then((s) => { if (alive) setIsAgent(!!s.is_salesperson); })
       .catch(() => { /* 비영업인 — 무시 */ });
     return () => { alive = false; };
   }, []);
