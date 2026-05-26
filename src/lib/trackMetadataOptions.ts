@@ -167,3 +167,32 @@ export async function adminUpdateTrackTags(trackId: string, m: SelectedMeta): Pr
   });
   if (error) throw error;
 }
+
+export interface MetaApproveResult {
+  ok: boolean; approved: boolean; release_status: string;
+  blocked_reasons: string[]; warnings: string[]; guardrail_hard_declared: string[];
+  mismatch_score: number; lufs: number | null; open_flags: string[];
+  updated_metadata: Record<string, unknown>; note: string | null; recompute_diff: unknown;
+}
+/** 메타 수정(또는 AI 적용) + recompute + 검증 + 승인 통합. */
+export async function adminUpdateMetadataAndApprove(
+  trackId: string,
+  opts: { useAi?: boolean; meta?: SelectedMeta; approve?: boolean; immediate?: boolean | null; force?: boolean },
+): Promise<MetaApproveResult> {
+  const m = opts.meta;
+  const { data, error } = await supabase.rpc('admin_update_track_metadata_and_approve', {
+    p_track_id: trackId,
+    p_use_ai: opts.useAi ?? false,
+    p_genre_tags: m?.genre_tags ?? null,
+    p_mood_tags: m?.mood_tags ?? null,
+    p_business_type_tags: m?.business_type_tags ?? null,
+    p_vocal_type: m?.vocal_type ?? null,
+    p_dayparts: m?.recommended_dayparts ?? null,
+    p_language: m?.language || null,
+    p_tempo_feel: m?.tempo_feel || null,
+    p_approve: opts.approve ?? true,
+    p_immediate: opts.immediate ?? null,
+    p_force: opts.force ?? false,
+  });
+  if (error) throw error; return data as MetaApproveResult;
+}
