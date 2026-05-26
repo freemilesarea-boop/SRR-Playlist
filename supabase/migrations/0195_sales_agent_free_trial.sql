@@ -83,6 +83,27 @@ returns text language sql immutable as $$
 $$;
 
 -- ----------------------
+-- 2b) 체험 기능 런칭 설정 (단일 행)
+--    launched_at 이후 "신규 가입" 사업자만 체험 대상. 기존 회원은 절대 자동/수동 체험 X.
+--    additive only — 기존 데이터/구독/billing 에 영향 없음.
+-- ----------------------
+create table if not exists public.free_trial_config (
+  id boolean primary key default true check (id),
+  launched_at timestamptz not null default now(),
+  trial_days integer not null default 3
+);
+insert into public.free_trial_config (id) values (true) on conflict (id) do nothing;
+
+alter table public.free_trial_config enable row level security;
+drop policy if exists ftc_admin_all on public.free_trial_config;
+create policy ftc_admin_all on public.free_trial_config
+  for all using (
+    exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
+  ) with check (
+    exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
+  );
+
+-- ----------------------
 -- 3) start_sales_agent_trial — 사업자 본인이 호출. 모든 검증은 서버에서.
 -- ----------------------
 create or replace function public.start_sales_agent_trial(p_code text)
@@ -100,13 +121,15 @@ declare
   v_phone text;
   v_now timestamptz := now();
   v_ends timestamptz;
+  v_launched timestamptz;
+  v_days integer;
 begin
   if v_uid is null then
     raise exception 'not authenticated';
   end if;
 
   select u.id, u.account_type, u.membership_tier, u.phone,
-         u.free_trial_started_at, u.withdrawn_at
+         u.free_trial_started_at, u.withdrawn_at, u.created_at
     into v_user
   from public.users u where u.id = v_uid;
   if v_user.id is null then
@@ -116,6 +139,13 @@ begin
   -- 사업자 회원만 체험 가능
   if coalesce(v_user.account_type, 'individual') <> 'business' then
     raise exception '사업자 회원만 무료 체험을 이용할 수 있습니다.';
+  end if;
+
+  -- 신규 가입 사업자만 대상 — 런칭 이전 가입한 기존 회원은 제외 (자동/수동 모두 차단).
+  select launched_at, trial_days into v_launched, v_days from public.free_trial_config limit 1;
+  v_days := coalesce(v_days, 3);
+  if v_launched is not null and v_user.created_at < v_launched then
+    raise exception '기존 회원은 무료 체험 대상이 아닙니다.';
   end if;
 
   -- 이미 유료 회원이면 체험 불필요
@@ -151,7 +181,7 @@ begin
     raise exception '무료 체험은 이미 사용되었습니다.';
   end if;
 
-  v_ends := v_now + interval '3 days';
+  v_ends := v_now + make_interval(days => v_days);
 
   update public.users u set
     free_trial_started_at = v_now,
