@@ -217,7 +217,8 @@ export default function ProfilePage() {
           <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />
         )}
         {isAgent && (
-          <Row to="/sales" icon={<Store size={18} />} label="영업인 대시보드" />
+          <Row to="/sales" icon={<Store size={18} />} label="영업 매장 관리"
+            desc="내 영업 코드로 등록된 매장과 이용 현황, 매출을 확인합니다." />
         )}
         <Row to="/business" icon={<Settings size={18} />} label="사업자 모드 설정" />
       </div>
@@ -300,11 +301,14 @@ function WithdrawConfirmModal({
   );
 }
 
-function Row({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+function Row({ to, icon, label, desc }: { to: string; icon: React.ReactNode; label: string; desc?: string }) {
   return (
     <Link to={to} className="flex items-center gap-3 px-4 py-3.5 hover:bg-bg-hover">
       <span className="text-ink-mute">{icon}</span>
-      <span className="flex-1 text-sm">{label}</span>
+      <span className="flex-1">
+        <span className="block text-sm">{label}</span>
+        {desc && <span className="mt-0.5 block text-[11px] text-ink-dim">{desc}</span>}
+      </span>
       <ChevronRight size={16} className="text-ink-dim" />
     </Link>
   );
