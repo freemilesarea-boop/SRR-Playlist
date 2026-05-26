@@ -403,8 +403,55 @@ export interface UploadResult {
   transcode_status?: TranscodeStatus;
   /** 0195 — 업로드된 최종 파일(또는 원본)의 sha256. */
   sha256?: string | null;
+  /** 0196 — 업로드된 storage object key (orphan 추적용). 업로드 성공 시에만 set. */
+  storage_path?: string | null;
   /** 커버를 첨부했으나 업로드 실패 → 음원은 등록됨. UI 가 "커버 재등록 안내" 표시용 */
   cover_warning?: string;
+}
+
+/**
+ * 0196 — 업로드된 오디오 객체의 실제 재생 가능 여부 + 무결성(크기) 검증.
+ * submit 직전에 호출하여 "깨진 링크/절단 업로드"를 차단한다(재다운로드 없이 HEAD/Range).
+ *  - HTTP 4xx/5xx, content-length=0, 크기 불일치(절단) → 차단(ok:false)
+ *  - CORS/네트워크 예외 → inconclusive (차단하지 않음, 경고만)
+ */
+async function verifyUploadedAudio(
+  url: string,
+  expectedBytes: number | null,
+): Promise<{ ok: boolean; reason?: string; detail: Record<string, unknown> }> {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const head = await withTimeout(fetch(url, { method: 'HEAD' }), 15_000, 'audio HEAD timeout');
+      if (!head.ok) {
+        if (attempt === 0) { await sleep(900); continue; } // CDN 전파 지연 대비 1회 재시도
+        return { ok: false, reason: `재생 링크 응답 오류 (HTTP ${head.status})`, detail: { http: head.status } };
+      }
+      const clenRaw = head.headers.get('content-length');
+      const ctype = head.headers.get('content-type');
+      const len = clenRaw ? parseInt(clenRaw, 10) : null;
+      if (len === 0) return { ok: false, reason: '업로드 객체가 비어 있어요 (content-length 0)', detail: { content_length: 0 } };
+      // 8) checksum 대용: 저장된 객체 크기 == 업로드한 바이트 (절단/손상 탐지)
+      if (expectedBytes != null && len != null && len !== expectedBytes) {
+        return { ok: false, reason: `업로드 크기 불일치 (기대 ${expectedBytes} / 실제 ${len}) — 전송 중 손상 가능`, detail: { expected: expectedBytes, actual: len } };
+      }
+      if (ctype && !/audio|octet-stream|mpeg|mp4|wav|flac/i.test(ctype)) {
+        return { ok: false, reason: `예상치 못한 content-type (${ctype})`, detail: { content_type: ctype } };
+      }
+      // Range 지원(스트리밍/seek 필수) — 미지원은 경고만(차단하지 않음)
+      let rangeSupported = true;
+      try {
+        const rr = await withTimeout(fetch(url, { headers: { Range: 'bytes=0-0' } }), 15_000, 'range timeout');
+        rangeSupported = rr.status === 206;
+      } catch { rangeSupported = true; }
+      return { ok: true, detail: { content_length: len, content_type: ctype, range_supported: rangeSupported } };
+    } catch {
+      if (attempt === 0) { await sleep(900); continue; }
+      // fetch 자체 실패(CORS/네트워크) → 확정 불가 → 차단하지 않음(거짓 차단 방지)
+      return { ok: true, detail: { verify: 'inconclusive' } };
+    }
+  }
+  return { ok: true, detail: { verify: 'inconclusive' } };
 }
 
 /**
@@ -687,6 +734,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let audioSha256: string | null = null;
     // 0153 — 원본 파일명/실제 storage key 분리 기록 (storage key 에는 한국어 미포함)
     let audioStoragePath: string | null = null;
+    let audioUploaded = false; // 0196 — storage 업로드 성공 여부(orphan/검증 판단)
     let coverStoragePathVal: string | null = null;
     const originalFilename = input.audioFile?.name ?? null;
     // 0154 — 발매 게이트(duration 필수)용 메타. 업로드 후 set_artist_track_audio_meta 로 기록.
@@ -873,9 +921,22 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       }
       const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
       audioUrl = audioPub.publicUrl;
+      audioUploaded = true;
       log('audio upload ok', { url: audioUrl });
       uploadDebug.patch({ audioStatus: 'ok' });
       uploadDebug.step('audio-upload', 'ok', audioPath);
+
+      // 0196 — 업로드 직후 재생 가능/크기 무결성 검증 (submit 전 차단). 객체는 orphan cleanup 으로 회수.
+      stage = 'verify-audio';
+      const verify = await verifyUploadedAudio(audioUrl, audioContentLengthVal);
+      if (!verify.ok) {
+        log('audio verify FAIL', verify.detail);
+        uploadDebug.step('verify-audio', 'error', verify.reason ?? 'verify failed');
+        uploadDebug.finish({ ok: false, audioStatus: 'error', error: `verify-audio: ${verify.reason}` });
+        notify('failed', { reason: 'upload_failed', stage: 'verify-audio', storagePath: audioStoragePath, ...verify.detail });
+        return { ok: false, error: `업로드된 음원 검증 실패 — ${verify.reason ?? '재생 불가'}. 다시 시도해주세요.`, failure_reason: 'upload_failed', transcode_status: transcodeStatus, sha256: audioSha256, storage_path: audioStoragePath };
+      }
+      uploadDebug.step('verify-audio', 'ok', `len=${verify.detail.content_length ?? '?'} · range=${verify.detail.range_supported ?? '?'}`);
     } else {
       audioUrl = input.existingAudioUrl ?? '';
       if (!audioUrl) return { ok: false, error: '기존 음원 URL 을 확인할 수 없어요' };
@@ -1021,22 +1082,23 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       const tailDbg = [err.code, err.details, err.hint].filter(Boolean).join(' | ');
       uploadDebug.finish({ ok: false, rpcStatus: 'error', error: `submit-rpc: ${msg}${tailDbg ? ` (${tailDbg})` : ''}` });
       uploadDebug.step('submit-rpc', 'error', `${msg}${tailDbg ? ` (${tailDbg})` : ''}`);
-      notify('failed', { reason: 'submit_failed', stage: 'submit-rpc', code: err.code });
+      notify('failed', { reason: 'submit_failed', stage: 'submit-rpc', code: err.code, storagePath: audioUploaded ? audioStoragePath : null });
+      const orphanPath = audioUploaded ? audioStoragePath : null;
       if (msg.includes('row-level security') || err.code === '42501') {
         const recheck = await fetchArtistUploadEligibility().catch(() => null);
         if (recheck && !recheck.can_upload) {
-          return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}`, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
+          return { ok: false, error: `트랙 저장 실패 — ${formatEligibilityError(recheck.reasons)}`, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256, storage_path: orphanPath };
         }
       }
       if (err.code === 'PGRST203' || err.code === 'PGRST202') {
         return {
           ok: false,
           error: '음원 등록 함수 호출 실패 (서버 함수 시그니처 불일치). 잠시 후 다시 시도해주시고, 문제가 지속되면 관리자에게 문의해주세요.',
-          failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256,
+          failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256, storage_path: orphanPath,
         };
       }
       const tail = err.hint ?? err.details;
-      return { ok: false, error: tail ? `${msg} (${tail})` : msg, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256 };
+      return { ok: false, error: tail ? `${msg} (${tail})` : msg, failure_reason: 'submit_failed', transcode_status: transcodeStatus, sha256: audioSha256, storage_path: orphanPath };
     }
 
     // 5) track_code 조회 — 실패해도 OK, 트랙 저장은 이미 성공
@@ -1070,7 +1132,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     uploadDebug.finish({ ok: true, trackId, error: coverWarning });
     uploadDebug.step('done', coverWarning ? 'warn' : 'ok', coverWarning ?? '업로드 완료');
     notify('submitted', { track_id: trackId });
-    return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning, transcode_status: transcodeStatus, sha256: audioSha256 };
+    return { ok: true, track_id: trackId, track_code: trackCode, cover_warning: coverWarning, transcode_status: transcodeStatus, sha256: audioSha256, storage_path: audioUploaded ? audioStoragePath : null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log('FATAL at stage=' + stage, { err: msg });

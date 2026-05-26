@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, HardDrive, AlertTriangle, Trash2, FileWarning, Clock, Boxes, Search } from 'lucide-react';
+import { RefreshCw, HardDrive, AlertTriangle, Trash2, FileWarning, Clock, Boxes, Search, ShieldAlert, Unlock } from 'lucide-react';
 import {
   fetchUploadAudit,
   deleteOrphanObjects,
   adminFetchBatchIntegrity,
+  adminListUploadOrphans,
+  adminIntegrityFailedCount,
+  adminClearBatchIntegrity,
   type UploadAudit,
   type BatchIntegrityDetail,
   type BatchListItem,
+  type UploadOrphan,
 } from '@/lib/uploadAudit';
 import { toast } from '@/store/toastStore';
 
@@ -229,7 +233,69 @@ export default function UploadAuditPanel() {
         )}
 
       <BatchIntegritySection />
+      <UploadOrphanSection />
     </div>
+  );
+}
+
+function UploadOrphanSection() {
+  const [orphans, setOrphans] = useState<UploadOrphan[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setOrphans(await adminListUploadOrphans()); setSel({}); }
+    catch (e) { toast.error(`orphan 조회 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  async function deleteSelected() {
+    const names = orphans.map((o) => o.storage_path).filter((n) => sel[n]);
+    if (names.length === 0) { toast.info('삭제할 orphan 을 선택해주세요.'); return; }
+    if (!window.confirm(`선택한 ${names.length}개 orphan 음원(업로드됐으나 트랙 미연결, 24h+)을 audio 버킷에서 영구 삭제할까요? (되돌릴 수 없음)`)) return;
+    setDeleting(true);
+    try {
+      const { removed } = await deleteOrphanObjects('audio', names);
+      toast.success(`${removed}개 orphan 삭제 (스토리지 비용 회수)`);
+      await load();
+    } catch (e) { toast.error(`삭제 실패: ${(e as Error).message}`); }
+    finally { setDeleting(false); }
+  }
+
+  return (
+    <Section title={`Orphan 업로드 (submit 실패 잔여물 · ${orphans.length})`} icon={<Trash2 size={15} className="text-amber-500" />}>
+      <p className="mb-2 text-[11px] text-ink-dim">
+        storage 업로드는 됐지만 트랙 연결 없이 24시간 이상 경과한 객체입니다(submit 실패/중단 잔여물). 선택 삭제로 스토리지 비용 누수를 막습니다.
+      </p>
+      {orphans.length === 0 ? (
+        <p className="py-3 text-center text-xs text-ink-dim">{loading ? '불러오는 중…' : 'orphan 없음'}</p>
+      ) : (
+        <>
+          <div className="mb-2 flex gap-2">
+            <button onClick={() => setSel(Object.fromEntries(orphans.map((o) => [o.storage_path, true])))} className="rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">전체 선택</button>
+            <button onClick={() => void deleteSelected()} disabled={deleting} className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-500/20 disabled:opacity-50">
+              <Trash2 size={12} /> 선택 삭제
+            </button>
+            <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-soft px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
+          </div>
+          <ul className="max-h-72 space-y-0.5 overflow-y-auto text-xs">
+            {orphans.map((o) => (
+              <li key={o.storage_path} className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-ink/5">
+                <input type="checkbox" checked={!!sel[o.storage_path]} onChange={() => setSel((s) => ({ ...s, [o.storage_path]: !s[o.storage_path] }))} />
+                <span className="flex-1 truncate font-mono text-[10px]">{o.storage_path}</span>
+                <span className="shrink-0 text-[10px] text-ink-dim">{o.original_filename ?? ''}</span>
+                <span className="shrink-0 text-[10px] text-ink-dim">{fmtBytes(o.file_size)}</span>
+                <span className="shrink-0 text-[10px] text-ink-dim">{o.failure_reason ?? ''}</span>
+                <span className="shrink-0 text-[10px] text-ink-dim">{fmtTime(o.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -238,17 +304,29 @@ function BatchIntegritySection() {
   const [detail, setDetail] = useState<BatchIntegrityDetail | null>(null);
   const [batches, setBatches] = useState<BatchListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
 
   const loadRecent = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetchBatchIntegrity({});
+      const [res, cnt] = await Promise.all([adminFetchBatchIntegrity({}), adminIntegrityFailedCount().catch(() => 0)]);
       if ('batches' in res) { setBatches(res.batches); setDetail(null); }
+      setFailedCount(cnt);
     } catch (e) {
       toast.error(`배치 목록 조회 실패: ${(e as Error).message}`);
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { void loadRecent(); }, [loadRecent]);
+
+  async function clearIntegrity(batchId: string) {
+    if (!window.confirm(`batch ${batchId.slice(0, 8)} 의 무결성 잠금을 해제(검토 완료)할까요? 사용자가 다시 제출할 수 있게 됩니다.`)) return;
+    try {
+      await adminClearBatchIntegrity(batchId);
+      toast.success('무결성 잠금 해제됨 (admin_action_log 기록)');
+      await loadRecent();
+      if (detail?.batch?.id === batchId) await lookup(batchId);
+    } catch (e) { toast.error(`해제 실패: ${(e as Error).message}`); }
+  }
 
   async function lookup(value: string) {
     const v = value.trim();
@@ -266,9 +344,13 @@ function BatchIntegritySection() {
 
   return (
     <Section title="업로드 무결성 (batch 추적)" icon={<Boxes size={15} className="text-accent" />}>
-      <p className="mb-2 text-[11px] text-ink-dim">
+      <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-dim">
         batch_id 또는 track_id 로 업로드 무결성 로그(곡별 단계/변환/실패 사유/생성 트랙)를 조회합니다.
-        무결성 점검(integrity_failed) 배치는 아래에서 확인할 수 있어요.
+        {failedCount > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-600">
+            <ShieldAlert size={11} /> integrity_failed {failedCount}건 — 검토 필요
+          </span>
+        )}
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex flex-1 items-center gap-1.5 rounded-lg bg-bg-soft px-2.5 py-1.5 ring-1 ring-line/10">
@@ -290,6 +372,11 @@ function BatchIntegritySection() {
               {detail.batch?.status ?? '?'}
             </span>
             <span className="text-ink-dim">{detail.owner_email ?? ''} · {detail.batch?.total_tracks ?? 0}곡</span>
+            {detail.batch?.status === 'integrity_failed' && detail.batch?.id && (
+              <button onClick={() => void clearIntegrity(detail.batch!.id)} className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300">
+                <Unlock size={11} /> 무결성 잠금 해제
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[10px]">

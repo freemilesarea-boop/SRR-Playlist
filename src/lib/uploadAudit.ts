@@ -92,6 +92,30 @@ export async function adminFetchBatchIntegrity(opts: { batchId?: string; trackId
   return data as BatchIntegrityDetail | { batches: BatchListItem[] };
 }
 
+// ---- 0196 orphan storage / integrity_failed 관리 ----
+export interface UploadOrphan {
+  storage_path: string; batch_id: string; client_track_id: string;
+  original_filename: string | null; file_size: number | null; failure_reason: string | null;
+  created_at: string; owner_email: string | null;
+}
+
+export async function adminListUploadOrphans(): Promise<UploadOrphan[]> {
+  const { data, error } = await supabase.rpc('admin_list_upload_orphans', { p_limit: 200 });
+  if (error) throw error;
+  return ((data as { orphans?: UploadOrphan[] })?.orphans ?? []) as UploadOrphan[];
+}
+
+export async function adminIntegrityFailedCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_integrity_failed_count');
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+export async function adminClearBatchIntegrity(batchId: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_clear_batch_integrity', { p_batch_id: batchId, p_note: note ?? null });
+  if (error) throw error;
+}
+
 /**
  * orphan storage object 삭제 — 어떤 track 도 참조하지 않는 파일만 (audit 결과 기준).
  * storage API(remove)로 실제 바이너리까지 삭제. 관리자가 명시적으로 선택/확인한 것만.

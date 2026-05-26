@@ -38,7 +38,9 @@ import {
 } from '@/lib/uploadIntegrity';
 
 const MAX_TRACKS = 30;
-const CONCURRENCY = 3;
+// 업로드(네트워크) 동시성. transcode(CPU/메모리)는 audioTranscode 의 전역 mutex 로 직렬화되므로
+// 여기 동시성은 업로드/검수 파이프라인용. iOS 메모리(동시 decode) 안정을 위해 보수적으로 3.
+const UPLOAD_CONCURRENCY = 3;
 
 function defaultReleaseDate(): string {
   const d = new Date();
@@ -324,9 +326,9 @@ export default function ArtistBatchUploadForm({
           transcodeStatus: ev.transcodeStatus,
           failureReason: (ev.detail?.reason as string | undefined) ?? undefined,
         });
-        // 서버 기록은 부하/경합을 줄이기 위해 핵심 전이에서만 (시작/변환/실패).
-        // 'submitted' 최종 확정은 runPool 에서 sha+track_id 와 함께 1회 기록.
-        if (ev.status === 'preparing' || ev.status === 'transcoding' || ev.status === 'failed') {
+        // 서버 기록은 부하/경합을 줄이기 위해 진행 전이(시작/변환)만.
+        // 종료(submitted/failed)는 runPool 에서 sha/track_id/storage_path 와 함께 1회 확정 기록.
+        if (ev.status === 'preparing' || ev.status === 'transcoding') {
           void recordUploadIntegrity({
             batchId,
             clientTrackId: t.clientTrackId,
@@ -334,10 +336,8 @@ export default function ArtistBatchUploadForm({
             originalFilename: t.file?.name ?? null,
             fileSize: t.file?.size ?? null,
             mimeType: t.file?.type ?? null,
-            sha256: ev.sha256 ?? null,
             transcodeStatus: ev.transcodeStatus ?? null,
             uploadStatus: ev.status,
-            failureReason: (ev.detail?.reason as FailureReason | undefined) ?? null,
             detail: ev.detail ?? null,
           });
         }
@@ -372,24 +372,36 @@ export default function ArtistBatchUploadForm({
             if (res.track_id) {
               try { await setTrackSelectedMetadata(res.track_id, meta); }
               catch (me) { console.warn('[batch] set metadata 실패', me); }
-              // 최종 sha + track_id 를 무결성 로그에 확정 기록 (await — 무결성 점검 전 커밋 보장)
+              // 최종 sha + track_id + storage_path 확정 기록 (await — 무결성 점검 전 커밋 보장)
               await recordUploadIntegrity({
                 batchId, clientTrackId: t.clientTrackId, browserSessionId: sessionId,
                 sha256: res.sha256 ?? null, transcodeStatus: res.transcode_status ?? null,
+                storagePath: res.storage_path ?? null,
                 uploadStatus: 'submitted', createdTrackId: res.track_id,
               });
             }
             patchTrack(t.clientTrackId, { status: 'submitted', trackCode: res.track_code, trackId: res.track_id, transcodeStatus: res.transcode_status, failureReason: null, error: undefined });
             if (res.cover_warning) toast.warning(`${t.title}: ${res.cover_warning}`);
           } else {
+            // 실패 확정 기록 (사유 + storage_path → orphan 추적)
+            void recordUploadIntegrity({
+              batchId, clientTrackId: t.clientTrackId, browserSessionId: sessionId,
+              sha256: res.sha256 ?? null, transcodeStatus: res.transcode_status ?? null,
+              storagePath: res.storage_path ?? null,
+              uploadStatus: 'failed', failureReason: (res.failure_reason as FailureReason | undefined) ?? 'unknown',
+            });
             patchTrack(t.clientTrackId, { status: 'failed', error: res.error ?? '업로드 실패', failureReason: res.failure_reason ?? 'unknown', transcodeStatus: res.transcode_status });
           }
         } catch (e) {
+          void recordUploadIntegrity({
+            batchId, clientTrackId: t.clientTrackId, browserSessionId: sessionId,
+            uploadStatus: 'failed', failureReason: 'unknown',
+          });
           patchTrack(t.clientTrackId, { status: 'failed', error: e instanceof Error ? e.message : String(e), failureReason: 'unknown' });
         }
       }
     };
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, () => worker()));
   }
 
   async function runBatch(targets: TrackRow[]) {
@@ -671,7 +683,7 @@ export default function ArtistBatchUploadForm({
           {submitting ? `업로드 중… (${inFlightCount}곡 진행 중)` : `총 ${tracks.filter((t) => t.status !== 'submitted').length}곡 제출`}
         </button>
         <p className="text-[11px] text-ink-dim">
-          동시 업로드 {CONCURRENCY}개씩 순차 처리되며, 각 곡은 독립적으로 성공/실패합니다.
+          동시 업로드 {UPLOAD_CONCURRENCY}개씩 처리되며(변환은 메모리 보호를 위해 순차), 각 곡은 독립적으로 성공/실패합니다.
           변환 실패 곡은 격리되어 사유와 함께 표시되고, 실패한 곡만 재시도할 수 있어요.
         </p>
         {(submitting || inFlightCount > 0) && (

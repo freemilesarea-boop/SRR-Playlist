@@ -54,6 +54,20 @@ function ffmpegBase(): string {
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
 
+// ffmpeg.wasm 인스턴스는 단일 워커 — 동시 exec 가 불가(파일명 충돌/메모리 손상).
+// 따라서 transcode 는 전역 mutex 로 직렬화한다. (대량 업로드 race 방지)
+let transcodeChain: Promise<unknown> = Promise.resolve();
+function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const next = transcodeChain.then(fn, fn);
+  // 체인이 reject 로 끊기지 않도록 swallow (각 호출의 결과는 next 로 전달)
+  transcodeChain = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+// 메모리 누수 방지: N곡마다 인스턴스를 폐기/재로드하여 wasm heap 을 회수(iOS/iPad 크래시 방지).
+let transcodeSinceLoad = 0;
+const RECYCLE_EVERY = 5;
+
 /** 인스턴스 1회만 로드. 동시 호출은 같은 promise 공유. 로컬 asset 만 사용(단계별 에러 메시지). */
 async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
@@ -104,6 +118,8 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
       // eslint-disable-next-line no-console
       console.info('[ffmpeg] load() start (module worker 생성 + ESM core import)');
       await ff.load({ coreURL, wasmURL });
+      // load 가 blob URL 을 소비한 뒤이므로 즉시 revoke (blob 메모리 회수)
+      try { URL.revokeObjectURL(coreURL); URL.revokeObjectURL(wasmURL); } catch { /* noop */ }
       // eslint-disable-next-line no-console
       console.info('[ffmpeg] load success (worker + ESM core + wasm)');
     } catch (e) {
@@ -144,6 +160,11 @@ export async function transcodeToStandardMp3(
   file: File,
   options: TranscodeOptions = {},
 ): Promise<File> {
+  // 전역 mutex 로 직렬화 — 동시에 두 곡이 같은 ffmpeg 인스턴스/파일명을 건드리지 못하게 한다.
+  return runExclusive(() => transcodeOneExclusive(file, options));
+}
+
+async function transcodeOneExclusive(file: File, options: TranscodeOptions): Promise<File> {
   const {
     onProgress,
     onLog,
@@ -160,6 +181,7 @@ export async function transcodeToStandardMp3(
   };
   ff.on('progress', progressHandler);
 
+  // 직렬화되어 있으므로 고정 파일명 사용 안전. 그래도 입력 확장자는 보존.
   const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
   const inputName = `input.${ext.replace(/[^a-z0-9]/g, '') || 'bin'}`;
   const outputName = 'output.mp3';
@@ -190,22 +212,27 @@ export async function transcodeToStandardMp3(
       throw new Error('ffmpeg readFile returned non-binary data');
     }
 
-    // ffmpeg FS 정리 (성공 경로)
+    // ffmpeg FS 정리 (성공 경로) — 입력/출력 모두 삭제하여 wasm FS 메모리 회수
     try { await ff.deleteFile(inputName); } catch { /* noop */ }
     try { await ff.deleteFile(outputName); } catch { /* noop */ }
     try { ff.off('progress', progressHandler); } catch { /* noop */ }
 
     const baseName = file.name.replace(/\.[^.]+$/, '') || 'audio';
-    // 파일명 안전화 (영문/한글/숫자/하이픈/언더스코어만)
     const safeBase = baseName.replace(/[^\p{L}\p{N}\-_]/gu, '_').slice(0, 60) || 'audio';
 
     // 깨끗한 ArrayBuffer 로 복사 (Uint8Array<SharedArrayBuffer> → Uint8Array<ArrayBuffer>)
     const cleanBytes = new Uint8Array(data.byteLength);
     cleanBytes.set(data);
-    return new File([cleanBytes], `${safeBase}_standard.mp3`, { type: 'audio/mpeg' });
+    const out = new File([cleanBytes], `${safeBase}_standard.mp3`, { type: 'audio/mpeg' });
+
+    // 메모리 누수 방지: N곡마다 인스턴스 폐기(다음 호출 시 재로드). wasm heap 회수.
+    transcodeSinceLoad += 1;
+    if (transcodeSinceLoad >= RECYCLE_EVERY) {
+      await cancelTranscode();
+    }
+    return out;
   } catch (e) {
-    // 'memory access out of bounds' 등 RuntimeError 후엔 wasm 메모리가 손상되어
-    // 같은 인스턴스로 다음 곡을 변환하면 연쇄 실패한다 → 인스턴스를 폐기(다음 곡은 새 인스턴스).
+    // RuntimeError 후 wasm 메모리 손상 → 인스턴스 폐기(다음 곡은 새 인스턴스).
     try { ff.off('progress', progressHandler); } catch { /* noop */ }
     await cancelTranscode();
     throw e;
@@ -222,4 +249,5 @@ export async function cancelTranscode(): Promise<void> {
   }
   ffmpegInstance = null;
   loadPromise = null;
+  transcodeSinceLoad = 0;
 }

@@ -110,6 +110,8 @@ export interface RecordIntegrityInput {
   uploadStatus?: UploadStatus | null;
   failureReason?: FailureReason | null;
   createdTrackId?: string | null;
+  storagePath?: string | null;
+  coverStoragePath?: string | null;
   detail?: Record<string, unknown> | null;
 }
 
@@ -129,6 +131,8 @@ export async function recordUploadIntegrity(input: RecordIntegrityInput): Promis
       p_failure_reason: input.failureReason ?? null,
       p_created_track_id: input.createdTrackId ?? null,
       p_detail: input.detail ?? null,
+      p_storage_path: input.storagePath ?? null,
+      p_cover_storage_path: input.coverStoragePath ?? null,
     });
   } catch (e) {
     // best-effort — 무결성 로깅 실패가 업로드 자체를 막지 않는다.
