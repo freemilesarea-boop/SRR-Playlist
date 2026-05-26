@@ -1346,6 +1346,7 @@ function RereviewTab() {
   const FILTERS: [string, string][] = [
     ['needs_re_review', '재검수 필요'], ['high_risk', '고위험'], ['quality_review_required', '품질 재검수'],
     ['guardrail_hard', '매장 차단'], ['mismatch_high', '불일치 high'], ['low_trust', '저신뢰'],
+    ['metadata_cleanup_required', '메타 정리/재분류'],
     ['store:hospital', '병원 충돌'], ['store:gym', '헬스장 충돌'], ['store:yoga', '요가 충돌'], ['store:kids_cafe', '키즈카페 충돌'],
     ['all', '전체'],
   ];
