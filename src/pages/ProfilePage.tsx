@@ -6,6 +6,7 @@ import {
   LogOut,
   ChevronRight,
   Shield,
+  Store,
   Sun,
   Moon,
   Monitor,
@@ -40,6 +41,16 @@ export default function ProfilePage() {
   const { profile, user, signOut } = useAuthStore();
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [isAgent, setIsAgent] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    import('@/lib/salespersonApi')
+      .then((m) => m.fetchSalespersonSummary())
+      .then((s) => { if (alive) setIsAgent(!!s.is_agent); })
+      .catch(() => { /* 비영업인 — 무시 */ });
+    return () => { alive = false; };
+  }, []);
 
   async function handleConfirmWithdraw() {
     setWithdrawing(true);
@@ -204,6 +215,9 @@ export default function ProfilePage() {
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
         {profile?.role === 'admin' && (
           <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />
+        )}
+        {isAgent && (
+          <Row to="/sales" icon={<Store size={18} />} label="영업인 대시보드" />
         )}
         <Row to="/business" icon={<Settings size={18} />} label="사업자 모드 설정" />
       </div>
