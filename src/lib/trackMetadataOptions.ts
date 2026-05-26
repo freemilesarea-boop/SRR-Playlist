@@ -78,7 +78,15 @@ export const DAYPART_OPTIONS: Option[] = [
   { value: 'all', label: '전체 시간대' },
 ];
 
-export const META_CAPS = { genre: 3, mood: 5, business: 5, daypart: 3 } as const;
+/** 체감 템포 (단일, 필수) — 업로더가 직접 선택. 실제 BPM 과 다를 수 있는 큐레이션 참고값. */
+export const TEMPO_OPTIONS: Option[] = [
+  { value: 'slow', label: '느림' },
+  { value: 'medium', label: '보통' },
+  { value: 'fast', label: '빠름' },
+];
+
+// 신규 입력 정책: 장르 1 / 무드 2 / 매장 3 / 시간대 3
+export const META_CAPS = { genre: 1, mood: 2, business: 3, daypart: 3 } as const;
 
 export interface SelectedMeta {
   genre_tags: string[];
@@ -88,23 +96,26 @@ export interface SelectedMeta {
   recommended_dayparts: string[];
   /** 언어권 (선택) */
   language?: string;
+  /** 체감 템포 slow/medium/fast (필수) */
+  tempo_feel?: string;
 }
 
 export function emptySelectedMeta(): SelectedMeta {
-  return { genre_tags: [], mood_tags: [], business_type_tags: [], vocal_type: '', recommended_dayparts: [], language: '' };
+  return { genre_tags: [], mood_tags: [], business_type_tags: [], vocal_type: '', recommended_dayparts: [], language: '', tempo_feel: '' };
 }
 
 /** 제출 전 검증 — 누락 시 메시지 반환, 통과 시 null. (언어는 선택 항목 — 검증 제외) */
 export function validateSelectedMeta(m: SelectedMeta): string | null {
-  if (m.genre_tags.length === 0) return '장르를 1개 이상 선택해주세요';
-  if (m.genre_tags.length > META_CAPS.genre) return `장르는 최대 ${META_CAPS.genre}개`;
+  if (m.genre_tags.length === 0) return '장르를 선택해주세요';
+  if (m.genre_tags.length > META_CAPS.genre) return '장르는 1개만 선택할 수 있습니다';
   if (m.mood_tags.length === 0) return '분위기를 1개 이상 선택해주세요';
-  if (m.mood_tags.length > META_CAPS.mood) return `분위기는 최대 ${META_CAPS.mood}개`;
+  if (m.mood_tags.length > META_CAPS.mood) return '분위기는 최대 2개까지 선택할 수 있습니다';
   if (m.business_type_tags.length === 0) return '추천 매장을 1개 이상 선택해주세요';
-  if (m.business_type_tags.length > META_CAPS.business) return `추천 매장은 최대 ${META_CAPS.business}개`;
+  if (m.business_type_tags.length > META_CAPS.business) return '추천 매장은 최대 3개까지 선택할 수 있습니다';
   if (!m.vocal_type) return '보컬 유형을 선택해주세요';
   if (m.recommended_dayparts.length === 0) return '추천 시간대를 1개 이상 선택해주세요';
   if (m.recommended_dayparts.length > META_CAPS.daypart) return `추천 시간대는 최대 ${META_CAPS.daypart}개`;
+  if (!m.tempo_feel || !['slow', 'medium', 'fast'].includes(m.tempo_feel)) return '곡의 체감 템포를 선택해주세요';
   return null;
 }
 
@@ -121,6 +132,7 @@ export async function setTrackSelectedMetadata(trackId: string, m: SelectedMeta)
     p_vocal_type: m.vocal_type,
     p_dayparts: m.recommended_dayparts,
     p_language: m.language || null,
+    p_tempo_feel: m.tempo_feel || null,
   });
   if (error) throw error;
 }
@@ -137,6 +149,7 @@ export async function adminGetTrackTags(trackId: string): Promise<SelectedMeta &
     vocal_type: (d.vocal_type as string) ?? '',
     recommended_dayparts: (d.recommended_dayparts as string[]) ?? [],
     language: (d.language as string) ?? '',
+    tempo_feel: (d.tempo_feel as string) ?? '',
     metadata_source: (d.metadata_source as string) ?? '',
   };
 }
@@ -150,6 +163,7 @@ export async function adminUpdateTrackTags(trackId: string, m: SelectedMeta): Pr
     p_vocal_type: m.vocal_type,
     p_dayparts: m.recommended_dayparts,
     p_language: m.language || null,
+    p_tempo_feel: m.tempo_feel || null,
   });
   if (error) throw error;
 }
