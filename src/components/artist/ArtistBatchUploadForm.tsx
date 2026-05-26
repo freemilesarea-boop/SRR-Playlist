@@ -21,6 +21,7 @@ import {
   getCurrentUserFast,
   formatEligibilityError,
   getMyMetadataTrust,
+  computeAudioSha256,
   type ReleaseType,
   type ArtistProfile,
 } from '@/lib/artistApi';
@@ -83,6 +84,36 @@ interface TrackRow {
   status: TrackStatus;
   trackCode?: string;
   error?: string;
+  /** 0196 — batch 내 동일 콘텐츠 사전 차단/재사용용 원본 SHA-256 */
+  audioSha256?: string;
+}
+
+// 0196 — 새로고침 복구용 manifest (File 은 보관 불가 → 메타/상태만 저장).
+const RECOVERY_KEY = 'srr-batch-upload-manifest';
+interface RecoveryItem { clientTrackId: string; filename: string; title: string; status: TrackStatus }
+interface RecoveryManifest { batchId: string; savedAt: number; items: RecoveryItem[] }
+
+function saveRecoveryManifest(batchId: string, rows: TrackRow[]): void {
+  try {
+    const m: RecoveryManifest = {
+      batchId, savedAt: Date.now(),
+      items: rows.map((t) => ({ clientTrackId: t.id, filename: t.file.name, title: t.title, status: t.status })),
+    };
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(m));
+  } catch { /* noop */ }
+}
+function readRecoveryManifest(): RecoveryManifest | null {
+  try {
+    const raw = localStorage.getItem(RECOVERY_KEY);
+    if (!raw) return null;
+    const m = JSON.parse(raw) as RecoveryManifest;
+    if (!m.batchId || !Array.isArray(m.items)) return null;
+    if (Date.now() - (m.savedAt ?? 0) > 24 * 3600 * 1000) return null; // 24h 초과 무시
+    return m;
+  } catch { return null; }
+}
+function clearRecoveryManifest(): void {
+  try { localStorage.removeItem(RECOVERY_KEY); } catch { /* noop */ }
 }
 
 function initialCommon(): CommonMeta {
@@ -127,7 +158,28 @@ export default function ArtistBatchUploadForm({
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // 0196 — 무결성 경고(차단) + 새로고침 복구 배너
+  const [integrityWarn, setIntegrityWarn] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState<{ registered: number; pending: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 0196 — 새로고침 복구: 마운트 시 이전 미완료 batch 가 있으면 서버와 대조해 안내.
+  useEffect(() => {
+    const m = readRecoveryManifest();
+    if (!m) return;
+    const incomplete = m.items.filter((it) => it.status !== 'success');
+    if (incomplete.length === 0) { clearRecoveryManifest(); return; }
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('get_my_batch_status', { p_batch_id: m.batchId });
+        const rows = (data ?? []) as Array<{ client_track_id: string; upload_status: string }>;
+        const registered = new Set(rows.filter((r) => r.upload_status === 'success').map((r) => r.client_track_id));
+        const pending = incomplete.filter((it) => !registered.has(it.clientTrackId)).map((it) => it.filename);
+        if (pending.length > 0) setRecovery({ registered: registered.size, pending });
+        else clearRecoveryManifest();
+      } catch { /* best-effort: 서버 확인 실패 시 배너 생략 */ }
+    })();
+  }, []);
 
   const successCount = useMemo(() => tracks.filter((t) => t.status === 'success').length, [tracks]);
   const failedCount = useMemo(() => tracks.filter((t) => t.status === 'failed').length, [tracks]);
@@ -258,11 +310,13 @@ export default function ArtistBatchUploadForm({
     t: TrackRow,
     profile: ArtistProfile | null,
     batchId: string,
+    shaById: Map<string, string>,
   ): Promise<{ ok: boolean; error?: string; track_id?: string; track_code?: string; cover_warning?: string }> {
     return uploadArtistTrack({
       batchId,
       clientTrackId: t.id,
       sourceFingerprint: t.fingerprint,
+      precomputedAudioSha256: shaById.get(t.id) ?? t.audioSha256 ?? null,
       title: t.title.trim(),
       artist: (t.artist.trim() || common.artist.trim()) || undefined,
       album_name: common.albumName.trim(),
@@ -313,7 +367,53 @@ export default function ArtistBatchUploadForm({
     }
   }
 
-  async function runPool(ids: string[], profile: ArtistProfile | null, batchId: string) {
+  /**
+   * 0196 — 업로드 직전 batch 내 동일 오디오 콘텐츠(SHA-256) 사전 차단.
+   * 서로 다른 client_track_id 가 동일 hash → 첫 곡만 업로드, 나머지는 즉시 failed + 서버 로그.
+   * 반환: 실제 업로드할 id 목록 + sha 맵(중복 해싱 방지용).
+   */
+  async function hashAndDedup(ids: string[], batchId: string): Promise<{ uploadIds: string[]; shaById: Map<string, string> }> {
+    const shaById = new Map<string, string>();
+    const seen = new Map<string, string>(); // sha → first id
+    const uploadIds: string[] = [];
+    const dupIds: string[] = [];
+    const rowsById = new Map(tracks.map((t) => [t.id, t] as const));
+    // 순차 해싱 (메모리/CPU 안정성). SHA-256(100MB)는 수백 ms 수준.
+    for (const id of ids) {
+      const t = rowsById.get(id);
+      if (!t) continue;
+      let sha: string | null = t.audioSha256 ?? null;
+      if (!sha) {
+        try { sha = await computeAudioSha256(t.file); }
+        catch { sha = null; } // 해싱 실패 시 차단하지 않고 업로드 진행(서버가 재계산)
+      }
+      if (!sha) { uploadIds.push(id); continue; }
+      shaById.set(id, sha);
+      const first = seen.get(sha);
+      if (first && first !== id) {
+        dupIds.push(id);
+        patchTrack(id, { status: 'failed', error: '동일한 오디오 콘텐츠가 이 배치의 다른 곡과 중복됩니다 (업로드 차단).' });
+        // 관리자 로그 기록 (best-effort)
+        void supabase.rpc('record_upload_integrity2', {
+          p_batch_id: batchId, p_client_track_id: id, p_track_id: null,
+          p_original_filename: t.file.name, p_source_fingerprint: t.fingerprint,
+          p_original_sha256: sha, p_final_sha256: null, p_storage_path: null,
+          p_duration: null, p_transcoded: false, p_status: 'failed',
+          p_error: 'duplicate_audio_in_batch', p_original_filesize: t.file.size,
+          p_final_filesize: null, p_transcoding_status: null,
+        }).then(undefined, () => {});
+      } else {
+        seen.set(sha, id);
+        uploadIds.push(id);
+      }
+    }
+    if (dupIds.length > 0) {
+      toast.warning(`동일 오디오 콘텐츠 ${dupIds.length}곡을 중복으로 차단했어요 (파일명만 다르고 내용이 같음).`);
+    }
+    return { uploadIds, shaById };
+  }
+
+  async function runPool(ids: string[], profile: ArtistProfile | null, batchId: string, shaById: Map<string, string>) {
     const queue = [...ids];
     const worker = async () => {
       while (queue.length > 0) {
@@ -323,7 +423,7 @@ export default function ArtistBatchUploadForm({
         if (!t) continue;
         patchTrack(id, { status: 'uploading', error: undefined });
         try {
-          const res = await uploadOne(t, profile, batchId);
+          const res = await uploadOne(t, profile, batchId, shaById);
           if (res.ok) {
             // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
             if (res.track_id) {
@@ -369,9 +469,12 @@ export default function ArtistBatchUploadForm({
           targets.includes(t.id) ? { ...t, status: 'queued' as TrackStatus, error: undefined } : t,
         ),
       );
+      setIntegrityWarn(null);
       const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
-      await runPool(targets, profile, batchId);
-      // 결과 요약 (state 가 최신이 아닐 수 있으므로 ref 대신 setter 콜백 사용)
+      // 0196 — 업로드 전 batch 내 동일 콘텐츠 사전 차단
+      const { uploadIds, shaById } = await hashAndDedup(targets, batchId);
+      if (uploadIds.length > 0) await runPool(uploadIds, profile, batchId, shaById);
+      // 결과 요약 + 새로고침 복구 manifest 저장 (state 최신값은 setter 콜백으로 확보)
       setTracks((prev) => {
         const ok = prev.filter((t) => t.status === 'success').length;
         const ng = prev.filter((t) => t.status === 'failed').length;
@@ -380,17 +483,31 @@ export default function ArtistBatchUploadForm({
         } else {
           toast.warning(`성공 ${ok}곡 · 실패 ${ng}곡. 실패 항목 확인 후 재시도해주세요.`);
         }
+        saveRecoveryManifest(batchId, prev);
         return prev;
       });
-      // 0194 — 업로드 무결성 self-check: 성공곡 = distinct(콘텐츠 sha) = distinct(path) 검증
+      // 0194/0196 — 업로드 무결성 self-check: 성공곡 = distinct(콘텐츠 sha) = distinct(path) + NULL sha 0
+      let integrityOk = true;
       try {
         const { data } = await supabase.rpc('check_batch_integrity', { p_batch_id: batchId });
-        const r = data as { ok?: boolean; success_count?: number; distinct_sha?: number } | null;
+        const r = data as { ok?: boolean; success_count?: number; null_sha_count?: number; duplicate_groups?: unknown[] } | null;
         if (r && r.success_count && r.ok === false) {
-          toast.error('업로드 무결성 오류가 감지되었습니다 (오디오 콘텐츠 중복 의심). 관리자에게 문의하거나 다시 시도해주세요.');
+          integrityOk = false;
+          const dupN = Array.isArray(r.duplicate_groups) ? r.duplicate_groups.length : 0;
+          setIntegrityWarn(
+            `업로드 무결성 검증 실패 — 등록된 곡과 실제 오디오 매핑에 이상이 의심됩니다`
+            + `${dupN > 0 ? ` (콘텐츠 중복 그룹 ${dupN}건)` : ''}`
+            + `${r.null_sha_count ? ` (콘텐츠 해시 누락 ${r.null_sha_count}건)` : ''}.`
+            + ` 아래 대조 리스트를 확인하고, 의심 곡은 내 음원 목록에서 검토/삭제 후 다시 업로드해주세요.`,
+          );
+          toast.error('업로드 무결성 오류가 감지되었습니다. 대조 리스트를 확인해주세요.');
         }
-      } catch { /* best-effort */ }
-      await onUploaded();
+      } catch { /* best-effort: 검증 실패 시 통과로 간주하지 않고 경고만 */ }
+      // 무결성 이상 시 자동 새로고침/닫기(onUploaded) 차단 — 사용자가 직접 검토하도록.
+      if (integrityOk) {
+        clearRecoveryManifest();
+        await onUploaded();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -417,7 +534,8 @@ export default function ArtistBatchUploadForm({
         ),
       );
       const batchId = (() => { try { return crypto.randomUUID(); } catch { return `b_${Date.now()}`; } })();
-      await runPool(failedIds, profile, batchId);
+      const { uploadIds, shaById } = await hashAndDedup(failedIds, batchId);
+      if (uploadIds.length > 0) await runPool(uploadIds, profile, batchId, shaById);
       await onUploaded();
     } finally {
       setSubmitting(false);
@@ -436,6 +554,29 @@ export default function ArtistBatchUploadForm({
         <div className={`rounded-xl p-3 text-[11px] leading-relaxed ${trust.tier === 'low' ? 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-400/20' : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-400/20'}`}>
           <b>메타데이터 정확도 안내 (신뢰도 {trust.trust_score})</b>
           <p className="mt-0.5">{trust.guidance}</p>
+        </div>
+      )}
+      {recovery && (
+        <div className="rounded-xl bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-700 ring-1 ring-amber-400/30 dark:text-amber-200">
+          <b>이전 업로드가 완료되지 않았어요.</b>
+          <p className="mt-0.5">
+            서버 확인 결과 {recovery.registered}곡은 정상 등록됐고, 다음 {recovery.pending.length}곡은 미완료 상태예요:
+            {' '}{recovery.pending.slice(0, 5).join(', ')}{recovery.pending.length > 5 ? ' …' : ''}.
+            {' '}브라우저 특성상 파일은 자동 복구되지 않으니, 미완료 곡 파일을 다시 선택해 업로드해주세요. (이미 등록된 곡은 중복 차단됩니다.)
+          </p>
+          <button
+            type="button"
+            onClick={() => { clearRecoveryManifest(); setRecovery(null); }}
+            className="mt-1.5 rounded-md bg-amber-500/20 px-2 py-1 text-[10px] font-semibold hover:bg-amber-500/30"
+          >
+            확인했어요
+          </button>
+        </div>
+      )}
+      {integrityWarn && (
+        <div className="rounded-xl bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-700 ring-1 ring-rose-400/30 dark:text-rose-200">
+          <b>⚠ 업로드 무결성 경고</b>
+          <p className="mt-0.5">{integrityWarn}</p>
         </div>
       )}
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -728,6 +869,30 @@ export default function ArtistBatchUploadForm({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* 0196 — 업로드 완료 대조 리스트: 업로드 파일명 ↔ 등록된 곡명/상태 */}
+      {(successCount > 0 || failedCount > 0) && (
+        <section className="space-y-2 rounded-xl bg-bg-soft/40 p-3 ring-1 ring-line/10">
+          <p className="text-xs font-semibold text-ink-mute">대조 리스트 (업로드 파일 ↔ 등록된 곡)</p>
+          <ul className="divide-y divide-line/5 text-[11px]">
+            {tracks.filter((t) => t.status === 'success' || t.status === 'failed').map((t) => (
+              <li key={t.id} className="flex items-center gap-2 py-1.5">
+                <StatusBadge status={t.status} trackCode={t.trackCode} />
+                <span className="min-w-0 flex-1 truncate" title={t.file.name}>
+                  <FileAudio size={10} className="mr-1 inline text-ink-dim" />{t.file.name}
+                </span>
+                <span className="text-ink-dim">→</span>
+                <span className="min-w-0 flex-1 truncate font-semibold" title={t.title}>
+                  {t.title}{t.trackCode ? <span className="ml-1 font-mono text-[10px] text-ink-dim">({t.trackCode})</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-ink-dim">
+            파일명과 등록된 곡 제목이 의도와 일치하는지 확인해주세요. 다르면 내 음원 목록에서 검토/삭제 후 다시 업로드하세요.
+          </p>
         </section>
       )}
 
