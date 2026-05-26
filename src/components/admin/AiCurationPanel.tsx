@@ -99,11 +99,15 @@ import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import { useAdminPermsStore } from '@/store/adminPermsStore';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
 
 type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business';
+// 서브탭 영역: content = 검수/메타/재검수/Guardrail/고위험/임베딩, curation = 성과/적합도/Flow/재배치/사업자
+const CONTENT_SUBS: SubTab[] = ['pending', 'results', 'review', 'guardrail', 'highrisk', 'rereview', 'embed_review', 'embedding'];
+const CURATION_SUBS: SubTab[] = ['perf', 'fit', 'flow', 'reorder', 'business'];
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -117,7 +121,25 @@ const STORE_LABELS: Record<string, string> = {
 };
 
 export default function AiCurationPanel() {
-  const [sub, setSub] = useState<SubTab>('perf');
+  const perms = useAdminPermsStore((s) => s.perms);
+  const canContent = perms?.can_manage_tracks ?? false;
+  const canCuration = perms?.can_manage_curation ?? false;
+  const allowed = (k: SubTab) =>
+    (CONTENT_SUBS.includes(k) && canContent) || (CURATION_SUBS.includes(k) && canCuration);
+
+  const ALL_SUBS: [SubTab, string][] = [['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']];
+  const visibleSubs = ALL_SUBS.filter(([k]) => allowed(k));
+
+  const [sub, setSub] = useState<SubTab>(() => visibleSubs[0]?.[0] ?? 'perf');
+  useEffect(() => {
+    if (visibleSubs.length && !visibleSubs.some(([k]) => k === sub)) setSub(visibleSubs[0][0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perms]);
+
+  if (perms && visibleSubs.length === 0) {
+    return <p className="rounded-xl bg-bg-card px-4 py-10 text-center text-sm text-ink-dim">이 영역에 접근할 권한이 없습니다.</p>;
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -129,7 +151,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
+        {visibleSubs.map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -1001,6 +1023,7 @@ function GuardrailBadges({ trackId, ready }: { trackId: string; ready: boolean }
     finally { setBusy(false); }
   }
   async function override(storeKey: string) {
+    if (!window.confirm(`${STORE_LABELS[storeKey] ?? storeKey} 금지규칙(guardrail)을 무시(override)합니다.\n해당 매장에서 이 곡이 추천될 수 있습니다. 계속할까요?`)) return;
     try { await setGuardrailOverride(trackId, storeKey, true, '관리자 override'); toast.success(`${storeKey} guardrail override`); setRows(await getTrackGuardrails(trackId)); }
     catch (e) { toast.error(`override 실패: ${(e as Error).message}`); }
   }
@@ -1122,8 +1145,8 @@ function GuardrailDashboardTab() {
           <h3 className="text-xs font-bold">위반 곡 {storeFilter ? `· ${STORE_LABELS[storeFilter] ?? storeFilter}` : '(hard_block 전체)'} ({tracks.length})</h3>
           {storeFilter && <button onClick={() => setStoreFilter(null)} className="rounded bg-ink/5 px-2 py-0.5 text-[10px]">필터 해제</button>}
           <div className="ml-auto flex gap-1.5">
-            {storeFilter && <button onClick={() => void run(() => bulkGuardrailOverride(selIds, storeFilter, '대시보드 일괄 override'), `${selIds.length}곡 ${storeFilter} override`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 disabled:opacity-50">선택 매장 override</button>}
-            <button onClick={() => void run(() => bulkGuardrailClear(selIds, '문제 없음 일괄'), `${selIds.length}곡 문제 없음`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 disabled:opacity-50">문제 없음(전체 override)</button>
+            {storeFilter && <button onClick={() => { if (window.confirm(`선택 ${selIds.length}곡의 ${STORE_LABELS[storeFilter] ?? storeFilter} 금지규칙(guardrail)을 일괄 무시(override)합니다. 계속할까요?`)) void run(() => bulkGuardrailOverride(selIds, storeFilter, '대시보드 일괄 override'), `${selIds.length}곡 ${storeFilter} override`); }} disabled={busy || selIds.length === 0} className="rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 disabled:opacity-50">선택 매장 override</button>}
+            <button onClick={() => { if (window.confirm(`선택 ${selIds.length}곡을 '문제 없음'으로 일괄 처리(hard_block 전체 override)합니다. 계속할까요?`)) void run(() => bulkGuardrailClear(selIds, '문제 없음 일괄'), `${selIds.length}곡 문제 없음`); }} disabled={busy || selIds.length === 0} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 disabled:opacity-50">문제 없음(전체 override)</button>
             <button onClick={() => void run(() => bulkApplyAiMetadata(selIds), `${selIds.length}곡 메타 재설정`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent disabled:opacity-50">메타 재설정</button>
           </div>
         </div>

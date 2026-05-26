@@ -6,6 +6,7 @@ import {
   validateSelectedMeta, emptySelectedMeta, type SelectedMeta, type MetaApproveResult, type MetadataAuditEntry,
 } from '@/lib/trackMetadataOptions';
 import { toast } from '@/store/toastStore';
+import { useAdminPermsStore } from '@/store/adminPermsStore';
 
 const TEMPO_KO: Record<string, string> = { slow: '느림', medium: '보통', fast: '빠름' };
 const VOCAL_KO: Record<string, string> = { male_vocal: '남성보컬', female_vocal: '여성보컬', mixed_vocal: '혼성', instrumental: '인스트루멘탈', chorus: '코러스', rap: '랩' };
@@ -35,6 +36,8 @@ export default function MetaApproveModal({
   const [result, setResult] = useState<MetaApproveResult | null>(null);
   const [audit, setAudit] = useState<MetadataAuditEntry[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  // 강제 승인(차단 사유 무시)은 content_admin/super_admin 만. reviewer 는 메타 수정·일반 승인만.
+  const canForce = useAdminPermsStore((s) => s.perms?.can_manage_tracks ?? false);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +61,7 @@ export default function MetaApproveModal({
   async function saveAndApprove(force = false) {
     const err = validateSelectedMeta(meta);
     if (err) { toast.error(err); return; }
+    if (force && !window.confirm('차단 사유(금지규칙/품질)를 무시하고 강제 승인합니다.\n해당 매장에서 부적합할 수 있는 곡이 공개됩니다. 계속할까요?')) return;
     setBusy(true);
     try {
       const r = await adminUpdateMetadataAndApprove(trackId, { meta, approve: true, force });
@@ -99,8 +103,11 @@ export default function MetaApproveModal({
               <div className="mt-3 space-y-1.5 rounded-xl bg-rose-500/10 p-3 ring-1 ring-rose-500/20">
                 {blocked.map((b, i) => <p key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600"><AlertTriangle size={12} /> {b}</p>)}
                 {result.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-600">{w}</p>)}
-                {blocked.length > 0 && canApprove && (
+                {blocked.length > 0 && canApprove && canForce && (
                   <button disabled={busy} onClick={() => void saveAndApprove(true)} className="mt-1 rounded-lg bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-600 disabled:opacity-50">경고 무시하고 강제 승인</button>
+                )}
+                {blocked.length > 0 && canApprove && !canForce && (
+                  <p className="mt-1 text-[10px] text-ink-dim">강제 승인 권한이 없습니다 (content_admin / super_admin 전용).</p>
                 )}
               </div>
             )}

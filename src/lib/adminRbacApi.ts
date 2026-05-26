@@ -20,8 +20,18 @@ export interface AdminUserRow {
   created_at: string; invited_by: string | null; linked: boolean; last_action_at: string | null;
 }
 export interface AdminActionLogRow {
-  id: string; action: string; target_email: string | null; detail: unknown; created_at: string; actor_email: string | null;
+  id: string; action: string; target_email: string | null; target_id: string | null;
+  target_title: string | null; detail: unknown; created_at: string; actor_email: string | null;
 }
+
+export const ADMIN_ACTION_LABELS: Record<string, string> = {
+  settlement_generate: '정산서 생성', settlement_finalize: '정산 확정', settlement_mark_paid: '정산 지급 완료',
+  settlement_mark_held: '정산 보류', track_takedown: '음원 공개중단', track_approve: '음원 승인',
+  track_force_approve: '음원 강제 승인', guardrail_override: 'Guardrail override',
+  guardrail_bulk_override: 'Guardrail 일괄 override', commission_payout: '수수료 정산 지급',
+  sales_agent_upsert: '영업인 등록/수정', add_admin: '관리자 추가', update_role: '관리자 역할 변경',
+  activate: '관리자 활성화', deactivate: '관리자 비활성화',
+};
 
 export async function fetchMyAdminPermissions(): Promise<AdminPermissions> {
   const { data, error } = await supabase.rpc('admin_my_permissions');

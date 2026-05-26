@@ -100,6 +100,7 @@ export default function ArtistSettlementDetail({
   }
 
   async function handlePay(memo: string) {
+    if (!window.confirm('정산을 지급 완료로 처리합니다.\n처리 후에는 되돌릴 수 없습니다(immutable). 계속할까요?')) return;
     setBusy(true);
     try {
       await adminMarkSettlementPaid(settlementId, memo);

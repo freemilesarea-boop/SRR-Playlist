@@ -30,6 +30,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { useAdminPermsStore } from '@/store/adminPermsStore';
 
 const REJECT_TEMPLATES = [
   '권리 확인 불가',
@@ -287,13 +288,15 @@ export default function TrackModerationPanel({
   }
 
   const status = releaseStatus ?? '';
+  // 음원 제거/숨김/복원/복구는 content_admin/super_admin 만 (reviewer 는 승인·반려·수정요청만).
+  const canManageTracks = useAdminPermsStore((s) => s.perms?.can_manage_tracks ?? false);
   const canApprove = status === 'submitted' || status === 'review_pending' || status === 'changes_requested';
   const canReject = status === 'submitted' || status === 'review_pending' || status === 'changes_requested';
   const canRequestChanges = status === 'submitted' || status === 'review_pending';
-  const canTakedown = ['draft', 'submitted', 'changes_requested', 'approved', 'scheduled', 'released'].includes(status);
-  const canRestore = status === 'removed' || status === 'rejected';
-  const canHideReleased = status === 'released' && visibilityStatus !== 'hidden';
-  const canUnhide = status === 'released' && visibilityStatus === 'hidden';
+  const canTakedown = canManageTracks && ['draft', 'submitted', 'changes_requested', 'approved', 'scheduled', 'released'].includes(status);
+  const canRestore = canManageTracks && (status === 'removed' || status === 'rejected');
+  const canHideReleased = canManageTracks && status === 'released' && visibilityStatus !== 'hidden';
+  const canUnhide = canManageTracks && status === 'released' && visibilityStatus === 'hidden';
 
   return (
     <div className="space-y-3 rounded-2xl bg-bg-soft/40 p-3 ring-1 ring-line/10">

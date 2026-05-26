@@ -219,6 +219,11 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       return;
     }
     const reason = delReason.trim();
+    const confirmMsg = [
+      protectedIds.length > 0 ? `발매곡 ${protectedIds.length}곡 공개중단` : null,
+      deletableIds.length > 0 ? `미발매곡 ${deletableIds.length}곡 ${delHard ? '완전 삭제' : '삭제'}` : null,
+    ].filter(Boolean).join(' · ');
+    if (!window.confirm(`${confirmMsg} 을(를) 진행합니다.${delHard ? '\n완전 삭제는 복구할 수 없습니다.' : ''}\n계속할까요?`)) return;
     if (import.meta.env.DEV) {
       console.debug('[track-manage] process', { takedown: protectedIds, delete: deletableIds, hard: delHard, reason });
     }
