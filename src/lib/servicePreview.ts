@@ -107,7 +107,7 @@ export async function fetchPreviewSampleTracks(businessType: string, limit = 20)
   try {
     const { data, error } = await supabase
       .from('tracks')
-      .select('id, title, artist, genre, mood, audio_url, cover_url, duration, created_at')
+      .select('id, title, artist, genre:main_genre, mood, audio_url, cover_url, duration, created_at')
       .eq('release_status', 'released')
       .eq('suitable_store', businessType)
       .not('audio_url', 'is', null)
