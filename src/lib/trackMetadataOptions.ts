@@ -205,6 +205,42 @@ export async function adminUpdateMetadataAndApprove(
   if (error) throw error; return data as MetaApproveResult;
 }
 
+/** 민감 매장(병원/키즈/요가/다이닝) — 일괄 추가 시 경고 + guardrail 재검수 유발. */
+export const SENSITIVE_BUSINESS = ['병원', '다이닝', '키즈', '키즈카페', '요가'];
+
+export interface BulkMetaResultItem { track_id: string; title: string | null; status: 'success' | 'failed'; error: string | null; }
+export interface BulkMetaResult { total: number; success: number; failed: number; changed_fields?: string[]; results: BulkMetaResultItem[]; }
+/** null/undefined = 변경 안 함 (기존 값 유지). 빈 배열은 서버에서 거부됨. */
+export interface BulkMetaPatch {
+  genre?: string[] | null; moods?: string[] | null; business_type_tags?: string[] | null;
+  vocal_type?: string | null; language?: string | null; time_tags?: string[] | null; tempo_feel?: string | null;
+}
+/** 선택 음원 일괄 메타 수정 (서버 검증/cap/권한/audit). recompute 기본 on. */
+export async function adminBulkUpdateTrackMetadata(trackIds: string[], patch: BulkMetaPatch, recompute = true): Promise<BulkMetaResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_update_track_metadata', {
+    p_track_ids: trackIds,
+    p_genre: patch.genre ?? null,
+    p_moods: patch.moods ?? null,
+    p_business_type_tags: patch.business_type_tags ?? null,
+    p_vocal_type: patch.vocal_type ?? null,
+    p_language: patch.language ?? null,
+    p_time_tags: patch.time_tags ?? null,
+    p_tempo_feel: patch.tempo_feel ?? null,
+    p_recompute: recompute,
+  });
+  if (error) throw error; return data as BulkMetaResult;
+}
+/** 선택 음원 일괄 재계산 (메타 변경 없이 AI/guardrail/fit/rereflag). */
+export async function adminBulkRecomputeTracks(trackIds: string[]): Promise<BulkMetaResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_recompute_tracks', { p_track_ids: trackIds });
+  if (error) throw error; return data as BulkMetaResult;
+}
+/** 선택 음원 AI 메타 일괄 적용 (AI 분석 genre/mood 반영 + 재계산). */
+export async function adminBulkApplyAiMetadata(trackIds: string[]): Promise<BulkMetaResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_apply_ai_metadata', { p_track_ids: trackIds });
+  if (error) throw error; return data as BulkMetaResult;
+}
+
 export interface MetadataAuditChange { field: string; label: string; from: unknown; to: unknown; }
 export interface MetadataAuditEntry {
   id: string; track_id: string; title: string | null; changed_at: string;

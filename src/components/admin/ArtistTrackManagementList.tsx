@@ -7,6 +7,7 @@ import AutoCover from '@/components/AutoCover';
 import TrackModerationPanel from './TrackModerationPanel';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import BulkMetaActions from '@/components/admin/BulkMetaActions';
 
 const APPROVABLE_RS = ['submitted', 'review_pending', 'changes_requested'];
 import {
@@ -355,6 +356,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
             미발매만 보기
           </label>
           <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
+          <BulkMetaActions selectedIds={[...selected]} onClear={() => setSelected(new Set())} onRefresh={load} />
           <div className="flex-1" />
           <button
             onClick={() => setDelModal(true)}

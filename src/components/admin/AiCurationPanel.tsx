@@ -99,6 +99,7 @@ import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import BulkMetaActions from '@/components/admin/BulkMetaActions';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
@@ -1156,14 +1157,18 @@ function HighRiskTab() {
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null; canApprove: boolean } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows(await listHighRiskTracks(200)); }
+    try { setRows(await listHighRiskTracks(200)); setSelected(new Set()); }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  function toggleSel(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function selAll() { setSelected((p) => p.size === rows.length ? new Set() : new Set(rows.map((r) => r.track_id))); }
 
   async function act(id: string, fn: () => Promise<unknown>, msg: string) {
     setBusyId(id);
@@ -1182,6 +1187,14 @@ function HighRiskTab() {
         <p className="text-[11px] text-ink-dim">trust&lt;50 · guardrail hard · AI 불일치 · 임베딩 불일치 · LUFS 경계 곡을 위험도순으로. (추천/정산 미반영)</p>
         <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
       </div>
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-bg-soft px-3 py-2 text-[11px]">
+          <button onClick={selAll} className="rounded bg-bg-card px-2 py-1 font-semibold hover:bg-bg-hover">{selected.size === rows.length && rows.length > 0 ? '전체 해제' : '전체 선택'}</button>
+          <span className="text-ink-dim">{selected.size}곡 선택</span>
+          <span className="mx-1 h-3 w-px bg-line" />
+          <BulkMetaActions selectedIds={[...selected]} onClear={() => setSelected(new Set())} onRefresh={load} />
+        </div>
+      )}
       {rows.length === 0 ? (
         <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '고위험 곡이 없어요.'}</p>
       ) : (
@@ -1189,7 +1202,10 @@ function HighRiskTab() {
           {rows.map((r) => (
             <li key={r.track_id} className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''} · {r.release_status}</span></span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <input type="checkbox" checked={selected.has(r.track_id)} onChange={() => toggleSel(r.track_id)} className="h-4 w-4 shrink-0 accent-accent" />
+                  <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''} · {r.release_status}</span></span>
+                </span>
                 <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-600">위험도 {r.risk_score}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
@@ -1388,6 +1404,8 @@ function RereviewTab() {
         <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">충돌 매장 태그 제거</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
+        <span className="mx-1 h-3 w-px bg-line" />
+        <BulkMetaActions selectedIds={selIds} onClear={() => setSelected(new Set())} onRefresh={load} />
       </div>
 
       {rows.length === 0 ? (

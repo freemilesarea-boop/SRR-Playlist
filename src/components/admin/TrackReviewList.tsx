@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil } from 'lucide-react';
 import { applyAiMetadata } from '@/lib/aiCuration';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import BulkMetaActions from '@/components/admin/BulkMetaActions';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -338,6 +339,7 @@ export default function TrackReviewList() {
             현재 페이지 전체 선택
           </label>
           <span className="text-[11px] text-ink-mute">{selected.size}곡 선택됨</span>
+          <BulkMetaActions selectedIds={[...selected]} onClear={() => setSelected(new Set())} onRefresh={load} />
           <div className="flex-1" />
           <button
             onClick={() => setBulk('approve')}
