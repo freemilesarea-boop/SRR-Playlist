@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Brain, Loader2, Sliders, Check, X } from 'lucide-react';
+import { Brain, Loader2, Sliders, Check, X, Eye } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import {
   fetchMetadataTrainingStats, type MetadataTrainingStats,
   generateWeightSuggestions, listWeightSuggestions, decideWeightSuggestion, type WeightSuggestion,
+  fetchWeightSuggestionSamples, type WeightSuggestionSample,
 } from '@/lib/metadataTraining';
 
 const SUGGESTION_LABEL: Record<string, string> = {
@@ -28,6 +29,19 @@ export default function MetadataTrainingPanel() {
   const [suggestions, setSuggestions] = useState<WeightSuggestion[]>([]);
   const [sugLoading, setSugLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [samplesFor, setSamplesFor] = useState<WeightSuggestion | null>(null);
+  const [samples, setSamples] = useState<WeightSuggestionSample[]>([]);
+  const [samplesLoading, setSamplesLoading] = useState(false);
+
+  function openSamples(s: WeightSuggestion) {
+    setSamplesFor(s);
+    setSamples([]);
+    setSamplesLoading(true);
+    fetchWeightSuggestionSamples(s.id, 10)
+      .then(setSamples)
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSamplesLoading(false));
+  }
 
   useEffect(() => {
     let alive = true;
@@ -177,12 +191,15 @@ export default function MetadataTrainingPanel() {
                 <span className="font-mono text-ink-dim">{s.target_kind === 'uploader' ? s.target_key.slice(0, 8) + '…' : s.target_key}</span>
                 {s.confidence != null && <span className="text-ink-dim">신뢰도 {Math.round(s.confidence * 100)}%</span>}
                 <StatusChip status={s.status} />
-                {s.status === 'pending' && (
-                  <span className="ml-auto flex gap-1">
-                    <button type="button" onClick={() => void onDecide(s.id, 'approved')} className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25"><Check size={11} /> 승인</button>
-                    <button type="button" onClick={() => void onDecide(s.id, 'rejected')} className="inline-flex items-center gap-0.5 rounded bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-500/25"><X size={11} /> 반려</button>
-                  </span>
-                )}
+                <span className="ml-auto flex gap-1">
+                  <button type="button" onClick={() => openSamples(s)} className="inline-flex items-center gap-0.5 rounded bg-bg-soft px-2 py-1 text-[10px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"><Eye size={11} /> 근거 샘플</button>
+                  {s.status === 'pending' && (
+                    <>
+                      <button type="button" onClick={() => void onDecide(s.id, 'approved')} className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25"><Check size={11} /> 승인</button>
+                      <button type="button" onClick={() => void onDecide(s.id, 'rejected')} className="inline-flex items-center gap-0.5 rounded bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-500/25"><X size={11} /> 반려</button>
+                    </>
+                  )}
+                </span>
               </div>
               <p className="mt-1 text-[11px] leading-relaxed text-ink">{s.suggested_action}</p>
               {s.target_config_key && <p className="mt-0.5 font-mono text-[10px] text-ink-dim">knob: {s.target_config_key}</p>}
@@ -190,6 +207,49 @@ export default function MetadataTrainingPanel() {
           ))}
         </ul>
       </section>
+
+      {samplesFor && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setSamplesFor(null)}>
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-bg-card p-4 ring-1 ring-line/10 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-bold">근거 샘플 — {SUGGESTION_LABEL[samplesFor.suggestion_type] ?? samplesFor.suggestion_type} · {samplesFor.target_kind === 'uploader' ? samplesFor.target_key.slice(0, 8) + '…' : samplesFor.target_key}</h3>
+              <button type="button" onClick={() => setSamplesFor(null)} className="rounded p-1 text-ink-dim hover:bg-bg-soft hover:text-ink"><X size={16} /></button>
+            </div>
+            {samplesLoading && <div className="flex items-center gap-2 text-xs text-ink-mute"><Loader2 size={14} className="animate-spin" /> 불러오는 중…</div>}
+            {!samplesLoading && samples.length === 0 && <Empty />}
+            <ul className="space-y-2">
+              {samples.map((s, i) => (
+                <li key={s.track_id + i} className="rounded-lg bg-bg-soft/50 p-2.5 text-[11px] ring-1 ring-line/10">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{s.track_title || '(제목 없음)'}</span>
+                    <span className="text-ink-dim">· {s.artist_email || s.owner_user_id?.slice(0, 8) || '—'}</span>
+                    {s.correction_type && <span className="rounded-full bg-bg-soft px-1.5 py-0.5 text-[10px] ring-1 ring-line/10">{s.correction_type}</span>}
+                    {s.changed_at && <span className="ml-auto text-[10px] text-ink-dim">{new Date(s.changed_at).toLocaleDateString()}</span>}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-1 gap-1 sm:grid-cols-3">
+                    <MetaCol label="업로더 입력" tags={s.user_metadata?.store_tags} tone="dim" />
+                    <MetaCol label="AI 예측" tags={s.ai_metadata?.store_tags} tone="rose" />
+                    <MetaCol label="관리자 최종" tags={s.admin_final_metadata?.store_tags} tone="emerald" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[10px] text-ink-dim">read-only · 가중치 자동 변경 없음</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaCol({ label, tags, tone }: { label: string; tags: string[] | null | undefined; tone: 'dim' | 'rose' | 'emerald' }) {
+  const cls = tone === 'rose' ? 'bg-rose-500/10 text-rose-600' : tone === 'emerald' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-bg-soft text-ink-mute';
+  return (
+    <div>
+      <div className="mb-0.5 text-[9px] uppercase tracking-wide text-ink-dim">{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {(tags && tags.length > 0) ? tags.map((t, i) => <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] ${cls}`}>{t}</span>) : <span className="text-[10px] text-ink-dim">—</span>}
+      </div>
     </div>
   );
 }

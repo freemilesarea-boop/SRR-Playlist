@@ -54,6 +54,28 @@ export async function decideWeightSuggestion(id: string, decision: 'approved' | 
   if (error) throw error;
 }
 
+export interface MetaTriple { genre: string[] | null; moods: string[] | null; store_tags: string[] | null; tempo: string | null }
+export interface WeightSuggestionSample {
+  track_id: string;
+  track_title: string | null;
+  artist_email: string | null;
+  owner_user_id: string | null;
+  ai_metadata: MetaTriple;
+  user_metadata: MetaTriple;
+  admin_final_metadata: MetaTriple;
+  correction_type: string | null;
+  changed_at: string | null;
+  reviewed_by: string | null;
+  field_diffs: Record<string, unknown> | null;
+}
+
+/** 특정 제안의 근거가 된 실제 샘플 곡 목록 (read-only). */
+export async function fetchWeightSuggestionSamples(suggestionId: string, limit = 10): Promise<WeightSuggestionSample[]> {
+  const { data, error } = await supabase.rpc('admin_weight_suggestion_samples', { p_suggestion_id: suggestionId, p_limit: limit });
+  if (error) throw error;
+  return ((data as { samples?: WeightSuggestionSample[] } | null)?.samples) ?? [];
+}
+
 /** 변경 없이 "AI 정답/문제 없음" 확인을 학습 데이터로 명시 기록 (관리자 검수 화면에서 호출). */
 export async function recordMetadataTrainingExample(
   trackId: string,
