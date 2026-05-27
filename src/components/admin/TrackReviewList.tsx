@@ -20,6 +20,7 @@ import {
   type PendingReviewCounts,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
+import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
 
 const PAGE_SIZE = 50;
@@ -130,6 +131,20 @@ export default function TrackReviewList() {
   useEffect(() => {
     if (page > 0 && page >= pageCount) setPage(pageCount - 1);
   }, [page, pageCount]);
+
+  async function overrideQualityWarning(r: PendingReviewTrackRow) {
+    setBusyId(r.track_id);
+    try {
+      const { error } = await supabase.rpc('admin_override_quality_warning', { p_track_id: r.track_id, p_note: null });
+      if (error) throw error;
+      toast.success('품질 경고 승인(override) 처리됐어요.');
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function overwriteWithAi(r: PendingReviewTrackRow) {
     setBusyId(r.track_id);
@@ -529,10 +544,25 @@ export default function TrackReviewList() {
                   {r.q_integrated_lufs != null && (
                     <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                       <DiagChip ok={!!r.q_passed} label={r.q_passed ? '품질 Pass' : '품질 Fail'} />
-                      <DiagChip ok={r.q_integrated_lufs >= -14 && r.q_integrated_lufs <= -10} label={`${r.q_integrated_lufs} LUFS`} />
-                      <DiagChip ok={r.q_true_peak == null || r.q_true_peak <= -1} label={`${r.q_true_peak ?? '?'} dBTP`} />
+                      {/* 기준: 등록 가능 LUFS -16~-8 (권장 -14~-10) */}
+                      <DiagChip ok={r.q_integrated_lufs >= -16 && r.q_integrated_lufs <= -8} label={`${r.q_integrated_lufs} LUFS`} />
+                      {/* TP: 등록 차단은 >0 (실측 클리핑) 만. -1~0 은 코덱 오버슈트 경고 */}
+                      <DiagChip ok={r.q_true_peak == null || r.q_true_peak <= 0} label={`${r.q_true_peak ?? '?'} dBTP`} />
+                      {r.q_true_peak != null && r.q_true_peak > -1 && r.q_true_peak <= 0 && (
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-600">TP 경고(코덱 오버슈트 의심)</span>
+                      )}
                       {r.q_loudness_range != null && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">LRA {r.q_loudness_range}</span>}
                       <DiagChip ok={!r.q_clipping} label={r.q_clipping ? 'clipping' : 'no clip'} />
+                      {r.q_true_peak != null && r.q_true_peak > -1 && r.q_true_peak <= 0 && (
+                        <button
+                          type="button"
+                          disabled={busyId === r.track_id}
+                          onClick={() => void overrideQualityWarning(r)}
+                          className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-semibold text-emerald-600 hover:bg-emerald-500/25 disabled:opacity-50"
+                        >
+                          품질경고 승인
+                        </button>
+                      )}
                     </div>
                   )}
 
