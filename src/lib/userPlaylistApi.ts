@@ -47,6 +47,32 @@ export async function fetchMyUserPlaylists(): Promise<MyUserPlaylist[]> {
   return (data ?? []) as MyUserPlaylist[];
 }
 
+export interface MyPlaylistForAdd {
+  playlist_id: string;
+  title: string;
+  track_count: number;
+  is_public: boolean;
+  already_contains_track: boolean;
+}
+
+/** 특정 곡 기준 내 플레이리스트 목록 (이미 포함 여부 포함). */
+export async function fetchMyPlaylistsForAdd(trackId: string): Promise<MyPlaylistForAdd[]> {
+  const { data, error } = await supabase.rpc('list_my_playlists_for_add', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as MyPlaylistForAdd[];
+}
+
+/** 새 플레이리스트 생성 + 곡 추가 (원자적). */
+export async function createMyPlaylistAndAddTrack(title: string, isPublic: boolean, trackId: string) {
+  const { data, error } = await supabase.rpc('create_my_playlist_and_add_track', {
+    p_title: title,
+    p_is_public: isPublic,
+    p_track_id: trackId,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; playlist_id: string; already: boolean };
+}
+
 export async function fetchUserPlaylistDetail(id: string): Promise<UserPlaylistDetail | null> {
   const { data, error } = await supabase.rpc('get_user_playlist_detail', { p_playlist_id: id });
   if (error) throw error;

@@ -205,6 +205,11 @@ export default function TrackSharePage() {
                         <TrackStateBadge state={state} variant="pill" />
                       </span>
                     )}
+                    {playable && (
+                      <span className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <AddToPlaylistButton trackId={t.id} variant="player" size={14} />
+                      </span>
+                    )}
                   </div>
                   <p className="truncate px-0.5 text-xs font-semibold">{t.title}</p>
                   <p className="truncate px-0.5 text-[10px] text-ink-mute">{t.artist ?? '—'}</p>

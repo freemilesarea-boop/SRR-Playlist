@@ -2,6 +2,7 @@ import { Play, Crown, Medal, AlertCircle } from 'lucide-react';
 import type { ChartTrack } from '@/lib/chartsApi';
 import { isPlayableUrl } from '@/lib/audio';
 import AutoCover from '@/components/AutoCover';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 
 const NUM = (n: number) => n.toLocaleString('ko-KR');
 
@@ -64,6 +65,13 @@ export default function ChartPodium({
             <div
               className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${style.gradient}`}
             />
+
+            {/* 플레이리스트 담기 — 카드 우상단 */}
+            {playable && (
+              <span className="absolute right-2 top-2 z-10">
+                <AddToPlaylistButton trackId={track.track_id} variant="player" size={15} />
+              </span>
+            )}
 
             <div className="relative flex items-center gap-3">
               {/* 커버 + 순위 뱃지 */}

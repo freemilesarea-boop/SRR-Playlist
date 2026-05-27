@@ -28,6 +28,7 @@ import type { PlaylistRow, TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 
 export default function LibraryPage() {
   const { user } = useAuthStore();
@@ -346,8 +347,9 @@ function LikedTrackRow({
         </p>
         <p className="truncate text-xs text-ink-mute">{track.artist ?? '—'}</p>
       </div>
-      <span className="shrink-0">
+      <span className="flex shrink-0 items-center gap-2">
         <TrackLikeButton trackId={track.id} size={14} />
+        {playable && <AddToPlaylistButton trackId={track.id} variant="bare" size={15} />}
       </span>
     </button>
   );

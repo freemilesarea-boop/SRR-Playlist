@@ -32,6 +32,7 @@ import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayabil
 import { toast } from '@/store/toastStore';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import TrackStateBadge from '@/components/TrackStateBadge';
 
 export default function SearchPage() {
@@ -483,7 +484,7 @@ function TrackResultRow({
         </span>
       )}
       {item.id && (
-        <span className="shrink-0 opacity-70 group-hover:opacity-100">
+        <span className="flex shrink-0 items-center gap-2 opacity-70 group-hover:opacity-100">
           <TrackLikeButton
             trackId={item.id}
             track={{
@@ -499,6 +500,7 @@ function TrackResultRow({
             }}
             size={14}
           />
+          {playable && <AddToPlaylistButton trackId={item.id} variant="bare" size={15} />}
         </span>
       )}
     </button>

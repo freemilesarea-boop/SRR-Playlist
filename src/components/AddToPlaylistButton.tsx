@@ -1,34 +1,40 @@
 import { useEffect, useState } from 'react';
-import { ListPlus, Plus, Check, X, Lock, Globe } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ListPlus, Plus, Check, X, Lock, Globe, ArrowRight } from 'lucide-react';
 import {
-  fetchMyUserPlaylists,
-  createUserPlaylist,
+  fetchMyPlaylistsForAdd,
+  createMyPlaylistAndAddTrack,
   addTrackToUserPlaylist,
-  type MyUserPlaylist,
+  type MyPlaylistForAdd,
 } from '@/lib/userPlaylistApi';
 import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
 import { errorMessage } from '@/lib/errorMessage';
 import { toast } from '@/store/toastStore';
 
 interface Props {
   trackId: string;
-  /** 버튼 스타일 변형 — player(밝은 pill) / icon(테두리) */
-  variant?: 'player' | 'icon';
+  /** 버튼 스타일 변형 — player(밝은 pill) / icon(테두리 원형) / bare(리스트 행용, 테두리 없음) */
+  variant?: 'player' | 'icon' | 'bare';
+  /** 아이콘 크기 (기본 16) */
+  size?: number;
   className?: string;
 }
 
 /**
  * "플레이리스트에 담기" 버튼 + picker modal.
- * Player / TrackSharePage 등 여러 곳에서 재사용.
+ * 차트/검색/대기열/곡상세/보관함 등 곡을 발견하는 모든 화면에서 재사용.
  */
-export default function AddToPlaylistButton({ trackId, variant = 'icon', className }: Props) {
+export default function AddToPlaylistButton({ trackId, variant = 'icon', size = 16, className }: Props) {
   const session = useAuthStore((s) => s.session);
   const [open, setOpen] = useState(false);
 
   function onClick(e: React.MouseEvent) {
+    e.preventDefault();
     e.stopPropagation();
     if (!session) {
       toast.info('로그인 후 플레이리스트에 담을 수 있어요.');
+      useGateStore.getState().open('login');
       return;
     }
     setOpen(true);
@@ -37,7 +43,9 @@ export default function AddToPlaylistButton({ trackId, variant = 'icon', classNa
   const btnClass =
     variant === 'player'
       ? 'flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/90 ring-1 ring-white/15 backdrop-blur transition hover:text-white'
-      : 'flex h-9 w-9 items-center justify-center rounded-full text-ink-mute ring-1 ring-line/15 transition hover:text-accent hover:ring-accent/30';
+      : variant === 'bare'
+        ? 'flex items-center justify-center rounded-full text-ink-mute transition hover:text-accent'
+        : 'flex h-9 w-9 items-center justify-center rounded-full text-ink-mute ring-1 ring-line/15 transition hover:text-accent hover:ring-accent/30';
 
   return (
     <>
@@ -48,7 +56,7 @@ export default function AddToPlaylistButton({ trackId, variant = 'icon', classNa
         aria-label="플레이리스트에 담기"
         title="플레이리스트에 담기"
       >
-        <ListPlus size={variant === 'player' ? 16 : 16} />
+        <ListPlus size={size} />
       </button>
       {open && <PickerModal trackId={trackId} onClose={() => setOpen(false)} />}
     </>
@@ -56,7 +64,8 @@ export default function AddToPlaylistButton({ trackId, variant = 'icon', classNa
 }
 
 function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => void }) {
-  const [playlists, setPlaylists] = useState<MyUserPlaylist[] | null>(null);
+  const navigate = useNavigate();
+  const [playlists, setPlaylists] = useState<MyPlaylistForAdd[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -64,31 +73,34 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
   const [newTitle, setNewTitle] = useState('');
   const [newPublic, setNewPublic] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const [lastAdded, setLastAdded] = useState<{ id: string; title: string } | null>(null);
 
-  // 최초 로드
   useEffect(() => {
     let alive = true;
-    fetchMyUserPlaylists()
+    fetchMyPlaylistsForAdd(trackId)
       .then((pls) => { if (alive) setPlaylists(pls); })
       .catch((e) => { if (alive) setError(errorMessage(e)); });
     return () => { alive = false; };
-  }, []);
+  }, [trackId]);
 
-  async function onPick(p: MyUserPlaylist) {
-    if (addedIds.has(p.id) || busyId) return;
-    setBusyId(p.id);
-    // optimistic
-    setAddedIds((prev) => new Set(prev).add(p.id));
+  function contains(p: MyPlaylistForAdd) {
+    return p.already_contains_track || addedIds.has(p.playlist_id);
+  }
+
+  async function onPick(p: MyPlaylistForAdd) {
+    if (contains(p) || busyId) return;
+    setBusyId(p.playlist_id);
+    setAddedIds((prev) => new Set(prev).add(p.playlist_id)); // optimistic
     try {
-      const r = await addTrackToUserPlaylist(p.id, trackId);
-      toast.success(r.already ? '이미 담겨 있어요' : `"${p.title}" 에 담았어요`);
+      const r = await addTrackToUserPlaylist(p.playlist_id, trackId);
+      if (r.already) {
+        toast.info('이미 담겨 있어요');
+      } else {
+        toast.success(`"${p.title}" 에 담았어요`);
+        setLastAdded({ id: p.playlist_id, title: p.title });
+      }
     } catch (e) {
-      // rollback
-      setAddedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(p.id);
-        return next;
-      });
+      setAddedIds((prev) => { const next = new Set(prev); next.delete(p.playlist_id); return next; }); // rollback
       toast.error(errorMessage(e));
     } finally {
       setBusyId(null);
@@ -96,21 +108,26 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
   }
 
   async function onCreate() {
-    if (!newTitle.trim()) {
-      toast.error('제목을 입력해주세요.');
-      return;
-    }
+    if (!newTitle.trim()) { toast.error('제목을 입력해주세요.'); return; }
     setCreateBusy(true);
     try {
-      const id = await createUserPlaylist({ title: newTitle.trim(), is_public: newPublic });
-      await addTrackToUserPlaylist(id, trackId);
+      const r = await createMyPlaylistAndAddTrack(newTitle.trim(), newPublic, trackId);
       toast.success(`"${newTitle.trim()}" 만들고 담았어요`);
-      onClose();
+      setLastAdded({ id: r.playlist_id, title: newTitle.trim() });
+      setCreating(false);
+      setNewTitle('');
+      // 목록 갱신
+      fetchMyPlaylistsForAdd(trackId).then(setPlaylists).catch(() => {});
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
       setCreateBusy(false);
     }
+  }
+
+  function goView(id: string) {
+    onClose();
+    navigate(`/my/playlist/${id}`);
   }
 
   return (
@@ -119,7 +136,7 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
       onClick={onClose}
     >
       <div
-        className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-t-3xl bg-bg-soft ring-1 ring-line/15 sm:rounded-3xl"
+        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-bg-soft ring-1 ring-line/15 sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line/10 px-5 py-3">
@@ -176,7 +193,7 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
               <span className="text-sm font-semibold">새 플레이리스트 만들기</span>
             </button>
 
-            <ul className="max-h-[50vh] overflow-y-auto">
+            <ul className="flex-1 overflow-y-auto">
               {error && <li className="p-5 text-center text-xs text-red-300">{error}</li>}
               {!error && playlists === null && (
                 <li className="p-6 text-center text-sm text-ink-mute">불러오는 중…</li>
@@ -187,27 +204,48 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
                 </li>
               )}
               {playlists?.map((p) => {
-                const added = addedIds.has(p.id);
+                const added = contains(p);
                 return (
-                  <li key={p.id}>
+                  <li key={p.playlist_id}>
                     <button
                       onClick={() => void onPick(p)}
-                      disabled={busyId === p.id}
-                      className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-bg-hover disabled:opacity-60"
+                      disabled={added || busyId === p.playlist_id}
+                      className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-bg-hover disabled:cursor-default disabled:hover:bg-transparent"
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-card text-ink-dim">
                         {p.is_public ? <Globe size={16} /> : <Lock size={16} />}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{p.title}</span>
-                        <span className="block truncate text-xs text-ink-mute">트랙 {p.track_count}</span>
+                        <span className={`block truncate text-sm font-semibold ${added ? 'text-ink-mute' : ''}`}>{p.title}</span>
+                        <span className="block truncate text-xs text-ink-mute">
+                          {added ? '이미 포함됨' : `트랙 ${p.track_count}`}
+                        </span>
                       </span>
-                      {added && <Check size={18} className="shrink-0 text-accent" />}
+                      {added
+                        ? <Check size={18} className="shrink-0 text-accent" />
+                        : busyId === p.playlist_id
+                          ? <span className="shrink-0 text-xs text-ink-mute">담는 중…</span>
+                          : <Plus size={18} className="shrink-0 text-ink-mute" />}
                     </button>
                   </li>
                 );
               })}
             </ul>
+
+            {lastAdded && (
+              <div className="flex items-center justify-between gap-2 border-t border-line/10 bg-bg-card/60 px-5 py-3">
+                <span className="min-w-0 truncate text-xs text-ink-mute">
+                  <Check size={13} className="mb-0.5 mr-1 inline text-accent" />
+                  &lsquo;{lastAdded.title}&rsquo; 에 담았어요
+                </span>
+                <button
+                  onClick={() => goView(lastAdded.id)}
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25"
+                >
+                  보기 <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

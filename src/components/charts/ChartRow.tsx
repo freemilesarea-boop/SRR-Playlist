@@ -5,6 +5,7 @@ import { formatTime } from '@/lib/format';
 import { getTrackPlaybackState } from '@/lib/trackPlayability';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import TrackStateBadge from '@/components/TrackStateBadge';
 
 const NUM = (n: number) => n.toLocaleString('ko-KR');
@@ -83,13 +84,14 @@ export default function ChartRow({
 
       {/* 우측 액션 영역 — 정렬 통일 */}
       <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-        {/* 좋아요 버튼 */}
-        <span className="opacity-70 transition-opacity group-hover:opacity-100">
+        {/* 좋아요 + 플레이리스트 담기 */}
+        <span className="flex items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
           <TrackLikeButton
             trackId={track.track_id}
             track={chartTrackToTrackRow(track)}
             size={14}
           />
+          {playable && <AddToPlaylistButton trackId={track.track_id} variant="bare" size={15} />}
         </span>
 
         {/* 재생 수 — 고정 폭 */}

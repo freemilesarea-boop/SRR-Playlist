@@ -1389,6 +1389,9 @@ export default function Player() {
                       {t.duration && (
                         <span className="text-xs text-ink-dim">{formatTime(t.duration)}</span>
                       )}
+                      {tPlayable && (
+                        <AddToPlaylistButton trackId={t.id} variant="bare" size={16} className="text-ink-mute" />
+                      )}
                     </li>
                   );
                 })}

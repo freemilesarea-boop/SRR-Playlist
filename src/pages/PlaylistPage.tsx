@@ -15,6 +15,7 @@ import { gradientStyle } from '@/lib/cover';
 import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import PlaylistFollowButton from '@/components/PlaylistFollowButton';
 import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
@@ -338,8 +339,9 @@ export default function PlaylistPage() {
                 </p>
                 <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
               </div>
-              <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
+              <span className="flex shrink-0 items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
                 <TrackLikeButton trackId={t.id} track={t} size={14} />
+                {playable && <AddToPlaylistButton trackId={t.id} variant="bare" size={15} />}
               </span>
               <div className="text-xs text-ink-dim">{t.duration ? formatTime(t.duration) : ''}</div>
             </li>

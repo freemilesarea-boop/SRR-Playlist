@@ -25,6 +25,7 @@ import { errorMessage } from '@/lib/errorMessage';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import ErrorRetry from '@/components/common/ErrorRetry';
 import { withTimeout } from '@/lib/withTimeout';
 
@@ -204,8 +205,8 @@ export default function UserPlaylistDetailPage() {
           {tracks.map((t) => {
             const playable = isPlayableUrl(t.audio_url);
             return (
-              <li key={t.id}>
-                <button onClick={() => playable && playAll(t.id)} disabled={!playable} className={`flex w-full items-center gap-3 border-b border-line/10 px-3 py-2.5 text-left last:border-b-0 ${playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-50'}`}>
+              <li key={t.id} className="flex items-center border-b border-line/10 last:border-b-0">
+                <button onClick={() => playable && playAll(t.id)} disabled={!playable} className={`flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left ${playable ? 'hover:bg-ink/5' : 'cursor-not-allowed opacity-50'}`}>
                   <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/10">
                     <AutoCover title={t.title} category={t.genre} imageUrl={t.cover_url} size="sm" />
                   </div>
@@ -214,6 +215,11 @@ export default function UserPlaylistDetailPage() {
                     <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
                   </div>
                 </button>
+                {playable && (
+                  <span className="shrink-0 pr-3">
+                    <AddToPlaylistButton trackId={t.id} variant="bare" size={16} />
+                  </span>
+                )}
               </li>
             );
           })}
@@ -250,6 +256,7 @@ function SortableTrack({ track, onRemove, onPlay }: { track: DetailTrack; onRemo
           <p className="truncate text-xs text-ink-mute">{track.artist ?? '—'}</p>
         </div>
       </button>
+      {playable && <AddToPlaylistButton trackId={track.id} variant="bare" size={16} />}
       <button onClick={onRemove} className="rounded-md p-2 text-red-300 hover:bg-red-500/10" aria-label="제거">
         <Trash2 size={15} />
       </button>
