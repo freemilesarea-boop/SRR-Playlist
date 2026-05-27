@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Brain, Loader2, Sliders, Check, X, Eye } from 'lucide-react';
+import { Brain, Loader2, Sliders, Check, X, Eye, Activity } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import {
   fetchMetadataTrainingStats, type MetadataTrainingStats,
   generateWeightSuggestions, listWeightSuggestions, decideWeightSuggestion, type WeightSuggestion,
   fetchWeightSuggestionSamples, type WeightSuggestionSample,
+  simulateWeightSuggestion, type WeightSimulation,
 } from '@/lib/metadataTraining';
 
 const SUGGESTION_LABEL: Record<string, string> = {
@@ -33,6 +34,10 @@ export default function MetadataTrainingPanel() {
   const [samples, setSamples] = useState<WeightSuggestionSample[]>([]);
   const [samplesLoading, setSamplesLoading] = useState(false);
 
+  const [simFor, setSimFor] = useState<WeightSuggestion | null>(null);
+  const [sim, setSim] = useState<WeightSimulation | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
+
   function openSamples(s: WeightSuggestion) {
     setSamplesFor(s);
     setSamples([]);
@@ -41,6 +46,15 @@ export default function MetadataTrainingPanel() {
       .then(setSamples)
       .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
       .finally(() => setSamplesLoading(false));
+  }
+  function openSim(s: WeightSuggestion) {
+    setSimFor(s);
+    setSim(null);
+    setSimLoading(true);
+    simulateWeightSuggestion(s.id, 50)
+      .then(setSim)
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSimLoading(false));
   }
 
   useEffect(() => {
@@ -193,6 +207,7 @@ export default function MetadataTrainingPanel() {
                 <StatusChip status={s.status} />
                 <span className="ml-auto flex gap-1">
                   <button type="button" onClick={() => openSamples(s)} className="inline-flex items-center gap-0.5 rounded bg-bg-soft px-2 py-1 text-[10px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"><Eye size={11} /> 근거 샘플</button>
+                  <button type="button" onClick={() => openSim(s)} className="inline-flex items-center gap-0.5 rounded bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/25"><Activity size={11} /> 영향도 시뮬레이션</button>
                   {s.status === 'pending' && (
                     <>
                       <button type="button" onClick={() => void onDecide(s.id, 'approved')} className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25"><Check size={11} /> 승인</button>
@@ -235,6 +250,61 @@ export default function MetadataTrainingPanel() {
               ))}
             </ul>
             <p className="mt-2 text-[10px] text-ink-dim">read-only · 가중치 자동 변경 없음</p>
+          </div>
+        </div>
+      )}
+
+      {simFor && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setSimFor(null)}>
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-bg-card p-4 ring-1 ring-line/10 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-bold">영향도 시뮬레이션 — {SUGGESTION_LABEL[simFor.suggestion_type] ?? simFor.suggestion_type} · {simFor.target_kind === 'uploader' ? simFor.target_key.slice(0, 8) + '…' : simFor.target_key}</h3>
+              <button type="button" onClick={() => setSimFor(null)} className="rounded p-1 text-ink-dim hover:bg-bg-soft hover:text-ink"><X size={16} /></button>
+            </div>
+            {simLoading && <div className="flex items-center gap-2 text-xs text-ink-mute"><Loader2 size={14} className="animate-spin" /> 계산 중…</div>}
+            {sim && !simLoading && (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-sky-500/10 p-2 text-[11px] text-sky-700 ring-1 ring-sky-400/20 dark:text-sky-300">
+                  가상 변화량 <b>{sim.proposed_delta > 0 ? '+' : ''}{sim.proposed_delta}p</b> (추천 컷오프 {sim.current_config?.fit_recommend_cutoff}, 제외 {sim.current_config?.store_exclude_threshold}) · <b>실제 적용 아님</b>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <Stat label="영향받는 곡" value={sim.affected_tracks_count} />
+                  <Stat label="추천→제외 예상" value={sim.would_drop_below_recommend} accent />
+                  <Stat label="신규 추천 예상" value={sim.would_enter_recommend} accent />
+                  <Stat label="제외기준 이하" value={sim.would_be_excluded} />
+                  <Stat label="플레이리스트 영향" value={sim.playlist_impact_count} />
+                  <Stat label={`민감매장 위험 ${sim.guardrail_conflict_change_estimate?.direction === 'increase' ? '증가' : '감소'}`} value={sim.guardrail_conflict_change_estimate?.estimate ?? 0} />
+                </div>
+                <Section title={`샘플 곡 (${sim.sample_tracks?.length ?? 0})`}>
+                  {(sim.sample_tracks ?? []).length === 0 ? <Empty /> : (
+                    <ul className="space-y-1.5 text-[11px]">
+                      {sim.sample_tracks.map((t, i) => (
+                        <li key={t.track_id + i} className="rounded-lg bg-bg-soft/50 p-2 ring-1 ring-line/10">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">{t.title || '(제목 없음)'}</span>
+                            <span className="text-ink-dim">{t.artist_email || '—'}</span>
+                            {t.in_playlists && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600">플리 포함</span>}
+                            <span className="ml-auto font-mono">
+                              {t.current_score}
+                              <span className="text-ink-dim"> → </span>
+                              <b className={t.delta < 0 ? 'text-rose-600' : 'text-emerald-600'}>{t.simulated_score}</b>
+                              <span className="text-ink-dim"> ({t.delta > 0 ? '+' : ''}{t.delta})</span>
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                            <span className={`rounded px-1.5 py-0.5 ${t.currently_recommended ? 'bg-emerald-500/10 text-emerald-600' : 'bg-bg-soft text-ink-dim'}`}>현재 {t.currently_recommended ? '추천' : '비추천'}</span>
+                            <span className="text-ink-dim">→</span>
+                            <span className={`rounded px-1.5 py-0.5 ${t.simulated_recommended ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>예상 {t.simulated_recommended ? '추천' : '비추천'}</span>
+                            <span className="ml-2 text-ink-dim">상위매장 {(t.current_top_stores ?? []).join(',') || '—'} → {(t.simulated_top_stores ?? []).join(',') || '—'}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Section>
+                <p className="text-[10px] text-ink-dim">read-only 추정 · ai_scoring_config/ai_store_profiles/score 변경 없음. 트러스트 제안은 최대 적합도 기준 근사 추정.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

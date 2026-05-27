@@ -76,6 +76,32 @@ export async function fetchWeightSuggestionSamples(suggestionId: string, limit =
   return ((data as { samples?: WeightSuggestionSample[] } | null)?.samples) ?? [];
 }
 
+export interface SimulationSample {
+  track_id: string; title: string | null; artist_email: string | null;
+  current_score: number; simulated_score: number; delta: number;
+  current_top_stores: string[] | null; simulated_top_stores: string[] | null;
+  currently_recommended: boolean; simulated_recommended: boolean; in_playlists: boolean;
+}
+export interface WeightSimulation {
+  suggestion_id: string; suggestion_type: string; target_key: string;
+  current_config: { fit_recommend_cutoff: number; store_exclude_threshold: number };
+  proposed_delta: number;
+  affected_tracks_count: number;
+  would_drop_below_recommend: number;
+  would_enter_recommend: number;
+  would_be_excluded: number;
+  playlist_impact_count: number;
+  guardrail_conflict_change_estimate: { sensitive_store: boolean; direction: string; estimate: number };
+  sample_tracks: SimulationSample[];
+}
+
+/** 제안 적용 전 영향도 시뮬레이션 (read-only, 실제 가중치/score/update 없음). */
+export async function simulateWeightSuggestion(suggestionId: string, sampleLimit = 100): Promise<WeightSimulation> {
+  const { data, error } = await supabase.rpc('admin_simulate_weight_suggestion', { p_suggestion_id: suggestionId, p_sample_limit: sampleLimit });
+  if (error) throw error;
+  return data as WeightSimulation;
+}
+
 /** 변경 없이 "AI 정답/문제 없음" 확인을 학습 데이터로 명시 기록 (관리자 검수 화면에서 호출). */
 export async function recordMetadataTrainingExample(
   trackId: string,
