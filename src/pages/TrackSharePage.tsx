@@ -47,12 +47,13 @@ export default function TrackSharePage() {
       }
       const t = applyDemoMode([data as TrackRow])[0];
       setTrack(t);
-      // 같은 장르 추천
-      if (t.genre) {
+      // 같은 장르 추천 (main_genre 기준)
+      const mainGenre = (data as { main_genre: string | null }).main_genre;
+      if (mainGenre) {
         const { data: rel } = await supabase
           .from('tracks')
           .select('*')
-          .eq('genre', t.genre)
+          .eq('main_genre', mainGenre)
           .neq('id', t.id)
           .eq('visibility_status', 'approved')
           .is('removed_at', null)
