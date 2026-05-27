@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Brain, Loader2, Sliders, Check, X, Eye, Activity } from 'lucide-react';
+import { Brain, Loader2, Sliders, Check, X, Eye, Activity, FlaskConical } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import {
   fetchMetadataTrainingStats, type MetadataTrainingStats,
   generateWeightSuggestions, listWeightSuggestions, decideWeightSuggestion, type WeightSuggestion,
   fetchWeightSuggestionSamples, type WeightSuggestionSample,
   simulateWeightSuggestion, type WeightSimulation,
+  createShadowFromSuggestion, simulateShadowConfig, decideShadowConfig, type ShadowSimResult,
 } from '@/lib/metadataTraining';
 
 const SUGGESTION_LABEL: Record<string, string> = {
@@ -37,6 +38,10 @@ export default function MetadataTrainingPanel() {
   const [simFor, setSimFor] = useState<WeightSuggestion | null>(null);
   const [sim, setSim] = useState<WeightSimulation | null>(null);
   const [simLoading, setSimLoading] = useState(false);
+  const [shadowFor, setShadowFor] = useState<WeightSuggestion | null>(null);
+  const [shadowId, setShadowId] = useState<string | null>(null);
+  const [shadowResult, setShadowResult] = useState<ShadowSimResult | null>(null);
+  const [shadowLoading, setShadowLoading] = useState(false);
 
   function openSamples(s: WeightSuggestion) {
     setSamplesFor(s);
@@ -55,6 +60,27 @@ export default function MetadataTrainingPanel() {
       .then(setSim)
       .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
       .finally(() => setSimLoading(false));
+  }
+  function openShadow(s: WeightSuggestion) {
+    setShadowFor(s);
+    setShadowResult(null);
+    setShadowId(null);
+    setShadowLoading(true);
+    createShadowFromSuggestion(s.id)
+      .then((id) => { setShadowId(id); return simulateShadowConfig(id, 500); })
+      .then(setShadowResult)
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => setShadowLoading(false));
+  }
+  async function onDecideShadow(decision: 'approved_for_apply' | 'rejected') {
+    if (!shadowId) return;
+    try {
+      await decideShadowConfig(shadowId, decision);
+      toast.success(decision === 'approved_for_apply' ? '반영 준비 완료로 표시 (실제 반영은 별도 단계)' : '반려됨');
+      setShadowFor(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
   }
 
   useEffect(() => {
@@ -208,6 +234,7 @@ export default function MetadataTrainingPanel() {
                 <span className="ml-auto flex gap-1">
                   <button type="button" onClick={() => openSamples(s)} className="inline-flex items-center gap-0.5 rounded bg-bg-soft px-2 py-1 text-[10px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"><Eye size={11} /> 근거 샘플</button>
                   <button type="button" onClick={() => openSim(s)} className="inline-flex items-center gap-0.5 rounded bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/25"><Activity size={11} /> 영향도 시뮬레이션</button>
+                  <button type="button" onClick={() => openShadow(s)} className="inline-flex items-center gap-0.5 rounded bg-violet-500/15 px-2 py-1 text-[10px] font-semibold text-violet-600 hover:bg-violet-500/25"><FlaskConical size={11} /> Shadow 정밀</button>
                   {s.status === 'pending' && (
                     <>
                       <button type="button" onClick={() => void onDecide(s.id, 'approved')} className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25"><Check size={11} /> 승인</button>
@@ -308,7 +335,66 @@ export default function MetadataTrainingPanel() {
           </div>
         </div>
       )}
+
+      {shadowFor && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setShadowFor(null)}>
+          <div className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-bg-card p-4 ring-1 ring-line/10 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 text-sm font-bold"><FlaskConical size={15} className="text-violet-500" /> Shadow 정밀 시뮬레이션</h3>
+              <button type="button" onClick={() => setShadowFor(null)} className="rounded p-1 text-ink-dim hover:bg-bg-soft hover:text-ink"><X size={16} /></button>
+            </div>
+            <div className="mb-2 rounded-lg bg-violet-500/10 p-2 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-400/20 dark:text-violet-300">
+              ⚠ 실제 반영 아님 (shadow). 운영 config·store profile·fit score 미변경. 실제 추천 공식으로 재계산한 예측치입니다.
+            </div>
+            {shadowLoading && <div className="flex items-center gap-2 text-xs text-ink-mute"><Loader2 size={14} className="animate-spin" /> 정밀 재계산 중…</div>}
+            {shadowResult && !shadowLoading && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Stat label="영향 곡" value={shadowResult.affected_tracks_count} />
+                  <Stat label="추천 변화" value={shadowResult.changed_recommendations_count} accent />
+                  <Stat label="추천 탈락" value={shadowResult.dropped_from_recommendation_count} />
+                  <Stat label="신규 추천" value={shadowResult.newly_recommended_count} />
+                  <Stat label="제외 전환" value={shadowResult.excluded_count} />
+                  <Stat label="플리 영향" value={shadowResult.playlist_impact_count} />
+                  <Stat label="민감매장 위험Δ" value={shadowResult.guardrail_conflict_change} />
+                  <Stat label="위험/안전" value={`${shadowResult.risky_changes?.length ?? 0}/${shadowResult.safe_changes?.length ?? 0}`} />
+                </div>
+                {(shadowResult.risky_changes?.length ?? 0) > 0 && (
+                  <Section title={`위험 변화 (${shadowResult.risky_changes.length})`}>
+                    <ShadowList items={shadowResult.risky_changes} />
+                  </Section>
+                )}
+                <Section title={`변경된 곡 (${shadowResult.top_changed_tracks?.length ?? 0})`}>
+                  {(shadowResult.top_changed_tracks?.length ?? 0) === 0 ? <Empty /> : <ShadowList items={shadowResult.top_changed_tracks} />}
+                </Section>
+                <p className="text-[10px] text-ink-dim">{shadowResult.note}</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => void onDecideShadow('approved_for_apply')} className="flex-1 rounded-lg bg-emerald-500/15 py-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 dark:text-emerald-300">반영 준비 완료 (실제 반영 X)</button>
+                  <button type="button" onClick={() => void onDecideShadow('rejected')} className="flex-1 rounded-lg bg-rose-500/15 py-2 text-xs font-bold text-rose-700 ring-1 ring-rose-400/30 hover:bg-rose-500/25 dark:text-rose-300">반려</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ShadowList({ items }: { items: Array<{ track_id: string; store: string | null; current_score: number | null; shadow_score: number; current_status: string | null; shadow_status: string; in_playlist: boolean; risk_reason: string | null }> }) {
+  return (
+    <ul className="space-y-1 text-[11px]">
+      {items.map((t, i) => (
+        <li key={t.track_id + i} className="flex flex-wrap items-center gap-2 rounded bg-bg-soft/50 p-1.5">
+          <span className="font-mono text-ink-dim">{t.track_id.slice(0, 8)}</span>
+          {t.store && <span className="rounded bg-bg-soft px-1.5 py-0.5 text-[10px]">{t.store}</span>}
+          <span className="font-mono">{t.current_score ?? '—'} → <b className={t.shadow_score < (t.current_score ?? 0) ? 'text-rose-600' : 'text-emerald-600'}>{t.shadow_score}</b></span>
+          <span className="text-[10px] text-ink-dim">{t.current_status} → {t.shadow_status}</span>
+          {t.in_playlist && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600">플리</span>}
+          {t.risk_reason && <span className="ml-auto rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-600">{t.risk_reason}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
