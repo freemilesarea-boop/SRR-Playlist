@@ -23,6 +23,7 @@ const DEUDDA_SERVICE_LINKS: LinkItem[] = [
 const SUPPORT_LINKS: LinkItem[] = [
   { label: '고객센터', href: '/support' },
   { label: '공지사항', href: '/notice' },
+  { label: '영업 파트너스 지원', href: '/sales-partners' },
   { label: '광고 / B2B 문의', href: 'mailto:freemilesarea@gmail.com?subject=듣다 문의' },
   { label: '이용약관', href: '/terms' },
   { label: '개인정보 처리방침', href: '/privacy' },
