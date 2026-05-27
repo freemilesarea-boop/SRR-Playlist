@@ -31,6 +31,7 @@ import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
 import SalesAgentsList from '@/components/admin/SalesAgentsList';
 import AdminUsersList from '@/components/admin/AdminUsersList';
 import UploadIntegrityPanel from '@/components/admin/UploadIntegrityPanel';
+import CompliancePanel from '@/components/admin/CompliancePanel';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
@@ -79,6 +80,7 @@ type Tab =
   | 'operation-logs'
   | 'admins'
   | 'upload-integrity'
+  | 'compliance'
   | 'recommendation';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
@@ -107,6 +109,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
+  { key: 'compliance', label: '계약/정산 미완료', icon: <ShieldCheck size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
@@ -193,6 +196,7 @@ export default function AdminPage() {
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
         {tab === 'upload-integrity' && <UploadIntegrityPanel />}
+        {tab === 'compliance' && <CompliancePanel />}
         {tab === 'admins' && <AdminUsersList />}
       </AdminErrorBoundary>
     </div>
