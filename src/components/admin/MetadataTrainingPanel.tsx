@@ -1,6 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Brain, Loader2 } from 'lucide-react';
-import { fetchMetadataTrainingStats, type MetadataTrainingStats } from '@/lib/metadataTraining';
+import { useEffect, useState, useCallback } from 'react';
+import { Brain, Loader2, Sliders, Check, X } from 'lucide-react';
+import { toast } from '@/store/toastStore';
+import {
+  fetchMetadataTrainingStats, type MetadataTrainingStats,
+  generateWeightSuggestions, listWeightSuggestions, decideWeightSuggestion, type WeightSuggestion,
+} from '@/lib/metadataTraining';
+
+const SUGGESTION_LABEL: Record<string, string> = {
+  store_overpredict: '매장 과예측(가중치↓)',
+  store_underpredict: '매장 누락(가중치↑)',
+  uploader_trust_down: '업로더 신뢰도↓',
+};
 
 const CORRECTION_LABEL: Record<string, string> = {
   ai_correct: 'AI 정답',
@@ -15,6 +25,9 @@ export default function MetadataTrainingPanel() {
   const [stats, setStats] = useState<MetadataTrainingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<WeightSuggestion[]>([]);
+  const [sugLoading, setSugLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -26,6 +39,37 @@ export default function MetadataTrainingPanel() {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [days]);
+
+  const loadSuggestions = useCallback(() => {
+    setSugLoading(true);
+    listWeightSuggestions()
+      .then(setSuggestions)
+      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSugLoading(false));
+  }, []);
+  useEffect(() => { loadSuggestions(); }, [loadSuggestions]);
+
+  async function onGenerate() {
+    setGenerating(true);
+    try {
+      const n = await generateWeightSuggestions(days, 5);
+      toast.success(`제안 ${n}건 생성/갱신`);
+      loadSuggestions();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(false);
+    }
+  }
+  async function onDecide(id: string, decision: 'approved' | 'rejected') {
+    try {
+      await decideWeightSuggestion(id, decision);
+      toast.success(decision === 'approved' ? '승인됨 (반영은 별도 단계)' : '반려됨');
+      loadSuggestions();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -105,8 +149,59 @@ export default function MetadataTrainingPanel() {
           </Section>
         </div>
       )}
+
+      <section className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold text-ink-mute">
+            <Sliders size={13} /> 가중치 수정 제안 (승인 필요 · 자동 반영 안 함)
+          </h3>
+          <button
+            type="button"
+            onClick={() => void onGenerate()}
+            disabled={generating}
+            className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-2.5 py-1.5 text-[11px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
+          >
+            {generating ? <Loader2 size={12} className="animate-spin" /> : <Sliders size={12} />} 제안 생성
+          </button>
+        </div>
+        <p className="mb-2 text-[10px] text-ink-dim">
+          학습 데이터에서 AI가 자주 틀리는 패턴을 분석해 권고만 만듭니다. 승인해도 실제 가중치는 바뀌지 않으며, 반영은 별도 단계에서 수동 진행합니다.
+        </p>
+        {sugLoading && <div className="flex items-center gap-2 text-xs text-ink-mute"><Loader2 size={14} className="animate-spin" /> 불러오는 중…</div>}
+        {!sugLoading && suggestions.length === 0 && <Empty />}
+        <ul className="space-y-1.5">
+          {suggestions.map((s) => (
+            <li key={s.id} className="rounded-lg bg-bg-soft/50 p-2 ring-1 ring-line/10">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="rounded bg-bg-soft px-1.5 py-0.5 font-semibold">{SUGGESTION_LABEL[s.suggestion_type] ?? s.suggestion_type}</span>
+                <span className="font-mono text-ink-dim">{s.target_kind === 'uploader' ? s.target_key.slice(0, 8) + '…' : s.target_key}</span>
+                {s.confidence != null && <span className="text-ink-dim">신뢰도 {Math.round(s.confidence * 100)}%</span>}
+                <StatusChip status={s.status} />
+                {s.status === 'pending' && (
+                  <span className="ml-auto flex gap-1">
+                    <button type="button" onClick={() => void onDecide(s.id, 'approved')} className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25"><Check size={11} /> 승인</button>
+                    <button type="button" onClick={() => void onDecide(s.id, 'rejected')} className="inline-flex items-center gap-0.5 rounded bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-500/25"><X size={11} /> 반려</button>
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-ink">{s.suggested_action}</p>
+              {s.target_config_key && <p className="mt-0.5 font-mono text-[10px] text-ink-dim">knob: {s.target_config_key}</p>}
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
+}
+
+function StatusChip({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    pending: 'bg-amber-500/15 text-amber-600',
+    approved: 'bg-emerald-500/15 text-emerald-600',
+    rejected: 'bg-rose-500/15 text-rose-600',
+  };
+  const label: Record<string, string> = { pending: '대기', approved: '승인', rejected: '반려' };
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[status] ?? 'bg-bg-soft'}`}>{label[status] ?? status}</span>;
 }
 
 function Stat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
