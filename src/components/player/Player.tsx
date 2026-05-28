@@ -141,6 +141,25 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
+
+  // DEV 전용 — 콘솔에서 audio 상태를 직접 들여다보기 위한 진단 헬퍼.
+  // 사용: window.__playerDiag() → { active: {currentSrc, currentTime, volume, muted, ...}, next, store }
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as { __playerDiag?: () => unknown };
+    w.__playerDiag = () => {
+      const a = activeRef();
+      const n = nextRef();
+      return {
+        active: a ? { currentSrc: a.currentSrc, currentTime: a.currentTime, duration: a.duration, paused: a.paused, muted: a.muted, volume: a.volume, readyState: a.readyState, networkState: a.networkState, ended: a.ended } : null,
+        next: n ? { currentSrc: n.currentSrc, paused: n.paused, volume: n.volume } : null,
+        store: { playing, crossfading, activeIdx, currentTrackId: current?.id, currentTrackTitle: current?.title, currentTrackUrl: current?.audio_url },
+      };
+    };
+    return () => { try { delete (w as { __playerDiag?: () => unknown }).__playerDiag; } catch { /* noop */ } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdx, playing, crossfading, current?.id]);
+
   // 0078 — 미니 플레이어 볼륨 popover
   const [volumePopover, setVolumePopover] = useState(false);
   const volumeBtnRef = useRef<HTMLButtonElement>(null);
@@ -819,8 +838,35 @@ export default function Player() {
     const expectedSrc = audio.currentSrc;
     try {
       await audio.play();
+      // muted=true 면 안전 해제 (브라우저/사용자 실수 방어)
+      if (audio.muted) {
+        if (import.meta.env.DEV) console.warn(`[Player] muted=true 감지 — 자동 해제 (${label})`);
+        audio.muted = false;
+      }
+      // volume=0 이면 경고 (크로스페이드 중간 아님)
+      if (audio.volume === 0 && !crossfading) {
+        if (import.meta.env.DEV) console.warn(`[Player] volume=0 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`);
+        audio.volume = volume;
+      }
       if (import.meta.env.DEV) {
-        console.debug(`[Player] play() ok (${label})`, { id: current?.id, currentSrc: audio.currentSrc, currentTime: audio.currentTime, readyState: audio.readyState });
+        console.debug(`[Player] play() ok (${label})`, {
+          id: current?.id, currentSrc: audio.currentSrc, currentTime: audio.currentTime, duration: audio.duration,
+          readyState: audio.readyState, paused: audio.paused, muted: audio.muted, volume: audio.volume, crossfading,
+        });
+        // 1s 후 currentTime 실제 진행 여부 검증 — paused 아님 + 같은 src 인 경우에만
+        const verifyAt = performance.now();
+        window.setTimeout(() => {
+          if (audio.paused) return; // 사용자가 일시정지했으면 무시
+          if (audio.currentSrc !== expectedSrc) return; // 그 사이 트랙 바뀌었으면 무시
+          const elapsed = (performance.now() - verifyAt) / 1000;
+          console.debug(`[Player] playback progress @1s (${label})`, {
+            currentTime: audio.currentTime, elapsed_real: elapsed.toFixed(2), volume: audio.volume, muted: audio.muted,
+          });
+          if (audio.currentTime <= 0.05) {
+            console.warn(`[Player] currentTime 정체 (${label}) — 1s 경과해도 currentTime=${audio.currentTime}. ` +
+              '브라우저 오디오 출력 차단 의심 (시스템 mute / 사이트 권한 / 가속 코덱 이슈).');
+          }
+        }, 1000);
       }
     } catch (err: unknown) {
       const e = err as DOMException;

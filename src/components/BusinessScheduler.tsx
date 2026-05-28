@@ -285,17 +285,27 @@ export default function BusinessScheduler() {
       if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: currentTracks.length, slot: current.slot_name });
       void logScheduleEvent(userId, current.id, current.playlist_id, 'started');
       toast.success(`${current.slot_name} 시작 (${currentTracks.length}곡)`);
-      // 1.5s 후 실제 재생 상태 검증 — playerStore.playing 과 큐 일치 여부, 트랙 정보 로그 (DEV)
+      // 1.5s 후 실제 재생 상태 검증 — playerStore.playing + audio element 의 실제 currentSrc/currentTime/볼륨/뮤트 (DEV)
       if (import.meta.env.DEV) {
         window.setTimeout(() => {
           const st = usePlayerStore.getState();
           const cur = st.queue[st.index] ?? null;
+          const diag = (window as unknown as { __playerDiag?: () => unknown }).__playerDiag;
+          const aud = typeof diag === 'function' ? (diag() as { active: { currentSrc: string; currentTime: number; duration: number; paused: boolean; muted: boolean; volume: number; readyState: number } | null }) : null;
           console.debug('[StoreScheduler] verify after 1.5s', {
-            playing: st.playing, queue_length: st.queue.length, index: st.index,
-            current_track_id: cur?.id, current_track_title: cur?.title, current_audio_url: cur?.audio_url,
+            store: { playing: st.playing, queue_length: st.queue.length, index: st.index,
+              current_track_id: cur?.id, current_track_title: cur?.title, current_audio_url: cur?.audio_url },
+            audio: aud?.active ?? '(audio element 접근 불가)',
+            url_match: aud?.active && cur?.audio_url ? aud.active.currentSrc === cur.audio_url : null,
           });
           if (!st.playing) {
-            console.warn('[StoreScheduler] 재생 상태가 1.5s 후에도 false — autoplay 차단 또는 src 미적용 의심. Player.tsx 콘솔 로그 확인 필요.');
+            console.warn('[StoreScheduler] store.playing=false @1.5s — autoplay 차단 또는 src 미적용 의심.');
+          } else if (aud?.active && aud.active.paused) {
+            console.warn('[StoreScheduler] store.playing=true 인데 audio.paused=true @1.5s — play() 거절됐을 가능성. [Player] 로그 확인.');
+          } else if (aud?.active && aud.active.currentTime <= 0.05) {
+            console.warn('[StoreScheduler] audio.currentTime 정체 @1.5s — 시스템 볼륨/사이트 사운드 권한/코덱 의심.');
+          } else if (aud?.active) {
+            console.debug('[StoreScheduler] OK — audio playback 정상 진행 중', { currentTime: aud.active.currentTime, volume: aud.active.volume, muted: aud.active.muted });
           }
         }, 1500);
       }
