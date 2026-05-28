@@ -353,7 +353,7 @@ function CreatePlaylistForm({
         <option value="morning">오전</option>
         <option value="afternoon">오후</option>
         <option value="evening">저녁</option>
-        <option value="night">밤</option>
+        {/* 'night' 옵션은 0215 마이그에서 evening 으로 흡수됨 — 매장 schedules 모델과 일치 */}
       </select>
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="btn-primary flex-1">

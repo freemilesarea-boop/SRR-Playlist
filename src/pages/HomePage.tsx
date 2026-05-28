@@ -112,8 +112,6 @@ export default function HomePage() {
         return '여유로운 오후예요';
       case 'evening':
         return '저녁이 시작됐어요';
-      case 'night':
-        return '깊은 밤이에요';
     }
   }, [slot]);
 
