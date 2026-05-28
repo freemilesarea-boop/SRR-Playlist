@@ -141,6 +141,25 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
+
+  // DEV 전용 — 콘솔에서 audio 상태를 직접 들여다보기 위한 진단 헬퍼.
+  // 사용: window.__playerDiag() → { active: {currentSrc, currentTime, volume, muted, ...}, next, store }
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as { __playerDiag?: () => unknown };
+    w.__playerDiag = () => {
+      const a = activeRef();
+      const n = nextRef();
+      return {
+        active: a ? { currentSrc: a.currentSrc, currentTime: a.currentTime, duration: a.duration, paused: a.paused, muted: a.muted, volume: a.volume, readyState: a.readyState, networkState: a.networkState, ended: a.ended } : null,
+        next: n ? { currentSrc: n.currentSrc, paused: n.paused, volume: n.volume } : null,
+        store: { playing, crossfading, activeIdx, currentTrackId: current?.id, currentTrackTitle: current?.title, currentTrackUrl: current?.audio_url },
+      };
+    };
+    return () => { try { delete (w as { __playerDiag?: () => unknown }).__playerDiag; } catch { /* noop */ } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdx, playing, crossfading, current?.id]);
+
   // 0078 — 미니 플레이어 볼륨 popover
   const [volumePopover, setVolumePopover] = useState(false);
   const volumeBtnRef = useRef<HTMLButtonElement>(null);
@@ -476,6 +495,9 @@ export default function Player() {
       // 1) 이전 src 의 play 프로미스 abort
       audio.pause();
       // 2) 새 src 적용
+      if (import.meta.env.DEV) {
+        console.debug('[Player] src set', { id: current.id, url: current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
+      }
       audio.src = current.audio_url;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
@@ -517,22 +539,8 @@ export default function Player() {
     // 같은 트랙 — playing 토글만 동기화
     if (playing) {
       if (audio.paused) {
-        if (import.meta.env.DEV) console.debug('[Player] play() resume', { id: current.id });
-        const p = audio.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch((err: DOMException) => {
-            if (err?.name === 'AbortError') return; // src 변경 등 — 무시
-            if (err?.name === 'NotAllowedError') {
-              pause();
-              toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
-              return;
-            }
-            if (import.meta.env.DEV) console.debug('[Player] play() rejected', err?.name, err?.message);
-            // 상태 꼬임 방지: pause 만 호출, auto-next 는 onError 에 위임
-            pause();
-            toast.error('재생 중 오류가 발생했어요.');
-          });
-        }
+        if (import.meta.env.DEV) console.debug('[Player] play() resume', { id: current.id, readyState: audio.readyState, currentSrc: audio.currentSrc });
+        void attemptPlay(audio, 'resume');
       }
     } else {
       audio.pause();
@@ -791,6 +799,9 @@ export default function Player() {
     const target = e.currentTarget;
     if (target !== activeRef()) return;
     const d = target.duration;
+    if (import.meta.env.DEV) {
+      console.debug('[Player] loadedmetadata', { id: current?.id, duration: d, readyState: target.readyState, currentSrc: target.currentSrc });
+    }
     // 메타데이터가 정상 로드됨(유한 duration) → 타임아웃 가드 해제
     if (Number.isFinite(d) && d > 0) clearMetaTimer();
     if (Number.isFinite(d)) setDuration(d);
@@ -816,18 +827,77 @@ export default function Player() {
     if (!playing) return;
     const audio = e.currentTarget;
     if (!audio.paused) return;
-    if (import.meta.env.DEV) console.debug('[Player] canplay → auto-play', { id: current?.id });
-    const p = audio.play();
-    if (p && typeof p.catch === 'function') {
-      p.catch((err: DOMException) => {
-        if (err?.name === 'AbortError') return;
-        if (err?.name === 'NotAllowedError') {
-          pause();
-          toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
-          return;
-        }
-        if (import.meta.env.DEV) console.debug('[Player] onCanPlay play() rejected', err?.name, err?.message);
-      });
+    if (import.meta.env.DEV) {
+      console.debug('[Player] canplay → auto-play', { id: current?.id, readyState: audio.readyState, currentSrc: audio.currentSrc });
+    }
+    void attemptPlay(audio, 'canplay');
+  }
+
+  // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
+  async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    const expectedSrc = audio.currentSrc;
+    try {
+      await audio.play();
+      // muted=true 면 안전 해제 (브라우저/사용자 실수 방어)
+      if (audio.muted) {
+        if (import.meta.env.DEV) console.warn(`[Player] muted=true 감지 — 자동 해제 (${label})`);
+        audio.muted = false;
+      }
+      // volume=0 이면 경고 (크로스페이드 중간 아님)
+      if (audio.volume === 0 && !crossfading) {
+        if (import.meta.env.DEV) console.warn(`[Player] volume=0 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`);
+        audio.volume = volume;
+      }
+      if (import.meta.env.DEV) {
+        console.debug(`[Player] play() ok (${label})`, {
+          id: current?.id, currentSrc: audio.currentSrc, currentTime: audio.currentTime, duration: audio.duration,
+          readyState: audio.readyState, paused: audio.paused, muted: audio.muted, volume: audio.volume, crossfading,
+        });
+        // 1s 후 currentTime 실제 진행 여부 검증 — paused 아님 + 같은 src 인 경우에만
+        const verifyAt = performance.now();
+        window.setTimeout(() => {
+          if (audio.paused) return; // 사용자가 일시정지했으면 무시
+          if (audio.currentSrc !== expectedSrc) return; // 그 사이 트랙 바뀌었으면 무시
+          const elapsed = (performance.now() - verifyAt) / 1000;
+          console.debug(`[Player] playback progress @1s (${label})`, {
+            currentTime: audio.currentTime, elapsed_real: elapsed.toFixed(2), volume: audio.volume, muted: audio.muted,
+          });
+          if (audio.currentTime <= 0.05) {
+            console.warn(`[Player] currentTime 정체 (${label}) — 1s 경과해도 currentTime=${audio.currentTime}. ` +
+              '브라우저 오디오 출력 차단 의심 (시스템 mute / 사이트 권한 / 가속 코덱 이슈).');
+          }
+        }, 1000);
+      }
+    } catch (err: unknown) {
+      const e = err as DOMException;
+      if (e?.name === 'AbortError') {
+        if (import.meta.env.DEV) console.debug(`[Player] play() AbortError (${label}) — src 변경으로 인한 무효화`);
+        return;
+      }
+      if (e?.name === 'NotAllowedError') {
+        if (import.meta.env.DEV) console.warn(`[Player] play() NotAllowedError (${label}) — autoplay 차단됨`);
+        pause();
+        toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
+        return;
+      }
+      if (import.meta.env.DEV) console.warn(`[Player] play() rejected (${label}) — 250ms 후 재시도 1회`, { name: e?.name, message: e?.message });
+      // 재시도 1회 — src 가 같고 여전히 paused 일 때만
+      await new Promise((r) => window.setTimeout(r, 250));
+      if (audio.currentSrc !== expectedSrc) {
+        if (import.meta.env.DEV) console.debug(`[Player] play() retry 취소 (${label}) — src 가 그 사이 변경됨`);
+        return;
+      }
+      if (!audio.paused) return;
+      try {
+        await audio.play();
+        if (import.meta.env.DEV) console.debug(`[Player] play() ok (${label} retry)`, { id: current?.id, currentSrc: audio.currentSrc });
+      } catch (err2: unknown) {
+        const e2 = err2 as DOMException;
+        if (e2?.name === 'AbortError' || e2?.name === 'NotAllowedError') return;
+        if (import.meta.env.DEV) console.error(`[Player] play() retry 실패 (${label})`, { name: e2?.name, message: e2?.message });
+        pause();
+        toast.error('재생 시작에 실패했어요. 다시 시도해주세요.');
+      }
     }
   }
 
@@ -1068,6 +1138,13 @@ export default function Player() {
             className="pointer-events-none absolute inset-0 opacity-30"
             style={gradientStyle(playlist?.category || current.title)}
           />
+          {/* DEUDDA — 상단 진행도 hairline (재생 중 시각적 alive 신호) */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-white/5">
+            <div
+              className="h-full bg-accent transition-[width] duration-200 ease-out"
+              style={{ width: duration > 0 ? `${Math.min(100, (currentTime / duration) * 100)}%` : '0%' }}
+            />
+          </div>
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/15">
             <AutoCover
               title={current.title}
@@ -1091,7 +1168,8 @@ export default function Player() {
               e.stopPropagation();
               handlePlayBtn();
             }}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15 transition hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white ring-1 ring-white/15 transition duration-smooth ease-emphasized hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
+            style={{ boxShadow: '0 10px 28px rgb(var(--color-accent) / 0.50), 0 4px 10px rgba(0,0,0,0.40)' }}
             aria-label={playing ? '일시정지' : '재생'}
             disabled={errored}
           >
@@ -1388,6 +1466,9 @@ export default function Player() {
                       </div>
                       {t.duration && (
                         <span className="text-xs text-ink-dim">{formatTime(t.duration)}</span>
+                      )}
+                      {tPlayable && (
+                        <AddToPlaylistButton trackId={t.id} variant="bare" size={16} className="text-ink-mute" />
                       )}
                     </li>
                   );

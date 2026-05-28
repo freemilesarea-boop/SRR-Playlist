@@ -10,17 +10,23 @@
  * bg / surface / ink / border 토큰은 v2 그대로 — 안정 우선.
  * ============================================ */
 
-/* ---------- 기본값 (다크 · 밤) ---------- */
+/* ---------- 기본값 (DEUDDA dark · 밤) ----------
+ * DEUDDA v0.2 정렬:
+ *  bg #0A0A0A · bg-elev-1 #111111 · bg-elev-2 #161616
+ *  violet #7B3FF2 · violet-h #8E58FF
+ *  ink #F5F5F5 / #A0A0A0 / #5C5C5C
+ *  border 토큰은 흰색+alpha 유지(기존 ring-line/10·/15 패턴 호환).
+ */
 :root {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      23 26 33;
-  --color-surface-soft: 35 39 52;
-  --color-accent:       155 120 245;
-  --color-accent-soft:  110 50 232;
-  --color-ink:          239 246 255;
-  --color-ink-mute:     150 162 184;
-  --color-ink-dim:      100 112 132;
+  --color-bg:           10 10 10;
+  --color-bg-soft:      5  5  5;
+  --color-surface:      17 17 17;
+  --color-surface-soft: 22 22 22;
+  --color-accent:       123 63 242;
+  --color-accent-soft:  142 88 255;
+  --color-ink:          245 245 245;
+  --color-ink-mute:     160 160 160;
+  --color-ink-dim:      92 92 92;
   --color-border:       255 255 255;
 }
 
@@ -28,69 +34,45 @@
  * DARK MODE — Violet hue, 시간대별 미세 변주
  * ============================================ */
 
+/* DEUDDA dark — 모든 timeslot 동일 코어, accent 살짝 변주. */
 [data-theme='dark'][data-timeslot='dawn'] {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      24 26 35;
-  --color-surface-soft: 36 39 52;
-  --color-accent:       175 152 250;
-  --color-accent-soft:  130 85 230;
-  --color-ink:          238 235 252;
-  --color-ink-mute:     156 158 188;
-  --color-ink-dim:      108 110 138;
-  --color-border:       255 255 255;
+  --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
+  --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
+  --color-accent: 142 88 255; --color-accent-soft: 123 63 242;
+  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-border: 255 255 255;
 }
 
 [data-theme='dark'][data-timeslot='morning'] {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      24 25 33;
-  --color-surface-soft: 36 38 50;
-  --color-accent:       173 142 240;
-  --color-accent-soft:  128 70 222;
-  --color-ink:          240 238 250;
-  --color-ink-mute:     160 158 184;
-  --color-ink-dim:      112 110 136;
-  --color-border:       255 255 255;
+  --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
+  --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
+  --color-accent: 135 78 250; --color-accent-soft: 123 63 242;
+  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-border: 255 255 255;
 }
 
 [data-theme='dark'][data-timeslot='afternoon'] {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      23 25 33;
-  --color-surface-soft: 35 38 50;
-  --color-accent:       167 139 250;
-  --color-accent-soft:  124 58 237;
-  --color-ink:          240 240 252;
-  --color-ink-mute:     158 162 186;
-  --color-ink-dim:      110 114 138;
-  --color-border:       255 255 255;
+  --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
+  --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
+  --color-accent: 123 63 242; --color-accent-soft: 110 50 232;
+  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-border: 255 255 255;
 }
 
 [data-theme='dark'][data-timeslot='evening'] {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      26 25 33;
-  --color-surface-soft: 38 36 50;
-  --color-accent:       173 132 245;
-  --color-accent-soft:  138 65 225;
-  --color-ink:          243 238 252;
-  --color-ink-mute:     168 158 188;
-  --color-ink-dim:      118 110 138;
-  --color-border:       255 255 255;
+  --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
+  --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
+  --color-accent: 138 70 250; --color-accent-soft: 123 63 242;
+  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-border: 255 255 255;
 }
 
 [data-theme='dark'][data-timeslot='night'] {
-  --color-bg:           15 17 21;
-  --color-bg-soft:      11 13 17;
-  --color-surface:      23 26 33;
-  --color-surface-soft: 35 39 52;
-  --color-accent:       155 120 245;
-  --color-accent-soft:  110 50 232;
-  --color-ink:          239 246 255;
-  --color-ink-mute:     150 162 184;
-  --color-ink-dim:      100 112 132;
-  --color-border:       255 255 255;
+  --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
+  --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
+  --color-accent: 123 63 242; --color-accent-soft: 110 50 232;
+  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-border: 255 255 255;
 }
 
 /* ============================================

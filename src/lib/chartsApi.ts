@@ -95,12 +95,12 @@ export async function fetchGenres(): Promise<GenreSummary[]> {
     if (error) throw error;
     return (data ?? []) as GenreSummary[];
   } catch {
-    // RPC 미적용 fallback — tracks 직접 조회 후 distinct
-    const { data } = await supabase.from('tracks').select('genre');
-    const rows = (data ?? []) as Array<{ genre: string | null }>;
+    // RPC 미적용 fallback — tracks 직접 조회 후 distinct (차트 집계와 동일하게 main_genre 기준)
+    const { data } = await supabase.from('tracks').select('main_genre');
+    const rows = (data ?? []) as Array<{ main_genre: string | null }>;
     const counts = new Map<string, number>();
     for (const r of rows) {
-      const g = r.genre?.trim() || '기타';
+      const g = r.main_genre?.trim() || '기타';
       counts.set(g, (counts.get(g) ?? 0) + 1);
     }
     return Array.from(counts.entries())

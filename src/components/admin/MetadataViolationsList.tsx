@@ -241,7 +241,7 @@ export default function MetadataViolationsList() {
                       {row.playlist_category ? ` · ${row.playlist_category}` : ''}
                     </p>
                     <p className="text-[11px] text-ink-dim">
-                      현재 메타데이터: 장르 {row.main_genre || row.genre || '-'} · 무드 {row.mood || '-'}
+                      현재 메타데이터: 장르 {row.main_genre || '-'} · 무드 {row.mood || '-'}
                       {row.energy_level != null ? ` · 에너지 ${row.energy_level}` : ''}
                     </p>
                   </div>

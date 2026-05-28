@@ -47,12 +47,13 @@ export default function TrackSharePage() {
       }
       const t = applyDemoMode([data as TrackRow])[0];
       setTrack(t);
-      // 같은 장르 추천
-      if (t.genre) {
+      // 같은 장르 추천 (main_genre 기준)
+      const mainGenre = (data as { main_genre: string | null }).main_genre;
+      if (mainGenre) {
         const { data: rel } = await supabase
           .from('tracks')
           .select('*')
-          .eq('genre', t.genre)
+          .eq('main_genre', mainGenre)
           .neq('id', t.id)
           .eq('visibility_status', 'approved')
           .is('removed_at', null)
@@ -118,7 +119,7 @@ export default function TrackSharePage() {
           </button>
 
           <div className="aspect-square w-40 shrink-0 overflow-hidden rounded-2xl shadow-elevated ring-1 ring-white/15 sm:w-52">
-            <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="xl" />
+            <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="xl" useAbstract />
           </div>
 
           <div className="space-y-2 text-center sm:text-left">
@@ -202,6 +203,11 @@ export default function TrackSharePage() {
                     {!playable && (
                       <span className="absolute left-1.5 top-1.5">
                         <TrackStateBadge state={state} variant="pill" />
+                      </span>
+                    )}
+                    {playable && (
+                      <span className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <AddToPlaylistButton trackId={t.id} variant="player" size={14} />
                       </span>
                     )}
                   </div>

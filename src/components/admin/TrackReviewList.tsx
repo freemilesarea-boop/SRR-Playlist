@@ -525,16 +525,21 @@ export default function TrackReviewList() {
                     />
                   </div>
 
-                  {/* 0167 — Loudness 품질 게이트 측정값 */}
-                  {r.q_integrated_lufs != null && (
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                      <DiagChip ok={!!r.q_passed} label={r.q_passed ? '품질 Pass' : '품질 Fail'} />
-                      <DiagChip ok={r.q_integrated_lufs >= -14 && r.q_integrated_lufs <= -10} label={`${r.q_integrated_lufs} LUFS`} />
-                      <DiagChip ok={r.q_true_peak == null || r.q_true_peak <= -1} label={`${r.q_true_peak ?? '?'} dBTP`} />
-                      {r.q_loudness_range != null && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">LRA {r.q_loudness_range}</span>}
-                      <DiagChip ok={!r.q_clipping} label={r.q_clipping ? 'clipping' : 'no clip'} />
-                    </div>
-                  )}
+                  {/* 0210 — 3단계 품질 게이트 (pass/warning/reject) */}
+                  {r.q_integrated_lufs != null && (() => {
+                    const grade = computeQualityGrade(r.q_integrated_lufs, r.q_true_peak ?? null, !!r.q_clipping);
+                    const lufsOk = r.q_integrated_lufs >= -14 && r.q_integrated_lufs <= -9;
+                    const tpOk = r.q_true_peak == null || r.q_true_peak <= 0.0;
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <GradeChip grade={grade} />
+                        <DiagChip ok={lufsOk} label={`${r.q_integrated_lufs} LUFS`} />
+                        <DiagChip ok={tpOk} label={`${r.q_true_peak ?? '?'} dBTP`} />
+                        {r.q_loudness_range != null && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">LRA {r.q_loudness_range}</span>}
+                        <DiagChip ok={!r.q_clipping} label={r.q_clipping ? 'clipping' : 'no clip'} />
+                      </div>
+                    );
+                  })()}
 
                   {/* 0161 — AI 큐레이션 판정 연결 */}
                   {r.ai_status && r.ai_status !== 'pending' && (
@@ -938,6 +943,28 @@ function Tag({ label, value, tone }: { label: string; value: string; tone: strin
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${tone}`}>
       <span className="text-[9px] uppercase tracking-wider opacity-70">{label}</span>
       {value}
+    </span>
+  );
+}
+
+// 0210 — 3단계 품질 등급 (pass/warning/reject)
+function computeQualityGrade(lufs: number | null, tp: number | null, clipping: boolean): 'pass' | 'warning' | 'reject' {
+  if (lufs == null) return 'reject';
+  if (clipping) return 'reject';
+  if (tp != null && tp > 0.3) return 'reject';
+  if (lufs >= -14 && lufs <= -9 && (tp == null || tp <= 0.0)) return 'pass';
+  return 'warning';
+}
+
+function GradeChip({ grade }: { grade: 'pass' | 'warning' | 'reject' }) {
+  const cfg = grade === 'pass'
+    ? { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300', icon: '✓', label: 'Pass' }
+    : grade === 'warning'
+      ? { cls: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200', icon: '!', label: 'Warning' }
+      : { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300', icon: '✕', label: 'Reject' };
+  return (
+    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${cfg.cls}`}>
+      {cfg.icon} 품질 {cfg.label}
     </span>
   );
 }

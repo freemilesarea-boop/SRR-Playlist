@@ -29,12 +29,13 @@ export default function PlaylistCard({
   return (
     <Link to={`/playlist/${playlist.id}`} className="group block">
       <div className="space-y-2.5">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-0.5 group-hover:shadow-lift">
           <AutoCover
             title={playlist.title}
             category={playlist.category}
             imageUrl={coverUrl ?? playlist.thumbnail_url}
             size={coverSize}
+            useAbstract
           />
 
           {/* 내부 light highlight */}
@@ -80,7 +81,7 @@ export default function PlaylistCard({
             </div>
           )}
         </div>
-        <div className="space-y-0.5 px-0.5">
+        <div className="space-y-1 px-0.5">
           <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">
             {playlist.title}
           </h3>
@@ -90,7 +91,9 @@ export default function PlaylistCard({
             </p>
           )}
           {variant === 'sm' && (
-            <p className="line-clamp-1 text-xs text-ink-mute">{playlist.category}</p>
+            <p className="line-clamp-1 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-dim">
+              {playlist.category}
+            </p>
           )}
         </div>
       </div>

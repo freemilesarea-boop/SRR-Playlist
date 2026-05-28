@@ -37,10 +37,9 @@ import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { fetchPlaylists, fetchPlaylistTracks } from '@/lib/api';
-import { isPlayableTrack } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
-import type { PlaylistRow } from '@/types/db';
+import type { PlaylistRow, TrackRow } from '@/types/db';
 
 export default function BusinessScheduler() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
@@ -49,6 +48,7 @@ export default function BusinessScheduler() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const playAction = usePlayerStore((s) => s.play);
   const businessMode = useBusinessStore((s) => s.businessMode);
 
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -58,6 +58,11 @@ export default function BusinessScheduler() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [creatingDefaults, setCreatingDefaults] = useState(false);
   const [editingDay, setEditingDay] = useState<number>(() => nowKstParts().day);
+  // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
+  const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
+  const [tracksLoading, setTracksLoading] = useState(false);
+  const [tracksError, setTracksError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   // 1분마다 현재 스케줄 다시 계산
   const [tick, setTick] = useState(0);
@@ -100,38 +105,76 @@ export default function BusinessScheduler() {
 
   // 매장 모드 ON 일 때 currentSchedule 변경 → 자동 큐 교체
   const [lastSwitchedScheduleId, setLastSwitchedScheduleId] = useState<string | null>(null);
+
+  // 1) current schedule 의 트랙 prefetch — businessMode 와 무관하게 항상 미리 로드.
+  //    user gesture 클릭 핸들러 안에서 동기 setQueue 가능 (autoplay 정책 안전).
   useEffect(() => {
-    if (!businessMode || !current) return;
+    setCurrentTracks(null);
+    setTracksError(null);
+    if (!current?.playlist_id) return;
+    setTracksLoading(true);
+    let alive = true;
+    fetchPlaylistTracks(current.playlist_id)
+      .then((tracks) => {
+        if (!alive) return;
+        const { playable } = filterPlayableTracks(tracks);
+        if (import.meta.env.DEV) {
+          console.debug('[StoreScheduler] tracks loaded count', { slot: current.slot_name, total: tracks.length, playable: playable.length });
+        }
+        setCurrentTracks(playable);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (import.meta.env.DEV) console.error('[StoreScheduler] tracks fetch failed', e);
+        setTracksError(msg);
+      })
+      .finally(() => { if (alive) setTracksLoading(false); });
+    return () => { alive = false; };
+  }, [current?.playlist_id, current?.slot_name]);
+
+  // 2) businessMode ON + schedule 전환 시 자동 큐 교체. prefetched tracks 가 있으면 즉시 사용,
+  //    없으면 fetch 후 교체. 첫 시작 시점에는 startBusinessMode 가 직접 큐를 세팅해 토스트만 분리.
+  useEffect(() => {
+    if (!businessMode || !current?.id || !current.playlist_id) return;
     if (lastSwitchedScheduleId === current.id) return;
-    if (!current.playlist_id) return;
-    // 자동 전환
+    const isInitial = lastSwitchedScheduleId === null;
+    // 가드: 매장 모드 off / 컴포넌트 언마운트 / 도중에 schedule 바뀜 → setQueue/play 발화 차단
+    let alive = true;
+    const targetScheduleId = current.id;
     (async () => {
       try {
-        const tracks = await fetchPlaylistTracks(current.playlist_id!);
-        const { playable } = filterPlayableTracks(tracks);
-        if (playable.length === 0) return;
+        let playable: TrackRow[];
+        if (currentTracks && currentTracks.length > 0) {
+          playable = currentTracks;
+        } else {
+          const tracks = await fetchPlaylistTracks(current.playlist_id!);
+          playable = filterPlayableTracks(tracks).playable;
+        }
+        // 비동기 fetch 후에도 여전히 유효한 상태인지 재확인
+        if (!alive) return;
+        if (!useBusinessStore.getState().businessMode) return; // 모드 off 됐으면 무시
+        if (current.id !== targetScheduleId) return; // 스케줄이 그 사이 바뀌었으면 무시
+        if (playable.length === 0) {
+          toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
+          return;
+        }
         const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
-        // 재생 가능한 트랙만 큐에 (무한 next() 캐스케이드 차단)
         setQueue(playable, 0, playlist);
         setRepeat('all');
         setShuffle(true);
-        const isInitial = lastSwitchedScheduleId === null;
+        playAction();
+        if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: playable.length, isInitial });
         setLastSwitchedScheduleId(current.id);
-        if (!isInitial) {
-          toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
-        }
-        void logScheduleEvent(
-          userId,
-          current.id,
-          current.playlist_id,
-          isInitial ? 'started' : 'switched',
-        );
+        if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
+        void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : '자동 전환 실패');
+        if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
       }
     })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessMode, current?.id, current?.playlist_id]);
+  }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
 
   async function saveProfile() {
     if (!userId || !profile) return;
@@ -209,14 +252,77 @@ export default function BusinessScheduler() {
 
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
 
-  async function startBusinessMode() {
-    if (!current?.playlist_id) {
+  function startBusinessMode() {
+    const now = nowKstParts();
+    const timeStr = `${String(Math.floor(now.minutes / 60)).padStart(2, '0')}:${String(now.minutes % 60).padStart(2, '0')}`;
+    if (import.meta.env.DEV) console.debug('[StoreScheduler] start clicked', { day: now.day, time: timeStr });
+    if (!current) {
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] no active schedule');
       toast.info('지금 시간대에 활성화된 스케줄이 없어요.');
       return;
     }
-    enableForBusinessMode(); // 5초 crossfade 기본 (사용자 override 있으면 존중)
-    setBusinessMode(true);
-    setLastSwitchedScheduleId(null); // 다시 시작 → started 이벤트 기록
+    if (import.meta.env.DEV) console.debug('[StoreScheduler] active schedule found', { id: current.id, name: current.slot_name, playlistId: current.playlist_id });
+    if (!current.playlist_id) {
+      toast.info('이 스케줄에 플레이리스트가 지정되지 않았어요. 스케줄 설정에서 플레이리스트를 선택해주세요.');
+      return;
+    }
+    if (tracksLoading) {
+      toast.info('트랙을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    if (tracksError) {
+      toast.error(`트랙 로드 실패: ${tracksError}`);
+      return;
+    }
+    if (!currentTracks || currentTracks.length === 0) {
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] no playable tracks for current schedule');
+      toast.error('이 스케줄에 재생 가능한 음악이 없어요.');
+      return;
+    }
+    // user gesture 안에서 모든 player 호출을 동기로 수행 (autoplay 정책 안전).
+    setStarting(true);
+    try {
+      enableForBusinessMode();
+      const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
+      setShuffle(true);
+      setRepeat('all');
+      setQueue(currentTracks, 0, playlist); // playerStore 내부에서 playing=true 세팅
+      playAction(); // 명시적 보강
+      setBusinessMode(true);
+      setLastSwitchedScheduleId(current.id);
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: currentTracks.length, slot: current.slot_name });
+      void logScheduleEvent(userId, current.id, current.playlist_id, 'started');
+      toast.success(`${current.slot_name} 시작 (${currentTracks.length}곡)`);
+      // 1.5s 후 실제 재생 상태 검증 — playerStore.playing + audio element 의 실제 currentSrc/currentTime/볼륨/뮤트 (DEV)
+      if (import.meta.env.DEV) {
+        window.setTimeout(() => {
+          const st = usePlayerStore.getState();
+          const cur = st.queue[st.index] ?? null;
+          const diag = (window as unknown as { __playerDiag?: () => unknown }).__playerDiag;
+          const aud = typeof diag === 'function' ? (diag() as { active: { currentSrc: string; currentTime: number; duration: number; paused: boolean; muted: boolean; volume: number; readyState: number } | null }) : null;
+          console.debug('[StoreScheduler] verify after 1.5s', {
+            store: { playing: st.playing, queue_length: st.queue.length, index: st.index,
+              current_track_id: cur?.id, current_track_title: cur?.title, current_audio_url: cur?.audio_url },
+            audio: aud?.active ?? '(audio element 접근 불가)',
+            url_match: aud?.active && cur?.audio_url ? aud.active.currentSrc === cur.audio_url : null,
+          });
+          if (!st.playing) {
+            console.warn('[StoreScheduler] store.playing=false @1.5s — autoplay 차단 또는 src 미적용 의심.');
+          } else if (aud?.active && aud.active.paused) {
+            console.warn('[StoreScheduler] store.playing=true 인데 audio.paused=true @1.5s — play() 거절됐을 가능성. [Player] 로그 확인.');
+          } else if (aud?.active && aud.active.currentTime <= 0.05) {
+            console.warn('[StoreScheduler] audio.currentTime 정체 @1.5s — 시스템 볼륨/사이트 사운드 권한/코덱 의심.');
+          } else if (aud?.active) {
+            console.debug('[StoreScheduler] OK — audio playback 정상 진행 중', { currentTime: aud.active.currentTime, volume: aud.active.volume, muted: aud.active.muted });
+          }
+        }, 1500);
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('[StoreScheduler] audio play failed', e);
+      toast.error(e instanceof Error ? e.message : '재생 시작 실패');
+    } finally {
+      setStarting(false);
+    }
   }
 
   if (!userId) return null;
@@ -345,20 +451,36 @@ export default function BusinessScheduler() {
 
       {/* CTA */}
       {current && (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            onClick={startBusinessMode}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card hover:opacity-95"
-          >
-            <Play size={16} fill="currentColor" /> 현재 스케줄로 매장 모드 시작
-          </button>
-          <button
-            onClick={() => setBusinessMode(false)}
-            disabled={!businessMode}
-            className="btn-ghost text-sm"
-          >
-            매장 모드 끄기
-          </button>
+        <div className="space-y-1.5">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              onClick={startBusinessMode}
+              disabled={starting || tracksLoading || (currentTracks !== null && currentTracks.length === 0)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card hover:opacity-95 disabled:opacity-60"
+            >
+              <Play size={16} fill="currentColor" />
+              {starting
+                ? '시작 중…'
+                : tracksLoading
+                  ? '트랙 불러오는 중…'
+                  : `현재 스케줄로 매장 모드 시작${currentTracks ? ` (${currentTracks.length}곡)` : ''}`}
+            </button>
+            <button
+              onClick={() => setBusinessMode(false)}
+              disabled={!businessMode}
+              className="btn-ghost text-sm"
+            >
+              매장 모드 끄기
+            </button>
+          </div>
+          {tracksError && (
+            <p className="text-[11px] text-red-300">트랙 로드 실패: {tracksError}</p>
+          )}
+          {!tracksLoading && !tracksError && currentTracks?.length === 0 && (
+            <p className="text-[11px] text-yellow-300">
+              이 스케줄(<b>{current.slot_name}</b>)에 재생 가능한 음악이 없어요. 스케줄의 플레이리스트를 변경하거나 음원을 추가해주세요.
+            </p>
+          )}
         </div>
       )}
 
@@ -412,12 +534,14 @@ export default function BusinessScheduler() {
             <ul className="space-y-2">
               {todaySchedules.map((s) => {
                 const overlap = overlaps.some((o) => o.id === s.id);
+                const isCurrent = current?.id === s.id;
                 return (
                   <SlotRow
                     key={s.id}
                     schedule={s}
                     playlists={playlists}
                     overlap={overlap}
+                    isCurrent={isCurrent}
                     onUpdate={(p) => handleUpdate(s.id, p)}
                     onDelete={() => handleDelete(s.id)}
                   />
@@ -460,27 +584,34 @@ function CurrentBadge({
     : null;
   return (
     <div
-      className={`rounded-2xl p-3 ring-1 ${
+      className={`relative overflow-hidden rounded-2xl p-3.5 ring-1 transition duration-smooth ease-emphasized ${
         highlight
-          ? 'bg-accent/8 ring-accent/30'
+          ? 'bg-accent/[0.08] ring-accent/30 shadow-card'
           : 'bg-bg-soft ring-line/10'
       }`}
     >
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+      {/* DEUDDA — 활성 카드 좌측 violet bar */}
+      {highlight && playing && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-accent" />
+      )}
+      <div className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-ink-dim">
         {highlight && playing && <Radio size={10} className="animate-pulse text-accent" />}
-        <span>{label}</span>
+        <span className={highlight ? 'text-accent' : ''}>{label}</span>
       </div>
       {schedule ? (
-        <div className="mt-1 space-y-0.5">
-          <p className="truncate text-sm font-bold">{schedule.slot_name}</p>
-          <p className="flex items-center gap-1 text-[11px] text-ink-mute">
-            <Clock size={10} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
-            <span className="ml-1">· {DAY_LABELS[schedule.day_of_week]}요일</span>
+        <div className="mt-1.5 space-y-1">
+          <p className="truncate text-[15px] font-bold tracking-tight">{schedule.slot_name}</p>
+          <p className="flex items-center gap-1.5 font-mono text-[11px] text-ink-mute">
+            <Clock size={11} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
+            <span className="text-ink-dim">·</span>
+            <span>{DAY_LABELS[schedule.day_of_week]}요일</span>
           </p>
-          <p className="truncate text-[11px] text-ink-dim">{playlist?.title ?? '플리 미지정'}</p>
+          <p className="truncate text-[12px] text-ink-mute">
+            {playlist?.title ?? <span className="text-ink-dim">플리 미지정</span>}
+          </p>
         </div>
       ) : (
-        <p className="mt-1 text-xs text-ink-mute">없음</p>
+        <p className="mt-1.5 text-xs text-ink-mute">없음</p>
       )}
     </div>
   );
@@ -490,12 +621,14 @@ function SlotRow({
   schedule,
   playlists,
   overlap,
+  isCurrent,
   onUpdate,
   onDelete,
 }: {
   schedule: BusinessSchedule;
   playlists: PlaylistRow[];
   overlap: boolean;
+  isCurrent?: boolean;
   onUpdate: (patch: Partial<BusinessSchedule>) => void;
   onDelete: () => void;
 }) {
@@ -503,49 +636,62 @@ function SlotRow({
   const others = playlists.filter((p) => !p.is_business_only);
   return (
     <li
-      className={`space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ${
-        overlap ? 'ring-red-400/40' : 'ring-line/10'
+      className={`relative space-y-2 overflow-hidden rounded-xl p-3 ring-1 transition duration-smooth ease-emphasized ${
+        overlap
+          ? 'bg-bg-soft ring-red-400/40'
+          : isCurrent
+            ? 'bg-accent/[0.06] ring-accent/30'
+            : 'bg-bg-soft ring-line/10 hover:ring-line/20'
       } ${!schedule.is_active ? 'opacity-60' : ''}`}
     >
+      {/* DEUDDA — 활성 슬롯 좌측 violet bar */}
+      {isCurrent && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-accent" />
+      )}
       <div className="flex items-center gap-2">
+        {isCurrent && (
+          <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-accent">
+            NOW
+          </span>
+        )}
         <input
           value={schedule.slot_name}
           onChange={(e) => onUpdate({ slot_name: e.target.value })}
-          className="input flex-1 py-1.5 text-sm"
+          className="input flex-1 py-1.5 text-sm font-semibold"
           placeholder="시간대 이름"
         />
         <button
           onClick={() => onUpdate({ is_active: !schedule.is_active })}
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+          className={`shrink-0 rounded-full px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-wider transition ${
             schedule.is_active
-              ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/30'
-              : 'bg-bg-hover text-ink-mute'
+              ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25'
+              : 'bg-bg-hover text-ink-mute hover:text-ink'
           }`}
         >
-          {schedule.is_active ? '활성' : '비활성'}
+          {schedule.is_active ? 'ACTIVE' : 'OFF'}
         </button>
         <button
           onClick={onDelete}
           aria-label="삭제"
-          className="shrink-0 rounded-full p-1.5 text-red-300 hover:bg-red-500/10"
+          className="shrink-0 rounded-full p-1.5 text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
         >
           <Trash2 size={14} />
         </button>
       </div>
 
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 font-mono text-xs text-ink-mute">
         <input
           type="time"
           value={schedule.start_time.slice(0, 5)}
           onChange={(e) => onUpdate({ start_time: `${e.target.value}:00` })}
-          className="input py-1.5 text-xs"
+          className="input py-1.5 text-xs font-mono"
         />
         <ChevronRight size={12} className="shrink-0 text-ink-dim" />
         <input
           type="time"
           value={schedule.end_time.slice(0, 5)}
           onChange={(e) => onUpdate({ end_time: `${e.target.value}:00` })}
-          className="input py-1.5 text-xs"
+          className="input py-1.5 text-xs font-mono"
         />
       </div>
 

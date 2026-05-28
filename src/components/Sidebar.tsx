@@ -34,10 +34,14 @@ export default function Sidebar() {
               <span
                 className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors duration-smooth ${
                   isActive
-                    ? 'bg-accent/15 text-accent ring-1 ring-accent/25'
+                    ? 'bg-accent/15 text-accent'
                     : 'text-ink-mute hover:bg-bg-hover hover:text-ink'
                 }`}
               >
+                {/* DEUDDA — active 좌측 violet bar (signal indicator) */}
+                {isActive && (
+                  <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full bg-accent" />
+                )}
                 <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
                 <span>{label}</span>
               </span>

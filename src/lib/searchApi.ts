@@ -171,12 +171,12 @@ async function fallbackSearch(q: string, limit: number): Promise<SearchOutcome> 
     const [tRes, pRes] = await Promise.all([
       supabase
         .from('tracks')
-        .select('id, title, artist, genre, mood, cover_url, audio_url, duration, created_at')
+        .select('id, title, artist, genre:main_genre, mood, cover_url, audio_url, duration, created_at')
         .eq('visibility_status', 'approved')
         .is('removed_at', null)
         .not('cover_url', 'is', null)
         .not('audio_url', 'is', null)
-        .or(`title.ilike.${like},artist.ilike.${like},genre.ilike.${like},mood.ilike.${like}`)
+        .or(`title.ilike.${like},artist.ilike.${like},main_genre.ilike.${like},mood.ilike.${like}`)
         .limit(limit),
       supabase
         .from('playlists')

@@ -1,6 +1,8 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
-import { adminListArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+import { adminListArtistTracks, adminCountArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+
+const PAGE_SIZE = 100;
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
@@ -67,6 +69,9 @@ const PAYOUT_TONE: Record<string, string> = {
 
 export default function ArtistTrackManagementList({ removedView = false }: { removedView?: boolean } = {}) {
   const [rows, setRows] = useState<AdminTrackRow[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [lastBatchSize, setLastBatchSize] = useState<number>(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,24 +158,60 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     }
   }
 
+  const requestSeqRef = useRef(0);
+  const filterKey = `${removedView ? 'removed' : status || 'all'}|${search}`;
+
   async function load() {
     setLoading(true);
     setError(null);
+    const seq = ++requestSeqRef.current;
+    const queryStatus = removedView ? 'removed' : status || undefined;
+    const querySearch = search || undefined;
     try {
-      const data = await adminListArtistTracks({
-        status: removedView ? 'removed' : status || undefined,
-        search: search || undefined,
-      });
-      // 음원 관리: removed 제외 / 삭제 음원: removed 만
-      const filtered = removedView
-        ? data.filter((r) => r.release_status === 'removed')
-        : data.filter((r) => r.release_status !== 'removed');
-      setRows(filtered);
-      setSelected(new Set());
+      const [data, count] = await Promise.all([
+        adminListArtistTracks({ status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset: 0 }),
+        adminCountArtistTracks({ status: queryStatus, search: querySearch }).catch((e) => {
+          console.warn('[ArtistTrackMgmt] count RPC failed (fallback to batch-size 기준 hasMore):', e);
+          return 0;
+        }),
+      ]);
+      if (seq !== requestSeqRef.current) return; // 더 최신 요청이 들어오면 폐기
+      console.debug('[ArtistTrackMgmt] load page=1', { offset: 0, returned: data.length, total: count, status: queryStatus ?? null, search: querySearch ?? null });
+      setRows(data);
+      setTotal(count);
+      setLastBatchSize(data.length);
     } catch (e) {
+      if (seq !== requestSeqRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
+    }
+  }
+
+  // hasMore: count 가 신뢰 가능하면 그것을 우선, 아니면 마지막 배치가 PAGE_SIZE 가득 찼는지로 판정
+  const hasMore = (total > 0 ? rows.length < total : lastBatchSize >= PAGE_SIZE);
+
+  async function loadMore() {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const seq = requestSeqRef.current; // 추가 로드는 현재 요청 시퀀스 유지
+    const offset = rows.length;
+    const queryStatus = removedView ? 'removed' : status || undefined;
+    const querySearch = search || undefined;
+    try {
+      const more = await adminListArtistTracks({
+        status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset,
+      });
+      if (seq !== requestSeqRef.current) return;
+      console.debug('[ArtistTrackMgmt] loadMore', { offset, returned: more.length, totalSoFar: rows.length + more.length, total });
+      // 중복 방지 — 이미 있는 id 는 스킵
+      const have = new Set(rows.map((r) => r.track_id));
+      setRows((prev) => [...prev, ...more.filter((r) => !have.has(r.track_id))]);
+      setLastBatchSize(more.length);
+    } catch (e) {
+      toast.error(`추가 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -278,6 +319,25 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
+  // 필터(status/search/removedView)가 바뀌면 선택 초기화 — 보이지 않는 곡 잠금 방지
+  useEffect(() => {
+    setSelected(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  // 하단 sentinel — 무한 스크롤 추가 로드
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMore = useCallback(() => { void loadMore(); }, [rows.length, total, lastBatchSize, loading, loadingMore, status, search, removedView, hasMore]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) onLoadMore();
+    }, { rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onLoadMore]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -286,9 +346,17 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
             <Music size={16} className="text-accent" /> {removedView ? '삭제 음원' : '음원 관리'}
           </h2>
           <p className="text-xs text-ink-mute">
-            {removedView
-              ? `${rows.length}건 · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출`
-              : `${rows.length}건 · release_status='released' 인 트랙만 정산 대상`}
+            {(() => {
+              const fmt = (n: number) => n.toLocaleString('ko-KR');
+              const knownTotal = total || rows.length;
+              const head = hasMore
+                ? `현재 ${fmt(rows.length)}곡 로드 / 총 ${fmt(knownTotal)}곡${total > 0 ? '' : '+'}`
+                : `전체 ${fmt(knownTotal)}곡 로드 완료`;
+              const suffix = removedView
+                ? ' · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출'
+                : ' · 검수 대기·승인·예정·공개·반려·숨김 모두 포함 (삭제/중단은 별도 탭)';
+              return head + suffix;
+            })()}
           </p>
         </div>
         <button
@@ -319,20 +387,22 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           onChange={(e) => setStatus(e.target.value as StatusFilter)}
           className="input w-auto text-sm"
         >
-          <option value="">전체 상태</option>
-          <optgroup label="visibility">
-            <option value="pending_review">심사 대기</option>
-            <option value="approved">승인됨</option>
-            <option value="rejected">거절됨</option>
-            <option value="hidden">숨김</option>
-          </optgroup>
-          <optgroup label="DSP release">
-            <option value="submitted">검수 대기 (submitted)</option>
+          <option value="">전체 상태 (검수·승인·발매 모두 포함)</option>
+          <optgroup label="발매 단계">
+            <option value="submitted">검수 대기</option>
             <option value="review_pending">검수 중</option>
             <option value="changes_requested">수정 요청</option>
+            <option value="approved">승인됨</option>
             <option value="scheduled">발매 예정</option>
-            <option value="released">공개됨</option>
-            <option value="removed">제거됨</option>
+            <option value="released">발매 완료</option>
+          </optgroup>
+          <optgroup label="검수 결과">
+            <option value="pending_review">심사 대기 (visibility)</option>
+            <option value="rejected">반려</option>
+            <option value="hidden">숨김</option>
+          </optgroup>
+          <optgroup label="중단/삭제">
+            <option value="removed">삭제/중단</option>
           </optgroup>
         </select>
       </div>
@@ -592,6 +662,26 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           </table>
         </div>
       </div>
+
+      {/* 무한 스크롤 sentinel + 항상 노출 "더 불러오기" 버튼 (Observer 불안정 대비) */}
+      {!loading && rows.length > 0 && (
+        <div ref={sentinelRef} className="flex flex-col items-center justify-center gap-2 py-4 text-xs text-ink-mute">
+          {loadingMore && (
+            <span className="inline-flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> 추가 로드 중… (offset {rows.length.toLocaleString('ko-KR')})</span>
+          )}
+          {!loadingMore && hasMore && (
+            <button
+              onClick={onLoadMore}
+              className="rounded-full bg-accent/15 px-4 py-2 font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/25"
+            >
+              더 불러오기 · 현재 {rows.length.toLocaleString('ko-KR')}곡 로드 {total > 0 ? `/ 총 ${total.toLocaleString('ko-KR')}곡` : ''}
+            </button>
+          )}
+          {!loadingMore && !hasMore && (
+            <span>전체 {(total || rows.length).toLocaleString('ko-KR')}곡 로드 완료</span>
+          )}
+        </div>
+      )}
 
       {delModal && (
         <div

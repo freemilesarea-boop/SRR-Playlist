@@ -361,6 +361,11 @@ export interface UploadInput {
   clientTrackId?: string | null;
   sourceFingerprint?: string | null;
   /**
+   * 0196 — 호출 전에 원본 파일 SHA-256 을 미리 계산했으면 전달.
+   * 일괄 업로드에서 batch 내 동일 콘텐츠 사전 차단에 사용한 값을 재사용 → 중복 해싱 방지.
+   */
+  precomputedAudioSha256?: string | null;
+  /**
    * 일괄 업로드 최적화: 호출 전에 eligibility 를 한 번 확인했으면 true.
    * 파일마다 eligibility RPC 를 반복 호출(30곡=30 RPC)하지 않도록 내부 검사를 건너뜀.
    * (submit_artist_release RPC + RLS 가 서버에서 최종 자격을 재검증하므로 안전)
@@ -558,6 +563,40 @@ export async function extractAudioDuration(file: File): Promise<number | null> {
  *   2) cover image 있으면 covers bucket 에 동일 패턴 ({uuid}_cover.{ext})
  *   3) tracks INSERT — RLS 가 owner_user_id/source_type/visibility_status/승인상태 모두 검증
  */
+/**
+ * 0196 — 업로드 실패를 무결성 로그에 기록 (best-effort, fire-and-forget).
+ * 운영 이상징후 집계(failed uploads / transcoding 실패)와 사후 추적에 사용.
+ */
+async function logUploadFailure(
+  input: UploadInput,
+  opts: {
+    trackId?: string | null; storagePath?: string | null; originalSha?: string | null;
+    finalSha?: string | null; duration?: number | null; transcoded?: boolean;
+    transcodingStatus?: string | null; originalFilesize?: number | null; finalFilesize?: number | null;
+    error: string;
+  },
+): Promise<void> {
+  try {
+    await supabase.rpc('record_upload_integrity2', {
+      p_batch_id: input.batchId ?? null,
+      p_client_track_id: input.clientTrackId ?? null,
+      p_track_id: opts.trackId ?? null,
+      p_original_filename: input.audioFile?.name ?? null,
+      p_source_fingerprint: input.sourceFingerprint ?? null,
+      p_original_sha256: opts.originalSha ?? null,
+      p_final_sha256: opts.finalSha ?? null,
+      p_storage_path: opts.storagePath ?? null,
+      p_duration: opts.duration ?? null,
+      p_transcoded: opts.transcoded ?? false,
+      p_status: 'failed',
+      p_error: opts.error ? opts.error.slice(0, 500) : null,
+      p_original_filesize: opts.originalFilesize ?? input.audioFile?.size ?? null,
+      p_final_filesize: opts.finalFilesize ?? null,
+      p_transcoding_status: opts.transcodingStatus ?? null,
+    });
+  } catch { /* best-effort */ }
+}
+
 export async function uploadArtistTrack(input: UploadInput): Promise<UploadResult> {
   // ============================================
   // 0074-hotfix: 단계별 console.info + 모든 await timeout + finally 안전 보장
@@ -664,6 +703,10 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     // 0194 — 업로드 무결성: 최종 업로드(변환 후) 바이트 sha + 변환 여부
     let finalAudioSha: string | null = null;
     let wasTranscoded = false;
+    // 0196 — 변환 상태/파일 크기 추적 (감사 로그)
+    let transcodingStatus: 'none' | 'transcoded' | 'failed' = 'none';
+    const originalFilesize: number | null = input.audioFile?.size ?? null;
+    let finalFilesize: number | null = null;
     const originalFilename = input.audioFile?.name ?? null;
     // 0154 — 발매 게이트(duration 필수)용 메타. 업로드 후 set_artist_track_audio_meta 로 기록.
     let audioDurationVal: number | null = null;
@@ -673,16 +716,22 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     let qualityResult: QualityResult | null = null;
     if (input.audioFile) {
       stage = 'sha256';
-      log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
-      try {
-        audioSha256 = await withTimeout(
-          computeAudioSha256(input.audioFile),
-          45_000,
-          'SHA-256 계산 시간이 초과되었습니다 — 파일 크기를 줄이거나 다른 브라우저에서 시도해주세요.',
-        );
-        log('sha256 ok', { sha: audioSha256?.slice(0, 10) + '…' });
-      } catch (e) {
-        log('sha256 fail (계속)', { err: e instanceof Error ? e.message : String(e) });
+      // 0196 — 폼에서 batch 사전 중복검사 시 계산한 sha 를 재사용 (중복 해싱 방지)
+      if (input.precomputedAudioSha256) {
+        audioSha256 = input.precomputedAudioSha256;
+        log('sha256 reuse (precomputed)', { sha: audioSha256.slice(0, 10) + '…' });
+      } else {
+        log('sha256 start', { sizeMB: (input.audioFile.size / 1024 / 1024).toFixed(2) });
+        try {
+          audioSha256 = await withTimeout(
+            computeAudioSha256(input.audioFile),
+            45_000,
+            'SHA-256 계산 시간이 초과되었습니다 — 파일 크기를 줄이거나 다른 브라우저에서 시도해주세요.',
+          );
+          log('sha256 ok', { sha: audioSha256?.slice(0, 10) + '…' });
+        } catch (e) {
+          log('sha256 fail (계속)', { err: e instanceof Error ? e.message : String(e) });
+        }
       }
       // 사전 중복 확인
       if (audioSha256) {
@@ -733,15 +782,18 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           );
           log('transcode→mp3 ok', { sizeMB: (fileToUpload.size / 1024 / 1024).toFixed(2) });
           uploadDebug.step('transcode', 'ok', `${(fileToUpload.size / 1024 / 1024).toFixed(1)}MB`);
+          transcodingStatus = 'transcoded';
         } catch (e) {
           // 변환 실패 시 업로드 자체는 막지 않고 원본 업로드(추후 재인코딩 필요). 콘솔/디버그에 기록.
           log('transcode→mp3 FAIL (원본 업로드)', { err: e instanceof Error ? e.message : String(e) });
           uploadDebug.step('transcode', 'warn', e instanceof Error ? e.message : String(e));
           fileToUpload = input.audioFile;
+          transcodingStatus = 'failed';
         }
       }
       // 0194 — 최종 업로드 바이트(변환 후) 무결성 sha. 변환 race 검출/감사용. best-effort.
       wasTranscoded = fileToUpload !== input.audioFile;
+      finalFilesize = fileToUpload.size || null;
       try { finalAudioSha = await withTimeout(computeAudioSha256(fileToUpload), 45_000, 'final sha timeout'); }
       catch { finalAudioSha = null; }
       // storage key 는 URL-safe ASCII 만 허용 — 사용자 파일명(한국어/공백/특수문자)은
@@ -775,16 +827,21 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
             75_000,
             '음질 분석 시간이 초과되었어요. 잠시 후 다시 시도해주세요.',
           );
-          log('quality gate', { lufs: q.integrated_lufs, tp: q.true_peak_dbtp, passed: q.passed, reason: q.failure_reason });
-          if (!q.passed) {
-            // 실패 음원은 storage 업로드 전에 차단 — 로그만 남김(track_id 없음)
+          log('quality gate', { lufs: q.integrated_lufs, tp: q.true_peak_dbtp, grade: q.grade, reasons: q.reasons });
+          if (q.grade === 'reject') {
+            // REJECT: storage 업로드 전 차단 — 로그만 남김(track_id 없음)
             void recordAudioQuality({ originalFilename, result: q });
-            uploadDebug.step('quality-gate', 'error', `${q.failure_reason} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
+            uploadDebug.step('quality-gate', 'error', `reject: ${q.reasons.join(',') || '?'} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
             uploadDebug.finish({ ok: false, audioStatus: 'error', error: `quality-gate: ${q.failure_reason}` });
+            void logUploadFailure(input, { originalSha: audioSha256, transcodingStatus, originalFilesize, finalFilesize, error: `quality-gate: ${q.failure_reason}` });
             return { ok: false, error: q.message ?? '음질 기준 미달로 등록할 수 없어요.' };
           }
-          qualityResult = q; // 통과 — insert 후 track_id 와 함께 기록
-          uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
+          qualityResult = q; // pass/warning — 업로드 허용, insert 후 track_id 와 함께 기록
+          if (q.grade === 'warning') {
+            uploadDebug.step('quality-gate', 'warn', `warning: ${q.reasons.join(',')} (LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp})`);
+          } else {
+            uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
+          }
         }
       } catch (e) {
         // 분석 자체 timeout/예외 — 통과 음원을 막지 않도록 게이트는 통과시키되 경고 로그.
@@ -809,6 +866,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         log('audio upload error', { err: e instanceof Error ? e.message : String(e) });
         uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${msg}` });
         uploadDebug.step('audio-upload', 'error', msg);
+        void logUploadFailure(input, { storagePath: audioStoragePath, originalSha: audioSha256, transcodingStatus, originalFilesize, finalFilesize, error: `audio-upload: ${e instanceof Error ? e.message : String(e)}` });
         return { ok: false, error: msg };
       }
       if (audioUpRes.error) {
@@ -816,6 +874,7 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
         log('audio upload fail', { msg: audioUpRes.error.message });
         uploadDebug.finish({ ok: false, audioStatus: 'error', error: `audio-upload: ${audioUpRes.error.message}` });
         uploadDebug.step('audio-upload', 'error', audioUpRes.error.message);
+        void logUploadFailure(input, { storagePath: audioStoragePath, originalSha: audioSha256, transcodingStatus, originalFilesize, finalFilesize, error: `audio-upload: ${audioUpRes.error.message}` });
         return { ok: false, error: msg };
       }
       const { data: audioPub } = supabase.storage.from('audio').getPublicUrl(audioPath);
@@ -958,14 +1017,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       if (trackId && qualityResult) {
         void recordAudioQuality({ trackId, originalFilename, result: qualityResult });
       }
-      // 0194 — 업로드 무결성 로그(최종 업로드 콘텐츠 sha). best-effort, 실패해도 업로드 성공 유지.
+      // 0194/0196 — 업로드 무결성 로그(최종 업로드 콘텐츠 sha + filesize/변환상태). best-effort, 실패해도 업로드 성공 유지.
       if (trackId) {
         try {
-          await supabase.rpc('record_upload_integrity', {
+          await supabase.rpc('record_upload_integrity2', {
             p_batch_id: input.batchId ?? null, p_client_track_id: input.clientTrackId ?? null, p_track_id: trackId,
             p_original_filename: originalFilename, p_source_fingerprint: input.sourceFingerprint ?? null,
             p_original_sha256: audioSha256, p_final_sha256: finalAudioSha, p_storage_path: audioStoragePath,
             p_duration: audioDurationVal, p_transcoded: wasTranscoded, p_status: 'success', p_error: null,
+            p_original_filesize: originalFilesize, p_final_filesize: finalFilesize, p_transcoding_status: transcodingStatus,
           });
         } catch (e) { log('integrity log skip', { err: e instanceof Error ? e.message : String(e) }); }
       }
@@ -978,6 +1038,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       const tailDbg = [err.code, err.details, err.hint].filter(Boolean).join(' | ');
       uploadDebug.finish({ ok: false, rpcStatus: 'error', error: `submit-rpc: ${msg}${tailDbg ? ` (${tailDbg})` : ''}` });
       uploadDebug.step('submit-rpc', 'error', `${msg}${tailDbg ? ` (${tailDbg})` : ''}`);
+      // 0196 — track row 생성 실패 → 방금 업로드한 storage object 격리 정리 (orphan 방지). 신규 업로드에만 적용.
+      if (!input.trackId && audioStoragePath) {
+        try { await supabase.storage.from('audio').remove([audioStoragePath]); log('orphan audio removed', { path: audioStoragePath }); }
+        catch (ce) { log('orphan audio cleanup skip', { err: ce instanceof Error ? ce.message : String(ce) }); }
+      }
+      if (!input.trackId && coverStoragePathVal) {
+        try { await supabase.storage.from('covers').remove([coverStoragePathVal]); } catch { /* best-effort */ }
+      }
+      void logUploadFailure(input, { storagePath: audioStoragePath, originalSha: audioSha256, finalSha: finalAudioSha, duration: audioDurationVal, transcoded: wasTranscoded, transcodingStatus, originalFilesize, finalFilesize, error: `submit-rpc: ${msg}` });
       if (msg.includes('row-level security') || err.code === '42501') {
         const recheck = await fetchArtistUploadEligibility().catch(() => null);
         if (recheck && !recheck.can_upload) {
@@ -1030,6 +1099,8 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     log('FATAL at stage=' + stage, { err: msg });
     uploadDebug.finish({ ok: false, error: `${stage} 단계 실패 — ${msg}` });
     uploadDebug.step(stage, 'error', msg);
+    // 0196 — 파일이 관여한 단계 실패만 무결성 로그에 failed 로 기록 (이상징후 집계용).
+    if (input.audioFile) void logUploadFailure(input, { error: `${stage}: ${msg}` });
     return { ok: false, error: `${stage} 단계 실패 — ${msg}` };
   } finally {
     log('finally', { stage, elapsedMs: Date.now() - startedAt });
@@ -1135,6 +1206,19 @@ export async function adminListArtistTracks(opts?: {
   });
   if (error) throw error;
   return (data ?? []) as AdminTrackRow[];
+}
+
+/** 동일 필터 기준 전체 곡 수 (페이지네이션 표시용). */
+export async function adminCountArtistTracks(opts?: {
+  status?: Parameters<typeof adminListArtistTracks>[0] extends { status?: infer S } | undefined ? S : never;
+  search?: string;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_artist_tracks_count', {
+    p_status: opts?.status || null,
+    p_search: opts?.search || null,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 export interface BulkDeleteResult {

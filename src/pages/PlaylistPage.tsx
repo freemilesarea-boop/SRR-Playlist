@@ -15,6 +15,7 @@ import { gradientStyle } from '@/lib/cover';
 import { playlistShareUrl } from '@/lib/shareApi';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import PlaylistFollowButton from '@/components/PlaylistFollowButton';
 import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
@@ -147,13 +148,20 @@ export default function PlaylistPage() {
 
   return (
     <div className="pb-8">
-      {/* Hero */}
+      {/* Hero — DEUDDA §6 adaptive gradient */}
       <div className="relative overflow-hidden">
         <div
           className="absolute inset-0 scale-110 opacity-90 blur-3xl"
           style={gradientStyle(playlist.category || playlist.title)}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-bg/60 to-bg" />
+        {/* DEUDDA §6 — transparent 50% → black/60 85% → bg 100% (자연스러운 페이지 흡수) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.6) 85%, rgb(var(--color-bg)) 100%)',
+          }}
+        />
 
         <div className="relative flex flex-col gap-5 p-5 pt-12 sm:flex-row sm:items-end sm:gap-6 sm:p-7 sm:pt-16">
           <Link
@@ -169,11 +177,12 @@ export default function PlaylistPage() {
               category={playlist.category}
               imageUrl={playlist.thumbnail_url ?? coverFromTracks}
               size="xl"
+              useAbstract
             />
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
               {playlist.category}
             </p>
             <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-4xl">
@@ -185,7 +194,7 @@ export default function PlaylistPage() {
               </p>
             )}
             {totalCount > 0 && (
-              <p className="flex items-center gap-1 text-xs text-white/70">
+              <p className="flex items-center gap-1.5 font-mono text-[11px] tracking-wide text-white/70">
                 {hasAnyPlayable ? (
                   <>
                     <CheckCircle2 size={12} className="text-emerald-300" />
@@ -319,8 +328,16 @@ export default function PlaylistPage() {
                 playable ? 'cursor-pointer hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
               } ${isCurrent ? 'text-accent' : ''}`}
             >
-              <div className="w-6 text-right text-xs text-ink-dim">
-                {isCurrent && playing ? <span className="text-accent">♪</span> : idx + 1}
+              <div className="flex h-5 w-6 items-center justify-end text-xs">
+                {isCurrent && playing ? (
+                  <span className="eq-bars text-accent" aria-label="재생 중">
+                    <span /><span /><span />
+                  </span>
+                ) : (
+                  <span className={`font-mono tabular-nums ${isCurrent ? 'text-accent' : 'text-ink-dim'}`}>
+                    {idx + 1}
+                  </span>
+                )}
               </div>
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-card">
                 {t.cover_url ? (
@@ -338,8 +355,9 @@ export default function PlaylistPage() {
                 </p>
                 <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
               </div>
-              <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100">
+              <span className="flex shrink-0 items-center gap-2 opacity-70 transition-opacity group-hover:opacity-100">
                 <TrackLikeButton trackId={t.id} track={t} size={14} />
+                {playable && <AddToPlaylistButton trackId={t.id} variant="bare" size={15} />}
               </span>
               <div className="text-xs text-ink-dim">{t.duration ? formatTime(t.duration) : ''}</div>
             </li>

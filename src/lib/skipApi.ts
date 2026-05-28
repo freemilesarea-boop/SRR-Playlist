@@ -91,7 +91,6 @@ export interface MetadataViolation {
   admin_note: string | null;
   title: string | null;
   artist: string | null;
-  genre: string | null;
   main_genre: string | null;
   mood: string | null;
   energy_level: number | null;
