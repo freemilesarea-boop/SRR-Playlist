@@ -339,7 +339,7 @@ function CreateContractModal({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-soft/95 px-5 py-3 backdrop-blur">
           <h3 className="text-base font-bold">계약서 발행</h3>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
+          <button onClick={onClose} aria-label="닫기" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
             <X size={16} />
           </button>
         </div>
@@ -506,7 +506,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
             <FileText size={16} /> {row.contract_title}{' '}
             <span className="font-mono text-xs text-ink-mute">({row.contract_version})</span>
           </h3>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
+          <button onClick={onClose} aria-label="닫기" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5">
             <X size={16} />
           </button>
         </div>

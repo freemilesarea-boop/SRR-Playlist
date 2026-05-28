@@ -211,7 +211,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
         <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" />
       </Field>
       <Field label="아티스트명 *" hint="공개되는 활동명">
-        <input type="text" required value={artistName} onChange={(e) => setArtistName(e.target.value)} className="input" />
+        <input type="text" required value={artistName} onChange={(e) => setArtistName(e.target.value)} autoComplete="nickname" maxLength={50} className="input" />
       </Field>
       <Field label="전화번호 *">
         <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="010-0000-0000" className="input" />

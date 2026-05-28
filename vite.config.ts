@@ -98,4 +98,9 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  // production 빌드 시 console.log/debug 자동 제거 — DEV 가드 없는 80+ 호출 노이즈 일괄 청소.
+  // console.warn/error 는 의도적 표시 가능성 있어 유지 (Sentry capture 와 함께 운영자 가시화).
+  esbuild: {
+    pure: process.env.NODE_ENV === 'production' ? ['console.log', 'console.debug', 'console.info'] : [],
+  },
 });
