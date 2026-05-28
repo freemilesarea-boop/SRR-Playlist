@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import BrandLogo from '@/components/BrandLogo';
+import SidebarLibrarySection from '@/components/SidebarLibrarySection';
 
 const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
   { to: '/', label: '홈', Icon: Home, end: true },
@@ -38,32 +39,35 @@ export default function Sidebar() {
         Navigate
       </p>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
-        {navItems.map(({ to, label, Icon, end }, idx) => (
-          <NavLink key={to} to={to} end={end}>
-            {({ isActive }) => (
-              <span
-                className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors duration-smooth ${
-                  isActive
-                    ? 'bg-accent/15 text-accent'
-                    : 'text-ink-mute hover:bg-bg-hover hover:text-ink'
-                }`}
-              >
-                {/* active 좌측 violet bar */}
-                {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full bg-accent" />
-                )}
-                <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
-                <span className="flex-1">{label}</span>
-                {/* DEUDDA spec: 우측 mono 인덱스 (01, 02, ...) */}
-                <span className={`font-mono text-[10px] tracking-wider ${isActive ? 'text-accent' : 'text-ink-dim'}`}>
-                  {navNo(idx)}
+      <div className="flex-1 overflow-y-auto">
+        <nav className="space-y-0.5 px-3 py-1">
+          {navItems.map(({ to, label, Icon, end }, idx) => (
+            <NavLink key={to} to={to} end={end}>
+              {({ isActive }) => (
+                <span
+                  className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors duration-smooth ${
+                    isActive
+                      ? 'bg-accent/15 text-accent'
+                      : 'text-ink-mute hover:bg-bg-hover hover:text-ink'
+                  }`}
+                >
+                  {isActive && (
+                    <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full bg-accent" />
+                  )}
+                  <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
+                  <span className="flex-1">{label}</span>
+                  <span className={`font-mono text-[10px] tracking-wider ${isActive ? 'text-accent' : 'text-ink-dim'}`}>
+                    {navNo(idx)}
+                  </span>
                 </span>
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* 내 라이브러리 — 좋아요한 곡 + 팔로우 플리 (사용자 어디서든 빠른 접근) */}
+        <SidebarLibrarySection />
+      </div>
 
       <div className="border-t border-line/10 px-5 py-4 font-mono text-[10px] leading-relaxed text-ink-dim">
         <p>DEUDDA · v0.2 PRO</p>
