@@ -148,13 +148,20 @@ export default function PlaylistPage() {
 
   return (
     <div className="pb-8">
-      {/* Hero */}
+      {/* Hero — DEUDDA §6 adaptive gradient */}
       <div className="relative overflow-hidden">
         <div
           className="absolute inset-0 scale-110 opacity-90 blur-3xl"
           style={gradientStyle(playlist.category || playlist.title)}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-bg/60 to-bg" />
+        {/* DEUDDA §6 — transparent 50% → black/60 85% → bg 100% (자연스러운 페이지 흡수) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.6) 85%, rgb(var(--color-bg)) 100%)',
+          }}
+        />
 
         <div className="relative flex flex-col gap-5 p-5 pt-12 sm:flex-row sm:items-end sm:gap-6 sm:p-7 sm:pt-16">
           <Link

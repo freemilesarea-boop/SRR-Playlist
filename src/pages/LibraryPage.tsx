@@ -29,6 +29,7 @@ import AutoCover from '@/components/AutoCover';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
+import Skeleton from '@/components/common/Skeleton';
 
 export default function LibraryPage() {
   const { user } = useAuthStore();
@@ -357,18 +358,11 @@ function LikedTrackRow({
 
 function SkeletonRow({ vertical }: { vertical?: boolean }) {
   return vertical ? (
-    <div className="space-y-2">
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="h-14 animate-pulse rounded-xl bg-bg-card" />
-      ))}
-    </div>
+    <Skeleton.Row count={4} />
   ) : (
     <div className="-mx-4 flex gap-3 overflow-hidden px-4 sm:-mx-6 sm:px-6">
       {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="w-32 shrink-0 space-y-2 sm:w-36">
-          <div className="aspect-square animate-pulse rounded-xl bg-bg-card" />
-          <div className="h-3 w-3/4 animate-pulse rounded bg-bg-card" />
-        </div>
+        <Skeleton.Card key={i} className="w-32 shrink-0 sm:w-36" />
       ))}
     </div>
   );
