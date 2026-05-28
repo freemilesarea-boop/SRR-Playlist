@@ -27,13 +27,20 @@ allowed_mime_types = ["image/*"]
 
 [auth]
 enabled = true
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173"]
+# 운영 도메인 — Supabase 대시보드의 Authentication → URL Configuration 에서도 동일하게 설정해야 함.
+site_url = "https://deudda.com"
+additional_redirect_urls = [
+  "https://deudda.com",
+  "https://www.deudda.com",
+  "http://localhost:5173",
+]
 
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false
+# 회원가입/이메일 변경 시 인증 메일 발송 필수.
+# false 면 가입 즉시 auto-confirm 되어 메일 미발송 + 즉시 로그인됨.
+enable_confirmations = true
 
 # 브랜드 인증메일 (듣다 DEUDDA) — supabase config push 로 적용.
 # 대시보드(Authentication → Email Templates)에 동일 HTML 을 붙여넣어도 됨.
