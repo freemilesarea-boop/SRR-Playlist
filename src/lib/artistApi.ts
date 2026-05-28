@@ -827,17 +827,21 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
             75_000,
             '음질 분석 시간이 초과되었어요. 잠시 후 다시 시도해주세요.',
           );
-          log('quality gate', { lufs: q.integrated_lufs, tp: q.true_peak_dbtp, passed: q.passed, reason: q.failure_reason });
-          if (!q.passed) {
-            // 실패 음원은 storage 업로드 전에 차단 — 로그만 남김(track_id 없음)
+          log('quality gate', { lufs: q.integrated_lufs, tp: q.true_peak_dbtp, grade: q.grade, reasons: q.reasons });
+          if (q.grade === 'reject') {
+            // REJECT: storage 업로드 전 차단 — 로그만 남김(track_id 없음)
             void recordAudioQuality({ originalFilename, result: q });
-            uploadDebug.step('quality-gate', 'error', `${q.failure_reason} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
+            uploadDebug.step('quality-gate', 'error', `reject: ${q.reasons.join(',') || '?'} (LUFS ${q.integrated_lufs ?? '?'} / TP ${q.true_peak_dbtp ?? '?'})`);
             uploadDebug.finish({ ok: false, audioStatus: 'error', error: `quality-gate: ${q.failure_reason}` });
             void logUploadFailure(input, { originalSha: audioSha256, transcodingStatus, originalFilesize, finalFilesize, error: `quality-gate: ${q.failure_reason}` });
             return { ok: false, error: q.message ?? '음질 기준 미달로 등록할 수 없어요.' };
           }
-          qualityResult = q; // 통과 — insert 후 track_id 와 함께 기록
-          uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
+          qualityResult = q; // pass/warning — 업로드 허용, insert 후 track_id 와 함께 기록
+          if (q.grade === 'warning') {
+            uploadDebug.step('quality-gate', 'warn', `warning: ${q.reasons.join(',')} (LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp})`);
+          } else {
+            uploadDebug.step('quality-gate', 'ok', `LUFS ${q.integrated_lufs} · TP ${q.true_peak_dbtp}`);
+          }
         }
       } catch (e) {
         // 분석 자체 timeout/예외 — 통과 음원을 막지 않도록 게이트는 통과시키되 경고 로그.

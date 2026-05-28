@@ -8,24 +8,36 @@
 import { supabase } from '@/lib/supabase';
 import type { LoudnessResult } from '@/lib/loudness';
 
+export type QualityGrade = 'pass' | 'warning' | 'reject';
+
 export interface QualityThresholds {
   enabled: boolean;
   lufs_min: number;
   lufs_max: number;
   true_peak_max: number;
+  /** WARNING ~ REJECT 경계 TP (이 값 초과 = REJECT) */
+  true_peak_reject_max: number;
   block_on_clipping: boolean;
 }
 
 const DEFAULT_THRESHOLDS: QualityThresholds = {
-  enabled: true, lufs_min: -14, lufs_max: -10, true_peak_max: -1.0, block_on_clipping: true,
+  enabled: true,
+  lufs_min: -14, lufs_max: -9,
+  true_peak_max: 0.0, true_peak_reject_max: 0.3,
+  block_on_clipping: true,
 };
 
 const ANALYZE_TIMEOUT_MS = 60_000;
 
 export interface QualityResult extends LoudnessResult {
   bitrate_kbps: number | null;
+  grade: QualityGrade;
+  /** grade === 'pass' || 'warning' (업로드 허용). */
   passed: boolean;
-  failure_reason: string | null; // 'low_loudness' | 'high_loudness' | 'true_peak' | 'clipping' | 'analysis_failed'
+  /** 첫 사유 (호환용). */
+  failure_reason: string | null; // 'low_loudness' | 'high_loudness' | 'true_peak' | 'true_peak_reject' | 'clipping' | 'analysis_failed'
+  /** 경고/거부 사유 전체. */
+  reasons: string[];
   message: string | null;
 }
 
@@ -40,21 +52,28 @@ export async function fetchQualityThresholds(): Promise<QualityThresholds> {
   }
 }
 
-/** 정책 검사 — 측정값을 기준과 비교해 통과/실패 + 사유 결정. */
-export function evaluateQuality(r: LoudnessResult, th: QualityThresholds): { passed: boolean; reason: string | null } {
-  if (r.integrated_lufs == null) return { passed: false, reason: 'analysis_failed' };
-  if (th.block_on_clipping && r.clipping_detected) return { passed: false, reason: 'clipping' };
-  if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_max) return { passed: false, reason: 'true_peak' };
-  if (r.integrated_lufs < th.lufs_min) return { passed: false, reason: 'low_loudness' };
-  if (r.integrated_lufs > th.lufs_max) return { passed: false, reason: 'high_loudness' };
-  return { passed: true, reason: null };
+/** 3단계 정책 검사 — 측정값을 기준과 비교해 pass/warning/reject 결정.
+ *  - REJECT: analysis_failed / clipping(설정 시) / TP > true_peak_reject_max
+ *  - PASS:   LUFS lufs_min..lufs_max AND TP <= true_peak_max
+ *  - WARNING: 그 외 (업로드 허용)
+ */
+export function evaluateQuality(r: LoudnessResult, th: QualityThresholds): { grade: QualityGrade; reasons: string[] } {
+  if (r.integrated_lufs == null) return { grade: 'reject', reasons: ['analysis_failed'] };
+  if (th.block_on_clipping && r.clipping_detected) return { grade: 'reject', reasons: ['clipping'] };
+  if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_reject_max) return { grade: 'reject', reasons: ['true_peak_reject'] };
+
+  const reasons: string[] = [];
+  if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_max) reasons.push('true_peak');
+  if (r.integrated_lufs < th.lufs_min) reasons.push('low_loudness');
+  else if (r.integrated_lufs > th.lufs_max) reasons.push('high_loudness');
+
+  return reasons.length === 0 ? { grade: 'pass', reasons: [] } : { grade: 'warning', reasons };
 }
 
-/** 실패 사유 → 사용자 안내 메시지 (플랫폼 품질 기준 안내 톤, 측정값 포함). */
+/** 결과 → 사용자 안내 메시지. grade 별 톤 분리(pass/warning/reject). */
 export function buildQualityMessage(r: QualityResult, th: QualityThresholds): string {
-  if (r.passed) return '음질 검사를 통과했어요.';
+  if (r.grade === 'pass') return '음질 검사를 통과했어요.';
 
-  // 분석 자체가 불가한 경우 — 측정값 없이 안내
   if (r.failure_reason === 'analysis_failed') {
     return (
       '음원 분석에 실패했습니다.\n\n' +
@@ -65,23 +84,32 @@ export function buildQualityMessage(r: QualityResult, th: QualityThresholds): st
 
   const lufs = r.integrated_lufs != null ? `${r.integrated_lufs} LUFS` : '측정 실패';
   const tp = r.true_peak_dbtp != null ? `${r.true_peak_dbtp} dBTP` : '측정 실패';
-  // 측정값 블록 — LUFS/True Peak 는 항상, Loudness Range 는 값이 있을 때만 표시
   const lines = [`• Integrated LUFS: ${lufs}`, `• True Peak: ${tp}`];
   if (r.loudness_range != null) lines.push(`• Loudness Range: ${r.loudness_range} LU`);
 
+  if (r.grade === 'warning') {
+    return (
+      '음원 볼륨이 권장 범위를 벗어났지만 업로드는 가능합니다.\n\n' +
+      '현재 측정값\n' +
+      lines.join('\n') +
+      '\n\n' +
+      `권장: ${th.lufs_min} ~ ${th.lufs_max} LUFS · True Peak ≤ ${th.true_peak_max} dBTP\n` +
+      '매장 환경에서 다른 곡과 볼륨 편차가 있을 수 있습니다.'
+    );
+  }
+
+  // reject (clipping / TP > reject_max)
+  const why = r.failure_reason === 'clipping'
+    ? '디지털 클리핑이 감지되었습니다.'
+    : `True Peak 이 안전 한계(+${th.true_peak_reject_max} dBTP)를 초과했습니다.`;
   return (
-    '음원 볼륨이 플랫폼 등록 기준에 부합하지 않습니다.\n\n' +
+    '심각한 왜곡 위험으로 등록할 수 없습니다.\n\n' +
+    why + '\n\n' +
     '현재 측정값\n' +
     lines.join('\n') +
     '\n\n' +
-    '듣다는 매장 내 일관된 청취 경험과\n' +
-    '플레이리스트 품질 유지를 위해\n' +
-    `${th.lufs_min} ~ ${th.lufs_max} LUFS / True Peak ≤ ${th.true_peak_max} dBTP\n` +
-    '기준을 충족한 음원만 등록 가능합니다.\n\n' +
-    '※ 기준을 충족하지 않은 음원은\n' +
-    '매장 환경에서 청취 볼륨 편차가 발생할 수 있습니다.\n\n' +
-    '마스터링 및 음원 볼륨 작업 후\n' +
-    '다시 업로드해주세요.'
+    '매장 스피커 환경에서 왜곡/잡음이 발생할 수 있어\n' +
+    '리미터/리마스터링 후 다시 업로드해주세요.'
   );
 }
 
@@ -93,7 +121,7 @@ export async function analyzeAudioQuality(file: File, th: QualityThresholds): Pr
   const fail = (reason: string): QualityResult => ({
     integrated_lufs: null, true_peak_dbtp: null, sample_peak_dbfs: null, loudness_range: null,
     clipping_detected: false, clip_sample_count: 0, channels: 0, sample_rate: 0, analyzer_version: 'ebur128-js-v1',
-    bitrate_kbps: null, passed: false, failure_reason: reason, message: null,
+    bitrate_kbps: null, grade: 'reject', passed: false, failure_reason: reason, reasons: [reason], message: null,
   });
 
   const Ctx =
@@ -133,8 +161,12 @@ export async function analyzeAudioQuality(file: File, th: QualityThresholds): Pr
       worker.onerror = (err) => { window.clearTimeout(timer); reject(new Error(err.message)); };
       worker.postMessage({ channels, sampleRate: sr }, channels.map((c) => c.buffer));
     });
-    const eval_ = evaluateQuality(result, th);
-    const out: QualityResult = { ...result, bitrate_kbps: bitrate, passed: eval_.passed, failure_reason: eval_.reason, message: null };
+    const ev = evaluateQuality(result, th);
+    const out: QualityResult = {
+      ...result, bitrate_kbps: bitrate,
+      grade: ev.grade, passed: ev.grade !== 'reject',
+      failure_reason: ev.reasons[0] ?? null, reasons: ev.reasons, message: null,
+    };
     out.message = buildQualityMessage(out, th);
     return out;
   } catch {
@@ -180,6 +212,7 @@ export interface AudioQualityRow {
   clipping_detected: boolean; sample_rate: number | null; channels: number | null; bitrate_kbps: number | null;
   passed_quality_check: boolean; failure_reason: string | null; analyzed_at: string;
   title: string | null; artist: string | null;
+  quality_grade: QualityGrade | null;
 }
 export async function listAudioQuality(filter = 'failed', limit = 200): Promise<AudioQualityRow[]> {
   const { data, error } = await supabase.rpc('admin_list_audio_quality', { p_filter: filter, p_limit: limit });
