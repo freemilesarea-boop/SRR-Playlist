@@ -24,12 +24,21 @@ export default {
       },
       fontFamily: {
         sans: [
+          'Pretendard Variable',
           'Pretendard',
           '-apple-system',
           'BlinkMacSystemFont',
           'system-ui',
           'Roboto',
           'sans-serif',
+        ],
+        mono: [
+          'JetBrains Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Monaco',
+          'monospace',
         ],
       },
       boxShadow: {
