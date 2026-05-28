@@ -70,6 +70,7 @@ const PAYOUT_TONE: Record<string, string> = {
 export default function ArtistTrackManagementList({ removedView = false }: { removedView?: boolean } = {}) {
   const [rows, setRows] = useState<AdminTrackRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [lastBatchSize, setLastBatchSize] = useState<number>(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,17 +165,21 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     setLoading(true);
     setError(null);
     const seq = ++requestSeqRef.current;
+    const queryStatus = removedView ? 'removed' : status || undefined;
+    const querySearch = search || undefined;
     try {
-      const queryStatus = removedView ? 'removed' : status || undefined;
-      const querySearch = search || undefined;
       const [data, count] = await Promise.all([
         adminListArtistTracks({ status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset: 0 }),
-        adminCountArtistTracks({ status: queryStatus, search: querySearch }),
+        adminCountArtistTracks({ status: queryStatus, search: querySearch }).catch((e) => {
+          console.warn('[ArtistTrackMgmt] count RPC failed (fallback to batch-size 기준 hasMore):', e);
+          return 0;
+        }),
       ]);
       if (seq !== requestSeqRef.current) return; // 더 최신 요청이 들어오면 폐기
+      console.debug('[ArtistTrackMgmt] load page=1', { offset: 0, returned: data.length, total: count, status: queryStatus ?? null, search: querySearch ?? null });
       setRows(data);
       setTotal(count);
-      // 선택은 보존 — 페이지 이동/필터 변경 후에도 일관 유지 (id Set 기반)
+      setLastBatchSize(data.length);
     } catch (e) {
       if (seq !== requestSeqRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -183,20 +188,26 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     }
   }
 
+  // hasMore: count 가 신뢰 가능하면 그것을 우선, 아니면 마지막 배치가 PAGE_SIZE 가득 찼는지로 판정
+  const hasMore = (total > 0 ? rows.length < total : lastBatchSize >= PAGE_SIZE);
+
   async function loadMore() {
-    if (loading || loadingMore || rows.length >= total) return;
+    if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
     const seq = requestSeqRef.current; // 추가 로드는 현재 요청 시퀀스 유지
+    const offset = rows.length;
+    const queryStatus = removedView ? 'removed' : status || undefined;
+    const querySearch = search || undefined;
     try {
-      const queryStatus = removedView ? 'removed' : status || undefined;
-      const querySearch = search || undefined;
       const more = await adminListArtistTracks({
-        status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset: rows.length,
+        status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset,
       });
       if (seq !== requestSeqRef.current) return;
+      console.debug('[ArtistTrackMgmt] loadMore', { offset, returned: more.length, totalSoFar: rows.length + more.length, total });
       // 중복 방지 — 이미 있는 id 는 스킵
       const have = new Set(rows.map((r) => r.track_id));
       setRows((prev) => [...prev, ...more.filter((r) => !have.has(r.track_id))]);
+      setLastBatchSize(more.length);
     } catch (e) {
       toast.error(`추가 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -316,7 +327,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
 
   // 하단 sentinel — 무한 스크롤 추가 로드
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const onLoadMore = useCallback(() => { void loadMore(); }, [rows.length, total, loading, loadingMore, status, search, removedView]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onLoadMore = useCallback(() => { void loadMore(); }, [rows.length, total, lastBatchSize, loading, loadingMore, status, search, removedView, hasMore]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -337,9 +348,10 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           <p className="text-xs text-ink-mute">
             {(() => {
               const fmt = (n: number) => n.toLocaleString('ko-KR');
-              const head = total > rows.length
-                ? `${fmt(rows.length)} / ${fmt(total)}건 로드`
-                : `총 ${fmt(total || rows.length)}건`;
+              const knownTotal = total || rows.length;
+              const head = hasMore
+                ? `현재 ${fmt(rows.length)}곡 로드 / 총 ${fmt(knownTotal)}곡${total > 0 ? '' : '+'}`
+                : `전체 ${fmt(knownTotal)}곡 로드 완료`;
               const suffix = removedView
                 ? ' · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출'
                 : ' · 검수 대기·승인·예정·공개·반려·숨김 모두 포함 (삭제/중단은 별도 탭)';
@@ -651,14 +663,23 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
         </div>
       </div>
 
-      {/* 무한 스크롤 sentinel + 추가 로드 상태 */}
+      {/* 무한 스크롤 sentinel + 항상 노출 "더 불러오기" 버튼 (Observer 불안정 대비) */}
       {!loading && rows.length > 0 && (
-        <div ref={sentinelRef} className="flex items-center justify-center py-4 text-xs text-ink-mute">
-          {loadingMore
-            ? <span className="inline-flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> 추가 로드 중…</span>
-            : rows.length < total
-              ? <button onClick={onLoadMore} className="rounded-full bg-bg-card px-3 py-1.5 font-semibold ring-1 ring-line/10 hover:bg-bg-hover">더 불러오기 ({rows.length.toLocaleString('ko-KR')} / {total.toLocaleString('ko-KR')})</button>
-              : <span>모든 곡 로드 완료 · {total.toLocaleString('ko-KR')}건</span>}
+        <div ref={sentinelRef} className="flex flex-col items-center justify-center gap-2 py-4 text-xs text-ink-mute">
+          {loadingMore && (
+            <span className="inline-flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> 추가 로드 중… (offset {rows.length.toLocaleString('ko-KR')})</span>
+          )}
+          {!loadingMore && hasMore && (
+            <button
+              onClick={onLoadMore}
+              className="rounded-full bg-accent/15 px-4 py-2 font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/25"
+            >
+              더 불러오기 · 현재 {rows.length.toLocaleString('ko-KR')}곡 로드 {total > 0 ? `/ 총 ${total.toLocaleString('ko-KR')}곡` : ''}
+            </button>
+          )}
+          {!loadingMore && !hasMore && (
+            <span>전체 {(total || rows.length).toLocaleString('ko-KR')}곡 로드 완료</span>
+          )}
         </div>
       )}
 
