@@ -1,0 +1,113 @@
+import { useEffect, useMemo } from 'react';
+import { useBusinessScheduleStore } from '@/store/businessScheduleStore';
+import { useBusinessStore } from '@/store/businessStore';
+import { usePlayerStore } from '@/store/playerStore';
+import { useAuthStore } from '@/store/authStore';
+import { fetchPlaylistTracks } from '@/lib/api';
+import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
+import { toast } from '@/store/toastStore';
+import type { TrackRow } from '@/types/db';
+
+/**
+ * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
+ *
+ * 1) 1분 tick — current schedule 재계산 트리거 (store.tick)
+ * 2) current slot 트랙 prefetch — user gesture 안에서 동기 setQueue 가능 (autoplay 정책 안전)
+ * 3) businessMode ON + current 변경 → 자동 큐 교체 (로테이션)
+ *
+ * 기존 BusinessScheduler 컴포넌트 내부에 있던 동일 로직을 끌어올려
+ * NOW 카드/에디터 어디서 시작하든 동일 엔진이 돌게 함.
+ */
+export function useBusinessAutoSwitch() {
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const schedules = useBusinessScheduleStore((s) => s.schedules);
+  const playlists = useBusinessScheduleStore((s) => s.playlists);
+  const tick = useBusinessScheduleStore((s) => s.tick);
+  const bumpTick = useBusinessScheduleStore((s) => s.bumpTick);
+  const currentTracks = useBusinessScheduleStore((s) => s.currentTracks);
+  const setCurrentTracks = useBusinessScheduleStore((s) => s.setCurrentTracks);
+  const setTracksLoading = useBusinessScheduleStore((s) => s.setTracksLoading);
+  const setTracksError = useBusinessScheduleStore((s) => s.setTracksError);
+  const lastSwitchedScheduleId = useBusinessScheduleStore((s) => s.lastSwitchedScheduleId);
+  const setLastSwitchedScheduleId = useBusinessScheduleStore((s) => s.setLastSwitchedScheduleId);
+  const businessMode = useBusinessStore((s) => s.businessMode);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const setShuffle = usePlayerStore((s) => s.setShuffle);
+  const playAction = usePlayerStore((s) => s.play);
+
+  // 1분마다 tick — current/next 재계산
+  useEffect(() => {
+    const id = window.setInterval(bumpTick, 60_000);
+    return () => window.clearInterval(id);
+  }, [bumpTick]);
+
+  const current = useMemo(() => getCurrentSchedule(schedules), [schedules, tick]);
+
+  // current slot 트랙 prefetch
+  useEffect(() => {
+    setCurrentTracks(null);
+    setTracksError(null);
+    if (!current?.playlist_id) return;
+    setTracksLoading(true);
+    let alive = true;
+    fetchPlaylistTracks(current.playlist_id)
+      .then((tracks) => {
+        if (!alive) return;
+        const { playable } = filterPlayableTracks(tracks);
+        if (import.meta.env.DEV) {
+          console.debug('[StoreEngine] tracks loaded', { slot: current.slot_name, total: tracks.length, playable: playable.length });
+        }
+        setCurrentTracks(playable);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (import.meta.env.DEV) console.error('[StoreEngine] tracks fetch failed', e);
+        setTracksError(msg);
+      })
+      .finally(() => { if (alive) setTracksLoading(false); });
+    return () => { alive = false; };
+  }, [current?.playlist_id, current?.slot_name, setCurrentTracks, setTracksLoading, setTracksError]);
+
+  // businessMode ON + current 변경 → 자동 큐 교체
+  useEffect(() => {
+    if (!businessMode || !current?.id || !current.playlist_id) return;
+    if (lastSwitchedScheduleId === current.id) return;
+    const isInitial = lastSwitchedScheduleId === null;
+    let alive = true;
+    const targetScheduleId = current.id;
+    (async () => {
+      try {
+        let playable: TrackRow[];
+        if (currentTracks && currentTracks.length > 0) {
+          playable = currentTracks;
+        } else {
+          const tracks = await fetchPlaylistTracks(current.playlist_id!);
+          playable = filterPlayableTracks(tracks).playable;
+        }
+        if (!alive) return;
+        if (!useBusinessStore.getState().businessMode) return;
+        if (current.id !== targetScheduleId) return;
+        if (playable.length === 0) {
+          toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
+          return;
+        }
+        const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
+        setQueue(playable, 0, playlist);
+        setRepeat('all');
+        setShuffle(true);
+        playAction();
+        if (import.meta.env.DEV) console.debug('[StoreEngine] playback switched', { tracks: playable.length, isInitial });
+        setLastSwitchedScheduleId(current.id);
+        if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
+        void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
+      } catch (e) {
+        if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
+}
