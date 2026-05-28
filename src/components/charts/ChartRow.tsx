@@ -39,11 +39,27 @@ export default function ChartRow({
         playable ? 'hover:bg-ink/8' : 'cursor-not-allowed opacity-[0.55]'
       } ${isCurrent ? 'bg-accent/12 ring-1 ring-accent/25' : ''}`}
     >
-      {/* 순위 — 고정 폭 */}
-      <div className="w-8 shrink-0 text-center text-sm font-bold tabular-nums sm:w-10">
-        <span className={isCurrent ? 'text-accent' : 'text-ink-mute'}>
-          {rank.toString().padStart(2, '0')}
-        </span>
+      {/* DEUDDA §7.2 — 순위 슬롯: 평상시 rank, hover 시 play icon, 재생 중이면 EQ glyph */}
+      <div className="relative flex h-6 w-8 shrink-0 items-center justify-center sm:w-10">
+        {isCurrent ? (
+          <span className="eq-bars text-accent" aria-label="재생 중">
+            <span /><span /><span />
+          </span>
+        ) : (
+          <>
+            <span className="font-mono text-sm font-medium tabular-nums text-ink-mute transition-opacity duration-smooth ease-emphasized group-hover:opacity-0">
+              {rank.toString().padStart(2, '0')}
+            </span>
+            {playable && (
+              <Play
+                size={13}
+                fill="currentColor"
+                className="absolute text-ink opacity-0 transition-opacity duration-smooth ease-emphasized group-hover:opacity-100"
+                aria-hidden
+              />
+            )}
+          </>
+        )}
       </div>
 
       {/* 커버 */}

@@ -321,8 +321,16 @@ export default function PlaylistPage() {
                 playable ? 'cursor-pointer hover:bg-ink/5' : 'cursor-not-allowed opacity-[0.55]'
               } ${isCurrent ? 'text-accent' : ''}`}
             >
-              <div className="w-6 text-right text-xs text-ink-dim">
-                {isCurrent && playing ? <span className="text-accent">♪</span> : idx + 1}
+              <div className="flex h-5 w-6 items-center justify-end text-xs">
+                {isCurrent && playing ? (
+                  <span className="eq-bars text-accent" aria-label="재생 중">
+                    <span /><span /><span />
+                  </span>
+                ) : (
+                  <span className={`font-mono tabular-nums ${isCurrent ? 'text-accent' : 'text-ink-dim'}`}>
+                    {idx + 1}
+                  </span>
+                )}
               </div>
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-card">
                 {t.cover_url ? (
