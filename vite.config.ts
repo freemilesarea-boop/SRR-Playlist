@@ -7,6 +7,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // injectManifest 로 전환 — custom src/sw.ts 에 push handler 통합.
+      // workbox 의 precache 기능은 그대로 (precacheAndRoute(self.__WB_MANIFEST)).
+      // 오디오 runtimeCaching 은 절대 안 함 (Range 요청 206 깨짐 방지) — 이전 generateSW 와 동일 정책.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: [
         'favicon.svg',
@@ -56,16 +62,11 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      // injectManifest 모드: precache 매니페스트만 inject 하고, runtimeCaching 같은
+      // workbox 옵션은 src/sw.ts 안에서 직접 제어. 오디오는 절대 SW 가 가로채지 않음
+      // (이전 supabase storage CacheFirst 규칙이 오디오 Range 요청을 opaque 로 캐싱 → 206 깨짐).
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
-        // 오디오는 절대 SW 가 가로채지 않는다. (이전 supabase storage CacheFirst 규칙이 오디오
-        // Range 요청을 opaque 로 캐싱 → 206 깨짐/416 → 모바일 재생 실패의 직접 원인이었음)
-        // runtimeCaching 제거 → 오디오/스토리지 요청은 매칭 라우트가 없어 브라우저 네이티브로 처리
-        // (Range 206 정상). 커버 이미지는 브라우저 HTTP 캐시(cacheControl) 로 충분.
-        runtimeCaching: [],
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
       },
     }),
   ],
