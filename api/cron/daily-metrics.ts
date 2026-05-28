@@ -57,6 +57,26 @@ export default async function handler(req: VercelRequest) {
     results['expired_free_trials'] = { error: e instanceof Error ? e.message : 'unknown' };
   }
 
+  // 무료 체험 D-day 알림 메일 (D-3 / D-1 / 만료-당일) — Resend 발송, 멱등.
+  // 만료 sweep 직후에 호출해야 expired 케이스가 정확히 잡힘.
+  try {
+    const reminderRes = await fetch(`${url}/functions/v1/dispatch-trial-reminders`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+        'x-cron-secret': secret ?? '',
+      },
+      body: '{}',
+    });
+    const reminderTxt = await reminderRes.text();
+    results['trial_reminders'] = reminderRes.ok
+      ? JSON.parse(reminderTxt)
+      : { error: reminderTxt, status: reminderRes.status };
+  } catch (e) {
+    results['trial_reminders'] = { error: e instanceof Error ? e.message : 'unknown' };
+  }
+
   for (const date of [yesterdayKst, todayKst]) {
     const res = await fetch(`${url}/rest/v1/rpc/admin_compute_daily_metrics`, {
       method: 'POST',
