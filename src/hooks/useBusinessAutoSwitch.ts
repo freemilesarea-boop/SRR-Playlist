@@ -7,6 +7,7 @@ import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
+import { captureError } from '@/lib/sentry';
 
 /**
  * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
@@ -64,6 +65,11 @@ export function useBusinessAutoSwitch() {
         const msg = e instanceof Error ? e.message : String(e);
         if (import.meta.env.DEV) console.error('[StoreEngine] tracks fetch failed', e);
         setTracksError(msg);
+        void captureError(e, {
+          scope: 'useBusinessAutoSwitch.prefetch',
+          playlistId: current?.playlist_id,
+          slot: current?.slot_name,
+        });
       })
       .finally(() => { if (alive) setTracksLoading(false); });
     return () => { alive = false; };
@@ -104,7 +110,15 @@ export function useBusinessAutoSwitch() {
         if (!isInitial) toast.success(`${targetSlotName} 플레이리스트로 자동 전환했어요`);
         void logScheduleEvent(userId, targetScheduleId, targetPlaylistId, isInitial ? 'started' : 'switched');
       } catch (e) {
-        if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
+        if (alive) {
+          toast.error(e instanceof Error ? e.message : '자동 전환 실패');
+          void captureError(e, {
+            scope: 'useBusinessAutoSwitch.autoswitch',
+            scheduleId: targetScheduleId,
+            playlistId: targetPlaylistId,
+            slot: targetSlotName,
+          });
+        }
       }
     })();
     return () => { alive = false; };
