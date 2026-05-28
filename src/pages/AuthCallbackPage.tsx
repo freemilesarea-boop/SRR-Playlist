@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { captureError } from '@/lib/sentry';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
 
@@ -63,6 +64,10 @@ export default function AuthCallbackPage() {
     // 1) provider 가 명시적 에러(error=access_denied 등)를 돌려준 경우 즉시 처리.
     const qs = `${window.location.search}${window.location.hash}`;
     if (/[?#&]error(_description)?=/.test(qs)) {
+      void captureError(new Error('oauth_provider_error'), {
+        scope: 'auth_callback.provider_error',
+        qs: qs.slice(0, 200), // 민감 토큰 보호 위해 200자 컷
+      });
       navigate('/login?error=oauth_callback_failed', { replace: true });
       return;
     }
@@ -70,6 +75,10 @@ export default function AuthCallbackPage() {
     //    (이전 8초는 fetch 타임아웃 예산 25초보다 짧아, 성공 직전 로그인을 실패로 오판했음)
     const t = window.setTimeout(() => {
       if (!useAuthStore.getState().session) {
+        void captureError(new Error('oauth_callback_timeout'), {
+          scope: 'auth_callback.timeout',
+          timeoutMs: 20000,
+        });
         navigate('/login?error=oauth_callback_failed', { replace: true });
       }
     }, 20000);

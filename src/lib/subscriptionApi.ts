@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './supabase';
+import { captureError } from './sentry';
 
 export interface SubscriptionSnapshot {
   id: string;
@@ -301,6 +302,7 @@ export async function syncPayappPaymentsAuto(payload: {
     }
     return data as AutoSyncSummary;
   } catch (e) {
+    void captureError(e, { scope: 'syncPayappPaymentsAuto' });
     return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
   }
 }
