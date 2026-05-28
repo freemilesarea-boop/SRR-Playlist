@@ -86,7 +86,7 @@ export default function MetaApproveModal({
       <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-bg-card p-4" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="truncate text-sm font-bold">메타데이터 수정/승인 · {title ?? ''}</h3>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-bg-hover"><X size={16} /></button>
+          <button onClick={onClose} aria-label="닫기" className="rounded-lg p-1 hover:bg-bg-hover"><X size={16} /></button>
         </div>
 
         {loading ? (

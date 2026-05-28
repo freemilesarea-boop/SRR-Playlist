@@ -265,22 +265,22 @@ export default function BusinessSignupForm({ onDone }: Props) {
         />
       </Field>
       <Field label="대표자명 *">
-        <input type="text" required value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} className="input" />
+        <input type="text" required value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} autoComplete="name" maxLength={50} className="input" />
       </Field>
       <Field label="개업일자 *">
         <input type="date" required value={businessOpenDate} onChange={(e) => setBusinessOpenDate(e.target.value)} className="input" />
       </Field>
       <Field label="상호명">
-        <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="input" />
+        <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} autoComplete="organization" maxLength={100} className="input" />
       </Field>
       <Field label="매장명">
-        <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} className="input" />
+        <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} autoComplete="organization" maxLength={100} className="input" />
       </Field>
       <Field label="매장 주소">
-        <input type="text" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} className="input" />
+        <input type="text" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} autoComplete="street-address" maxLength={200} className="input" />
       </Field>
       <Field label="업종">
-        <input type="text" value={businessType} onChange={(e) => setBusinessType(e.target.value)} placeholder="예: 카페, 와인바" className="input" />
+        <input type="text" value={businessType} onChange={(e) => setBusinessType(e.target.value)} placeholder="예: 카페, 와인바" autoComplete="off" maxLength={50} className="input" />
       </Field>
 
       <Field label="사업자 검증 *" hint="국세청 진위확인 API 연동 예정. MVP 는 mock.">
