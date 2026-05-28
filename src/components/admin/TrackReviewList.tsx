@@ -330,9 +330,9 @@ export default function TrackReviewList() {
         )}
       </div>
 
-      {/* 일괄 작업 툴바 */}
+      {/* 일괄 작업 툴바 — 스크롤 시 상단 sticky 유지해 선택 → 액션 동선 단축 */}
       {!loading && rows.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/60 p-2 ring-1 ring-line/10">
+        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl bg-bg-soft/95 p-2 ring-1 ring-line/10 backdrop-blur shadow-sm">
           <label className="inline-flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold">
             <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAllPage} />
             현재 페이지 전체 선택

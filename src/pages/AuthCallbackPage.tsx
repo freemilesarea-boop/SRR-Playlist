@@ -3,12 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
+const FIRST_ROUTE_KEY = 'srr-first-route-done';
+
+/** account_type 기반 첫 도착 페이지 — 가입 직후 1회만 적용. */
+function firstRouteFor(accountType: string | undefined | null): string {
+  switch (accountType) {
+    case 'business':
+      return '/business';
+    case 'artist':
+      return '/artist';
+    default:
+      return '/';
+  }
+}
+
 /**
- * Google OAuth redirect 착륙 페이지.
+ * Google OAuth + 이메일 인증 redirect 착륙 페이지.
  *
  * Supabase JS SDK 가 URL 의 `?code=...` (PKCE) / `#access_token=...` (implicit) 를
  * 자동으로 감지해서 session 으로 교환하면 authStore.onAuthStateChange 가 fire.
- * session 이 set 되는 순간 / 로 replace navigate.
+ * session + profile 모두 set 되는 순간 account_type 기반 첫 화면으로 replace navigate.
  *
  * 별도 라우트로 분리한 이유:
  * - OAuth provider 가 콜백 URL 을 정확히 일치시키도록 (`/auth/callback` 만 화이트리스트)
@@ -17,13 +31,32 @@ import { useAuthStore } from '@/store/authStore';
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
+  const profile = useAuthStore((s) => s.profile);
+  const isProfileReady = useAuthStore((s) => s.isProfileReady);
 
   useEffect(() => {
-    if (session) {
-      // session 적용 즉시 / 로 이동 (history replace — 뒤로가기 시 callback 페이지 안 보임)
-      navigate('/', { replace: true });
+    if (!session) return;
+    // profile 까지 ready 가 되어야 account_type 분기 가능. 아직 안 되어 있으면 대기.
+    if (!isProfileReady) return;
+
+    // 첫 로그인이면 account_type 기반 분기, 이후는 / 로.
+    let firstRouteDone = false;
+    try {
+      firstRouteDone = localStorage.getItem(FIRST_ROUTE_KEY) === 'true';
+    } catch {
+      /* localStorage 막힌 환경은 매번 분기 동작 — 마찰 < 누락 */
     }
-  }, [session, navigate]);
+
+    const target = firstRouteDone ? '/' : firstRouteFor(profile?.account_type);
+    if (!firstRouteDone) {
+      try {
+        localStorage.setItem(FIRST_ROUTE_KEY, 'true');
+      } catch {
+        /* noop */
+      }
+    }
+    navigate(target, { replace: true });
+  }, [session, isProfileReady, profile?.account_type, navigate]);
 
   // session 적용 전에 너무 오래 머무르면 (취소 / 오류) 로그인 페이지로.
   useEffect(() => {
