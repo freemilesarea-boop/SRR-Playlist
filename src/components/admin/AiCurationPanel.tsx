@@ -1179,7 +1179,7 @@ function HighRiskTab() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-ink-dim">trust&lt;50 · guardrail hard · AI 불일치 · 임베딩 불일치 · LUFS 경계 곡을 위험도순으로. (추천/정산 미반영)</p>
+        <p className="text-[11px] text-ink-dim">trust&lt;50 · guardrail hard · AI 불일치 · 임베딩 불일치 · 품질 REJECT(오디오 차단) 곡을 위험도순으로. (추천/정산 미반영)</p>
         <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
       </div>
       {rows.length === 0 ? (
@@ -1197,7 +1197,10 @@ function HighRiskTab() {
                 {r.guardrail_hard && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-600">차단 {r.hard_stores}매장</span>}
                 {r.ai_mismatch_high && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700">AI 불일치 {Math.round((r.mismatch_score ?? 0) * 100)}%</span>}
                 {r.embedding_disagree_high && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700">임베딩 불일치</span>}
-                {r.lufs_boundary && <span className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-yellow-700">LUFS 경계</span>}
+                {r.lufs_boundary && (
+                  <span title="오디오 품질 게이트(0210) 결과 reject — TP>+0.3 또는 clipping 또는 분석 실패"
+                    className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-600">품질 REJECT</span>
+                )}
                 <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">{r.owner_name ?? ''} ({r.trust_tier})</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
