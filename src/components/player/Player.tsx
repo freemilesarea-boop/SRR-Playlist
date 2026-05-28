@@ -1135,7 +1135,7 @@ export default function Player() {
           className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl glass-strong p-2.5 transition duration-smooth ease-emphasized hover:-translate-y-0.5"
         >
           <div
-            className="pointer-events-none absolute inset-0 opacity-30"
+            className="pointer-events-none absolute inset-0 opacity-10"
             style={gradientStyle(playlist?.category || current.title)}
           />
           {/* DEUDDA — 상단 진행도 hairline (재생 중 시각적 alive 신호) */}
