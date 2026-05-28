@@ -46,15 +46,18 @@ export default function TopBar() {
   return (
     <div className="sticky top-0 z-20 hidden lg:block pt-safe">
       <div className="flex items-center gap-3 border-b border-line/10 bg-bg/85 px-6 py-3 backdrop-blur-xl">
-        {/* 좌측 — 페이지 타이틀 */}
-        <div className="min-w-0 flex-1">
+        {/* 좌측 — DEUDDA Product spec breadcrumb: "DEUDDA / 페이지명" */}
+        <nav aria-label="페이지 위치" className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-[0.18em]">
+          <span className="text-ink">DEUDDA</span>
+          <span className="mx-2 text-ink-dim">/</span>
+          <span className="text-ink-mute">{title}</span>
           {eyebrow && (
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
-              {eyebrow}
-            </p>
+            <>
+              <span className="mx-2 text-ink-dim">/</span>
+              <span className="text-accent">{eyebrow}</span>
+            </>
           )}
-          <h1 className="truncate text-[17px] font-bold tracking-tight">{title}</h1>
-        </div>
+        </nav>
 
         {/* 중앙/우측 — 검색 affordance */}
         {!onSearchPage && (

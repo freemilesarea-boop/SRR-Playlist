@@ -13,6 +13,11 @@ const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }
   { to: '/profile', label: '내 정보', Icon: User, end: false },
 ];
 
+/** mono 2자리 인덱스 — DEUDDA Product spec p02/p07 sidebar 의 NAV 01/02/.. 표기 */
+function navNo(i: number): string {
+  return String(i + 1).padStart(2, '0');
+}
+
 export default function Sidebar() {
   const isCurator = useAuthStore((s) => s.profile?.is_curator ?? false);
   const navItems = isCurator
@@ -20,16 +25,21 @@ export default function Sidebar() {
     : items;
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
-      <div className="px-5 pt-5 pb-3">
-        {/* DEUDDA "On Ink · White" — 검정 사이드바 위 흰 마크, 타일 없음 (가이드 canonical placement) */}
+      {/* Brand — DEUDDA Product spec: 로고 마크 + "DEUDDA." (영문 wordmark, period 포함) */}
+      <div className="px-5 pt-5 pb-4">
         <Link to="/" className="inline-flex items-center gap-2.5 text-white group">
-          <LogoMark size={32} className="transition-transform group-hover:scale-105" />
-          <span className="text-base font-extrabold tracking-tight">듣다</span>
+          <LogoMark size={28} className="transition-transform group-hover:scale-105" />
+          <span className="text-[17px] font-extrabold tracking-tight">DEUDDA<span className="text-accent">.</span></span>
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {navItems.map(({ to, label, Icon, end }) => (
+      {/* NAVIGATE eyebrow — DEUDDA spec mono caps */}
+      <p className="px-5 pb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-ink-dim">
+        Navigate
+      </p>
+
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
+        {navItems.map(({ to, label, Icon, end }, idx) => (
           <NavLink key={to} to={to} end={end}>
             {({ isActive }) => (
               <span
@@ -39,21 +49,25 @@ export default function Sidebar() {
                     : 'text-ink-mute hover:bg-bg-hover hover:text-ink'
                 }`}
               >
-                {/* DEUDDA — active 좌측 violet bar (signal indicator) */}
+                {/* active 좌측 violet bar */}
                 {isActive && (
                   <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full bg-accent" />
                 )}
                 <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
-                <span>{label}</span>
+                <span className="flex-1">{label}</span>
+                {/* DEUDDA spec: 우측 mono 인덱스 (01, 02, ...) */}
+                <span className={`font-mono text-[10px] tracking-wider ${isActive ? 'text-accent' : 'text-ink-dim'}`}>
+                  {navNo(idx)}
+                </span>
               </span>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="border-t border-line/10 px-5 py-4 text-[10px] leading-relaxed text-ink-dim">
-        <p>듣다 · v0.1.0 MVP</p>
-        <p className="mt-1 text-ink-dim/70">© 루베르 콘텐츠 스튜디오</p>
+      <div className="border-t border-line/10 px-5 py-4 font-mono text-[10px] leading-relaxed text-ink-dim">
+        <p>DEUDDA · v0.2 PRO</p>
+        <p className="mt-0.5 text-ink-dim/70">© Louver Studio · 2026</p>
       </div>
     </aside>
   );
