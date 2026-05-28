@@ -30,6 +30,7 @@ import {
   type UploadEligibility,
 } from '@/lib/artistApi';
 import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
+import PushNotificationToggle from '@/components/PushNotificationToggle';
 import {
   usePlaybackSettingsStore,
   CROSSFADE_OPTIONS,
@@ -210,6 +211,8 @@ export default function ProfilePage() {
           <CuratorProfileEditor userId={user.id} />
         </section>
       )}
+
+      <PushNotificationToggle />
 
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
