@@ -45,7 +45,7 @@ export default function TopBar() {
 
   return (
     <div className="sticky top-0 z-20 hidden lg:block pt-safe">
-      <div className="flex items-center gap-3 border-b border-line/10 bg-bg-card/75 px-6 py-3 backdrop-blur-xl">
+      <div className="flex items-center gap-3 border-b border-line/10 bg-bg/85 px-6 py-3 backdrop-blur-xl">
         {/* 좌측 — 페이지 타이틀 */}
         <div className="min-w-0 flex-1">
           {eyebrow && (

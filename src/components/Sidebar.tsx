@@ -19,9 +19,9 @@ export default function Sidebar() {
     ? [...items, { to: '/curator/studio', label: '스튜디오', Icon: Wand2, end: false }]
     : items;
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg-soft/70 backdrop-blur-xl pt-safe lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
       <div className="px-5 pt-5 pb-3">
-        <Link to="/" className="inline-flex items-center gap-2.5 group">
+        <Link to="/" className="inline-flex items-center gap-2.5 text-white group">
           <Logo size={36} className="transition-transform group-hover:scale-105" />
           <span className="text-base font-extrabold tracking-tight">듣다</span>
         </Link>
