@@ -1,18 +1,25 @@
 type MarkProps = { size?: number; className?: string };
 
 /**
- * DEUDDA 듣다 브랜드 마크 (Logo Print v0.2 — 2026)
+ * DEUDDA 듣다 브랜드 마크 — SIDE A (Logo Print spec 정확 일치)
  *
- * 구성 (canvas 220×200, stroke 16u, round caps, 10×10 grid):
- *  - 반-D 브래킷: 수직 spine + 오른쪽 반원호
- *  - 3개 좌측 horizontal speed line (사운드/모션 시그널)
+ * Spec (Construction Sheet 05/14):
+ *   GRID         10 × 10 units
+ *   CANVAS       220 × 200 u
+ *   D RADIUS     85 u (8.5 grid)
+ *   STROKE       16 u (1 grid unit) · CAP Round · JOIN Round
+ *   PILL EXT.    6.5 u — top/bottom pill 길이 (65 user units)
+ *   PILL (MID)   3.6 u — middle pill 길이 (36 user units, 가장 짧음)
+ *   PILL GAP     2.6 u — pill 사이 수직 gap (26 user units, edge-to-edge)
+ *   CENTER       100, 100 — D 원의 중심
+ *   OPTICAL BAL. +2 u right (반영됨)
  *
- * stroke 는 currentColor — 부모 text-* 색상으로 제어:
- *  - On Ink (검정 배경) → text-white
- *  - On Bone (크림 배경) → text-ink (또는 black)
- *  - On Sonic Violet (#7B3FF2 배경) → text-white
+ *  - D 브래킷: (100,100) 중심 반경 85 의 우측 반원 (M 100,15 → A 85,85 → 100,185)
+ *  - 3 pills: top/bottom 길이 65u, middle 길이 36u, 모두 우측 끝 x=92 (round cap 으로 D spine x=100 접촉)
+ *  - 수직 위치: top y=58, mid y=100, bottom y=142 (gap 26u edge-to-edge)
  *
- * MIN SIZE: 24px (digital) / 12mm (print) — 가이드 준수.
+ * stroke 는 currentColor — 부모 text-* 색상으로 3 변형 모두 지원.
+ * MIN SIZE: 24px (digital) / 12mm (print).
  */
 export function LogoMark({ size = 24, className = '' }: MarkProps) {
   return (
@@ -32,14 +39,14 @@ export function LogoMark({ size = 24, className = '' }: MarkProps) {
         strokeLinejoin="round"
         fill="none"
       >
-        {/* D bracket: vertical spine */}
-        <path d="M120 32 V168" />
-        {/* D bracket: right semicircular arc (반원호, 반경 68) */}
-        <path d="M120 32 A 68 68 0 0 1 120 168" />
-        {/* 3 speed lines — 좌측에서 spine 으로 진입, round-cap stub */}
-        <path d="M52 72 H108" />
-        <path d="M28 100 H108" />
-        <path d="M52 128 H108" />
+        {/* D bracket — 중심 (100,100), 반경 85, 우측 반원 (open left) */}
+        <path d="M 100 15 A 85 85 0 0 1 100 185" />
+        {/* Top pill — PILL EXT 65u, 우측 끝 x=92, y=58 */}
+        <path d="M 27 58 H 92" />
+        {/* Middle pill — PILL (MID) 36u, 우측 끝 x=92, y=100 (가장 짧음) */}
+        <path d="M 56 100 H 92" />
+        {/* Bottom pill — PILL EXT 65u, 우측 끝 x=92, y=142 */}
+        <path d="M 27 142 H 92" />
       </g>
     </svg>
   );
