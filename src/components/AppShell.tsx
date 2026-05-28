@@ -12,16 +12,20 @@ import {
   installPlayerSessionPersistence,
   revalidateRestoredQueue,
 } from '@/lib/playerSession';
+import { useBrandStore } from '@/store/brandStore';
 
 export default function AppShell() {
+  const loadBrand = useBrandStore((s) => s.load);
   useEffect(() => {
     // 새로고침/탭종료 후 큐+위치 복원 (자동재생은 X — 사용자 ▶ 누르면 시작)
     const restored = restorePlayerSessionToStore();
     // 복원된 큐에서 그 사이 삭제/미노출된 트랙 제거 (stale queue 방어)
     if (restored) void revalidateRestoredQueue();
     const cleanup = installPlayerSessionPersistence();
+    // 브랜드 로고 URL 1회 캐시 — 업로드된 로고가 있으면 모든 BrandLogo 가 즉시 그 이미지 사용
+    void loadBrand();
     return cleanup;
-  }, []);
+  }, [loadBrand]);
 
   return (
     <div className="flex min-h-screen flex-col bg-bg pt-safe">

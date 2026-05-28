@@ -20,6 +20,7 @@ import {
   HardDrive,
   ShieldCheck,
   Gift,
+  Image as ImageIcon,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -33,6 +34,7 @@ import SalesAgentsList from '@/components/admin/SalesAgentsList';
 import FreeTrialsPanel from '@/components/admin/FreeTrialsPanel';
 import AdminUsersList from '@/components/admin/AdminUsersList';
 import UploadIntegrityPanel from '@/components/admin/UploadIntegrityPanel';
+import BrandSettingsPanel from '@/components/admin/BrandSettingsPanel';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
@@ -82,7 +84,8 @@ type Tab =
   | 'operation-logs'
   | 'admins'
   | 'upload-integrity'
-  | 'recommendation';
+  | 'recommendation'
+  | 'brand';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -111,6 +114,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
+  { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
@@ -198,6 +202,7 @@ export default function AdminPage() {
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
         {tab === 'upload-integrity' && <UploadIntegrityPanel />}
+        {tab === 'brand' && <BrandSettingsPanel />}
         {tab === 'admins' && <AdminUsersList />}
       </AdminErrorBoundary>
     </div>
