@@ -1138,6 +1138,13 @@ export default function Player() {
             className="pointer-events-none absolute inset-0 opacity-30"
             style={gradientStyle(playlist?.category || current.title)}
           />
+          {/* DEUDDA — 상단 진행도 hairline (재생 중 시각적 alive 신호) */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-white/5">
+            <div
+              className="h-full bg-accent transition-[width] duration-200 ease-out"
+              style={{ width: duration > 0 ? `${Math.min(100, (currentTime / duration) * 100)}%` : '0%' }}
+            />
+          </div>
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-line/15">
             <AutoCover
               title={current.title}
@@ -1161,7 +1168,8 @@ export default function Player() {
               e.stopPropagation();
               handlePlayBtn();
             }}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lift ring-1 ring-white/15 transition hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white ring-1 ring-white/15 transition duration-smooth ease-emphasized hover:scale-105 hover:bg-accent-soft disabled:opacity-50"
+            style={{ boxShadow: '0 10px 28px rgb(var(--color-accent) / 0.50), 0 4px 10px rgba(0,0,0,0.40)' }}
             aria-label={playing ? '일시정지' : '재생'}
             disabled={errored}
           >

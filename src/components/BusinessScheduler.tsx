@@ -574,27 +574,34 @@ function CurrentBadge({
     : null;
   return (
     <div
-      className={`rounded-2xl p-3 ring-1 ${
+      className={`relative overflow-hidden rounded-2xl p-3.5 ring-1 transition duration-smooth ease-emphasized ${
         highlight
-          ? 'bg-accent/8 ring-accent/30'
+          ? 'bg-accent/[0.08] ring-accent/30 shadow-card'
           : 'bg-bg-soft ring-line/10'
       }`}
     >
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+      {/* DEUDDA — 활성 카드 좌측 violet bar */}
+      {highlight && playing && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-accent" />
+      )}
+      <div className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-ink-dim">
         {highlight && playing && <Radio size={10} className="animate-pulse text-accent" />}
-        <span>{label}</span>
+        <span className={highlight ? 'text-accent' : ''}>{label}</span>
       </div>
       {schedule ? (
-        <div className="mt-1 space-y-0.5">
-          <p className="truncate text-sm font-bold">{schedule.slot_name}</p>
-          <p className="flex items-center gap-1 text-[11px] text-ink-mute">
-            <Clock size={10} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
-            <span className="ml-1">· {DAY_LABELS[schedule.day_of_week]}요일</span>
+        <div className="mt-1.5 space-y-1">
+          <p className="truncate text-[15px] font-bold tracking-tight">{schedule.slot_name}</p>
+          <p className="flex items-center gap-1.5 font-mono text-[11px] text-ink-mute">
+            <Clock size={11} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
+            <span className="text-ink-dim">·</span>
+            <span>{DAY_LABELS[schedule.day_of_week]}요일</span>
           </p>
-          <p className="truncate text-[11px] text-ink-dim">{playlist?.title ?? '플리 미지정'}</p>
+          <p className="truncate text-[12px] text-ink-mute">
+            {playlist?.title ?? <span className="text-ink-dim">플리 미지정</span>}
+          </p>
         </div>
       ) : (
-        <p className="mt-1 text-xs text-ink-mute">없음</p>
+        <p className="mt-1.5 text-xs text-ink-mute">없음</p>
       )}
     </div>
   );
