@@ -16,9 +16,11 @@ import {
   DAY_LABELS,
   DAY_LABELS_FULL,
   TEMPLATE_KEYS,
+  consolidateSchedules,
   createDefaultSchedules,
   createSchedule,
   deleteSchedule,
+  effectiveDays,
   fetchBusinessProfile,
   fetchBusinessSchedules,
   formatSlotTime,
@@ -57,22 +59,23 @@ export default function BusinessScheduler() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [creatingDefaults, setCreatingDefaults] = useState(false);
-  // 다중 요일 선택 — 기본값: 오늘 한 요일만.
-  const [selectedDays, setSelectedDays] = useState<number[]>(() => [nowKstParts().day]);
-  // 신규 시간대 인라인 폼
+  // 신규 시간대 인라인 폼 — 적용 요일을 폼 내부에서 직접 선택
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState<{
+    days: number[]; // 이 시간대를 적용할 요일들 (기본: 매일)
     slot_name: string;
     start_time: string; // HH:MM
     end_time: string;
     playlist_id: string | null;
   }>({
-    slot_name: '새 시간대',
+    days: [0, 1, 2, 3, 4, 5, 6],
+    slot_name: '',
     start_time: '12:00',
     end_time: '14:00',
     playlist_id: null,
   });
   const [submittingAdd, setSubmittingAdd] = useState(false);
+  const [consolidating, setConsolidating] = useState(false);
   // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
   const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
   const [tracksLoading, setTracksLoading] = useState(false);
@@ -230,7 +233,11 @@ export default function BusinessScheduler() {
   }
 
   async function submitAdd() {
-    if (!userId || selectedDays.length === 0 || submittingAdd) return;
+    if (!userId || submittingAdd) return;
+    if (addForm.days.length === 0) {
+      toast.info('적용 요일을 1개 이상 선택해주세요.');
+      return;
+    }
     const name = addForm.slot_name.trim();
     if (!name) {
       toast.info('시간대 이름을 입력해주세요.');
@@ -242,26 +249,24 @@ export default function BusinessScheduler() {
     }
     setSubmittingAdd(true);
     try {
-      await Promise.all(
-        selectedDays.map((day) =>
-          createSchedule({
-            user_id: userId,
-            day_of_week: day,
-            slot_name: name,
-            start_time: `${addForm.start_time}:00`,
-            end_time: `${addForm.end_time}:00`,
-            playlist_id: addForm.playlist_id,
-            is_active: true,
-          }),
-        ),
-      );
+      await createSchedule({
+        user_id: userId,
+        days_of_week: addForm.days,
+        slot_name: name,
+        start_time: `${addForm.start_time}:00`,
+        end_time: `${addForm.end_time}:00`,
+        playlist_id: addForm.playlist_id,
+        is_active: true,
+      });
       await load();
       toast.success(
-        selectedDays.length > 1
-          ? `${selectedDays.length}개 요일에 시간대를 추가했어요.`
-          : '시간대를 추가했어요.',
+        addForm.days.length > 1
+          ? `${addForm.days.length}개 요일에 적용되는 시간대를 만들었어요.`
+          : '시간대를 만들었어요.',
       );
       setAddOpen(false);
+      // 다음 추가를 위해 이름만 비움 (요일/시간/플리는 유지하면 연속 입력 빠름)
+      setAddForm((f) => ({ ...f, slot_name: '' }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '추가 실패');
     } finally {
@@ -269,31 +274,55 @@ export default function BusinessScheduler() {
     }
   }
 
-  function toggleDay(day: number) {
-    setSelectedDays((prev) => {
-      if (prev.includes(day)) {
-        // 최소 1개 보장 — 마지막 1개는 해제 불가
-        if (prev.length === 1) return prev;
-        return prev.filter((d) => d !== day);
-      }
-      return [...prev, day].sort((a, b) => a - b);
+  /** 슬롯의 적용 요일 토글 — 즉시 DB 저장. 마지막 1개는 해제 불가. */
+  async function toggleSlotDay(s: BusinessSchedule, day: number) {
+    const cur = effectiveDays(s);
+    let next: number[];
+    if (cur.includes(day)) {
+      if (cur.length === 1) return; // 최소 1개 보장
+      next = cur.filter((d) => d !== day);
+    } else {
+      next = [...cur, day].sort((a, b) => a - b);
+    }
+    await handleUpdate(s.id, { days_of_week: next });
+  }
+
+  /** 폼 안의 요일 토글 */
+  function toggleAddFormDay(day: number) {
+    setAddForm((f) => {
+      const has = f.days.includes(day);
+      const next = has ? f.days.filter((d) => d !== day) : [...f.days, day].sort((a, b) => a - b);
+      return { ...f, days: next };
     });
   }
 
-  function setDaysPreset(preset: 'today' | 'all' | 'weekday' | 'weekend') {
-    switch (preset) {
-      case 'today':
-        setSelectedDays([nowKstParts().day]);
-        return;
-      case 'all':
-        setSelectedDays([0, 1, 2, 3, 4, 5, 6]);
-        return;
-      case 'weekday':
-        setSelectedDays([1, 2, 3, 4, 5]);
-        return;
-      case 'weekend':
-        setSelectedDays([0, 6]);
-        return;
+  function setAddFormPreset(preset: 'today' | 'all' | 'weekday' | 'weekend') {
+    setAddForm((f) => {
+      switch (preset) {
+        case 'today': return { ...f, days: [nowKstParts().day] };
+        case 'all': return { ...f, days: [0, 1, 2, 3, 4, 5, 6] };
+        case 'weekday': return { ...f, days: [1, 2, 3, 4, 5] };
+        case 'weekend': return { ...f, days: [0, 6] };
+      }
+    });
+  }
+
+  /** 기존에 만들어진 동일 (이름·시간·플리) 슬롯들을 days 합집합으로 자동 병합 — 옛 모델로 만들어진 중복 정리 */
+  async function handleConsolidate() {
+    if (!confirm('같은 이름·시간·플레이리스트의 슬롯들을 합쳐서 한 행으로 만들까요? 적용 요일은 합집합으로 보존됩니다.')) return;
+    setConsolidating(true);
+    try {
+      const r = await consolidateSchedules();
+      if (r.kept === 0) {
+        toast.info('병합할 중복 슬롯이 없어요.');
+      } else {
+        toast.success(`${r.kept}개 그룹을 정리했어요. ${r.merged}건이 한 행으로 통합되었어요.`);
+      }
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '병합 실패');
+    } finally {
+      setConsolidating(false);
     }
   }
 
@@ -395,16 +424,22 @@ export default function BusinessScheduler() {
 
   const isBusinessPlan = profileSub === 'business';
   const todayDayIdx = nowKstParts().day;
-  const isPresetToday = selectedDays.length === 1 && selectedDays[0] === todayDayIdx;
-  const isPresetAll = selectedDays.length === 7;
-  const isPresetWeekday =
-    selectedDays.length === 5 && [1, 2, 3, 4, 5].every((d) => selectedDays.includes(d));
-  const isPresetWeekend =
-    selectedDays.length === 2 && [0, 6].every((d) => selectedDays.includes(d));
-  const addLabel =
-    selectedDays.length > 1
-      ? `${selectedDays.length}개 요일에 일괄 추가`
-      : `${DAY_LABELS[selectedDays[0]]}요일에 추가`;
+  // 폼 안의 days 기준 프리셋 활성 여부
+  const fd = addForm.days;
+  const isFormPresetToday = fd.length === 1 && fd[0] === todayDayIdx;
+  const isFormPresetAll = fd.length === 7;
+  const isFormPresetWeekday = fd.length === 5 && [1, 2, 3, 4, 5].every((d) => fd.includes(d));
+  const isFormPresetWeekend = fd.length === 2 && [0, 6].every((d) => fd.includes(d));
+  const addSubmitLabel =
+    fd.length === 7 ? '매일 적용' :
+    fd.length > 1 ? `${fd.length}개 요일에 적용` :
+    fd.length === 1 ? `${DAY_LABELS[fd[0]]}요일에 적용` :
+    '요일을 선택해주세요';
+
+  // 평탄화된 스케줄 리스트 — 시작 시간 순. 그룹화 없음. 한 행 = 한 규칙.
+  const sortedSchedules = [...schedules].sort((a, b) =>
+    a.start_time.localeCompare(b.start_time),
+  );
 
   return (
     <section className="space-y-5 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10">
@@ -562,245 +597,201 @@ export default function BusinessScheduler() {
         </div>
       )}
 
-      {/* 스케줄 편집 */}
-      {schedules.length === 0 ? (
-        <Empty />
-      ) : (
-        <section className="space-y-3">
-          <header className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">
-              요일별 스케줄
-            </h3>
+      {/* 스케줄 편집 — 평탄 리스트. 한 행 = 한 규칙 (여러 요일 동시 적용). */}
+      <section className="space-y-3">
+        <header className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">시간대 규칙</h3>
+            <p className="mt-0.5 text-[11px] text-ink-dim">
+              한 번 만들면 적용된 모든 요일에 자동 재생됩니다.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {schedules.length > 0 && (
+              <button
+                onClick={() => void handleConsolidate()}
+                disabled={consolidating}
+                className="rounded-full bg-bg-soft px-3 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
+                title="동일 이름·시간·플리 슬롯을 한 행으로 합치고 적용 요일을 합칩니다"
+              >
+                {consolidating ? '정리 중…' : '중복 정리'}
+              </button>
+            )}
             <button
               onClick={() => setAddOpen((v) => !v)}
               aria-expanded={addOpen}
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition ${
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition ${
                 addOpen
                   ? 'bg-bg-soft text-ink-mute ring-line/15 hover:text-ink'
                   : 'bg-accent/15 text-accent ring-accent/25 hover:bg-accent/20'
               }`}
             >
               <Plus size={11} className={addOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
-              {addOpen ? '닫기' : addLabel}
+              {addOpen ? '닫기' : '새 시간대'}
             </button>
-          </header>
-
-          {/* 빠른 선택 프리셋 */}
-          <div className="flex flex-wrap gap-1.5">
-            <PresetChip label="오늘" active={isPresetToday} onClick={() => setDaysPreset('today')} />
-            <PresetChip label="매일" active={isPresetAll} onClick={() => setDaysPreset('all')} />
-            <PresetChip label="주중 (월–금)" active={isPresetWeekday} onClick={() => setDaysPreset('weekday')} />
-            <PresetChip label="주말 (토·일)" active={isPresetWeekend} onClick={() => setDaysPreset('weekend')} />
           </div>
+        </header>
 
-          {/* 요일 칩 — 다중 토글 */}
-          <div className="-mx-1 flex gap-1 overflow-x-auto pb-1 no-scrollbar">
-            {DAY_LABELS.map((label, idx) => {
-              const isToday = todayDayIdx === idx;
-              const selected = selectedDays.includes(idx);
-              const count = schedules.filter((s) => s.day_of_week === idx).length;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => toggleDay(idx)}
-                  aria-pressed={selected}
-                  className={`shrink-0 rounded-2xl px-3 py-2 text-xs font-semibold transition ${
-                    selected
-                      ? 'bg-accent text-bg'
-                      : 'bg-bg-soft text-ink-mute hover:text-ink'
-                  } ${isToday && !selected ? 'ring-1 ring-accent/40' : ''}`}
-                  title={DAY_LABELS_FULL[idx]}
+        {/* 신규 시간대 인라인 폼 */}
+        {addOpen && (
+          <div className="space-y-3 rounded-2xl bg-bg-soft/60 p-3.5 ring-1 ring-accent/20">
+            <div className="flex items-center gap-2">
+              <Plus size={14} className="text-accent" />
+              <p className="text-sm font-semibold text-ink">새 시간대 만들기</p>
+            </div>
+
+            {/* 적용 요일 — 폼 내부 다중 선택 */}
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                적용 요일 (여러 개 선택 가능)
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                <PresetChip label="매일" active={isFormPresetAll} onClick={() => setAddFormPreset('all')} />
+                <PresetChip label="주중 (월–금)" active={isFormPresetWeekday} onClick={() => setAddFormPreset('weekday')} />
+                <PresetChip label="주말 (토·일)" active={isFormPresetWeekend} onClick={() => setAddFormPreset('weekend')} />
+                <PresetChip label="오늘만" active={isFormPresetToday} onClick={() => setAddFormPreset('today')} />
+              </div>
+              <div className="-mx-1 flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+                {DAY_LABELS.map((label, idx) => {
+                  const isToday = todayDayIdx === idx;
+                  const selected = fd.includes(idx);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => toggleAddFormDay(idx)}
+                      aria-pressed={selected}
+                      className={`shrink-0 rounded-2xl px-3 py-1.5 text-xs font-semibold transition ${
+                        selected ? 'bg-accent text-bg' : 'bg-bg-soft text-ink-mute hover:text-ink'
+                      } ${isToday && !selected ? 'ring-1 ring-accent/40' : ''}`}
+                      title={DAY_LABELS_FULL[idx]}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">시간대 이름</label>
+                <input
+                  value={addForm.slot_name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, slot_name: e.target.value }))}
+                  placeholder="예: 오픈 준비, 점심 피크, 저녁 무드"
+                  className="input mt-1 w-full text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">시작 시간</label>
+                <input
+                  type="time"
+                  value={addForm.start_time}
+                  onChange={(e) => setAddForm((f) => ({ ...f, start_time: e.target.value }))}
+                  onClick={openTimePicker}
+                  onFocus={openTimePicker}
+                  className="input mt-1 w-full text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">종료 시간</label>
+                <input
+                  type="time"
+                  value={addForm.end_time}
+                  onChange={(e) => setAddForm((f) => ({ ...f, end_time: e.target.value }))}
+                  onClick={openTimePicker}
+                  onFocus={openTimePicker}
+                  className="input mt-1 w-full text-sm font-mono"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                  플레이리스트 (이 시간대에 자동 재생)
+                </label>
+                <select
+                  value={addForm.playlist_id ?? ''}
+                  onChange={(e) => setAddForm((f) => ({ ...f, playlist_id: e.target.value || null }))}
+                  className="input mt-1 w-full text-sm"
                 >
-                  {label}
-                  {count > 0 && (
-                    <span className="ml-1 opacity-70">{count}</span>
-                  )}
-                </button>
+                  <option value="">나중에 선택</option>
+                  {(() => {
+                    const businessOnly = playlists.filter((p) => p.is_business_only);
+                    const others = playlists.filter((p) => !p.is_business_only);
+                    return (
+                      <>
+                        {businessOnly.length > 0 && (
+                          <optgroup label="사업자 전용">
+                            {businessOnly.map((p) => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {others.length > 0 && (
+                          <optgroup label="일반">
+                            {others.map((p) => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    );
+                  })()}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => setAddOpen(false)}
+                className="rounded-full bg-bg-soft px-3 py-1.5 text-xs font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => void submitAdd()}
+                disabled={submittingAdd || fd.length === 0}
+                className="inline-flex items-center gap-1 rounded-full bg-accent px-3.5 py-1.5 text-xs font-bold text-bg hover:opacity-95 disabled:opacity-60"
+              >
+                <Plus size={12} /> {submittingAdd ? '만드는 중…' : addSubmitLabel}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 평탄 리스트 — 한 행 = 한 규칙 */}
+        {schedules.length === 0 ? (
+          <Empty />
+        ) : (
+          <ul className="space-y-2">
+            {sortedSchedules.map((s) => {
+              const overlap = overlaps.some((o) => o.id === s.id);
+              const isCurrent = current?.id === s.id;
+              return (
+                <SlotRow
+                  key={s.id}
+                  schedule={s}
+                  playlists={playlists}
+                  overlap={overlap}
+                  isCurrent={isCurrent}
+                  todayDayIdx={todayDayIdx}
+                  onUpdate={(p) => handleUpdate(s.id, p)}
+                  onToggleDay={(d) => void toggleSlotDay(s, d)}
+                  onDelete={() => handleDelete(s.id)}
+                />
               );
             })}
+          </ul>
+        )}
+
+        {overlaps.length > 0 && (
+          <div className="flex items-start gap-2 rounded-xl bg-yellow-500/10 p-2.5 text-[11px] ring-1 ring-yellow-400/30">
+            <AlertCircle size={12} className="mt-0.5 shrink-0 text-yellow-300" />
+            <span className="text-ink-mute">
+              겹치는 시간대가 있어요. 빨간색으로 표시된 슬롯의 시간 또는 요일을 조정해주세요.
+            </span>
           </div>
-
-          <p className="text-[11px] text-ink-dim">
-            여러 요일을 동시에 선택하면 <b className="text-ink-mute">+ 추가</b> 가 선택한 모든 요일에 같은 시간대를 한번에 만들어줘요.
-            슬롯 편집은 각 요일별로 따로 적용됩니다.
-          </p>
-
-          {/* 신규 시간대 인라인 폼 — 시간/이름/플레이리스트 한번에 입력 */}
-          {addOpen && (
-            <div className="space-y-3 rounded-2xl bg-bg-soft/60 p-3.5 ring-1 ring-accent/20">
-              <div className="flex items-center gap-2">
-                <Plus size={14} className="text-accent" />
-                <p className="text-sm font-semibold text-ink">
-                  새 시간대 만들기
-                  <span className="ml-1.5 text-[11px] font-normal text-ink-mute">
-                    · {selectedDays.length > 1 ? `${selectedDays.length}개 요일에 일괄 적용` : `${DAY_LABELS_FULL[selectedDays[0]]}에 적용`}
-                  </span>
-                </p>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-                    시간대 이름
-                  </label>
-                  <input
-                    value={addForm.slot_name}
-                    onChange={(e) => setAddForm((f) => ({ ...f, slot_name: e.target.value }))}
-                    placeholder="예: 오픈 준비, 점심 피크, 저녁 무드"
-                    className="input mt-1 w-full text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-                    시작 시간
-                  </label>
-                  <input
-                    type="time"
-                    value={addForm.start_time}
-                    onChange={(e) => setAddForm((f) => ({ ...f, start_time: e.target.value }))}
-                    onClick={openTimePicker}
-                    onFocus={openTimePicker}
-                    className="input mt-1 w-full text-sm font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-                    종료 시간
-                  </label>
-                  <input
-                    type="time"
-                    value={addForm.end_time}
-                    onChange={(e) => setAddForm((f) => ({ ...f, end_time: e.target.value }))}
-                    onClick={openTimePicker}
-                    onFocus={openTimePicker}
-                    className="input mt-1 w-full text-sm font-mono"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-                    플레이리스트 (이 시간대에 자동 재생)
-                  </label>
-                  <select
-                    value={addForm.playlist_id ?? ''}
-                    onChange={(e) =>
-                      setAddForm((f) => ({ ...f, playlist_id: e.target.value || null }))
-                    }
-                    className="input mt-1 w-full text-sm"
-                  >
-                    <option value="">나중에 선택</option>
-                    {(() => {
-                      const businessOnly = playlists.filter((p) => p.is_business_only);
-                      const others = playlists.filter((p) => !p.is_business_only);
-                      return (
-                        <>
-                          {businessOnly.length > 0 && (
-                            <optgroup label="사업자 전용">
-                              {businessOnly.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.title}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {others.length > 0 && (
-                            <optgroup label="일반">
-                              {others.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.title}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                <button
-                  onClick={() => setAddOpen(false)}
-                  className="rounded-full bg-bg-soft px-3 py-1.5 text-xs font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={() => void submitAdd()}
-                  disabled={submittingAdd}
-                  className="inline-flex items-center gap-1 rounded-full bg-accent px-3.5 py-1.5 text-xs font-bold text-bg hover:opacity-95 disabled:opacity-60"
-                >
-                  <Plus size={12} /> {submittingAdd ? '추가 중…' : addLabel}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 슬롯 리스트 — 선택된 요일별 섹션 */}
-          {selectedDays.every((day) => schedules.filter((s) => s.day_of_week === day).length === 0) ? (
-            <div className="rounded-xl bg-bg-soft p-4 text-center text-xs text-ink-mute">
-              선택한 요일에 스케줄이 없어요. <b className="text-ink-mute">+ {addLabel}</b> 로 추가하세요.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {selectedDays.map((day) => {
-                const daySchedules = schedules
-                  .filter((s) => s.day_of_week === day)
-                  .sort((a, b) => a.start_time.localeCompare(b.start_time));
-                return (
-                  <div key={day} className="space-y-2">
-                    {selectedDays.length > 1 && (
-                      <div className="flex items-center gap-2 px-1">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] ${
-                            day === todayDayIdx ? 'text-accent ring-1 ring-accent/30' : 'text-ink-mute'
-                          }`}
-                        >
-                          {DAY_LABELS_FULL[day]}
-                          {day === todayDayIdx && <span className="ml-0.5 normal-case tracking-normal">· 오늘</span>}
-                        </span>
-                        <span className="text-[10px] text-ink-dim">{daySchedules.length}개 시간대</span>
-                      </div>
-                    )}
-                    {daySchedules.length === 0 ? (
-                      <div className="rounded-xl bg-bg-soft/60 p-3 text-center text-[11px] text-ink-dim ring-1 ring-line/5">
-                        시간대 없음
-                      </div>
-                    ) : (
-                      <ul className="space-y-2">
-                        {daySchedules.map((s) => {
-                          const overlap = overlaps.some((o) => o.id === s.id);
-                          const isCurrent = current?.id === s.id;
-                          return (
-                            <SlotRow
-                              key={s.id}
-                              schedule={s}
-                              playlists={playlists}
-                              overlap={overlap}
-                              isCurrent={isCurrent}
-                              onUpdate={(p) => handleUpdate(s.id, p)}
-                              onDelete={() => handleDelete(s.id)}
-                            />
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {overlaps.length > 0 && (
-            <div className="flex items-start gap-2 rounded-xl bg-yellow-500/10 p-2.5 text-[11px] ring-1 ring-yellow-400/30">
-              <AlertCircle size={12} className="mt-0.5 shrink-0 text-yellow-300" />
-              <span className="text-ink-mute">
-                겹치는 시간대가 있어요. 빨간색으로 표시된 슬롯의 시간을 조정해주세요.
-              </span>
-            </div>
-          )}
-        </section>
-      )}
+        )}
+      </section>
 
       {loading && <p className="text-xs text-ink-dim">불러오는 중…</p>}
     </section>
@@ -845,7 +836,7 @@ function CurrentBadge({
           <p className="flex items-center gap-1.5 font-mono text-[11px] text-ink-mute">
             <Clock size={11} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
             <span className="text-ink-dim">·</span>
-            <span>{DAY_LABELS[schedule.day_of_week]}요일</span>
+            <span>{summarizeDays(effectiveDays(schedule))}</span>
           </p>
           <p className="truncate text-[12px] text-ink-mute">
             {playlist?.title ?? <span className="text-ink-dim">플리 미지정</span>}
@@ -863,21 +854,26 @@ function SlotRow({
   playlists,
   overlap,
   isCurrent,
+  todayDayIdx,
   onUpdate,
+  onToggleDay,
   onDelete,
 }: {
   schedule: BusinessSchedule;
   playlists: PlaylistRow[];
   overlap: boolean;
   isCurrent?: boolean;
+  todayDayIdx: number;
   onUpdate: (patch: Partial<BusinessSchedule>) => void;
+  onToggleDay: (day: number) => void;
   onDelete: () => void;
 }) {
   const businessOnly = playlists.filter((p) => p.is_business_only);
   const others = playlists.filter((p) => !p.is_business_only);
+  const days = effectiveDays(schedule);
   return (
     <li
-      className={`relative space-y-2 overflow-hidden rounded-xl p-3 ring-1 transition duration-smooth ease-emphasized ${
+      className={`relative space-y-2.5 overflow-hidden rounded-xl p-3 ring-1 transition duration-smooth ease-emphasized ${
         overlap
           ? 'bg-bg-soft ring-red-400/40'
           : isCurrent
@@ -918,6 +914,31 @@ function SlotRow({
         >
           <Trash2 size={14} />
         </button>
+      </div>
+
+      {/* 적용 요일 — 인라인 토글. 클릭 즉시 DB 저장. */}
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-ink-dim">적용</span>
+        {DAY_LABELS.map((label, idx) => {
+          const on = days.includes(idx);
+          const isToday = todayDayIdx === idx;
+          return (
+            <button
+              key={idx}
+              onClick={() => onToggleDay(idx)}
+              aria-pressed={on}
+              title={DAY_LABELS_FULL[idx]}
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition ${
+                on
+                  ? 'bg-accent text-bg'
+                  : 'bg-bg-hover text-ink-dim ring-1 ring-line/10 hover:text-ink'
+              } ${isToday && !on ? 'ring-accent/40' : ''}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+        <span className="ml-1 text-[10px] text-ink-dim">{summarizeDays(days)}</span>
       </div>
 
       <div className="flex items-center gap-2 font-mono text-xs text-ink-mute">
@@ -967,6 +988,15 @@ function SlotRow({
       </select>
     </li>
   );
+}
+
+/** 적용 요일 배열을 짧은 라벨로 — "매일" / "주중" / "주말" / "월·수·금" */
+function summarizeDays(days: number[]): string {
+  const set = new Set(days);
+  if (set.size === 7) return '매일';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every((d) => set.has(d))) return '주중 (월–금)';
+  if (set.size === 2 && set.has(0) && set.has(6)) return '주말 (토·일)';
+  return [...days].sort((a, b) => a - b).map((d) => DAY_LABELS[d]).join('·');
 }
 
 /** 시간 input 클릭 즉시 picker 띄우기 — 작은 시계 아이콘만 동작하는 기본 UX 보완. */

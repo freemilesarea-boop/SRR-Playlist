@@ -16,7 +16,10 @@ export interface BusinessProfile {
 export interface BusinessSchedule {
   id: string;
   user_id: string;
-  day_of_week: number; // 0=Sunday, 6=Saturday
+  /** @deprecated 호환용 — 새 코드는 days_of_week 사용. days_of_week[0] 과 동일하게 유지됨. */
+  day_of_week: number | null; // 0=Sunday, 6=Saturday
+  /** 한 스케줄이 적용되는 모든 요일. 한 번 만들면 여기 들어간 모든 요일에 동일 시간/플리가 자동 적용. */
+  days_of_week: number[];
   slot_name: string;
   start_time: string; // 'HH:MM:SS' or 'HH:MM'
   end_time: string;
@@ -24,6 +27,12 @@ export interface BusinessSchedule {
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+/** 호환 헬퍼 — 옛 day_of_week 만 채워져 있어도 days_of_week 로 정규화. */
+export function effectiveDays(s: BusinessSchedule): number[] {
+  if (s.days_of_week && s.days_of_week.length > 0) return s.days_of_week;
+  return s.day_of_week == null ? [] : [s.day_of_week];
 }
 
 export const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const;
@@ -104,7 +113,6 @@ export async function fetchBusinessSchedules(userId: string): Promise<BusinessSc
     .from('business_music_schedules')
     .select('*')
     .eq('user_id', userId)
-    .order('day_of_week', { ascending: true })
     .order('start_time', { ascending: true });
   if (error) throw error;
   return (data ?? []) as BusinessSchedule[];
@@ -112,16 +120,28 @@ export async function fetchBusinessSchedules(userId: string): Promise<BusinessSc
 
 export async function createSchedule(payload: {
   user_id: string;
-  day_of_week: number;
+  days_of_week: number[];
   slot_name: string;
   start_time: string;
   end_time: string;
   playlist_id?: string | null;
   is_active?: boolean;
 }): Promise<BusinessSchedule | null> {
+  const days = [...new Set(payload.days_of_week)].sort((a, b) => a - b);
+  if (days.length === 0) throw new Error('적용 요일을 1개 이상 선택해주세요.');
+  // day_of_week 호환 컬럼은 days[0] 로 자동 채움 (옛 코드/RPC 가 참조해도 안전)
   const { data, error } = await supabase
     .from('business_music_schedules')
-    .insert(payload)
+    .insert({
+      user_id: payload.user_id,
+      days_of_week: days,
+      day_of_week: days[0],
+      slot_name: payload.slot_name,
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+      playlist_id: payload.playlist_id ?? null,
+      is_active: payload.is_active ?? true,
+    })
     .select('*')
     .single();
   if (error) throw error;
@@ -130,13 +150,29 @@ export async function createSchedule(payload: {
 
 export async function updateSchedule(
   id: string,
-  patch: Partial<BusinessSchedule>,
+  patch: Partial<Omit<BusinessSchedule, 'id' | 'user_id'>>,
 ): Promise<void> {
+  // days_of_week 변경 시 day_of_week 호환 컬럼도 동기화
+  const normalized: Record<string, unknown> = { ...patch };
+  if (patch.days_of_week) {
+    const days = [...new Set(patch.days_of_week)].sort((a, b) => a - b);
+    if (days.length === 0) throw new Error('적용 요일을 1개 이상 선택해주세요.');
+    normalized.days_of_week = days;
+    normalized.day_of_week = days[0];
+  }
   const { error } = await supabase
     .from('business_music_schedules')
-    .update(patch)
+    .update(normalized)
     .eq('id', id);
   if (error) throw error;
+}
+
+/** 동일한 (이름·시간·플리·활성) 슬롯들을 days_of_week 합집합으로 자동 병합 — 1회성 정리 도구. */
+export async function consolidateSchedules(): Promise<{ merged: number; kept: number }> {
+  const { data, error } = await supabase.rpc('consolidate_business_schedules');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return { merged: row?.merged_count ?? 0, kept: row?.kept_count ?? 0 };
 }
 
 export async function deleteSchedule(id: string): Promise<void> {
@@ -191,17 +227,18 @@ export async function createDefaultSchedules(
     return playlists[0]?.id ?? null;
   }
 
-  const rows = daysOfWeek.flatMap((day) =>
-    templates.map((tmpl) => ({
-      user_id: userId,
-      day_of_week: day,
-      slot_name: tmpl.slot_name,
-      start_time: tmpl.start_time,
-      end_time: tmpl.end_time,
-      playlist_id: findPlaylist(tmpl.match_keywords),
-      is_active: true,
-    })),
-  );
+  // 한 템플릿 = 한 행 (선택된 요일 모두에 적용) — 단일 행 모델
+  const days = [...new Set(daysOfWeek)].sort((a, b) => a - b);
+  const rows = templates.map((tmpl) => ({
+    user_id: userId,
+    days_of_week: days,
+    day_of_week: days[0], // 호환 컬럼
+    slot_name: tmpl.slot_name,
+    start_time: tmpl.start_time,
+    end_time: tmpl.end_time,
+    playlist_id: findPlaylist(tmpl.match_keywords),
+    is_active: true,
+  }));
 
   const { error } = await supabase.from('business_music_schedules').insert(rows);
   if (error) throw error;
@@ -240,7 +277,7 @@ export function getCurrentSchedule(
     .filter(
       (s) =>
         s.is_active &&
-        s.day_of_week === day &&
+        effectiveDays(s).includes(day) &&
         minutesOf(s.start_time) <= minutes &&
         minutes < minutesOf(s.end_time),
     )
@@ -255,14 +292,14 @@ export function getNextSchedule(
   const { day, minutes } = nowKstParts(now);
   // 오늘 안에서 시작 시간이 현재 이후
   const today = schedules
-    .filter((s) => s.is_active && s.day_of_week === day && minutesOf(s.start_time) > minutes)
+    .filter((s) => s.is_active && effectiveDays(s).includes(day) && minutesOf(s.start_time) > minutes)
     .sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
   if (today[0]) return today[0];
   // 다음 날부터
   for (let i = 1; i <= 7; i++) {
     const nextDay = (day + i) % 7;
     const ofDay = schedules
-      .filter((s) => s.is_active && s.day_of_week === nextDay)
+      .filter((s) => s.is_active && effectiveDays(s).includes(nextDay))
       .sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
     if (ofDay[0]) return ofDay[0];
   }
@@ -273,25 +310,29 @@ export function formatSlotTime(start: string, end: string): string {
   return `${start.slice(0, 5)} ~ ${end.slice(0, 5)}`;
 }
 
-/** 영업시간을 기준으로 겹침 체크 (배열 안에서 동일 요일끼리만) */
+/** 영업시간을 기준으로 겹침 체크. 두 스케줄이 공통 요일을 적어도 하나 공유하고 시간이 겹치면 양쪽 모두 표시. */
 export function hasOverlap(schedules: BusinessSchedule[]): BusinessSchedule[] {
-  const overlapping: BusinessSchedule[] = [];
-  const byDay = new Map<number, BusinessSchedule[]>();
-  for (const s of schedules) {
-    if (!s.is_active) continue;
-    const arr = byDay.get(s.day_of_week) ?? [];
-    arr.push(s);
-    byDay.set(s.day_of_week, arr);
-  }
-  for (const arr of byDay.values()) {
-    const sorted = [...arr].sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
-    for (let i = 1; i < sorted.length; i++) {
-      if (minutesOf(sorted[i].start_time) < minutesOf(sorted[i - 1].end_time)) {
-        overlapping.push(sorted[i]);
+  const overlappingIds = new Set<string>();
+  const active = schedules.filter((s) => s.is_active);
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const a = active[i];
+      const b = active[j];
+      const ad = effectiveDays(a);
+      const bd = effectiveDays(b);
+      const shareDay = ad.some((d) => bd.includes(d));
+      if (!shareDay) continue;
+      const aStart = minutesOf(a.start_time);
+      const aEnd = minutesOf(a.end_time);
+      const bStart = minutesOf(b.start_time);
+      const bEnd = minutesOf(b.end_time);
+      if (aStart < bEnd && bStart < aEnd) {
+        overlappingIds.add(a.id);
+        overlappingIds.add(b.id);
       }
     }
   }
-  return overlapping;
+  return active.filter((s) => overlappingIds.has(s.id));
 }
 
 export async function logScheduleEvent(
