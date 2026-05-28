@@ -476,6 +476,9 @@ export default function Player() {
       // 1) 이전 src 의 play 프로미스 abort
       audio.pause();
       // 2) 새 src 적용
+      if (import.meta.env.DEV) {
+        console.debug('[Player] src set', { id: current.id, url: current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
+      }
       audio.src = current.audio_url;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
@@ -517,22 +520,8 @@ export default function Player() {
     // 같은 트랙 — playing 토글만 동기화
     if (playing) {
       if (audio.paused) {
-        if (import.meta.env.DEV) console.debug('[Player] play() resume', { id: current.id });
-        const p = audio.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch((err: DOMException) => {
-            if (err?.name === 'AbortError') return; // src 변경 등 — 무시
-            if (err?.name === 'NotAllowedError') {
-              pause();
-              toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
-              return;
-            }
-            if (import.meta.env.DEV) console.debug('[Player] play() rejected', err?.name, err?.message);
-            // 상태 꼬임 방지: pause 만 호출, auto-next 는 onError 에 위임
-            pause();
-            toast.error('재생 중 오류가 발생했어요.');
-          });
-        }
+        if (import.meta.env.DEV) console.debug('[Player] play() resume', { id: current.id, readyState: audio.readyState, currentSrc: audio.currentSrc });
+        void attemptPlay(audio, 'resume');
       }
     } else {
       audio.pause();
@@ -791,6 +780,9 @@ export default function Player() {
     const target = e.currentTarget;
     if (target !== activeRef()) return;
     const d = target.duration;
+    if (import.meta.env.DEV) {
+      console.debug('[Player] loadedmetadata', { id: current?.id, duration: d, readyState: target.readyState, currentSrc: target.currentSrc });
+    }
     // 메타데이터가 정상 로드됨(유한 duration) → 타임아웃 가드 해제
     if (Number.isFinite(d) && d > 0) clearMetaTimer();
     if (Number.isFinite(d)) setDuration(d);
@@ -816,18 +808,50 @@ export default function Player() {
     if (!playing) return;
     const audio = e.currentTarget;
     if (!audio.paused) return;
-    if (import.meta.env.DEV) console.debug('[Player] canplay → auto-play', { id: current?.id });
-    const p = audio.play();
-    if (p && typeof p.catch === 'function') {
-      p.catch((err: DOMException) => {
-        if (err?.name === 'AbortError') return;
-        if (err?.name === 'NotAllowedError') {
-          pause();
-          toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
-          return;
-        }
-        if (import.meta.env.DEV) console.debug('[Player] onCanPlay play() rejected', err?.name, err?.message);
-      });
+    if (import.meta.env.DEV) {
+      console.debug('[Player] canplay → auto-play', { id: current?.id, readyState: audio.readyState, currentSrc: audio.currentSrc });
+    }
+    void attemptPlay(audio, 'canplay');
+  }
+
+  // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
+  async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    const expectedSrc = audio.currentSrc;
+    try {
+      await audio.play();
+      if (import.meta.env.DEV) {
+        console.debug(`[Player] play() ok (${label})`, { id: current?.id, currentSrc: audio.currentSrc, currentTime: audio.currentTime, readyState: audio.readyState });
+      }
+    } catch (err: unknown) {
+      const e = err as DOMException;
+      if (e?.name === 'AbortError') {
+        if (import.meta.env.DEV) console.debug(`[Player] play() AbortError (${label}) — src 변경으로 인한 무효화`);
+        return;
+      }
+      if (e?.name === 'NotAllowedError') {
+        if (import.meta.env.DEV) console.warn(`[Player] play() NotAllowedError (${label}) — autoplay 차단됨`);
+        pause();
+        toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
+        return;
+      }
+      if (import.meta.env.DEV) console.warn(`[Player] play() rejected (${label}) — 250ms 후 재시도 1회`, { name: e?.name, message: e?.message });
+      // 재시도 1회 — src 가 같고 여전히 paused 일 때만
+      await new Promise((r) => window.setTimeout(r, 250));
+      if (audio.currentSrc !== expectedSrc) {
+        if (import.meta.env.DEV) console.debug(`[Player] play() retry 취소 (${label}) — src 가 그 사이 변경됨`);
+        return;
+      }
+      if (!audio.paused) return;
+      try {
+        await audio.play();
+        if (import.meta.env.DEV) console.debug(`[Player] play() ok (${label} retry)`, { id: current?.id, currentSrc: audio.currentSrc });
+      } catch (err2: unknown) {
+        const e2 = err2 as DOMException;
+        if (e2?.name === 'AbortError' || e2?.name === 'NotAllowedError') return;
+        if (import.meta.env.DEV) console.error(`[Player] play() retry 실패 (${label})`, { name: e2?.name, message: e2?.message });
+        pause();
+        toast.error('재생 시작에 실패했어요. 다시 시도해주세요.');
+      }
     }
   }
 

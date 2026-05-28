@@ -285,6 +285,20 @@ export default function BusinessScheduler() {
       if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: currentTracks.length, slot: current.slot_name });
       void logScheduleEvent(userId, current.id, current.playlist_id, 'started');
       toast.success(`${current.slot_name} 시작 (${currentTracks.length}곡)`);
+      // 1.5s 후 실제 재생 상태 검증 — playerStore.playing 과 큐 일치 여부, 트랙 정보 로그 (DEV)
+      if (import.meta.env.DEV) {
+        window.setTimeout(() => {
+          const st = usePlayerStore.getState();
+          const cur = st.queue[st.index] ?? null;
+          console.debug('[StoreScheduler] verify after 1.5s', {
+            playing: st.playing, queue_length: st.queue.length, index: st.index,
+            current_track_id: cur?.id, current_track_title: cur?.title, current_audio_url: cur?.audio_url,
+          });
+          if (!st.playing) {
+            console.warn('[StoreScheduler] 재생 상태가 1.5s 후에도 false — autoplay 차단 또는 src 미적용 의심. Player.tsx 콘솔 로그 확인 필요.');
+          }
+        }, 1500);
+      }
     } catch (e) {
       if (import.meta.env.DEV) console.error('[StoreScheduler] audio play failed', e);
       toast.error(e instanceof Error ? e.message : '재생 시작 실패');
