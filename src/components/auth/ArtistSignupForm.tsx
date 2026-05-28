@@ -7,7 +7,7 @@ import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
 
 interface Props {
-  onDone: () => void;
+  onDone: (email: string) => void;
 }
 
 /**
@@ -185,7 +185,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
           '아티스트 가입 신청이 접수됐어요. 이메일 인증 후 로그인하시면 등록이 완료됩니다.',
         );
       }
-      onDone();
+      onDone(email.trim());
     } catch (err) {
       if (import.meta.env.DEV) console.error('[artist-signup] failed:', err);
       setError(err instanceof Error ? err.message : '가입에 실패했어요');

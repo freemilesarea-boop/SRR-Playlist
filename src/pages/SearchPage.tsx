@@ -34,6 +34,7 @@ import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import TrackStateBadge from '@/components/TrackStateBadge';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function SearchPage() {
   const navigate = useNavigate();
@@ -284,12 +285,11 @@ export default function SearchPage() {
               )}
 
               {total === 0 && (
-                <div className="rounded-2xl bg-bg-card p-8 text-center ring-1 ring-line/10">
-                  <p className="text-sm font-semibold">검색 결과가 없어요</p>
-                  <p className="mt-1 text-xs text-ink-mute">
-                    다른 분위기나 장르로 찾아보세요.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={<Search size={18} />}
+                  title={query.trim() ? `'${query.trim()}' 검색 결과가 없어요` : '검색 결과가 없어요'}
+                  subtitle="다른 분위기나 장르로 찾아보세요"
+                />
               )}
 
               {/* 장르/분위기/카테고리 칩 */}

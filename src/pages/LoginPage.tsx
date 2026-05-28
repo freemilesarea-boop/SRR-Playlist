@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -12,14 +12,55 @@ import Logo from '@/components/Logo';
 type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
 
 export default function LoginPage() {
-  const { session, signInWithPassword, signInWithGoogle } = useAuthStore();
+  const { session, signInWithPassword, signInWithGoogle, resendSignupEmail } = useAuthStore();
+  const location = useLocation();
+  // 로그인 게이트(SubscriptionGate) 또는 공유 링크에서 넘어온 returnTo URL.
+  // 로그인 성공 시 원래 보던 페이지로 자동 복귀.
+  const returnTo =
+    (location.state as { from?: string } | null)?.from ?? '/';
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signupDone, setSignupDone] = useState(false);
+  const [signupEmail, setSignupEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
+
+  // 60초 쿨다운 타이머 — Supabase resend rate limit 회피 + 사용자 피드백.
+  function startResendCooldown() {
+    setResendCooldown(60);
+    const id = window.setInterval(() => {
+      setResendCooldown((s) => {
+        if (s <= 1) {
+          window.clearInterval(id);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
+  async function handleResend(targetEmail: string) {
+    if (!targetEmail || resending || resendCooldown > 0) return;
+    setResending(true);
+    setError(null);
+    try {
+      await resendSignupEmail(targetEmail);
+      // 토스트 + 쿨다운 시작. UI 에 "60초 후 다시" 노출.
+      const { toast } = await import('@/store/toastStore');
+      toast.success('인증 메일을 다시 보냈어요. 받은편지함과 스팸함을 확인해주세요.');
+      startResendCooldown();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '재발송 실패';
+      // Supabase rate limit 메시지 자체 노출 (대부분 60초 이내 재요청 시).
+      setError(msg);
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function onGoogleSignIn() {
     setError(null);
@@ -33,7 +74,7 @@ export default function LoginPage() {
     }
   }
 
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to={returnTo} replace />;
 
   async function onSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -88,21 +129,49 @@ export default function LoginPage() {
         )}
 
         {signupDone ? (
-          <div className="space-y-4 rounded-2xl bg-bg-card p-5 text-center">
+          <div className="space-y-3 rounded-2xl bg-bg-card p-5 text-center">
             <p className="text-sm font-semibold">회원가입 신청 완료</p>
             <p className="text-xs text-ink-mute">
               이메일 인증 메일을 확인한 뒤 로그인해주세요.
+              {signupEmail && (
+                <>
+                  <br />
+                  <span className="mt-1 inline-block font-mono text-[11px] text-ink">
+                    {signupEmail}
+                  </span>{' '}
+                  로 발송됨
+                </>
+              )}
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSignupDone(false);
-                setMode('signin');
-              }}
-              className="btn-primary w-full"
-            >
-              로그인 화면으로
-            </button>
+            {error && <p className="text-[11px] text-red-300">{error}</p>}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => signupEmail && void handleResend(signupEmail)}
+                disabled={!signupEmail || resending || resendCooldown > 0}
+                className="btn-ghost w-full py-2.5 text-sm disabled:opacity-50"
+              >
+                {resending
+                  ? '재발송 중…'
+                  : resendCooldown > 0
+                    ? `재발송 (${resendCooldown}초 후 가능)`
+                    : '메일 다시 보내기'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupDone(false);
+                  setError(null);
+                  setMode('signin');
+                }}
+                className="btn-primary w-full"
+              >
+                로그인 화면으로
+              </button>
+            </div>
+            <p className="text-[10px] text-ink-dim">
+              메일이 안 오면 스팸함을 확인하고, 60초 후 다시 보내기를 눌러주세요.
+            </p>
           </div>
         ) : (
           <>
@@ -139,6 +208,27 @@ export default function LoginPage() {
                 <button type="submit" disabled={busy} className="btn-primary w-full py-3">
                   {busy ? '잠시만요…' : '로그인'}
                 </button>
+
+                {/* 이메일 인증 미수신 도움 — signin 모드에 늘 노출 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = email.trim();
+                    if (!v) {
+                      setError('재발송할 이메일을 위쪽에 먼저 입력해주세요.');
+                      return;
+                    }
+                    void handleResend(v);
+                  }}
+                  disabled={resending || resendCooldown > 0}
+                  className="block w-full text-center text-[11px] text-ink-mute hover:text-ink disabled:opacity-50"
+                >
+                  {resending
+                    ? '재발송 중…'
+                    : resendCooldown > 0
+                      ? `재발송 (${resendCooldown}초 후 가능)`
+                      : '인증 메일이 안 왔어요 — 재발송'}
+                </button>
               </form>
             )}
 
@@ -150,15 +240,30 @@ export default function LoginPage() {
             )}
 
             {mode === 'signup-individual' && (
-              <IndividualSignupForm onDone={() => setSignupDone(true)} />
+              <IndividualSignupForm
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
             )}
 
             {mode === 'signup-business' && (
-              <BusinessSignupForm onDone={() => setSignupDone(true)} />
+              <BusinessSignupForm
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
             )}
 
             {mode === 'signup-artist' && (
-              <ArtistSignupForm onDone={() => setSignupDone(true)} />
+              <ArtistSignupForm
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
             )}
 
             {(mode === 'signin' || mode === 'signup-type') && (
