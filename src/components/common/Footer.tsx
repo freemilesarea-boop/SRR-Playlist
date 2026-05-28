@@ -1,6 +1,6 @@
 import { Instagram } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Logo from '@/components/Logo';
+import BrandLogo from '@/components/BrandLogo';
 
 interface LinkItem {
   label: string;
@@ -72,7 +72,7 @@ export default function Footer() {
           {/* Brand col */}
           <div className="lg:col-span-3">
             <Link to="/" className="inline-flex items-center gap-2.5 group">
-              <Logo size={36} className="transition-transform group-hover:scale-105" />
+              <BrandLogo size={36} className="transition-transform group-hover:scale-105" fallbackColorClass="text-white" />
               <span className="text-lg font-extrabold tracking-tight text-white">듣다</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-neutral-400">
