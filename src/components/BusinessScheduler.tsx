@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Calendar,
-  Clock,
-  Play,
   Save,
   Radio,
   Sunrise,
@@ -14,25 +12,19 @@ import {
   TEMPLATE_KEYS,
   createSchedule,
   effectiveDays,
-  fetchBusinessProfile,
-  fetchBusinessSchedules,
   formatSlotTime,
   getCurrentSchedule,
-  getNextSchedule,
-  logScheduleEvent,
   upsertBusinessProfile,
   type BusinessProfile,
   type BusinessSchedule,
 } from '@/lib/businessSchedulerApi';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { useBusinessScheduleStore } from '@/store/businessScheduleStore';
 import { useBusinessStore } from '@/store/businessStore';
-import { usePlayerStore } from '@/store/playerStore';
-import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
-import { fetchPlaylists, fetchPlaylistTracks } from '@/lib/api';
-import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
-import type { PlaylistRow, TrackRow } from '@/types/db';
+import type { PlaylistRow } from '@/types/db';
+import { Clock } from 'lucide-react';
 
 type Category = 'all' | 'weekday' | 'weekend';
 type SlotName = '오전' | '오후' | '저녁';
@@ -51,7 +43,7 @@ function categoryFromDays(days: number[]): Category {
   if (set.size === 7) return 'all';
   if (set.size === 5 && [1, 2, 3, 4, 5].every((d) => set.has(d))) return 'weekday';
   if (set.size === 2 && set.has(0) && set.has(6)) return 'weekend';
-  return 'all'; // fallback
+  return 'all';
 }
 
 /** 영업시간(있으면) 3등분 / 없으면 디폴트 09–12 / 12–18 / 18–22 */
@@ -109,17 +101,20 @@ function autoMatchPlaylist(name: SlotName, playlists: PlaylistRow[]): string | n
 export default function BusinessScheduler() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const profileSub = useAuthStore((s) => s.profile?.subscription_type);
-  const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
-  const setQueue = usePlayerStore((s) => s.setQueue);
-  const setShuffle = usePlayerStore((s) => s.setShuffle);
-  const setRepeat = usePlayerStore((s) => s.setRepeat);
-  const playAction = usePlayerStore((s) => s.play);
+  const storeProfile = useBusinessScheduleStore((s) => s.profile);
+  const schedules = useBusinessScheduleStore((s) => s.schedules);
+  const playlists = useBusinessScheduleStore((s) => s.playlists);
+  const loading = useBusinessScheduleStore((s) => s.loading);
+  const tick = useBusinessScheduleStore((s) => s.tick);
+  const refresh = useBusinessScheduleStore((s) => s.refresh);
+  const setLastSwitchedScheduleId = useBusinessScheduleStore((s) => s.setLastSwitchedScheduleId);
   const businessMode = useBusinessStore((s) => s.businessMode);
 
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [schedules, setSchedules] = useState<BusinessSchedule[]>([]);
-  const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 매장 정보 — 로컬 편집 버퍼 (store.profile 으로 동기화)
+  const [profile, setProfile] = useState<BusinessProfile | null>(storeProfile);
+  useEffect(() => {
+    setProfile(storeProfile);
+  }, [storeProfile]);
   const [savingProfile, setSavingProfile] = useState(false);
 
   // 간단 모델 — 카테고리 1개 + 3 슬롯(오전/오후/저녁)
@@ -128,124 +123,10 @@ export default function BusinessScheduler() {
   const [savingSimple, setSavingSimple] = useState(false);
   const [synced, setSynced] = useState(false);
 
-  // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
-  const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
-  const [tracksLoading, setTracksLoading] = useState(false);
-  const [tracksError, setTracksError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-
-  // 1분마다 현재 스케줄 다시 계산
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  async function load() {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [p, s, pls] = await Promise.all([
-        fetchBusinessProfile(userId),
-        fetchBusinessSchedules(userId).catch(() => []),
-        fetchPlaylists(),
-      ]);
-      setProfile(p);
-      setSchedules(s);
-      setPlaylists(pls);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '스케줄 로드 실패');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
-
-  // 매장 모드 ON + 스케줄 변경 자동 감지 (1분 tick)
-  const current = useMemo(() => getCurrentSchedule(schedules), [schedules, tick]);
-  const next = useMemo(() => getNextSchedule(schedules), [schedules, tick]);
-
-  // 매장 모드 ON 일 때 currentSchedule 변경 → 자동 큐 교체
-  const [lastSwitchedScheduleId, setLastSwitchedScheduleId] = useState<string | null>(null);
-
-  // 1) current schedule 의 트랙 prefetch — businessMode 와 무관하게 항상 미리 로드.
-  //    user gesture 클릭 핸들러 안에서 동기 setQueue 가능 (autoplay 정책 안전).
-  useEffect(() => {
-    setCurrentTracks(null);
-    setTracksError(null);
-    if (!current?.playlist_id) return;
-    setTracksLoading(true);
-    let alive = true;
-    fetchPlaylistTracks(current.playlist_id)
-      .then((tracks) => {
-        if (!alive) return;
-        const { playable } = filterPlayableTracks(tracks);
-        if (import.meta.env.DEV) {
-          console.debug('[StoreScheduler] tracks loaded count', { slot: current.slot_name, total: tracks.length, playable: playable.length });
-        }
-        setCurrentTracks(playable);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        if (import.meta.env.DEV) console.error('[StoreScheduler] tracks fetch failed', e);
-        setTracksError(msg);
-      })
-      .finally(() => { if (alive) setTracksLoading(false); });
-    return () => { alive = false; };
-  }, [current?.playlist_id, current?.slot_name]);
-
-  // 2) businessMode ON + schedule 전환 시 자동 큐 교체.
-  useEffect(() => {
-    if (!businessMode || !current?.id || !current.playlist_id) return;
-    if (lastSwitchedScheduleId === current.id) return;
-    const isInitial = lastSwitchedScheduleId === null;
-    let alive = true;
-    const targetScheduleId = current.id;
-    (async () => {
-      try {
-        let playable: TrackRow[];
-        if (currentTracks && currentTracks.length > 0) {
-          playable = currentTracks;
-        } else {
-          const tracks = await fetchPlaylistTracks(current.playlist_id!);
-          playable = filterPlayableTracks(tracks).playable;
-        }
-        if (!alive) return;
-        if (!useBusinessStore.getState().businessMode) return;
-        if (current.id !== targetScheduleId) return;
-        if (playable.length === 0) {
-          toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
-          return;
-        }
-        const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
-        setQueue(playable, 0, playlist);
-        setRepeat('all');
-        setShuffle(true);
-        playAction();
-        if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: playable.length, isInitial });
-        setLastSwitchedScheduleId(current.id);
-        if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
-        void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
-      } catch (e) {
-        if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
-      }
-    })();
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
-
-  // schedules 가 로드되면 간단 폼의 초기값을 채움 (최초 1회 + profile 변경시)
+  // schedules → 간단 폼 prefill (최초 + profile 시간/플리 변경시)
   useEffect(() => {
     if (loading) return;
-    const base = defaultSlots(profile);
+    const base = defaultSlots(storeProfile);
     const morning = schedules.find((s) => s.slot_name === '오전');
     const afternoon = schedules.find((s) => s.slot_name === '오후');
     const evening = schedules.find((s) => s.slot_name === '저녁');
@@ -266,7 +147,9 @@ export default function BusinessScheduler() {
     });
     setSynced(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, schedules, profile?.open_time, profile?.close_time, playlists.length]);
+  }, [loading, schedules, storeProfile?.open_time, storeProfile?.close_time, playlists.length]);
+
+  void tick; // current는 store.tick 변경에 따라 재평가 — NOW 카드와 동일 source
 
   async function saveProfile() {
     if (!userId || !profile) return;
@@ -280,6 +163,8 @@ export default function BusinessScheduler() {
         open_time: profile.open_time,
         close_time: profile.close_time,
       });
+      // 스토어 갱신
+      await refresh(userId);
       setProfile(saved);
       toast.success('매장 정보를 저장했어요.');
     } catch (e) {
@@ -292,7 +177,6 @@ export default function BusinessScheduler() {
   /** 3-슬롯 저장 — 기존 스케줄 전체 삭제 후 오전/오후/저녁 3행 insert */
   async function saveSimpleSchedule() {
     if (!userId || savingSimple) return;
-    // validate
     for (const name of SLOT_NAMES) {
       const s = slots[name];
       if (s.start >= s.end) {
@@ -309,13 +193,11 @@ export default function BusinessScheduler() {
     setSavingSimple(true);
     try {
       const days = categoryToDays(category);
-      // 전체 삭제
       const { error: delError } = await supabase
         .from('business_music_schedules')
         .delete()
         .eq('user_id', userId);
       if (delError) throw delError;
-      // 3개 행 insert
       await Promise.all(
         SLOT_NAMES.map((name) =>
           createSchedule({
@@ -329,9 +211,9 @@ export default function BusinessScheduler() {
           }),
         ),
       );
-      // 다음 자동 전환을 위해 lastSwitchedScheduleId 리셋
+      // 자동 전환 리셋 → 다음 사이클에 새 플리로 부드럽게 전환
       setLastSwitchedScheduleId(null);
-      await load();
+      await refresh(userId);
       toast.success('시간대 3개를 적용했어요.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '저장 실패');
@@ -340,54 +222,14 @@ export default function BusinessScheduler() {
     }
   }
 
-  const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
-
-  function startBusinessMode() {
-    if (!current) {
-      toast.info('지금 시간대에 활성화된 스케줄이 없어요. 먼저 3개 시간대를 저장해주세요.');
-      return;
-    }
-    if (!current.playlist_id) {
-      toast.info('현재 시간대에 플레이리스트가 지정되지 않았어요.');
-      return;
-    }
-    if (tracksLoading) {
-      toast.info('트랙을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');
-      return;
-    }
-    if (tracksError) {
-      toast.error(`트랙 로드 실패: ${tracksError}`);
-      return;
-    }
-    if (!currentTracks || currentTracks.length === 0) {
-      toast.error('현재 시간대에 재생 가능한 음악이 없어요.');
-      return;
-    }
-    setStarting(true);
-    try {
-      enableForBusinessMode();
-      const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
-      setShuffle(true);
-      setRepeat('all');
-      setQueue(currentTracks, 0, playlist);
-      playAction();
-      setBusinessMode(true);
-      setLastSwitchedScheduleId(current.id);
-      void logScheduleEvent(userId, current.id, current.playlist_id, 'started');
-      toast.success(`${current.slot_name} 시작 (${currentTracks.length}곡)`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '재생 시작 실패');
-    } finally {
-      setStarting(false);
-    }
-  }
-
   if (!userId) return null;
 
   const isBusinessPlan = profileSub === 'business';
   const businessOnly = playlists.filter((p) => p.is_business_only);
   const otherPlaylists = playlists.filter((p) => !p.is_business_only);
-  const hasLegacyOnly = synced && schedules.length > 0 && !SLOT_NAMES.some((n) => schedules.find((s) => s.slot_name === n));
+  const hasLegacyOnly =
+    synced && schedules.length > 0 && !SLOT_NAMES.some((n) => schedules.find((s) => s.slot_name === n));
+  const current = getCurrentSchedule(schedules);
 
   return (
     <section className="space-y-5 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10">
@@ -407,25 +249,11 @@ export default function BusinessScheduler() {
               )}
             </div>
             <p className="text-xs text-ink-mute">
-              오전·오후·저녁 3개 시간대로 자동 전환됩니다. 카테고리 한 번 + 시간/플리만 정하면 끝.
+              여기서 설정한 3개 시간대가 NOW 카드와 자동 전환의 단일 source 입니다.
             </p>
           </div>
         </div>
       </header>
-
-      {/* 현재 / 다음 스케줄 */}
-      {schedules.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          <CurrentBadge
-            label="현재 재생 중"
-            schedule={current}
-            playlists={playlists}
-            playing={businessMode}
-            highlight
-          />
-          <CurrentBadge label="다음 전환" schedule={next} playlists={playlists} />
-        </div>
-      )}
 
       {/* 프로필 + 영업시간 */}
       <section className="space-y-3">
@@ -500,45 +328,13 @@ export default function BusinessScheduler() {
         </div>
       </section>
 
-      {/* CTA */}
-      {current && (
-        <div className="space-y-1.5">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              onClick={startBusinessMode}
-              disabled={starting || tracksLoading || (currentTracks !== null && currentTracks.length === 0)}
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card hover:opacity-95 disabled:opacity-60"
-            >
-              <Play size={16} fill="currentColor" />
-              {starting
-                ? '시작 중…'
-                : tracksLoading
-                  ? '트랙 불러오는 중…'
-                  : `현재 스케줄로 매장 모드 시작${currentTracks ? ` (${currentTracks.length}곡)` : ''}`}
-            </button>
-            <button
-              onClick={() => setBusinessMode(false)}
-              disabled={!businessMode}
-              className="btn-ghost text-sm"
-            >
-              매장 모드 끄기
-            </button>
-          </div>
-          {tracksError && (
-            <p className="text-[11px] text-red-300">트랙 로드 실패: {tracksError}</p>
-          )}
-        </div>
-      )}
-
       {/* 간단 시간대 설정 — 카테고리 1개 + 3 슬롯 */}
       <section className="space-y-4">
-        <header className="flex items-center justify-between gap-2">
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">시간대 설정</h3>
-            <p className="mt-0.5 text-[11px] text-ink-dim">
-              아래 카테고리 + 3개 시간대를 정하고 저장하면 끝. 시간대가 바뀌면 자동으로 다음 플리로 전환됩니다.
-            </p>
-          </div>
+        <header>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">시간대 설정</h3>
+          <p className="mt-0.5 text-[11px] text-ink-dim">
+            저장하면 즉시 NOW 카드 + 자동 전환에 반영됩니다.
+          </p>
         </header>
 
         {hasLegacyOnly && (
@@ -571,12 +367,15 @@ export default function BusinessScheduler() {
               onChange={(patch) =>
                 setSlots((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
               }
-              onAutoMatch={() =>
+              onAutoMatch={() => {
+                const pid = autoMatchPlaylist(name, playlists);
                 setSlots((prev) => ({
                   ...prev,
-                  [name]: { ...prev[name], playlist_id: autoMatchPlaylist(name, playlists) },
-                }))
-              }
+                  [name]: { ...prev[name], playlist_id: pid },
+                }));
+                const matched = playlists.find((p) => p.id === pid);
+                toast.success(matched ? `${name}: ${matched.title}` : `${name}: 매칭된 플리 없음`);
+              }}
             />
           ))}
         </div>
@@ -662,6 +461,10 @@ function SimpleSlotCard({
             {isPlaying && <Radio size={9} className="animate-pulse" />} NOW
           </span>
         )}
+        <span className="ml-auto font-mono text-[10px] text-ink-dim">
+          <Clock size={10} className="-mt-0.5 mr-1 inline" />
+          {data.start} ~ {data.end}
+        </span>
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_1fr]">
@@ -722,7 +525,8 @@ function SimpleSlotCard({
   );
 }
 
-function CurrentBadge({
+/** 외부에서 import 가능한 CurrentBadge — NOW 카드 보조 표시용 */
+export function CurrentBadge({
   label,
   schedule,
   playlists,
@@ -756,8 +560,6 @@ function CurrentBadge({
           <p className="truncate text-[15px] font-bold tracking-tight">{schedule.slot_name}</p>
           <p className="flex items-center gap-1.5 font-mono text-[11px] text-ink-mute">
             <Clock size={11} /> {formatSlotTime(schedule.start_time, schedule.end_time)}
-            <span className="text-ink-dim">·</span>
-            <span>{categoryLabel(categoryFromDays(effectiveDays(schedule)))}</span>
           </p>
           <p className="truncate text-[12px] text-ink-mute">
             {playlist?.title ?? <span className="text-ink-dim">플리 미지정</span>}
@@ -770,11 +572,7 @@ function CurrentBadge({
   );
 }
 
-function categoryLabel(c: Category): string {
-  return c === 'all' ? '매일' : c === 'weekday' ? '주중 (월–금)' : '주말 (토·일)';
-}
-
-/** 시간 input 클릭 즉시 picker 띄우기 — 작은 시계 아이콘만 동작하는 기본 UX 보완. */
+/** 시간 input 클릭 즉시 picker — 작은 시계 아이콘만 동작하는 기본 UX 보완. */
 function openTimePicker(
   e: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>,
 ) {
@@ -786,8 +584,7 @@ function openTimePicker(
     try {
       (el as HTMLInputElement & { showPicker: () => void }).showPicker();
     } catch {
-      /* picker 표시 거절 시(브라우저별 정책) 무시 — 기본 동작 fallback */
+      /* picker 표시 거절 시 무시 — 기본 동작 fallback */
     }
   }
 }
-
