@@ -170,11 +170,12 @@ export default function PlaylistPage() {
               category={playlist.category}
               imageUrl={playlist.thumbnail_url ?? coverFromTracks}
               size="xl"
+              useAbstract
             />
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-accent">
               {playlist.category}
             </p>
             <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow sm:text-4xl">
@@ -186,7 +187,7 @@ export default function PlaylistPage() {
               </p>
             )}
             {totalCount > 0 && (
-              <p className="flex items-center gap-1 text-xs text-white/70">
+              <p className="flex items-center gap-1.5 font-mono text-[11px] tracking-wide text-white/70">
                 {hasAnyPlayable ? (
                   <>
                     <CheckCircle2 size={12} className="text-emerald-300" />
