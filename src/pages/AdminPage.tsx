@@ -118,14 +118,76 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
+/** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
+type Group = '운영' | '회원' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
+
+const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
+  { key: '운영', tabs: ['dashboard'] },
+  { key: '회원', tabs: ['members', 'sales-agents', 'free-trials'] },
+  { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
+  {
+    key: '아티스트',
+    tabs: [
+      'artists',
+      'artist-contracts',
+      'payout-verification',
+      'track-review',
+      'artist-tracks',
+      'deleted-tracks',
+      'artist-settlements',
+    ],
+  },
+  {
+    key: '콘텐츠/오디오',
+    tabs: [
+      'content',
+      'auto-playlists',
+      'audio-reencode',
+      'audio-diagnostics',
+      'metadata-violations',
+      'upload-audit',
+      'ai-curation',
+      'recommendation',
+      'upload-integrity',
+    ],
+  },
+  { key: '설정', tabs: ['brand', 'admins'] },
+];
+
+function groupOf(tab: Tab): Group {
+  for (const g of GROUPS) {
+    if (g.tabs.includes(tab)) return g.key;
+  }
+  return '운영';
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [group, setGroup] = useState<Group>(groupOf('dashboard'));
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
 
   useEffect(() => { fetchMyAdminPermissions().then(setPerms).catch(() => {}); }, []);
   const visibleTabs = TABS.filter((t) => !t.superOnly || perms?.is_super_admin);
+  const tabsInGroup = visibleTabs.filter((t) =>
+    (GROUPS.find((g) => g.key === group)?.tabs ?? []).includes(t.key),
+  );
+
+  // 탭 직접 클릭(예: 외부 링크) 시 그룹도 자동 동기화
+  function selectTab(next: Tab) {
+    setTab(next);
+    setGroup(groupOf(next));
+  }
+
+  // 그룹 클릭 시 그 그룹의 첫 가시 탭으로 자동 진입 — 빈 panel 회피
+  function selectGroup(next: Group) {
+    setGroup(next);
+    const firstInGroup = visibleTabs.find((t) =>
+      (GROUPS.find((g) => g.key === next)?.tabs ?? []).includes(t.key),
+    );
+    if (firstInGroup) setTab(firstInGroup.key);
+  }
 
   // OnboardingChecklist 용
   useEffect(() => {
@@ -154,22 +216,49 @@ export default function AdminPage() {
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
 
-      <nav className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-        <div className="flex gap-1.5 pb-1 no-scrollbar">
-          {visibleTabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
-                tab === t.key
-                  ? 'bg-accent text-black'
-                  : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+      {/* 2-level nav — 1열: 그룹, 2열: 그룹 내 탭. 28개 한 줄 스크롤 → 의미 단위 묶음. */}
+      <nav className="space-y-2">
+        {/* 그룹 nav */}
+        <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+          <div className="flex gap-1.5 pb-1 no-scrollbar">
+            {GROUPS.map((g) => {
+              const hasVisible = visibleTabs.some((t) => g.tabs.includes(t.key));
+              if (!hasVisible) return null;
+              const isActive = group === g.key;
+              return (
+                <button
+                  key={g.key}
+                  onClick={() => selectGroup(g.key)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider transition ${
+                    isActive
+                      ? 'bg-ink text-bg ring-1 ring-ink'
+                      : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
+                  }`}
+                >
+                  {g.key}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {/* 탭 nav (선택 그룹 내) */}
+        <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+          <div className="flex gap-1.5 pb-1 no-scrollbar">
+            {tabsInGroup.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => selectTab(t.key)}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                  tab === t.key
+                    ? 'bg-accent text-black'
+                    : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </nav>
 

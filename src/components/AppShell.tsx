@@ -4,6 +4,7 @@ import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import TrialBanner from './TrialBanner';
+import InstallPromptBanner from './InstallPromptBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
 import Footer from './common/Footer';
@@ -44,6 +45,7 @@ export default function AppShell() {
         <main className="mx-auto w-full max-w-[1500px]">
           <div className="px-4 pt-3 sm:px-6">
             <TrialBanner />
+            <InstallPromptBanner />
           </div>
           <Outlet />
         </main>
