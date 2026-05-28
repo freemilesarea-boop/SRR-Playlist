@@ -13,6 +13,7 @@ import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
+import Skeleton from '@/components/common/Skeleton';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 
@@ -83,7 +84,12 @@ export default function TrackSharePage() {
   }
 
   if (loading) {
-    return <div className="p-8 text-center text-sm text-ink-mute">불러오는 중…</div>;
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton.Row count={3} />
+      </div>
+    );
   }
   if (!track) {
     return (

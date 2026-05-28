@@ -210,20 +210,20 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   }
   if (artist.approval_status === 'rejected') {
     return (
-      <div className="rounded-2xl bg-red-500/10 p-4 ring-1 ring-red-500/30">
-        <p className="flex items-center gap-2 text-sm font-bold text-red-200">
-          <XCircle size={14} /> 승인이 거절되었습니다
-        </p>
+      <Alert tone="error" title="승인이 거절되었습니다">
         {artist.rejected_reason && (
-          <p className="mt-1 text-xs text-red-200/85">사유: {artist.rejected_reason}</p>
+          <p className="mt-1 text-xs opacity-85">사유: {artist.rejected_reason}</p>
         )}
-        <p className="mt-2 text-xs text-red-100/70">
+        <p className="mt-2 text-xs opacity-70">
           이의가 있으신가요?{' '}
-          <a href="mailto:freemilesarea@gmail.com?subject=아티스트 승인 재신청" className="underline">
+          <a
+            href="mailto:freemilesarea@gmail.com?subject=아티스트 승인 재신청"
+            className="underline"
+          >
             고객센터 문의
           </a>
         </p>
-      </div>
+      </Alert>
     );
   }
   return (

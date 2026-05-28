@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
+import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
@@ -175,7 +176,7 @@ export default function LoginPage() {
                 </>
               )}
             </p>
-            {error && <p className="text-[11px] text-red-300">{error}</p>}
+            {error && <Alert tone="error">{error}</Alert>}
             <div className="space-y-2 pt-1">
               <button
                 type="button"
@@ -235,7 +236,7 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {error && <div className="text-xs text-red-300">{error}</div>}
+                {error && <Alert tone="error">{error}</Alert>}
 
                 <button type="submit" disabled={busy} className="btn-primary w-full py-3">
                   {busy ? '잠시만요…' : '로그인'}

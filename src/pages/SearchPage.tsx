@@ -35,6 +35,7 @@ import TrackLikeButton from '@/components/TrackLikeButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import TrackStateBadge from '@/components/TrackStateBadge';
 import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 
 export default function SearchPage() {
   const navigate = useNavigate();
@@ -262,14 +263,7 @@ export default function SearchPage() {
       {debounced && (
         <div className="space-y-6">
           {loading && (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="h-14 animate-pulse rounded-xl bg-bg-card"
-                />
-              ))}
-            </div>
+            <Skeleton.Row count={3} />
           )}
 
           {!loading && groups && (

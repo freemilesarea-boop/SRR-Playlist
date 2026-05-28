@@ -14,6 +14,7 @@ import { fetchCuratorProfile, type CuratorProfile } from '@/lib/curatorApi';
 import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
 import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 
 export default function CuratorProfilePage() {
   const { handle } = useParams<{ handle: string }>();
@@ -43,9 +44,9 @@ export default function CuratorProfilePage() {
   if (loading) {
     return (
       <div className="space-y-6 px-4 pb-12 pt-6 sm:px-6">
-        <div className="h-48 animate-pulse rounded-3xl bg-bg-card" />
-        <div className="h-6 w-1/3 animate-pulse rounded bg-bg-card" />
-        <div className="h-32 animate-pulse rounded-2xl bg-bg-card" />
+        <Skeleton className="h-48 rounded-3xl" />
+        <Skeleton className="h-6 w-1/3" />
+        <Skeleton className="h-32 rounded-2xl" />
       </div>
     );
   }

@@ -29,6 +29,7 @@ import { toast } from '@/store/toastStore';
 import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import { captureError } from '@/lib/sentry';
 import {
   emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
 } from '@/lib/trackMetadataOptions';
@@ -440,6 +441,7 @@ export default function ArtistBatchUploadForm({
             status: 'failed',
             error: e instanceof Error ? e.message : String(e),
           });
+          void captureError(e, { scope: 'artist_batch_upload', trackId: id });
         }
       }
     };
