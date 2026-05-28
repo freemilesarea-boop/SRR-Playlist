@@ -342,7 +342,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                 : `총 ${fmt(total || rows.length)}건`;
               const suffix = removedView
                 ? ' · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출'
-                : " · release_status='released' 인 트랙만 정산 대상";
+                : ' · 검수 대기·승인·예정·공개·반려·숨김 모두 포함 (삭제/중단은 별도 탭)';
               return head + suffix;
             })()}
           </p>
@@ -375,20 +375,22 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           onChange={(e) => setStatus(e.target.value as StatusFilter)}
           className="input w-auto text-sm"
         >
-          <option value="">전체 상태</option>
-          <optgroup label="visibility">
-            <option value="pending_review">심사 대기</option>
-            <option value="approved">승인됨</option>
-            <option value="rejected">거절됨</option>
-            <option value="hidden">숨김</option>
-          </optgroup>
-          <optgroup label="DSP release">
-            <option value="submitted">검수 대기 (submitted)</option>
+          <option value="">전체 상태 (검수·승인·발매 모두 포함)</option>
+          <optgroup label="발매 단계">
+            <option value="submitted">검수 대기</option>
             <option value="review_pending">검수 중</option>
             <option value="changes_requested">수정 요청</option>
+            <option value="approved">승인됨</option>
             <option value="scheduled">발매 예정</option>
-            <option value="released">공개됨</option>
-            <option value="removed">제거됨</option>
+            <option value="released">발매 완료</option>
+          </optgroup>
+          <optgroup label="검수 결과">
+            <option value="pending_review">심사 대기 (visibility)</option>
+            <option value="rejected">반려</option>
+            <option value="hidden">숨김</option>
+          </optgroup>
+          <optgroup label="중단/삭제">
+            <option value="removed">삭제/중단</option>
           </optgroup>
         </select>
       </div>
