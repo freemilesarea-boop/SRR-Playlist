@@ -17,6 +17,8 @@ import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
 import ChartRow from '@/components/charts/ChartRow';
 import ChartPodium from '@/components/charts/ChartPodium';
+import SharedEmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 
 type Tab = 'daily' | 'weekly' | 'monthly' | 'top100' | 'genre';
 
@@ -184,7 +186,7 @@ export default function ChartPage() {
       {tab === 'genre' && (
         <section className="space-y-2">
           {genres.length === 0 ? (
-            <p className="text-sm text-ink-mute">불러오는 중…</p>
+            <Skeleton.Row count={6} />
           ) : (
             <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:flex-wrap sm:overflow-visible sm:px-6">
               {genres.map((g) => (
@@ -261,30 +263,18 @@ export default function ChartPage() {
   );
 }
 
+// 표준 Skeleton / EmptyState 사용 — 로컬 wrapper 제거.
 function SkeletonList() {
-  return (
-    <ul className="space-y-1 pt-1">
-      {Array.from({ length: 10 }).map((_, i) => (
-        <li key={i} className="flex animate-pulse items-center gap-4 rounded-xl px-3 py-3 sm:gap-5 sm:px-4">
-          <div className="h-4 w-6 rounded bg-bg-hover" />
-          <div className="h-12 w-12 rounded-lg bg-bg-hover" />
-          <div className="flex-1 space-y-2">
-            <div className="h-3 w-2/3 rounded bg-bg-hover" />
-            <div className="h-2 w-1/3 rounded bg-bg-hover" />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
+  return <Skeleton.Row count={10} />;
 }
 
 function EmptyState() {
   return (
-    <div className="space-y-2 px-6 py-12 text-center">
-      <BarChart3 size={28} className="mx-auto text-ink-dim" />
-      <p className="text-sm font-semibold text-ink">아직 충분한 재생 기록이 없어 차트를 준비 중입니다.</p>
-      <p className="text-xs text-ink-mute">곡을 30초 이상 들으면 차트에 반영됩니다.</p>
-    </div>
+    <SharedEmptyState
+      icon={<BarChart3 size={20} />}
+      title="아직 충분한 재생 기록이 없어 차트를 준비 중입니다"
+      subtitle="곡을 30초 이상 들으면 차트에 반영됩니다"
+    />
   );
 }
 

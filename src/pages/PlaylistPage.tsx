@@ -19,6 +19,7 @@ import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import PlaylistFollowButton from '@/components/PlaylistFollowButton';
 import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
+import Skeleton from '@/components/common/Skeleton';
 import { toast } from '@/store/toastStore';
 
 export default function PlaylistPage() {
@@ -138,7 +139,12 @@ export default function PlaylistPage() {
   }
 
   if (loading) {
-    return <div className="p-6 text-ink-mute">불러오는 중…</div>;
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton.Row count={5} />
+      </div>
+    );
   }
   if (!playlist) {
     return <div className="p-6 text-ink-mute">플레이리스트를 찾을 수 없어요.</div>;

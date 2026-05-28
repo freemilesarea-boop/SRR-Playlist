@@ -19,6 +19,8 @@ import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 import { withTimeout } from '@/lib/withTimeout';
 
 type Tab = 'mine' | 'liked' | 'followed';
@@ -221,16 +223,14 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
   );
 }
 
+// 표준 공통 컴포넌트(EmptyState, Skeleton) 로 통일 — 로컬 wrapper 제거.
 function Loading() {
-  return <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>;
+  return <Skeleton.Row count={3} />;
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-bg-card/60 p-8 text-center text-sm text-ink-mute ring-1 ring-line/10">
-      {children}
-    </div>
-  );
+  // children 은 single string 가정 — EmptyState 의 title 로 매핑.
+  return <EmptyState icon={<ListMusic size={20} />} title={String(children)} />;
 }
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {

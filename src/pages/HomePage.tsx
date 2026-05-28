@@ -18,7 +18,8 @@ import { fetchCuratorMadePlaylists, type CuratorMadePlaylist } from '@/lib/curat
 import { fetchNewPublicPlaylists, type NewPublicPlaylist } from '@/lib/userPlaylistApi';
 import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
-import { Wand2 } from 'lucide-react';
+import EmptyState from '@/components/common/EmptyState';
+import { Wand2, ListMusic } from 'lucide-react';
 
 export default function HomePage() {
   const { profile, user } = useAuthStore();
@@ -421,10 +422,11 @@ export default function HomePage() {
       {loading && <SkeletonSection />}
 
       {!loading && playlists.length === 0 && (
-        <div className="rounded-2xl bg-bg-card/60 p-8 text-center text-sm text-ink-mute ring-1 ring-line/10">
-          아직 등록된 플레이리스트가 없어요. <br />
-          관리자 페이지에서 플레이리스트와 트랙을 추가해보세요.
-        </div>
+        <EmptyState
+          icon={<ListMusic size={20} />}
+          title="아직 등록된 플레이리스트가 없어요"
+          subtitle="관리자 페이지에서 플레이리스트와 트랙을 추가해보세요"
+        />
       )}
     </div>
   );
