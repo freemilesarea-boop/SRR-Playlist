@@ -27,6 +27,8 @@ import type { TrackRow } from '@/types/db';
 import AutoCover from '@/components/AutoCover';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 import { withTimeout } from '@/lib/withTimeout';
 
 type DetailTrack = TrackRow & { order_index: number };
@@ -116,7 +118,13 @@ export default function UserPlaylistDetailPage() {
     }
   }
 
-  if (loading) return <div className="px-4 py-16 text-center text-sm text-ink-mute sm:px-6">불러오는 중…</div>;
+  if (loading) {
+    return (
+      <div className="px-4 py-6 sm:px-6">
+        <Skeleton.Row count={5} />
+      </div>
+    );
+  }
   if (error) {
     return (
       <div className="px-4 py-10 sm:px-6">
@@ -187,9 +195,11 @@ export default function UserPlaylistDetailPage() {
 
       {/* 트랙 목록 */}
       {tracks.length === 0 ? (
-        <div className="rounded-2xl bg-bg-card/60 p-8 text-center text-sm text-ink-mute ring-1 ring-line/10">
-          아직 곡이 없어요. 곡 상세나 플레이어에서 "담기" 를 눌러 추가해보세요.
-        </div>
+        <EmptyState
+          icon={<Music2 size={20} />}
+          title="아직 곡이 없어요"
+          subtitle="곡 상세나 플레이어에서 '담기' 를 눌러 추가해보세요"
+        />
       ) : data.is_owner ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={tracks.map((t) => t.id)} strategy={verticalListSortingStrategy}>

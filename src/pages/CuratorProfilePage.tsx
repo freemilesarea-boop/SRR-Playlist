@@ -13,6 +13,7 @@ import {
 import { fetchCuratorProfile, type CuratorProfile } from '@/lib/curatorApi';
 import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
+import EmptyState from '@/components/common/EmptyState';
 
 export default function CuratorProfilePage() {
   const { handle } = useParams<{ handle: string }>();
@@ -189,9 +190,10 @@ export default function CuratorProfilePage() {
           <Music size={16} className="text-accent" /> 플레이리스트
         </h2>
         {profile.playlists.length === 0 ? (
-          <p className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-line/10">
-            아직 공개된 플레이리스트가 없어요.
-          </p>
+          <EmptyState
+            icon={<Music size={20} />}
+            title="아직 공개된 플레이리스트가 없어요"
+          />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {profile.playlists.map((p) => (

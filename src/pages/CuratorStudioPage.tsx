@@ -16,6 +16,8 @@ import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
 import ErrorRetry from '@/components/common/ErrorRetry';
+import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 import { withTimeout } from '@/lib/withTimeout';
 
 const CATEGORIES = ['카페', '와인바', '레스토랑', '필라테스', '드라이브', '집중', '휴식', '운동'];
@@ -126,12 +128,13 @@ export default function CuratorStudioPage() {
       {error ? (
         <ErrorRetry message={error} onRetry={() => void load()} />
       ) : loading ? (
-        <div className="py-12 text-center text-sm text-ink-mute">불러오는 중…</div>
+        <Skeleton.Row count={3} />
       ) : playlists.length === 0 ? (
-        <div className="rounded-2xl bg-bg-card/60 p-8 text-center text-sm text-ink-mute ring-1 ring-line/10">
-          아직 만든 플레이리스트가 없어요.<br />
-          "새 플리" 를 눌러 첫 플레이리스트를 만들어보세요.
-        </div>
+        <EmptyState
+          icon={<Music2 size={20} />}
+          title="아직 만든 플레이리스트가 없어요"
+          subtitle="'새 플리' 를 눌러 첫 플레이리스트를 만들어보세요"
+        />
       ) : (
         <ul className="space-y-2">
           {playlists.map((p) => (
