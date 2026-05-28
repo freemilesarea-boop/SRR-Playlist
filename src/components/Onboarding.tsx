@@ -9,6 +9,20 @@ const STORAGE_KEY = 'srr-onboarding-seen';
 
 type Mode = 'personal' | 'business';
 
+/** account_type 으로부터 onboarding mode 자동 결정. artist 는 별도 흐름이라 모달 자체 미노출. */
+function modeFromAccountType(accountType: string | undefined | null): Mode | null {
+  switch (accountType) {
+    case 'business':
+      return 'business';
+    case 'individual':
+      return 'personal';
+    case 'artist':
+      return null; // 아티스트는 onboarding 모달 안 띄움
+    default:
+      return null;
+  }
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { profile, loading } = useAuthStore();
@@ -23,10 +37,29 @@ export default function Onboarding() {
     if (loading || !profile) return;
     try {
       const seen = localStorage.getItem(STORAGE_KEY);
-      if (!seen) setOpen(true);
+      if (seen) return;
     } catch {
-      /* localStorage 막힌 환경은 그냥 무시 */
+      /* localStorage 막힌 환경: 매번 모달 노출 (마찰 < 안 보임) */
     }
+    // 가입 시 결정된 account_type 으로 mode 자동 설정.
+    // - business / individual: Step 1 부터 시작 (mode 선택 화면 생략)
+    // - artist: 모달 자체 미노출 (별도 /artist 대시보드가 안내)
+    // - account_type 누락 / unknown: 기존 mode 선택 화면 표시
+    const autoMode = modeFromAccountType(profile.account_type);
+    if (profile.account_type === 'artist') {
+      // 모달 안 띄움 + seen 표시해 다음 방문 시도 차단
+      try {
+        localStorage.setItem(STORAGE_KEY, 'true');
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+    if (autoMode) {
+      setMode(autoMode);
+      setStep(1);
+    }
+    setOpen(true);
   }, [loading, profile]);
 
   function close() {

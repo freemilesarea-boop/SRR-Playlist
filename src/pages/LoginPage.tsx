@@ -11,13 +11,43 @@ import Logo from '@/components/Logo';
 
 type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
 
+const FIRST_ROUTE_KEY = 'srr-first-route-done';
+
+function firstRouteFor(accountType: string | undefined | null): string {
+  switch (accountType) {
+    case 'business':
+      return '/business';
+    case 'artist':
+      return '/artist';
+    default:
+      return '/';
+  }
+}
+
 export default function LoginPage() {
   const { session, signInWithPassword, signInWithGoogle, resendSignupEmail } = useAuthStore();
+  const profile = useAuthStore((s) => s.profile);
+  const isProfileReady = useAuthStore((s) => s.isProfileReady);
   const location = useLocation();
   // 로그인 게이트(SubscriptionGate) 또는 공유 링크에서 넘어온 returnTo URL.
-  // 로그인 성공 시 원래 보던 페이지로 자동 복귀.
-  const returnTo =
-    (location.state as { from?: string } | null)?.from ?? '/';
+  // 명시적 returnTo 있으면 그곳으로, 없고 첫 로그인이면 account_type 기반 분기.
+  const explicitReturn = (location.state as { from?: string } | null)?.from ?? null;
+  function computeTarget(): string {
+    if (explicitReturn) return explicitReturn;
+    let done = false;
+    try {
+      done = localStorage.getItem(FIRST_ROUTE_KEY) === 'true';
+    } catch {
+      /* noop */
+    }
+    if (done) return '/';
+    try {
+      localStorage.setItem(FIRST_ROUTE_KEY, 'true');
+    } catch {
+      /* noop */
+    }
+    return firstRouteFor(profile?.account_type);
+  }
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -74,7 +104,9 @@ export default function LoginPage() {
     }
   }
 
-  if (session) return <Navigate to={returnTo} replace />;
+  // profile 로드 끝나기 전엔 분기가 부정확 — session 있고 profile ready 일 때만 navigate.
+  // (profile 로드 도중엔 기존 LoginPage UI 가 잠깐 보이지만 곧 redirect.)
+  if (session && isProfileReady) return <Navigate to={computeTarget()} replace />;
 
   async function onSignIn(e: React.FormEvent) {
     e.preventDefault();
