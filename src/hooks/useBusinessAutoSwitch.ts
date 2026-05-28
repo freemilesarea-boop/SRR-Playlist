@@ -7,7 +7,6 @@ import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
-import type { TrackRow } from '@/types/db';
 
 /**
  * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
@@ -25,7 +24,6 @@ export function useBusinessAutoSwitch() {
   const playlists = useBusinessScheduleStore((s) => s.playlists);
   const tick = useBusinessScheduleStore((s) => s.tick);
   const bumpTick = useBusinessScheduleStore((s) => s.bumpTick);
-  const currentTracks = useBusinessScheduleStore((s) => s.currentTracks);
   const setCurrentTracks = useBusinessScheduleStore((s) => s.setCurrentTracks);
   const setTracksLoading = useBusinessScheduleStore((s) => s.setTracksLoading);
   const setTracksError = useBusinessScheduleStore((s) => s.setTracksError);
@@ -71,43 +69,46 @@ export function useBusinessAutoSwitch() {
     return () => { alive = false; };
   }, [current?.playlist_id, current?.slot_name, setCurrentTracks, setTracksLoading, setTracksError]);
 
-  // businessMode ON + current 변경 → 자동 큐 교체
+  // businessMode ON + current 변경 → 자동 큐 교체.
+  //
+  // 항상 fresh fetch. (이전 구현은 cached currentTracks 동기 path 가 있었으나
+  // slot 전환 시점에 stale [이전 슬롯 tracks] 가 setQueue 되는 race 존재.
+  // cached 는 user-gesture useStartBusinessMode 에서만 사용.)
   useEffect(() => {
     if (!businessMode || !current?.id || !current.playlist_id) return;
     if (lastSwitchedScheduleId === current.id) return;
     const isInitial = lastSwitchedScheduleId === null;
-    let alive = true;
+    // 비동기 fetch 도중 current 가 또 바뀔 수 있으므로 setup 시점 값 캡처
     const targetScheduleId = current.id;
+    const targetPlaylistId = current.playlist_id;
+    const targetSlotName = current.slot_name;
+    let alive = true;
     (async () => {
       try {
-        let playable: TrackRow[];
-        if (currentTracks && currentTracks.length > 0) {
-          playable = currentTracks;
-        } else {
-          const tracks = await fetchPlaylistTracks(current.playlist_id!);
-          playable = filterPlayableTracks(tracks).playable;
-        }
+        const tracks = await fetchPlaylistTracks(targetPlaylistId);
+        const playable = filterPlayableTracks(tracks).playable;
         if (!alive) return;
         if (!useBusinessStore.getState().businessMode) return;
-        if (current.id !== targetScheduleId) return;
+        if (getCurrentSchedule(useBusinessScheduleStore.getState().schedules)?.id !== targetScheduleId) return;
         if (playable.length === 0) {
-          toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
+          toast.error(`${targetSlotName}: 재생 가능한 음악이 없어요.`);
           return;
         }
-        const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
+        const playlist = playlists.find((p) => p.id === targetPlaylistId) ?? null;
         setQueue(playable, 0, playlist);
         setRepeat('all');
         setShuffle(true);
         playAction();
-        if (import.meta.env.DEV) console.debug('[StoreEngine] playback switched', { tracks: playable.length, isInitial });
-        setLastSwitchedScheduleId(current.id);
-        if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
-        void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
+        if (import.meta.env.DEV) console.debug('[StoreEngine] playback switched', { tracks: playable.length, isInitial, slot: targetSlotName });
+        setLastSwitchedScheduleId(targetScheduleId);
+        if (!isInitial) toast.success(`${targetSlotName} 플레이리스트로 자동 전환했어요`);
+        void logScheduleEvent(userId, targetScheduleId, targetPlaylistId, isInitial ? 'started' : 'switched');
       } catch (e) {
         if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
       }
     })();
     return () => { alive = false; };
+    // currentTracks 의존 제거 — cached 사용 안 함
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
+  }, [businessMode, current?.id, current?.playlist_id]);
 }
