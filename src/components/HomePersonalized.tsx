@@ -4,9 +4,12 @@ import { Link } from 'react-router-dom';
 import {
   fetchPersonalizedTracks,
   fetchPersonalizedPlaylists,
+  recommendCollabForUser,
   type RecommendedTrack,
   type PersonalizedPlaylist,
 } from '@/lib/recommendationApi';
+import { supabase } from '@/lib/supabase';
+import type { TrackRow } from '@/types/db';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
 import { useGateStore } from '@/store/gateStore';
@@ -30,6 +33,8 @@ export default function HomePersonalized({ trackLimit = 12, playlistLimit = 8 }:
   const [tracks, setTracks] = useState<RecommendedTrack[]>([]);
   const [playlists, setPlaylists] = useState<PersonalizedPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
+  // 추천 출처 — 'collab' (청취 행동 기반) / 'baseline' (기존 RPC, 콜드스타트 fallback)
+  const [source, setSource] = useState<'collab' | 'baseline'>('baseline');
 
   const setQueue = usePlayerStore((s) => s.setQueue);
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id);
@@ -38,16 +43,54 @@ export default function HomePersonalized({ trackLimit = 12, playlistLimit = 8 }:
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    Promise.all([
-      fetchPersonalizedTracks(trackLimit),
-      fetchPersonalizedPlaylists(playlistLimit),
-    ])
-      .then(([trk, pls]) => {
+    (async () => {
+      try {
+        // 항상 baseline 먼저 시도 (콜드스타트 + 비로그인 안전)
+        const [baseline, pls] = await Promise.all([
+          fetchPersonalizedTracks(trackLimit),
+          fetchPersonalizedPlaylists(playlistLimit),
+        ]);
+        let finalTracks = baseline;
+        let finalSource: 'collab' | 'baseline' = 'baseline';
+
+        // 로그인 사용자만 user-based collab 추가 시도
+        if (session?.user?.id) {
+          const collab = await recommendCollabForUser(session.user.id, trackLimit);
+          // 청취 이력이 충분해 의미있는 collab 결과가 나왔을 때만 사용 (>= 6)
+          if (collab.length >= 6) {
+            const { data } = await supabase
+              .from('tracks')
+              .select('*')
+              .in('id', collab.map((c) => c.track_id))
+              .eq('visibility_status', 'approved')
+              .is('removed_at', null);
+            if (data && data.length >= 6) {
+              const byId = new Map((data as TrackRow[]).map((t) => [t.id, t]));
+              // collab score desc 순서 보존
+              const hydrated = collab
+                .map((c) => byId.get(c.track_id))
+                .filter((t): t is TrackRow => !!t)
+                .map((t): RecommendedTrack => ({
+                  ...t,
+                  score: 0,
+                  score_reasons: ['같이 들은 곡'],
+                }));
+              if (hydrated.length >= 6) {
+                finalTracks = hydrated;
+                finalSource = 'collab';
+              }
+            }
+          }
+        }
+
         if (!alive) return;
-        setTracks(trk);
+        setTracks(finalTracks);
         setPlaylists(pls);
-      })
-      .finally(() => alive && setLoading(false));
+        setSource(finalSource);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -82,10 +125,18 @@ export default function HomePersonalized({ trackLimit = 12, playlistLimit = 8 }:
           <div className="px-0.5">
             <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight sm:text-xl">
               <Heart size={16} className="text-accent" />
-              {session ? '최근 취향에 맞는 추천곡' : '지금 인기 있는 신곡'}
+              {source === 'collab'
+                ? '비슷한 취향 사용자가 들은 곡'
+                : session
+                  ? '최근 취향에 맞는 추천곡'
+                  : '지금 인기 있는 신곡'}
             </h2>
             <p className="mt-0.5 text-xs text-ink-mute">
-              {session ? '자주 듣는 장르·분위기 기반' : '최근 출시된 인기 음원'}
+              {source === 'collab'
+                ? '내가 들은 곡과 같은 청취 패턴 기반'
+                : session
+                  ? '자주 듣는 장르·분위기 기반'
+                  : '최근 출시된 인기 음원'}
             </p>
           </div>
 
