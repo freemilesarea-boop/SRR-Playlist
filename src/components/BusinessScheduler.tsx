@@ -37,10 +37,9 @@ import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { fetchPlaylists, fetchPlaylistTracks } from '@/lib/api';
-import { isPlayableTrack } from '@/lib/audio';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { toast } from '@/store/toastStore';
-import type { PlaylistRow } from '@/types/db';
+import type { PlaylistRow, TrackRow } from '@/types/db';
 
 export default function BusinessScheduler() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
@@ -49,6 +48,7 @@ export default function BusinessScheduler() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const playAction = usePlayerStore((s) => s.play);
   const businessMode = useBusinessStore((s) => s.businessMode);
 
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -58,6 +58,11 @@ export default function BusinessScheduler() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [creatingDefaults, setCreatingDefaults] = useState(false);
   const [editingDay, setEditingDay] = useState<number>(() => nowKstParts().day);
+  // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
+  const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
+  const [tracksLoading, setTracksLoading] = useState(false);
+  const [tracksError, setTracksError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   // 1분마다 현재 스케줄 다시 계산
   const [tick, setTick] = useState(0);
@@ -100,38 +105,68 @@ export default function BusinessScheduler() {
 
   // 매장 모드 ON 일 때 currentSchedule 변경 → 자동 큐 교체
   const [lastSwitchedScheduleId, setLastSwitchedScheduleId] = useState<string | null>(null);
+
+  // 1) current schedule 의 트랙 prefetch — businessMode 와 무관하게 항상 미리 로드.
+  //    user gesture 클릭 핸들러 안에서 동기 setQueue 가능 (autoplay 정책 안전).
   useEffect(() => {
-    if (!businessMode || !current) return;
+    setCurrentTracks(null);
+    setTracksError(null);
+    if (!current?.playlist_id) return;
+    setTracksLoading(true);
+    let alive = true;
+    fetchPlaylistTracks(current.playlist_id)
+      .then((tracks) => {
+        if (!alive) return;
+        const { playable } = filterPlayableTracks(tracks);
+        if (import.meta.env.DEV) {
+          console.debug('[StoreScheduler] tracks loaded count', { slot: current.slot_name, total: tracks.length, playable: playable.length });
+        }
+        setCurrentTracks(playable);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (import.meta.env.DEV) console.error('[StoreScheduler] tracks fetch failed', e);
+        setTracksError(msg);
+      })
+      .finally(() => { if (alive) setTracksLoading(false); });
+    return () => { alive = false; };
+  }, [current?.playlist_id, current?.slot_name]);
+
+  // 2) businessMode ON + schedule 전환 시 자동 큐 교체. prefetched tracks 가 있으면 즉시 사용,
+  //    없으면 fetch 후 교체. 첫 시작 시점에는 startBusinessMode 가 직접 큐를 세팅해 토스트만 분리.
+  useEffect(() => {
+    if (!businessMode || !current?.id || !current.playlist_id) return;
     if (lastSwitchedScheduleId === current.id) return;
-    if (!current.playlist_id) return;
-    // 자동 전환
+    const isInitial = lastSwitchedScheduleId === null;
     (async () => {
       try {
-        const tracks = await fetchPlaylistTracks(current.playlist_id!);
-        const { playable } = filterPlayableTracks(tracks);
-        if (playable.length === 0) return;
+        let playable: TrackRow[];
+        if (currentTracks && currentTracks.length > 0) {
+          playable = currentTracks;
+        } else {
+          const tracks = await fetchPlaylistTracks(current.playlist_id!);
+          playable = filterPlayableTracks(tracks).playable;
+        }
+        if (playable.length === 0) {
+          toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
+          return;
+        }
         const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
-        // 재생 가능한 트랙만 큐에 (무한 next() 캐스케이드 차단)
         setQueue(playable, 0, playlist);
         setRepeat('all');
         setShuffle(true);
-        const isInitial = lastSwitchedScheduleId === null;
+        playAction();
+        if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: playable.length, isInitial });
         setLastSwitchedScheduleId(current.id);
-        if (!isInitial) {
-          toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
-        }
-        void logScheduleEvent(
-          userId,
-          current.id,
-          current.playlist_id,
-          isInitial ? 'started' : 'switched',
-        );
+        if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
+        void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : '자동 전환 실패');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessMode, current?.id, current?.playlist_id]);
+  }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
 
   async function saveProfile() {
     if (!userId || !profile) return;
@@ -209,14 +244,53 @@ export default function BusinessScheduler() {
 
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
 
-  async function startBusinessMode() {
-    if (!current?.playlist_id) {
+  function startBusinessMode() {
+    const now = nowKstParts();
+    const timeStr = `${String(Math.floor(now.minutes / 60)).padStart(2, '0')}:${String(now.minutes % 60).padStart(2, '0')}`;
+    if (import.meta.env.DEV) console.debug('[StoreScheduler] start clicked', { day: now.day, time: timeStr });
+    if (!current) {
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] no active schedule');
       toast.info('지금 시간대에 활성화된 스케줄이 없어요.');
       return;
     }
-    enableForBusinessMode(); // 5초 crossfade 기본 (사용자 override 있으면 존중)
-    setBusinessMode(true);
-    setLastSwitchedScheduleId(null); // 다시 시작 → started 이벤트 기록
+    if (import.meta.env.DEV) console.debug('[StoreScheduler] active schedule found', { id: current.id, name: current.slot_name, playlistId: current.playlist_id });
+    if (!current.playlist_id) {
+      toast.info('이 스케줄에 플레이리스트가 지정되지 않았어요. 스케줄 설정에서 플레이리스트를 선택해주세요.');
+      return;
+    }
+    if (tracksLoading) {
+      toast.info('트랙을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    if (tracksError) {
+      toast.error(`트랙 로드 실패: ${tracksError}`);
+      return;
+    }
+    if (!currentTracks || currentTracks.length === 0) {
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] no playable tracks for current schedule');
+      toast.error('이 스케줄에 재생 가능한 음악이 없어요.');
+      return;
+    }
+    // user gesture 안에서 모든 player 호출을 동기로 수행 (autoplay 정책 안전).
+    setStarting(true);
+    try {
+      enableForBusinessMode();
+      const playlist = playlists.find((p) => p.id === current.playlist_id) ?? null;
+      setShuffle(true);
+      setRepeat('all');
+      setQueue(currentTracks, 0, playlist); // playerStore 내부에서 playing=true 세팅
+      playAction(); // 명시적 보강
+      setBusinessMode(true);
+      setLastSwitchedScheduleId(current.id);
+      if (import.meta.env.DEV) console.debug('[StoreScheduler] playback started', { tracks: currentTracks.length, slot: current.slot_name });
+      void logScheduleEvent(userId, current.id, current.playlist_id, 'started');
+      toast.success(`${current.slot_name} 시작 (${currentTracks.length}곡)`);
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('[StoreScheduler] audio play failed', e);
+      toast.error(e instanceof Error ? e.message : '재생 시작 실패');
+    } finally {
+      setStarting(false);
+    }
   }
 
   if (!userId) return null;
@@ -345,20 +419,36 @@ export default function BusinessScheduler() {
 
       {/* CTA */}
       {current && (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            onClick={startBusinessMode}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card hover:opacity-95"
-          >
-            <Play size={16} fill="currentColor" /> 현재 스케줄로 매장 모드 시작
-          </button>
-          <button
-            onClick={() => setBusinessMode(false)}
-            disabled={!businessMode}
-            className="btn-ghost text-sm"
-          >
-            매장 모드 끄기
-          </button>
+        <div className="space-y-1.5">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              onClick={startBusinessMode}
+              disabled={starting || tracksLoading || (currentTracks !== null && currentTracks.length === 0)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card hover:opacity-95 disabled:opacity-60"
+            >
+              <Play size={16} fill="currentColor" />
+              {starting
+                ? '시작 중…'
+                : tracksLoading
+                  ? '트랙 불러오는 중…'
+                  : `현재 스케줄로 매장 모드 시작${currentTracks ? ` (${currentTracks.length}곡)` : ''}`}
+            </button>
+            <button
+              onClick={() => setBusinessMode(false)}
+              disabled={!businessMode}
+              className="btn-ghost text-sm"
+            >
+              매장 모드 끄기
+            </button>
+          </div>
+          {tracksError && (
+            <p className="text-[11px] text-red-300">트랙 로드 실패: {tracksError}</p>
+          )}
+          {!tracksLoading && !tracksError && currentTracks?.length === 0 && (
+            <p className="text-[11px] text-yellow-300">
+              이 스케줄(<b>{current.slot_name}</b>)에 재생 가능한 음악이 없어요. 스케줄의 플레이리스트를 변경하거나 음원을 추가해주세요.
+            </p>
+          )}
         </div>
       )}
 
