@@ -151,3 +151,48 @@ export async function recommendPlaylistsByContext(
     return [];
   }
 }
+
+/**
+ * Item-based Collaborative Filtering — 0217 RPC.
+ * "이 곡 들은 사용자가 같이 들은 곡" — track 상세/공유 페이지에서 사용.
+ *
+ * @returns track_id 와 점수만 반환. 클라이언트가 fetchTracksByIds 로 트랙 정보 hydrate.
+ *          비로그인 사용자도 호출 가능 (seed track 기반이라 user 정보 불필요).
+ */
+export async function recommendCollabTracksFor(
+  seedTrackId: string,
+  limit = 12,
+): Promise<Array<{ track_id: string; score: number; co_users: number }>> {
+  try {
+    const { data, error } = await supabase.rpc('recommend_collab_tracks_for', {
+      seed_track_id: seedTrackId,
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return (data ?? []) as Array<{ track_id: string; score: number; co_users: number }>;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * User-based Collaborative Filtering — 0217 RPC.
+ * "당신을 위한 추천" — 사용자의 최근 30일 청취 이력 기반.
+ *
+ * 비로그인 시 빈 배열. 청취 이력이 적으면 (시드 트랙 < 1개) 결과 0.
+ */
+export async function recommendCollabForUser(
+  userId: string,
+  limit = 12,
+): Promise<Array<{ track_id: string; score: number }>> {
+  try {
+    const { data, error } = await supabase.rpc('recommend_collab_for_user', {
+      p_user_id: userId,
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return (data ?? []) as Array<{ track_id: string; score: number }>;
+  } catch {
+    return [];
+  }
+}
