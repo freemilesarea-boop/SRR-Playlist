@@ -119,7 +119,7 @@ export default function TrackSharePage() {
           </button>
 
           <div className="aspect-square w-40 shrink-0 overflow-hidden rounded-2xl shadow-elevated ring-1 ring-white/15 sm:w-52">
-            <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="xl" />
+            <AutoCover title={track.title} category={track.genre} imageUrl={track.cover_url} size="xl" useAbstract />
           </div>
 
           <div className="space-y-2 text-center sm:text-left">
