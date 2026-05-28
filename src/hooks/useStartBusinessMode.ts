@@ -8,6 +8,7 @@ import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
+import { captureError } from '@/lib/sentry';
 import type { TrackRow } from '@/types/db';
 
 /**
@@ -90,6 +91,12 @@ export function useStartBusinessMode() {
         return true;
       } catch (e) {
         toast.error(e instanceof Error ? e.message : '재생 시작 실패');
+        void captureError(e, {
+          scope: 'useStartBusinessMode',
+          playlistId,
+          slotLabel,
+          scheduleId,
+        });
         return false;
       }
     },

@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
+import { captureError } from '@/lib/sentry';
 
 interface Props {
   /** 값이 바뀌면 에러 상태를 자동 리셋한다 (탭 전환 시 직전 탭의 에러를 끌고 가지 않도록). */
@@ -35,6 +36,13 @@ export default class AdminErrorBoundary extends Component<Props, State> {
       // eslint-disable-next-line no-console
       console.error('[AdminErrorBoundary]', error, info.componentStack);
     }
+    // Sentry 로 전송 — 운영자 패널 한 곳이 죽으면 즉시 모니터링.
+    // DSN 미설정 / dev 면 captureError 가 silent skip.
+    void captureError(error, {
+      boundary: 'AdminErrorBoundary',
+      resetKey: this.props.resetKey,
+      componentStack: info.componentStack,
+    });
   }
 
   render() {
