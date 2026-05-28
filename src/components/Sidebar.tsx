@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { LogoMark } from '@/components/Logo';
+import BrandLogo from '@/components/BrandLogo';
 
 const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
   { to: '/', label: '홈', Icon: Home, end: true },
@@ -28,7 +28,7 @@ export default function Sidebar() {
       {/* Brand — DEUDDA Product spec: 로고 마크 + "DEUDDA." (영문 wordmark, period 포함) */}
       <div className="px-5 pt-5 pb-4">
         <Link to="/" className="inline-flex items-center gap-2.5 text-white group">
-          <LogoMark size={28} className="transition-transform group-hover:scale-105" />
+          <BrandLogo size={28} className="transition-transform group-hover:scale-105" fallbackColorClass="text-white" />
           <span className="text-[17px] font-extrabold tracking-tight">DEUDDA<span className="text-accent">.</span></span>
         </Link>
       </div>
