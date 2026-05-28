@@ -139,6 +139,9 @@ export default function BusinessScheduler() {
     if (!businessMode || !current?.id || !current.playlist_id) return;
     if (lastSwitchedScheduleId === current.id) return;
     const isInitial = lastSwitchedScheduleId === null;
+    // 가드: 매장 모드 off / 컴포넌트 언마운트 / 도중에 schedule 바뀜 → setQueue/play 발화 차단
+    let alive = true;
+    const targetScheduleId = current.id;
     (async () => {
       try {
         let playable: TrackRow[];
@@ -148,6 +151,10 @@ export default function BusinessScheduler() {
           const tracks = await fetchPlaylistTracks(current.playlist_id!);
           playable = filterPlayableTracks(tracks).playable;
         }
+        // 비동기 fetch 후에도 여전히 유효한 상태인지 재확인
+        if (!alive) return;
+        if (!useBusinessStore.getState().businessMode) return; // 모드 off 됐으면 무시
+        if (current.id !== targetScheduleId) return; // 스케줄이 그 사이 바뀌었으면 무시
         if (playable.length === 0) {
           toast.error(`${current.slot_name}: 재생 가능한 음악이 없어요.`);
           return;
@@ -162,9 +169,10 @@ export default function BusinessScheduler() {
         if (!isInitial) toast.success(`${current.slot_name} 플레이리스트로 자동 전환했어요`);
         void logScheduleEvent(userId, current.id, current.playlist_id, isInitial ? 'started' : 'switched');
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : '자동 전환 실패');
+        if (alive) toast.error(e instanceof Error ? e.message : '자동 전환 실패');
       }
     })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessMode, current?.id, current?.playlist_id, currentTracks]);
 
