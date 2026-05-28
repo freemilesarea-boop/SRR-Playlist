@@ -27,9 +27,9 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
       {/* Brand — DEUDDA Product spec: 로고 마크 + "DEUDDA." (영문 wordmark, period 포함) */}
       <div className="px-5 pt-5 pb-4">
-        <Link to="/" className="inline-flex items-center gap-2.5 text-white group">
+        <Link to="/" className="inline-flex items-center gap-2.5 group">
           <BrandLogo size={28} className="transition-transform group-hover:scale-105" fallbackColorClass="text-white" />
-          <span className="text-[17px] font-extrabold tracking-tight">DEUDDA<span className="text-accent">.</span></span>
+          <span className="text-[17px] font-extrabold tracking-tight text-black">DEUDDA<span className="text-accent">.</span></span>
         </Link>
       </div>
 
