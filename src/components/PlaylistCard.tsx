@@ -29,12 +29,13 @@ export default function PlaylistCard({
   return (
     <Link to={`/playlist/${playlist.id}`} className="group block">
       <div className="space-y-2.5">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-1 group-hover:shadow-lift">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-bg-card shadow-card ring-1 ring-line/10 transition duration-smooth ease-emphasized group-hover:-translate-y-0.5 group-hover:shadow-lift">
           <AutoCover
             title={playlist.title}
             category={playlist.category}
             imageUrl={coverUrl ?? playlist.thumbnail_url}
             size={coverSize}
+            useAbstract
           />
 
           {/* 내부 light highlight */}
