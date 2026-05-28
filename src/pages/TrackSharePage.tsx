@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { applyDemoMode } from '@/lib/demoMode';
 import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
+import { recommendCollabTracksFor } from '@/lib/recommendationApi';
 import TrackStateBadge from '@/components/TrackStateBadge';
 import { usePlayerStore } from '@/store/playerStore';
 import { gradientStyle } from '@/lib/cover';
@@ -48,20 +49,43 @@ export default function TrackSharePage() {
       }
       const t = applyDemoMode([data as TrackRow])[0];
       setTrack(t);
-      // 같은 장르 추천 (main_genre 기준)
-      const mainGenre = (data as { main_genre: string | null }).main_genre;
-      if (mainGenre) {
+      // 추천 전략 — 1차: collaborative filtering (청취 행동 기반)
+      //            2차: main_genre fallback (CF 결과 적을 때)
+      const collab = await recommendCollabTracksFor(t.id, 6);
+      let recommended: TrackRow[] = [];
+      if (collab.length >= 3) {
+        // CF 결과로 트랙 hydrate — score 순서 보존
         const { data: rel } = await supabase
           .from('tracks')
           .select('*')
-          .eq('main_genre', mainGenre)
-          .neq('id', t.id)
+          .in('id', collab.map((c) => c.track_id))
           .eq('visibility_status', 'approved')
-          .is('removed_at', null)
-          .not('cover_url', 'is', null)
-          .limit(6);
-        if (alive) setRelated(applyDemoMode((rel ?? []) as TrackRow[]));
+          .is('removed_at', null);
+        if (rel) {
+          // score desc 정렬 유지
+          const byId = new Map((rel as TrackRow[]).map((r) => [r.id, r]));
+          recommended = collab
+            .map((c) => byId.get(c.track_id))
+            .filter((r): r is TrackRow => !!r);
+        }
       }
+      // CF 결과 부족 → main_genre fallback
+      if (recommended.length < 3) {
+        const mainGenre = (data as { main_genre: string | null }).main_genre;
+        if (mainGenre) {
+          const { data: rel } = await supabase
+            .from('tracks')
+            .select('*')
+            .eq('main_genre', mainGenre)
+            .neq('id', t.id)
+            .eq('visibility_status', 'approved')
+            .is('removed_at', null)
+            .not('cover_url', 'is', null)
+            .limit(6);
+          recommended = (rel ?? []) as TrackRow[];
+        }
+      }
+      if (alive) setRelated(applyDemoMode(recommended));
       setLoading(false);
     })();
     return () => {
@@ -175,10 +199,10 @@ export default function TrackSharePage() {
         </div>
       )}
 
-      {/* 같은 장르 추천 */}
+      {/* 추천 — 1차 collab filtering, fallback main_genre */}
       {related.length > 0 && (
         <section className="space-y-3 px-4 pt-6 sm:px-6">
-          <h2 className="text-lg font-bold tracking-tight">같은 장르 추천</h2>
+          <h2 className="text-lg font-bold tracking-tight">이런 곡 어때요</h2>
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:-mx-6 sm:px-6">
             {related.map((t) => {
               const state = getTrackPlaybackState(t);
