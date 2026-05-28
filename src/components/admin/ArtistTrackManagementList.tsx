@@ -1,6 +1,8 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
-import { adminListArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+import { adminListArtistTracks, adminCountArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+
+const PAGE_SIZE = 100;
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import AutoCover from '@/components/AutoCover';
@@ -67,6 +69,8 @@ const PAYOUT_TONE: Record<string, string> = {
 
 export default function ArtistTrackManagementList({ removedView = false }: { removedView?: boolean } = {}) {
   const [rows, setRows] = useState<AdminTrackRow[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,24 +157,50 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     }
   }
 
+  const requestSeqRef = useRef(0);
+  const filterKey = `${removedView ? 'removed' : status || 'all'}|${search}`;
+
   async function load() {
     setLoading(true);
     setError(null);
+    const seq = ++requestSeqRef.current;
     try {
-      const data = await adminListArtistTracks({
-        status: removedView ? 'removed' : status || undefined,
-        search: search || undefined,
-      });
-      // 음원 관리: removed 제외 / 삭제 음원: removed 만
-      const filtered = removedView
-        ? data.filter((r) => r.release_status === 'removed')
-        : data.filter((r) => r.release_status !== 'removed');
-      setRows(filtered);
-      setSelected(new Set());
+      const queryStatus = removedView ? 'removed' : status || undefined;
+      const querySearch = search || undefined;
+      const [data, count] = await Promise.all([
+        adminListArtistTracks({ status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset: 0 }),
+        adminCountArtistTracks({ status: queryStatus, search: querySearch }),
+      ]);
+      if (seq !== requestSeqRef.current) return; // 더 최신 요청이 들어오면 폐기
+      setRows(data);
+      setTotal(count);
+      // 선택은 보존 — 페이지 이동/필터 변경 후에도 일관 유지 (id Set 기반)
     } catch (e) {
+      if (seq !== requestSeqRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
+    }
+  }
+
+  async function loadMore() {
+    if (loading || loadingMore || rows.length >= total) return;
+    setLoadingMore(true);
+    const seq = requestSeqRef.current; // 추가 로드는 현재 요청 시퀀스 유지
+    try {
+      const queryStatus = removedView ? 'removed' : status || undefined;
+      const querySearch = search || undefined;
+      const more = await adminListArtistTracks({
+        status: queryStatus, search: querySearch, limit: PAGE_SIZE, offset: rows.length,
+      });
+      if (seq !== requestSeqRef.current) return;
+      // 중복 방지 — 이미 있는 id 는 스킵
+      const have = new Set(rows.map((r) => r.track_id));
+      setRows((prev) => [...prev, ...more.filter((r) => !have.has(r.track_id))]);
+    } catch (e) {
+      toast.error(`추가 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -278,6 +308,25 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
+  // 필터(status/search/removedView)가 바뀌면 선택 초기화 — 보이지 않는 곡 잠금 방지
+  useEffect(() => {
+    setSelected(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  // 하단 sentinel — 무한 스크롤 추가 로드
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMore = useCallback(() => { void loadMore(); }, [rows.length, total, loading, loadingMore, status, search, removedView]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) onLoadMore();
+    }, { rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onLoadMore]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -286,9 +335,16 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
             <Music size={16} className="text-accent" /> {removedView ? '삭제 음원' : '음원 관리'}
           </h2>
           <p className="text-xs text-ink-mute">
-            {removedView
-              ? `${rows.length}건 · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출`
-              : `${rows.length}건 · release_status='released' 인 트랙만 정산 대상`}
+            {(() => {
+              const fmt = (n: number) => n.toLocaleString('ko-KR');
+              const head = total > rows.length
+                ? `${fmt(rows.length)} / ${fmt(total)}건 로드`
+                : `총 ${fmt(total || rows.length)}건`;
+              const suffix = removedView
+                ? ' · 관리자가 삭제/공개중단(removed)한 음원 · 서비스 전역 미노출'
+                : " · release_status='released' 인 트랙만 정산 대상";
+              return head + suffix;
+            })()}
           </p>
         </div>
         <button
@@ -592,6 +648,17 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           </table>
         </div>
       </div>
+
+      {/* 무한 스크롤 sentinel + 추가 로드 상태 */}
+      {!loading && rows.length > 0 && (
+        <div ref={sentinelRef} className="flex items-center justify-center py-4 text-xs text-ink-mute">
+          {loadingMore
+            ? <span className="inline-flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> 추가 로드 중…</span>
+            : rows.length < total
+              ? <button onClick={onLoadMore} className="rounded-full bg-bg-card px-3 py-1.5 font-semibold ring-1 ring-line/10 hover:bg-bg-hover">더 불러오기 ({rows.length.toLocaleString('ko-KR')} / {total.toLocaleString('ko-KR')})</button>
+              : <span>모든 곡 로드 완료 · {total.toLocaleString('ko-KR')}건</span>}
+        </div>
+      )}
 
       {delModal && (
         <div

@@ -1208,6 +1208,19 @@ export async function adminListArtistTracks(opts?: {
   return (data ?? []) as AdminTrackRow[];
 }
 
+/** 동일 필터 기준 전체 곡 수 (페이지네이션 표시용). */
+export async function adminCountArtistTracks(opts?: {
+  status?: Parameters<typeof adminListArtistTracks>[0] extends { status?: infer S } | undefined ? S : never;
+  search?: string;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_artist_tracks_count', {
+    p_status: opts?.status || null,
+    p_search: opts?.search || null,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export interface BulkDeleteResult {
   deleted_count: number;
   skipped_count: number;
