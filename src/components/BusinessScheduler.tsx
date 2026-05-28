@@ -526,12 +526,14 @@ export default function BusinessScheduler() {
             <ul className="space-y-2">
               {todaySchedules.map((s) => {
                 const overlap = overlaps.some((o) => o.id === s.id);
+                const isCurrent = current?.id === s.id;
                 return (
                   <SlotRow
                     key={s.id}
                     schedule={s}
                     playlists={playlists}
                     overlap={overlap}
+                    isCurrent={isCurrent}
                     onUpdate={(p) => handleUpdate(s.id, p)}
                     onDelete={() => handleDelete(s.id)}
                   />
@@ -611,12 +613,14 @@ function SlotRow({
   schedule,
   playlists,
   overlap,
+  isCurrent,
   onUpdate,
   onDelete,
 }: {
   schedule: BusinessSchedule;
   playlists: PlaylistRow[];
   overlap: boolean;
+  isCurrent?: boolean;
   onUpdate: (patch: Partial<BusinessSchedule>) => void;
   onDelete: () => void;
 }) {
@@ -624,49 +628,62 @@ function SlotRow({
   const others = playlists.filter((p) => !p.is_business_only);
   return (
     <li
-      className={`space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ${
-        overlap ? 'ring-red-400/40' : 'ring-line/10'
+      className={`relative space-y-2 overflow-hidden rounded-xl p-3 ring-1 transition duration-smooth ease-emphasized ${
+        overlap
+          ? 'bg-bg-soft ring-red-400/40'
+          : isCurrent
+            ? 'bg-accent/[0.06] ring-accent/30'
+            : 'bg-bg-soft ring-line/10 hover:ring-line/20'
       } ${!schedule.is_active ? 'opacity-60' : ''}`}
     >
+      {/* DEUDDA — 활성 슬롯 좌측 violet bar */}
+      {isCurrent && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-accent" />
+      )}
       <div className="flex items-center gap-2">
+        {isCurrent && (
+          <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-accent">
+            NOW
+          </span>
+        )}
         <input
           value={schedule.slot_name}
           onChange={(e) => onUpdate({ slot_name: e.target.value })}
-          className="input flex-1 py-1.5 text-sm"
+          className="input flex-1 py-1.5 text-sm font-semibold"
           placeholder="시간대 이름"
         />
         <button
           onClick={() => onUpdate({ is_active: !schedule.is_active })}
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+          className={`shrink-0 rounded-full px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-wider transition ${
             schedule.is_active
-              ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/30'
-              : 'bg-bg-hover text-ink-mute'
+              ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25'
+              : 'bg-bg-hover text-ink-mute hover:text-ink'
           }`}
         >
-          {schedule.is_active ? '활성' : '비활성'}
+          {schedule.is_active ? 'ACTIVE' : 'OFF'}
         </button>
         <button
           onClick={onDelete}
           aria-label="삭제"
-          className="shrink-0 rounded-full p-1.5 text-red-300 hover:bg-red-500/10"
+          className="shrink-0 rounded-full p-1.5 text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
         >
           <Trash2 size={14} />
         </button>
       </div>
 
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 font-mono text-xs text-ink-mute">
         <input
           type="time"
           value={schedule.start_time.slice(0, 5)}
           onChange={(e) => onUpdate({ start_time: `${e.target.value}:00` })}
-          className="input py-1.5 text-xs"
+          className="input py-1.5 text-xs font-mono"
         />
         <ChevronRight size={12} className="shrink-0 text-ink-dim" />
         <input
           type="time"
           value={schedule.end_time.slice(0, 5)}
           onChange={(e) => onUpdate({ end_time: `${e.target.value}:00` })}
-          className="input py-1.5 text-xs"
+          className="input py-1.5 text-xs font-mono"
         />
       </div>
 

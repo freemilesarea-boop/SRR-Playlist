@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
+import TopBar from './TopBar';
 import TrialBanner from './TrialBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
@@ -26,8 +27,8 @@ export default function AppShell() {
     <div className="flex min-h-screen flex-col bg-bg pt-safe">
       <Sidebar />
 
-      {/* 상단 우측 테마 토글 — lg+ 에선 사이드바 폭만큼 우측으로 */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe sm:px-6 lg:pl-60">
+      {/* 모바일 전용 상단 우측 테마 토글 — lg+ 에서는 TopBar 안에 통합돼 숨김 */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe sm:px-6 lg:hidden">
         <div className="pointer-events-auto pt-2.5">
           <ThemeQuickToggle />
         </div>
@@ -35,6 +36,7 @@ export default function AppShell() {
 
       {/* main + footer 영역을 사이드바 우측 영역에 두고, 그 안에서 max-w 컨텐츠를 mx-auto 로 중앙 정렬 */}
       <div className="flex-1 lg:pl-60">
+        <TopBar />
         <main className="mx-auto w-full max-w-[1500px]">
           <div className="px-4 pt-3 sm:px-6">
             <TrialBanner />
