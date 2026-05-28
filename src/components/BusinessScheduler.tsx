@@ -455,6 +455,8 @@ export default function BusinessScheduler() {
                 open_time: e.target.value || null,
               }))
             }
+            onClick={openTimePicker}
+            onFocus={openTimePicker}
             className="input text-sm"
             placeholder="영업 시작"
           />
@@ -467,6 +469,8 @@ export default function BusinessScheduler() {
                 close_time: e.target.value || null,
               }))
             }
+            onClick={openTimePicker}
+            onFocus={openTimePicker}
             className="input text-sm"
             placeholder="영업 종료"
           />
@@ -774,6 +778,8 @@ function SlotRow({
           type="time"
           value={schedule.start_time.slice(0, 5)}
           onChange={(e) => onUpdate({ start_time: `${e.target.value}:00` })}
+          onClick={openTimePicker}
+          onFocus={openTimePicker}
           className="input py-1.5 text-xs font-mono"
         />
         <ChevronRight size={12} className="shrink-0 text-ink-dim" />
@@ -781,6 +787,8 @@ function SlotRow({
           type="time"
           value={schedule.end_time.slice(0, 5)}
           onChange={(e) => onUpdate({ end_time: `${e.target.value}:00` })}
+          onClick={openTimePicker}
+          onFocus={openTimePicker}
           className="input py-1.5 text-xs font-mono"
         />
       </div>
@@ -812,6 +820,18 @@ function SlotRow({
       </select>
     </li>
   );
+}
+
+/** 시간 input 클릭 즉시 picker 띄우기 — 작은 시계 아이콘만 동작하는 기본 UX 보완. */
+function openTimePicker(e: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) {
+  const el = e.currentTarget;
+  if ('showPicker' in el && typeof (el as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+    try {
+      (el as HTMLInputElement & { showPicker: () => void }).showPicker();
+    } catch {
+      /* picker 표시 거절 시(브라우저별 정책) 무시 — 기본 동작 fallback */
+    }
+  }
 }
 
 function PresetChip({
