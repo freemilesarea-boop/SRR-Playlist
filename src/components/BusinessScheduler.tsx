@@ -57,7 +57,8 @@ export default function BusinessScheduler() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [creatingDefaults, setCreatingDefaults] = useState(false);
-  const [editingDay, setEditingDay] = useState<number>(() => nowKstParts().day);
+  // 다중 요일 선택 — 기본값: 오늘 한 요일만.
+  const [selectedDays, setSelectedDays] = useState<number[]>(() => [nowKstParts().day]);
   // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
   const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
   const [tracksLoading, setTracksLoading] = useState(false);
@@ -215,19 +216,54 @@ export default function BusinessScheduler() {
   }
 
   async function handleAddSlot() {
-    if (!userId) return;
+    if (!userId || selectedDays.length === 0) return;
     try {
-      await createSchedule({
-        user_id: userId,
-        day_of_week: editingDay,
-        slot_name: '새 시간대',
-        start_time: '12:00',
-        end_time: '14:00',
-        is_active: true,
-      });
+      await Promise.all(
+        selectedDays.map((day) =>
+          createSchedule({
+            user_id: userId,
+            day_of_week: day,
+            slot_name: '새 시간대',
+            start_time: '12:00',
+            end_time: '14:00',
+            is_active: true,
+          }),
+        ),
+      );
       await load();
+      if (selectedDays.length > 1) {
+        toast.success(`${selectedDays.length}개 요일에 시간대를 추가했어요.`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '추가 실패');
+    }
+  }
+
+  function toggleDay(day: number) {
+    setSelectedDays((prev) => {
+      if (prev.includes(day)) {
+        // 최소 1개 보장 — 마지막 1개는 해제 불가
+        if (prev.length === 1) return prev;
+        return prev.filter((d) => d !== day);
+      }
+      return [...prev, day].sort((a, b) => a - b);
+    });
+  }
+
+  function setDaysPreset(preset: 'today' | 'all' | 'weekday' | 'weekend') {
+    switch (preset) {
+      case 'today':
+        setSelectedDays([nowKstParts().day]);
+        return;
+      case 'all':
+        setSelectedDays([0, 1, 2, 3, 4, 5, 6]);
+        return;
+      case 'weekday':
+        setSelectedDays([1, 2, 3, 4, 5]);
+        return;
+      case 'weekend':
+        setSelectedDays([0, 6]);
+        return;
     }
   }
 
@@ -328,9 +364,17 @@ export default function BusinessScheduler() {
   if (!userId) return null;
 
   const isBusinessPlan = profileSub === 'business';
-  const todaySchedules = schedules
-    .filter((s) => s.day_of_week === editingDay)
-    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const todayDayIdx = nowKstParts().day;
+  const isPresetToday = selectedDays.length === 1 && selectedDays[0] === todayDayIdx;
+  const isPresetAll = selectedDays.length === 7;
+  const isPresetWeekday =
+    selectedDays.length === 5 && [1, 2, 3, 4, 5].every((d) => selectedDays.includes(d));
+  const isPresetWeekend =
+    selectedDays.length === 2 && [0, 6].every((d) => selectedDays.includes(d));
+  const addLabel =
+    selectedDays.length > 1
+      ? `${selectedDays.length}개 요일에 일괄 추가`
+      : `${DAY_LABELS[selectedDays[0]]}요일에 추가`;
 
   return (
     <section className="space-y-5 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10">
@@ -489,32 +533,43 @@ export default function BusinessScheduler() {
         <Empty />
       ) : (
         <section className="space-y-3">
-          <header className="flex items-center justify-between">
+          <header className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">
               요일별 스케줄
             </h3>
             <button
               onClick={handleAddSlot}
-              className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-3 py-1 text-[11px] hover:bg-bg-hover"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold text-accent ring-1 ring-accent/25 hover:bg-accent/20"
             >
-              <Plus size={11} /> {DAY_LABELS[editingDay]}요일에 추가
+              <Plus size={11} /> {addLabel}
             </button>
           </header>
 
-          {/* 요일 탭 */}
+          {/* 빠른 선택 프리셋 */}
+          <div className="flex flex-wrap gap-1.5">
+            <PresetChip label="오늘" active={isPresetToday} onClick={() => setDaysPreset('today')} />
+            <PresetChip label="매일" active={isPresetAll} onClick={() => setDaysPreset('all')} />
+            <PresetChip label="주중 (월–금)" active={isPresetWeekday} onClick={() => setDaysPreset('weekday')} />
+            <PresetChip label="주말 (토·일)" active={isPresetWeekend} onClick={() => setDaysPreset('weekend')} />
+          </div>
+
+          {/* 요일 칩 — 다중 토글 */}
           <div className="-mx-1 flex gap-1 overflow-x-auto pb-1 no-scrollbar">
             {DAY_LABELS.map((label, idx) => {
-              const isToday = nowKstParts().day === idx;
+              const isToday = todayDayIdx === idx;
+              const selected = selectedDays.includes(idx);
               const count = schedules.filter((s) => s.day_of_week === idx).length;
               return (
                 <button
                   key={idx}
-                  onClick={() => setEditingDay(idx)}
+                  onClick={() => toggleDay(idx)}
+                  aria-pressed={selected}
                   className={`shrink-0 rounded-2xl px-3 py-2 text-xs font-semibold transition ${
-                    editingDay === idx
+                    selected
                       ? 'bg-accent text-bg'
                       : 'bg-bg-soft text-ink-mute hover:text-ink'
-                  } ${isToday && editingDay !== idx ? 'ring-1 ring-accent/40' : ''}`}
+                  } ${isToday && !selected ? 'ring-1 ring-accent/40' : ''}`}
+                  title={DAY_LABELS_FULL[idx]}
                 >
                   {label}
                   {count > 0 && (
@@ -525,29 +580,64 @@ export default function BusinessScheduler() {
             })}
           </div>
 
-          {/* 슬롯 리스트 */}
-          {todaySchedules.length === 0 ? (
+          <p className="text-[11px] text-ink-dim">
+            여러 요일을 동시에 선택하면 <b className="text-ink-mute">+ 추가</b> 가 선택한 모든 요일에 같은 시간대를 한번에 만들어줘요.
+            슬롯 편집은 각 요일별로 따로 적용됩니다.
+          </p>
+
+          {/* 슬롯 리스트 — 선택된 요일별 섹션 */}
+          {selectedDays.every((day) => schedules.filter((s) => s.day_of_week === day).length === 0) ? (
             <div className="rounded-xl bg-bg-soft p-4 text-center text-xs text-ink-mute">
-              {DAY_LABELS_FULL[editingDay]} 스케줄이 없어요. + 버튼으로 추가하세요.
+              선택한 요일에 스케줄이 없어요. <b className="text-ink-mute">+ {addLabel}</b> 로 추가하세요.
             </div>
           ) : (
-            <ul className="space-y-2">
-              {todaySchedules.map((s) => {
-                const overlap = overlaps.some((o) => o.id === s.id);
-                const isCurrent = current?.id === s.id;
+            <div className="space-y-4">
+              {selectedDays.map((day) => {
+                const daySchedules = schedules
+                  .filter((s) => s.day_of_week === day)
+                  .sort((a, b) => a.start_time.localeCompare(b.start_time));
                 return (
-                  <SlotRow
-                    key={s.id}
-                    schedule={s}
-                    playlists={playlists}
-                    overlap={overlap}
-                    isCurrent={isCurrent}
-                    onUpdate={(p) => handleUpdate(s.id, p)}
-                    onDelete={() => handleDelete(s.id)}
-                  />
+                  <div key={day} className="space-y-2">
+                    {selectedDays.length > 1 && (
+                      <div className="flex items-center gap-2 px-1">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] ${
+                            day === todayDayIdx ? 'text-accent ring-1 ring-accent/30' : 'text-ink-mute'
+                          }`}
+                        >
+                          {DAY_LABELS_FULL[day]}
+                          {day === todayDayIdx && <span className="ml-0.5 normal-case tracking-normal">· 오늘</span>}
+                        </span>
+                        <span className="text-[10px] text-ink-dim">{daySchedules.length}개 시간대</span>
+                      </div>
+                    )}
+                    {daySchedules.length === 0 ? (
+                      <div className="rounded-xl bg-bg-soft/60 p-3 text-center text-[11px] text-ink-dim ring-1 ring-line/5">
+                        시간대 없음
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {daySchedules.map((s) => {
+                          const overlap = overlaps.some((o) => o.id === s.id);
+                          const isCurrent = current?.id === s.id;
+                          return (
+                            <SlotRow
+                              key={s.id}
+                              schedule={s}
+                              playlists={playlists}
+                              overlap={overlap}
+                              isCurrent={isCurrent}
+                              onUpdate={(p) => handleUpdate(s.id, p)}
+                              onDelete={() => handleDelete(s.id)}
+                            />
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
 
           {overlaps.length > 0 && (
@@ -721,6 +811,30 @@ function SlotRow({
         )}
       </select>
     </li>
+  );
+}
+
+function PresetChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+        active
+          ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+          : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
