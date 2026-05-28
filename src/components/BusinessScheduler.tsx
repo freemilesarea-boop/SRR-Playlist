@@ -117,21 +117,86 @@ export default function BusinessScheduler() {
   }, [storeProfile]);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // 간단 모델 — 카테고리 1개 + 3 슬롯(오전/오후/저녁)
+  // 모드: unified(매일 같음) — 카테고리 1개 + 3슬롯
+  //       split(주중·주말 별도) — 주중 3슬롯 + 주말 3슬롯 (총 6슬롯)
+  const [mode, setMode] = useState<'unified' | 'split'>('unified');
   const [category, setCategory] = useState<Category>('all');
   const [slots, setSlots] = useState<Record<SlotName, SimpleSlot>>(() => defaultSlots(null));
+  const [weekdaySlots, setWeekdaySlots] = useState<Record<SlotName, SimpleSlot>>(() => defaultSlots(null));
+  const [weekendSlots, setWeekendSlots] = useState<Record<SlotName, SimpleSlot>>(() => defaultSlots(null));
   const [savingSimple, setSavingSimple] = useState(false);
   const [synced, setSynced] = useState(false);
 
-  // schedules → 간단 폼 prefill (최초 + profile 시간/플리 변경시)
+  // schedules → 폼 prefill (최초 + profile 시간/플리 변경시)
+  // split mode 감지: 같은 slot_name 으로 weekday row + weekend row 모두 있는 경우
   useEffect(() => {
     if (loading) return;
     const base = defaultSlots(storeProfile);
+
+    function pickFor(daySet: Set<number>, name: SlotName): SimpleSlot {
+      const row = schedules.find(
+        (s) =>
+          s.slot_name === name &&
+          (() => {
+            const ds = effectiveDays(s);
+            // row 의 days 가 daySet 의 부분집합이면 매칭 (정확 일치 우선이지만 호환)
+            return ds.length > 0 && ds.every((d) => daySet.has(d));
+          })(),
+      );
+      if (row) {
+        return {
+          start: row.start_time.slice(0, 5),
+          end: row.end_time.slice(0, 5),
+          playlist_id: row.playlist_id,
+        };
+      }
+      return { ...base[name], playlist_id: autoMatchPlaylist(name, playlists) };
+    }
+
+    const weekdaySet = new Set([1, 2, 3, 4, 5]);
+    const weekendSet = new Set([0, 6]);
+
+    // split 감지: 같은 슬롯에서 weekday + weekend 행이 둘 다 존재하는지
+    const hasWeekday = SLOT_NAMES.some((n) =>
+      schedules.some(
+        (s) =>
+          s.slot_name === n &&
+          effectiveDays(s).length > 0 &&
+          effectiveDays(s).every((d) => weekdaySet.has(d)) &&
+          !effectiveDays(s).some((d) => weekendSet.has(d)),
+      ),
+    );
+    const hasWeekend = SLOT_NAMES.some((n) =>
+      schedules.some(
+        (s) =>
+          s.slot_name === n &&
+          effectiveDays(s).length > 0 &&
+          effectiveDays(s).every((d) => weekendSet.has(d)) &&
+          !effectiveDays(s).some((d) => weekdaySet.has(d)),
+      ),
+    );
+    const isSplit = hasWeekday && hasWeekend;
+    setMode(isSplit ? 'split' : 'unified');
+
+    if (isSplit) {
+      setWeekdaySlots({
+        오전: pickFor(weekdaySet, '오전'),
+        오후: pickFor(weekdaySet, '오후'),
+        저녁: pickFor(weekdaySet, '저녁'),
+      });
+      setWeekendSlots({
+        오전: pickFor(weekendSet, '오전'),
+        오후: pickFor(weekendSet, '오후'),
+        저녁: pickFor(weekendSet, '저녁'),
+      });
+    }
+
+    // unified 분기는 기존 그대로 (split 라도 일단 unified state 도 채워둠 — 모드 전환 시 시드 값)
     const morning = schedules.find((s) => s.slot_name === '오전');
     const afternoon = schedules.find((s) => s.slot_name === '오후');
     const evening = schedules.find((s) => s.slot_name === '저녁');
     const first = morning || afternoon || evening;
-    if (first) {
+    if (!isSplit && first) {
       setCategory(categoryFromDays(effectiveDays(first)));
     }
     setSlots({
@@ -174,47 +239,94 @@ export default function BusinessScheduler() {
     }
   }
 
-  /** 3-슬롯 저장 — 기존 스케줄 전체 삭제 후 오전/오후/저녁 3행 insert */
+  /** 시간대 저장 — mode 에 따라 3행(unified) 또는 6행(split) insert */
   async function saveSimpleSchedule() {
     if (!userId || savingSimple) return;
-    for (const name of SLOT_NAMES) {
-      const s = slots[name];
-      if (s.start >= s.end) {
-        toast.info(`${name} 종료 시간은 시작 시간보다 늦어야 해요.`);
-        return;
+    // 검증: unified or split 의 각 슬롯 시간 정합성
+    const groups: Array<{ label: string; src: Record<SlotName, SimpleSlot> }> =
+      mode === 'split'
+        ? [
+            { label: '주중', src: weekdaySlots },
+            { label: '주말', src: weekendSlots },
+          ]
+        : [{ label: '', src: slots }];
+    for (const g of groups) {
+      for (const name of SLOT_NAMES) {
+        const s = g.src[name];
+        if (s.start >= s.end) {
+          toast.info(`${g.label ? g.label + ' ' : ''}${name} 종료 시간은 시작 시간보다 늦어야 해요.`);
+          return;
+        }
       }
     }
+
     const hasOldData = schedules.length > 0;
+    const totalNew = mode === 'split' ? 6 : 3;
     const msg = hasOldData
-      ? `기존 시간대 ${schedules.length}개를 모두 새 3개 슬롯(오전·오후·저녁)으로 교체할까요?`
-      : '오전·오후·저녁 3개 시간대를 저장할까요?';
+      ? `기존 시간대 ${schedules.length}개를 모두 새 ${totalNew}개 슬롯(${
+          mode === 'split' ? '주중·주말 × 오전·오후·저녁' : '오전·오후·저녁'
+        })으로 교체할까요?`
+      : `${mode === 'split' ? '주중·주말 별도' : '오전·오후·저녁'} ${totalNew}개 시간대를 저장할까요?`;
     if (!confirm(msg)) return;
 
     setSavingSimple(true);
     try {
-      const days = categoryToDays(category);
       const { error: delError } = await supabase
         .from('business_music_schedules')
         .delete()
         .eq('user_id', userId);
       if (delError) throw delError;
-      await Promise.all(
-        SLOT_NAMES.map((name) =>
-          createSchedule({
-            user_id: userId,
-            days_of_week: days,
-            slot_name: name,
-            start_time: `${slots[name].start}:00`,
-            end_time: `${slots[name].end}:00`,
-            playlist_id: slots[name].playlist_id,
-            is_active: true,
-          }),
-        ),
-      );
+
+      if (mode === 'split') {
+        const inserts: Array<Promise<unknown>> = [];
+        const weekdayDays = [1, 2, 3, 4, 5];
+        const weekendDays = [0, 6];
+        for (const name of SLOT_NAMES) {
+          inserts.push(
+            createSchedule({
+              user_id: userId,
+              days_of_week: weekdayDays,
+              slot_name: name,
+              start_time: `${weekdaySlots[name].start}:00`,
+              end_time: `${weekdaySlots[name].end}:00`,
+              playlist_id: weekdaySlots[name].playlist_id,
+              is_active: true,
+            }),
+          );
+          inserts.push(
+            createSchedule({
+              user_id: userId,
+              days_of_week: weekendDays,
+              slot_name: name,
+              start_time: `${weekendSlots[name].start}:00`,
+              end_time: `${weekendSlots[name].end}:00`,
+              playlist_id: weekendSlots[name].playlist_id,
+              is_active: true,
+            }),
+          );
+        }
+        await Promise.all(inserts);
+      } else {
+        const days = categoryToDays(category);
+        await Promise.all(
+          SLOT_NAMES.map((name) =>
+            createSchedule({
+              user_id: userId,
+              days_of_week: days,
+              slot_name: name,
+              start_time: `${slots[name].start}:00`,
+              end_time: `${slots[name].end}:00`,
+              playlist_id: slots[name].playlist_id,
+              is_active: true,
+            }),
+          ),
+        );
+      }
+
       // 자동 전환 리셋 → 다음 사이클에 새 플리로 부드럽게 전환
       setLastSwitchedScheduleId(null);
       await refresh(userId);
-      toast.success('시간대 3개를 적용했어요.');
+      toast.success(`시간대 ${totalNew}개를 적용했어요.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '저장 실패');
     } finally {
@@ -343,42 +455,92 @@ export default function BusinessScheduler() {
           </div>
         )}
 
-        {/* 카테고리 라디오 */}
+        {/* 운영 모드 토글 — 매일 같음 vs 주중·주말 별도 */}
         <div className="space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-dim">적용 요일</p>
-          <div className="grid grid-cols-3 gap-2">
-            <CategoryButton label="매일" sub="일~토" active={category === 'all'} onClick={() => setCategory('all')} />
-            <CategoryButton label="주중" sub="월~금" active={category === 'weekday'} onClick={() => setCategory('weekday')} />
-            <CategoryButton label="주말" sub="토·일" active={category === 'weekend'} onClick={() => setCategory('weekend')} />
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-dim">운영 모드</p>
+          <div className="grid grid-cols-2 gap-2">
+            <CategoryButton
+              label="매일 같음"
+              sub="단일 3슬롯"
+              active={mode === 'unified'}
+              onClick={() => setMode('unified')}
+            />
+            <CategoryButton
+              label="주중·주말 별도"
+              sub="2×3슬롯 = 6"
+              active={mode === 'split'}
+              onClick={() => setMode('split')}
+            />
           </div>
         </div>
 
-        {/* 3 슬롯 카드 */}
-        <div className="space-y-2">
-          {SLOT_NAMES.map((name) => (
-            <SimpleSlotCard
-              key={name}
-              name={name}
-              data={slots[name]}
+        {mode === 'unified' ? (
+          <>
+            {/* unified: 카테고리 라디오 (매일/주중/주말 중 택1) */}
+            <div className="space-y-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-dim">적용 요일</p>
+              <div className="grid grid-cols-3 gap-2">
+                <CategoryButton label="매일" sub="일~토" active={category === 'all'} onClick={() => setCategory('all')} />
+                <CategoryButton label="주중만" sub="월~금" active={category === 'weekday'} onClick={() => setCategory('weekday')} />
+                <CategoryButton label="주말만" sub="토·일" active={category === 'weekend'} onClick={() => setCategory('weekend')} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {SLOT_NAMES.map((name) => (
+                <SimpleSlotCard
+                  key={name}
+                  name={name}
+                  data={slots[name]}
+                  businessOnly={businessOnly}
+                  otherPlaylists={otherPlaylists}
+                  isCurrent={current?.slot_name === name}
+                  isPlaying={businessMode && current?.slot_name === name}
+                  onChange={(patch) =>
+                    setSlots((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
+                  }
+                  onAutoMatch={() => {
+                    const pid = autoMatchPlaylist(name, playlists);
+                    setSlots((prev) => ({
+                      ...prev,
+                      [name]: { ...prev[name], playlist_id: pid },
+                    }));
+                    const matched = playlists.find((p) => p.id === pid);
+                    toast.success(matched ? `${name}: ${matched.title}` : `${name}: 매칭된 플리 없음`);
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* split: 주중 + 주말 각각 3슬롯 */}
+            <SplitSlotGroup
+              label="주중"
+              sub="월요일 ~ 금요일"
+              data={weekdaySlots}
+              setData={setWeekdaySlots}
               businessOnly={businessOnly}
               otherPlaylists={otherPlaylists}
-              isCurrent={current?.slot_name === name}
-              isPlaying={businessMode && current?.slot_name === name}
-              onChange={(patch) =>
-                setSlots((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
-              }
-              onAutoMatch={() => {
-                const pid = autoMatchPlaylist(name, playlists);
-                setSlots((prev) => ({
-                  ...prev,
-                  [name]: { ...prev[name], playlist_id: pid },
-                }));
-                const matched = playlists.find((p) => p.id === pid);
-                toast.success(matched ? `${name}: ${matched.title}` : `${name}: 매칭된 플리 없음`);
-              }}
+              isWeekday
+              playlists={playlists}
+              current={current}
+              businessMode={businessMode}
             />
-          ))}
-        </div>
+            <SplitSlotGroup
+              label="주말"
+              sub="토요일 · 일요일"
+              data={weekendSlots}
+              setData={setWeekendSlots}
+              businessOnly={businessOnly}
+              otherPlaylists={otherPlaylists}
+              isWeekday={false}
+              playlists={playlists}
+              current={current}
+              businessMode={businessMode}
+            />
+          </>
+        )}
 
         <button
           onClick={() => void saveSimpleSchedule()}
@@ -386,12 +548,87 @@ export default function BusinessScheduler() {
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card transition hover:opacity-95 disabled:opacity-60"
         >
           <Save size={16} />
-          {savingSimple ? '적용 중…' : '저장 (3개 시간대 적용)'}
+          {savingSimple
+            ? '적용 중…'
+            : mode === 'split'
+              ? '저장 (주중·주말 6개 시간대 적용)'
+              : '저장 (3개 시간대 적용)'}
         </button>
       </section>
 
       {loading && <p className="text-xs text-ink-dim">불러오는 중…</p>}
     </section>
+  );
+}
+
+/** Split mode 의 한 그룹(주중 또는 주말) 렌더 — 라벨 헤더 + 3슬롯 카드. */
+function SplitSlotGroup({
+  label,
+  sub,
+  data,
+  setData,
+  businessOnly,
+  otherPlaylists,
+  isWeekday,
+  playlists,
+  current,
+  businessMode,
+}: {
+  label: string;
+  sub: string;
+  data: Record<SlotName, SimpleSlot>;
+  setData: React.Dispatch<React.SetStateAction<Record<SlotName, SimpleSlot>>>;
+  businessOnly: PlaylistRow[];
+  otherPlaylists: PlaylistRow[];
+  isWeekday: boolean;
+  playlists: PlaylistRow[];
+  current: BusinessSchedule | null;
+  businessMode: boolean;
+}) {
+  // 오늘이 이 그룹에 속하는지 판단 (NOW 강조)
+  const todayDay = new Date().getDay();
+  const groupHasToday = isWeekday ? todayDay >= 1 && todayDay <= 5 : todayDay === 0 || todayDay === 6;
+  return (
+    <div className="space-y-2 rounded-2xl bg-bg-soft/40 p-3 ring-1 ring-line/10">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div>
+          <p className="text-sm font-bold tracking-tight">
+            {label}
+            {groupHasToday && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent/15 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-accent">
+                오늘
+              </span>
+            )}
+          </p>
+          <p className="text-[10px] text-ink-dim">{sub}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {SLOT_NAMES.map((name) => (
+          <SimpleSlotCard
+            key={name}
+            name={name}
+            data={data[name]}
+            businessOnly={businessOnly}
+            otherPlaylists={otherPlaylists}
+            isCurrent={groupHasToday && current?.slot_name === name}
+            isPlaying={groupHasToday && businessMode && current?.slot_name === name}
+            onChange={(patch) =>
+              setData((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
+            }
+            onAutoMatch={() => {
+              const pid = autoMatchPlaylist(name, playlists);
+              setData((prev) => ({
+                ...prev,
+                [name]: { ...prev[name], playlist_id: pid },
+              }));
+              const matched = playlists.find((p) => p.id === pid);
+              toast.success(matched ? `${label} ${name}: ${matched.title}` : `${label} ${name}: 매칭된 플리 없음`);
+            }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
