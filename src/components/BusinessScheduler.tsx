@@ -232,6 +232,46 @@ export default function BusinessScheduler() {
     }
   }
 
+  /** 3-슬롯 로테이션 자동 생성 — 영업시간이 있으면 3등분, 없으면 디폴트 (09-12 / 12-18 / 18-22). */
+  async function quickRotation(days: number[], label: string) {
+    if (!userId) return;
+    if (!confirm(`${label} 오전·오후·저녁 3개 시간대를 자동으로 만들까요?`)) return;
+    setCreatingDefaults(true);
+    try {
+      const slots = computeRotationSlots(profile);
+      const businessOnly = playlists.filter((p) => p.is_business_only);
+      function pickPlaylist(keywords: string[]): string | null {
+        const all = [...businessOnly, ...playlists.filter((p) => !p.is_business_only)];
+        for (const k of keywords) {
+          const m = all.find((p) =>
+            p.title.includes(k) || p.category?.includes(k) || (p.business_category ?? '').includes(k),
+          );
+          if (m) return m.id;
+        }
+        return all[0]?.id ?? null;
+      }
+      await Promise.all(
+        slots.map((s) =>
+          createSchedule({
+            user_id: userId,
+            days_of_week: days,
+            slot_name: s.name,
+            start_time: `${s.start}:00`,
+            end_time: `${s.end}:00`,
+            playlist_id: pickPlaylist(s.keywords),
+            is_active: true,
+          }),
+        ),
+      );
+      await load();
+      toast.success(`${label} 3개 시간대를 만들었어요 (오전·오후·저녁).`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '생성 실패');
+    } finally {
+      setCreatingDefaults(false);
+    }
+  }
+
   async function submitAdd() {
     if (!userId || submittingAdd) return;
     if (addForm.days.length === 0) {
@@ -424,12 +464,9 @@ export default function BusinessScheduler() {
 
   const isBusinessPlan = profileSub === 'business';
   const todayDayIdx = nowKstParts().day;
-  // 폼 안의 days 기준 프리셋 활성 여부
+  // 폼 안의 days
   const fd = addForm.days;
   const isFormPresetToday = fd.length === 1 && fd[0] === todayDayIdx;
-  const isFormPresetAll = fd.length === 7;
-  const isFormPresetWeekday = fd.length === 5 && [1, 2, 3, 4, 5].every((d) => fd.includes(d));
-  const isFormPresetWeekend = fd.length === 2 && [0, 6].every((d) => fd.includes(d));
   const addSubmitLabel =
     fd.length === 7 ? '매일 적용' :
     fd.length > 1 ? `${fd.length}개 요일에 적용` :
@@ -606,31 +643,66 @@ export default function BusinessScheduler() {
               한 번 만들면 적용된 모든 요일에 자동 재생됩니다.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {schedules.length > 0 && (
-              <button
-                onClick={() => void handleConsolidate()}
-                disabled={consolidating}
-                className="rounded-full bg-bg-soft px-3 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
-                title="동일 이름·시간·플리 슬롯을 한 행으로 합치고 적용 요일을 합칩니다"
-              >
-                {consolidating ? '정리 중…' : '중복 정리'}
-              </button>
-            )}
+          {schedules.length > 0 && (
             <button
-              onClick={() => setAddOpen((v) => !v)}
-              aria-expanded={addOpen}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition ${
-                addOpen
-                  ? 'bg-bg-soft text-ink-mute ring-line/15 hover:text-ink'
-                  : 'bg-accent/15 text-accent ring-accent/25 hover:bg-accent/20'
-              }`}
+              onClick={() => void handleConsolidate()}
+              disabled={consolidating}
+              className="shrink-0 rounded-full bg-bg-soft px-3 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
+              title="동일 이름·시간·플리 슬롯을 한 행으로 합치고 적용 요일을 합칩니다"
             >
-              <Plus size={11} className={addOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
-              {addOpen ? '닫기' : '새 시간대'}
+              {consolidating ? '정리 중…' : '중복 정리'}
+            </button>
+          )}
+        </header>
+
+        {/* 빠른 만들기 — 클릭 한 번에 오전·오후·저녁 3개 시간대 자동 생성 */}
+        <div className="space-y-2 rounded-2xl bg-bg-soft/40 p-3 ring-1 ring-accent/15">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-dim">
+            빠른 만들기 · 클릭 한 번에 <b className="text-ink-mute">오전·오후·저녁</b> 3개 자동
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => void quickRotation([0, 1, 2, 3, 4, 5, 6], '매일')}
+              disabled={creatingDefaults}
+              className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-3.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/30 transition hover:bg-accent/25 disabled:opacity-50"
+            >
+              <Sparkles size={12} /> 매일
+            </button>
+            <button
+              onClick={() => void quickRotation([1, 2, 3, 4, 5], '주중')}
+              disabled={creatingDefaults}
+              className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/25 transition hover:bg-accent/20 disabled:opacity-50"
+            >
+              <Sparkles size={12} /> 주중 (월–금)
+            </button>
+            <button
+              onClick={() => void quickRotation([0, 6], '주말')}
+              disabled={creatingDefaults}
+              className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3.5 py-1.5 text-xs font-bold text-accent ring-1 ring-accent/25 transition hover:bg-accent/20 disabled:opacity-50"
+            >
+              <Sparkles size={12} /> 주말 (토·일)
             </button>
           </div>
-        </header>
+          <p className="text-[10px] text-ink-dim">
+            영업시간({(profile?.open_time?.slice(0, 5) ?? '미설정')} ~ {(profile?.close_time?.slice(0, 5) ?? '미설정')})이 있으면 그 안에서 자동 3등분, 없으면 09–12 / 12–18 / 18–22 기준. 플레이리스트는 이름/카테고리 매칭으로 자동 선택.
+          </p>
+        </div>
+
+        {/* 직접 만들기 토글 */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setAddOpen((v) => !v)}
+            aria-expanded={addOpen}
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition ${
+              addOpen
+                ? 'bg-bg-soft text-ink-mute ring-line/15 hover:text-ink'
+                : 'bg-bg-soft text-ink-mute ring-line/15 hover:text-ink'
+            }`}
+          >
+            <Plus size={11} className={addOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
+            {addOpen ? '직접 만들기 닫기' : '직접 만들기 (커스텀 시간/이름/플리)'}
+          </button>
+        </div>
 
         {/* 신규 시간대 인라인 폼 */}
         {addOpen && (
@@ -640,15 +712,12 @@ export default function BusinessScheduler() {
               <p className="text-sm font-semibold text-ink">새 시간대 만들기</p>
             </div>
 
-            {/* 적용 요일 — 폼 내부 다중 선택 */}
+            {/* 적용 요일 — 폼 내부 다중 선택 (오늘 빠른 선택만) */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
                 적용 요일 (여러 개 선택 가능)
               </label>
               <div className="flex flex-wrap gap-1.5">
-                <PresetChip label="매일" active={isFormPresetAll} onClick={() => setAddFormPreset('all')} />
-                <PresetChip label="주중 (월–금)" active={isFormPresetWeekday} onClick={() => setAddFormPreset('weekday')} />
-                <PresetChip label="주말 (토·일)" active={isFormPresetWeekend} onClick={() => setAddFormPreset('weekend')} />
                 <PresetChip label="오늘만" active={isFormPresetToday} onClick={() => setAddFormPreset('today')} />
               </div>
               <div className="-mx-1 flex gap-1 overflow-x-auto pb-1 no-scrollbar">
@@ -988,6 +1057,43 @@ function SlotRow({
       </select>
     </li>
   );
+}
+
+/** 빠른 시작용 3-슬롯 로테이션 — 영업시간을 3등분, 없으면 디폴트. */
+function computeRotationSlots(profile: BusinessProfile | null): Array<{
+  name: string;
+  start: string; // HH:MM
+  end: string;
+  keywords: string[];
+}> {
+  function toMin(t: string): number {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
+  function toHHMM(min: number): string {
+    const h = Math.floor(min / 60) % 24;
+    const m = min % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  const open = profile?.open_time?.slice(0, 5) ?? '';
+  const close = profile?.close_time?.slice(0, 5) ?? '';
+  let t1 = '09:00', t2 = '12:00', t3 = '18:00', t4 = '22:00';
+  if (open && close) {
+    const o = toMin(open);
+    const c = toMin(close);
+    if (c > o && c - o >= 180) {
+      const third = Math.round((c - o) / 3);
+      t1 = open;
+      t2 = toHHMM(o + third);
+      t3 = toHHMM(o + third * 2);
+      t4 = close;
+    }
+  }
+  return [
+    { name: '오전', start: t1, end: t2, keywords: ['오전', '산뜻', '카페', '오픈'] },
+    { name: '오후', start: t2, end: t3, keywords: ['오후', '라운지', '잔잔', '집중'] },
+    { name: '저녁', start: t3, end: t4, keywords: ['저녁', '와인', '재즈', '감성'] },
+  ];
 }
 
 /** 적용 요일 배열을 짧은 라벨로 — "매일" / "주중" / "주말" / "월·수·금" */
