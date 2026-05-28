@@ -59,6 +59,20 @@ export default function BusinessScheduler() {
   const [creatingDefaults, setCreatingDefaults] = useState(false);
   // 다중 요일 선택 — 기본값: 오늘 한 요일만.
   const [selectedDays, setSelectedDays] = useState<number[]>(() => [nowKstParts().day]);
+  // 신규 시간대 인라인 폼
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState<{
+    slot_name: string;
+    start_time: string; // HH:MM
+    end_time: string;
+    playlist_id: string | null;
+  }>({
+    slot_name: '새 시간대',
+    start_time: '12:00',
+    end_time: '14:00',
+    playlist_id: null,
+  });
+  const [submittingAdd, setSubmittingAdd] = useState(false);
   // 현재 active schedule 의 트랙을 미리 로드 (user gesture 안에서 동기 setQueue 가능하도록).
   const [currentTracks, setCurrentTracks] = useState<TrackRow[] | null>(null);
   const [tracksLoading, setTracksLoading] = useState(false);
@@ -215,27 +229,43 @@ export default function BusinessScheduler() {
     }
   }
 
-  async function handleAddSlot() {
-    if (!userId || selectedDays.length === 0) return;
+  async function submitAdd() {
+    if (!userId || selectedDays.length === 0 || submittingAdd) return;
+    const name = addForm.slot_name.trim();
+    if (!name) {
+      toast.info('시간대 이름을 입력해주세요.');
+      return;
+    }
+    if (addForm.start_time >= addForm.end_time) {
+      toast.info('종료 시간은 시작 시간보다 늦어야 해요.');
+      return;
+    }
+    setSubmittingAdd(true);
     try {
       await Promise.all(
         selectedDays.map((day) =>
           createSchedule({
             user_id: userId,
             day_of_week: day,
-            slot_name: '새 시간대',
-            start_time: '12:00',
-            end_time: '14:00',
+            slot_name: name,
+            start_time: `${addForm.start_time}:00`,
+            end_time: `${addForm.end_time}:00`,
+            playlist_id: addForm.playlist_id,
             is_active: true,
           }),
         ),
       );
       await load();
-      if (selectedDays.length > 1) {
-        toast.success(`${selectedDays.length}개 요일에 시간대를 추가했어요.`);
-      }
+      toast.success(
+        selectedDays.length > 1
+          ? `${selectedDays.length}개 요일에 시간대를 추가했어요.`
+          : '시간대를 추가했어요.',
+      );
+      setAddOpen(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '추가 실패');
+    } finally {
+      setSubmittingAdd(false);
     }
   }
 
@@ -542,10 +572,16 @@ export default function BusinessScheduler() {
               요일별 스케줄
             </h3>
             <button
-              onClick={handleAddSlot}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold text-accent ring-1 ring-accent/25 hover:bg-accent/20"
+              onClick={() => setAddOpen((v) => !v)}
+              aria-expanded={addOpen}
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition ${
+                addOpen
+                  ? 'bg-bg-soft text-ink-mute ring-line/15 hover:text-ink'
+                  : 'bg-accent/15 text-accent ring-accent/25 hover:bg-accent/20'
+              }`}
             >
-              <Plus size={11} /> {addLabel}
+              <Plus size={11} className={addOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
+              {addOpen ? '닫기' : addLabel}
             </button>
           </header>
 
@@ -588,6 +624,117 @@ export default function BusinessScheduler() {
             여러 요일을 동시에 선택하면 <b className="text-ink-mute">+ 추가</b> 가 선택한 모든 요일에 같은 시간대를 한번에 만들어줘요.
             슬롯 편집은 각 요일별로 따로 적용됩니다.
           </p>
+
+          {/* 신규 시간대 인라인 폼 — 시간/이름/플레이리스트 한번에 입력 */}
+          {addOpen && (
+            <div className="space-y-3 rounded-2xl bg-bg-soft/60 p-3.5 ring-1 ring-accent/20">
+              <div className="flex items-center gap-2">
+                <Plus size={14} className="text-accent" />
+                <p className="text-sm font-semibold text-ink">
+                  새 시간대 만들기
+                  <span className="ml-1.5 text-[11px] font-normal text-ink-mute">
+                    · {selectedDays.length > 1 ? `${selectedDays.length}개 요일에 일괄 적용` : `${DAY_LABELS_FULL[selectedDays[0]]}에 적용`}
+                  </span>
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                    시간대 이름
+                  </label>
+                  <input
+                    value={addForm.slot_name}
+                    onChange={(e) => setAddForm((f) => ({ ...f, slot_name: e.target.value }))}
+                    placeholder="예: 오픈 준비, 점심 피크, 저녁 무드"
+                    className="input mt-1 w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                    시작 시간
+                  </label>
+                  <input
+                    type="time"
+                    value={addForm.start_time}
+                    onChange={(e) => setAddForm((f) => ({ ...f, start_time: e.target.value }))}
+                    onClick={openTimePicker}
+                    onFocus={openTimePicker}
+                    className="input mt-1 w-full text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                    종료 시간
+                  </label>
+                  <input
+                    type="time"
+                    value={addForm.end_time}
+                    onChange={(e) => setAddForm((f) => ({ ...f, end_time: e.target.value }))}
+                    onClick={openTimePicker}
+                    onFocus={openTimePicker}
+                    className="input mt-1 w-full text-sm font-mono"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                    플레이리스트 (이 시간대에 자동 재생)
+                  </label>
+                  <select
+                    value={addForm.playlist_id ?? ''}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, playlist_id: e.target.value || null }))
+                    }
+                    className="input mt-1 w-full text-sm"
+                  >
+                    <option value="">나중에 선택</option>
+                    {(() => {
+                      const businessOnly = playlists.filter((p) => p.is_business_only);
+                      const others = playlists.filter((p) => !p.is_business_only);
+                      return (
+                        <>
+                          {businessOnly.length > 0 && (
+                            <optgroup label="사업자 전용">
+                              {businessOnly.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.title}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {others.length > 0 && (
+                            <optgroup label="일반">
+                              {others.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.title}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setAddOpen(false)}
+                  className="rounded-full bg-bg-soft px-3 py-1.5 text-xs font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => void submitAdd()}
+                  disabled={submittingAdd}
+                  className="inline-flex items-center gap-1 rounded-full bg-accent px-3.5 py-1.5 text-xs font-bold text-bg hover:opacity-95 disabled:opacity-60"
+                >
+                  <Plus size={12} /> {submittingAdd ? '추가 중…' : addLabel}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 슬롯 리스트 — 선택된 요일별 섹션 */}
           {selectedDays.every((day) => schedules.filter((s) => s.day_of_week === day).length === 0) ? (
