@@ -14,7 +14,10 @@ import { supabase } from './supabase';
 import type { PlaylistRow, TimeSlot } from '@/types/db';
 
 function toTimeSlot(v: string | null): TimeSlot | null {
-  if (v === 'morning' || v === 'afternoon' || v === 'evening' || v === 'night') return v;
+  if (v === 'morning' || v === 'afternoon' || v === 'evening') return v;
+  // legacy DB row 호환 — 0215 이전 'night'/'late'/'lunch' 데이터가 캐시에 남아있을 때
+  if (v === 'night' || v === 'late') return 'evening';
+  if (v === 'lunch') return 'afternoon';
   return null;
 }
 

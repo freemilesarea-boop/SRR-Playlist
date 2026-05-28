@@ -2,7 +2,8 @@
 // 'personal' 은 legacy 값으로 일부 기존 row 에 남아있을 수 있음.
 export type SubscriptionType = 'free' | 'personal' | 'individual' | 'business';
 export type UserRole = 'user' | 'admin';
-export type TimeSlot = 'morning' | 'afternoon' | 'evening' | 'night';
+// 0215 마이그 후 플리 time_slot 은 3-slot (매장 schedules 와 일치). 'night'/'late' → 'evening', 'lunch' → 'afternoon' 으로 흡수.
+export type TimeSlot = 'morning' | 'afternoon' | 'evening';
 
 export interface UserRow {
   id: string;
