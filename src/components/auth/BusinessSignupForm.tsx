@@ -13,7 +13,7 @@ import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
 
 interface Props {
-  onDone: () => void;
+  onDone: (email: string) => void;
 }
 
 export default function BusinessSignupForm({ onDone }: Props) {
@@ -219,7 +219,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
       }
 
       toast.success('사업자 회원가입이 완료됐어요. 이메일 인증 메일을 확인해주세요.');
-      onDone();
+      onDone(email.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : '가입에 실패했어요');
     } finally {

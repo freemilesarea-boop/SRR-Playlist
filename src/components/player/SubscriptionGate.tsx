@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Crown, X } from 'lucide-react';
 import type { GateMode } from '@/store/gateStore';
 
@@ -6,7 +6,7 @@ export type { GateMode };
 
 /**
  * 재생 구독 게이트 모달.
- * - login: 비회원 재생 시도 → 로그인 유도
+ * - login: 비회원 재생 시도 → 로그인 유도 (로그인 성공 시 현재 페이지로 자동 복귀)
  * - upsell: 무료회원 25초 미리듣기 초과 → 프리미엄 구독 유도
  */
 export default function SubscriptionGate({
@@ -17,6 +17,13 @@ export default function SubscriptionGate({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // 로그인/회원가입 후 원래 페이지로 복귀하기 위해 현재 경로 캡처.
+  // /login 자체에서 트리거된 경우는 무시 (무한 루프 방지).
+  const returnTo =
+    location.pathname.startsWith('/login') || location.pathname.startsWith('/auth')
+      ? '/'
+      : location.pathname + location.search;
 
   return (
     <div
@@ -48,7 +55,13 @@ export default function SubscriptionGate({
               </p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => navigate('/login')} className="btn-primary w-full py-3">
+              <button
+                onClick={() => {
+                  navigate('/login', { state: { from: returnTo } });
+                  onClose();
+                }}
+                className="btn-primary w-full py-3"
+              >
                 로그인 / 회원가입
               </button>
               <button onClick={onClose} className="btn-ghost w-full py-2.5 text-sm">

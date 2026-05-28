@@ -35,6 +35,8 @@ interface AuthState {
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** 회원가입 인증 메일 재발송 — 메일 못 받았거나 만료된 경우 사용. */
+  resendSignupEmail: (email: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -240,5 +242,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       session: null, user: null, profile: null, profileError: null,
       isProfileReady: true, loading: false,
     });
+  },
+
+  resendSignupEmail: async (email) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw error;
   },
 }));

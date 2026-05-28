@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
-import { useBusinessStore } from '@/store/businessStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
@@ -124,7 +123,6 @@ export default function App() {
   const loadProfile = useAuthStore((s) => s.loadProfile);
   const initTheme = useThemeStore((s) => s.init);
   const refreshTimeSlot = useThemeStore((s) => s.refreshTimeSlot);
-  const businessMode = useBusinessStore((s) => s.businessMode);
   const playing = usePlayerStore((s) => s.playing);
 
   const initPlayback = usePlaybackSettingsStore((s) => s.init);
@@ -149,7 +147,8 @@ export default function App() {
   // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
   useEffect(() => installUnloadGuard(), []);
 
-  useWakeLock(businessMode && playing);
+  // 화면 꺼짐 방지 — 어떤 모드든 재생 중이면 wake lock (개인/매장 공통).
+  useWakeLock(playing);
   useTrackVisit();
 
   if (!isSupabaseConfigured) {
