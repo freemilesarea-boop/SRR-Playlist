@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { safeExtension } from '@/lib/storagePath';
 import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
 import { fetchAllCurators, setPlaylistCurator, type CuratorListItem } from '@/lib/curatorApi';
+import { usePlaylistLock } from '@/hooks/usePlaylistLock';
 import { updateCuratorPlaylistThumbnail } from '@/lib/curatorStudioApi';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
@@ -40,6 +41,8 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
   const [thumbBusy, setThumbBusy] = useState(false);
   const [curators, setCurators] = useState<CuratorListItem[]>([]);
   const [savingCurator, setSavingCurator] = useState(false);
+  // 협업 advisory lock — 다른 큐레이터/관리자가 편집 중이면 경고 배너
+  const lock = usePlaylistLock(playlistId);
 
   useEffect(() => {
     if (variant !== 'admin') return;
@@ -196,6 +199,36 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
           <p className="text-xs text-ink-mute">{playlist.category}</p>
         </div>
       </header>
+
+      {/* 협업 lock 배너 — 다른 사용자가 활성 편집 중일 때 경고 */}
+      {!lock.loading && lock.otherUser && (
+        <div className="flex items-start gap-2.5 rounded-2xl bg-yellow-500/10 p-3 ring-1 ring-yellow-500/30">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 text-yellow-200">!</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-yellow-100">
+              <b>{lock.otherUser.nickname}</b> 님이 지금 편집 중이에요
+            </p>
+            <p className="mt-0.5 text-[11px] text-yellow-200/85">
+              마지막 활동{' '}
+              {(() => {
+                const diff = Math.max(
+                  0,
+                  Math.floor((Date.now() - new Date(lock.otherUser.heartbeatAt).getTime()) / 60000),
+                );
+                if (diff === 0) return '방금 전';
+                return `${diff}분 전`;
+              })()}
+              {' '}· 동시 편집 시 변경 사항이 덮어쓰일 수 있어요
+            </p>
+          </div>
+          <button
+            onClick={() => void lock.forceTakeover()}
+            className="shrink-0 rounded-full bg-yellow-500/20 px-3 py-1.5 text-[11px] font-semibold text-yellow-100 ring-1 ring-yellow-300/30 hover:bg-yellow-500/30"
+          >
+            그래도 편집
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 rounded-2xl bg-bg-card p-3">
         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-bg-hover">
