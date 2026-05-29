@@ -55,6 +55,9 @@ import AudioDiagnosticPanel from '@/components/admin/AudioDiagnosticPanel';
 import MetadataViolationsList from '@/components/admin/MetadataViolationsList';
 import UploadAuditPanel from '@/components/admin/UploadAuditPanel';
 import AiCurationPanel from '@/components/admin/AiCurationPanel';
+import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel';
+import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
+import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
 import { supabaseProjectRef } from '@/lib/supabase';
 
@@ -82,6 +85,9 @@ type Tab =
   | 'metadata-violations'
   | 'upload-audit'
   | 'ai-curation'
+  | 'clap-curation'
+  | 'ai-metadata'
+  | 'site-settings'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -114,6 +120,9 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'metadata-violations', label: '메타데이터 위반 의심', icon: <AlertTriangle size={14} /> },
   { key: 'upload-audit', label: '업로드/스토리지 점검', icon: <HardDrive size={14} /> },
   { key: 'ai-curation', label: 'AI 큐레이션', icon: <Sparkles size={14} /> },
+  { key: 'clap-curation', label: 'CLAP 추천', icon: <Sparkles size={14} /> },
+  { key: 'ai-metadata', label: 'AI 메타데이터', icon: <Sparkles size={14} /> },
+  { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
@@ -150,11 +159,13 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'metadata-violations',
       'upload-audit',
       'ai-curation',
+      'clap-curation',
+      'ai-metadata',
       'recommendation',
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['brand', 'admins'] },
+  { key: '설정', tabs: ['site-settings', 'brand', 'admins'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -292,6 +303,9 @@ export default function AdminPage() {
         {tab === 'metadata-violations' && <MetadataViolationsList />}
         {tab === 'upload-audit' && <UploadAuditPanel />}
         {tab === 'ai-curation' && <AiCurationPanel />}
+        {tab === 'clap-curation' && <ClapRecommendationPanel />}
+        {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
+        {tab === 'site-settings' && <SiteSettingsPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
         {tab === 'upload-integrity' && <UploadIntegrityPanel />}
