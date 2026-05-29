@@ -16,6 +16,9 @@ export interface ClapPlaylistRow {
   centroid_track_count: number | null;
   centroid_updated_at: string | null;
   pending_count: number;
+  auto_approved_count: number;
+  auto_attach_enabled: boolean;
+  auto_attach_threshold: number;
 }
 
 export interface ClapRecommendationRow {
@@ -78,6 +81,49 @@ export async function decideClapRecommendation(
   const { error } = await supabase.rpc('decide_clap_recommendation', {
     p_recommendation_id: recommendationId,
     p_approve: approve,
+  });
+  if (error) throw error;
+}
+
+export interface ClapAutoApprovedRow {
+  recommendation_id: string;
+  playlist_id: string;
+  playlist_title: string;
+  business_category: string | null;
+  track_id: string;
+  track_title: string;
+  track_artist: string | null;
+  cover_url: string | null;
+  audio_url: string;
+  main_genre: string | null;
+  sub_genre: string | null;
+  clap_similarity: number;
+  total_score: number;
+  attached_at: string;
+}
+
+export async function listClapAutoApproved(limit = 50): Promise<ClapAutoApprovedRow[]> {
+  const { data, error } = await supabase.rpc('list_clap_auto_approved', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ClapAutoApprovedRow[];
+}
+
+export async function rollbackClapAutoAttach(recommendationId: string): Promise<void> {
+  const { error } = await supabase.rpc('rollback_clap_auto_attach', {
+    p_recommendation_id: recommendationId,
+  });
+  if (error) throw error;
+}
+
+export async function setPlaylistAutoAttach(
+  playlistId: string,
+  enabled: boolean,
+  threshold: number,
+): Promise<void> {
+  const { error } = await supabase.rpc('set_playlist_auto_attach', {
+    p_playlist_id: playlistId,
+    p_enabled: enabled,
+    p_threshold: threshold,
   });
   if (error) throw error;
 }
