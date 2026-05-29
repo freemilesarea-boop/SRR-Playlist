@@ -224,6 +224,10 @@ function AdminTrackList({
   const [mismatches, setMismatches] = useState<MetadataMismatch[] | null>(null);
   const [showMismatch, setShowMismatch] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkDraft, setBulkDraft] = useState<AdminTrackMetadataFullInput>({});
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const aiByTrackId = useMemo(() => {
     const m = new Map<string, AdminTrackWithAi>();
@@ -303,6 +307,85 @@ function AdminTrackList({
     } finally {
       setCleaning(false);
     }
+  }
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allOnPage = visible.every((t) => next.has(t.id));
+      if (allOnPage) visible.forEach((t) => next.delete(t.id));
+      else visible.forEach((t) => next.add(t.id));
+      return next;
+    });
+  }
+  function selectAllFiltered() {
+    setSelected(new Set(filtered.map((t) => t.id)));
+  }
+  function clearSelection() { setSelected(new Set()); }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(
+      `선택한 ${selected.size}개 트랙을 일괄 삭제합니다.\n\n` +
+      `· 정산 없는 트랙: 완전 삭제 (DB + 스토리지)\n` +
+      `· 정산 있는 트랙: hidden 처리 + 스토리지 파일 제거\n` +
+      `· 어느 경우든 재생 불가\n· 되돌릴 수 없습니다.`,
+    )) return;
+    const ids = Array.from(selected);
+    setBulkProgress({ done: 0, total: ids.length });
+    let ok = 0, fail = 0;
+    for (let i = 0; i < ids.length; i++) {
+      try { await adminHardDeleteTrack(ids[i]); ok++; }
+      catch { fail++; }
+      setBulkProgress({ done: i + 1, total: ids.length });
+    }
+    setBulkProgress(null);
+    setSelected(new Set());
+    toast.success(`일괄 삭제 완료: 성공 ${ok}, 실패 ${fail}`);
+    await onUpdated();
+  }
+
+  function openBulkEdit() {
+    if (selected.size === 0) return;
+    setBulkDraft({});
+    setShowBulkEdit(true);
+  }
+  async function applyBulkEdit() {
+    const draft = bulkDraft;
+    // 빈 값/null 이 아닌 필드만 모음
+    const patched: AdminTrackMetadataFullInput = {};
+    (Object.keys(draft) as (keyof AdminTrackMetadataFullInput)[]).forEach((k) => {
+      const v = draft[k];
+      if (v === null || v === undefined) return;
+      if (typeof v === 'string' && v.trim() === '') return;
+      if (Array.isArray(v) && v.length === 0) return;
+      (patched as Record<string, unknown>)[k] = v;
+    });
+    if (Object.keys(patched).length === 0) {
+      toast.info('적용할 변경사항이 없습니다. 최소 1개 필드를 채워주세요.');
+      return;
+    }
+    if (!confirm(`선택한 ${selected.size}개 트랙에 다음 필드를 일괄 적용합니다:\n\n${Object.keys(patched).join(', ')}\n\n진행할까요?`)) return;
+
+    const ids = Array.from(selected);
+    setBulkProgress({ done: 0, total: ids.length });
+    let ok = 0, fail = 0;
+    for (let i = 0; i < ids.length; i++) {
+      try { await adminUpdateTrackMetadataFull(ids[i], patched); ok++; }
+      catch { fail++; }
+      setBulkProgress({ done: i + 1, total: ids.length });
+    }
+    setBulkProgress(null);
+    setShowBulkEdit(false);
+    toast.success(`일괄 수정 완료: 성공 ${ok}, 실패 ${fail}`);
+    await onUpdated();
   }
 
   return (
@@ -441,12 +524,74 @@ function AdminTrackList({
         </div>
       )}
 
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl bg-accent/15 px-3 py-2 ring-1 ring-accent/30 backdrop-blur">
+          <span className="text-xs font-bold text-accent">선택 {selected.size}개</span>
+          {selected.size < filtered.length && (
+            <button onClick={selectAllFiltered} className="rounded-full bg-bg-card px-2.5 py-1 text-[11px] text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover">
+              필터 전체 ({filtered.length}) 선택
+            </button>
+          )}
+          <button onClick={clearSelection} className="rounded-full bg-bg-card px-2.5 py-1 text-[11px] text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover">
+            해제
+          </button>
+          <div className="ml-auto flex gap-1.5">
+            <button
+              onClick={openBulkEdit}
+              disabled={bulkProgress != null}
+              className="rounded-full bg-accent px-3 py-1 text-[11px] font-bold text-black hover:bg-accent/90 disabled:opacity-50"
+            >
+              일괄 편집
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkProgress != null}
+              className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-50"
+            >
+              일괄 삭제
+            </button>
+          </div>
+          {bulkProgress && (
+            <span className="w-full text-[11px] text-ink-mute">
+              진행 중 {bulkProgress.done}/{bulkProgress.total}…
+            </span>
+          )}
+        </div>
+      )}
+
+      {showBulkEdit && (
+        <BulkEditPanel
+          count={selected.size}
+          draft={bulkDraft}
+          onChange={setBulkDraft}
+          onCancel={() => setShowBulkEdit(false)}
+          onApply={applyBulkEdit}
+          running={bulkProgress != null}
+        />
+      )}
+
       <ul className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
+        {visible.length > 0 && (
+          <li className="flex items-center gap-2 bg-bg-soft/60 px-3 py-2 text-[11px] text-ink-mute">
+            <input
+              type="checkbox"
+              checked={visible.every((t) => selected.has(t.id))}
+              ref={(el) => {
+                if (el) el.indeterminate = visible.some((t) => selected.has(t.id)) && !visible.every((t) => selected.has(t.id));
+              }}
+              onChange={togglePage}
+              className="h-4 w-4 rounded border-line/30 bg-bg-card accent-accent"
+            />
+            <span>이 페이지 전체 선택 ({visible.length}개)</span>
+          </li>
+        )}
         {visible.map((t) => (
           <AdminTrackRow
             key={t.id}
             track={t}
             ai={aiByTrackId.get(t.id) ?? null}
+            selected={selected.has(t.id)}
+            onToggle={() => toggleOne(t.id)}
             onDelete={onDelete}
             onUpdated={onUpdated}
           />
@@ -468,6 +613,91 @@ function AdminTrackList({
 }
 
 /** 숫자 페이지네이션 — 1, 2, 3, … 형태. 현재 페이지 주변 5개 + 첫/마지막. */
+/** 선택된 N개 트랙에 공통 적용할 메타 폼 — 비워둔 필드는 변경 안 함. */
+function BulkEditPanel({
+  count, draft, onChange, onCancel, onApply, running,
+}: {
+  count: number;
+  draft: AdminTrackMetadataFullInput;
+  onChange: (next: AdminTrackMetadataFullInput) => void;
+  onCancel: () => void;
+  onApply: () => Promise<void> | void;
+  running: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-bg-card ring-1 ring-line/20 sm:max-h-[90vh] sm:rounded-2xl">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-card px-4 py-3">
+          <div>
+            <h2 className="text-sm font-bold tracking-tight">일괄 편집 ({count}개)</h2>
+            <p className="text-[10px] text-ink-dim">비워둔 필드는 변경되지 않습니다. 채운 필드만 일괄 적용.</p>
+          </div>
+          <button onClick={onCancel} className="rounded-lg p-1.5 text-ink-mute hover:bg-bg-hover hover:text-ink">
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="space-y-3 p-4">
+          <Section label="장르 / 무드">
+            <Field label="메인 장르">
+              <select value={draft.main_genre ?? ''} onChange={(e) => onChange({ ...draft, main_genre: e.target.value || null })} className="input h-8 text-xs">
+                <option value="">— 변경 안 함 —</option>
+                {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </Field>
+            <Field label="서브 장르">
+              <input value={draft.sub_genre ?? ''} onChange={(e) => onChange({ ...draft, sub_genre: e.target.value })} placeholder="예: City Pop" className="input h-8 text-xs" />
+            </Field>
+            <Field label="무드">
+              <select value={draft.mood ?? ''} onChange={(e) => onChange({ ...draft, mood: e.target.value || null })} className="input h-8 text-xs">
+                <option value="">— 변경 안 함 —</option>
+                {MOOD_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </Field>
+            <Field label="템포감">
+              <select value={draft.tempo_feel ?? ''} onChange={(e) => onChange({ ...draft, tempo_feel: e.target.value || null })} className="input h-8 text-xs">
+                <option value="">— 변경 안 함 —</option>
+                {TEMPO_OPTIONS.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+              </select>
+            </Field>
+            <Field label="에너지 (1-5)">
+              <input type="number" min={1} max={5} value={draft.energy_level ?? ''} onChange={(e) => onChange({ ...draft, energy_level: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" placeholder="— 변경 안 함" />
+            </Field>
+            <Field label="BPM">
+              <input type="number" min={0} max={400} value={draft.bpm ?? ''} onChange={(e) => onChange({ ...draft, bpm: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" placeholder="— 변경 안 함" />
+            </Field>
+            <Field label="언어">
+              <input value={draft.language ?? ''} onChange={(e) => onChange({ ...draft, language: e.target.value })} placeholder="ko / en / ja" className="input h-8 text-xs" />
+            </Field>
+            <Field label="적합 매장">
+              <input value={draft.suitable_store ?? ''} onChange={(e) => onChange({ ...draft, suitable_store: e.target.value })} placeholder="예: 카페" className="input h-8 text-xs" />
+            </Field>
+          </Section>
+
+          <Section label="태그 (쉼표로 구분)">
+            <TagField label="장르 태그" value={draft.genre_tags} onChange={(arr) => onChange({ ...draft, genre_tags: arr })} colSpan={2} />
+            <TagField label="무드 태그" value={draft.mood_tags} onChange={(arr) => onChange({ ...draft, mood_tags: arr })} colSpan={2} />
+            <TagField label="업종 태그" value={draft.business_tags} onChange={(arr) => onChange({ ...draft, business_tags: arr })} colSpan={2} />
+            <TagField label="추천 시간대" value={draft.recommended_dayparts} onChange={(arr) => onChange({ ...draft, recommended_dayparts: arr })} colSpan={2} />
+            <TagField label="시간 슬롯" value={draft.time_slots} onChange={(arr) => onChange({ ...draft, time_slots: arr })} colSpan={2} />
+            <TagField label="상황 태그" value={draft.situation_tags} onChange={(arr) => onChange({ ...draft, situation_tags: arr })} colSpan={2} />
+            <TagField label="시즌 태그" value={draft.season_tags} onChange={(arr) => onChange({ ...draft, season_tags: arr })} colSpan={2} />
+          </Section>
+        </div>
+
+        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line/10 bg-bg-card px-4 py-3">
+          <button onClick={onCancel} className="btn-ghost h-9 text-xs">
+            <X size={12} /> 취소
+          </button>
+          <button onClick={() => onApply()} disabled={running} className="btn-primary h-9 text-xs">
+            <Save size={12} /> {running ? '적용 중…' : `${count}개에 적용`}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
   if (totalPages <= 1) return null;
   const pages: (number | '…')[] = [];
@@ -533,12 +763,14 @@ const GENRE_OPTIONS = ['POP','House','R&B','K-POP','J-Pop','Lo-fi','Jazz','Indie
 const MOOD_OPTIONS = ['차분한','밝은','트렌디한','따뜻한','몽환적인','신나는','감각적인','고급스러운','활기찬','편안한','세련된'] as const;
 const TEMPO_OPTIONS = [{ v: 'slow', l: '느림' }, { v: 'mid', l: '중간' }, { v: 'fast', l: '빠름' }] as const;
 
-/** 단일 트랙 행 — 재생/편집/삭제 + 메타 풀 비교 + 인라인 수정. */
+/** 단일 트랙 행 — 재생/편집/삭제 + 메타 풀 비교 + 인라인 수정 + 다중 선택. */
 function AdminTrackRow({
-  track, ai, onDelete, onUpdated,
+  track, ai, selected, onToggle, onDelete, onUpdated,
 }: {
   track: TrackRow;
   ai: AdminTrackWithAi | null;
+  selected: boolean;
+  onToggle: () => void;
   onDelete: (id: string, title: string) => void;
   onUpdated: () => Promise<void>;
 }) {
@@ -624,8 +856,16 @@ function AdminTrackRow({
   }
 
   return (
-    <li className="border-b border-line/5 last:border-b-0">
+    <li className={`border-b border-line/5 last:border-b-0 ${selected ? 'bg-accent/5' : ''}`}>
       <div className="flex items-center gap-3 p-3 hover:bg-bg-hover">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 shrink-0 rounded border-line/30 bg-bg-card accent-accent"
+          title="선택"
+        />
         <button
           onClick={play} disabled={!playable}
           className={`relative h-10 w-10 shrink-0 overflow-hidden rounded-md ${playable ? 'ring-1 ring-line/10' : 'opacity-50'}`}

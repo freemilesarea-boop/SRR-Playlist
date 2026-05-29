@@ -206,10 +206,12 @@ export default function TrackMetaSelectors({
 
       <GenrePicker selected={value.genre_tags} max={META_CAPS.genre}
         onChange={(v) => onChange({ ...value, genre_tags: v })} disabled={disabled} />
-      <PillMulti label="분위기/무드 *" options={MOOD_OPTIONS} selected={value.mood_tags} max={META_CAPS.mood}
-        overMessage="분위기는 최대 2개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, mood_tags: v })} disabled={disabled} />
-      <PillMulti label="추천 매장/업종 *" options={BUSINESS_OPTIONS} selected={value.business_type_tags} max={META_CAPS.business}
-        overMessage="추천 매장은 최대 3개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, business_type_tags: v })} disabled={disabled} />
+      <PillSingle label="분위기/무드 *" options={MOOD_OPTIONS}
+        value={value.mood_tags[0] ?? ''}
+        onChange={(v) => onChange({ ...value, mood_tags: v ? [v] : [] })} disabled={disabled} />
+      <PillSingle label="추천 매장/업종 *" options={BUSINESS_OPTIONS}
+        value={value.business_type_tags[0] ?? ''}
+        onChange={(v) => onChange({ ...value, business_type_tags: v ? [v] : [] })} disabled={disabled} />
       <PillSingle label="보컬 타입 *" options={VOCAL_OPTIONS} value={value.vocal_type}
         onChange={(v) => onChange({ ...value, vocal_type: v })} disabled={disabled} />
       <div className="space-y-1.5">
@@ -219,8 +221,9 @@ export default function TrackMetaSelectors({
       </div>
       <PillSingle label="언어권" options={LANGUAGE_OPTIONS} value={value.language ?? ''} optional
         onChange={(v) => onChange({ ...value, language: v })} disabled={disabled} />
-      <PillMulti label="추천 시간대 *" options={DAYPART_OPTIONS} selected={value.recommended_dayparts} max={META_CAPS.daypart}
-        overMessage="추천 시간대는 최대 3개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, recommended_dayparts: v })} disabled={disabled} />
+      <PillSingle label="추천 시간대 *" options={DAYPART_OPTIONS}
+        value={value.recommended_dayparts[0] ?? ''}
+        onChange={(v) => onChange({ ...value, recommended_dayparts: v ? [v] : [] })} disabled={disabled} />
     </div>
   );
 }

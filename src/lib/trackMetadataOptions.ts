@@ -93,8 +93,9 @@ export const TEMPO_OPTIONS: Option[] = [
   { value: 'fast', label: '빠름' },
 ];
 
-// 신규 입력 정책: 장르 1 / 무드 2 / 매장 3 / 시간대 3
-export const META_CAPS = { genre: 1, mood: 2, business: 3, daypart: 3 } as const;
+// 신규 입력 정책: 모든 메타 필드 단일 선택 (장르 1 / 무드 1 / 매장 1 / 시간대 1)
+// 큐레이션 정확도 + 책임 명확화 목적. 다중 선택은 추천 정확도를 떨어뜨림.
+export const META_CAPS = { genre: 1, mood: 1, business: 1, daypart: 1 } as const;
 
 export interface SelectedMeta {
   genre_tags: string[];
@@ -116,13 +117,13 @@ export function emptySelectedMeta(): SelectedMeta {
 export function validateSelectedMeta(m: SelectedMeta): string | null {
   if (m.genre_tags.length === 0) return '장르를 선택해주세요';
   if (m.genre_tags.length > META_CAPS.genre) return '장르는 1개만 선택할 수 있습니다';
-  if (m.mood_tags.length === 0) return '분위기를 1개 이상 선택해주세요';
-  if (m.mood_tags.length > META_CAPS.mood) return '분위기는 최대 2개까지 선택할 수 있습니다';
-  if (m.business_type_tags.length === 0) return '추천 매장을 1개 이상 선택해주세요';
-  if (m.business_type_tags.length > META_CAPS.business) return '추천 매장은 최대 3개까지 선택할 수 있습니다';
+  if (m.mood_tags.length === 0) return '분위기를 1개 선택해주세요';
+  if (m.mood_tags.length > META_CAPS.mood) return '분위기는 1개만 선택할 수 있습니다';
+  if (m.business_type_tags.length === 0) return '추천 매장을 1개 선택해주세요';
+  if (m.business_type_tags.length > META_CAPS.business) return '추천 매장은 1개만 선택할 수 있습니다';
   if (!m.vocal_type) return '보컬 유형을 선택해주세요';
-  if (m.recommended_dayparts.length === 0) return '추천 시간대를 1개 이상 선택해주세요';
-  if (m.recommended_dayparts.length > META_CAPS.daypart) return `추천 시간대는 최대 ${META_CAPS.daypart}개`;
+  if (m.recommended_dayparts.length === 0) return '추천 시간대를 1개 선택해주세요';
+  if (m.recommended_dayparts.length > META_CAPS.daypart) return '추천 시간대는 1개만 선택할 수 있습니다';
   if (!m.tempo_feel || !['slow', 'medium', 'fast'].includes(m.tempo_feel)) return '곡의 체감 템포를 선택해주세요';
   return null;
 }
