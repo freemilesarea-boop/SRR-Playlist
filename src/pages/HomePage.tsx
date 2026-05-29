@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import FeaturedHero from '@/components/FeaturedHero';
+import SiteNoticeModal from '@/components/SiteNoticeModal';
 import HomeChartSection from '@/components/HomeChartSection';
 import HomeSearchBar from '@/components/HomeSearchBar';
 import HomeLibrarySections from '@/components/HomeLibrarySections';
@@ -180,6 +181,7 @@ export default function HomePage() {
 
   return (
     <div className="space-y-10 px-4 pb-16 pt-6 sm:space-y-12 sm:px-6 sm:pt-10 lg:space-y-14 lg:px-8 lg:pt-12">
+      <SiteNoticeModal />
       {/* Greeting */}
       <header className="space-y-3">
         <div className="space-y-1">

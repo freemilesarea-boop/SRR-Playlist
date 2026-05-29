@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
+import { fetchSiteSettings } from './siteSettingsApi';
 
 export interface ArtistProfile {
   user_id: string;
@@ -617,6 +618,15 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
 
   let stage = 'init';
   try {
+    stage = 'distribution_kill_switch';
+    const _siteSettings = await fetchSiteSettings().catch(() => null);
+    if (_siteSettings && _siteSettings.distribution_enabled === false) {
+      throw new Error(
+        '현재 과도한 음원 등록으로 인해 신규 음원 유통 접수가 일시 중지되었습니다.\n' +
+        '메타데이터 및 음원 품질 검수 완료 후 다시 이용하실 수 있습니다.',
+      );
+    }
+
     stage = 'session';
     log('session start');
     // 0077-hotfix — getSession 무한 pending 방지: getCurrentUserFast 가 cache→getUser→
@@ -1495,7 +1505,17 @@ export async function submitArtistRelease(input: SubmitReleaseInput): Promise<st
     p_storage_path: input.storagePath ?? null,
     p_cover_storage_path: input.coverStoragePath ?? null,
   });
-  if (error) throw error;
+  if (error) {
+    // 트리거가 distribution_disabled 로 던지는 경우 친절한 한국어 메시지로 변환
+    const msg = (error.message || '') + ' ' + ((error as { hint?: string }).hint ?? '');
+    if (msg.includes('distribution_disabled')) {
+      throw new Error(
+        '현재 과도한 음원 등록으로 인해 신규 음원 유통 접수가 일시 중지되었습니다.\n' +
+        '메타데이터 및 음원 품질 검수 완료 후 다시 이용하실 수 있습니다.',
+      );
+    }
+    throw error;
+  }
   return data as string;
 }
 
