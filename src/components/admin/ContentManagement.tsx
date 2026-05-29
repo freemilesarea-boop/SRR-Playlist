@@ -10,7 +10,7 @@ import { useFreshFetch } from '@/hooks/useFreshFetch';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
-import { adminHardDeleteTrack, adminUpdateTrackMetadata, type AdminTrackMetadataInput } from '@/lib/adminTrackApi';
+import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, type AdminTrackMetadataFullInput, type AdminTrackDetail } from '@/lib/adminTrackApi';
 import { toast } from '@/store/toastStore';
 
 type SubTab = 'playlists' | 'tracks';
@@ -280,7 +280,7 @@ const GENRE_OPTIONS = ['POP','House','R&B','K-POP','J-Pop','Lo-fi','Jazz','Indie
 const MOOD_OPTIONS = ['차분한','밝은','트렌디한','따뜻한','몽환적인','신나는','감각적인','고급스러운','활기찬','편안한','세련된'] as const;
 const TEMPO_OPTIONS = [{ v: 'slow', l: '느림' }, { v: 'mid', l: '중간' }, { v: 'fast', l: '빠름' }] as const;
 
-/** 단일 트랙 행 — 재생/편집/삭제 + 메타 인라인 수정. */
+/** 단일 트랙 행 — 재생/편집/삭제 + 메타 풀 비교 + 인라인 수정. */
 function AdminTrackRow({
   track, onDelete, onUpdated,
 }: {
@@ -292,48 +292,78 @@ function AdminTrackRow({
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
   const isPlaying = usePlayerStore((s) => s.playing);
   const [editing, setEditing] = useState(false);
+  const [detail, setDetail] = useState<AdminTrackDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<AdminTrackMetadataInput>({});
+  const [draft, setDraft] = useState<AdminTrackMetadataFullInput>({});
 
-  // tracks 타입에 main_genre/sub_genre/mood/energy_level/bpm/tempo_feel 가 빠진 경우 unknown 캐스팅으로 접근.
-  // db 에는 0237/0238 마이그레이션으로 존재.
+  // 짧은 라벨용 raw 캐스팅 (collapsed 상태에서 빠른 표시)
   const raw = track as unknown as TrackRow & {
-    main_genre?: string | null; sub_genre?: string | null;
-    mood?: string | null; energy_level?: number | null;
-    bpm?: number | null; tempo_feel?: string | null;
-    instrumental?: boolean | null;
+    main_genre?: string | null; sub_genre?: string | null; mood?: string | null;
+    energy_level?: number | null; bpm?: number | null;
   };
 
   const playable = isPlayableUrl(track.audio_url);
   const isThisPlaying = currentTrackId === track.id && isPlaying;
 
-  function startEdit() {
-    setDraft({
-      title: track.title, artist: track.artist,
-      main_genre: raw.main_genre ?? null, sub_genre: raw.sub_genre ?? null, mood: raw.mood ?? null,
-      energy_level: raw.energy_level ?? null, bpm: raw.bpm ?? null,
-      tempo_feel: raw.tempo_feel ?? null, instrumental: raw.instrumental ?? null,
-    });
+  async function openEdit() {
     setEditing(true);
+    setLoadingDetail(true);
+    try {
+      const d = await getAdminTrackDetail(track.id);
+      if (d) {
+        setDetail(d);
+        setDraft({
+          title: d.title, artist: d.artist, album_name: d.album_name,
+          main_genre: d.main_genre, sub_genre: d.sub_genre, mood: d.mood,
+          suitable_store: d.suitable_store, lyrics: d.lyrics, language: d.language,
+          explicit_content: d.explicit_content, instrumental: d.instrumental,
+          energy_level: d.energy_level, bpm: d.bpm, tempo_feel: d.tempo_feel,
+          vocal_type: d.vocal_type, vocal_presence: d.vocal_presence,
+          emotional_intensity: d.emotional_intensity, brightness_level: d.brightness_level,
+          mood_tags: d.mood_tags, genre_tags: d.genre_tags,
+          business_tags: d.business_tags,
+          recommended_dayparts: d.recommended_dayparts, time_slots: d.time_slots,
+          situation_tags: d.situation_tags, season_tags: d.season_tags,
+        });
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '메타데이터 불러오기 실패');
+    } finally {
+      setLoadingDetail(false);
+    }
   }
 
   function play() {
-    if (!playable) {
-      toast.info('재생 가능한 음원이 없어요.');
-      return;
-    }
+    if (!playable) { toast.info('재생 가능한 음원이 없어요.'); return; }
     setQueue([track], 0, null);
+  }
+
+  function applyAiEnergy() {
+    if (detail?.ai_predicted_energy_level != null) {
+      setDraft((d) => ({ ...d, energy_level: detail.ai_predicted_energy_level }));
+    }
+  }
+  function applyAiBpm() {
+    if (detail?.ai_predicted_bpm != null) {
+      setDraft((d) => ({ ...d, bpm: detail.ai_predicted_bpm }));
+    }
+  }
+  function applyAiTempo() {
+    if (detail?.ai_predicted_tempo_feel) {
+      setDraft((d) => ({ ...d, tempo_feel: detail.ai_predicted_tempo_feel }));
+    }
   }
 
   async function save() {
     setSaving(true);
     try {
-      await adminUpdateTrackMetadata(track.id, draft);
+      await adminUpdateTrackMetadataFull(track.id, draft);
       toast.success('메타데이터 저장 완료');
       setEditing(false);
       await onUpdated();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '저장 실패');
+      toast.error(e instanceof Error ? e.message : ((e as { message?: string })?.message ?? '저장 실패'));
     } finally {
       setSaving(false);
     }
@@ -343,11 +373,8 @@ function AdminTrackRow({
     <li className="border-b border-line/5 last:border-b-0">
       <div className="flex items-center gap-3 p-3 hover:bg-bg-hover">
         <button
-          onClick={play}
-          disabled={!playable}
-          className={`relative h-10 w-10 shrink-0 overflow-hidden rounded-md ${
-            playable ? 'ring-1 ring-line/10' : 'opacity-50'
-          }`}
+          onClick={play} disabled={!playable}
+          className={`relative h-10 w-10 shrink-0 overflow-hidden rounded-md ${playable ? 'ring-1 ring-line/10' : 'opacity-50'}`}
           title={playable ? '재생' : '재생 불가'}
         >
           {track.cover_url ? (
@@ -357,9 +384,7 @@ function AdminTrackRow({
               <Music size={14} />
             </div>
           )}
-          <div className={`absolute inset-0 flex items-center justify-center bg-black/40 ${
-            isThisPlaying ? 'opacity-100' : 'opacity-0 hover:opacity-100'
-          } transition`}>
+          <div className={`absolute inset-0 flex items-center justify-center bg-black/40 ${isThisPlaying ? 'opacity-100' : 'opacity-0 hover:opacity-100'} transition`}>
             <Play size={14} fill="currentColor" className="text-white" />
           </div>
         </button>
@@ -372,9 +397,7 @@ function AdminTrackRow({
           <p className="truncate text-xs text-ink-mute">
             {track.artist ?? '—'}
             {(raw.main_genre || raw.sub_genre) && (
-              <span className="ml-1.5 text-ink-dim">
-                · {raw.main_genre ?? ''}{raw.sub_genre ? ` / ${raw.sub_genre}` : ''}
-              </span>
+              <span className="ml-1.5 text-ink-dim">· {raw.main_genre ?? ''}{raw.sub_genre ? ` / ${raw.sub_genre}` : ''}</span>
             )}
             {raw.energy_level != null && (
               <span className="ml-1.5 rounded bg-accent/15 px-1 text-[9px] font-bold text-accent">E{raw.energy_level}</span>
@@ -385,17 +408,13 @@ function AdminTrackRow({
           </p>
         </div>
 
-        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${
-          playable ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'
-        }`}>
+        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${playable ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'}`}>
           {playable ? '재생가능' : '음원 없음'}
         </span>
 
         <button
-          onClick={() => editing ? setEditing(false) : startEdit()}
-          className={`rounded-md px-2.5 py-1.5 text-xs ${
-            editing ? 'bg-accent text-black' : 'text-ink-mute hover:bg-ink/10 hover:text-ink'
-          }`}
+          onClick={() => editing ? setEditing(false) : openEdit()}
+          className={`rounded-md px-2.5 py-1.5 text-xs ${editing ? 'bg-accent text-black' : 'text-ink-mute hover:bg-ink/10 hover:text-ink'}`}
           title="메타데이터 편집"
         >
           <Pencil size={12} className="inline" /> 편집
@@ -410,91 +429,253 @@ function AdminTrackRow({
       </div>
 
       {editing && (
-        <div className="grid grid-cols-2 gap-2 border-t border-line/10 bg-bg-soft px-3 py-3 sm:grid-cols-4">
-          <Field label="제목" colSpan={2}>
-            <input
-              value={draft.title ?? ''} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              className="input h-8 text-xs"
-            />
-          </Field>
-          <Field label="아티스트" colSpan={2}>
-            <input
-              value={draft.artist ?? ''} onChange={(e) => setDraft({ ...draft, artist: e.target.value })}
-              className="input h-8 text-xs"
-            />
-          </Field>
+        <div className="border-t border-line/10 bg-bg-soft px-3 py-3">
+          {loadingDetail ? (
+            <p className="py-4 text-center text-xs text-ink-mute">메타데이터 불러오는 중…</p>
+          ) : !detail ? (
+            <p className="py-4 text-center text-xs text-rose-400">불러오기 실패</p>
+          ) : (
+            <div className="space-y-3">
+              {/* 발매/소스 상태 */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <Pill tone="info">{detail.source_label}</Pill>
+                {detail.release_status && <Pill tone="info">상태: {detail.release_status}</Pill>}
+                {detail.visibility_status && <Pill>가시: {detail.visibility_status}</Pill>}
+                {detail.audio_health_status && <Pill tone={detail.audio_health_status === 'ok' ? 'good' : 'warn'}>오디오: {detail.audio_health_status}</Pill>}
+                {detail.metadata_source && <Pill>메타소스: {detail.metadata_source}</Pill>}
+                {detail.isrc && <Pill>ISRC: {detail.isrc}</Pill>}
+                {detail.release_date && <Pill>발매일: {detail.release_date}</Pill>}
+                {detail.release_type && <Pill>{detail.release_type}</Pill>}
+                {detail.duration != null && <Pill>{Math.round(detail.duration)}초</Pill>}
+              </div>
 
-          <Field label="메인 장르">
-            <select
-              value={draft.main_genre ?? ''} onChange={(e) => setDraft({ ...draft, main_genre: e.target.value || null })}
-              className="input h-8 text-xs"
-            >
-              <option value="">—</option>
-              {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </Field>
-          <Field label="서브 장르">
-            <input
-              value={draft.sub_genre ?? ''} onChange={(e) => setDraft({ ...draft, sub_genre: e.target.value })}
-              placeholder="예: City Pop" className="input h-8 text-xs"
-            />
-          </Field>
-          <Field label="무드">
-            <select
-              value={draft.mood ?? ''} onChange={(e) => setDraft({ ...draft, mood: e.target.value || null })}
-              className="input h-8 text-xs"
-            >
-              <option value="">—</option>
-              {MOOD_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </Field>
-          <Field label="템포">
-            <select
-              value={draft.tempo_feel ?? ''} onChange={(e) => setDraft({ ...draft, tempo_feel: e.target.value || null })}
-              className="input h-8 text-xs"
-            >
-              <option value="">—</option>
-              {TEMPO_OPTIONS.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
-            </select>
-          </Field>
+              {/* AI 분석 vs 현재 — 핵심 비교 */}
+              <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/10">
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+                  AI 분석 결과 (CLAP + librosa)
+                  {detail.ai_predicted_at && (
+                    <span className="ml-2 font-normal normal-case text-ink-dim">
+                      {new Date(detail.ai_predicted_at).toLocaleDateString()}
+                      {detail.ai_applied_at && ' · 이미 반영됨'}
+                    </span>
+                  )}
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Compare
+                    label="에너지 (1-5)" current={draft.energy_level} predicted={detail.ai_predicted_energy_level}
+                    confidence={detail.ai_energy_confidence} onApply={applyAiEnergy}
+                  />
+                  <Compare
+                    label="BPM" current={draft.bpm} predicted={detail.ai_predicted_bpm} onApply={applyAiBpm}
+                  />
+                  <Compare
+                    label="템포감" current={draft.tempo_feel ? (TEMPO_OPTIONS.find((t) => t.v === draft.tempo_feel)?.l ?? draft.tempo_feel) : null}
+                    predicted={detail.ai_predicted_tempo_feel ? (TEMPO_OPTIONS.find((t) => t.v === detail.ai_predicted_tempo_feel)?.l ?? detail.ai_predicted_tempo_feel) : null}
+                    onApply={applyAiTempo}
+                  />
+                </div>
+              </div>
 
-          <Field label="에너지 (1-5)">
-            <input
-              type="number" min={1} max={5}
-              value={draft.energy_level ?? ''} onChange={(e) => setDraft({ ...draft, energy_level: e.target.value ? Number(e.target.value) : null })}
-              className="input h-8 text-xs"
-            />
-          </Field>
-          <Field label="BPM">
-            <input
-              type="number" min={0} max={400}
-              value={draft.bpm ?? ''} onChange={(e) => setDraft({ ...draft, bpm: e.target.value ? Number(e.target.value) : null })}
-              className="input h-8 text-xs"
-            />
-          </Field>
-          <Field label="Instrumental">
-            <label className="flex h-8 items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={!!draft.instrumental}
-                onChange={(e) => setDraft({ ...draft, instrumental: e.target.checked })}
-                className="h-4 w-4 rounded border-line/30 bg-bg-card accent-accent"
-              />
-              가사 없음
-            </label>
-          </Field>
+              {/* 식별 정보 */}
+              <Section label="기본 정보">
+                <Field label="제목" colSpan={2}>
+                  <input value={draft.title ?? ''} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="아티스트" colSpan={2}>
+                  <input value={draft.artist ?? ''} onChange={(e) => setDraft({ ...draft, artist: e.target.value })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="앨범" colSpan={2}>
+                  <input value={draft.album_name ?? ''} onChange={(e) => setDraft({ ...draft, album_name: e.target.value })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="언어" colSpan={1}>
+                  <input value={draft.language ?? ''} onChange={(e) => setDraft({ ...draft, language: e.target.value })} placeholder="ko / en / ja" className="input h-8 text-xs" />
+                </Field>
+                <Field label="권리자" colSpan={1}>
+                  <input value={detail.rights_holder_name ?? '—'} readOnly className="input h-8 cursor-not-allowed text-xs opacity-60" />
+                </Field>
+              </Section>
 
-          <div className="col-span-2 flex items-center justify-end gap-2 sm:col-span-4">
-            <button onClick={() => setEditing(false)} className="btn-ghost h-8 text-xs">
-              <X size={11} /> 취소
-            </button>
-            <button onClick={save} disabled={saving} className="btn-primary h-8 text-xs">
-              <Save size={11} /> {saving ? '저장 중…' : '저장'}
-            </button>
-          </div>
+              {/* 장르/무드 */}
+              <Section label="장르 / 무드">
+                <Field label="메인 장르">
+                  <select value={draft.main_genre ?? ''} onChange={(e) => setDraft({ ...draft, main_genre: e.target.value || null })} className="input h-8 text-xs">
+                    <option value="">—</option>
+                    {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </Field>
+                <Field label="서브 장르">
+                  <input value={draft.sub_genre ?? ''} onChange={(e) => setDraft({ ...draft, sub_genre: e.target.value })} placeholder="예: City Pop" className="input h-8 text-xs" />
+                </Field>
+                <Field label="무드">
+                  <select value={draft.mood ?? ''} onChange={(e) => setDraft({ ...draft, mood: e.target.value || null })} className="input h-8 text-xs">
+                    <option value="">—</option>
+                    {MOOD_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Field>
+                <Field label="템포감">
+                  <select value={draft.tempo_feel ?? ''} onChange={(e) => setDraft({ ...draft, tempo_feel: e.target.value || null })} className="input h-8 text-xs">
+                    <option value="">—</option>
+                    {TEMPO_OPTIONS.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+                  </select>
+                </Field>
+                <Field label="에너지 (1-5)">
+                  <input type="number" min={1} max={5} value={draft.energy_level ?? ''} onChange={(e) => setDraft({ ...draft, energy_level: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="BPM">
+                  <input type="number" min={0} max={400} value={draft.bpm ?? ''} onChange={(e) => setDraft({ ...draft, bpm: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="적합 매장">
+                  <input value={draft.suitable_store ?? ''} onChange={(e) => setDraft({ ...draft, suitable_store: e.target.value })} placeholder="예: 카페" className="input h-8 text-xs" />
+                </Field>
+                <Field label="Instrumental">
+                  <label className="flex h-8 items-center gap-2 text-xs">
+                    <input type="checkbox" checked={!!draft.instrumental} onChange={(e) => setDraft({ ...draft, instrumental: e.target.checked })} className="h-4 w-4 rounded border-line/30 bg-bg-card accent-accent" />
+                    가사 없음
+                  </label>
+                </Field>
+                <Field label="Explicit">
+                  <label className="flex h-8 items-center gap-2 text-xs">
+                    <input type="checkbox" checked={!!draft.explicit_content} onChange={(e) => setDraft({ ...draft, explicit_content: e.target.checked })} className="h-4 w-4 rounded border-line/30 bg-bg-card accent-accent" />
+                    성인 컨텐츠
+                  </label>
+                </Field>
+              </Section>
+
+              {/* 보컬/감정 */}
+              <Section label="보컬 / 감정">
+                <Field label="보컬 타입">
+                  <input value={draft.vocal_type ?? ''} onChange={(e) => setDraft({ ...draft, vocal_type: e.target.value })} placeholder="male / female / mixed" className="input h-8 text-xs" />
+                </Field>
+                <Field label="보컬 비중 (1-5)">
+                  <input type="number" min={1} max={5} value={draft.vocal_presence ?? ''} onChange={(e) => setDraft({ ...draft, vocal_presence: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="감정 강도 (1-5)">
+                  <input type="number" min={1} max={5} value={draft.emotional_intensity ?? ''} onChange={(e) => setDraft({ ...draft, emotional_intensity: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" />
+                </Field>
+                <Field label="밝기 (1-5)">
+                  <input type="number" min={1} max={5} value={draft.brightness_level ?? ''} onChange={(e) => setDraft({ ...draft, brightness_level: e.target.value ? Number(e.target.value) : null })} className="input h-8 text-xs" />
+                </Field>
+              </Section>
+
+              {/* 태그 (배열) */}
+              <Section label="태그 (쉼표로 구분)">
+                <TagField label="장르 태그" value={draft.genre_tags} onChange={(arr) => setDraft({ ...draft, genre_tags: arr })} colSpan={2} />
+                <TagField label="무드 태그" value={draft.mood_tags} onChange={(arr) => setDraft({ ...draft, mood_tags: arr })} colSpan={2} />
+                <TagField label="업종 태그" value={draft.business_tags} onChange={(arr) => setDraft({ ...draft, business_tags: arr })} colSpan={2} />
+                <TagField label="추천 시간대" value={draft.recommended_dayparts} onChange={(arr) => setDraft({ ...draft, recommended_dayparts: arr })} colSpan={2} />
+                <TagField label="시간 슬롯" value={draft.time_slots} onChange={(arr) => setDraft({ ...draft, time_slots: arr })} colSpan={2} />
+                <TagField label="상황 태그" value={draft.situation_tags} onChange={(arr) => setDraft({ ...draft, situation_tags: arr })} colSpan={2} />
+                <TagField label="시즌 태그" value={draft.season_tags} onChange={(arr) => setDraft({ ...draft, season_tags: arr })} colSpan={2} />
+              </Section>
+
+              {/* 가사 */}
+              <Section label="가사" cols={1}>
+                <label className="col-span-full block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-ink-dim">
+                    가사 ({draft.lyrics?.length ?? 0}자) {detail.lyric_type && `· ${detail.lyric_type}`}
+                  </span>
+                  <textarea
+                    value={draft.lyrics ?? ''} onChange={(e) => setDraft({ ...draft, lyrics: e.target.value })}
+                    className="input min-h-[100px] resize-y text-xs"
+                    placeholder="가사 입력"
+                  />
+                </label>
+              </Section>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={() => setEditing(false)} className="btn-ghost h-8 text-xs">
+                  <X size={11} /> 취소
+                </button>
+                <button onClick={save} disabled={saving} className="btn-primary h-8 text-xs">
+                  <Save size={11} /> {saving ? '저장 중…' : '저장'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </li>
+  );
+}
+
+function Section({ label, children, cols = 4 }: { label: string; children: React.ReactNode; cols?: 1 | 2 | 4 }) {
+  const gridClass = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4';
+  return (
+    <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/10">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
+      <div className={`grid ${gridClass} gap-2`}>{children}</div>
+    </div>
+  );
+}
+
+function Pill({ children, tone }: { children: React.ReactNode; tone?: 'info' | 'good' | 'warn' }) {
+  const cls =
+    tone === 'good' ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/20' :
+    tone === 'warn' ? 'bg-amber-500/15 text-amber-300 ring-amber-500/20' :
+    tone === 'info' ? 'bg-accent/15 text-accent ring-accent/20' :
+    'bg-bg-soft text-ink-mute ring-line/10';
+  return <span className={`rounded-full px-2 py-0.5 ring-1 ${cls}`}>{children}</span>;
+}
+
+function Compare({
+  label, current, predicted, confidence, onApply,
+}: {
+  label: string;
+  current: number | string | null | undefined;
+  predicted: number | string | null | undefined;
+  confidence?: number | null;
+  onApply: () => void;
+}) {
+  const same = predicted != null && current != null && String(predicted) === String(current);
+  const hasPrediction = predicted != null;
+  return (
+    <div className="rounded-md bg-bg-soft p-2 ring-1 ring-line/5">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-ink-dim">
+        {label}
+        {confidence != null && (
+          <span className="ml-1 rounded bg-accent/15 px-1 text-[8px] text-accent">{Number(confidence).toFixed(2)}</span>
+        )}
+      </p>
+      <div className="mt-1 flex items-center gap-1.5 text-xs">
+        <span className="text-ink-mute">현재 <span className="font-semibold text-ink">{current ?? '—'}</span></span>
+        <span className="text-ink-dim">→</span>
+        <span className={`font-semibold ${hasPrediction ? (same ? 'text-emerald-400' : 'text-accent') : 'text-ink-dim'}`}>
+          AI <span>{predicted ?? '—'}</span>
+        </span>
+        {hasPrediction && !same && (
+          <button onClick={onApply} className="ml-auto rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-bold text-accent hover:bg-accent/25">
+            적용
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TagField({
+  label, value, onChange, colSpan = 1,
+}: {
+  label: string;
+  value: string[] | null | undefined;
+  onChange: (arr: string[] | null) => void;
+  colSpan?: 1 | 2;
+}) {
+  const [text, setText] = useState((value ?? []).join(', '));
+  // 값 외부 갱신 동기화
+  useEffect(() => { setText((value ?? []).join(', ')); }, [value]);
+  return (
+    <label className={`block space-y-1 ${colSpan === 2 ? 'col-span-2' : ''}`}>
+      <span className="text-[9px] font-bold uppercase tracking-wider text-ink-dim">{label}</span>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          const arr = text.split(',').map((s) => s.trim()).filter(Boolean);
+          onChange(arr.length === 0 ? null : arr);
+        }}
+        className="input h-8 text-xs" placeholder="태그1, 태그2"
+      />
+    </label>
   );
 }
 
