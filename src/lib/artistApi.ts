@@ -15,6 +15,24 @@ import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
 import { fetchSiteSettings } from './siteSettingsApi';
 
+export interface UploadQuotaInfo {
+  used: number;
+  quota: number;
+  remaining: number;
+  period_start: string;
+  period_end: string;
+}
+
+export async function fetchMyUploadQuota(): Promise<UploadQuotaInfo | null> {
+  const { data, error } = await supabase.rpc('get_my_upload_quota');
+  if (error) {
+    if (import.meta.env.DEV) console.warn('[uploadQuota] fetch failed', error);
+    return null;
+  }
+  const row = (data as UploadQuotaInfo[] | null)?.[0];
+  return row ?? null;
+}
+
 export interface ArtistProfile {
   user_id: string;
   real_name: string;
@@ -635,6 +653,18 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
     const me = await getCurrentUserFast();
     const userId = me?.id;
     log('session ok', { uid: userId ? userId.slice(0, 8) + '…' : 'null' });
+
+    // 월 50곡 한도 사전 차단 (서버 트리거가 최종 가드 — 여기서는 빠른 실패 + 친절한 안내)
+    if (!input.trackId && !input.skipEligibilityCheck) {
+      stage = 'monthly_upload_quota';
+      const quota = await fetchMyUploadQuota().catch(() => null);
+      if (quota && quota.remaining <= 0) {
+        throw new Error(
+          `이번 달 음원 등록 한도 ${quota.quota}곡을 모두 사용하셨습니다.\n` +
+          '다음 달 1일부터 다시 등록 가능합니다.',
+        );
+      }
+    }
     if (!userId) {
       log('session fail — no user');
       return {
@@ -1506,12 +1536,18 @@ export async function submitArtistRelease(input: SubmitReleaseInput): Promise<st
     p_cover_storage_path: input.coverStoragePath ?? null,
   });
   if (error) {
-    // 트리거가 distribution_disabled 로 던지는 경우 친절한 한국어 메시지로 변환
+    // 트리거가 던지는 RAW 메시지를 친절한 한국어로 변환
     const msg = (error.message || '') + ' ' + ((error as { hint?: string }).hint ?? '');
     if (msg.includes('distribution_disabled')) {
       throw new Error(
         '현재 과도한 음원 등록으로 인해 신규 음원 유통 접수가 일시 중지되었습니다.\n' +
         '메타데이터 및 음원 품질 검수 완료 후 다시 이용하실 수 있습니다.',
+      );
+    }
+    if (msg.includes('monthly_upload_quota_exceeded')) {
+      throw new Error(
+        '이번 달 음원 등록 한도 50곡을 모두 사용하셨습니다.\n' +
+        '다음 달 1일부터 다시 등록 가능합니다.',
       );
     }
     throw error;

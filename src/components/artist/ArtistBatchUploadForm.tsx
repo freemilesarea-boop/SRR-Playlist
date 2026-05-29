@@ -22,6 +22,8 @@ import {
   formatEligibilityError,
   getMyMetadataTrust,
   computeAudioSha256,
+  fetchMyUploadQuota,
+  type UploadQuotaInfo,
   type ReleaseType,
   type ArtistProfile,
 } from '@/lib/artistApi';
@@ -154,7 +156,9 @@ export default function ArtistBatchUploadForm({
   const [common, setCommon] = useState<CommonMeta>(initialCommon);
   const [meta, setMeta] = useState<SelectedMeta>(emptySelectedMeta);
   const [trust, setTrust] = useState<{ trust_score: number; tier: 'high' | 'medium' | 'low'; guidance: string } | null>(null);
+  const [quota, setQuota] = useState<UploadQuotaInfo | null>(null);
   useEffect(() => { getMyMetadataTrust().then(setTrust).catch(() => {}); }, []);
+  useEffect(() => { fetchMyUploadQuota().then(setQuota).catch(() => {}); }, []);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -559,6 +563,25 @@ export default function ArtistBatchUploadForm({
       }}
       className="space-y-4 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10"
     >
+      {quota && (
+        <div className={`flex items-center justify-between rounded-xl p-3 text-[11px] leading-relaxed ring-1 ${
+          quota.remaining === 0 ? 'bg-rose-500/10 text-rose-700 ring-rose-400/20'
+            : quota.remaining <= 5 ? 'bg-amber-500/10 text-amber-700 ring-amber-400/20'
+            : 'bg-emerald-500/10 text-emerald-700 ring-emerald-400/20'
+        }`}>
+          <div>
+            <b>이번 달 등록 한도</b>
+            <p className="mt-0.5">
+              {quota.used} / {quota.quota}곡 사용 ·{' '}
+              <b>잔여 {quota.remaining}곡</b>
+              {quota.remaining === 0 && ' — 다음 달 1일부터 다시 등록 가능합니다'}
+            </p>
+          </div>
+          <div className="text-right text-[10px] opacity-70">
+            <div>~ {new Date(quota.period_end).toLocaleDateString()}</div>
+          </div>
+        </div>
+      )}
       {trust && trust.tier !== 'high' && (
         <div className={`rounded-xl p-3 text-[11px] leading-relaxed ${trust.tier === 'low' ? 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-400/20' : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-400/20'}`}>
           <b>메타데이터 정확도 안내 (신뢰도 {trust.trust_score})</b>
