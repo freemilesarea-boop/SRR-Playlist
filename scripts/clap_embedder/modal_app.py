@@ -59,7 +59,7 @@ model_volume = modal.Volume.from_name("clap-model-cache", create_if_missing=True
     secrets=secrets,
     volumes={"/cache": model_volume},
     timeout=600,
-    container_idle_timeout=300,  # 5분 idle 후 종료 (비용 절감)
+    scaledown_window=300,  # 5분 idle 후 종료 (비용 절감)
 )
 class ClapEmbedder:
     @modal.enter()
