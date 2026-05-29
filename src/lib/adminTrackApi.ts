@@ -3,6 +3,81 @@
  */
 import { supabase } from './supabase';
 
+export interface AdminTrackDetail {
+  id: string;
+  // 식별
+  title: string;
+  artist: string | null;
+  album_name: string | null;
+  release_title: string | null;
+  release_type: string | null;
+  release_date: string | null;
+  release_status: string | null;
+  visibility_status: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+  source_type: string | null;
+  source_label: string | null;
+  // 아티스트 메타
+  main_genre: string | null;
+  sub_genre: string | null;
+  mood: string | null;
+  suitable_store: string | null;
+  lyrics: string | null;
+  lyric_type: string | null;
+  isrc: string | null;
+  rights_holder_name: string | null;
+  language: string | null;
+  explicit_content: boolean | null;
+  instrumental: boolean | null;
+  // 태깅 (배열)
+  genre_tags: string[] | null;
+  mood_tags: string[] | null;
+  business_tags: string[] | null;
+  business_type_tags: string[] | null;
+  recommended_dayparts: string[] | null;
+  time_slots: string[] | null;
+  situation_tags: string[] | null;
+  season_tags: string[] | null;
+  // 보컬/감정
+  vocal_type: string | null;
+  vocal_presence: number | null;
+  emotional_intensity: number | null;
+  brightness_level: number | null;
+  // 음원 분석 (admin 수정 가능)
+  energy_level: number | null;
+  bpm: number | null;
+  tempo_feel: string | null;
+  // AI 예측 (참고)
+  ai_predicted_energy_level: number | null;
+  ai_energy_confidence: number | null;
+  ai_predicted_bpm: number | null;
+  ai_predicted_tempo_feel: string | null;
+  ai_predicted_at: string | null;
+  ai_applied_at: string | null;
+  // 미디어/품질
+  audio_url: string | null;
+  cover_url: string | null;
+  duration: number | null;
+  audio_health_status: string | null;
+  audio_review_status: string | null;
+  cover_review_status: string | null;
+  metadata_review_status: string | null;
+  metadata_source: string | null;
+  // 시간
+  created_at: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  released_at: string | null;
+}
+
+export async function getAdminTrackDetail(trackId: string): Promise<AdminTrackDetail | null> {
+  const { data, error } = await supabase.rpc('get_admin_track_detail', { p_track_id: trackId });
+  if (error) throw error;
+  const arr = data as AdminTrackDetail[] | null;
+  return arr?.[0] ?? null;
+}
+
 export interface AdminTrackPurgeResult {
   track_id: string;
   audio_bucket: string;
@@ -12,20 +87,11 @@ export interface AdminTrackPurgeResult {
   mode: 'hard' | 'soft_due_to_revenue';
 }
 
-/**
- * 트랙 삭제 — 두 가지 모드:
- *   - 'hard': 정산/수익 기록 없음 → DB row + storage 파일 완전 제거
- *   - 'soft_due_to_revenue': 정산 보존 필요 → tracks row 는 hidden + removed_at,
- *     audio/cover URL 제거 + storage 파일 삭제 → 사이트 어디서도 재생 불가
- * 어느 모드든 호출 후 사이트에서 재생 / 노출 불가능.
- */
 export async function adminHardDeleteTrack(trackId: string): Promise<AdminTrackPurgeResult> {
   const { data, error } = await supabase.rpc('admin_hard_delete_track', { p_track_id: trackId });
   if (error) throw error;
   const row = (data as AdminTrackPurgeResult[] | null)?.[0];
   if (!row) throw new Error('삭제 응답이 비어있어요.');
-
-  // best-effort: storage 파일 제거. DB 작업은 이미 완료됐으므로 storage 실패해도 진행.
   if (row.audio_path) {
     try { await supabase.storage.from(row.audio_bucket).remove([row.audio_path]); } catch { /* ignore */ }
   }
@@ -35,33 +101,70 @@ export async function adminHardDeleteTrack(trackId: string): Promise<AdminTrackP
   return row;
 }
 
-export interface AdminTrackMetadataInput {
+export interface AdminTrackMetadataFullInput {
   title?: string | null;
   artist?: string | null;
+  album_name?: string | null;
   main_genre?: string | null;
   sub_genre?: string | null;
   mood?: string | null;
+  suitable_store?: string | null;
+  lyrics?: string | null;
+  language?: string | null;
+  explicit_content?: boolean | null;
+  instrumental?: boolean | null;
   energy_level?: number | null;
   bpm?: number | null;
   tempo_feel?: string | null;
-  instrumental?: boolean | null;
+  vocal_type?: string | null;
+  vocal_presence?: number | null;
+  emotional_intensity?: number | null;
+  brightness_level?: number | null;
+  genre_tags?: string[] | null;
+  mood_tags?: string[] | null;
+  business_tags?: string[] | null;
+  recommended_dayparts?: string[] | null;
+  time_slots?: string[] | null;
+  situation_tags?: string[] | null;
+  season_tags?: string[] | null;
 }
 
-export async function adminUpdateTrackMetadata(
+export async function adminUpdateTrackMetadataFull(
   trackId: string,
-  input: AdminTrackMetadataInput,
+  input: AdminTrackMetadataFullInput,
 ): Promise<void> {
-  const { error } = await supabase.rpc('admin_update_track_metadata', {
+  const { error } = await supabase.rpc('admin_update_track_metadata_full', {
     p_track_id: trackId,
     p_title: input.title ?? null,
     p_artist: input.artist ?? null,
+    p_album_name: input.album_name ?? null,
     p_main_genre: input.main_genre ?? null,
     p_sub_genre: input.sub_genre ?? null,
     p_mood: input.mood ?? null,
+    p_suitable_store: input.suitable_store ?? null,
+    p_lyrics: input.lyrics ?? null,
+    p_language: input.language ?? null,
+    p_explicit_content: input.explicit_content ?? null,
+    p_instrumental: input.instrumental ?? null,
     p_energy_level: input.energy_level ?? null,
     p_bpm: input.bpm ?? null,
     p_tempo_feel: input.tempo_feel ?? null,
-    p_instrumental: input.instrumental ?? null,
+    p_vocal_type: input.vocal_type ?? null,
+    p_vocal_presence: input.vocal_presence ?? null,
+    p_emotional_intensity: input.emotional_intensity ?? null,
+    p_brightness_level: input.brightness_level ?? null,
+    p_genre_tags: input.genre_tags ?? null,
+    p_mood_tags: input.mood_tags ?? null,
+    p_business_tags: input.business_tags ?? null,
+    p_recommended_dayparts: input.recommended_dayparts ?? null,
+    p_time_slots: input.time_slots ?? null,
+    p_situation_tags: input.situation_tags ?? null,
+    p_season_tags: input.season_tags ?? null,
   });
   if (error) throw error;
 }
+
+// legacy alias — 기존 호출 (간단 모드) 위해 유지
+export type AdminTrackMetadataInput = AdminTrackMetadataFullInput;
+export const adminUpdateTrackMetadata = adminUpdateTrackMetadataFull;
+
