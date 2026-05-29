@@ -152,7 +152,8 @@ class ClapEmbedder:
                     "p_model_version": "laion-clap-music-v1",
                 },
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                raise RuntimeError(f"store_track_embedding HTTP {resp.status_code}: {resp.text[:500]}")
 
     def _list_pending(self, limit: int) -> list:
         """list_tracks_needing_embedding RPC 호출."""
