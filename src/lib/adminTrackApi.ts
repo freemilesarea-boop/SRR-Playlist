@@ -164,6 +164,49 @@ export async function adminUpdateTrackMetadataFull(
   if (error) throw error;
 }
 
+export interface AdminTrackWithAi {
+  id: string;
+  title: string;
+  artist: string | null;
+  audio_url: string;
+  cover_url: string | null;
+  duration: number | null;
+  created_at: string;
+  main_genre: string | null;
+  sub_genre: string | null;
+  mood: string | null;
+  energy_level: number | null;
+  bpm: number | null;
+  tempo_feel: string | null;
+  ai_predicted_energy_level: number | null;
+  ai_energy_confidence: number | null;
+  ai_predicted_bpm: number | null;
+  ai_predicted_tempo_feel: string | null;
+  ai_applied_at: string | null;
+}
+
+export async function listAdminTracksWithAi(limit = 1000): Promise<AdminTrackWithAi[]> {
+  const { data, error } = await supabase.rpc('list_admin_tracks_with_ai', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AdminTrackWithAi[];
+}
+
+export interface AiCorrectionStat {
+  field_name: string;
+  total_corrections: number;
+  exact_matches: number;
+  changed: number;
+  accuracy_pct: number | null;
+  avg_numeric_delta: number | null;
+  recent_corrections: number;
+}
+
+export async function aiCorrectionStats(): Promise<AiCorrectionStat[]> {
+  const { data, error } = await supabase.rpc('ai_correction_stats');
+  if (error) throw error;
+  return (data ?? []) as AiCorrectionStat[];
+}
+
 // legacy alias — 기존 호출 (간단 모드) 위해 유지
 export type AdminTrackMetadataInput = AdminTrackMetadataFullInput;
 export const adminUpdateTrackMetadata = adminUpdateTrackMetadataFull;

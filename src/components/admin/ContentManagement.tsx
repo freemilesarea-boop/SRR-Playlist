@@ -10,7 +10,7 @@ import { useFreshFetch } from '@/hooks/useFreshFetch';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
-import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, type AdminTrackMetadataFullInput, type AdminTrackDetail } from '@/lib/adminTrackApi';
+import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, listAdminTracksWithAi, aiCorrectionStats, type AdminTrackMetadataFullInput, type AdminTrackDetail, type AdminTrackWithAi, type AiCorrectionStat } from '@/lib/adminTrackApi';
 import { toast } from '@/store/toastStore';
 
 type SubTab = 'playlists' | 'tracks';
@@ -19,14 +19,20 @@ export default function ContentManagement() {
   const [subTab, setSubTab] = useState<SubTab>('playlists');
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
+  const [aiTracks, setAiTracks] = useState<AdminTrackWithAi[]>([]);
   const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
 
   async function refresh() {
-    const [pls, trs] = await Promise.all([fetchPlaylists(), fetchTracks()]);
+    const [pls, trs, aiTs] = await Promise.all([
+      fetchPlaylists(),
+      fetchTracks(),
+      listAdminTracksWithAi(1500).catch(() => [] as AdminTrackWithAi[]),
+    ]);
     setPlaylists(pls);
     setTracks(trs);
+    setAiTracks(aiTs);
   }
 
   // 재로그인 / 새로고침 / 탭 복귀 시 항상 DB 에서 최신 fetch
@@ -184,6 +190,7 @@ export default function ContentManagement() {
       {subTab === 'tracks' && (
         <AdminTrackList
           tracks={tracks}
+          aiTracks={aiTracks}
           showUploader={showUploader}
           setShowUploader={setShowUploader}
           onUploaded={async () => { setShowUploader(false); await refresh(); }}
@@ -195,11 +202,12 @@ export default function ContentManagement() {
   );
 }
 
-/** 트랙 리스트 + 검색 + 페이지네이션. 1000+ 트랙 처리 위해 50개씩 표시. */
+/** 트랙 리스트 + 검색 + 페이지네이션 + AI 정확도 패널. */
 function AdminTrackList({
-  tracks, showUploader, setShowUploader, onUploaded, onDelete, onUpdated,
+  tracks, aiTracks, showUploader, setShowUploader, onUploaded, onDelete, onUpdated,
 }: {
   tracks: TrackRow[];
+  aiTracks: AdminTrackWithAi[];
   showUploader: boolean;
   setShowUploader: (b: boolean) => void;
   onUploaded: () => Promise<void>;
@@ -208,6 +216,15 @@ function AdminTrackList({
 }) {
   const [query, setQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(50);
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState<AiCorrectionStat[]>([]);
+
+  // AI 데이터 와 기본 tracks 합쳐서 표시 (AI 가 없는 트랙도 노출)
+  const aiByTrackId = useMemo(() => {
+    const m = new Map<string, AdminTrackWithAi>();
+    for (const a of aiTracks) m.set(a.id, a);
+    return m;
+  }, [aiTracks]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -218,6 +235,11 @@ function AdminTrackList({
     );
   }, [tracks, query]);
   const visible = filtered.slice(0, visibleCount);
+
+  useEffect(() => {
+    if (!showStats) return;
+    aiCorrectionStats().then(setStats).catch(() => setStats([]));
+  }, [showStats]);
 
   return (
     <div className="space-y-3">
@@ -243,6 +265,15 @@ function AdminTrackList({
               </button>
             )}
           </div>
+          <button
+            onClick={() => setShowStats((s) => !s)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${
+              showStats ? 'bg-accent/15 text-accent ring-accent/30' : 'bg-bg-card text-ink-mute ring-line/10 hover:bg-bg-hover'
+            }`}
+            title="AI 가 admin 수정을 통해 얼마나 학습되고 있는지"
+          >
+            AI 정확도
+          </button>
           <span className="text-[11px] text-ink-mute">
             {filtered.length === tracks.length
               ? `${tracks.length}개`
@@ -251,9 +282,50 @@ function AdminTrackList({
         </div>
       )}
 
+      {showStats && (
+        <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+            AI 정확도 — admin 수정 기록 기반 (학습 시그널)
+          </p>
+          {stats.length === 0 ? (
+            <p className="text-xs text-ink-mute">아직 수정 기록이 없습니다. 트랙 메타데이터를 편집/저장하면 AI 가 예측한 값과 admin 의 최종 값이 비교되어 여기에 누적됩니다.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {stats.map((s) => (
+                <div key={s.field_name} className="rounded-lg bg-bg-soft p-3 ring-1 ring-line/10">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold">{FIELD_LABELS[s.field_name] ?? s.field_name}</p>
+                    {s.accuracy_pct != null && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        s.accuracy_pct >= 70 ? 'bg-emerald-500/15 text-emerald-400'
+                          : s.accuracy_pct >= 40 ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-rose-500/15 text-rose-400'
+                      }`}>
+                        정확도 {s.accuracy_pct}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[10px] text-ink-mute">
+                    총 {s.total_corrections}건 · AI 일치 {s.exact_matches} · 수정 {s.changed}
+                    {s.avg_numeric_delta != null && ` · 평균 오차 ±${s.avg_numeric_delta}`}
+                    {s.recent_corrections > 0 && ` · 30일 ${s.recent_corrections}건`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <ul className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
         {visible.map((t) => (
-          <AdminTrackRow key={t.id} track={t} onDelete={onDelete} onUpdated={onUpdated} />
+          <AdminTrackRow
+            key={t.id}
+            track={t}
+            ai={aiByTrackId.get(t.id) ?? null}
+            onDelete={onDelete}
+            onUpdated={onUpdated}
+          />
         ))}
         {filtered.length === 0 && (
           <li className="p-6 text-center text-sm text-ink-mute">
@@ -276,15 +348,24 @@ function AdminTrackList({
   );
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  energy_level: '에너지 (1-5)',
+  bpm: 'BPM',
+  tempo_feel: '템포감',
+  main_genre: '메인 장르',
+  mood: '무드',
+};
+
 const GENRE_OPTIONS = ['POP','House','R&B','K-POP','J-Pop','Lo-fi','Jazz','Indie Pop','Jazzhop','Hip-Hop','K-HipHop','Phonk','Chillhop','Ballad','Retro Pop','Instrumental','Electronic','Ambient','Classical','Lounge','Soul','Funk'] as const;
 const MOOD_OPTIONS = ['차분한','밝은','트렌디한','따뜻한','몽환적인','신나는','감각적인','고급스러운','활기찬','편안한','세련된'] as const;
 const TEMPO_OPTIONS = [{ v: 'slow', l: '느림' }, { v: 'mid', l: '중간' }, { v: 'fast', l: '빠름' }] as const;
 
 /** 단일 트랙 행 — 재생/편집/삭제 + 메타 풀 비교 + 인라인 수정. */
 function AdminTrackRow({
-  track, onDelete, onUpdated,
+  track, ai, onDelete, onUpdated,
 }: {
   track: TrackRow;
+  ai: AdminTrackWithAi | null;
   onDelete: (id: string, title: string) => void;
   onUpdated: () => Promise<void>;
 }) {
@@ -300,7 +381,7 @@ function AdminTrackRow({
   // 짧은 라벨용 raw 캐스팅 (collapsed 상태에서 빠른 표시)
   const raw = track as unknown as TrackRow & {
     main_genre?: string | null; sub_genre?: string | null; mood?: string | null;
-    energy_level?: number | null; bpm?: number | null;
+    energy_level?: number | null; bpm?: number | null; tempo_feel?: string | null;
   };
 
   const playable = isPlayableUrl(track.audio_url);
@@ -399,11 +480,22 @@ function AdminTrackRow({
             {(raw.main_genre || raw.sub_genre) && (
               <span className="ml-1.5 text-ink-dim">· {raw.main_genre ?? ''}{raw.sub_genre ? ` / ${raw.sub_genre}` : ''}</span>
             )}
-            {raw.energy_level != null && (
-              <span className="ml-1.5 rounded bg-accent/15 px-1 text-[9px] font-bold text-accent">E{raw.energy_level}</span>
-            )}
-            {raw.bpm != null && (
-              <span className="ml-1 rounded bg-bg-soft px-1 text-[9px] font-bold text-ink-mute">{raw.bpm} BPM</span>
+          </p>
+          {/* 현재 vs AI 비교 라인 */}
+          <p className="mt-1 flex flex-wrap gap-1 text-[10px]">
+            <ComparePair
+              label="E" current={raw.energy_level ?? null} ai={ai?.ai_predicted_energy_level ?? null}
+              confidence={ai?.ai_energy_confidence ?? null}
+            />
+            <ComparePair
+              label="BPM" current={raw.bpm ?? null} ai={ai?.ai_predicted_bpm ?? null}
+            />
+            <ComparePair
+              label="템포" current={raw.tempo_feel ? (TEMPO_OPTIONS.find((t) => t.v === raw.tempo_feel)?.l ?? raw.tempo_feel) : null}
+              ai={ai?.ai_predicted_tempo_feel ? (TEMPO_OPTIONS.find((t) => t.v === ai.ai_predicted_tempo_feel)?.l ?? ai.ai_predicted_tempo_feel) : null}
+            />
+            {ai?.ai_applied_at && (
+              <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-bold text-emerald-400">AI 적용됨</span>
             )}
           </p>
         </div>
@@ -605,6 +697,33 @@ function Section({ label, children, cols = 4 }: { label: string; children: React
       <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
       <div className={`grid ${gridClass} gap-2`}>{children}</div>
     </div>
+  );
+}
+
+/** 행 안의 컴팩트 비교 배지 — 현재값 / AI 값을 나란히. */
+function ComparePair({
+  label, current, ai, confidence,
+}: {
+  label: string;
+  current: number | string | null;
+  ai: number | string | null;
+  confidence?: number | null;
+}) {
+  const has = current != null || ai != null;
+  if (!has) return null;
+  const same = current != null && ai != null && String(current) === String(ai);
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded bg-bg-card px-1 ring-1 ring-line/5">
+      <span className="text-[9px] font-bold text-ink-dim">{label}</span>
+      <span className="font-semibold text-ink">{current ?? '—'}</span>
+      <span className="text-ink-dim">/</span>
+      <span className={ai == null ? 'text-ink-dim' : (same ? 'text-emerald-400' : 'text-accent')}>
+        AI {ai ?? '—'}
+      </span>
+      {confidence != null && ai != null && (
+        <span className="text-[8px] text-ink-dim">·{Number(confidence).toFixed(2)}</span>
+      )}
+    </span>
   );
 }
 
