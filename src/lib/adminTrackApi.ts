@@ -226,6 +226,29 @@ export async function listSevereMismatches(limit = 100): Promise<MetadataMismatc
   return (data ?? []) as MetadataMismatch[];
 }
 
+export interface PurgeAllResult {
+  snapshot_artists: number;
+  total_tracks: number;
+  hard_deleted: number;
+  soft_deleted: number;
+  failed: number;
+}
+
+/**
+ * 모든 트랙을 완전 삭제 — 위험 액션.
+ * 호출 전에 stream_events 를 아티스트별로 artist_lifetime_streams 에 자동 스냅샷.
+ * 정산 기록 있는 트랙은 자동 soft, 없는 트랙은 hard.
+ */
+export async function adminPurgeAllTracks(): Promise<PurgeAllResult> {
+  const { data, error } = await supabase.rpc('admin_purge_all_tracks', {
+    p_confirm: 'DELETE_ALL_TRACKS',
+  });
+  if (error) throw error;
+  const row = (data as PurgeAllResult[] | null)?.[0];
+  if (!row) throw new Error('응답이 비어있어요.');
+  return row;
+}
+
 export async function bulkDeleteSevereMismatches(
   minConfidence = 0.6, limit = 100,
 ): Promise<{ deleted_count: number; soft_deleted_count: number }> {

@@ -1,12 +1,47 @@
 import { useEffect, useState } from 'react';
-import { Bell, Save, ShieldOff, ShieldCheck } from 'lucide-react';
+import { Bell, Save, ShieldOff, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { fetchSiteSettings, adminUpdateSiteSettings, type SiteSettings } from '@/lib/siteSettingsApi';
+import { adminPurgeAllTracks, type PurgeAllResult } from '@/lib/adminTrackApi';
 import { toast } from '@/store/toastStore';
 
 export default function SiteSettingsPanel() {
   const [s, setS] = useState<SiteSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [lastPurge, setLastPurge] = useState<PurgeAllResult | null>(null);
+
+  async function handlePurgeAll() {
+    if (confirmText !== 'DELETE_ALL_TRACKS') {
+      toast.error('확인 문구 정확히 입력해주세요');
+      return;
+    }
+    if (!confirm(
+      '⚠️ 모든 음원과 트랙 DB row 가 영구 삭제됩니다.\n\n' +
+      '· 아티스트별 누적 스트리밍 수는 artist_lifetime_streams 에 자동 스냅샷 (보존)\n' +
+      '· 정산/수익 기록 (streaming_revenues, settlement_items) 도 보존\n' +
+      '· 음원 파일 (audio/cover) 도 storage 에서 제거\n' +
+      '· 되돌릴 수 없습니다.\n\n계속할까요?',
+    )) return;
+
+    setPurging(true);
+    try {
+      const result = await adminPurgeAllTracks();
+      setLastPurge(result);
+      setConfirmText('');
+      toast.success(
+        `완료: 아티스트 스냅샷 ${result.snapshot_artists}, ` +
+        `완전삭제 ${result.hard_deleted}, ` +
+        `보존삭제 ${result.soft_deleted}, ` +
+        `실패 ${result.failed}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '실행 실패');
+    } finally {
+      setPurging(false);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -124,6 +159,50 @@ export default function SiteSettingsPanel() {
           <Save size={14} />
           {saving ? '저장 중…' : '저장'}
         </button>
+      </div>
+
+      {/* 위험 영역: 전체 트랙 일괄 삭제 (스트리밍 카운트 보존) */}
+      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+        <div className="mb-3 flex items-center gap-2">
+          <AlertTriangle size={14} className="text-rose-400" />
+          <h3 className="text-sm font-bold tracking-tight text-rose-300">위험 영역 — 전체 트랙 초기화</h3>
+        </div>
+        <p className="text-[11px] leading-relaxed text-ink-mute">
+          · 모든 음원과 트랙 DB row 가 영구 삭제됩니다 (storage 파일 포함).
+          <br />· 아티스트별 누적 스트리밍 수는 <b>artist_lifetime_streams</b> 에 자동 스냅샷 → 보존.
+          <br />· 정산/수익 기록 (<b>streaming_revenues</b>, <b>settlement_items</b>) 도 보존.
+          <br />· 되돌릴 수 없습니다. 실행 전 확인 문구 입력 필요.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="DELETE_ALL_TRACKS"
+            className="input h-9 flex-1 text-xs"
+          />
+          <button
+            onClick={handlePurgeAll}
+            disabled={purging || confirmText !== 'DELETE_ALL_TRACKS'}
+            className="h-9 rounded-lg bg-rose-500/20 px-4 text-xs font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-40"
+          >
+            {purging ? '실행 중…' : '전체 트랙 삭제'}
+          </button>
+        </div>
+
+        {lastPurge && (
+          <div className="mt-3 rounded-lg bg-bg-card p-3 text-[11px]">
+            <p className="font-semibold text-ink">최근 실행 결과</p>
+            <ul className="mt-1 space-y-0.5 text-ink-mute">
+              <li>· 아티스트 스냅샷: <b className="text-ink">{lastPurge.snapshot_artists}</b> 명</li>
+              <li>· 대상 트랙: <b className="text-ink">{lastPurge.total_tracks}</b> 개</li>
+              <li>· 완전 삭제 (정산 없음): <b className="text-emerald-400">{lastPurge.hard_deleted}</b></li>
+              <li>· 보존 삭제 (정산 보호): <b className="text-amber-400">{lastPurge.soft_deleted}</b></li>
+              <li>· 실패: <b className="text-rose-400">{lastPurge.failed}</b></li>
+            </ul>
+          </div>
+        )}
       </div>
     </section>
   );
