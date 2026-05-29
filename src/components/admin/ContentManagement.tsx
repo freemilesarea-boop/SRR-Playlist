@@ -10,7 +10,8 @@ import { useFreshFetch } from '@/hooks/useFreshFetch';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import TrackUploader from '@/components/admin/TrackUploader';
 import PlaylistEditor from '@/components/admin/PlaylistEditor';
-import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, listAdminTracksWithAi, aiCorrectionStats, type AdminTrackMetadataFullInput, type AdminTrackDetail, type AdminTrackWithAi, type AiCorrectionStat } from '@/lib/adminTrackApi';
+import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, listAdminTracksWithAi, aiCorrectionStats, listSevereMismatches, bulkDeleteSevereMismatches, type AdminTrackMetadataFullInput, type AdminTrackDetail, type AdminTrackWithAi, type AiCorrectionStat, type MetadataMismatch } from '@/lib/adminTrackApi';
+import { bulkApplyHighConfidence } from '@/lib/trackAiPredictionsApi';
 import { toast } from '@/store/toastStore';
 
 type SubTab = 'playlists' | 'tracks';
@@ -214,12 +215,16 @@ function AdminTrackList({
   onDelete: (id: string, title: string) => void;
   onUpdated: () => Promise<void>;
 }) {
+  const PAGE_SIZE = 50;
   const [query, setQuery] = useState('');
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [page, setPage] = useState(1);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<AiCorrectionStat[]>([]);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [mismatches, setMismatches] = useState<MetadataMismatch[] | null>(null);
+  const [showMismatch, setShowMismatch] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
-  // AI 데이터 와 기본 tracks 합쳐서 표시 (AI 가 없는 트랙도 노출)
   const aiByTrackId = useMemo(() => {
     const m = new Map<string, AdminTrackWithAi>();
     for (const a of aiTracks) m.set(a.id, a);
@@ -234,12 +239,71 @@ function AdminTrackList({
       (t.artist ?? '').toLowerCase().includes(q),
     );
   }, [tracks, query]);
-  const visible = filtered.slice(0, visibleCount);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  const visible = filtered.slice(start, start + PAGE_SIZE);
+
+  useEffect(() => { setPage(1); }, [query]);
 
   useEffect(() => {
     if (!showStats) return;
     aiCorrectionStats().then(setStats).catch(() => setStats([]));
   }, [showStats]);
+
+  async function loadMismatches() {
+    setShowMismatch(true);
+    try {
+      const rows = await listSevereMismatches(200);
+      setMismatches(rows);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '불일치 조회 실패');
+    }
+  }
+
+  async function handleBulkApplyAi() {
+    if (!confirm(
+      'AI 예측 confidence ≥ 0.6 인 모든 트랙의 빈 메타데이터 (에너지/BPM/템포) 를 일괄 적용할까요?\n\n' +
+      '· 이미 값이 있는 필드는 덮어쓰지 않습니다.\n' +
+      '· 적용 후에는 AI 정확도 통계가 갱신됩니다.',
+    )) return;
+    setBulkApplying(true);
+    try {
+      const count = await bulkApplyHighConfidence(0.6, 1000);
+      toast.success(`${count}개 트랙 AI 메타 일괄 적용 완료`);
+      await new Promise((r) => setTimeout(r, 500));
+      window.location.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '일괄 적용 실패');
+    } finally {
+      setBulkApplying(false);
+    }
+  }
+
+  async function handleAutoClean() {
+    if (!mismatches || mismatches.length === 0) {
+      toast.info('자동 삭제할 불일치 트랙이 없습니다.');
+      return;
+    }
+    if (!confirm(
+      `불일치 ${mismatches.length}개 트랙을 자동 삭제합니다 (confidence ≥ 0.6 만).\n\n` +
+      `· 정산 기록 없으면 완전 삭제, 있으면 hidden 처리\n` +
+      `· 사이트 어디서도 재생 불가\n` +
+      `· 되돌릴 수 없음`,
+    )) return;
+    setCleaning(true);
+    try {
+      const r = await bulkDeleteSevereMismatches(0.6, 200);
+      toast.success(`완전삭제 ${r.deleted_count} · 보존삭제 ${r.soft_deleted_count}`);
+      await new Promise((res) => setTimeout(res, 500));
+      window.location.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '자동 정리 실패');
+    } finally {
+      setCleaning(false);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -255,7 +319,7 @@ function AdminTrackList({
             <input
               type="text"
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setVisibleCount(50); }}
+              onChange={(e) => { setQuery(e.target.value); setPage(1); }}
               placeholder="제목/아티스트로 검색…"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-dim"
             />
@@ -274,11 +338,71 @@ function AdminTrackList({
           >
             AI 정확도
           </button>
+          <button
+            onClick={handleBulkApplyAi}
+            disabled={bulkApplying}
+            className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50"
+            title="confidence ≥ 0.6 인 AI 예측을 빈 필드에 일괄 적용"
+          >
+            {bulkApplying ? '적용 중…' : 'AI 메타 일괄 적용'}
+          </button>
+          <button
+            onClick={loadMismatches}
+            className="rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/25"
+            title="메타데이터와 AI 분석이 심하게 충돌하는 트랙 자동 정리"
+          >
+            심한 불일치 검사
+          </button>
           <span className="text-[11px] text-ink-mute">
             {filtered.length === tracks.length
               ? `${tracks.length}개`
               : `${filtered.length}/${tracks.length}개`}
           </span>
+        </div>
+      )}
+
+      {showMismatch && (
+        <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-rose-300">
+              심한 불일치 트랙 — 등록 메타 vs AI 분석 결과 모순
+              <span className="ml-2 font-normal text-ink-mute">({mismatches?.length ?? 0}개)</span>
+            </p>
+            <div className="flex gap-1.5">
+              {(mismatches?.length ?? 0) > 0 && (
+                <button
+                  onClick={handleAutoClean}
+                  disabled={cleaning}
+                  className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-50"
+                >
+                  {cleaning ? '삭제 중…' : `${mismatches?.length} 자동 삭제`}
+                </button>
+              )}
+              <button onClick={() => { setShowMismatch(false); setMismatches(null); }} className="rounded-full bg-bg-card px-3 py-1 text-[11px] text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover">
+                닫기
+              </button>
+            </div>
+          </div>
+          {!mismatches ? (
+            <p className="py-4 text-center text-xs text-ink-mute">조회 중…</p>
+          ) : mismatches.length === 0 ? (
+            <p className="py-4 text-center text-xs text-emerald-300">심한 불일치 트랙 없음 — 메타와 AI 가 잘 맞고 있어요.</p>
+          ) : (
+            <ul className="max-h-72 space-y-1 overflow-y-auto">
+              {mismatches.map((m) => (
+                <li key={m.track_id} className="flex items-center gap-2 rounded bg-bg-card px-2 py-1.5 text-[10px]">
+                  <span className="min-w-0 flex-1 truncate font-semibold">{m.title}</span>
+                  <span className="truncate text-ink-mute">{m.artist ?? '—'}</span>
+                  <span className="rounded bg-bg-soft px-1.5 py-0.5 text-ink-mute">{m.declared_genre ?? '—'} / {m.declared_mood ?? '—'}</span>
+                  <span className="rounded bg-accent/15 px-1.5 py-0.5 text-accent">E{m.ai_energy ?? '—'} · {m.ai_bpm ?? '—'}BPM</span>
+                  <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300">{m.reasons}</span>
+                  {m.ai_confidence != null && (
+                    <span className="text-[9px] text-ink-dim">{Number(m.ai_confidence).toFixed(2)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -334,17 +458,66 @@ function AdminTrackList({
         )}
       </ul>
 
-      {visibleCount < filtered.length && (
-        <div className="flex justify-center">
-          <button
-            onClick={() => setVisibleCount((c) => c + 50)}
-            className="rounded-full bg-bg-card px-4 py-1.5 text-xs font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover hover:text-ink"
-          >
-            더 보기 ({filtered.length - visibleCount}개 남음)
-          </button>
-        </div>
-      )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        onPage={(p) => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+      />
     </div>
+  );
+}
+
+/** 숫자 페이지네이션 — 1, 2, 3, … 형태. 현재 페이지 주변 5개 + 첫/마지막. */
+function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+  const pages: (number | '…')[] = [];
+  const add = (n: number) => { if (!pages.includes(n)) pages.push(n); };
+  add(1);
+  for (let i = page - 2; i <= page + 2; i++) {
+    if (i > 1 && i < totalPages) add(i);
+  }
+  if (totalPages > 1) add(totalPages);
+  // gap 삽입
+  const withGaps: (number | '…')[] = [];
+  pages.forEach((n, i) => {
+    if (i > 0 && typeof n === 'number' && typeof pages[i - 1] === 'number' && (n - (pages[i - 1] as number)) > 1) {
+      withGaps.push('…');
+    }
+    withGaps.push(n);
+  });
+
+  return (
+    <nav className="flex items-center justify-center gap-1">
+      <button
+        onClick={() => onPage(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="rounded-lg bg-bg-card px-2.5 py-1.5 text-xs text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-30"
+      >
+        ‹
+      </button>
+      {withGaps.map((p, i) =>
+        p === '…' ? (
+          <span key={`gap-${i}`} className="px-1 text-xs text-ink-dim">…</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onPage(p)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ${
+              p === page ? 'bg-accent text-black ring-accent' : 'bg-bg-card text-ink-mute ring-line/10 hover:bg-bg-hover hover:text-ink'
+            }`}
+          >
+            {p}
+          </button>
+        ),
+      )}
+      <button
+        onClick={() => onPage(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="rounded-lg bg-bg-card px-2.5 py-1.5 text-xs text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-30"
+      >
+        ›
+      </button>
+    </nav>
   );
 }
 
