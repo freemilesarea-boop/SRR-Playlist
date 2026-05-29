@@ -42,6 +42,7 @@ image = (
         "soundfile==0.12.1",
         "httpx==0.27.0",
         "numpy==1.26.0",
+        "fastapi[standard]==0.115.0",
     )
 )
 
