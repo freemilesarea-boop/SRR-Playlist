@@ -58,12 +58,14 @@ import AiCurationPanel from '@/components/admin/AiCurationPanel';
 import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel';
 import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
 import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
+import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
   | 'dashboard'
   | 'members'
   | 'sales-agents'
+  | 'sales-partners'
   | 'free-trials'
   | 'streaming'
   | 'revenue'
@@ -97,6 +99,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
+  { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
   { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
@@ -279,6 +282,7 @@ export default function AdminPage() {
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'members' && <MembersList />}
         {tab === 'sales-agents' && <SalesAgentsList />}
+        {tab === 'sales-partners' && <SalesPartnerApplications />}
         {tab === 'free-trials' && <FreeTrialsPanel />}
         {tab === 'streaming' && <StreamingAnalytics />}
         {tab === 'revenue' && <RevenueManagement />}
