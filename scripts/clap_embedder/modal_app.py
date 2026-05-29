@@ -217,7 +217,7 @@ class ClapEmbedder:
 
 # ----- HTTP 엔드포인트 -----
 @app.function(image=image, secrets=secrets)
-@modal.web_endpoint(method="POST", label="embed-single")
+@modal.fastapi_endpoint(method="POST", label="embed-single")
 def embed_single_endpoint(item: dict) -> dict:
     """POST { track_id, audio_url } → embedding 추출 + 저장."""
     track_id = item.get("track_id")
@@ -229,7 +229,7 @@ def embed_single_endpoint(item: dict) -> dict:
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)  # 1시간 한도
-@modal.web_endpoint(method="POST", label="backfill")
+@modal.fastapi_endpoint(method="POST", label="backfill")
 def backfill_endpoint(item: dict) -> dict:
     """POST { limit?: int } → 백필 일괄 처리."""
     limit = int(item.get("limit", 100))
