@@ -207,6 +207,37 @@ export async function aiCorrectionStats(): Promise<AiCorrectionStat[]> {
   return (data ?? []) as AiCorrectionStat[];
 }
 
+export interface MetadataMismatch {
+  track_id: string;
+  title: string;
+  artist: string | null;
+  declared_mood: string | null;
+  declared_genre: string | null;
+  ai_energy: number | null;
+  ai_bpm: number | null;
+  ai_tempo: string | null;
+  ai_confidence: number | null;
+  reasons: string;
+}
+
+export async function listSevereMismatches(limit = 100): Promise<MetadataMismatch[]> {
+  const { data, error } = await supabase.rpc('list_severe_metadata_mismatches', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MetadataMismatch[];
+}
+
+export async function bulkDeleteSevereMismatches(
+  minConfidence = 0.6, limit = 100,
+): Promise<{ deleted_count: number; soft_deleted_count: number }> {
+  const { data, error } = await supabase.rpc('bulk_delete_severe_mismatches', {
+    p_min_confidence: minConfidence,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  const row = (data as { deleted_count: number; soft_deleted_count: number }[] | null)?.[0];
+  return row ?? { deleted_count: 0, soft_deleted_count: 0 };
+}
+
 // legacy alias — 기존 호출 (간단 모드) 위해 유지
 export type AdminTrackMetadataInput = AdminTrackMetadataFullInput;
 export const adminUpdateTrackMetadata = adminUpdateTrackMetadataFull;
