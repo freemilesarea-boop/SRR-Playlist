@@ -206,8 +206,9 @@ export default function TrackMetaSelectors({
 
       <GenrePicker selected={value.genre_tags} max={META_CAPS.genre}
         onChange={(v) => onChange({ ...value, genre_tags: v })} disabled={disabled} />
-      <PillMulti label="분위기/무드 *" options={MOOD_OPTIONS} selected={value.mood_tags} max={META_CAPS.mood}
-        overMessage="분위기는 최대 2개까지 선택할 수 있습니다" onChange={(v) => onChange({ ...value, mood_tags: v })} disabled={disabled} />
+      <PillSingle label="분위기/무드 *" options={MOOD_OPTIONS}
+        value={value.mood_tags[0] ?? ''}
+        onChange={(v) => onChange({ ...value, mood_tags: v ? [v] : [] })} disabled={disabled} />
       <PillSingle label="추천 매장/업종 *" options={BUSINESS_OPTIONS}
         value={value.business_type_tags[0] ?? ''}
         onChange={(v) => onChange({ ...value, business_type_tags: v ? [v] : [] })} disabled={disabled} />
