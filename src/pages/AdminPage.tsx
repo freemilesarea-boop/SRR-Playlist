@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Gift,
   Image as ImageIcon,
+  Bell,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -58,6 +59,7 @@ import AiCurationPanel from '@/components/admin/AiCurationPanel';
 import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel';
 import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
 import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
+import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel';
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
 import { supabaseProjectRef } from '@/lib/supabase';
 
@@ -88,6 +90,7 @@ type Tab =
   | 'clap-curation'
   | 'ai-metadata'
   | 'site-settings'
+  | 'site-notices'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -123,6 +126,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'clap-curation', label: 'CLAP 추천', icon: <Sparkles size={14} /> },
   { key: 'ai-metadata', label: 'AI 메타데이터', icon: <Sparkles size={14} /> },
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
+  { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
@@ -165,7 +169,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'brand', 'admins'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -306,6 +310,7 @@ export default function AdminPage() {
         {tab === 'clap-curation' && <ClapRecommendationPanel />}
         {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
         {tab === 'site-settings' && <SiteSettingsPanel />}
+        {tab === 'site-notices' && <SiteNoticesManagerPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
         {tab === 'recommendation' && <RecommendationTester />}
         {tab === 'upload-integrity' && <UploadIntegrityPanel />}
