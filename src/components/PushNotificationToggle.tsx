@@ -1,5 +1,9 @@
-import { Bell, BellOff, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, BellOff, AlertCircle, Send } from 'lucide-react';
 import { usePushSubscription } from '@/hooks/usePushSubscription';
+import { sendPush } from '@/lib/pushApi';
+import { useAuthStore } from '@/store/authStore';
+import { toast } from '@/store/toastStore';
 
 /**
  * PWA Web Push 알림 on/off 토글.
@@ -22,6 +26,31 @@ export default function PushNotificationToggle({
 }) {
   const { supported, permission, subscribed, busy, error, subscribe, unsubscribe } =
     usePushSubscription();
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const [testing, setTesting] = useState(false);
+
+  async function sendTest() {
+    if (!userId || testing) return;
+    setTesting(true);
+    try {
+      const r = await sendPush({
+        user_id: userId,
+        title: '🔔 DEUDDA 테스트 알림',
+        body: '푸시 알림이 정상 동작해요. 매장 운영 이벤트가 발생하면 여기로 알려드릴게요.',
+        url: '/profile',
+        tag: 'test',
+      });
+      if (r.ok && r.sent > 0) {
+        toast.success(`푸시 ${r.sent}건 발송됨`);
+      } else if (r.ok && r.candidates === 0) {
+        toast.info('구독된 디바이스가 없어요. 위에서 "켜기" 먼저 해주세요.');
+      } else {
+        toast.error(r.error ?? '푸시 발송 실패');
+      }
+    } finally {
+      setTesting(false);
+    }
+  }
 
   if (!supported) {
     if (!showWhenUnsupported) return null;
@@ -66,17 +95,30 @@ export default function PushNotificationToggle({
           {error && <p className="mt-1 text-[11px] text-red-300">에러: {error}</p>}
         </div>
         {!blocked && (
-          <button
-            onClick={() => (on ? void unsubscribe() : void subscribe())}
-            disabled={busy}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50 ${
-              on
-                ? 'bg-bg-soft text-ink-mute ring-1 ring-line/15 hover:text-ink'
-                : 'bg-accent text-bg hover:opacity-90'
-            }`}
-          >
-            {busy ? '처리 중…' : on ? '끄기' : '켜기'}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {on && (
+              <button
+                onClick={() => void sendTest()}
+                disabled={testing || !userId}
+                aria-label="테스트 푸시 발송"
+                title="이 디바이스에 테스트 푸시 보내기"
+                className="rounded-full bg-bg-soft p-2 text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
+              >
+                <Send size={12} />
+              </button>
+            )}
+            <button
+              onClick={() => (on ? void unsubscribe() : void subscribe())}
+              disabled={busy}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50 ${
+                on
+                  ? 'bg-bg-soft text-ink-mute ring-1 ring-line/15 hover:text-ink'
+                  : 'bg-accent text-bg hover:opacity-90'
+              }`}
+            >
+              {busy ? '처리 중…' : on ? '끄기' : '켜기'}
+            </button>
+          </div>
         )}
       </div>
     </div>

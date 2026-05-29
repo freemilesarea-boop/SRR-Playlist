@@ -8,6 +8,7 @@ import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
 import { captureError } from '@/lib/sentry';
+import { sendPush } from '@/lib/pushApi';
 
 /**
  * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
@@ -118,6 +119,17 @@ export function useBusinessAutoSwitch() {
             playlistId: targetPlaylistId,
             slot: targetSlotName,
           });
+          // 매장 사장님이 자리 비웠을 수 있어 본인 폰에 push 발송.
+          // VAPID 미설정 / 미구독이면 silent skip.
+          if (userId) {
+            void sendPush({
+              user_id: userId,
+              title: '⚠️ 매장 자동 전환 실패',
+              body: `${targetSlotName} 시간대 음악 전환에 실패했어요. 매장 페이지에서 확인해주세요.`,
+              url: '/business',
+              tag: 'business-autoswitch-failure',
+            });
+          }
         }
       }
     })();
