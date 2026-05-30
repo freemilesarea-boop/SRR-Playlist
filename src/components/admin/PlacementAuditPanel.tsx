@@ -290,6 +290,22 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
     return 'text-ink-dim';
   }
 
+  // Store Fit Gate v1
+  const gate = data.gate;
+  const gateSignals: Array<{ key: string; label: string; match: boolean }> = gate ? [
+    { key: 'genre', label: 'genre', match: gate.genre_match },
+    { key: 'mood', label: 'mood', match: gate.mood_match },
+    { key: 'business', label: 'business', match: gate.business_match },
+    { key: 'ai_store', label: 'AI store', match: gate.ai_store_match },
+    { key: 'allow', label: 'allow rule', match: gate.allow_rule_matched },
+  ] : [];
+  const decisionLabel: Record<string, { text: string; tone: string }> = {
+    auto_place: { text: '✓ 자동 배치', tone: 'bg-emerald-500/15 text-emerald-400' },
+    skip_gate_failed: { text: '⚠️ 최소 게이트 실패', tone: 'bg-amber-500/15 text-amber-400' },
+    skip_blocked: { text: '🚫 Block 룰 매치', tone: 'bg-rose-500/15 text-rose-400' },
+    skip_below_threshold: { text: '✕ Threshold 미달', tone: 'bg-slate-500/15 text-slate-300' },
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-bg-card p-5 ring-1 ring-line/10" onClick={(e) => e.stopPropagation()}>
@@ -320,6 +336,36 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
             {Number(data.final_score).toFixed(1)} {data.would_place ? '✓ 배치' : '✕ 거부'}
           </p>
         </div>
+
+        {/* Store Fit Gate v1 */}
+        {gate && (
+          <div className="mt-3 space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">Store Fit Gate v1</p>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${decisionLabel[gate.final_decision]?.tone ?? 'bg-bg-card text-ink-mute'}`}>
+                {decisionLabel[gate.final_decision]?.text ?? gate.final_decision}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {gateSignals.map((s) => (
+                <span key={s.key}
+                  className={'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono ' +
+                    (s.match ? 'bg-emerald-500/15 text-emerald-300' : 'bg-bg-card text-ink-dim')}>
+                  {s.match ? '✓' : '·'} {s.label}
+                </span>
+              ))}
+              {gate.block_rule_matched && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-mono text-rose-300">
+                  ⚠️ block matched
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-ink-dim">
+              <span className="font-semibold">최소 게이트:</span> {gate.minimum_gate_passed ? '통과' : '실패'}
+              {gate.gate_reasons.length > 0 && <span className="ml-2">(사유: {gate.gate_reasons.join(', ')})</span>}
+            </p>
+          </div>
+        )}
 
         {(data.block_reasons || data.allow_exceptions) && (
           <div className="mt-3 space-y-2">

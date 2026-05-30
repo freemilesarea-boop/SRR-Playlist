@@ -121,7 +121,22 @@ export async function getPlacementRiskStatus(): Promise<PlacementRiskStatus | nu
   return row as PlacementRiskStatus;
 }
 
-// ===== 디버그 (0231 의 admin_explain_placement) =====
+// ===== Store Fit Gate v1 (0234) =====
+export type PlacementDecision =
+  | 'auto_place' | 'skip_gate_failed' | 'skip_blocked' | 'skip_below_threshold';
+
+export interface PlacementGate {
+  genre_match: boolean;
+  mood_match: boolean;
+  business_match: boolean;
+  ai_store_match: boolean;
+  allow_rule_matched: boolean;
+  block_rule_matched: boolean;
+  minimum_gate_passed: boolean;
+  gate_reasons: string[];
+  final_decision: PlacementDecision;
+}
+
 export interface PlacementExplanation {
   track: {
     id: string; title: string; artist: string | null;
@@ -138,6 +153,7 @@ export interface PlacementExplanation {
     genre_tags: string[] | null; mood_tags: string[] | null;
     bpm_min: number | null; bpm_max: number | null;
     energy_min: number | null; energy_max: number | null;
+    ai_store_key: string | null;
   };
   scores: {
     genre: number; mood: number; business: number; daypart: number;
@@ -149,11 +165,35 @@ export interface PlacementExplanation {
   final_score: number;
   threshold: number;
   would_place: boolean;
+  gate: PlacementGate;
   metadata_source: string;
   ai_prediction_taxonomy_v1: {
     main: string | null; subs: string[] | null;
     confidence: number | null; applied_at: string | null;
+    predicted_store_types: string[] | null;
   } | null;
+}
+
+// ===== Simulate (0234) =====
+export interface SimulationRow {
+  playlist_id: string;
+  playlist_title: string;
+  business_category: string | null;
+  score: number;
+  genre_match: boolean;
+  mood_match: boolean;
+  business_match: boolean;
+  ai_store_match: boolean;
+  allow_match: boolean;
+  block_match: boolean;
+  decision: PlacementDecision;
+  block_pattern: string | null;
+}
+
+export async function simulateAutoPlacement(trackId: string): Promise<SimulationRow[]> {
+  const { data, error } = await supabase.rpc('admin_simulate_auto_placement', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as SimulationRow[];
 }
 
 export async function explainPlacement(trackId: string, playlistId: string): Promise<PlacementExplanation> {
