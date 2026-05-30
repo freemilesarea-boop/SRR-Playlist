@@ -15,6 +15,8 @@ DEUDDA CLAP Embedding Worker — Modal serverless GPU app.
     POST /backfill           — { limit?: int } → list_tracks_needing_embedding → 일괄 처리
     POST /genre-single       — { track_id, audio_url } → 단일 트랙 장르 분류 (taxonomy-v1)
     POST /genre-backfill     — { limit?, dryRun? } → 장르 미분류 트랙 일괄 처리
+    POST /mood-single        — { track_id, audio_url } → 단일 트랙 무드 분류 (taxonomy-v1)
+    POST /mood-backfill      — { limit?, dryRun? } → 무드 미분류 트랙 일괄 처리
 
 운영:
     - cold start: ~30초 (모델 로드)
@@ -341,6 +343,140 @@ class ClapEmbedder:
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_genre_classification",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={"p_limit": limit},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    # ========== Phase X1.2 — taxonomy zero-shot Mood 분류 ==========
+
+    # Mood slug → 단일 prompt (사용자 spec).
+    # name_en 만으로는 mood 어휘 미묘함을 표현 못해서 slug 별로 명시.
+    _MOOD_PROMPTS = {
+        "calm":       "calm and peaceful background music",
+        "warm":       "warm and cozy music",
+        "bright":     "bright and cheerful music",
+        "happy":      "happy and uplifting music",
+        "emotional":  "emotional and sentimental music",
+        "dreamy":     "dreamy and atmospheric music",
+        "chic":       "chic and stylish music",
+        "luxurious":  "luxurious and elegant music",
+        "energetic":  "energetic and powerful music",
+        "trendy":     "trendy modern music",
+        "focused":    "focused and concentration music",
+    }
+
+    def _fetch_active_moods(self) -> list[dict]:
+        """list_taxonomy_moods RPC → 활성 mood 목록 (slug + name_en + name_ko)."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_taxonomy_moods",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+        return [{"slug": r["slug"], "name_en": r["name_en"], "name_ko": r["name_ko"]} for r in rows]
+
+    def _ensure_mood_features(self):
+        """활성 mood 목록 → CLAP text features 캐싱.
+        slug 별 단일 prompt 사용. 미정의 slug 는 fallback 으로 'name_en mood music'.
+        """
+        import torch
+
+        if getattr(self, "_mood_cache_loaded", False):
+            return
+
+        moods = self._fetch_active_moods()
+        if not moods:
+            raise RuntimeError("no active taxonomy_moods rows — Phase X1.0 마이그레이션 미적용?")
+
+        prompts: list[str] = []
+        for m in moods:
+            slug = m["slug"]
+            if slug in self._MOOD_PROMPTS:
+                prompts.append(self._MOOD_PROMPTS[slug])
+            else:
+                # Fallback — taxonomy 가 확장되면 spec 추가 필요. 일단 안전 fallback.
+                prompts.append(f"{m['name_en'].lower()} mood music")
+
+        text_inputs = self.processor(text=prompts, return_tensors="pt", padding=True)
+        text_inputs = {k: v.to("cuda") for k, v in text_inputs.items()}
+        with torch.no_grad():
+            text_features = self.model.get_text_features(**text_inputs)
+        text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-9)
+
+        self._mood_slugs = [m["slug"] for m in moods]
+        self._mood_labels_ko = [m["name_ko"] for m in moods]
+        self._mood_text_features = text_features  # [N_mood, 512] cuda
+        self._mood_cache_loaded = True
+        print(f"[ClapEmbedder] cached mood text features for {len(moods)} active moods")
+
+    def _classify_mood(self, audio_embedding: list[float]) -> dict:
+        """audio_embedding → mood top1~3 + softmax 분포.
+        Returns:
+          {
+            "predicted_moods": ["calm","warm","emotional"],
+            "mood_confidence": 0.41,
+            "prediction_scores": {"mood": {slug: score, ...}}
+          }
+        """
+        import torch
+        import numpy as np
+
+        self._ensure_mood_features()
+
+        audio_emb = torch.tensor(audio_embedding, dtype=torch.float32, device="cuda").unsqueeze(0)
+        with torch.no_grad():
+            sims = (audio_emb @ self._mood_text_features.T).squeeze(0)
+            scores = torch.softmax(sims * 100.0, dim=-1)
+        scores_np = scores.cpu().numpy()
+
+        order = np.argsort(-scores_np)
+        top3 = [self._mood_slugs[int(i)] for i in order[:3]]
+        top1_conf = float(scores_np[int(order[0])])
+
+        mood_scores = {self._mood_slugs[i]: round(float(scores_np[i]), 4) for i in range(len(self._mood_slugs))}
+        return {
+            "predicted_moods": top3,
+            "mood_confidence": round(top1_conf, 4),
+            "prediction_scores": {"mood": mood_scores},
+        }
+
+    def _store_mood_prediction(self, track_id: str, result: dict):
+        """store_track_mood_prediction RPC 호출 (predicted_main_genre 보존)."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/store_track_mood_prediction",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={
+                    "p_track_id": track_id,
+                    "p_predicted_moods": result["predicted_moods"],
+                    "p_mood_confidence": result["mood_confidence"],
+                    "p_prediction_scores": result["prediction_scores"],
+                    "p_model_version": "taxonomy-v1",
+                },
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"store_track_mood_prediction HTTP {resp.status_code}: {resp.text[:500]}")
+
+    def _list_pending_mood(self, limit: int) -> list:
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_tracks_needing_mood_classification",
                 headers={"apikey": key, "Authorization": f"Bearer {key}",
                          "content-type": "application/json"},
                 json={"p_limit": limit},
@@ -891,6 +1027,73 @@ class ClapEmbedder:
         }
 
     @modal.method()
+    def mood_single(self, track_id: str, audio_url: str, dry_run: bool = False) -> dict:
+        """단일 트랙 zero-shot mood 분류. genre 와 동일 패턴 — predicted_main_genre 보존."""
+        try:
+            audio, sr = self._download_audio(audio_url)
+            embedding = self._extract_embedding(audio, sr)
+            result = self._classify_mood(embedding)
+            if not dry_run:
+                self._store_mood_prediction(track_id, result)
+            return {
+                "ok": True, "track_id": track_id, "dryRun": dry_run,
+                "predicted_moods": result["predicted_moods"],
+                "mood_confidence": result["mood_confidence"],
+                "top3_scores": {k: result["prediction_scores"]["mood"][k]
+                                for k in result["predicted_moods"]},
+            }
+        except Exception as e:
+            return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
+
+    @modal.method()
+    def mood_backfill(self, limit: int = 50, dry_run: bool = False) -> dict:
+        """taxonomy-v1 의 predicted_moods 가 비어있는 트랙 일괄 분류.
+        dry_run=True → 결과 계산 + DB 저장 skip + samples 응답.
+        """
+        tracks = self._list_pending_mood(limit)
+        if not tracks:
+            return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
+        print(f"[Mood] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
+        done = 0
+        failed: list = []
+        samples: list = []
+        for t in tracks:
+            track_id = t["track_id"]
+            audio_url = t.get("audio_url")
+            current_mood = t.get("mood")
+            if not audio_url:
+                failed.append({"track_id": track_id, "error": "no_audio_url"})
+                continue
+            try:
+                audio, sr = self._download_audio(audio_url)
+                embedding = self._extract_embedding(audio, sr)
+                result = self._classify_mood(embedding)
+                if not dry_run:
+                    self._store_mood_prediction(track_id, result)
+                done += 1
+                samples.append({
+                    "track_id": track_id,
+                    "title": t.get("title"),
+                    "current_mood": current_mood,
+                    "predicted_moods": result["predicted_moods"],
+                    "mood_confidence": result["mood_confidence"],
+                    "top3_scores": {k: result["prediction_scores"]["mood"][k]
+                                    for k in result["predicted_moods"]},
+                })
+                if done % 10 == 0:
+                    print(f"[Mood] {done}/{len(tracks)} done")
+            except Exception as e:
+                failed.append({"track_id": track_id, "error": str(e)[:200]})
+        return {
+            "ok": True, "dryRun": dry_run,
+            "total_candidates": len(tracks),
+            "classified": done,
+            "failed_count": len(failed),
+            "failed_samples": failed[:10],
+            "samples": samples,
+        }
+
+    @modal.method()
     def backfill(self, limit: int = 100) -> dict:
         """백필: list_tracks_needing_embedding 호출 → 순차 처리 → 결과 요약."""
         tracks = self._list_pending(limit)
@@ -1020,6 +1223,34 @@ def genre_backfill_endpoint(item: dict) -> dict:
     dry_run = bool(item.get("dryRun", False))
     embedder = ClapEmbedder()
     return embedder.genre_backfill.remote(limit, dry_run)
+
+
+@app.function(image=image, secrets=secrets, timeout=600)
+@modal.fastapi_endpoint(method="POST", label="mood-single")
+def mood_single_endpoint(item: dict) -> dict:
+    """POST { track_id, audio_url, dryRun?, _auth } → 단일 트랙 zero-shot mood 분류."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
+    track_id = item.get("track_id")
+    audio_url = item.get("audio_url")
+    if not track_id or not audio_url:
+        return {"ok": False, "error": "track_id and audio_url required"}
+    dry_run = bool(item.get("dryRun", False))
+    embedder = ClapEmbedder()
+    return embedder.mood_single.remote(track_id, audio_url, dry_run)
+
+
+@app.function(image=image, secrets=secrets, timeout=3600)
+@modal.fastapi_endpoint(method="POST", label="mood-backfill")
+def mood_backfill_endpoint(item: dict) -> dict:
+    """POST { limit?, dryRun?, _auth } → mood 미분류 트랙 일괄 분류.
+    dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
+    limit = int(item.get("limit", 50))
+    dry_run = bool(item.get("dryRun", False))
+    embedder = ClapEmbedder()
+    return embedder.mood_backfill.remote(limit, dry_run)
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)
