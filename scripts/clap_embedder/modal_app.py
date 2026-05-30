@@ -620,9 +620,16 @@ class ClapEmbedder:
             return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
 
     @modal.method()
-    def qc_backfill(self, limit: int = 50) -> dict:
-        """QC 없는 트랙들 백필."""
+    def qc_backfill(self, limit: int = 50, dry_run: bool = False) -> dict:
+        """QC 없는 트랙들 백필. dry_run=True 면 후보만 반환하고 분석 안 함.
+        실패 시 전체 failed 목록 반환 (응답 페이로드 크기 고려해 최대 100건)."""
         tracks = self._list_pending_qc(limit)
+        if dry_run:
+            return {
+                "ok": True, "dryRun": True,
+                "candidate_count": len(tracks),
+                "candidates": [{"track_id": t["track_id"], "title": t.get("title")} for t in tracks[:limit]],
+            }
         print(f"[QC] backfill {len(tracks)} tracks")
         done = 0
         failed = []
@@ -643,7 +650,7 @@ class ClapEmbedder:
                 failed.append({"track_id": track_id, "error": str(e)[:200]})
         return {"ok": True, "total_candidates": len(tracks),
                 "analyzed": done, "failed_count": len(failed),
-                "failed_samples": failed[:10]}
+                "failed": failed[:100], "failed_samples": failed[:10]}
 
     @modal.method()
     def backfill(self, limit: int = 100) -> dict:
@@ -682,10 +689,29 @@ class ClapEmbedder:
 
 
 # ----- HTTP 엔드포인트 -----
+def _check_auth(item: dict):
+    """공통 시크릿 검증 — QC_WORKER_SECRET env 가 있으면 body._auth 매칭 필수.
+    env 미설정 시 우회 (dev). 인증 실패 시 401 JSONResponse 반환, 통과 시 None.
+    """
+    expected = os.environ.get("QC_WORKER_SECRET")
+    if not expected:
+        print("[QC_AUTH] QC_WORKER_SECRET not set — bypassing auth (dev mode)")
+        return None
+    if item.get("_auth") != expected:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "unauthorized: invalid worker secret"},
+        )
+    return None
+
+
 @app.function(image=image, secrets=secrets)
 @modal.fastapi_endpoint(method="POST", label="embed-single")
 def embed_single_endpoint(item: dict) -> dict:
-    """POST { track_id, audio_url } → embedding 추출 + 저장."""
+    """POST { track_id, audio_url, _auth } → embedding 추출 + 저장."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
     track_id = item.get("track_id")
     audio_url = item.get("audio_url")
     if not track_id or not audio_url:
@@ -694,10 +720,12 @@ def embed_single_endpoint(item: dict) -> dict:
     return embedder.embed_single.remote(track_id, audio_url)
 
 
-@app.function(image=image, secrets=secrets, timeout=3600)  # 1시간 한도
+@app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="backfill")
 def backfill_endpoint(item: dict) -> dict:
-    """POST { limit?: int } → 임베딩 + 분류 백필 (없는 트랙 대상)."""
+    """POST { limit?, _auth } → 임베딩 + 분류 백필."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
     limit = int(item.get("limit", 100))
     embedder = ClapEmbedder()
     return embedder.backfill.remote(limit)
@@ -706,7 +734,9 @@ def backfill_endpoint(item: dict) -> dict:
 @app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="classify-backfill")
 def classify_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?: int } → 임베딩은 있는데 분류 없는 트랙 분류 백필."""
+    """POST { limit?, _auth } → 임베딩 있는데 분류 없는 트랙 백필."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
     limit = int(item.get("limit", 50))
     embedder = ClapEmbedder()
     return embedder.classify_backfill.remote(limit)
@@ -715,7 +745,9 @@ def classify_backfill_endpoint(item: dict) -> dict:
 @app.function(image=image, secrets=secrets)
 @modal.fastapi_endpoint(method="POST", label="qc-single")
 def qc_single_endpoint(item: dict) -> dict:
-    """POST { track_id, audio_url } → AI QC 분석 + DB 저장."""
+    """POST { track_id, audio_url, _auth } → AI QC 분석 + 저장."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
     track_id = item.get("track_id")
     audio_url = item.get("audio_url")
     if not track_id or not audio_url:
@@ -727,10 +759,13 @@ def qc_single_endpoint(item: dict) -> dict:
 @app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="qc-backfill")
 def qc_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?: int } → QC 리포트 없는 트랙 백필."""
+    """POST { limit?, dryRun?, _auth } → QC 백필. dryRun=true 면 후보만 반환."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
     limit = int(item.get("limit", 50))
+    dry_run = bool(item.get("dryRun", False))
     embedder = ClapEmbedder()
-    return embedder.qc_backfill.remote(limit)
+    return embedder.qc_backfill.remote(limit, dry_run)
 
 
 # ----- 로컬 테스트 -----
