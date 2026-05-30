@@ -61,6 +61,7 @@ import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel'
 import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
 import TaxonomyManagerPanel from '@/components/admin/TaxonomyManagerPanel';
 import GenrePredictionPanel from '@/components/admin/GenrePredictionPanel';
+import PlacementAuditPanel from '@/components/admin/PlacementAuditPanel';
 import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
 import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel';
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
@@ -95,6 +96,7 @@ type Tab =
   | 'ai-metadata'
   | 'ai-taxonomy'
   | 'ai-genre'
+  | 'placement-audit'
   | 'site-settings'
   | 'site-notices'
   | 'artist-settlements'
@@ -134,6 +136,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-metadata', label: 'AI 메타데이터', icon: <Sparkles size={14} /> },
   { key: 'ai-taxonomy', label: 'AI 분류 체계', icon: <Sparkles size={14} /> },
   { key: 'ai-genre', label: 'AI 장르 분류', icon: <Sparkles size={14} /> },
+  { key: 'placement-audit', label: 'AI 배치 진단', icon: <ShieldCheck size={14} /> },
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
@@ -177,6 +180,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'ai-metadata',
       'ai-taxonomy',
       'ai-genre',
+      'placement-audit',
       'recommendation',
       'upload-integrity',
     ],
@@ -324,6 +328,7 @@ export default function AdminPage() {
         {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
         {tab === 'ai-taxonomy' && <TaxonomyManagerPanel />}
         {tab === 'ai-genre' && <GenrePredictionPanel />}
+        {tab === 'placement-audit' && <PlacementAuditPanel />}
         {tab === 'site-settings' && <SiteSettingsPanel />}
         {tab === 'site-notices' && <SiteNoticesManagerPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
