@@ -13,13 +13,18 @@ DEUDDA CLAP Embedding Worker — Modal serverless GPU app.
 엔드포인트 (Modal Free 플랜 Web Function 제한 8개 — 7개 사용):
     POST /embed-single       — { track_id, audio_url } → 단일 트랙 임베딩
     POST /backfill           — { limit?: int } → list_tracks_needing_embedding → 일괄 처리
-    POST /classify-backfill  — { limit? } → 임베딩 있지만 분류 없는 트랙 일괄
     POST /qc-single          — { track_id, audio_url } → 단일 QC
     POST /qc-backfill        — { limit?, dryRun? } → QC 일괄
     POST /genre-backfill     — { limit?, dryRun?, track_id?, audio_url? } → 장르 분류
-                                 track_id 지정 시 단일 트랙 (= 옛 /genre-single 통합)
+                                 track_id 지정 시 단일 트랙
     POST /mood-backfill      — { limit?, dryRun?, track_id?, audio_url? } → mood 분류
-                                 track_id 지정 시 단일 트랙 (= 옛 /mood-single 통합)
+                                 track_id 지정 시 단일 트랙
+    POST /storetype-backfill — { limit?, dryRun?, track_id?, audio_url? } → store_type 분류 (X1.3)
+                                 track_id 지정 시 단일 트랙
+
+  변경 기록:
+    X1.2.2 — single (2개) 제거 → backfill 에 track_id 옵션 통합 (8 → 7)
+    X1.3   — classify-backfill (energy/BPM) 제거 → storetype-backfill 추가 (7 유지)
 
 운영:
     - cold start: ~30초 (모델 로드)
@@ -585,6 +590,185 @@ class ClapEmbedder:
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_mood_classification",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={"p_limit": limit},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    # ========== Phase X1.3 — taxonomy zero-shot Store Type 분류 ==========
+
+    # Store type slug → 3 DSP-상황 prompts.
+    _STORE_TYPE_PROMPTS: dict[str, list[str]] = {
+        "cafe": [
+            "cafe background music",
+            "coffee shop atmosphere music",
+            "casual cafe playlist",
+        ],
+        "hospital": [
+            "hospital waiting room music",
+            "calm clinic background music",
+            "medical center peaceful music",
+        ],
+        "hotel": [
+            "luxury hotel lobby music",
+            "elegant hotel lounge music",
+            "premium hotel reception background",
+        ],
+        "restaurant": [
+            "fine dining restaurant music",
+            "restaurant dinner background",
+            "sophisticated restaurant atmosphere",
+        ],
+        "fitness": [
+            "gym workout music",
+            "fitness training background",
+            "high energy exercise music",
+        ],
+        "boutique": [
+            "fashion boutique music",
+            "select shop background music",
+            "stylish retail playlist",
+        ],
+        "office": [
+            "office background music",
+            "workplace ambient music",
+            "coworking space music",
+        ],
+        "study_cafe": [
+            "study cafe music",
+            "library quiet background music",
+            "focus study atmosphere",
+        ],
+        "bakery": [
+            "bakery cafe music",
+            "sweet dessert shop atmosphere",
+            "cozy bakery background music",
+        ],
+        "beauty_shop": [
+            "beauty salon music",
+            "hair salon background",
+            "nail shop atmosphere music",
+        ],
+        "kids_zone": [
+            "kids cafe music",
+            "children play area music",
+            "family friendly kids music",
+        ],
+    }
+
+    def _fetch_active_store_types(self) -> list[dict]:
+        """list_taxonomy_store_types RPC → 활성 store_type 목록."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_taxonomy_store_types",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+        return [{"slug": r["slug"], "name_en": r["name_en"], "name_ko": r["name_ko"]} for r in rows]
+
+    def _ensure_storetype_features(self):
+        """활성 store_type 목록 → CLAP text features 캐싱.
+        X1.2 mood 와 동일 패턴 (가변 prompt 평균 + 정규화).
+        """
+        import torch
+
+        if getattr(self, "_storetype_cache_loaded", False):
+            return
+
+        store_types = self._fetch_active_store_types()
+        if not store_types:
+            raise RuntimeError("no active taxonomy_store_types rows — Phase X1.0 마이그레이션 미적용?")
+
+        prompts: list[str] = []
+        group_idx: list[int] = []
+        for i, s in enumerate(store_types):
+            ps = self._STORE_TYPE_PROMPTS.get(s["slug"]) or [f"{s['name_en'].lower()} background music"]
+            for p in ps:
+                prompts.append(p)
+                group_idx.append(i)
+
+        text_inputs = self.processor(text=prompts, return_tensors="pt", padding=True)
+        text_inputs = {k: v.to("cuda") for k, v in text_inputs.items()}
+        with torch.no_grad():
+            text_features = self.model.get_text_features(**text_inputs)
+        text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-9)
+
+        gi = torch.tensor(group_idx, device="cuda")
+        n = len(store_types)
+        st_features = torch.zeros(n, text_features.shape[1], device="cuda")
+        st_features.index_add_(0, gi, text_features)
+        counts = torch.bincount(gi, minlength=n).float().clamp(min=1.0).unsqueeze(1)
+        st_features = st_features / counts
+        st_features = st_features / (st_features.norm(dim=-1, keepdim=True) + 1e-9)
+
+        self._storetype_slugs = [s["slug"] for s in store_types]
+        self._storetype_labels_ko = [s["name_ko"] for s in store_types]
+        self._storetype_text_features = st_features
+        self._storetype_cache_loaded = True
+        print(f"[ClapEmbedder] cached store_type text features for {len(store_types)} active types "
+              f"({len(prompts)} total prompts)")
+
+    def _classify_storetype(self, audio_embedding: list[float]) -> dict:
+        """audio_embedding → store_type top1~3 + softmax 분포."""
+        import torch
+        import numpy as np
+
+        self._ensure_storetype_features()
+
+        audio_emb = torch.tensor(audio_embedding, dtype=torch.float32, device="cuda").unsqueeze(0)
+        with torch.no_grad():
+            sims = (audio_emb @ self._storetype_text_features.T).squeeze(0)
+            scores = torch.softmax(sims * 100.0, dim=-1)
+        scores_np = scores.cpu().numpy()
+
+        order = np.argsort(-scores_np)
+        top3 = [self._storetype_slugs[int(i)] for i in order[:3]]
+        top1_conf = float(scores_np[int(order[0])])
+
+        st_scores = {self._storetype_slugs[i]: round(float(scores_np[i]), 4)
+                     for i in range(len(self._storetype_slugs))}
+        return {
+            "predicted_store_types": top3,
+            "store_type_confidence": round(top1_conf, 4),
+            "prediction_scores": {"store_type": st_scores},
+        }
+
+    def _store_storetype_prediction(self, track_id: str, result: dict):
+        """store_track_storetype_prediction RPC 호출 (genre/mood 보존)."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/store_track_storetype_prediction",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={
+                    "p_track_id": track_id,
+                    "p_predicted_store_types": result["predicted_store_types"],
+                    "p_store_type_confidence": result["store_type_confidence"],
+                    "p_prediction_scores": result["prediction_scores"],
+                    "p_model_version": "taxonomy-v1",
+                },
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"store_track_storetype_prediction HTTP {resp.status_code}: {resp.text[:500]}")
+
+    def _list_pending_storetype(self, limit: int) -> list:
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_tracks_needing_storetype_classification",
                 headers={"apikey": key, "Authorization": f"Bearer {key}",
                          "content-type": "application/json"},
                 json={"p_limit": limit},
@@ -1243,6 +1427,73 @@ class ClapEmbedder:
         }
 
     @modal.method()
+    def storetype_backfill(self, limit: int = 50, dry_run: bool = False,
+                           track_id: str | None = None, audio_url: str | None = None) -> dict:
+        """taxonomy-v1 의 predicted_store_types 가 비어있는 트랙 일괄 분류.
+        X1.2 mood 와 동일 패턴 — predicted_main_genre / predicted_moods 보존.
+        track_id 지정 시 단일 트랙 처리 (audio_url 미지정이면 DB 조회).
+        """
+        if track_id:
+            if not audio_url:
+                import httpx
+                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(
+                        f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
+                        headers={"apikey": key, "Authorization": f"Bearer {key}"},
+                    )
+                    resp.raise_for_status()
+                    rows = resp.json()
+                    audio_url = rows[0]["audio_url"] if rows else None
+                if not audio_url:
+                    return {"ok": False, "error": "track_id not found or audio_url missing"}
+            tracks = [{"track_id": track_id, "audio_url": audio_url, "title": None, "suitable_store": None}]
+        else:
+            tracks = self._list_pending_storetype(limit)
+            if not tracks:
+                return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
+
+        print(f"[StoreType] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
+        done = 0
+        failed: list = []
+        samples: list = []
+        for t in tracks:
+            tid = t["track_id"]
+            aurl = t.get("audio_url")
+            current_store = t.get("suitable_store")
+            if not aurl:
+                failed.append({"track_id": tid, "error": "no_audio_url"})
+                continue
+            try:
+                audio, sr = self._download_audio(aurl)
+                embedding = self._extract_embedding(audio, sr)
+                result = self._classify_storetype(embedding)
+                if not dry_run:
+                    self._store_storetype_prediction(tid, result)
+                done += 1
+                samples.append({
+                    "track_id": tid,
+                    "title": t.get("title"),
+                    "current_store": current_store,
+                    "predicted_store_types": result["predicted_store_types"],
+                    "store_type_confidence": result["store_type_confidence"],
+                    "top3_scores": {k: result["prediction_scores"]["store_type"][k]
+                                    for k in result["predicted_store_types"]},
+                })
+                if done % 10 == 0:
+                    print(f"[StoreType] {done}/{len(tracks)} done")
+            except Exception as e:
+                failed.append({"track_id": tid, "error": str(e)[:200]})
+        return {
+            "ok": True, "dryRun": dry_run,
+            "total_candidates": len(tracks),
+            "classified": done,
+            "failed_count": len(failed),
+            "failed_samples": failed[:10],
+            "samples": samples,
+        }
+
+    @modal.method()
     def backfill(self, limit: int = 100) -> dict:
         """백필: list_tracks_needing_embedding 호출 → 순차 처리 → 결과 요약."""
         tracks = self._list_pending(limit)
@@ -1321,16 +1572,9 @@ def backfill_endpoint(item: dict) -> dict:
     return embedder.backfill.remote(limit)
 
 
-@app.function(image=image, secrets=secrets, timeout=3600)
-@modal.fastapi_endpoint(method="POST", label="classify-backfill")
-def classify_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?, _auth } → 임베딩 있는데 분류 없는 트랙 백필."""
-    deny = _check_auth(item)
-    if deny is not None: return deny
-    limit = int(item.get("limit", 50))
-    embedder = ClapEmbedder()
-    return embedder.classify_backfill.remote(limit)
-
+# NOTE: classify-backfill (energy/BPM 분류) 는 storetype-backfill (X1.3) 추가로 8개 한도 초과 → 제거.
+# energy/BPM 은 후속 PR 에서 mood/store_type 분류와 통합 endpoint 로 재도입 검토.
+# 메서드 ClapEmbedder.classify_backfill 은 보존 (내부 .remote 호출 가능).
 
 @app.function(image=image, secrets=secrets)
 @modal.fastapi_endpoint(method="POST", label="qc-single")
@@ -1381,6 +1625,23 @@ def mood_backfill_endpoint(item: dict) -> dict:
     audio_url = item.get("audio_url")
     embedder = ClapEmbedder()
     return embedder.mood_backfill.remote(limit, dry_run, track_id, audio_url)
+
+
+@app.function(image=image, secrets=secrets, timeout=3600)
+@modal.fastapi_endpoint(method="POST", label="storetype-backfill")
+def storetype_backfill_endpoint(item: dict) -> dict:
+    """POST { limit?, dryRun?, track_id?, audio_url?, _auth }
+    → store_type 미분류 트랙 일괄 분류.
+    track_id 지정 시 단일 트랙만 처리 (audio_url 미지정이면 DB 조회).
+    dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
+    limit = int(item.get("limit", 50))
+    dry_run = bool(item.get("dryRun", False))
+    track_id = item.get("track_id")
+    audio_url = item.get("audio_url")
+    embedder = ClapEmbedder()
+    return embedder.storetype_backfill.remote(limit, dry_run, track_id, audio_url)
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)
