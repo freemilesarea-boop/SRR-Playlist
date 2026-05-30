@@ -59,6 +59,7 @@ import UploadAuditPanel from '@/components/admin/UploadAuditPanel';
 import AiCurationPanel from '@/components/admin/AiCurationPanel';
 import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel';
 import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
+import TaxonomyManagerPanel from '@/components/admin/TaxonomyManagerPanel';
 import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
 import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel';
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
@@ -91,6 +92,7 @@ type Tab =
   | 'ai-curation'
   | 'clap-curation'
   | 'ai-metadata'
+  | 'ai-taxonomy'
   | 'site-settings'
   | 'site-notices'
   | 'artist-settlements'
@@ -128,6 +130,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-curation', label: 'AI 큐레이션', icon: <Sparkles size={14} /> },
   { key: 'clap-curation', label: 'CLAP 추천', icon: <Sparkles size={14} /> },
   { key: 'ai-metadata', label: 'AI 메타데이터', icon: <Sparkles size={14} /> },
+  { key: 'ai-taxonomy', label: 'AI 분류 체계', icon: <Sparkles size={14} /> },
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
@@ -169,6 +172,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'ai-curation',
       'clap-curation',
       'ai-metadata',
+      'ai-taxonomy',
       'recommendation',
       'upload-integrity',
     ],
@@ -314,6 +318,7 @@ export default function AdminPage() {
         {tab === 'ai-curation' && <AiCurationPanel />}
         {tab === 'clap-curation' && <ClapRecommendationPanel />}
         {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
+        {tab === 'ai-taxonomy' && <TaxonomyManagerPanel />}
         {tab === 'site-settings' && <SiteSettingsPanel />}
         {tab === 'site-notices' && <SiteNoticesManagerPanel />}
         {tab === 'artist-settlements' && <ArtistSettlementsList />}
