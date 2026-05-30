@@ -10,13 +10,16 @@ DEUDDA CLAP Embedding Worker — Modal serverless GPU app.
     SUPABASE_URL
     SUPABASE_SERVICE_ROLE_KEY
 
-엔드포인트:
-    POST /embed_single       — { track_id, audio_url } → 단일 트랙 임베딩 → store_track_embedding RPC 호출
+엔드포인트 (Modal Free 플랜 Web Function 제한 8개 — 7개 사용):
+    POST /embed-single       — { track_id, audio_url } → 단일 트랙 임베딩
     POST /backfill           — { limit?: int } → list_tracks_needing_embedding → 일괄 처리
-    POST /genre-single       — { track_id, audio_url } → 단일 트랙 장르 분류 (taxonomy-v1)
-    POST /genre-backfill     — { limit?, dryRun? } → 장르 미분류 트랙 일괄 처리
-    POST /mood-single        — { track_id, audio_url } → 단일 트랙 무드 분류 (taxonomy-v1)
-    POST /mood-backfill      — { limit?, dryRun? } → 무드 미분류 트랙 일괄 처리
+    POST /classify-backfill  — { limit? } → 임베딩 있지만 분류 없는 트랙 일괄
+    POST /qc-single          — { track_id, audio_url } → 단일 QC
+    POST /qc-backfill        — { limit?, dryRun? } → QC 일괄
+    POST /genre-backfill     — { limit?, dryRun?, track_id?, audio_url? } → 장르 분류
+                                 track_id 지정 시 단일 트랙 (= 옛 /genre-single 통합)
+    POST /mood-backfill      — { limit?, dryRun?, track_id?, audio_url? } → mood 분류
+                                 track_id 지정 시 단일 트랙 (= 옛 /mood-single 통합)
 
 운영:
     - cold start: ~30초 (모델 로드)
@@ -978,11 +981,33 @@ class ClapEmbedder:
             return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
 
     @modal.method()
-    def genre_backfill(self, limit: int = 50, dry_run: bool = False) -> dict:
+    def genre_backfill(self, limit: int = 50, dry_run: bool = False,
+                       track_id: str | None = None, audio_url: str | None = None) -> dict:
         """taxonomy-v1 장르 예측 없는 트랙 일괄 분류.
-        dryRun=True → 후보 목록만 반환 + 분류는 실행 (저장 skip), 보고서용 샘플 수집.
+        dryRun=True → 결과 계산하지만 DB 저장 skip + samples 응답.
+        track_id 지정 시 단일 트랙만 처리 (old /genre-single 대체):
+          - audio_url 도 전달되면 그대로 사용, 없으면 DB 의 tracks.audio_url 조회.
         """
-        tracks = self._list_pending_genre(limit)
+        if track_id:
+            # 단일 모드 — audio_url 자동 조회 fallback
+            if not audio_url:
+                import httpx
+                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(
+                        f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
+                        headers={"apikey": key, "Authorization": f"Bearer {key}"},
+                    )
+                    resp.raise_for_status()
+                    rows = resp.json()
+                    audio_url = rows[0]["audio_url"] if rows else None
+                if not audio_url:
+                    return {"ok": False, "error": "track_id not found or audio_url missing"}
+            tracks = [{"track_id": track_id, "audio_url": audio_url, "title": None, "main_genre": None}]
+        else:
+            tracks = self._list_pending_genre(limit)
+            if not tracks:
+                return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
         if not tracks:
             return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
         print(f"[Genre] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
@@ -1046,13 +1071,32 @@ class ClapEmbedder:
             return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
 
     @modal.method()
-    def mood_backfill(self, limit: int = 50, dry_run: bool = False) -> dict:
+    def mood_backfill(self, limit: int = 50, dry_run: bool = False,
+                      track_id: str | None = None, audio_url: str | None = None) -> dict:
         """taxonomy-v1 의 predicted_moods 가 비어있는 트랙 일괄 분류.
         dry_run=True → 결과 계산 + DB 저장 skip + samples 응답.
+        track_id 지정 시 단일 트랙만 처리 (old /mood-single 대체):
+          - audio_url 도 전달되면 그대로 사용, 없으면 DB 의 tracks.audio_url 조회.
         """
-        tracks = self._list_pending_mood(limit)
-        if not tracks:
-            return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
+        if track_id:
+            if not audio_url:
+                import httpx
+                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(
+                        f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
+                        headers={"apikey": key, "Authorization": f"Bearer {key}"},
+                    )
+                    resp.raise_for_status()
+                    rows = resp.json()
+                    audio_url = rows[0]["audio_url"] if rows else None
+                if not audio_url:
+                    return {"ok": False, "error": "track_id not found or audio_url missing"}
+            tracks = [{"track_id": track_id, "audio_url": audio_url, "title": None, "mood": None}]
+        else:
+            tracks = self._list_pending_mood(limit)
+            if not tracks:
+                return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
         print(f"[Mood] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
         done = 0
         failed: list = []
@@ -1197,60 +1241,41 @@ def qc_single_endpoint(item: dict) -> dict:
     return embedder.qc_single.remote(track_id, audio_url)
 
 
-@app.function(image=image, secrets=secrets, timeout=600)
-@modal.fastapi_endpoint(method="POST", label="genre-single")
-def genre_single_endpoint(item: dict) -> dict:
-    """POST { track_id, audio_url, dryRun?, _auth } → 단일 트랙 zero-shot 장르 분류."""
-    deny = _check_auth(item)
-    if deny is not None: return deny
-    track_id = item.get("track_id")
-    audio_url = item.get("audio_url")
-    if not track_id or not audio_url:
-        return {"ok": False, "error": "track_id and audio_url required"}
-    dry_run = bool(item.get("dryRun", False))
-    embedder = ClapEmbedder()
-    return embedder.genre_single.remote(track_id, audio_url, dry_run)
-
+# NOTE: genre-single / mood-single 은 Modal Free 플랜의 Web Function 제한(8개) 으로 인해 제거.
+# 동일 기능은 backfill endpoint 에 { track_id, audio_url? } 옵션으로 통합.
 
 @app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="genre-backfill")
 def genre_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?, dryRun?, _auth } → 장르 미분류 트랙 일괄 분류.
+    """POST { limit?, dryRun?, track_id?, audio_url?, _auth }
+    → 장르 미분류 트랙 일괄 분류.
+    track_id 지정 시 단일 트랙만 처리 (audio_url 미지정이면 DB 조회).
     dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀 (검증용)."""
     deny = _check_auth(item)
     if deny is not None: return deny
     limit = int(item.get("limit", 50))
     dry_run = bool(item.get("dryRun", False))
-    embedder = ClapEmbedder()
-    return embedder.genre_backfill.remote(limit, dry_run)
-
-
-@app.function(image=image, secrets=secrets, timeout=600)
-@modal.fastapi_endpoint(method="POST", label="mood-single")
-def mood_single_endpoint(item: dict) -> dict:
-    """POST { track_id, audio_url, dryRun?, _auth } → 단일 트랙 zero-shot mood 분류."""
-    deny = _check_auth(item)
-    if deny is not None: return deny
     track_id = item.get("track_id")
     audio_url = item.get("audio_url")
-    if not track_id or not audio_url:
-        return {"ok": False, "error": "track_id and audio_url required"}
-    dry_run = bool(item.get("dryRun", False))
     embedder = ClapEmbedder()
-    return embedder.mood_single.remote(track_id, audio_url, dry_run)
+    return embedder.genre_backfill.remote(limit, dry_run, track_id, audio_url)
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="mood-backfill")
 def mood_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?, dryRun?, _auth } → mood 미분류 트랙 일괄 분류.
+    """POST { limit?, dryRun?, track_id?, audio_url?, _auth }
+    → mood 미분류 트랙 일괄 분류.
+    track_id 지정 시 단일 트랙만 처리 (audio_url 미지정이면 DB 조회).
     dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀."""
     deny = _check_auth(item)
     if deny is not None: return deny
     limit = int(item.get("limit", 50))
     dry_run = bool(item.get("dryRun", False))
+    track_id = item.get("track_id")
+    audio_url = item.get("audio_url")
     embedder = ClapEmbedder()
-    return embedder.mood_backfill.remote(limit, dry_run)
+    return embedder.mood_backfill.remote(limit, dry_run, track_id, audio_url)
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)
