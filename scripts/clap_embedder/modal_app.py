@@ -355,20 +355,65 @@ class ClapEmbedder:
 
     # ========== Phase X1.2 — taxonomy zero-shot Mood 분류 ==========
 
-    # Mood slug → 단일 prompt (사용자 spec).
-    # name_en 만으로는 mood 어휘 미묘함을 표현 못해서 slug 별로 명시.
-    _MOOD_PROMPTS = {
-        "calm":       "calm and peaceful background music",
-        "warm":       "warm and cozy music",
-        "bright":     "bright and cheerful music",
-        "happy":      "happy and uplifting music",
-        "emotional":  "emotional and sentimental music",
-        "dreamy":     "dreamy and atmospheric music",
-        "chic":       "chic and stylish music",
-        "luxurious":  "luxurious and elegant music",
-        "energetic":  "energetic and powerful music",
-        "trendy":     "trendy modern music",
-        "focused":    "focused and concentration music",
+    # Phase X1.2.1 — DSP 상황 기반 multi-prompt (warm 편향 완화).
+    # 단일 감정 단어 ("warm and cozy music") 가 다양한 음악을 끌어와서 warm 65% 쏠림.
+    # 매장/상황 컨텍스트를 명시한 3 prompts 평균으로 분리도 향상.
+    _MOOD_PROMPTS: dict[str, list[str]] = {
+        "calm": [
+            "quiet study background music",
+            "peaceful spa relaxation music",
+            "calm meditation atmosphere",
+        ],
+        "warm": [
+            "warm acoustic cafe music",
+            "cozy coffee shop background music",
+            "comfortable relaxing cafe atmosphere",
+        ],
+        "bright": [
+            "bright morning playlist",
+            "sunny pop music",
+            "cheerful daytime atmosphere",
+        ],
+        "happy": [
+            "happy celebration music",
+            "upbeat party playlist",
+            "joyful pop music",
+        ],
+        "emotional": [
+            "emotional ballad music",
+            "sentimental piano music",
+            "heartfelt acoustic song",
+        ],
+        "dreamy": [
+            "dreamy night music",
+            "floating ambient music",
+            "ethereal emotional atmosphere",
+        ],
+        "chic": [
+            "chic boutique store music",
+            "stylish fashion playlist",
+            "sophisticated urban music",
+        ],
+        "luxurious": [
+            "luxury hotel lobby music",
+            "premium lounge music",
+            "high-end wine bar atmosphere",
+        ],
+        "energetic": [
+            "fitness gym workout music",
+            "high energy driving music",
+            "powerful motivational music",
+        ],
+        "trendy": [
+            "modern retail store music",
+            "fashionable trendy playlist",
+            "instagram aesthetic music",
+        ],
+        "focused": [
+            "focus study music",
+            "concentration ambient music",
+            "productive work playlist",
+        ],
     }
 
     def _fetch_active_moods(self) -> list[dict]:
@@ -389,7 +434,8 @@ class ClapEmbedder:
 
     def _ensure_mood_features(self):
         """활성 mood 목록 → CLAP text features 캐싱.
-        slug 별 단일 prompt 사용. 미정의 slug 는 fallback 으로 'name_en mood music'.
+        slug 별 3 DSP-상황 prompts 평균 → 단일 정규화 feature (X1.1 genre 패턴 동일).
+        미정의 slug 는 fallback 으로 'name_en mood music' 단일.
         """
         import torch
 
@@ -400,26 +446,41 @@ class ClapEmbedder:
         if not moods:
             raise RuntimeError("no active taxonomy_moods rows — Phase X1.0 마이그레이션 미적용?")
 
+        # mood 별 prompt 개수가 다를 수 있으므로 (정의된 slug = 3, fallback = 1)
+        # 그룹 인덱스를 함께 보존했다가 인코딩 후 mood 별 평균.
         prompts: list[str] = []
-        for m in moods:
+        group_idx: list[int] = []  # 각 prompt 의 mood 인덱스
+        for i, m in enumerate(moods):
             slug = m["slug"]
-            if slug in self._MOOD_PROMPTS:
-                prompts.append(self._MOOD_PROMPTS[slug])
-            else:
-                # Fallback — taxonomy 가 확장되면 spec 추가 필요. 일단 안전 fallback.
-                prompts.append(f"{m['name_en'].lower()} mood music")
+            ps = self._MOOD_PROMPTS.get(slug) or [f"{m['name_en'].lower()} mood music"]
+            for p in ps:
+                prompts.append(p)
+                group_idx.append(i)
 
         text_inputs = self.processor(text=prompts, return_tensors="pt", padding=True)
         text_inputs = {k: v.to("cuda") for k, v in text_inputs.items()}
         with torch.no_grad():
             text_features = self.model.get_text_features(**text_inputs)
+        # per-prompt 정규화
         text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-9)
+
+        # mood 별 평균
+        import numpy as np
+        gi = torch.tensor(group_idx, device="cuda")
+        n_moods = len(moods)
+        mood_features = torch.zeros(n_moods, text_features.shape[1], device="cuda")
+        mood_features.index_add_(0, gi, text_features)
+        counts = torch.bincount(gi, minlength=n_moods).float().clamp(min=1.0).unsqueeze(1)
+        mood_features = mood_features / counts
+        # 평균 후 재정규화
+        mood_features = mood_features / (mood_features.norm(dim=-1, keepdim=True) + 1e-9)
 
         self._mood_slugs = [m["slug"] for m in moods]
         self._mood_labels_ko = [m["name_ko"] for m in moods]
-        self._mood_text_features = text_features  # [N_mood, 512] cuda
+        self._mood_text_features = mood_features  # [N_mood, 512] cuda (mood 별 평균 + 정규화)
         self._mood_cache_loaded = True
-        print(f"[ClapEmbedder] cached mood text features for {len(moods)} active moods")
+        print(f"[ClapEmbedder] cached mood text features for {len(moods)} active moods "
+              f"({len(prompts)} total prompts, {len(prompts) / max(len(moods), 1):.1f} avg per mood)")
 
     def _classify_mood(self, audio_embedding: list[float]) -> dict:
         """audio_embedding → mood top1~3 + softmax 분포.
