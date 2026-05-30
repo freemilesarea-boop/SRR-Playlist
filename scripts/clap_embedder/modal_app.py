@@ -355,14 +355,15 @@ class ClapEmbedder:
 
     # ========== Phase X1.2 — taxonomy zero-shot Mood 분류 ==========
 
-    # Phase X1.2.1 — DSP 상황 기반 multi-prompt (warm 편향 완화).
-    # 단일 감정 단어 ("warm and cozy music") 가 다양한 음악을 끌어와서 warm 65% 쏠림.
-    # 매장/상황 컨텍스트를 명시한 3 prompts 평균으로 분리도 향상.
+    # Phase X1.2.2 — bright 75% 쏠림 완화 + luxurious/dreamy/emotional/calm 강화 + romantic 신규.
+    # X1.2.1 의 일반적 "atmosphere/background music" 표현이 호텔 BGM Jazz 를 bright 로
+    # 끌어왔음 → bright 는 upbeat/cheerful/sunny 로 제한, Jazz/lounge 표현은 luxurious/dreamy
+    # 로 명시 이동. romantic 은 X1.0 시드에 없었지만 운영 데이터에 "로맨틱한" 다수 존재 → 0236.
     _MOOD_PROMPTS: dict[str, list[str]] = {
         "calm": [
-            "quiet study background music",
-            "peaceful spa relaxation music",
-            "calm meditation atmosphere",
+            "calm spa background music",
+            "peaceful clinic waiting room music",
+            "quiet relaxing instrumental music",
         ],
         "warm": [
             "warm acoustic cafe music",
@@ -370,9 +371,9 @@ class ClapEmbedder:
             "comfortable relaxing cafe atmosphere",
         ],
         "bright": [
-            "bright morning playlist",
-            "sunny pop music",
-            "cheerful daytime atmosphere",
+            "upbeat cheerful pop music",
+            "sunny morning playlist",
+            "lively energetic daytime music",
         ],
         "happy": [
             "happy celebration music",
@@ -380,14 +381,15 @@ class ClapEmbedder:
             "joyful pop music",
         ],
         "emotional": [
-            "emotional ballad music",
-            "sentimental piano music",
-            "heartfelt acoustic song",
+            "sentimental jazz ballad",
+            "emotional piano lounge music",
+            "nostalgic romantic background music",
         ],
         "dreamy": [
-            "dreamy night music",
-            "floating ambient music",
-            "ethereal emotional atmosphere",
+            "dreamy late night jazz",
+            "soft atmospheric night music",
+            "floating ambient lounge music",
+            "mellow dreamlike background music",
         ],
         "chic": [
             "chic boutique store music",
@@ -395,9 +397,11 @@ class ClapEmbedder:
             "sophisticated urban music",
         ],
         "luxurious": [
-            "luxury hotel lobby music",
-            "premium lounge music",
-            "high-end wine bar atmosphere",
+            "sophisticated jazz lounge music",
+            "elegant hotel lobby jazz",
+            "premium wine bar jazz",
+            "smooth luxury lounge atmosphere",
+            "refined cocktail bar music",
         ],
         "energetic": [
             "fitness gym workout music",
@@ -413,6 +417,11 @@ class ClapEmbedder:
             "focus study music",
             "concentration ambient music",
             "productive work playlist",
+        ],
+        "romantic": [
+            "romantic dinner jazz",
+            "intimate wine bar music",
+            "romantic evening lounge music",
         ],
     }
 
