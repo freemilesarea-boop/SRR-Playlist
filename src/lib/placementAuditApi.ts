@@ -12,7 +12,11 @@
  */
 import { supabase } from './supabase';
 
-export const LOUNGE_BUSINESS_CATEGORIES = ['호텔', '라운지', '와인바', '카페 라운지', '칵테일바', '미용실'];
+export const LOUNGE_BUSINESS_CATEGORIES = [
+  '호텔', '라운지', '와인바', '카페 라운지', '칵테일바',
+  '미용실', '뷰티샵', '네일샵',
+  'beauty_shop', 'salon', 'hair_salon', 'cosmetic_shop',
+];
 export const EXCLUDED_GENRE_PATTERNS = ['rock', 'metal', 'punk', 'hard rock', 'hardstyle', 'hardcore', 'trap', 'drill'];
 
 export type RiskDecision = 'pending' | 'approve' | 'keep' | 'remove';
@@ -63,6 +67,7 @@ export interface FlagApplyResult {
   dryRun: false;
   candidate_count: number;
   inserted_count: number;
+  skipped_already_decided?: number;
   run_id: string;
 }
 
