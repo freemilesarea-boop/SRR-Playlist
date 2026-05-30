@@ -355,73 +355,108 @@ class ClapEmbedder:
 
     # ========== Phase X1.2 — taxonomy zero-shot Mood 분류 ==========
 
-    # Phase X1.2.2 — bright 75% 쏠림 완화 + luxurious/dreamy/emotional/calm 강화 + romantic 신규.
-    # X1.2.1 의 일반적 "atmosphere/background music" 표현이 호텔 BGM Jazz 를 bright 로
-    # 끌어왔음 → bright 는 upbeat/cheerful/sunny 로 제한, Jazz/lounge 표현은 luxurious/dreamy
-    # 로 명시 이동. romantic 은 X1.0 시드에 없었지만 운영 데이터에 "로맨틱한" 다수 존재 → 0236.
+    # Phase X1.2.3 — 16 moods × 3~5 prompts (사용자 spec). 주요 변경:
+    #   - happy 축소 (Electronic/Rock/J-Pop 100% 과적합 → exciting/lively/energetic 분산)
+    #   - Ballad 가 bright 80% 로 잡히던 문제 → emotional prompts 에 "ballad" 강조
+    #   - energetic 강화 (hard rock workout / aggressive gym 추가) → Rock/헬스장 정당 분류
+    #   - calm / relaxed 분리 (relaxed 카페/병원, calm 잔잔 백그라운드)
+    #   - sensual / lively / exciting 신규 (0237 taxonomy 4종 추가 대응)
+    #   - hotel/winebar/jazz → luxurious/romantic/chic 으로 명시 유도
     _MOOD_PROMPTS: dict[str, list[str]] = {
         "calm": [
-            "calm spa background music",
-            "peaceful clinic waiting room music",
-            "quiet relaxing instrumental music",
+            "calm ambient background music",
+            "quiet peaceful lounge music",
+            "calm clinic waiting room music",
+            "gentle relaxing instrumental music",
+        ],
+        "relaxed": [
+            "relaxed cafe background music",
+            "easygoing comfortable music",
+            "soft relaxing coffee shop music",
+            "laid back lounge music",
         ],
         "warm": [
             "warm acoustic cafe music",
             "cozy coffee shop background music",
-            "comfortable relaxing cafe atmosphere",
+            "warm mellow background music",
         ],
         "bright": [
-            "upbeat cheerful pop music",
-            "sunny morning playlist",
-            "lively energetic daytime music",
+            "bright cheerful pop music",
+            "sunny upbeat daytime music",
+            "light positive background music",
+        ],
+        "lively": [
+            "lively retail store music",
+            "upbeat casual cafe music",
+            "bright energetic shop music",
+            "playful family friendly music",
         ],
         "happy": [
-            "happy celebration music",
-            "upbeat party playlist",
-            "joyful pop music",
+            "happy feel good pop music",
+            "joyful cheerful song",
+            "pleasant uplifting music",
         ],
         "emotional": [
-            "sentimental jazz ballad",
-            "emotional piano lounge music",
-            "nostalgic romantic background music",
+            "emotional ballad music",
+            "sentimental piano ballad",
+            "nostalgic emotional song",
+            "heartfelt slow music",
+        ],
+        "romantic": [
+            "romantic dinner jazz",
+            "intimate wine bar music",
+            "candlelight jazz music",
+            "romantic evening lounge music",
         ],
         "dreamy": [
-            "dreamy late night jazz",
+            "dreamy ambient music",
             "soft atmospheric night music",
-            "floating ambient lounge music",
             "mellow dreamlike background music",
+            "floating lounge music",
+        ],
+        "sensual": [
+            "sensual stylish boutique music",
+            "sophisticated sensual lounge music",
+            "elegant sensual fashion music",
+            "refined sensual atmosphere music",
         ],
         "chic": [
-            "chic boutique store music",
-            "stylish fashion playlist",
-            "sophisticated urban music",
+            "chic fashion store music",
+            "stylish modern lounge music",
+            "sophisticated trendy background music",
+            "minimalist boutique music",
         ],
         "luxurious": [
             "sophisticated jazz lounge music",
             "elegant hotel lobby jazz",
             "premium wine bar jazz",
-            "smooth luxury lounge atmosphere",
-            "refined cocktail bar music",
+            "high end cocktail bar music",
+            "refined luxury lounge atmosphere",
+        ],
+        "exciting": [
+            "exciting dance pop music",
+            "fun upbeat party music",
+            "energetic festival music",
+            "exciting event music",
         ],
         "energetic": [
-            "fitness gym workout music",
-            "high energy driving music",
-            "powerful motivational music",
+            "high energy workout music",
+            "gym training rock music",
+            "powerful driving music",
+            "aggressive fitness background music",
+            "hard rock workout music",
         ],
         "trendy": [
-            "modern retail store music",
-            "fashionable trendy playlist",
+            "trendy modern pop music",
+            "fashionable retail playlist",
             "instagram aesthetic music",
+            "modern urban background music",
         ],
         "focused": [
-            "focus study music",
-            "concentration ambient music",
-            "productive work playlist",
-        ],
-        "romantic": [
-            "romantic dinner jazz",
-            "intimate wine bar music",
-            "romantic evening lounge music",
+            "focused concentration music",
+            "study cafe background music",
+            "minimal focus instrumental music",
+            "productivity background music",
         ],
     }
 
