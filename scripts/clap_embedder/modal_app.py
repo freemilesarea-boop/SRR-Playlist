@@ -43,6 +43,8 @@ image = (
         "httpx==0.27.0",
         "numpy==1.26.0",
         "fastapi[standard]==0.115.0",
+        "pyloudnorm==0.1.1",
+        "scipy==1.13.0",
     )
 )
 
@@ -227,6 +229,254 @@ class ClapEmbedder:
             if resp.status_code >= 400:
                 raise RuntimeError(f"store_track_ai_predictions HTTP {resp.status_code}: {resp.text[:500]}")
 
+    def _analyze_qc(self, audio_array, sr: int) -> dict:
+        """DSP-급 음원 QC 분석 — LUFS / TruePeak / Clipping / DR / Noise / Stereo / Silence.
+
+        Returns dict with raw metrics + qc_score + qc_grade + risk_level + issues_json.
+        """
+        import numpy as np
+        import pyloudnorm as pyln
+
+        # 입력은 mono 가정 (download 시 mono 로 디코딩). stereo_width 계산은 별도 처리.
+        if audio_array.ndim == 1:
+            mono = audio_array
+            stereo_width = 0.0  # mono → 0
+        else:
+            mono = np.mean(audio_array, axis=0) if audio_array.shape[0] < audio_array.shape[1] else np.mean(audio_array, axis=1)
+            # mid/side 기반 스테레오 폭 = side / (mid + side + 1e-9)
+            left = audio_array[0] if audio_array.shape[0] < audio_array.shape[1] else audio_array[:, 0]
+            right = audio_array[1] if audio_array.shape[0] < audio_array.shape[1] else audio_array[:, 1]
+            mid = (left + right) / 2
+            side = (left - right) / 2
+            mid_rms = float(np.sqrt(np.mean(mid ** 2)))
+            side_rms = float(np.sqrt(np.mean(side ** 2)))
+            stereo_width = side_rms / (mid_rms + side_rms + 1e-9)
+
+        duration = float(len(mono) / sr)
+
+        # 1) Integrated LUFS (ITU-R BS.1770)
+        try:
+            meter = pyln.Meter(sr)  # block-based loudness measurement
+            integrated_lufs = float(meter.integrated_loudness(mono))
+            if not np.isfinite(integrated_lufs) or integrated_lufs < -80:
+                integrated_lufs = -80.0
+        except Exception:
+            integrated_lufs = None
+
+        # 2) True Peak (간단 근사 — 4x oversample 후 max abs → dBTP)
+        try:
+            from scipy import signal as sps
+            up = sps.resample_poly(mono, 4, 1)
+            peak_lin = float(np.max(np.abs(up)))
+            true_peak_db = 20 * np.log10(peak_lin + 1e-12)
+        except Exception:
+            peak_lin = float(np.max(np.abs(mono)))
+            true_peak_db = 20 * np.log10(peak_lin + 1e-12)
+
+        # 3) Clipping — 0 dBFS 이상 샘플 카운트 (mono 기반 + tolerance)
+        clipping_count = int(np.sum(np.abs(mono) >= 0.99))
+
+        # 4) Noise floor — RMS lower 10th percentile of 50ms windows
+        win = max(int(sr * 0.05), 1)
+        if len(mono) > win:
+            squared = mono ** 2
+            n_blocks = len(mono) // win
+            rms = np.sqrt(np.mean(squared[: n_blocks * win].reshape(n_blocks, win), axis=1))
+            noise_rms = float(np.percentile(rms, 10))
+            noise_floor_db = 20 * np.log10(noise_rms + 1e-12)
+        else:
+            noise_floor_db = -60.0
+
+        # 5) Silence ratio — |x| < -50dBFS (≈ 0.003 amp) 인 샘플 비율
+        silence_thresh = 10 ** (-50 / 20.0)
+        silence_ratio = float(np.mean(np.abs(mono) < silence_thresh))
+
+        # 6) Dynamic Range — true_peak_db - integrated_lufs (PSR 근사)
+        if integrated_lufs is not None:
+            dynamic_range = float(true_peak_db - integrated_lufs)
+        else:
+            dynamic_range = None
+
+        # 7) Distortion proxy — RMS 위 4*RMS 초과 샘플 비율 (간단 한계)
+        rms_overall = float(np.sqrt(np.mean(mono ** 2)))
+        distortion_score = float(np.mean(np.abs(mono) > 4 * rms_overall + 1e-9)) if rms_overall > 0 else 0.0
+        distortion_score = min(distortion_score * 5, 1.0)  # 0-1 스케일
+
+        # ----- 점수/등급/위험도 계산 -----
+        issues = []
+        score = 100.0
+
+        # LUFS — 목표 -14 LUFS (±2 허용)
+        if integrated_lufs is None:
+            score -= 5
+            issues.append({"code": "LOUDNESS_UNKNOWN", "message": "LUFS 측정 실패"})
+        elif integrated_lufs < -18:
+            score -= 15
+            issues.append({"code": "LOUDNESS_LOW", "message": f"LUFS {integrated_lufs:.1f} — 권장 -14 보다 낮음"})
+        elif integrated_lufs > -10:
+            score -= 12
+            issues.append({"code": "LOUDNESS_HIGH", "message": f"LUFS {integrated_lufs:.1f} — 권장 -14 보다 너무 높음"})
+        elif integrated_lufs < -16 or integrated_lufs > -12:
+            score -= 5
+            issues.append({"code": "LOUDNESS_OFFTARGET", "message": f"LUFS {integrated_lufs:.1f} — 목표 -14 에서 벗어남"})
+
+        # True Peak — -1 dBTP 초과 금지
+        if true_peak_db > 0:
+            score -= 20
+            issues.append({"code": "TRUE_PEAK_CLIP", "message": f"True peak {true_peak_db:.1f} dBTP — 0 dB 초과 (클리핑 위험)"})
+        elif true_peak_db > -1:
+            score -= 8
+            issues.append({"code": "TRUE_PEAK_HOT", "message": f"True peak {true_peak_db:.1f} dBTP — 권장 -1 dBTP 초과"})
+
+        # Clipping — 100샘플 이상이면 위험
+        if clipping_count > 500:
+            score -= 25
+            issues.append({"code": "CLIPPING_SEVERE", "message": f"클리핑 {clipping_count}샘플 — 심각"})
+        elif clipping_count > 100:
+            score -= 12
+            issues.append({"code": "CLIPPING", "message": f"클리핑 {clipping_count}샘플 발생"})
+        elif clipping_count > 10:
+            score -= 4
+            issues.append({"code": "CLIPPING_MINOR", "message": f"클리핑 {clipping_count}샘플 경미"})
+
+        # Noise floor — > -45 dBFS 면 노이즈 많음
+        if noise_floor_db > -35:
+            score -= 15
+            issues.append({"code": "NOISE_HIGH", "message": f"노이즈 플로어 {noise_floor_db:.1f} dBFS — 매우 높음"})
+        elif noise_floor_db > -45:
+            score -= 5
+            issues.append({"code": "NOISE_ELEVATED", "message": f"노이즈 플로어 {noise_floor_db:.1f} dBFS — 다소 높음"})
+
+        # Silence — > 30% 면 비정상
+        if silence_ratio > 0.5:
+            score -= 30
+            issues.append({"code": "SILENCE_EXCESS", "message": f"무음 비율 {silence_ratio*100:.0f}% — 매우 과다"})
+        elif silence_ratio > 0.3:
+            score -= 12
+            issues.append({"code": "SILENCE_HIGH", "message": f"무음 비율 {silence_ratio*100:.0f}%"})
+
+        # Dynamic Range — 4 미만 (over-compressed) / 25 이상 (제어 부족)
+        if dynamic_range is not None:
+            if dynamic_range < 3:
+                score -= 10
+                issues.append({"code": "DR_LOW", "message": f"DR {dynamic_range:.1f} — 과도하게 압축됨"})
+            elif dynamic_range > 25:
+                score -= 5
+                issues.append({"code": "DR_HIGH", "message": f"DR {dynamic_range:.1f} — 다이내믹 과다"})
+
+        # Stereo width — mono 면 신경 안 씀, stereo 인데 width < 0.05 면 사실상 mono
+        if stereo_width > 0 and stereo_width < 0.05:
+            score -= 3
+            issues.append({"code": "STEREO_NARROW", "message": "스테레오 폭이 매우 좁음 (사실상 mono)"})
+
+        # Distortion proxy
+        if distortion_score > 0.3:
+            score -= 10
+            issues.append({"code": "DISTORTION_HIGH", "message": f"왜곡 추정치 높음 ({distortion_score:.2f})"})
+
+        # Duration — 너무 짧거나 너무 김
+        if duration < 20:
+            score -= 20
+            issues.append({"code": "DURATION_SHORT", "message": f"재생시간 {duration:.0f}초 — 매우 짧음"})
+        elif duration > 900:
+            score -= 5
+            issues.append({"code": "DURATION_LONG", "message": f"재생시간 {duration/60:.0f}분"})
+
+        score = max(0.0, min(100.0, score))
+
+        # 등급
+        if score >= 85:
+            qc_grade = 'A'
+        elif score >= 70:
+            qc_grade = 'B'
+        elif score >= 50:
+            qc_grade = 'C'
+        else:
+            qc_grade = 'D'
+
+        # 위험도 — 심각 항목 가산
+        critical_codes = {'CLIPPING_SEVERE', 'SILENCE_EXCESS', 'TRUE_PEAK_CLIP', 'DURATION_SHORT'}
+        high_codes = {'CLIPPING', 'NOISE_HIGH', 'SILENCE_HIGH', 'LOUDNESS_HIGH', 'DISTORTION_HIGH'}
+        codes = {i['code'] for i in issues}
+        if codes & critical_codes:
+            risk_level = 'CRITICAL'
+        elif codes & high_codes or score < 50:
+            risk_level = 'HIGH'
+        elif score < 70:
+            risk_level = 'MEDIUM'
+        else:
+            risk_level = 'LOW'
+
+        return {
+            "integrated_lufs": round(integrated_lufs, 2) if integrated_lufs is not None else None,
+            "true_peak_db": round(true_peak_db, 2),
+            "dynamic_range": round(dynamic_range, 2) if dynamic_range is not None else None,
+            "stereo_width": round(stereo_width, 3),
+            "noise_floor_db": round(noise_floor_db, 2),
+            "silence_ratio": round(silence_ratio, 3),
+            "clipping_count": clipping_count,
+            "distortion_score": round(distortion_score, 3),
+            "sample_rate": int(sr),
+            "bit_depth": None,  # librosa 디코딩 후엔 알 수 없음
+            "duration": round(duration, 2),
+            "qc_score": round(score, 2),
+            "qc_grade": qc_grade,
+            "risk_level": risk_level,
+            "issues": issues,
+        }
+
+    def _store_qc_report(self, track_id: str, qc: dict):
+        """store_track_qc_report RPC 호출."""
+        import httpx
+        import json
+
+        url = os.environ["SUPABASE_URL"]
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/store_track_qc_report",
+                headers={
+                    "apikey": key,
+                    "Authorization": f"Bearer {key}",
+                    "content-type": "application/json",
+                },
+                json={
+                    "p_track_id": track_id,
+                    "p_integrated_lufs": qc.get("integrated_lufs"),
+                    "p_true_peak_db": qc.get("true_peak_db"),
+                    "p_dynamic_range": qc.get("dynamic_range"),
+                    "p_stereo_width": qc.get("stereo_width"),
+                    "p_noise_floor_db": qc.get("noise_floor_db"),
+                    "p_silence_ratio": qc.get("silence_ratio"),
+                    "p_clipping_count": qc.get("clipping_count"),
+                    "p_distortion_score": qc.get("distortion_score"),
+                    "p_sample_rate": qc.get("sample_rate"),
+                    "p_bit_depth": qc.get("bit_depth"),
+                    "p_duration": qc.get("duration"),
+                    "p_qc_score": qc.get("qc_score"),
+                    "p_qc_grade": qc.get("qc_grade"),
+                    "p_risk_level": qc.get("risk_level"),
+                    "p_issues_json": qc.get("issues"),
+                },
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"store_track_qc_report HTTP {resp.status_code}: {resp.text[:500]}")
+
+    def _list_pending_qc(self, limit: int) -> list:
+        """list_tracks_needing_qc RPC."""
+        import httpx
+        url = os.environ["SUPABASE_URL"]
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_tracks_needing_qc",
+                headers={"apikey": key, "Authorization": f"Bearer {key}", "content-type": "application/json"},
+                json={"p_limit": limit},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
     def _download_audio(self, audio_url: str) -> tuple:
         """audio_url 에서 오디오 다운로드 후 numpy array 로 변환."""
         import httpx
@@ -357,6 +607,45 @@ class ClapEmbedder:
         }
 
     @modal.method()
+    def qc_single(self, track_id: str, audio_url: str) -> dict:
+        """단일 트랙 QC 분석 + DB 저장."""
+        try:
+            audio, sr = self._download_audio(audio_url)
+            qc = self._analyze_qc(audio, sr)
+            self._store_qc_report(track_id, qc)
+            return {"ok": True, "track_id": track_id,
+                    "qc_score": qc["qc_score"], "qc_grade": qc["qc_grade"],
+                    "risk_level": qc["risk_level"], "issues_count": len(qc["issues"])}
+        except Exception as e:
+            return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
+
+    @modal.method()
+    def qc_backfill(self, limit: int = 50) -> dict:
+        """QC 없는 트랙들 백필."""
+        tracks = self._list_pending_qc(limit)
+        print(f"[QC] backfill {len(tracks)} tracks")
+        done = 0
+        failed = []
+        for t in tracks:
+            track_id = t["track_id"]
+            audio_url = t.get("audio_url")
+            if not audio_url:
+                failed.append({"track_id": track_id, "error": "no_audio_url"})
+                continue
+            try:
+                audio, sr = self._download_audio(audio_url)
+                qc = self._analyze_qc(audio, sr)
+                self._store_qc_report(track_id, qc)
+                done += 1
+                if done % 10 == 0:
+                    print(f"[QC] {done}/{len(tracks)} done")
+            except Exception as e:
+                failed.append({"track_id": track_id, "error": str(e)[:200]})
+        return {"ok": True, "total_candidates": len(tracks),
+                "analyzed": done, "failed_count": len(failed),
+                "failed_samples": failed[:10]}
+
+    @modal.method()
     def backfill(self, limit: int = 100) -> dict:
         """백필: list_tracks_needing_embedding 호출 → 순차 처리 → 결과 요약."""
         tracks = self._list_pending(limit)
@@ -421,6 +710,27 @@ def classify_backfill_endpoint(item: dict) -> dict:
     limit = int(item.get("limit", 50))
     embedder = ClapEmbedder()
     return embedder.classify_backfill.remote(limit)
+
+
+@app.function(image=image, secrets=secrets)
+@modal.fastapi_endpoint(method="POST", label="qc-single")
+def qc_single_endpoint(item: dict) -> dict:
+    """POST { track_id, audio_url } → AI QC 분석 + DB 저장."""
+    track_id = item.get("track_id")
+    audio_url = item.get("audio_url")
+    if not track_id or not audio_url:
+        return {"ok": False, "error": "track_id and audio_url required"}
+    embedder = ClapEmbedder()
+    return embedder.qc_single.remote(track_id, audio_url)
+
+
+@app.function(image=image, secrets=secrets, timeout=3600)
+@modal.fastapi_endpoint(method="POST", label="qc-backfill")
+def qc_backfill_endpoint(item: dict) -> dict:
+    """POST { limit?: int } → QC 리포트 없는 트랙 백필."""
+    limit = int(item.get("limit", 50))
+    embedder = ClapEmbedder()
+    return embedder.qc_backfill.remote(limit)
 
 
 # ----- 로컬 테스트 -----
