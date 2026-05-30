@@ -27,6 +27,19 @@ import os
 import json
 from typing import Optional
 
+
+def _supabase_url() -> str:
+    """SUPABASE_URL 정규화 — protocol prefix 자동 추가, trailing slash 제거.
+    Modal Secret 입력 실수 (예: 'nsoes...supabase.co' 또는 'https://...supabase.co/') 모두 흡수.
+    """
+    url = os.environ.get("SUPABASE_URL", "").strip().rstrip('/')
+    if not url:
+        raise RuntimeError("SUPABASE_URL env var not set in Modal Secret")
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+    return url
+
+
 # ----- Modal 앱 정의 -----
 app = modal.App("deudda-clap-embedder")
 
@@ -205,7 +218,7 @@ class ClapEmbedder:
         """store_track_ai_predictions RPC 호출."""
         import httpx
 
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
         with httpx.Client(timeout=30.0) as client:
@@ -430,7 +443,7 @@ class ClapEmbedder:
         import httpx
         import json
 
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
         with httpx.Client(timeout=30.0) as client:
@@ -466,7 +479,7 @@ class ClapEmbedder:
     def _list_pending_qc(self, limit: int) -> list:
         """list_tracks_needing_qc RPC."""
         import httpx
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -497,7 +510,7 @@ class ClapEmbedder:
         """Supabase store_track_embedding RPC 호출."""
         import httpx
 
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
         with httpx.Client(timeout=30.0) as client:
@@ -521,7 +534,7 @@ class ClapEmbedder:
         """list_tracks_needing_embedding RPC 호출."""
         import httpx
 
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
         with httpx.Client(timeout=30.0) as client:
@@ -559,7 +572,7 @@ class ClapEmbedder:
         """list_tracks_needing_predictions RPC 호출 (분류 백필용)."""
         import httpx
 
-        url = os.environ["SUPABASE_URL"]
+        url = _supabase_url()
         key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
         with httpx.Client(timeout=30.0) as client:
