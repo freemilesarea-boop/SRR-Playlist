@@ -13,6 +13,8 @@ DEUDDA CLAP Embedding Worker — Modal serverless GPU app.
 엔드포인트:
     POST /embed_single       — { track_id, audio_url } → 단일 트랙 임베딩 → store_track_embedding RPC 호출
     POST /backfill           — { limit?: int } → list_tracks_needing_embedding → 일괄 처리
+    POST /genre-single       — { track_id, audio_url } → 단일 트랙 장르 분류 (taxonomy-v1)
+    POST /genre-backfill     — { limit?, dryRun? } → 장르 미분류 트랙 일괄 처리
 
 운영:
     - cold start: ~30초 (모델 로드)
@@ -213,6 +215,138 @@ class ClapEmbedder:
             "bpm_confidence": bpm_conf,
             "tempo_feel": tempo_feel,
         }
+
+    # ========== Phase X1.1 — taxonomy zero-shot 장르 분류 ==========
+
+    def _fetch_active_genres(self) -> list[dict]:
+        """list_taxonomy_genres RPC → 활성 장르 + name_en + name_ko 수집."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_taxonomy_genres",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+        # [{slug, name_ko, name_en, is_active, sort_order, ...}, ...]
+        return [{"slug": r["slug"], "name_en": r["name_en"], "name_ko": r["name_ko"]} for r in rows]
+
+    def _ensure_genre_features(self):
+        """taxonomy_genres 활성 목록 → CLAP text features 캐싱.
+        장르당 3 prompt 평균 → 1 feature. 호출 시 캐시 없으면 계산, 있으면 재사용.
+        Cold container 마다 1번 재계산.
+        """
+        import torch
+
+        if getattr(self, "_genre_cache_loaded", False):
+            return
+
+        genres = self._fetch_active_genres()
+        if not genres:
+            raise RuntimeError("no active taxonomy_genres rows — Phase X1.0 마이그레이션 미적용?")
+
+        prompts: list[str] = []
+        per_genre_prompt_count = 3
+        for g in genres:
+            en = g["name_en"]
+            prompts.append(f"this is {en} music")
+            prompts.append(f"a {en} song")
+            prompts.append(f"{en} background music")
+
+        text_inputs = self.processor(text=prompts, return_tensors="pt", padding=True)
+        text_inputs = {k: v.to("cuda") for k, v in text_inputs.items()}
+        with torch.no_grad():
+            text_features = self.model.get_text_features(**text_inputs)
+        # normalize per-prompt
+        text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-9)
+        # 평균 over 3 prompts → re-normalize per-genre
+        text_features = text_features.view(len(genres), per_genre_prompt_count, -1).mean(dim=1)
+        text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-9)
+
+        self._genre_slugs = [g["slug"] for g in genres]
+        self._genre_labels_ko = [g["name_ko"] for g in genres]
+        self._genre_text_features = text_features  # [N_genre, 512] cuda
+        self._genre_cache_loaded = True
+        print(f"[ClapEmbedder] cached genre text features for {len(genres)} active genres")
+
+    def _classify_genre(self, audio_embedding: list[float]) -> dict:
+        """audio_embedding (정규화 512-dim) → 장르 분류 결과.
+        Returns:
+          {
+            "predicted_main_genre": "kpop",
+            "predicted_sub_genres": ["pop","ballad","indie"],
+            "genre_confidence": 0.421,
+            "prediction_scores": {"genre": {"kpop":0.42,"pop":0.18,...}}
+          }
+        """
+        import torch
+        import numpy as np
+
+        self._ensure_genre_features()
+
+        audio_emb = torch.tensor(audio_embedding, dtype=torch.float32, device="cuda").unsqueeze(0)
+        # audio_emb 는 정규화된 상태 (extract_embedding 마지막에 정규화)
+        with torch.no_grad():
+            sims = (audio_emb @ self._genre_text_features.T).squeeze(0)  # [N_genre]
+            scores = torch.softmax(sims * 100.0, dim=-1)
+        scores_np = scores.cpu().numpy()
+
+        order = np.argsort(-scores_np)
+        top1_idx = int(order[0])
+        top1 = self._genre_slugs[top1_idx]
+        top1_conf = float(scores_np[top1_idx])
+
+        # sub_genres = top2~top4
+        sub = [self._genre_slugs[int(i)] for i in order[1:4]]
+
+        # prediction_scores: {"genre": {slug: float, ...}}
+        genre_scores = {self._genre_slugs[i]: round(float(scores_np[i]), 4) for i in range(len(self._genre_slugs))}
+        return {
+            "predicted_main_genre": top1,
+            "predicted_sub_genres": sub,
+            "genre_confidence": round(top1_conf, 4),
+            "prediction_scores": {"genre": genre_scores},
+        }
+
+    def _store_genre_prediction(self, track_id: str, result: dict):
+        """store_track_genre_prediction RPC 호출."""
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/store_track_genre_prediction",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={
+                    "p_track_id": track_id,
+                    "p_predicted_main_genre": result["predicted_main_genre"],
+                    "p_predicted_sub_genres": result["predicted_sub_genres"],
+                    "p_genre_confidence": result["genre_confidence"],
+                    "p_prediction_scores": result["prediction_scores"],
+                    "p_model_version": "taxonomy-v1",
+                },
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"store_track_genre_prediction HTTP {resp.status_code}: {resp.text[:500]}")
+
+    def _list_pending_genre(self, limit: int) -> list:
+        import httpx
+        url = _supabase_url()
+        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                f"{url}/rest/v1/rpc/list_tracks_needing_genre_classification",
+                headers={"apikey": key, "Authorization": f"Bearer {key}",
+                         "content-type": "application/json"},
+                json={"p_limit": limit},
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     def _store_predictions(self, track_id: str, predictions: dict):
         """store_track_ai_predictions RPC 호출."""
@@ -686,6 +820,77 @@ class ClapEmbedder:
                 "failed": failed[:100], "failed_samples": failed[:10]}
 
     @modal.method()
+    def genre_single(self, track_id: str, audio_url: str, dry_run: bool = False) -> dict:
+        """단일 트랙 zero-shot 장르 분류. embedding 추출 (저장은 안함) → genre classification → DB.
+        dry_run=True 면 DB 저장 skip + 결과만 반환.
+        """
+        try:
+            audio, sr = self._download_audio(audio_url)
+            embedding = self._extract_embedding(audio, sr)
+            result = self._classify_genre(embedding)
+            if not dry_run:
+                self._store_genre_prediction(track_id, result)
+            return {
+                "ok": True, "track_id": track_id, "dryRun": dry_run,
+                "predicted_main_genre": result["predicted_main_genre"],
+                "predicted_sub_genres": result["predicted_sub_genres"],
+                "genre_confidence": result["genre_confidence"],
+                "top4_scores": {k: result["prediction_scores"]["genre"][k]
+                                for k in [result["predicted_main_genre"]] + result["predicted_sub_genres"]},
+            }
+        except Exception as e:
+            return {"ok": False, "track_id": track_id, "error": str(e)[:300]}
+
+    @modal.method()
+    def genre_backfill(self, limit: int = 50, dry_run: bool = False) -> dict:
+        """taxonomy-v1 장르 예측 없는 트랙 일괄 분류.
+        dryRun=True → 후보 목록만 반환 + 분류는 실행 (저장 skip), 보고서용 샘플 수집.
+        """
+        tracks = self._list_pending_genre(limit)
+        if not tracks:
+            return {"ok": True, "total_candidates": 0, "classified": 0, "samples": []}
+        print(f"[Genre] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
+        done = 0
+        failed: list = []
+        samples: list = []  # dryRun 시 결과 비교용
+        for t in tracks:
+            track_id = t["track_id"]
+            audio_url = t.get("audio_url")
+            current_genre = t.get("main_genre")
+            if not audio_url:
+                failed.append({"track_id": track_id, "error": "no_audio_url"})
+                continue
+            try:
+                audio, sr = self._download_audio(audio_url)
+                embedding = self._extract_embedding(audio, sr)
+                result = self._classify_genre(embedding)
+                if not dry_run:
+                    self._store_genre_prediction(track_id, result)
+                done += 1
+                samples.append({
+                    "track_id": track_id,
+                    "title": t.get("title"),
+                    "current_genre": current_genre,
+                    "predicted_main_genre": result["predicted_main_genre"],
+                    "predicted_sub_genres": result["predicted_sub_genres"],
+                    "genre_confidence": result["genre_confidence"],
+                    "top4_scores": {k: result["prediction_scores"]["genre"][k]
+                                    for k in [result["predicted_main_genre"]] + result["predicted_sub_genres"]},
+                })
+                if done % 10 == 0:
+                    print(f"[Genre] {done}/{len(tracks)} done")
+            except Exception as e:
+                failed.append({"track_id": track_id, "error": str(e)[:200]})
+        return {
+            "ok": True, "dryRun": dry_run,
+            "total_candidates": len(tracks),
+            "classified": done,
+            "failed_count": len(failed),
+            "failed_samples": failed[:10],
+            "samples": samples,
+        }
+
+    @modal.method()
     def backfill(self, limit: int = 100) -> dict:
         """백필: list_tracks_needing_embedding 호출 → 순차 처리 → 결과 요약."""
         tracks = self._list_pending(limit)
@@ -787,6 +992,34 @@ def qc_single_endpoint(item: dict) -> dict:
         return {"ok": False, "error": "track_id and audio_url required"}
     embedder = ClapEmbedder()
     return embedder.qc_single.remote(track_id, audio_url)
+
+
+@app.function(image=image, secrets=secrets, timeout=600)
+@modal.fastapi_endpoint(method="POST", label="genre-single")
+def genre_single_endpoint(item: dict) -> dict:
+    """POST { track_id, audio_url, dryRun?, _auth } → 단일 트랙 zero-shot 장르 분류."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
+    track_id = item.get("track_id")
+    audio_url = item.get("audio_url")
+    if not track_id or not audio_url:
+        return {"ok": False, "error": "track_id and audio_url required"}
+    dry_run = bool(item.get("dryRun", False))
+    embedder = ClapEmbedder()
+    return embedder.genre_single.remote(track_id, audio_url, dry_run)
+
+
+@app.function(image=image, secrets=secrets, timeout=3600)
+@modal.fastapi_endpoint(method="POST", label="genre-backfill")
+def genre_backfill_endpoint(item: dict) -> dict:
+    """POST { limit?, dryRun?, _auth } → 장르 미분류 트랙 일괄 분류.
+    dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀 (검증용)."""
+    deny = _check_auth(item)
+    if deny is not None: return deny
+    limit = int(item.get("limit", 50))
+    dry_run = bool(item.get("dryRun", False))
+    embedder = ClapEmbedder()
+    return embedder.genre_backfill.remote(limit, dry_run)
 
 
 @app.function(image=image, secrets=secrets, timeout=3600)
