@@ -289,13 +289,30 @@ class ClapEmbedder:
         # 3) Clipping — 0 dBFS 이상 샘플 카운트 (mono 기반 + tolerance)
         clipping_count = int(np.sum(np.abs(mono) >= 0.99))
 
-        # 4) Noise floor — RMS lower 10th percentile of 50ms windows
+        # 4) Noise floor — qc-v2 알고리즘 (false positive 100% 발생 → v2 로 교체):
+        #    1차: |x| < -55 dBFS 구간을 실제 silence 로 간주하고 그 안의 RMS 측정
+        #    2차: silence 구간이 부족하면 (전체 < 1%) 1st percentile RMS 로 fallback
+        #    기존 v1 의 10th percentile 은 "조용한 음악" 까지 noise 로 오인해 부적합.
         win = max(int(sr * 0.05), 1)
         if len(mono) > win:
+            # samples 단위 실제 silence detection
+            silence_sample_thresh = 10 ** (-55 / 20.0)   # ≈ 0.00178
+            is_silent_sample = np.abs(mono) < silence_sample_thresh
+            silence_frac = float(np.mean(is_silent_sample))
+
             squared = mono ** 2
             n_blocks = len(mono) // win
             rms = np.sqrt(np.mean(squared[: n_blocks * win].reshape(n_blocks, win), axis=1))
-            noise_rms = float(np.percentile(rms, 10))
+
+            if silence_frac >= 0.01:
+                # silence sample 들의 RMS = 진짜 noise floor
+                silent_samples = mono[is_silent_sample]
+                noise_rms = float(np.sqrt(np.mean(silent_samples ** 2)))
+                if noise_rms < 1e-12:
+                    noise_rms = 1e-12
+            else:
+                # silence 구간 거의 없음 → 1st percentile (음악 사이 짧은 정적)
+                noise_rms = float(np.percentile(rms, 1))
             noise_floor_db = 20 * np.log10(noise_rms + 1e-12)
         else:
             noise_floor_db = -60.0
@@ -352,11 +369,13 @@ class ClapEmbedder:
             score -= 4
             issues.append({"code": "CLIPPING_MINOR", "message": f"클리핑 {clipping_count}샘플 경미"})
 
-        # Noise floor — > -45 dBFS 면 노이즈 많음
-        if noise_floor_db > -35:
+        # Noise floor (qc-v2 임계점): 마스터링된 상업 음원 기준 -50~-80 dB 정상
+        # > -40 dBFS = 청취 가능한 hiss/noise → HIGH
+        # > -50 dBFS = 다소 높음 → 경고
+        if noise_floor_db > -40:
             score -= 15
             issues.append({"code": "NOISE_HIGH", "message": f"노이즈 플로어 {noise_floor_db:.1f} dBFS — 매우 높음"})
-        elif noise_floor_db > -45:
+        elif noise_floor_db > -50:
             score -= 5
             issues.append({"code": "NOISE_ELEVATED", "message": f"노이즈 플로어 {noise_floor_db:.1f} dBFS — 다소 높음"})
 
@@ -471,6 +490,7 @@ class ClapEmbedder:
                     "p_qc_grade": qc.get("qc_grade"),
                     "p_risk_level": qc.get("risk_level"),
                     "p_issues_json": qc.get("issues"),
+                    "p_model_version": "qc-v2",
                 },
             )
             if resp.status_code >= 400:
