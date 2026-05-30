@@ -69,7 +69,33 @@ export async function listQcReviewQueue(limit = 50): Promise<QcReviewQueueRow[]>
   return (data ?? []) as QcReviewQueueRow[];
 }
 
+export interface QcPipelineStatus {
+  tracks_total: number;
+  tracks_with_qc: number;
+  tracks_pending_qc: number;
+  enqueue_total_24h: number;
+  enqueue_failed_24h: number;
+  enqueue_skipped_24h: number;
+}
+
+export async function getQcPipelineStatus(): Promise<QcPipelineStatus | null> {
+  const { data, error } = await supabase.rpc('admin_qc_pipeline_status');
+  if (error) {
+    if (import.meta.env.DEV) console.warn('[qc] status fetch failed', error);
+    return null;
+  }
+  return (data?.[0] ?? null) as QcPipelineStatus | null;
+}
+
+export async function adminRetryPendingQc(limit = 50): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_retry_pending_qc', { p_limit: limit });
+  if (error) throw error;
+  return (data?.length ?? 0) as number;
+}
+
 // 등급/위험도 색상 도구
+const UNKNOWN_TONE = 'text-ink-mute bg-bg-soft ring-line/10';
+
 export const GRADE_TONE: Record<QcGrade, string> = {
   A: 'text-emerald-400 bg-emerald-500/15 ring-emerald-500/30',
   B: 'text-sky-400 bg-sky-500/15 ring-sky-500/30',
@@ -83,3 +109,11 @@ export const RISK_TONE: Record<QcRiskLevel, string> = {
   HIGH: 'text-amber-400 bg-amber-500/15 ring-amber-500/30',
   CRITICAL: 'text-rose-400 bg-rose-500/20 ring-rose-500/40',
 };
+
+/** 모르는 값에 대한 fallback 톤 (DB 가 새 등급/위험도 추가했을 때 깨지지 않게) */
+export function gradeTone(g: QcGrade | string | null | undefined): string {
+  return (g && (GRADE_TONE as Record<string, string>)[g]) ?? UNKNOWN_TONE;
+}
+export function riskTone(r: QcRiskLevel | string | null | undefined): string {
+  return (r && (RISK_TONE as Record<string, string>)[r]) ?? UNKNOWN_TONE;
+}

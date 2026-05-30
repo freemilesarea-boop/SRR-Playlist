@@ -6,22 +6,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
 import {
-  listQcReviewQueue, GRADE_TONE, RISK_TONE,
-  type QcReviewQueueRow,
+  listQcReviewQueue, gradeTone, riskTone, getQcPipelineStatus, adminRetryPendingQc,
+  type QcReviewQueueRow, type QcPipelineStatus,
 } from '@/lib/qcApi';
 import QcReportCard from '@/components/admin/QcReportCard';
 import { toast } from '@/store/toastStore';
 
 export default function QcReviewQueuePanel() {
   const [rows, setRows] = useState<QcReviewQueueRow[]>([]);
+  const [status, setStatus] = useState<QcPipelineStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await listQcReviewQueue(100);
+      const [r, s] = await Promise.all([listQcReviewQueue(100), getQcPipelineStatus()]);
       setRows(r);
+      setStatus(s);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'QC 큐 불러오기 실패');
     } finally {
@@ -30,6 +33,20 @@ export default function QcReviewQueuePanel() {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  async function handleRetry() {
+    if (!confirm('QC 미분석 트랙을 일괄 재시도합니다 (최대 50개). 계속할까요?')) return;
+    setRetrying(true);
+    try {
+      const count = await adminRetryPendingQc(50);
+      toast.success(`${count}개 트랙 QC 재시도 enqueue 됨`);
+      setTimeout(reload, 1000);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '재시도 실패');
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   const totalsByRisk = rows.reduce((acc, r) => {
     const k = r.risk_level ?? 'UNREVIEWED';
@@ -46,10 +63,29 @@ export default function QcReviewQueuePanel() {
           <span className="ml-2 text-[10px] text-ink-dim">
             DSP-급 음원 검수 — 라우드니스/클리핑/노이즈/다이내믹 자동 분석. 위험도 높은 순.
           </span>
-          <button onClick={reload} disabled={loading} className="btn-ghost ml-auto h-8 text-[11px]">
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
-          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            {status && status.tracks_pending_qc > 0 && (
+              <button onClick={handleRetry} disabled={retrying}
+                className="rounded-full bg-accent/15 px-3 py-1 text-[11px] font-bold text-accent ring-1 ring-accent/30 hover:bg-accent/25 disabled:opacity-50">
+                {retrying ? '재시도 중…' : `미분석 ${status.tracks_pending_qc}개 재시도`}
+              </button>
+            )}
+            <button onClick={reload} disabled={loading} className="btn-ghost h-8 text-[11px]">
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
+            </button>
+          </div>
         </div>
+
+        {status && (
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
+            <Mini label="전체 트랙" value={status.tracks_total} />
+            <Mini label="QC 완료" value={status.tracks_with_qc} tone="good" />
+            <Mini label="QC 대기" value={status.tracks_pending_qc} tone={status.tracks_pending_qc > 0 ? 'warn' : undefined} />
+            <Mini label="enqueue 24h" value={status.enqueue_total_24h} />
+            <Mini label="실패 24h" value={status.enqueue_failed_24h} tone={status.enqueue_failed_24h > 0 ? 'bad' : undefined} />
+            <Mini label="skip 24h" value={status.enqueue_skipped_24h} />
+          </div>
+        )}
 
         {/* 위험도 분포 */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -113,13 +149,15 @@ export default function QcReviewQueuePanel() {
                         <div className="text-xs font-bold">{r.qc_score.toFixed(0)}<span className="text-[9px] text-ink-dim">/100</span></div>
                       </div>
                     )}
-                    {r.qc_grade && (
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${GRADE_TONE[r.qc_grade]}`}>
+                    {r.qc_grade ? (
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${gradeTone(r.qc_grade)}`}>
                         {r.qc_grade}
                       </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-bg-soft px-2 py-0.5 text-[10px] text-ink-dim ring-1 ring-line/10">미분석</span>
                     )}
                     {r.risk_level && (
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${RISK_TONE[r.risk_level]}`}>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${riskTone(r.risk_level)}`}>
                         {r.risk_level}
                       </span>
                     )}
@@ -136,6 +174,16 @@ export default function QcReviewQueuePanel() {
         )}
       </div>
     </section>
+  );
+}
+
+function Mini({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'bad' }) {
+  const cls = tone === 'good' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'bad' ? 'text-rose-400' : 'text-ink';
+  return (
+    <div className="rounded-lg bg-bg-soft px-3 py-2 ring-1 ring-line/10">
+      <div className="text-[9px] font-bold uppercase tracking-wider text-ink-dim">{label}</div>
+      <div className={`mt-0.5 text-lg font-extrabold ${cls}`}>{value}</div>
+    </div>
   );
 }
 

@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, ShieldCheck, Volume2, Sparkles } from 'lucide-react';
-import { getTrackQcReport, GRADE_TONE, RISK_TONE, type AudioQcReport } from '@/lib/qcApi';
+import { getTrackQcReport, gradeTone, riskTone, type AudioQcReport } from '@/lib/qcApi';
 
 export default function QcReportCard({ trackId }: { trackId: string }) {
   const [report, setReport] = useState<AudioQcReport | null>(null);
@@ -37,9 +37,28 @@ export default function QcReportCard({ trackId }: { trackId: string }) {
     );
   }
 
+  // 분석 실패 케이스 — row 는 있는데 핵심 측정값이 모두 null
+  const analysisFailed = report.qc_score == null
+    && report.integrated_lufs == null
+    && report.true_peak_db == null;
+
+  if (analysisFailed) {
+    return (
+      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+        <div className="flex items-center gap-2 text-xs text-rose-300">
+          <AlertTriangle size={14} />
+          <span>
+            AI QC 분석 실패 — Modal 워커가 응답을 저장했지만 측정값이 비어있음.
+            로그 확인 후 백필로 재시도하세요. ({new Date(report.created_at).toLocaleString()})
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   const score = report.qc_score ?? 0;
-  const grade = report.qc_grade ?? 'D';
-  const risk = report.risk_level ?? 'LOW';
+  const grade = report.qc_grade ?? '?';
+  const risk = report.risk_level ?? '?';
 
   return (
     <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
@@ -63,11 +82,11 @@ export default function QcReportCard({ trackId }: { trackId: string }) {
             <span className="text-xs text-ink-dim">/100</span>
           </div>
         </div>
-        <div className={`rounded-xl p-3 text-center ring-1 ${GRADE_TONE[grade]}`}>
+        <div className={`rounded-xl p-3 text-center ring-1 ${gradeTone(grade)}`}>
           <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">등급</div>
           <div className="mt-1 text-2xl font-extrabold tracking-tight">{grade}</div>
         </div>
-        <div className={`rounded-xl p-3 text-center ring-1 ${RISK_TONE[risk]}`}>
+        <div className={`rounded-xl p-3 text-center ring-1 ${riskTone(risk)}`}>
           <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">위험도</div>
           <div className="mt-1 text-sm font-extrabold tracking-tight">{risk}</div>
         </div>
