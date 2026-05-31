@@ -1171,3 +1171,76 @@ export async function adminListQcRuleAudit(ruleId?: string, limit = 100): Promis
   if (error) throw error;
   return (data ?? []) as QcRuleAuditEntry[];
 }
+
+// ===== Phase X4.0 (0250) — Behavior Learning =====
+export interface BehaviorScore {
+  track_id: string;
+  window_days: number;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  save_rate: number;
+  avg_listen_seconds: number;
+  avg_completion_percent: number;
+  behavior_score: number;
+  confidence: number;
+  store_breakdown_json: Record<string, { play_count: number; completion_rate: number; avg_listen_seconds?: number }> | null;
+  playlist_breakdown_json: Record<string, { title: string; play_count: number; completion_rate: number; business_category: string | null }> | null;
+  daypart_breakdown_json: Record<string, { play_count: number; completion_rate: number }> | null;
+  calculated_at: string;
+}
+
+export interface BehaviorOutlier {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  behavior_score: number;
+  confidence: number;
+  risk_signals: string[];
+}
+
+export async function adminRecomputeBehaviorScores(windowDays = 30): Promise<{ ok: true; tracks_computed: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('recompute_track_behavior_scores', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; tracks_computed: number; elapsed_ms: number };
+}
+
+export async function adminRecomputeSingleTrackBehaviorScore(
+  trackId: string, windowDays = 30,
+): Promise<BehaviorScore | null> {
+  const { data, error } = await supabase.rpc('recompute_single_track_behavior_score', {
+    p_track_id: trackId, p_window_days: windowDays,
+  });
+  if (error) throw error;
+  return data as BehaviorScore | null;
+}
+
+export async function adminGetTrackBehaviorDetail(
+  trackId: string, windowDays = 30,
+): Promise<{ track: Record<string, unknown>; score: BehaviorScore | null; window_days: number; has_data: boolean }> {
+  const { data, error } = await supabase.rpc('admin_get_track_behavior_detail', {
+    p_track_id: trackId, p_window_days: windowDays,
+  });
+  if (error) throw error;
+  return data as { track: Record<string, unknown>; score: BehaviorScore | null; window_days: number; has_data: boolean };
+}
+
+export async function adminListBehaviorOutliers(
+  windowDays = 30, minPlayCount = 20, limit = 200,
+): Promise<BehaviorOutlier[]> {
+  const { data, error } = await supabase.rpc('admin_list_behavior_outliers', {
+    p_window_days: windowDays, p_min_play_count: minPlayCount, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as BehaviorOutlier[];
+}
