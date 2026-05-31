@@ -1028,3 +1028,87 @@ export async function adminListBulkAudit(limit = 50): Promise<BulkAuditEntry[]> 
   if (error) throw error;
   return (data ?? []) as BulkAuditEntry[];
 }
+
+// ===== Phase X3.3 (0248) — QC Queue Automation =====
+export type QcSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type QcStatus = 'open' | 'reviewing' | 'resolved' | 'dismissed' | 'all';
+export type QcSource = 'rule' | 'ai' | 'chromaprint' | 'fingerprint' | 'placement' | 'manual';
+
+export interface QcQueueRowFull {
+  id: string;
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  issue_type: string;
+  severity: QcSeverity;
+  source: QcSource;
+  reason: string;
+  evidence_json: Record<string, unknown> | null;
+  status: 'open' | 'reviewing' | 'resolved' | 'dismissed';
+  assigned_to_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QcQueueSummary {
+  total_open: number;
+  total_reviewing: number;
+  total_resolved: number;
+  total_dismissed: number;
+  by_severity: Record<string, number> | null;
+  by_issue_type: Record<string, number> | null;
+  by_source: Record<string, number> | null;
+}
+
+export async function adminGenerateQcQueueCandidates(): Promise<{ ok: true; by_rule: Record<string, number>; generated_total: number }> {
+  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates');
+  if (error) throw error;
+  return data as { ok: true; by_rule: Record<string, number>; generated_total: number };
+}
+
+export async function adminListQcQueue(
+  status: QcStatus = 'open',
+  severity?: QcSeverity,
+  issueType?: string,
+  source?: QcSource,
+  limit = 200,
+): Promise<QcQueueRowFull[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_queue', {
+    p_status: status, p_severity: severity ?? null,
+    p_issue_type: issueType ?? null, p_source: source ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcQueueRowFull[];
+}
+
+export async function adminQcQueueSummary(): Promise<QcQueueSummary | null> {
+  const { data, error } = await supabase.rpc('admin_qc_queue_summary');
+  if (error) throw error;
+  return data as QcQueueSummary;
+}
+
+export async function adminAssignQcQueue(id: string, assignee?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_assign_qc_queue', { p_id: id, p_assignee: assignee ?? null });
+  if (error) throw error;
+}
+
+export async function adminResolveQcQueue(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_resolve_qc_queue', { p_id: id, p_reason: reason ?? null });
+  if (error) throw error;
+}
+
+export async function adminDismissQcQueue(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_dismiss_qc_queue', { p_id: id, p_reason: reason ?? null });
+  if (error) throw error;
+}
+
+export async function adminBulkResolveQcQueue(
+  ids: string[], status: 'resolved' | 'dismissed', reason?: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_bulk_resolve_qc_queue', {
+    p_ids: ids, p_status: status, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as number;
+}
