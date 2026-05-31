@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save } from 'lucide-react';
+import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save, Eye, RotateCcw, Wrench, Filter } from 'lucide-react';
 import {
   adminGenerateQcQueueCandidates,
   adminGenerateFingerprintQcCandidates,
@@ -9,6 +9,10 @@ import {
   adminResolveQcQueue,
   adminDismissQcQueue,
   adminBulkResolveQcQueue,
+  adminBulkReviewQcQueue,
+  adminGetFingerprintFailureDetail,
+  adminRetryFingerprintForQueue,
+  adminGetQcQueueAudit,
   adminListQcRules,
   adminUpdateQcRule,
   adminListQcRuleAudit,
@@ -19,6 +23,8 @@ import {
   type QcSource,
   type QcRule,
   type QcRuleAuditEntry,
+  type FingerprintFailureDetail,
+  type QcQueueAuditRow,
 } from '@/lib/aiCuration';
 import { toast } from '@/store/toastStore';
 import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
@@ -82,6 +88,8 @@ function QcQueueInner() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editorTrackId, setEditorTrackId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [fpDetail, setFpDetail] = useState<{ queueId: string; data: FingerprintFailureDetail | null } | null>(null);
+  const [auditFor, setAuditFor] = useState<QcQueueRowFull | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +132,58 @@ function QcQueueInner() {
     } catch (e) {
       toast.error(`생성 실패: ${(e as Error).message}`);
     } finally { setBusy(false); }
+  };
+
+  const bulkReview = async () => {
+    if (selected.size === 0) { toast.error('항목 선택'); return; }
+    const note = prompt('검토 시작 메모 (선택):') ?? '';
+    setBusy(true);
+    try {
+      const r = await adminBulkReviewQcQueue(Array.from(selected), null, note || null);
+      toast.success(`${r.count}건 reviewing 으로 전환`);
+      setSelected(new Set());
+      await load();
+    } catch (e) {
+      toast.error(`실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const openFingerprintDetail = async (queueId: string) => {
+    setFpDetail({ queueId, data: null });
+    try {
+      const d = await adminGetFingerprintFailureDetail(queueId);
+      setFpDetail({ queueId, data: d });
+    } catch (e) {
+      toast.error(`상세 로딩 실패: ${(e as Error).message}`);
+      setFpDetail(null);
+    }
+  };
+
+  const retryFingerprint = async (queueId: string, resetRetry = false) => {
+    const label = resetRetry ? '재분석 + retry_count 초기화' : '재분석';
+    if (!confirm(`${label} 진행할까요?`)) return;
+    setBusy(true);
+    try {
+      const r = await adminRetryFingerprintForQueue(queueId, resetRetry);
+      toast.success(`${label} 완료 (이전 retry=${r.before_retry})`);
+      setFpDetail(null);
+      await load();
+    } catch (e) {
+      toast.error(`실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const applyPreset = (preset: 'high' | 'fingerprint' | 'meta' | 'reset') => {
+    setSelected(new Set());
+    if (preset === 'reset') {
+      setStatusFilter('open'); setSeverityFilter(''); setIssueFilter(''); setSourceFilter('');
+    } else if (preset === 'high') {
+      setStatusFilter('open'); setSeverityFilter('HIGH'); setIssueFilter(''); setSourceFilter('');
+    } else if (preset === 'fingerprint') {
+      setStatusFilter('open'); setSeverityFilter(''); setIssueFilter('fingerprint_failed'); setSourceFilter('');
+    } else if (preset === 'meta') {
+      setStatusFilter('open'); setSeverityFilter(''); setIssueFilter('meta_conflict_genre'); setSourceFilter('');
+    }
   };
 
   const bulkResolve = async (status: 'resolved' | 'dismissed') => {
@@ -245,6 +305,26 @@ function QcQueueInner() {
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px]">
+        <span className="inline-flex items-center gap-1 text-ink-mute"><Filter size={11} /> 빠른 필터:</span>
+        <button onClick={() => applyPreset('high')}
+          className={`rounded-full px-2.5 py-1 font-bold ${severityFilter === 'HIGH' && issueFilter === '' ? 'bg-rose-500/30 text-rose-400' : 'bg-rose-500/15 text-rose-500 hover:bg-rose-500/25'}`}>
+          심각도 높음만
+        </button>
+        <button onClick={() => applyPreset('fingerprint')}
+          className={`rounded-full px-2.5 py-1 font-bold ${issueFilter === 'fingerprint_failed' ? 'bg-indigo-500/30 text-indigo-400' : 'bg-indigo-500/15 text-indigo-500 hover:bg-indigo-500/25'}`}>
+          Fingerprint 실패만
+        </button>
+        <button onClick={() => applyPreset('meta')}
+          className={`rounded-full px-2.5 py-1 font-bold ${issueFilter === 'meta_conflict_genre' ? 'bg-amber-500/30 text-amber-400' : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'}`}>
+          Metadata 충돌만
+        </button>
+        <button onClick={() => applyPreset('reset')}
+          className="rounded-full bg-bg-deep px-2.5 py-1 text-ink-dim hover:bg-bg-hover">
+          초기화
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-card p-3 text-xs">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as QcStatus)}
           className="rounded bg-bg-deep px-2 py-1">
@@ -284,6 +364,10 @@ function QcQueueInner() {
           <button onClick={() => setBulkOpen(true)} disabled={selectedTrackIds.length === 0}
             className="inline-flex items-center gap-1 rounded bg-indigo-500 px-2 py-1 font-bold text-white">
             <Sparkles size={11} /> Bulk Actions
+          </button>
+          <button onClick={() => void bulkReview()} disabled={busy}
+            className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 font-bold text-amber-500 disabled:opacity-50">
+            <Play size={11} /> 검토 시작 ({selected.size})
           </button>
           <button onClick={() => void bulkResolve('resolved')} disabled={busy}
             className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 font-bold text-emerald-500 disabled:opacity-50">
@@ -365,6 +449,13 @@ function QcQueueInner() {
                         className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-semibold text-indigo-500">
                         <ExternalLink size={10} /> 편집기
                       </button>
+                      {r.issue_type === 'fingerprint_failed' && (
+                        <button onClick={() => void openFingerprintDetail(r.id)}
+                          className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-semibold text-indigo-500"
+                          title="Fingerprint 실패 상세 + 재분석 액션">
+                          <Wrench size={10} /> 지문 도구
+                        </button>
+                      )}
                       {r.status === 'open' && (
                         <button onClick={() => void assign(r.id)} disabled={busy}
                           className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-500 disabled:opacity-50">
@@ -383,6 +474,10 @@ function QcQueueInner() {
                           </button>
                         </>
                       )}
+                      <button onClick={() => setAuditFor(r)} title="이력 보기"
+                        className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-0.5 text-ink-dim hover:bg-bg-hover">
+                        <Eye size={10} /> 이력
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -406,6 +501,149 @@ function QcQueueInner() {
           onCompleted={() => { void load(); }}
         />
       )}
+
+      {fpDetail && (
+        <FingerprintDetailModal
+          queueId={fpDetail.queueId}
+          data={fpDetail.data}
+          busy={busy}
+          onClose={() => setFpDetail(null)}
+          onRetry={(reset) => void retryFingerprint(fpDetail.queueId, reset)}
+        />
+      )}
+      {auditFor && (
+        <QcAuditModal row={auditFor} onClose={() => setAuditFor(null)} />
+      )}
+    </div>
+  );
+}
+
+function FingerprintDetailModal({
+  queueId, data, busy, onClose, onRetry,
+}: {
+  queueId: string;
+  data: FingerprintFailureDetail | null;
+  busy: boolean;
+  onClose: () => void;
+  onRetry: (resetRetry: boolean) => void;
+}) {
+  const fp = data?.fingerprint as any;
+  const tr = data?.track;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl bg-bg-deep p-4">
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <h3 className="text-sm font-bold flex items-center gap-1">
+              <Wrench size={14} /> Fingerprint 실패 상세
+            </h3>
+            <p className="text-[11px] text-ink-dim">{tr?.title ?? '—'} · {tr?.artist ?? '—'}</p>
+            <p className="text-[10px] text-ink-dim">queue: {queueId.slice(0, 8)}…</p>
+          </div>
+          <button onClick={onClose} className="text-ink-dim hover:text-ink"><X size={16} /></button>
+        </div>
+        {!data ? (
+          <p className="text-center text-xs text-ink-dim">로딩 중…</p>
+        ) : (
+          <div className="space-y-2 text-[11px]">
+            <div className="rounded bg-bg-card p-2">
+              <div className="font-bold text-ink-mute">Fingerprint 현재 상태</div>
+              <div className="mt-1 grid grid-cols-2 gap-1">
+                <span>status</span><span className="font-mono">{fp?.fingerprint_status ?? '—'}</span>
+                <span>retry_count</span><span className="font-mono">{fp?.retry_count ?? 0}</span>
+                <span>attempted_at</span>
+                <span className="font-mono text-[10px]">
+                  {fp?.fingerprint_attempted_at ? new Date(fp.fingerprint_attempted_at).toLocaleString() : '—'}
+                </span>
+                <span>content_type</span><span className="font-mono">{fp?.download_content_type ?? '—'}</span>
+                <span>size_bytes</span><span className="font-mono">{fp?.download_size_bytes ?? '—'}</span>
+              </div>
+            </div>
+            <div className="rounded bg-rose-500/10 p-2">
+              <div className="font-bold text-rose-500">실패 사유</div>
+              <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-rose-300">
+{fp?.fingerprint_error ?? '(no error message)'}
+              </pre>
+            </div>
+            <div className="rounded bg-bg-card p-2">
+              <div className="font-bold text-ink-mute">트랙 audio 상태</div>
+              <div className="mt-1 grid grid-cols-2 gap-1">
+                <span>audio_health</span><span className="font-mono">{tr?.audio_health_status ?? '—'}</span>
+                <span>content_type</span><span className="font-mono">{tr?.audio_content_type ?? '—'}</span>
+                <span>length</span><span className="font-mono">{tr?.audio_content_length ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <button onClick={onClose} disabled={busy}
+            className="rounded bg-bg-card px-3 py-1.5 text-xs">닫기</button>
+          <button onClick={() => onRetry(false)} disabled={busy || !data}
+            className="inline-flex items-center gap-1 rounded bg-indigo-500/20 px-3 py-1.5 text-xs font-bold text-indigo-400 disabled:opacity-50">
+            <RotateCcw size={11} /> 재분석
+          </button>
+          <button onClick={() => onRetry(true)} disabled={busy || !data}
+            className="inline-flex items-center gap-1 rounded bg-amber-500 px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
+            <RotateCcw size={11} /> 재분석 + retry 초기화
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] text-ink-dim">
+          ⚠️ audio_fingerprints.status='pending' 으로 변경 + fingerprint_error 초기화.
+          백그라운드 fingerprint 워커가 재시도합니다.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function QcAuditModal({ row, onClose }: { row: QcQueueRowFull; onClose: () => void }) {
+  const [logs, setLogs] = useState<QcQueueAuditRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    adminGetQcQueueAudit(row.id, 50)
+      .then(setLogs)
+      .catch((e) => toast.error(`audit 로딩 실패: ${e.message}`))
+      .finally(() => setLoading(false));
+  }, [row.id]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-xl max-h-[80vh] overflow-y-auto rounded-xl bg-bg-deep p-4">
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <h3 className="text-sm font-bold flex items-center gap-1">
+              <Eye size={14} /> QC 큐 이력
+            </h3>
+            <p className="text-[11px] text-ink-dim">{row.title ?? '—'} · {row.issue_type}</p>
+          </div>
+          <button onClick={onClose} className="text-ink-dim hover:text-ink"><X size={16} /></button>
+        </div>
+        {loading ? (
+          <p className="text-center text-xs text-ink-dim">로딩 중…</p>
+        ) : logs.length === 0 ? (
+          <p className="text-center text-xs text-ink-dim">이력 없음</p>
+        ) : (
+          <div className="space-y-2">
+            {logs.map((l) => (
+              <div key={l.id} className="rounded bg-bg-card p-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="rounded bg-bg-deep px-1.5 py-0.5 font-bold">{l.action}</span>
+                  <span className="text-ink-dim">{new Date(l.created_at).toLocaleString()}</span>
+                </div>
+                <div className="mt-1 text-ink-dim">
+                  by {l.admin_name ?? (l.admin_user_id?.slice(0, 8) ?? 'system')}
+                  {(l.before_status || l.after_status) && (
+                    <span> · {l.before_status ?? '∅'} → <b className="text-ink">{l.after_status ?? '∅'}</b></span>
+                  )}
+                </div>
+                {l.note && <div className="mt-1 text-[10px] text-amber-400">📝 {l.note}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-3 flex justify-end">
+          <button onClick={onClose} className="rounded bg-bg-card px-3 py-1.5 text-xs">닫기</button>
+        </div>
+      </div>
     </div>
   );
 }

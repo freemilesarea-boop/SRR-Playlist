@@ -1103,6 +1103,87 @@ export async function adminGenerateFingerprintQcCandidates(
   return data as QcGenerateResult;
 }
 
+// Phase 0264: QC 큐 처리 UX 강화
+export async function adminBulkReviewQcQueue(
+  ids: string[],
+  assignee?: string | null,
+  note?: string | null,
+): Promise<{ ok: true; count: number }> {
+  const { data, error } = await supabase.rpc('admin_bulk_review_qc_queue', {
+    p_ids: ids,
+    p_assignee: assignee ?? null,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; count: number };
+}
+
+export interface FingerprintFailureDetail {
+  queue: Record<string, unknown> | null;
+  track: {
+    id: string; title: string | null; artist: string | null;
+    audio_url: string | null; audio_health_status: string | null;
+    audio_content_type: string | null; audio_content_length: number | null;
+  } | null;
+  fingerprint: {
+    track_id: string; fingerprint_status: string | null;
+    retry_count: number | null; fingerprint_error: string | null;
+    download_content_type: string | null; download_size_bytes: number | null;
+    fingerprint_attempted_at: string | null;
+  } | null;
+}
+
+export async function adminGetFingerprintFailureDetail(
+  queueId: string,
+): Promise<FingerprintFailureDetail> {
+  const { data, error } = await supabase.rpc('admin_get_fingerprint_failure_detail', {
+    p_queue_id: queueId,
+  });
+  if (error) throw error;
+  return data as FingerprintFailureDetail;
+}
+
+export async function adminRetryFingerprintForQueue(
+  queueId: string,
+  resetRetry = false,
+  note?: string | null,
+): Promise<{ ok: true; before_status: string; before_retry: number; reset: boolean }> {
+  const { data, error } = await supabase.rpc('admin_retry_fingerprint_for_queue', {
+    p_queue_id: queueId,
+    p_reset_retry: resetRetry,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before_status: string; before_retry: number; reset: boolean };
+}
+
+export interface QcQueueAuditRow {
+  id: string;
+  queue_id: string;
+  track_id: string | null;
+  admin_user_id: string | null;
+  admin_name: string | null;
+  action: string;
+  before_status: string | null;
+  after_status: string | null;
+  before_assignee: string | null;
+  after_assignee: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export async function adminGetQcQueueAudit(
+  queueId?: string | null,
+  limit = 50,
+): Promise<QcQueueAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_get_qc_queue_audit', {
+    p_queue_id: queueId ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcQueueAuditRow[];
+}
+
 export async function adminListQcQueue(
   status: QcStatus = 'open',
   severity?: QcSeverity,
