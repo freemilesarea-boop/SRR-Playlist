@@ -4,10 +4,16 @@ import {
   adminPlaybackEventSummary,
   adminListEventQualityIssues,
   adminRecentPlayerErrors,
+  adminBehaviorDualRunSummary,
+  adminCompareBehaviorV1V2,
+  adminRecomputeBehaviorV2,
   type PlaybackEventSummary,
   type EventQualityIssue,
   type PlayerErrorRow,
+  type BehaviorDualRunSummary,
+  type BehaviorComparisonV1V2Row,
 } from '@/lib/playbackEventsV2';
+import { Calculator } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 
 const ISSUE_LABEL: Record<string, string> = {
@@ -39,24 +45,44 @@ export default function EventQualityTab() {
   const [issues, setIssues] = useState<EventQualityIssue[]>([]);
   const [errors, setErrors] = useState<PlayerErrorRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // X4.4 — dual-run
+  const [dualSummary, setDualSummary] = useState<BehaviorDualRunSummary | null>(null);
+  const [dualCompare, setDualCompare] = useState<BehaviorComparisonV1V2Row[]>([]);
+  const [dualBusy, setDualBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, q, e] = await Promise.all([
+      const [s, q, e, ds, dc] = await Promise.all([
         adminPlaybackEventSummary(days),
         adminListEventQualityIssues(Math.max(days, 7), 200),
         adminRecentPlayerErrors(Math.max(days, 7), 50),
+        adminBehaviorDualRunSummary(30),
+        adminCompareBehaviorV1V2(30),
       ]);
       setSummary(s);
       setIssues(q);
       setErrors(e);
+      setDualSummary(ds);
+      setDualCompare(dc);
     } catch (e) {
       toast.error(`로딩 실패: ${(e as Error).message}`);
     } finally {
       setLoading(false);
     }
   }, [days]);
+
+  const recomputeV2 = async () => {
+    if (!confirm('playback_events_v2 기반으로 모든 트랙 behavior_score_v2 재계산? (v1 변경 없음)')) return;
+    setDualBusy(true);
+    try {
+      const r = await adminRecomputeBehaviorV2(30);
+      toast.success(`v2 ${r.rows_upserted} 행 (${(r.elapsed_ms / 1000).toFixed(1)}s)`);
+      await load();
+    } catch (e) {
+      toast.error(`v2 재계산 실패: ${(e as Error).message}`);
+    } finally { setDualBusy(false); }
+  };
 
   useEffect(() => { void load(); }, [load]);
 
@@ -297,6 +323,108 @@ export default function EventQualityTab() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* X4.4 — Behavior v1/v2 Dual-Run 비교 */}
+      <div className="rounded-xl bg-bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-xs font-bold">Behavior v1 vs v2 비교 (Dual-Run, window 30d)</h4>
+          <button onClick={() => void recomputeV2()} disabled={dualBusy}
+            className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs font-bold text-black disabled:opacity-50">
+            <Calculator size={11} className={dualBusy ? 'animate-spin' : ''} /> v2 재계산
+          </button>
+        </div>
+        {dualSummary && (
+          <>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+              <div className="rounded bg-bg-deep p-2">
+                <div className="text-[10px] text-ink-dim">v1 rows</div>
+                <div className="text-xl font-bold">{dualSummary.v1_rows}</div>
+              </div>
+              <div className="rounded bg-bg-deep p-2">
+                <div className="text-[10px] text-ink-dim">v2 rows</div>
+                <div className="text-xl font-bold">{dualSummary.v2_rows}</div>
+              </div>
+              <div className="rounded bg-bg-deep p-2">
+                <div className="text-[10px] text-ink-dim">both</div>
+                <div className="text-xl font-bold text-emerald-500">{dualSummary.both_rows}</div>
+              </div>
+              <div className="rounded bg-bg-deep p-2">
+                <div className="text-[10px] text-ink-dim">avg |score Δ|</div>
+                <div className="text-xl font-bold">{dualSummary.avg_score_delta ?? '—'}</div>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+              {dualSummary.drift_high_count > 0 && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-bold text-rose-500">score Δ≥10: {dualSummary.drift_high_count}</span>}
+              {dualSummary.completion_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">완료 Δ≥0.2: {dualSummary.completion_drift_count}</span>}
+              {dualSummary.skip_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">skip Δ≥0.2: {dualSummary.skip_drift_count}</span>}
+              {dualSummary.play_count_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">plays Δ≥30%: {dualSummary.play_count_drift_count}</span>}
+              {dualSummary.v2_missing_count > 0 && <span className="rounded bg-gray-500/15 px-1.5 py-0.5 font-bold text-gray-400">v2 missing: {dualSummary.v2_missing_count}</span>}
+              {dualSummary.v1_missing_count > 0 && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 font-bold text-blue-500">v1 missing: {dualSummary.v1_missing_count}</span>}
+            </div>
+            <p className="mt-2 text-[11px] text-ink-dim">
+              <b>Cutover 조건</b>: v2 이벤트 7일+ 누적 / track당 평균 play_count 충분 / drift_high 원인 확인 / like·replay·player_error 정상 누적.
+              현재 {dualSummary.both_rows < 10 ? '⚠️ both_rows 부족 — cutover 불가' : dualSummary.drift_high_count > dualSummary.both_rows * 0.3 ? '⚠️ drift 비율 30% 초과 — cutover 불가' : '✓ cutover 검토 가능'}.
+            </p>
+          </>
+        )}
+
+        {dualCompare.length > 0 && (
+          <div className="mt-3 max-h-96 overflow-y-auto rounded bg-bg-deep">
+            <table className="w-full text-left text-[11px]">
+              <thead className="sticky top-0 bg-bg-card">
+                <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                  <th className="px-2 py-1.5">곡</th>
+                  <th className="px-2 py-1.5 text-right">v1 plays</th>
+                  <th className="px-2 py-1.5 text-right">v2 plays</th>
+                  <th className="px-2 py-1.5 text-right">v1 comp</th>
+                  <th className="px-2 py-1.5 text-right">v2 comp</th>
+                  <th className="px-2 py-1.5 text-right">v1 skip</th>
+                  <th className="px-2 py-1.5 text-right">v2 skip</th>
+                  <th className="px-2 py-1.5 text-right">v1 score</th>
+                  <th className="px-2 py-1.5 text-right">v2 score</th>
+                  <th className="px-2 py-1.5 text-right">Δ</th>
+                  <th className="px-2 py-1.5">flags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dualCompare.slice(0, 100).map((r, idx) => (
+                  <tr key={`${r.track_id}-${idx}`} className="border-b border-line/10">
+                    <td className="px-2 py-1">
+                      <div className="font-semibold">{r.title ?? '(제목없음)'}</div>
+                      <div className="text-[10px] text-ink-dim">{r.artist ?? ''}</div>
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums">{r.v1_play_count}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{r.v2_play_count}</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-ink-mute">{(r.v1_completion_rate * 100).toFixed(0)}%</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{(r.v2_completion_rate * 100).toFixed(0)}%</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-ink-mute">{(r.v1_skip_rate * 100).toFixed(0)}%</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{(r.v2_skip_rate * 100).toFixed(0)}%</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-ink-mute">{r.v1_behavior_score.toFixed(1)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{r.v2_behavior_score.toFixed(1)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">
+                      <span className={Math.abs(r.score_delta) >= 10 ? 'font-bold text-rose-500' : ''}>
+                        {r.score_delta > 0 ? '+' : ''}{r.score_delta.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1">
+                      <div className="flex flex-wrap gap-1">
+                        {r.issue_flags.map((f) => (
+                          <span key={f} className={`rounded px-1 text-[10px] font-bold ${f.includes('missing') ? 'bg-gray-500/20 text-gray-400' : 'bg-amber-500/15 text-amber-500'}`}>
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {dualCompare.length > 100 && (
+              <p className="px-2 py-1 text-[10px] text-ink-dim">… 처음 100건만 표시 (총 {dualCompare.length})</p>
+            )}
           </div>
         )}
       </div>

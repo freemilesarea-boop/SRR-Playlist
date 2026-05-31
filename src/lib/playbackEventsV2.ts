@@ -156,3 +156,63 @@ export async function adminRecentPlayerErrors(days = 7, limit = 50): Promise<Pla
   if (error) throw error;
   return (data ?? []) as PlayerErrorRow[];
 }
+
+// ===== Phase X4.4 — Behavior v1/v2 Dual-Run =====
+export interface BehaviorDualRunSummary {
+  window_days: number;
+  v1_rows: number;
+  v2_rows: number;
+  both_rows: number;
+  v1_only_rows: number;
+  v2_only_rows: number;
+  avg_score_delta: number | null;
+  drift_high_count: number;
+  completion_drift_count: number;
+  skip_drift_count: number;
+  play_count_drift_count: number;
+  v2_missing_count: number;
+  v1_missing_count: number;
+  v2_total_muted: number | null;
+  v2_total_errors: number | null;
+}
+
+export interface BehaviorComparisonV1V2Row {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  v1_play_count: number;
+  v2_play_count: number;
+  v1_completion_rate: number;
+  v2_completion_rate: number;
+  v1_skip_rate: number;
+  v2_skip_rate: number;
+  v1_behavior_score: number;
+  v2_behavior_score: number;
+  v1_confidence: number;
+  v2_confidence: number;
+  score_delta: number;
+  completion_delta: number;
+  skip_delta: number;
+  play_count_delta_pct: number;
+  v2_muted_play_count: number;
+  v2_player_error_count: number;
+  issue_flags: string[];
+}
+
+export async function adminRecomputeBehaviorV2(windowDays = 30): Promise<{ ok: true; rows_upserted: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('recompute_track_behavior_scores_v2', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; rows_upserted: number; elapsed_ms: number };
+}
+
+export async function adminBehaviorDualRunSummary(windowDays = 30): Promise<BehaviorDualRunSummary | null> {
+  const { data, error } = await supabase.rpc('admin_behavior_dual_run_summary', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as BehaviorDualRunSummary;
+}
+
+export async function adminCompareBehaviorV1V2(windowDays = 30): Promise<BehaviorComparisonV1V2Row[]> {
+  const { data, error } = await supabase.rpc('admin_compare_behavior_v1_v2', { p_window_days: windowDays });
+  if (error) throw error;
+  return (data ?? []) as BehaviorComparisonV1V2Row[];
+}
