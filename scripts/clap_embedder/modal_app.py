@@ -22,6 +22,16 @@ DEUDDA CLAP Embedding Worker — Modal serverless GPU app.
     POST /storetype-backfill — { limit?, dryRun?, track_id?, audio_url? } → store_type 분류 (X1.3)
                                  track_id 지정 시 단일 트랙
 
+⚠️ 백필 호출 안전 권고 (X1.2.4 + X1.3.1 이후):
+    - limit ≤ 50 으로 chunk 호출 권장. 트랙당 3-5초 × 50 ≈ 150-250초, HTTP timeout 300초 이내.
+    - limit=233 단일 호출은 timeout 또는 중단 → 처리 누락 발생 (X1.2.3 + X1.3 실측).
+    - 전체 백필 = limit=50 × 7~8 회 반복. 각 호출 후 누락 수 확인 SQL:
+        select count(*) from public.tracks t
+          where t.audio_url is not null and t.removed_at is null
+            and not exists (select 1 from public.track_ai_predictions p
+                            where p.track_id=t.id and p.model_version='taxonomy-v1'
+                              and p.predicted_moods is not null);  -- mood 미처리
+
   변경 기록:
     X1.2.2 — single (2개) 제거 → backfill 에 track_id 옵션 통합 (8 → 7)
     X1.3   — classify-backfill (energy/BPM) 제거 → storetype-backfill 추가 (7 유지)
@@ -360,76 +370,77 @@ class ClapEmbedder:
 
     # ========== Phase X1.2 — taxonomy zero-shot Mood 분류 ==========
 
-    # Phase X1.2.3 — 16 moods × 3~5 prompts (사용자 spec). 주요 변경:
-    #   - happy 축소 (Electronic/Rock/J-Pop 100% 과적합 → exciting/lively/energetic 분산)
-    #   - Ballad 가 bright 80% 로 잡히던 문제 → emotional prompts 에 "ballad" 강조
-    #   - energetic 강화 (hard rock workout / aggressive gym 추가) → Rock/헬스장 정당 분류
-    #   - calm / relaxed 분리 (relaxed 카페/병원, calm 잔잔 백그라운드)
-    #   - sensual / lively / exciting 신규 (0237 taxonomy 4종 추가 대응)
-    #   - hotel/winebar/jazz → luxurious/romantic/chic 으로 명시 유도
+    # Phase X1.2.4 — happy 59% 과적합 + 9 mood 0건 + 운영 불가 → 사용자 spec 기반 전면 재설계.
+    #
+    # 핵심 변경:
+    #   - happy 더 축소 ("가벼운 기분 좋은 pop"). electronic/rock/dance/workout/party/festival/high energy 금지
+    #   - energetic = hard rock workout (Rock/헬스장 흡수)
+    #   - exciting = dance electronic festival (구 happy 의 광범위 영역)
+    #   - lively = pop rock retail (J-Rock/J-Pop 흡수)
+    #   - emotional / romantic = ballad 명시 (Ballad → bright 차단)
+    #   - calm = 병원/요가/대기 / relaxed = 카페/라운지 / warm = 어쿠스틱 감성
+    #   - sensual = 뷰티/편집샵/와인바 / chic = 패션/모던 / luxurious = 호텔/와인바 jazz
     _MOOD_PROMPTS: dict[str, list[str]] = {
         "calm": [
-            "calm ambient background music",
-            "quiet peaceful lounge music",
-            "calm clinic waiting room music",
-            "gentle relaxing instrumental music",
+            "calm hospital waiting room music",
+            "quiet yoga relaxation music",
+            "peaceful clinic background music",
+            "gentle meditation music",
         ],
         "relaxed": [
             "relaxed cafe background music",
-            "easygoing comfortable music",
-            "soft relaxing coffee shop music",
-            "laid back lounge music",
+            "easygoing comfortable lounge music",
+            "soft laid back coffee shop music",
+            "mellow lounge background music",
         ],
         "warm": [
             "warm acoustic cafe music",
-            "cozy coffee shop background music",
-            "warm mellow background music",
+            "cozy mellow background music",
+            "warm vintage acoustic instrumental",
         ],
         "bright": [
-            "bright cheerful pop music",
-            "sunny upbeat daytime music",
-            "light positive background music",
+            "bright daytime acoustic music",
+            "clear morning pop music",
+            "light sunny instrumental",
         ],
         "lively": [
-            "lively retail store music",
-            "upbeat casual cafe music",
-            "bright energetic shop music",
-            "playful family friendly music",
+            "lively pop rock music",
+            "upbeat retail background music",
+            "playful bright shop music",
         ],
         "happy": [
-            "happy feel good pop music",
-            "joyful cheerful song",
-            "pleasant uplifting music",
+            "light feel good pop music",
+            "pleasant cheerful song",
+            "friendly mellow pop song",
         ],
         "emotional": [
             "emotional ballad music",
-            "sentimental piano ballad",
-            "nostalgic emotional song",
-            "heartfelt slow music",
+            "sentimental vocal ballad",
+            "slow heartfelt song",
         ],
         "romantic": [
+            "romantic ballad music",
+            "intimate evening song",
             "romantic dinner jazz",
-            "intimate wine bar music",
             "candlelight jazz music",
-            "romantic evening lounge music",
         ],
         "dreamy": [
             "dreamy ambient music",
             "soft atmospheric night music",
             "mellow dreamlike background music",
-            "floating lounge music",
+            "floating ethereal music",
         ],
         "sensual": [
             "sensual stylish boutique music",
             "sophisticated sensual lounge music",
             "elegant sensual fashion music",
-            "refined sensual atmosphere music",
+            "refined wine bar sensual atmosphere",
         ],
         "chic": [
-            "chic fashion store music",
+            "chic minimalist music",
             "stylish modern lounge music",
             "sophisticated trendy background music",
-            "minimalist boutique music",
+            "minimalist fashion music",
         ],
         "luxurious": [
             "sophisticated jazz lounge music",
@@ -439,17 +450,15 @@ class ClapEmbedder:
             "refined luxury lounge atmosphere",
         ],
         "exciting": [
-            "exciting dance pop music",
-            "fun upbeat party music",
-            "energetic festival music",
-            "exciting event music",
+            "exciting dance electronic music",
+            "festival dance music",
+            "fun event music",
         ],
         "energetic": [
-            "high energy workout music",
-            "gym training rock music",
-            "powerful driving music",
-            "aggressive fitness background music",
             "hard rock workout music",
+            "aggressive gym training music",
+            "high energy rock music",
+            "powerful fitness music",
         ],
         "trendy": [
             "trendy modern pop music",
@@ -460,7 +469,7 @@ class ClapEmbedder:
         "focused": [
             "focused concentration music",
             "study cafe background music",
-            "minimal focus instrumental music",
+            "minimal focus instrumental",
             "productivity background music",
         ],
     }
@@ -599,62 +608,77 @@ class ClapEmbedder:
 
     # ========== Phase X1.3 — taxonomy zero-shot Store Type 분류 ==========
 
-    # Store type slug → 3 DSP-상황 prompts.
+    # Phase X1.3.1 — boutique 100% 쏠림 진단 결과:
+    #   avg score: boutique=0.947, cafe=0.019, hospital=0.028, kids_zone=0.004, 나머지 ~0.
+    # 원인: boutique prompts ("fashion boutique / select shop / stylish retail") 가 너무 광범위
+    # → 모든 pop/modern/bright 음악 흡수. 다른 10 prompts 는 너무 좁은 도메인.
+    # 수정: 사용자 spec — 각 store_type 을 "업장 + 음악 스타일 + 사용 맥락" 명시. 4 prompts/slug.
     _STORE_TYPE_PROMPTS: dict[str, list[str]] = {
         "cafe": [
-            "cafe background music",
-            "coffee shop atmosphere music",
-            "casual cafe playlist",
+            "coffee shop background music",
+            "acoustic cafe playlist",
+            "cozy brunch cafe music",
+            "relaxed coffeehouse ambience",
         ],
         "hospital": [
-            "hospital waiting room music",
-            "calm clinic background music",
-            "medical center peaceful music",
+            "calm clinic waiting room music",
+            "peaceful hospital background music",
+            "gentle healing instrumental music",
+            "quiet medical lobby music",
         ],
         "hotel": [
-            "luxury hotel lobby music",
-            "elegant hotel lounge music",
-            "premium hotel reception background",
+            "elegant hotel lobby music",
+            "luxury hotel lounge jazz",
+            "refined five star hotel ambience",
+            "premium lobby background music",
         ],
         "restaurant": [
-            "fine dining restaurant music",
-            "restaurant dinner background",
-            "sophisticated restaurant atmosphere",
+            "dinner restaurant background music",
+            "elegant dining music",
+            "soft meal time ambience",
+            "romantic restaurant jazz",
         ],
         "fitness": [
             "gym workout music",
-            "fitness training background",
-            "high energy exercise music",
+            "high energy training music",
+            "fitness center background music",
+            "powerful exercise playlist",
         ],
         "boutique": [
             "fashion boutique music",
-            "select shop background music",
-            "stylish retail playlist",
+            "stylish select shop playlist",
+            "chic clothing store background music",
+            "modern fashion retail music",
         ],
         "office": [
             "office background music",
-            "workplace ambient music",
-            "coworking space music",
+            "productive work music",
+            "calm office lounge music",
+            "corporate workspace ambience",
         ],
         "study_cafe": [
-            "study cafe music",
-            "library quiet background music",
-            "focus study atmosphere",
+            "study cafe focus music",
+            "concentration background music",
+            "quiet reading room music",
+            "minimal focus instrumental",
         ],
         "bakery": [
             "bakery cafe music",
-            "sweet dessert shop atmosphere",
-            "cozy bakery background music",
+            "warm pastry shop background music",
+            "cozy morning bakery ambience",
+            "light brunch bakery music",
         ],
         "beauty_shop": [
-            "beauty salon music",
-            "hair salon background",
-            "nail shop atmosphere music",
+            "beauty salon background music",
+            "hair salon trendy music",
+            "relaxing beauty shop ambience",
+            "stylish cosmetic shop music",
         ],
         "kids_zone": [
-            "kids cafe music",
-            "children play area music",
-            "family friendly kids music",
+            "playful kids cafe music",
+            "cheerful family friendly music",
+            "children play area background music",
+            "fun bright kids music",
         ],
     }
 
