@@ -1385,3 +1385,72 @@ export async function adminStoreLearningSummary(windowDays = 30): Promise<StoreL
   if (error) throw error;
   return data as StoreLearningSummary;
 }
+
+// ===== X5.0 Genre Guardrails =====
+
+export type GenreGuardrailRuleType = 'hard_block' | 'soft_penalty' | 'bonus';
+
+export interface GenreGuardrailRow {
+  id: string;
+  genre_pattern: string;
+  store_slug: string;
+  rule_type: GenreGuardrailRuleType;
+  score_delta: number;
+  description: string | null;
+  is_active: boolean;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenreGuardrailSummary {
+  total: number;
+  active: number;
+  by_rule_type: Record<GenreGuardrailRuleType, number>;
+  by_store: Record<string, number>;
+}
+
+export async function adminListGenreGuardrails(storeSlug?: string | null): Promise<GenreGuardrailRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_genre_guardrails', {
+    p_store_slug: storeSlug ?? null,
+  });
+  if (error) throw error;
+  return (data ?? []) as GenreGuardrailRow[];
+}
+
+export async function adminGenreGuardrailSummary(): Promise<GenreGuardrailSummary | null> {
+  const { data, error } = await supabase.rpc('admin_genre_guardrail_summary');
+  if (error) throw error;
+  return data as GenreGuardrailSummary;
+}
+
+export async function adminUpsertGenreGuardrail(input: {
+  id?: string | null;
+  genre_pattern?: string | null;
+  store_slug?: string | null;
+  rule_type?: GenreGuardrailRuleType | null;
+  score_delta?: number | null;
+  description?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_upsert_genre_guardrail', {
+    p_id: input.id ?? null,
+    p_genre_pattern: input.genre_pattern ?? null,
+    p_store_slug: input.store_slug ?? null,
+    p_rule_type: input.rule_type ?? null,
+    p_score_delta: input.score_delta ?? null,
+    p_description: input.description ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminToggleGenreGuardrail(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('admin_toggle_genre_guardrail', { p_id: id });
+  if (error) throw error;
+  return data as boolean;
+}
+
+export async function adminDeleteGenreGuardrail(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_genre_guardrail', { p_id: id });
+  if (error) throw error;
+}
