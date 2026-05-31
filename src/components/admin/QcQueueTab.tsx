@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save } from 'lucide-react';
 import {
   adminGenerateQcQueueCandidates,
   adminListQcQueue,
@@ -8,11 +8,16 @@ import {
   adminResolveQcQueue,
   adminDismissQcQueue,
   adminBulkResolveQcQueue,
+  adminListQcRules,
+  adminUpdateQcRule,
+  adminListQcRuleAudit,
   type QcQueueRowFull,
   type QcQueueSummary,
   type QcSeverity,
   type QcStatus,
   type QcSource,
+  type QcRule,
+  type QcRuleAuditEntry,
 } from '@/lib/aiCuration';
 import { toast } from '@/store/toastStore';
 import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
@@ -44,7 +49,27 @@ const ISSUE_LABEL: Record<string, string> = {
   exclusion_conflict: '금지장소 배치 잔존',
 };
 
+// ===== Wrapper with sub-tabs: 큐 vs 룰 관리 (Phase X3.4) =====
 export default function QcQueueTab() {
+  const [sub, setSub] = useState<'queue' | 'rules'>('queue');
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1.5">
+        <button onClick={() => setSub('queue')}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${sub === 'queue' ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
+          큐
+        </button>
+        <button onClick={() => setSub('rules')}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${sub === 'rules' ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
+          룰 관리
+        </button>
+      </div>
+      {sub === 'queue' ? <QcQueueInner /> : <QcRulesInner />}
+    </div>
+  );
+}
+
+function QcQueueInner() {
   const [rows, setRows] = useState<QcQueueRowFull[]>([]);
   const [summary, setSummary] = useState<QcQueueSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -368,6 +393,200 @@ function Stat({ label, v, color }: { label: string; v: number; color: string }) 
     <div className="rounded bg-bg-deep p-2">
       <div className="text-[10px] text-ink-dim">{label}</div>
       <div className={`text-xl font-bold ${colorMap[color] ?? 'text-blue-500'}`}>{v}</div>
+    </div>
+  );
+}
+
+// ===== Rules management (X3.4) =====
+function QcRulesInner() {
+  const [rules, setRules] = useState<QcRule[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [audit, setAudit] = useState<QcRuleAuditEntry[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setRules(await adminListQcRules());
+    } catch (e) {
+      toast.error(`룰 로딩 실패: ${(e as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadAudit = useCallback(async () => {
+    try {
+      setAudit(await adminListQcRuleAudit(undefined, 50));
+    } catch (e) {
+      toast.error(`이력 로딩 실패: ${(e as Error).message}`);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const toggleActive = async (rule: QcRule) => {
+    if (!confirm(`"${rule.name}" 룰을 ${rule.is_active ? '비활성화' : '활성화'}하시겠어요?\n(다음 generate 부터 적용)`)) return;
+    setBusy(true);
+    try {
+      await adminUpdateQcRule(rule.id, { is_active: !rule.is_active },
+        `toggle to ${!rule.is_active ? 'active' : 'inactive'}`);
+      toast.success(`${rule.name} ${!rule.is_active ? '활성화' : '비활성화'}`);
+      await load();
+    } catch (e) {
+      toast.error(`토글 실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const changeSeverity = async (rule: QcRule, sev: QcSeverity) => {
+    if (sev === rule.severity) return;
+    setBusy(true);
+    try {
+      await adminUpdateQcRule(rule.id, { severity: sev }, `severity ${rule.severity}→${sev}`);
+      toast.success(`${rule.rule_key}: ${rule.severity}→${sev}`);
+      await load();
+    } catch (e) {
+      toast.error(`severity 변경 실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const editDescription = async (rule: QcRule) => {
+    const next = prompt('설명 수정:', rule.description ?? '');
+    if (next == null || next === rule.description) return;
+    setBusy(true);
+    try {
+      await adminUpdateQcRule(rule.id, { description: next }, 'edit description');
+      toast.success('설명 저장');
+      await load();
+    } catch (e) {
+      toast.error(`수정 실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const totalActive = rules.filter((r) => r.is_active).length;
+  const totalOpenAll = rules.reduce((sum, r) => sum + r.open_count, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl bg-bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold">QC 룰 관리 ({rules.length})</h3>
+          <div className="flex gap-2 text-xs">
+            <span className="rounded bg-emerald-500/10 px-2 py-1 text-emerald-500">활성 {totalActive}</span>
+            <span className="rounded bg-gray-500/10 px-2 py-1 text-gray-400">비활성 {rules.length - totalActive}</span>
+            <span className="rounded bg-rose-500/10 px-2 py-1 text-rose-500">현재 open {totalOpenAll}</span>
+            <button onClick={() => { setShowAudit((v) => !v); if (!showAudit) void loadAudit(); }}
+              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover">
+              {showAudit ? '이력 숨김' : '변경 이력'}
+            </button>
+            <button onClick={() => void load()} disabled={loading}
+              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover disabled:opacity-50">
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
+            </button>
+          </div>
+        </div>
+        <p className="mt-1 text-[11px] text-ink-dim">
+          룰의 활성/비활성, severity, 설명을 관리합니다. 비활성 룰은 admin_generate_qc_queue_candidates 호출 시 SKIP 됩니다.
+          기존 open 큐는 자동 처리되지 않으니 별도로 resolve/dismiss 필요합니다.
+        </p>
+      </div>
+
+      {showAudit && audit.length > 0 && (
+        <div className="rounded-xl bg-bg-card p-3">
+          <h4 className="mb-2 text-xs font-bold">변경 이력 ({audit.length})</h4>
+          <ul className="space-y-1.5 text-[11px]">
+            {audit.slice(0, 20).map((a) => (
+              <li key={a.id} className="rounded bg-bg-deep px-2 py-1.5">
+                <div className="flex items-center justify-between">
+                  <span><b>{a.rule_key}</b> · {a.action_type}</span>
+                  <span className="text-[10px] text-ink-dim">{new Date(a.created_at).toLocaleString()} · {a.admin_name ?? 'unknown'}</span>
+                </div>
+                {a.reason && <p className="text-ink-mute">사유: {a.reason}</p>}
+                <details>
+                  <summary className="cursor-pointer text-[10px] text-ink-dim">before/after</summary>
+                  <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+                    <pre className="rounded bg-bg-soft/40 p-1 text-rose-400">{JSON.stringify(a.before_json, null, 2)}</pre>
+                    <pre className="rounded bg-bg-soft/40 p-1 text-emerald-400">{JSON.stringify(a.after_json, null, 2)}</pre>
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-center text-sm text-ink-dim">로딩 중…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl bg-bg-card">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim">
+                <th className="px-2 py-2">활성</th>
+                <th className="px-2 py-2">룰</th>
+                <th className="px-2 py-2">severity</th>
+                <th className="px-2 py-2">source</th>
+                <th className="px-2 py-2">설명 / 조건</th>
+                <th className="px-2 py-2 text-right">open</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => (
+                <tr key={rule.id} className="border-b border-line/10">
+                  <td className="px-2 py-2 w-12">
+                    <button onClick={() => void toggleActive(rule)} disabled={busy}
+                      className={`rounded px-2 py-1 text-[10px] font-bold ${rule.is_active ? 'bg-emerald-500/20 text-emerald-500' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
+                      {rule.is_active ? 'ON' : 'OFF'}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="font-semibold">{rule.name}</div>
+                    <code className="text-[10px] text-ink-dim">{rule.rule_key}</code>
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as QcSeverity[]).map((s) => (
+                        <button key={s} onClick={() => void changeSeverity(rule, s)}
+                          disabled={busy || rule.severity === s}
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${rule.severity === s ? SEVERITY_COLOR[s] : 'bg-bg-deep text-ink-dim hover:bg-bg-hover'} disabled:opacity-100`}>
+                          {SEVERITY_LABEL[s]}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2">
+                    <span className="rounded bg-bg-deep px-1.5 py-0.5 text-[10px]">{rule.source}</span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <button onClick={() => void editDescription(rule)} disabled={busy}
+                      className="text-left text-ink-mute hover:text-ink disabled:opacity-50">
+                      {rule.description ?? '(설명 없음)'}
+                    </button>
+                    {rule.condition_json && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[10px] text-ink-dim">condition_json</summary>
+                        <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-[10px] text-ink-dim/80">
+                          {JSON.stringify(rule.condition_json, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <span className={`font-bold ${rule.open_count > 0 ? 'text-rose-500' : 'text-ink-dim'}`}>
+                      {rule.open_count}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-[11px] text-ink-dim">
+        ⚠️ 룰은 큐 생성 여부만 제어합니다. 자동 삭제/차단/반려 없음. 기존 open 큐 정리는 별도 작업.
+      </p>
     </div>
   );
 }

@@ -1112,3 +1112,62 @@ export async function adminBulkResolveQcQueue(
   if (error) throw error;
   return data as number;
 }
+
+// ===== Phase X3.4 (0249) — QC Rule Management =====
+export interface QcRule {
+  id: string;
+  rule_key: string;
+  name: string;
+  description: string | null;
+  issue_type: string;
+  severity: QcSeverity;
+  source: QcSource;
+  condition_json: Record<string, unknown> | null;
+  is_active: boolean;
+  open_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function adminListQcRules(): Promise<QcRule[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_rules');
+  if (error) throw error;
+  return (data ?? []) as QcRule[];
+}
+
+export async function adminUpdateQcRule(
+  id: string,
+  fields: { is_active?: boolean; severity?: QcSeverity; description?: string; name?: string },
+  reason?: string,
+): Promise<{ ok: true; before: Record<string, unknown>; after: Record<string, unknown> }> {
+  const { data, error } = await supabase.rpc('admin_update_qc_rule', {
+    p_id: id,
+    p_is_active: fields.is_active ?? null,
+    p_severity: fields.severity ?? null,
+    p_description: fields.description ?? null,
+    p_name: fields.name ?? null,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before: Record<string, unknown>; after: Record<string, unknown> };
+}
+
+export interface QcRuleAuditEntry {
+  id: string;
+  rule_id: string | null;
+  rule_key: string | null;
+  admin_name: string | null;
+  action_type: string;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export async function adminListQcRuleAudit(ruleId?: string, limit = 100): Promise<QcRuleAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_rule_audit', {
+    p_rule_id: ruleId ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcRuleAuditEntry[];
+}
