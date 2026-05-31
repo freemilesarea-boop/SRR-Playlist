@@ -111,6 +111,7 @@ import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
+import BulkActionsModal from '@/components/admin/BulkActionsModal';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
@@ -260,6 +261,19 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
   const [filter, setFilter] = useState<CurationFilter>(reviewOnly ? 'review_needed' : 'analyzed');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editorTrackId, setEditorTrackId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+  const toggleAll = () => {
+    if (selected.size === rows.length) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.track_id)));
+  };
+  const clearSelection = () => setSelected(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -309,6 +323,26 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
         </button>
       </div>
+
+      {/* Bulk selection bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-card px-3 py-2 text-xs">
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={rows.length > 0 && selected.size === rows.length}
+            ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < rows.length; }}
+            onChange={toggleAll} />
+          <span>전체 선택 ({rows.length})</span>
+        </label>
+        {selected.size > 0 && (
+          <>
+            <span className="rounded bg-accent/15 px-2 py-0.5 font-bold text-accent">Selected: {selected.size}</span>
+            <button onClick={clearSelection} className="text-ink-dim hover:underline">해제</button>
+            <button onClick={() => setBulkOpen(true)}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-600">
+              <Sparkles size={12} /> Bulk Actions
+            </button>
+          </>
+        )}
+      </div>
       {rows.length === 0 ? (
         <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '해당 항목이 없어요.'}</p>
       ) : (
@@ -321,6 +355,8 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={selected.has(r.track_id)} onChange={() => toggleOne(r.track_id)}
+                        className="shrink-0" />
                       <span className="font-bold">{r.title ?? '(제목없음)'}</span>
                       <span className="text-sm text-ink-mute">· {r.artist ?? ''}</span>
                       {r.feature_status === 'failed' && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">분석 실패</span>}
@@ -412,6 +448,13 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
           trackId={editorTrackId}
           onClose={() => setEditorTrackId(null)}
           onMutated={() => { void load(); }}
+        />
+      )}
+      {bulkOpen && selected.size > 0 && (
+        <BulkActionsModal
+          trackIds={Array.from(selected)}
+          onClose={() => setBulkOpen(false)}
+          onCompleted={() => { void load(); }}
         />
       )}
     </div>

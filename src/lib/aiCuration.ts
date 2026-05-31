@@ -905,3 +905,126 @@ export async function listTaxonomyStoreTypes(): Promise<StoreTypeOption[]> {
   if (error) throw error;
   return (data ?? []) as StoreTypeOption[];
 }
+
+// ===== Phase X3.2 (0247) — Bulk Operations =====
+export interface BulkAiApplyResult {
+  ok: true;
+  audit_id: string;
+  preview: boolean;
+  total: number;
+  applied: number;
+  skipped_low_conf: number;
+  skipped_no_pred: number;
+  failed: number;
+  breakdown?: Array<{
+    track_id: string; title: string | null;
+    min_confidence: number;
+    will_apply_genre: boolean; will_apply_mood: boolean; will_apply_store: boolean;
+  }> | null;
+}
+
+export async function adminBulkApplyAiMetadata(
+  trackIds: string[],
+  scope: { genre: boolean; mood: boolean; store: boolean },
+  minConfidence: number,
+  confirm: boolean,
+  reason?: string,
+): Promise<BulkAiApplyResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_apply_ai_metadata', {
+    p_track_ids: trackIds,
+    p_apply_genre: scope.genre, p_apply_mood: scope.mood, p_apply_store: scope.store,
+    p_min_confidence: minConfidence, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkAiApplyResult;
+}
+
+export interface BulkExclusionResult {
+  ok: true; audit_id: string; preview: boolean;
+  track_count: number; slug_count: number; combos_total: number;
+  inserted: number; already_active: number;
+}
+
+export async function adminBulkAddTrackExclusions(
+  trackIds: string[], storeSlugs: string[], confirm: boolean, reason?: string,
+): Promise<BulkExclusionResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_add_track_exclusions', {
+    p_track_ids: trackIds, p_store_slugs: storeSlugs, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkExclusionResult;
+}
+
+export interface BulkRecomputeResult {
+  ok: true; audit_id: string; track_count: number; total_recomputed: number;
+}
+
+export async function adminBulkRecomputeFitScores(trackIds: string[]): Promise<BulkRecomputeResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_recompute_fit_scores', { p_track_ids: trackIds });
+  if (error) throw error;
+  return data as BulkRecomputeResult;
+}
+
+export interface BulkPreviewPlacement {
+  ok: true; track_count: number; total_remove: number; total_keep: number;
+  per_track: Array<{ track_id: string; title: string | null; remove_count: number; keep_count: number }>;
+}
+
+export async function adminBulkPreviewPlacementChanges(trackIds: string[]): Promise<BulkPreviewPlacement> {
+  const { data, error } = await supabase.rpc('admin_bulk_preview_placement_changes', { p_track_ids: trackIds });
+  if (error) throw error;
+  return data as BulkPreviewPlacement;
+}
+
+export interface BulkRemoveMisplacedResult {
+  ok: true; audit_id: string; preview: boolean;
+  track_count: number; total_removed: number;
+  per_track: Array<{ track_id: string; removed: number }>;
+}
+
+export async function adminBulkRemoveMisplacedPlaylistTracks(
+  trackIds: string[], confirm: boolean, reason?: string,
+): Promise<BulkRemoveMisplacedResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_remove_misplaced_playlist_tracks', {
+    p_track_ids: trackIds, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkRemoveMisplacedResult;
+}
+
+export interface QcQueueFilter {
+  main_genre_in?: string[];
+  in_playlist_categories?: string[];
+  fingerprint_status?: 'success' | 'failed';
+  store_type_confidence_lt?: number;
+  mood_confidence_lt?: number;
+  genre_confidence_lt?: number;
+  ai_predicted_store_in?: string[];
+  limit?: number;
+}
+
+export interface QcQueueRow {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null;
+  current_playlists: string[] | null;
+  genre_conf: number | null; mood_conf: number | null; store_conf: number | null;
+  fingerprint_status: string | null;
+}
+
+export async function adminBulkQcQueueFilter(filter: QcQueueFilter): Promise<QcQueueRow[]> {
+  const { data, error } = await supabase.rpc('admin_bulk_qc_queue_filter', { p_filter: filter });
+  if (error) throw error;
+  return (data ?? []) as QcQueueRow[];
+}
+
+export interface BulkAuditEntry {
+  id: string; operation_type: string; track_count: number;
+  params_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  status: string; created_at: string; admin_name: string | null;
+}
+
+export async function adminListBulkAudit(limit = 50): Promise<BulkAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_bulk_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as BulkAuditEntry[];
+}
