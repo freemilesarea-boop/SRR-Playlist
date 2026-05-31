@@ -461,10 +461,9 @@ class ClapEmbedder:
             "powerful fitness music",
         ],
         "trendy": [
-            "trendy modern pop music",
-            "fashionable retail playlist",
-            "instagram aesthetic music",
-            "modern urban background music",
+            "trendy hip street fashion music",
+            "trendy idol playlist",
+            "trendy youth culture music",
         ],
         "focused": [
             "focused concentration music",
@@ -645,10 +644,10 @@ class ClapEmbedder:
             "powerful exercise playlist",
         ],
         "boutique": [
-            "fashion boutique music",
-            "stylish select shop playlist",
-            "chic clothing store background music",
-            "modern fashion retail music",
+            "high fashion designer boutique music",
+            "luxury apparel store music",
+            "designer brand boutique playlist",
+            "premium fashion boutique atmosphere",
         ],
         "office": [
             "office background music",
