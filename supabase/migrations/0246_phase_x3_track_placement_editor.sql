@@ -150,7 +150,7 @@ begin
   if pred.predicted_main_genre is not null
      and exists(select 1 from unnest(pl.genre_tags) g where lower(g)=lower(pred.predicted_main_genre)) then
     v_ai_genre := 5;
-    v_reason_codes := v_reason_codes || 'ai_genre_match';
+    v_reason_codes := array_append(v_reason_codes, 'ai_genre_match');
   end if;
   if pred.predicted_moods is not null then
     select count(*) into v_mood_overlap from unnest(pred.predicted_moods) pm
@@ -158,29 +158,29 @@ begin
     where tm.name_ko = any(coalesce(pl.mood_tags,'{}'::text[]));
     v_ai_mood := least(v_mood_overlap*3, 9);
     if v_mood_overlap > 0 then
-      v_reason_codes := v_reason_codes || ('ai_mood_overlap_' || v_mood_overlap);
+      v_reason_codes := array_append(v_reason_codes, 'ai_mood_overlap_' || v_mood_overlap::text);
     end if;
   end if;
   if pred.predicted_store_types is not null and v_normalized_slug is not null then
     if array_length(pred.predicted_store_types, 1) >= 1
        and pred.predicted_store_types[1] = v_normalized_slug then
       v_ai_store := v_ai_store + 20;
-      v_reason_codes := v_reason_codes || 'ai_store_top1_match';
+      v_reason_codes := array_append(v_reason_codes, 'ai_store_top1_match');
     elsif array_length(pred.predicted_store_types, 1) >= 2
           and pred.predicted_store_types[2] = v_normalized_slug then
       v_ai_store := v_ai_store + 10;
-      v_reason_codes := v_reason_codes || 'ai_store_top2_match';
+      v_reason_codes := array_append(v_reason_codes, 'ai_store_top2_match');
     elsif array_length(pred.predicted_store_types, 1) >= 3
           and pred.predicted_store_types[3] = v_normalized_slug then
       v_ai_store := v_ai_store + 10;
-      v_reason_codes := v_reason_codes || 'ai_store_top3_match';
+      v_reason_codes := array_append(v_reason_codes, 'ai_store_top3_match');
     end if;
     if pred.prediction_scores ? 'store_type'
        and (pred.prediction_scores->'store_type' ? v_normalized_slug) then
       v_ai_store := v_ai_store + least(10, round(
         (pred.prediction_scores->'store_type'->>v_normalized_slug)::numeric * 30
       )::int);
-      v_reason_codes := v_reason_codes || 'ai_store_prob_boost';
+      v_reason_codes := array_append(v_reason_codes, 'ai_store_prob_boost');
     end if;
   end if;
 
@@ -192,18 +192,18 @@ begin
     if (gr->>'blocked')::boolean then
       v_fit := 0; v_excluded := true;
       v_reason := '[guardrail hard_block] ' || coalesce((select string_agg(e->>'reason',', ') from jsonb_array_elements(gr->'violations') e), '');
-      v_reason_codes := v_reason_codes || 'guardrail_blocked';
+      v_reason_codes := array_append(v_reason_codes, 'guardrail_blocked');
     else
       v_gpen := coalesce((gr->>'penalty_score')::numeric, 0);
       if v_gpen > 0 then
         v_fit := greatest(0, v_fit - v_gpen);
-        v_reason_codes := v_reason_codes || ('guardrail_penalty_' || round(v_gpen));
+        v_reason_codes := array_append(v_reason_codes, 'guardrail_penalty_' || round(v_gpen)::text);
       end if;
     end if;
   end if;
   if ai.track_id is not null and v_key is not null and ai.ai_exclusions @> array[v_key] then
     v_excluded := true;
-    v_reason_codes := v_reason_codes || 'ai_excluded';
+    v_reason_codes := array_append(v_reason_codes, 'ai_excluded');
   end if;
 
   if v_status is null then

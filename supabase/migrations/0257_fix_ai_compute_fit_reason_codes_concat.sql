@@ -1,32 +1,21 @@
--- 0241 — Phase X2.2 Fit Score v2 (AI boost)
+-- 0257 — Hotfix: _ai_compute_fit reason_codes concat bug
 --
--- 목표: _ai_compute_fit 에 X1 taxonomy-v1 결과를 반영하여 store 적합도 정밀화.
+-- 증상: "fit 재계산" 버튼 → "malformed array literal: ai_store_top3_match"
 --
--- 정책 (사용자 spec):
---   - manual 메타 점수 (기존 audio/meta/behavior/penalty) 유지
---   - AI 신호는 boost 만 — 자동 차단/승인 X
---   - fit_score 계산만 정밀화
+-- 원인:
+--   _ai_compute_fit (X3 0246 v3) 안에서 9곳에 `v_reason_codes := v_reason_codes || 'literal'`
+--   PostgreSQL 가 right-hand 'literal' 을 text[] 로 캐스팅 시도 → 중괄호 없는 문자열은
+--   array literal 로 해석 불가하여 실패.
+--   X2.2 0241 원본에서는 array_append 로 수정됐었으나 X3 0246 재작성 시 || 패턴이
+--   재도입됨 (회귀 버그).
 --
--- AI boost 공식:
---   genre_ai:  predicted_main_genre ∈ playlist.genre_tags → +5
---   mood_ai:   predicted_moods × playlist.mood_tags overlap → +3 × count, max +9
---   store_ai:  predicted_store_types[1] = normalized slug → +20
---              predicted_store_types[2,3] match → +10 each
---              prediction_scores.store_type[normalized_slug] × 30 (확률 기반 가산)
---              합산 max +50 (top1 20 + top2 10 + top3 10 + prob 10 cap)
---   AI boost 총 max ~64 — final fit_score 는 여전히 0~100 clip.
+-- 조치: 9개 모두 array_append() 로 교체. 본문 외 로직 변경 없음.
+--
+-- 영향 함수 (호출 경로):
+--   _ai_compute_fit ← admin_recompute_track_fit_scores (X3) ← TrackPlacementEditor 재계산 버튼
+--                  ← admin_bulk_recompute_fit_scores (X3.2) ← BulkActionsModal fit 재계산
+--                  ← auto_place_track (X3) (placement loop 내부 — exclusion 후 호출 안 함)
 
--- ===== A. playlist_track_fit_scores 컬럼 확장 =====
-alter table public.playlist_track_fit_scores
-  add column if not exists manual_score numeric,         -- baseline (X1 boost 없이)
-  add column if not exists ai_store_score int,
-  add column if not exists ai_mood_score int,
-  add column if not exists ai_genre_score int,
-  add column if not exists ai_boost_total int,
-  add column if not exists normalized_store_slug text,
-  add column if not exists reason_codes text[];
-
--- ===== B. _ai_compute_fit v2 =====
 create or replace function public._ai_compute_fit(p_playlist_id uuid, p_track_id uuid)
 returns void
 language plpgsql
@@ -38,7 +27,6 @@ declare
   v_key text; v_audio numeric; v_meta numeric; v_behav numeric; v_pen numeric;
   v_manual numeric; v_fit numeric;
   v_status text; v_reason text; v_excluded boolean := false; v_gpen numeric := 0;
-  -- X2.2 AI boost
   v_normalized_slug text;
   v_ai_genre int := 0; v_ai_mood int := 0; v_ai_store int := 0; v_ai_boost int := 0;
   v_mood_overlap int := 0;
@@ -48,13 +36,41 @@ begin
   select id, business_category, category, daypart, genre_tags, mood_tags, situation_tags, ai_store_key
     into pl from public.playlists where id=p_playlist_id;
   if pl.id is null then return; end if;
+
+  -- X3 0246: admin store exclusion (hard block)
+  if public._track_is_excluded_from_playlist(p_track_id, p_playlist_id) then
+    insert into public.playlist_track_fit_scores(
+      playlist_id, track_id, fit_score, audio_score, metadata_score, behavior_score, penalty_score,
+      reason, source, status, updated_at,
+      manual_score, ai_store_score, ai_mood_score, ai_genre_score, ai_boost_total,
+      normalized_store_slug, reason_codes
+    ) values (
+      p_playlist_id, p_track_id, 0, 0, 0, 0, 0,
+      '[admin_store_exclusion] 관리자가 이 매장에서 이 트랙을 제외함',
+      'algorithm', 'excluded', now(),
+      0, 0, 0, 0, 0,
+      public.normalize_store_label(pl.business_category),
+      array['admin_store_exclusion']
+    )
+    on conflict (playlist_id, track_id) do update set
+      fit_score = 0,
+      audio_score = 0, metadata_score = 0, behavior_score = 0, penalty_score = 0,
+      reason = '[admin_store_exclusion] 관리자가 이 매장에서 이 트랙을 제외함',
+      status = case when public.playlist_track_fit_scores.source = 'admin'
+                    then public.playlist_track_fit_scores.status else 'excluded' end,
+      updated_at = now(),
+      manual_score = 0, ai_store_score = 0, ai_mood_score = 0,
+      ai_genre_score = 0, ai_boost_total = 0,
+      reason_codes = array['admin_store_exclusion'];
+    return;
+  end if;
+
   select * into ai from public.track_ai_metadata where track_id=p_track_id;
   select genre_tags, mood_tags, audio_health_status into t from public.tracks where id=p_track_id;
 
   v_key := coalesce(nullif(btrim(pl.ai_store_key),''),
                     public._ai_playlist_store_key(pl.business_category, pl.category, pl.daypart));
 
-  -- 기존 점수 (manual baseline)
   if ai.track_id is not null and v_key is not null and ai.ai_store_fit ? v_key then
     v_audio := (ai.ai_store_fit->>v_key)::numeric; else v_audio := 50; end if;
   v_meta := 50 + public._ai_overlap(pl.genre_tags, t.genre_tags)*8
@@ -72,17 +88,16 @@ begin
   v_manual := least(100, greatest(0, v_audio*cfg.fit_audio_w + v_meta*cfg.fit_meta_w
                                     + v_behav*cfg.fit_behavior_w - v_pen*cfg.fit_penalty_w));
 
-  -- ===== X2.2 AI boost =====
   select * into pred from public.track_ai_predictions
     where track_id=p_track_id and model_version='taxonomy-v1';
   v_normalized_slug := public.normalize_store_label(pl.business_category);
 
+  -- 🔧 0257 hotfix: 9개 unsafe concat 모두 array_append 로 교체
   if pred.predicted_main_genre is not null
      and exists(select 1 from unnest(pl.genre_tags) g where lower(g)=lower(pred.predicted_main_genre)) then
     v_ai_genre := 5;
     v_reason_codes := array_append(v_reason_codes, 'ai_genre_match');
   end if;
-
   if pred.predicted_moods is not null then
     select count(*) into v_mood_overlap from unnest(pred.predicted_moods) pm
     join public.taxonomy_moods tm on tm.slug=pm
@@ -92,8 +107,6 @@ begin
       v_reason_codes := array_append(v_reason_codes, 'ai_mood_overlap_' || v_mood_overlap::text);
     end if;
   end if;
-
-  -- store_ai: top1 +20 / top2+top3 +10 each + prediction_scores 확률 × 30 (max 10)
   if pred.predicted_store_types is not null and v_normalized_slug is not null then
     if array_length(pred.predicted_store_types, 1) >= 1
        and pred.predicted_store_types[1] = v_normalized_slug then
@@ -108,8 +121,6 @@ begin
       v_ai_store := v_ai_store + 10;
       v_reason_codes := array_append(v_reason_codes, 'ai_store_top3_match');
     end if;
-
-    -- 확률 기반 가산 (prediction_scores.store_type[slug] × 30, cap 10)
     if pred.prediction_scores ? 'store_type'
        and (pred.prediction_scores->'store_type' ? v_normalized_slug) then
       v_ai_store := v_ai_store + least(10, round(
@@ -120,11 +131,8 @@ begin
   end if;
 
   v_ai_boost := v_ai_genre + v_ai_mood + v_ai_store;
-
-  -- Final fit_score = manual baseline + AI boost (0~100 clip)
   v_fit := least(100, greatest(0, v_manual + v_ai_boost));
 
-  -- Hard Guardrails (추천 점수보다 공간 분위기 보호 우선)
   if v_key is not null then
     gr := public._ai_check_store_guardrails(p_track_id, v_key);
     if (gr->>'blocked')::boolean then
@@ -139,7 +147,6 @@ begin
       end if;
     end if;
   end if;
-
   if ai.track_id is not null and v_key is not null and ai.ai_exclusions @> array[v_key] then
     v_excluded := true;
     v_reason_codes := array_append(v_reason_codes, 'ai_excluded');
@@ -175,10 +182,8 @@ begin
     status=case when public.playlist_track_fit_scores.source='admin'
                 then public.playlist_track_fit_scores.status else excluded.status end,
     updated_at=now(),
-    manual_score=excluded.manual_score,
-    ai_store_score=excluded.ai_store_score,
-    ai_mood_score=excluded.ai_mood_score,
-    ai_genre_score=excluded.ai_genre_score,
+    manual_score=excluded.manual_score, ai_store_score=excluded.ai_store_score,
+    ai_mood_score=excluded.ai_mood_score, ai_genre_score=excluded.ai_genre_score,
     ai_boost_total=excluded.ai_boost_total,
     normalized_store_slug=excluded.normalized_store_slug,
     reason_codes=excluded.reason_codes;
