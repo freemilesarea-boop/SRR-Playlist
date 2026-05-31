@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save } from 'lucide-react';
 import {
   adminGenerateQcQueueCandidates,
+  adminGenerateFingerprintQcCandidates,
   adminListQcQueue,
   adminQcQueueSummary,
   adminAssignQcQueue,
@@ -101,12 +102,24 @@ function QcQueueInner() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const regenerate = async () => {
-    if (!confirm('QC 큐 룰을 실행하시겠어요? (중복은 자동 제외)')) return;
+  const regenerate = async (limit = 100) => {
+    if (!confirm(`QC 큐 룰을 batch ${limit}건 실행하시겠어요? (중복은 자동 제외)`)) return;
     setBusy(true);
     try {
-      const r = await adminGenerateQcQueueCandidates();
-      toast.success(`새로 ${r.generated_total} 건 후보 생성`);
+      const r = await adminGenerateQcQueueCandidates(limit, null, false);
+      toast.success(`${r.generated_total} 건 후보 생성 (limit=${r.limit ?? limit})`);
+      await load();
+    } catch (e) {
+      toast.error(`생성 실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
+
+  const regenerateFingerprint = async () => {
+    if (!confirm('Fingerprint 후보 (failed + duplicate) 만 별도 생성하시겠어요?')) return;
+    setBusy(true);
+    try {
+      const r = await adminGenerateFingerprintQcCandidates(100);
+      toast.success(`Fingerprint 후보 ${r.generated_total} 건 생성`);
       await load();
     } catch (e) {
       toast.error(`생성 실패: ${(e as Error).message}`);
@@ -193,10 +206,23 @@ function QcQueueInner() {
       <div className="rounded-xl bg-bg-card p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold">AI 검수 큐</h3>
-          <button onClick={() => void regenerate()} disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
-            <Sparkles size={13} /> 룰 실행 (Generate)
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button onClick={() => void regenerate(100)} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50"
+              title="룰별 최대 100건씩 batch 생성 (fingerprint 제외)">
+              <Sparkles size={13} /> 룰 실행 (100)
+            </button>
+            <button onClick={() => void regenerate(20)} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-bg-deep px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
+              title="가벼운 batch (20건)">
+              룰 실행 (20)
+            </button>
+            <button onClick={() => void regenerateFingerprint()} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-500 disabled:opacity-50"
+              title="Fingerprint failed + duplicate (분리 RPC, heavy)">
+              Fingerprint 후보
+            </button>
+          </div>
         </div>
         {summary && (
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">

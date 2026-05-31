@@ -1061,10 +1061,46 @@ export interface QcQueueSummary {
   by_source: Record<string, number> | null;
 }
 
-export async function adminGenerateQcQueueCandidates(): Promise<{ ok: true; by_rule: Record<string, number>; generated_total: number }> {
-  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates');
-  if (error) throw error;
-  return data as { ok: true; by_rule: Record<string, number>; generated_total: number };
+export interface QcGenerateResult {
+  ok: true;
+  by_rule: Record<string, number | string>;
+  generated_total: number;
+  limit?: number;
+  issue?: string | null;
+}
+
+export async function adminGenerateQcQueueCandidates(
+  limit = 100,
+  issue?: string | null,
+  force = false,
+): Promise<QcGenerateResult> {
+  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates', {
+    p_limit: limit,
+    p_issue: issue ?? null,
+    p_force: force,
+  });
+  if (error) {
+    if (/timeout/i.test(error.message)) {
+      throw new Error('DB timeout — batch size 를 줄여 다시 실행하세요 (현재 limit=' + limit + ')');
+    }
+    throw error;
+  }
+  return data as QcGenerateResult;
+}
+
+export async function adminGenerateFingerprintQcCandidates(
+  limit = 100,
+): Promise<QcGenerateResult> {
+  const { data, error } = await supabase.rpc('admin_generate_fingerprint_qc_candidates', {
+    p_limit: limit,
+  });
+  if (error) {
+    if (/timeout/i.test(error.message)) {
+      throw new Error('Fingerprint 후보 생성 timeout — limit 을 줄여 재시도하세요 (현재 ' + limit + ')');
+    }
+    throw error;
+  }
+  return data as QcGenerateResult;
 }
 
 export async function adminListQcQueue(
