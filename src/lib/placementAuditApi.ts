@@ -154,6 +154,8 @@ export interface PlacementExplanation {
     bpm_min: number | null; bpm_max: number | null;
     energy_min: number | null; energy_max: number | null;
     ai_store_key: string | null;
+    normalized_store_key?: string | null;
+    alias_match_source?: string | null;
   };
   scores: {
     genre_manual: number; genre_ai: number;
@@ -166,6 +168,8 @@ export interface PlacementExplanation {
     genre_ai_match: boolean;
     mood_ai_overlap_count: number;
     store_ai_overlap_count: number;
+    normalized_store_key?: string | null;
+    alias_match_source?: string | null;
   };
   block_reasons: string[] | null;
   allow_exceptions: string[] | null;
