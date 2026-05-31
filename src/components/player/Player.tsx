@@ -24,6 +24,7 @@ import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
 import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/analytics';
+import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -311,6 +312,10 @@ export default function Player() {
   const profile = useAuthStore((s) => s.profile);
   const startedTrackIdRef = useRef<string | null>(null);
   const milestoneSentRef = useRef(false);
+  // X4.3 — pev2 session id (페이지 로드당 stable, anonId + load time)
+  const pev2SessionRef = useRef<string>(`${getAnonymousId()}-${Date.now()}`);
+  // X4.3 — milestone tracking refs (트랙 변경 시 reset)
+  const pev2MilestonesRef = useRef<{ track: string | null; sent: Set<string> }>({ track: null, sent: new Set() });
   const recentSentRef = useRef<string | null>(null);
   // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
   // 마운트 해제 후 stale next() 발화를 막는다.
@@ -391,7 +396,76 @@ export default function Player() {
     if (playlistContext?.type === 'catalog') {
       void recordPlayEvent({ trackId: current.id, playlistId: playlistContext.id, eventType: 'play', duration: current.duration ?? null, anonId: getAnonymousId() });
     }
+    // X4.3 — playback_events_v2 play_start (parallel layer, fit_score 영향 없음)
+    pev2MilestonesRef.current = { track: current.id, sent: new Set() };
+    void logPlaybackEventV2({
+      trackId: current.id, eventType: 'play_start',
+      sessionId: pev2SessionRef.current,
+      trackDurationSeconds: current.duration ?? undefined,
+      playlistId: playlist?.id ?? undefined,
+      volume, muted: volume === 0,
+      anonymousId: getAnonymousId(),
+    });
   }, [current?.id, playable, playing, userId, playlist?.id, current]);
+
+  // X4.3 — 25/50/75/complete milestone (percentage 기반)
+  useEffect(() => {
+    if (!current || !playable || !playing) return;
+    if (!duration || !Number.isFinite(duration) || duration < 1) return;
+    if (startedTrackIdRef.current !== current.id) return;
+    if (pev2MilestonesRef.current.track !== current.id) return;
+
+    const pct = (currentTime / duration) * 100;
+    const sent = pev2MilestonesRef.current.sent;
+    const fireMilestone = (eventType: 'play_25' | 'play_50' | 'play_75' | 'play_complete', threshold: number) => {
+      if (pct < threshold || sent.has(eventType)) return;
+      sent.add(eventType);
+      void logPlaybackEventV2({
+        trackId: current.id, eventType,
+        sessionId: pev2SessionRef.current,
+        listenedSeconds: Math.floor(currentTime),
+        trackDurationSeconds: duration,
+        completionPercent: Math.min(100, Math.round(pct * 10) / 10),
+        volume, muted: volume === 0,
+        playlistId: playlist?.id ?? undefined,
+        anonymousId: getAnonymousId(),
+      });
+    };
+    fireMilestone('play_25', 25);
+    fireMilestone('play_50', 50);
+    fireMilestone('play_75', 75);
+    fireMilestone('play_complete', 90);
+  }, [currentTime, current, duration, playable, playing, playlist?.id, volume]);
+
+  // X4.3 — volume_low / muted 이벤트 (재생 중에만)
+  const pev2VolumeStateRef = useRef<{ track: string | null; lowSent: boolean; mutedSent: boolean }>(
+    { track: null, lowSent: false, mutedSent: false }
+  );
+  useEffect(() => {
+    if (!current || !playing) return;
+    if (pev2VolumeStateRef.current.track !== current.id) {
+      pev2VolumeStateRef.current = { track: current.id, lowSent: false, mutedSent: false };
+    }
+    if (volume === 0 && !pev2VolumeStateRef.current.mutedSent) {
+      pev2VolumeStateRef.current.mutedSent = true;
+      void logPlaybackEventV2({
+        trackId: current.id, eventType: 'muted',
+        sessionId: pev2SessionRef.current,
+        volume, muted: true,
+        playlistId: playlist?.id ?? undefined,
+        anonymousId: getAnonymousId(),
+      });
+    } else if (volume > 0 && volume < 0.1 && !pev2VolumeStateRef.current.lowSent) {
+      pev2VolumeStateRef.current.lowSent = true;
+      void logPlaybackEventV2({
+        trackId: current.id, eventType: 'volume_low',
+        sessionId: pev2SessionRef.current,
+        volume, muted: false,
+        playlistId: playlist?.id ?? undefined,
+        anonymousId: getAnonymousId(),
+      });
+    }
+  }, [volume, current?.id, playing, playlist?.id]);
 
   useEffect(() => {
     if (!current || milestoneSentRef.current) return;
@@ -732,6 +806,17 @@ export default function Player() {
     void recordTrackSkip(ctx.id, outgoingId, prog.played, dur, reason);
     // AI 큐레이션 behavior 이벤트 (정산용 stream_events 와 분리) — skip
     void recordPlayEvent({ trackId: outgoingId, playlistId: ctx.id, eventType: 'skip', played: prog.played, duration: dur, skipReason: reason, anonId: getAnonymousId() });
+    // X4.3 — playback_events_v2 skip (parallel layer)
+    void logPlaybackEventV2({
+      trackId: outgoingId, eventType: 'skip',
+      sessionId: pev2SessionRef.current,
+      listenedSeconds: prog.played,
+      trackDurationSeconds: dur ?? undefined,
+      completionPercent: dur && dur > 0 ? Math.min(100, (prog.played / dur) * 100) : undefined,
+      volume, muted: volume === 0,
+      playlistId: ctx.id,
+      anonymousId: getAnonymousId(),
+    });
     // 사업자 회원 30초 이내 수동 스킵 → 자동 제외 후보 집계 (비사업자는 서버에서 무시). 정산 무관.
     if (prog.played <= 30) void recordBusinessEarlySkip(ctx.id, outgoingId, prog.played, dur, reason);
   }
@@ -968,6 +1053,17 @@ export default function Player() {
         event_type: 'complete',
         player_volume: volume,
         player_muted: volume === 0,
+      });
+      // X4.3 — playback_events_v2 play_complete (자연 종료, parallel layer)
+      void logPlaybackEventV2({
+        trackId: current.id, eventType: 'play_complete',
+        sessionId: pev2SessionRef.current,
+        listenedSeconds: Math.floor(duration || currentTime || 0),
+        trackDurationSeconds: duration || undefined,
+        completionPercent: 100,
+        volume, muted: volume === 0,
+        playlistId: playlist?.id ?? undefined,
+        anonymousId: getAnonymousId(),
       });
       void clearContinueListening(current.id, userId);
     }
