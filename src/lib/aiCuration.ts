@@ -630,3 +630,758 @@ export async function excludeTrackGroup(trackId: string, groupKey: string, note?
   const { error } = await supabase.rpc('admin_exclude_track_group', { p_track_id: trackId, p_group_key: groupKey, p_note: note ?? null });
   if (error) throw error;
 }
+
+// ===== Phase X2.3 — Chromaprint Audio Fingerprint Duplicate Detection =====
+export interface DuplicateCandidate {
+  source_track_id: string;
+  candidate_track_id: string;
+  similarity: number;
+  source_title: string | null;
+  source_artist: string | null;
+  candidate_title: string | null;
+  candidate_artist: string | null;
+  source_duration: number | null;
+  candidate_duration: number | null;
+  duration_delta: number | null;
+  hash_exact: boolean;
+}
+
+export async function adminFindDuplicateTracks(
+  trackId: string,
+  threshold = 0.85,
+  maxResults = 20,
+  durationTolerance = 5.0,
+): Promise<DuplicateCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_find_duplicate_tracks', {
+    p_target_track_id: trackId,
+    p_similarity_threshold: threshold,
+    p_max_results: maxResults,
+    p_duration_tolerance: durationTolerance,
+  });
+  if (error) throw error;
+  return (data ?? []) as DuplicateCandidate[];
+}
+
+export async function adminFindAllDuplicateCandidates(
+  threshold = 0.85,
+  maxResults = 100,
+  durationTolerance = 3.0,
+): Promise<DuplicateCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_find_all_duplicate_candidates', {
+    p_similarity_threshold: threshold,
+    p_max_results: maxResults,
+    p_duration_tolerance: durationTolerance,
+  });
+  if (error) throw error;
+  return (data ?? []) as DuplicateCandidate[];
+}
+
+// ===== Phase X2.3 (0244) — Fingerprint failure tracking =====
+export interface FingerprintFailureSummary {
+  total_success: number;
+  total_failed: number;
+  total_retryable: number;
+  total_exhausted: number;
+  pending_never_attempted: number;
+  failure_breakdown: Record<string, number>;
+}
+
+export interface FingerprintFailureRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  audio_url: string | null;
+  error: string | null;
+  retry_count: number;
+  attempted_at: string | null;
+  download_size_bytes: number | null;
+  download_content_type: string | null;
+}
+
+export async function adminFingerprintFailureSummary(): Promise<FingerprintFailureSummary | null> {
+  const { data, error } = await supabase.rpc('admin_fingerprint_failure_summary');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row as FingerprintFailureSummary;
+}
+
+export async function adminListFingerprintFailures(
+  limit = 100, onlyExhausted = false,
+): Promise<FingerprintFailureRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_fingerprint_failures', {
+    p_limit: limit, p_only_exhausted: onlyExhausted,
+  });
+  if (error) throw error;
+  return (data ?? []) as FingerprintFailureRow[];
+}
+
+export async function adminResetFingerprintFailure(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reset_fingerprint_failure', { p_track_id: trackId });
+  if (error) throw error;
+}
+
+// ===== 0245 — Audio corruption candidate queue =====
+export interface CorruptionCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  audio_url: string | null;
+  fingerprint_error: string | null;
+  retry_count: number;
+  attempted_at: string | null;
+  download_size_bytes: number | null;
+  download_content_type: string | null;
+  track_duration: number | null;
+  qc_risk_level: string | null;
+  qc_score: number | null;
+  qc_issues_count: number;
+  has_qc_report: boolean;
+}
+
+export async function adminListCorruptionCandidates(
+  limit = 100, onlyExhausted = false,
+): Promise<CorruptionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_corruption_candidates', {
+    p_limit: limit, p_only_exhausted: onlyExhausted,
+  });
+  if (error) throw error;
+  return (data ?? []) as CorruptionCandidate[];
+}
+
+export async function adminMarkFingerprintQcRisk(trackId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_mark_fingerprint_qc_risk', { p_track_id: trackId });
+  if (error) throw error;
+  return data as string;
+}
+
+// ===== Phase X3 (0246) — Admin Track Placement Editor =====
+export interface TrackPlacementDetail {
+  track: {
+    id: string; title: string | null; artist: string | null;
+    main_genre: string | null; sub_genre: string | null;
+    mood: string | null; mood_tags: string[] | null;
+    suitable_store: string | null; business_tags: string[] | null;
+    genre_tags: string[] | null; time_slots: string[] | null;
+    instrumental: boolean | null;
+    release_status: string | null; release_date: string | null;
+    audio_url_present: boolean; isrc_present: boolean;
+    locked_fields: string[];
+    [key: string]: unknown;
+  };
+  ai_prediction: {
+    predicted_main_genre: string | null;
+    predicted_sub_genres: string[] | null;
+    genre_confidence: number | null;
+    predicted_moods: string[] | null;
+    mood_confidence: number | null;
+    predicted_store_types: string[] | null;
+    store_type_confidence: number | null;
+    prediction_scores: Record<string, Record<string, number>> | null;
+    applied_at: string | null;
+    predicted_main_genre_ko: string | null;
+    predicted_moods_ko: string[] | null;
+    predicted_store_types_ko: string[] | null;
+  } | null;
+  exclusions: Array<{
+    id: string; store_type_slug: string; store_type_name_ko: string | null;
+    reason: string | null; created_at: string; created_by_name: string | null;
+  }>;
+  placements: Array<{
+    playlist_id: string; playlist_title: string;
+    business_category: string | null; daypart: string | null; ai_store_key: string | null;
+    fit_score: number | null; fit_status: string | null;
+    manual_score: number | null; ai_boost_total: number | null;
+    reason_codes: string[] | null;
+    in_playlist: boolean; order_index: number | null;
+    placement_reason: string | null;
+    is_excluded_by_admin: boolean;
+  }>;
+  audit_count: number;
+}
+
+export async function adminGetTrackPlacementDetail(trackId: string): Promise<TrackPlacementDetail> {
+  const { data, error } = await supabase.rpc('admin_get_track_placement_detail', { p_track_id: trackId });
+  if (error) throw error;
+  return data as TrackPlacementDetail;
+}
+
+export async function adminUpdateTrackMetadata(
+  trackId: string, fields: { title?: string; artist?: string; main_genre?: string; mood?: string; suitable_store?: string }, reason?: string,
+): Promise<{ ok: true; before: Record<string, unknown>; after: Record<string, unknown> }> {
+  const { data, error } = await supabase.rpc('admin_update_track_metadata', {
+    p_track_id: trackId,
+    p_title: fields.title ?? null,
+    p_artist: fields.artist ?? null,
+    p_main_genre: fields.main_genre ?? null,
+    p_mood: fields.mood ?? null,
+    p_suitable_store: fields.suitable_store ?? null,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before: Record<string, unknown>; after: Record<string, unknown> };
+}
+
+export async function adminApplyAiMetadataWithAudit(
+  trackId: string, scope: { genre: boolean; mood: boolean; store: boolean }, reason?: string,
+) {
+  const { data, error } = await supabase.rpc('admin_apply_ai_metadata_with_audit', {
+    p_track_id: trackId,
+    p_apply_genre: scope.genre,
+    p_apply_mood: scope.mood,
+    p_apply_store: scope.store,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function adminAddTrackExclusion(trackId: string, storeTypeSlug: string, reason?: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_add_track_exclusion', {
+    p_track_id: trackId, p_store_type_slug: storeTypeSlug, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminRemoveTrackExclusion(exclusionId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_remove_track_exclusion', { p_exclusion_id: exclusionId });
+  if (error) throw error;
+}
+
+export interface PreviewPlacementChanges {
+  remove_count: number;
+  keep_count: number;
+  new_candidate_count: number;
+  to_remove: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; current_fit_score: number | null; order_index: number | null; matched_exclusion_slug: string | null }>;
+  to_keep: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; current_fit_score: number | null; order_index: number | null }>;
+  new_candidates: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; estimated_score: number; decision: string }>;
+}
+
+export async function adminPreviewPlacementChanges(trackId: string): Promise<PreviewPlacementChanges> {
+  const { data, error } = await supabase.rpc('admin_preview_placement_changes', { p_track_id: trackId });
+  if (error) throw error;
+  return data as PreviewPlacementChanges;
+}
+
+export async function adminRemoveMisplacedPlaylistTracks(
+  trackId: string, confirm: boolean, reason?: string,
+): Promise<{ preview: boolean; count: number; targets?: unknown[]; removed?: unknown[] }> {
+  const { data, error } = await supabase.rpc('admin_remove_misplaced_playlist_tracks', {
+    p_track_id: trackId, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { preview: boolean; count: number; targets?: unknown[]; removed?: unknown[] };
+}
+
+export async function adminRecomputeTrackFitScores(trackId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_recompute_track_fit_scores', { p_track_id: trackId });
+  if (error) throw error;
+  return data as number;
+}
+
+export interface TrackAuditEntry {
+  id: string; action_type: string;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  reason: string | null;
+  created_at: string;
+  admin_name: string | null;
+}
+
+export async function adminListTrackMetadataAudit(trackId: string, limit = 100): Promise<TrackAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_metadata_audit', {
+    p_track_id: trackId, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackAuditEntry[];
+}
+
+// taxonomy store types — exclusion picker 용
+export interface StoreTypeOption {
+  slug: string; name_ko: string; name_en: string;
+}
+export async function listTaxonomyStoreTypes(): Promise<StoreTypeOption[]> {
+  const { data, error } = await supabase.rpc('list_taxonomy_store_types');
+  if (error) throw error;
+  return (data ?? []) as StoreTypeOption[];
+}
+
+// ===== Phase X3.2 (0247) — Bulk Operations =====
+export interface BulkAiApplyResult {
+  ok: true;
+  audit_id: string;
+  preview: boolean;
+  total: number;
+  applied: number;
+  skipped_low_conf: number;
+  skipped_no_pred: number;
+  failed: number;
+  breakdown?: Array<{
+    track_id: string; title: string | null;
+    min_confidence: number;
+    will_apply_genre: boolean; will_apply_mood: boolean; will_apply_store: boolean;
+  }> | null;
+}
+
+export async function adminBulkApplyAiMetadata(
+  trackIds: string[],
+  scope: { genre: boolean; mood: boolean; store: boolean },
+  minConfidence: number,
+  confirm: boolean,
+  reason?: string,
+): Promise<BulkAiApplyResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_apply_ai_metadata', {
+    p_track_ids: trackIds,
+    p_apply_genre: scope.genre, p_apply_mood: scope.mood, p_apply_store: scope.store,
+    p_min_confidence: minConfidence, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkAiApplyResult;
+}
+
+export interface BulkExclusionResult {
+  ok: true; audit_id: string; preview: boolean;
+  track_count: number; slug_count: number; combos_total: number;
+  inserted: number; already_active: number;
+}
+
+export async function adminBulkAddTrackExclusions(
+  trackIds: string[], storeSlugs: string[], confirm: boolean, reason?: string,
+): Promise<BulkExclusionResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_add_track_exclusions', {
+    p_track_ids: trackIds, p_store_slugs: storeSlugs, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkExclusionResult;
+}
+
+export interface BulkRecomputeResult {
+  ok: true; audit_id: string; track_count: number; total_recomputed: number;
+}
+
+export async function adminBulkRecomputeFitScores(trackIds: string[]): Promise<BulkRecomputeResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_recompute_fit_scores', { p_track_ids: trackIds });
+  if (error) throw error;
+  return data as BulkRecomputeResult;
+}
+
+export interface BulkPreviewPlacement {
+  ok: true; track_count: number; total_remove: number; total_keep: number;
+  per_track: Array<{ track_id: string; title: string | null; remove_count: number; keep_count: number }>;
+}
+
+export async function adminBulkPreviewPlacementChanges(trackIds: string[]): Promise<BulkPreviewPlacement> {
+  const { data, error } = await supabase.rpc('admin_bulk_preview_placement_changes', { p_track_ids: trackIds });
+  if (error) throw error;
+  return data as BulkPreviewPlacement;
+}
+
+export interface BulkRemoveMisplacedResult {
+  ok: true; audit_id: string; preview: boolean;
+  track_count: number; total_removed: number;
+  per_track: Array<{ track_id: string; removed: number }>;
+}
+
+export async function adminBulkRemoveMisplacedPlaylistTracks(
+  trackIds: string[], confirm: boolean, reason?: string,
+): Promise<BulkRemoveMisplacedResult> {
+  const { data, error } = await supabase.rpc('admin_bulk_remove_misplaced_playlist_tracks', {
+    p_track_ids: trackIds, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as BulkRemoveMisplacedResult;
+}
+
+export interface QcQueueFilter {
+  main_genre_in?: string[];
+  in_playlist_categories?: string[];
+  fingerprint_status?: 'success' | 'failed';
+  store_type_confidence_lt?: number;
+  mood_confidence_lt?: number;
+  genre_confidence_lt?: number;
+  ai_predicted_store_in?: string[];
+  limit?: number;
+}
+
+export interface QcQueueRow {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null;
+  current_playlists: string[] | null;
+  genre_conf: number | null; mood_conf: number | null; store_conf: number | null;
+  fingerprint_status: string | null;
+}
+
+export async function adminBulkQcQueueFilter(filter: QcQueueFilter): Promise<QcQueueRow[]> {
+  const { data, error } = await supabase.rpc('admin_bulk_qc_queue_filter', { p_filter: filter });
+  if (error) throw error;
+  return (data ?? []) as QcQueueRow[];
+}
+
+export interface BulkAuditEntry {
+  id: string; operation_type: string; track_count: number;
+  params_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  status: string; created_at: string; admin_name: string | null;
+}
+
+export async function adminListBulkAudit(limit = 50): Promise<BulkAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_bulk_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as BulkAuditEntry[];
+}
+
+// ===== Phase X3.3 (0248) — QC Queue Automation =====
+export type QcSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type QcStatus = 'open' | 'reviewing' | 'resolved' | 'dismissed' | 'all';
+export type QcSource = 'rule' | 'ai' | 'chromaprint' | 'fingerprint' | 'placement' | 'manual';
+
+export interface QcQueueRowFull {
+  id: string;
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  issue_type: string;
+  severity: QcSeverity;
+  source: QcSource;
+  reason: string;
+  evidence_json: Record<string, unknown> | null;
+  status: 'open' | 'reviewing' | 'resolved' | 'dismissed';
+  assigned_to_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QcQueueSummary {
+  total_open: number;
+  total_reviewing: number;
+  total_resolved: number;
+  total_dismissed: number;
+  by_severity: Record<string, number> | null;
+  by_issue_type: Record<string, number> | null;
+  by_source: Record<string, number> | null;
+}
+
+export async function adminGenerateQcQueueCandidates(): Promise<{ ok: true; by_rule: Record<string, number>; generated_total: number }> {
+  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates');
+  if (error) throw error;
+  return data as { ok: true; by_rule: Record<string, number>; generated_total: number };
+}
+
+export async function adminListQcQueue(
+  status: QcStatus = 'open',
+  severity?: QcSeverity,
+  issueType?: string,
+  source?: QcSource,
+  limit = 200,
+): Promise<QcQueueRowFull[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_queue', {
+    p_status: status, p_severity: severity ?? null,
+    p_issue_type: issueType ?? null, p_source: source ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcQueueRowFull[];
+}
+
+export async function adminQcQueueSummary(): Promise<QcQueueSummary | null> {
+  const { data, error } = await supabase.rpc('admin_qc_queue_summary');
+  if (error) throw error;
+  return data as QcQueueSummary;
+}
+
+export async function adminAssignQcQueue(id: string, assignee?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_assign_qc_queue', { p_id: id, p_assignee: assignee ?? null });
+  if (error) throw error;
+}
+
+export async function adminResolveQcQueue(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_resolve_qc_queue', { p_id: id, p_reason: reason ?? null });
+  if (error) throw error;
+}
+
+export async function adminDismissQcQueue(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_dismiss_qc_queue', { p_id: id, p_reason: reason ?? null });
+  if (error) throw error;
+}
+
+export async function adminBulkResolveQcQueue(
+  ids: string[], status: 'resolved' | 'dismissed', reason?: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_bulk_resolve_qc_queue', {
+    p_ids: ids, p_status: status, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+// ===== Phase X3.4 (0249) — QC Rule Management =====
+export interface QcRule {
+  id: string;
+  rule_key: string;
+  name: string;
+  description: string | null;
+  issue_type: string;
+  severity: QcSeverity;
+  source: QcSource;
+  condition_json: Record<string, unknown> | null;
+  is_active: boolean;
+  open_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function adminListQcRules(): Promise<QcRule[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_rules');
+  if (error) throw error;
+  return (data ?? []) as QcRule[];
+}
+
+export async function adminUpdateQcRule(
+  id: string,
+  fields: { is_active?: boolean; severity?: QcSeverity; description?: string; name?: string },
+  reason?: string,
+): Promise<{ ok: true; before: Record<string, unknown>; after: Record<string, unknown> }> {
+  const { data, error } = await supabase.rpc('admin_update_qc_rule', {
+    p_id: id,
+    p_is_active: fields.is_active ?? null,
+    p_severity: fields.severity ?? null,
+    p_description: fields.description ?? null,
+    p_name: fields.name ?? null,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before: Record<string, unknown>; after: Record<string, unknown> };
+}
+
+export interface QcRuleAuditEntry {
+  id: string;
+  rule_id: string | null;
+  rule_key: string | null;
+  admin_name: string | null;
+  action_type: string;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export async function adminListQcRuleAudit(ruleId?: string, limit = 100): Promise<QcRuleAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_qc_rule_audit', {
+    p_rule_id: ruleId ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcRuleAuditEntry[];
+}
+
+// ===== Phase X4.0 (0250) — Behavior Learning =====
+export interface BehaviorScore {
+  track_id: string;
+  window_days: number;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  save_rate: number;
+  avg_listen_seconds: number;
+  avg_completion_percent: number;
+  behavior_score: number;
+  confidence: number;
+  store_breakdown_json: Record<string, { play_count: number; completion_rate: number; avg_listen_seconds?: number }> | null;
+  playlist_breakdown_json: Record<string, { title: string; play_count: number; completion_rate: number; business_category: string | null }> | null;
+  daypart_breakdown_json: Record<string, { play_count: number; completion_rate: number }> | null;
+  calculated_at: string;
+}
+
+export interface BehaviorOutlier {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  behavior_score: number;
+  confidence: number;
+  risk_signals: string[];
+}
+
+export async function adminRecomputeBehaviorScores(windowDays = 30): Promise<{ ok: true; tracks_computed: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('recompute_track_behavior_scores', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; tracks_computed: number; elapsed_ms: number };
+}
+
+export async function adminRecomputeSingleTrackBehaviorScore(
+  trackId: string, windowDays = 30,
+): Promise<BehaviorScore | null> {
+  const { data, error } = await supabase.rpc('recompute_single_track_behavior_score', {
+    p_track_id: trackId, p_window_days: windowDays,
+  });
+  if (error) throw error;
+  return data as BehaviorScore | null;
+}
+
+export async function adminGetTrackBehaviorDetail(
+  trackId: string, windowDays = 30,
+): Promise<{ track: Record<string, unknown>; score: BehaviorScore | null; window_days: number; has_data: boolean }> {
+  const { data, error } = await supabase.rpc('admin_get_track_behavior_detail', {
+    p_track_id: trackId, p_window_days: windowDays,
+  });
+  if (error) throw error;
+  return data as { track: Record<string, unknown>; score: BehaviorScore | null; window_days: number; has_data: boolean };
+}
+
+export async function adminListBehaviorOutliers(
+  windowDays = 30, minPlayCount = 20, limit = 200,
+): Promise<BehaviorOutlier[]> {
+  const { data, error } = await supabase.rpc('admin_list_behavior_outliers', {
+    p_window_days: windowDays, p_min_play_count: minPlayCount, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as BehaviorOutlier[];
+}
+
+// ===== Phase X4.1 (0251) — Behavior Feedback Engine =====
+export interface PromotionDemotionCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  behavior_score: number;
+  confidence: number;
+  play_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  like_rate: number;
+  avg_fit_score: number;
+  avg_final_fit_score: number;
+  avg_boost: number;
+  current_placement_count: number;
+}
+
+export interface BehaviorComparisonRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  play_count: number;
+  confidence: number;
+  behavior_score: number;
+  avg_fit_score: number;
+  avg_final_fit_score: number;
+  avg_boost: number;
+  is_promotion_candidate: boolean;
+  is_demotion_candidate: boolean;
+}
+
+export async function adminRecomputeBehaviorBoosts(windowDays = 30): Promise<{ ok: true; rows_updated: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('admin_recompute_behavior_boosts', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; rows_updated: number; elapsed_ms: number };
+}
+
+export async function adminListPromotionCandidates(
+  minBehavior = 70, minConfidence = 0.30, limit = 100,
+): Promise<PromotionDemotionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_promotion_candidates', {
+    p_min_behavior: minBehavior, p_min_confidence: minConfidence, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PromotionDemotionCandidate[];
+}
+
+export async function adminListDemotionCandidates(
+  maxBehavior = 30, minConfidence = 0.30, limit = 100,
+): Promise<PromotionDemotionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_demotion_candidates', {
+    p_max_behavior: maxBehavior, p_min_confidence: minConfidence, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PromotionDemotionCandidate[];
+}
+
+export async function adminListBehaviorComparison(limit = 50): Promise<BehaviorComparisonRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_behavior_comparison', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as BehaviorComparisonRow[];
+}
+
+// ===== Phase X4.2 (0252) — Store Learning Engine =====
+export interface TrackStoreScoreRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  store_type_slug: string;
+  store_name_ko: string | null;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  store_behavior_score: number;
+  confidence: number;
+  is_promotion_candidate: boolean;
+  is_demotion_candidate: boolean;
+}
+
+export interface StoreMismatchCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  store_type_slug: string;
+  store_name_ko: string | null;
+  play_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  store_behavior_score: number;
+  confidence: number;
+  risk_signals: string[];
+}
+
+export interface StoreLearningSummary {
+  total_rows: number;
+  distinct_tracks: number;
+  by_store: Record<string, {
+    rows: number; distinct_tracks: number; avg_score: number; avg_confidence: number;
+    high_confidence_rows: number; promotion_candidates: number; demotion_candidates: number;
+  }> | null;
+}
+
+export async function adminRecomputeTrackStoreBehaviorScores(windowDays = 30): Promise<{ ok: true; rows_upserted: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('recompute_track_store_behavior_scores', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; rows_upserted: number; elapsed_ms: number };
+}
+
+export async function adminListTrackStoreScores(
+  storeSlug?: string, windowDays = 30, limit = 200,
+): Promise<TrackStoreScoreRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_store_scores', {
+    p_store_slug: storeSlug ?? null, p_window_days: windowDays, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackStoreScoreRow[];
+}
+
+export async function adminListStoreMismatchCandidates(
+  windowDays = 30, minPlayCount = 10, limit = 200,
+): Promise<StoreMismatchCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_store_mismatch_candidates', {
+    p_window_days: windowDays, p_min_play_count: minPlayCount, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as StoreMismatchCandidate[];
+}
+
+export async function adminStoreLearningSummary(windowDays = 30): Promise<StoreLearningSummary | null> {
+  const { data, error } = await supabase.rpc('admin_store_learning_summary', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as StoreLearningSummary;
+}
