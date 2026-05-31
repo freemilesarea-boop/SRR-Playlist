@@ -1659,12 +1659,40 @@ def genre_backfill_endpoint(item: dict) -> dict:
 @app.function(image=image, secrets=secrets, timeout=3600)
 @modal.fastapi_endpoint(method="POST", label="mood-backfill")
 def mood_backfill_endpoint(item: dict) -> dict:
-    """POST { limit?, dryRun?, track_id?, audio_url?, _auth }
+    """POST { limit?, dryRun?, track_id?, audio_url?, debug_secret?, _auth }
     → mood 미분류 트랙 일괄 분류.
     track_id 지정 시 단일 트랙만 처리 (audio_url 미지정이면 DB 조회).
-    dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀."""
+    dryRun=true 면 결과는 계산하고 DB 저장만 건너뜀.
+    debug_secret=true 면 Modal Secret attachment 진단 결과만 반환 (audio 처리 X).
+    """
     deny = _check_auth(item)
     if deny is not None: return deny
+
+    # Secret attachment 진단 — auth 통과했는데 SUPABASE_URL 못 읽는 케이스 대응.
+    # 값은 노출하지 않고 (보안) key 이름 + 길이 + 존재 여부만 반환.
+    if item.get("debug_secret"):
+        url_v = os.environ.get("SUPABASE_URL", "")
+        key_v = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        qc_v  = os.environ.get("QC_WORKER_SECRET", "")
+        env_keys = sorted([k for k in os.environ.keys()
+                           if any(t in k.upper() for t in ('SUPABASE', 'QC_WORKER', 'KEY', 'TOKEN'))])
+        return {
+            "ok": False,
+            "diagnostic": "secret_attachment",
+            "endpoint_function": "mood_backfill_endpoint",
+            "secrets_decl": ["deudda-supabase"],
+            "supabase_url_set": bool(url_v),
+            "supabase_url_len": len(url_v),
+            "supabase_url_prefix": url_v[:15] + "..." if len(url_v) > 18 else url_v,
+            "supabase_key_set": bool(key_v),
+            "supabase_key_len": len(key_v),
+            "supabase_key_starts_with_eyJ": key_v.startswith("eyJ"),
+            "qc_secret_set": bool(qc_v),
+            "qc_secret_len": len(qc_v),
+            "secret_like_env_keys": env_keys,
+            "env_keys_total": len(os.environ),
+        }
+
     limit = int(item.get("limit", 50))
     dry_run = bool(item.get("dryRun", False))
     track_id = item.get("track_id")
