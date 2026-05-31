@@ -675,3 +675,47 @@ export async function adminFindAllDuplicateCandidates(
   if (error) throw error;
   return (data ?? []) as DuplicateCandidate[];
 }
+
+// ===== Phase X2.3 (0244) — Fingerprint failure tracking =====
+export interface FingerprintFailureSummary {
+  total_success: number;
+  total_failed: number;
+  total_retryable: number;
+  total_exhausted: number;
+  pending_never_attempted: number;
+  failure_breakdown: Record<string, number>;
+}
+
+export interface FingerprintFailureRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  audio_url: string | null;
+  error: string | null;
+  retry_count: number;
+  attempted_at: string | null;
+  download_size_bytes: number | null;
+  download_content_type: string | null;
+}
+
+export async function adminFingerprintFailureSummary(): Promise<FingerprintFailureSummary | null> {
+  const { data, error } = await supabase.rpc('admin_fingerprint_failure_summary');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row as FingerprintFailureSummary;
+}
+
+export async function adminListFingerprintFailures(
+  limit = 100, onlyExhausted = false,
+): Promise<FingerprintFailureRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_fingerprint_failures', {
+    p_limit: limit, p_only_exhausted: onlyExhausted,
+  });
+  if (error) throw error;
+  return (data ?? []) as FingerprintFailureRow[];
+}
+
+export async function adminResetFingerprintFailure(trackId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reset_fingerprint_failure', { p_track_id: trackId });
+  if (error) throw error;
+}

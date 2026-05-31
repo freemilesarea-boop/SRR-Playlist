@@ -66,7 +66,12 @@ import {
   excludeTrackGroup,
   adminFindDuplicateTracks,
   adminFindAllDuplicateCandidates,
+  adminFingerprintFailureSummary,
+  adminListFingerprintFailures,
+  adminResetFingerprintFailure,
   type DuplicateCandidate,
+  type FingerprintFailureSummary,
+  type FingerprintFailureRow,
   type BusinessSkipSummary,
   type BusinessExclusionRow,
   type EmbeddingPendingRow,
@@ -1880,6 +1885,12 @@ function DuplicateDetectionTab() {
   const [loading, setLoading] = useState(false);
   const [singleTrackId, setSingleTrackId] = useState('');
   const [openCompareKey, setOpenCompareKey] = useState<string | null>(null);
+  // 0244 — fingerprint 상태 패널
+  const [fpSummary, setFpSummary] = useState<FingerprintFailureSummary | null>(null);
+  const [fpFailures, setFpFailures] = useState<FingerprintFailureRow[]>([]);
+  const [showFailures, setShowFailures] = useState(false);
+  const [onlyExhausted, setOnlyExhausted] = useState(false);
+  const [fpBusy, setFpBusy] = useState(false);
 
   const fmtDuration = (s: number | null): string => {
     if (s == null) return '—';
@@ -1888,6 +1899,50 @@ function DuplicateDetectionTab() {
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
   const fmtSimilarity = (v: number): string => `${(v * 100).toFixed(1)}%`;
+  const fmtBytes = (b: number | null): string => {
+    if (b == null) return '—';
+    if (b < 1024) return `${b}B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}KB`;
+    return `${(b / 1024 / 1024).toFixed(1)}MB`;
+  };
+
+  const loadFpSummary = useCallback(async () => {
+    try {
+      const s = await adminFingerprintFailureSummary();
+      setFpSummary(s);
+    } catch (e) {
+      console.warn('[fp-summary]', e);
+    }
+  }, []);
+
+  const loadFpFailures = useCallback(async () => {
+    setFpBusy(true);
+    try {
+      const list = await adminListFingerprintFailures(200, onlyExhausted);
+      setFpFailures(list);
+    } catch (e) {
+      toast.error(`실패 목록 조회 실패: ${(e as Error).message}`);
+    } finally {
+      setFpBusy(false);
+    }
+  }, [onlyExhausted]);
+
+  useEffect(() => { void loadFpSummary(); }, [loadFpSummary]);
+  useEffect(() => { if (showFailures) void loadFpFailures(); }, [showFailures, loadFpFailures]);
+
+  const resetFailure = async (trackId: string) => {
+    if (!confirm('이 트랙의 실패 기록을 삭제하고 재시도 가능 상태로 되돌리시겠어요?')) return;
+    setFpBusy(true);
+    try {
+      await adminResetFingerprintFailure(trackId);
+      toast.success('재시도 가능 상태로 초기화.');
+      await Promise.all([loadFpSummary(), loadFpFailures()]);
+    } catch (e) {
+      toast.error(`초기화 실패: ${(e as Error).message}`);
+    } finally {
+      setFpBusy(false);
+    }
+  };
 
   const runAll = useCallback(async () => {
     setLoading(true);
@@ -1927,6 +1982,112 @@ function DuplicateDetectionTab() {
 
   return (
     <div className="space-y-3">
+      {/* Fingerprint 상태 패널 (X2.3 0244) */}
+      <div className="rounded-xl bg-bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold">Fingerprint 백필 상태</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void loadFpSummary()}
+              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover">
+              <RefreshCw size={12} /> 새로고침
+            </button>
+            <button onClick={() => setShowFailures((v) => !v)}
+              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover">
+              {showFailures ? '실패 목록 숨김' : '실패 목록 보기'}
+            </button>
+          </div>
+        </div>
+        {fpSummary ? (
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+            <div className="rounded bg-emerald-500/10 p-2"><div className="text-[10px] text-ink-dim">성공</div><div className="text-lg font-bold text-emerald-500">{fpSummary.total_success}</div></div>
+            <div className="rounded bg-rose-500/10 p-2"><div className="text-[10px] text-ink-dim">실패 (총)</div><div className="text-lg font-bold text-rose-500">{fpSummary.total_failed}</div></div>
+            <div className="rounded bg-amber-500/10 p-2"><div className="text-[10px] text-ink-dim">재시도 가능</div><div className="text-lg font-bold text-amber-500">{fpSummary.total_retryable}</div></div>
+            <div className="rounded bg-gray-500/10 p-2"><div className="text-[10px] text-ink-dim">재시도 소진</div><div className="text-lg font-bold text-gray-500">{fpSummary.total_exhausted}</div></div>
+            <div className="rounded bg-blue-500/10 p-2"><div className="text-[10px] text-ink-dim">미시도</div><div className="text-lg font-bold text-blue-500">{fpSummary.pending_never_attempted}</div></div>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-ink-dim">상태 로딩 중…</p>
+        )}
+        {fpSummary && Object.keys(fpSummary.failure_breakdown ?? {}).length > 0 && (
+          <details className="mt-2 text-xs">
+            <summary className="cursor-pointer text-ink-mute">실패 사유 breakdown ({Object.keys(fpSummary.failure_breakdown).length}개 패턴)</summary>
+            <ul className="mt-1 space-y-1">
+              {Object.entries(fpSummary.failure_breakdown)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 20)
+                .map(([sig, cnt]) => (
+                  <li key={sig} className="flex items-start gap-2 text-[11px]">
+                    <span className="shrink-0 rounded bg-rose-500/15 px-1.5 font-bold text-rose-500">{cnt}</span>
+                    <code className="break-all text-ink-mute">{sig}</code>
+                  </li>
+                ))}
+            </ul>
+          </details>
+        )}
+        {showFailures && (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center gap-2 text-xs">
+              <label className="flex items-center gap-1">
+                <input type="checkbox" checked={onlyExhausted} onChange={(e) => setOnlyExhausted(e.target.checked)} />
+                <span>재시도 소진(≥3회) 만 보기</span>
+              </label>
+              <span className="text-ink-dim">총 {fpFailures.length}건</span>
+            </div>
+            {fpFailures.length === 0 ? (
+              <p className="rounded bg-bg-deep px-3 py-4 text-center text-xs text-ink-dim">{fpBusy ? '로딩 중…' : '실패 트랙이 없어요.'}</p>
+            ) : (
+              <div className="overflow-x-auto rounded bg-bg-deep">
+                <table className="w-full text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b border-line/10 text-ink-dim">
+                      <th className="px-2 py-1.5">곡</th>
+                      <th className="px-2 py-1.5">retry</th>
+                      <th className="px-2 py-1.5">size</th>
+                      <th className="px-2 py-1.5">content_type</th>
+                      <th className="px-2 py-1.5">error</th>
+                      <th className="px-2 py-1.5">시도일</th>
+                      <th className="px-2 py-1.5">조치</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fpFailures.map((f) => (
+                      <tr key={f.track_id} className="border-b border-line/10">
+                        <td className="px-2 py-1.5">
+                          <div className="font-semibold">{f.title ?? '(제목없음)'}</div>
+                          <div className="text-ink-dim">{f.artist ?? ''}</div>
+                          <div className="text-[10px] text-ink-dim/70">{f.track_id.slice(0, 8)}…</div>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <span className={`rounded px-1.5 font-bold ${f.retry_count >= 3 ? 'bg-gray-500/20 text-gray-500' : 'bg-amber-500/15 text-amber-500'}`}>{f.retry_count}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-ink-mute">{fmtBytes(f.download_size_bytes)}</td>
+                        <td className="px-2 py-1.5 text-ink-mute">{f.download_content_type ?? '—'}</td>
+                        <td className="px-2 py-1.5">
+                          <details>
+                            <summary className="cursor-pointer text-rose-500">{(f.error ?? '').slice(0, 60)}{(f.error ?? '').length > 60 ? '…' : ''}</summary>
+                            <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-[10px] text-ink-mute">{f.error}</pre>
+                          </details>
+                        </td>
+                        <td className="px-2 py-1.5 text-ink-mute">{f.attempted_at ? new Date(f.attempted_at).toLocaleString() : '—'}</td>
+                        <td className="px-2 py-1.5">
+                          <button disabled={fpBusy} onClick={() => void resetFailure(f.track_id)}
+                            className="rounded bg-accent/15 px-2 py-0.5 font-semibold text-accent disabled:opacity-50">
+                            재시도 가능으로
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[10px] text-ink-dim">
+              실패 트랙은 자동 삭제/차단되지 않습니다. 운영자가 수동으로 음원 교체 또는 "재시도 가능으로" 버튼으로 큐에 복귀시킬 수 있습니다.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="rounded-xl bg-bg-card p-3">
         <h3 className="mb-2 text-sm font-bold">중복 음원 탐지 (Chromaprint)</h3>
         <p className="text-[11px] text-ink-dim">

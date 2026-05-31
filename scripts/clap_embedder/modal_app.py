@@ -1540,81 +1540,114 @@ class ClapEmbedder:
 
     # ========== Phase X2.3 — Chromaprint Audio Fingerprint ==========
     #
-    # 정책: 자동 차단/자동 삭제 금지. 관리자 경고 큐 빌드만 수행.
-    # 방식: fpcalc(libchromaprint-tools) -raw -json → int32 array + duration.
-    #        + base64 canonical (fpcalc -json) 도 함께 저장 (포터블).
-    #        + SHA-256(canonical csv) = fingerprint_hash 로 동일 파일 즉시 매칭.
+    # 정책: 자동 차단/자동 삭제 금지. 관리자 경고 큐로만 표시.
+    # 방식: fpcalc(libchromaprint-tools) -raw -json → uint32 array + duration.
+    #        실패 시 ffmpeg 로 wav 변환 후 재시도. 최종 실패는 store_track_fingerprint_failure
+    #        로 status='failed' 기록 (retry_count 증가, p_max_retries 까지 재시도).
+    # 0244: 진단 메타 (download_size, content_type, fpcalc stderr) 저장.
 
-    def _download_audio_bytes(self, audio_url: str) -> bytes:
-        """오디오 raw bytes 다운로드 — fpcalc 입력용 (librosa 디코딩 없음)."""
+    def _download_audio_bytes(self, audio_url: str) -> tuple:
+        """오디오 raw bytes + 메타 다운로드. Returns (bytes, size, content_type, http_status)."""
         import httpx
         with httpx.Client(timeout=60.0, follow_redirects=True) as client:
             resp = client.get(audio_url)
             resp.raise_for_status()
-            return resp.content
+            ctype = resp.headers.get("content-type", "") or ""
+            return resp.content, len(resp.content), ctype, int(resp.status_code)
 
-    def _compute_chromaprint(self, audio_bytes: bytes) -> dict:
-        """fpcalc 로 Chromaprint 지문 생성. int32 array + duration + b64 + sha256.
-
-        Returns:
-          {
-            "fingerprint": list[int],          # raw int32 array
-            "fingerprint_hash": str,           # sha256 hex of "i1,i2,..." csv
-            "fingerprint_b64": str | None,     # base64 canonical (포터블, 디버그용)
-            "duration_seconds": float,
-          }
+    def _fpcalc_extract(self, path: str) -> dict:
+        """단일 fpcalc 시도 — raw int array + b64 + sha256.
+        성공 시 dict, 실패 시 RuntimeError(stderr 포함) raise.
         """
         import subprocess
         import json as _json
-        import tempfile
-        import os as _os
         import hashlib
 
+        r1 = subprocess.run(
+            ['fpcalc', '-raw', '-json', path],
+            capture_output=True, text=True, timeout=120,
+        )
+        if r1.returncode != 0:
+            raise RuntimeError(f"fpcalc -raw failed (rc={r1.returncode}): {r1.stderr.strip()[:500]}")
+        try:
+            data = _json.loads(r1.stdout)
+        except Exception as je:
+            raise RuntimeError(f"fpcalc -raw stdout parse failed: {je}; stdout={r1.stdout[:200]}")
+        fp_array = data.get('fingerprint') or []
+        if not isinstance(fp_array, list) or not fp_array:
+            raise RuntimeError(f"fpcalc returned empty fingerprint: {r1.stdout[:200]}")
+        duration = float(data.get('duration', 0.0))
+
+        # b64 canonical (선택)
+        fp_b64 = None
+        try:
+            r2 = subprocess.run(
+                ['fpcalc', '-json', path], capture_output=True, text=True, timeout=120,
+            )
+            if r2.returncode == 0:
+                fp_b64 = _json.loads(r2.stdout).get('fingerprint')
+        except Exception as e:
+            print(f"[Chromaprint] b64 skipped: {e}")
+
+        canonical = ','.join(str(int(x)) for x in fp_array).encode()
+        fp_hash = hashlib.sha256(canonical).hexdigest()
+        return {
+            "fingerprint": [int(x) for x in fp_array],
+            "fingerprint_hash": fp_hash,
+            "fingerprint_b64": fp_b64,
+            "duration_seconds": round(duration, 3),
+        }
+
+    def _compute_chromaprint_with_fallback(self, audio_bytes: bytes) -> tuple:
+        """fpcalc 직접 시도 → 실패 시 ffmpeg→wav→fpcalc 재시도.
+        Returns (result_dict | None, stderr_log: str, used_fallback: bool).
+        """
+        import subprocess
+        import tempfile
+        import os as _os
+
+        stderr_log: list = []
         with tempfile.NamedTemporaryFile(suffix='.audio', delete=False) as f:
             f.write(audio_bytes)
-            tmp_path = f.name
+            orig_path = f.name
+        wav_path = orig_path + '.wav'
         try:
-            # raw int32 array
-            r1 = subprocess.run(
-                ['fpcalc', '-raw', '-json', tmp_path],
-                capture_output=True, text=True, timeout=120,
-            )
-            if r1.returncode != 0:
-                raise RuntimeError(f"fpcalc -raw failed: {r1.stderr.strip()[:500]}")
-            data = _json.loads(r1.stdout)
-            fp_array = data.get('fingerprint') or []
-            if not isinstance(fp_array, list) or not fp_array:
-                raise RuntimeError(f"fpcalc returned empty fingerprint: {r1.stdout[:200]}")
-            duration = float(data.get('duration', 0.0))
-
-            # canonical base64 (선택, 디버그/외부 호환용)
-            fp_b64 = None
+            # 1차: fpcalc original
             try:
-                r2 = subprocess.run(
-                    ['fpcalc', '-json', tmp_path],
-                    capture_output=True, text=True, timeout=120,
-                )
-                if r2.returncode == 0:
-                    fp_b64 = _json.loads(r2.stdout).get('fingerprint')
-            except Exception as e:
-                print(f"[Chromaprint] b64 fingerprint skipped: {e}")
-
-            # SHA-256 of canonical CSV — exact duplicate quick check
-            canonical = ','.join(str(int(x)) for x in fp_array).encode()
-            fp_hash = hashlib.sha256(canonical).hexdigest()
-
-            return {
-                "fingerprint": [int(x) for x in fp_array],
-                "fingerprint_hash": fp_hash,
-                "fingerprint_b64": fp_b64,
-                "duration_seconds": round(duration, 3),
-            }
+                return self._fpcalc_extract(orig_path), '', False
+            except RuntimeError as e1:
+                stderr_log.append(f"[1st fpcalc] {str(e1)[:400]}")
+                # 2차: ffmpeg → 44.1k stereo wav → fpcalc
+                try:
+                    r = subprocess.run(
+                        ['ffmpeg', '-y', '-loglevel', 'error',
+                         '-i', orig_path, '-ar', '44100', '-ac', '2', '-vn', wav_path],
+                        capture_output=True, text=True, timeout=180,
+                    )
+                    if r.returncode != 0:
+                        stderr_log.append(f"[ffmpeg] {r.stderr.strip()[:400]}")
+                        raise RuntimeError(' | '.join(stderr_log))
+                    try:
+                        result = self._fpcalc_extract(wav_path)
+                        stderr_log.append("[recovered via ffmpeg→wav]")
+                        return result, ' | '.join(stderr_log), True
+                    except RuntimeError as e2:
+                        stderr_log.append(f"[2nd fpcalc on wav] {str(e2)[:400]}")
+                        raise RuntimeError(' | '.join(stderr_log))
+                except FileNotFoundError:
+                    stderr_log.append("[ffmpeg] binary not found")
+                    raise RuntimeError(' | '.join(stderr_log))
         finally:
-            try: _os.unlink(tmp_path)
+            try: _os.unlink(orig_path)
+            except Exception: pass
+            try: _os.unlink(wav_path)
             except Exception: pass
 
-    def _store_fingerprint(self, track_id: str, fp: dict):
-        """store_track_fingerprint RPC 호출 (service_role)."""
+    def _store_fingerprint(self, track_id: str, fp: dict,
+                            download_size: int | None = None,
+                            content_type: str | None = None,
+                            used_fallback: bool = False):
+        """store_track_fingerprint RPC 호출 (success)."""
         import httpx
         url = _supabase_url()
         key = _supabase_key()
@@ -1631,12 +1664,40 @@ class ClapEmbedder:
                     "p_duration_seconds": fp.get("duration_seconds"),
                     "p_confidence": 1.0,
                     "p_algorithm": "chromaprint-v1",
+                    "p_download_size_bytes": download_size,
+                    "p_download_content_type": content_type,
+                    "p_used_fallback": used_fallback,
                 },
             )
             if resp.status_code >= 400:
                 raise RuntimeError(f"store_track_fingerprint HTTP {resp.status_code}: {resp.text[:500]}")
 
-    def _list_pending_fingerprint(self, limit: int) -> list:
+    def _store_fingerprint_failure(self, track_id: str, error: str,
+                                    download_size: int | None = None,
+                                    content_type: str | None = None):
+        """store_track_fingerprint_failure RPC 호출 (실패 행 기록 / retry_count 증가)."""
+        import httpx
+        url = _supabase_url()
+        key = _supabase_key()
+        with httpx.Client(timeout=30.0) as client:
+            try:
+                resp = client.post(
+                    f"{url}/rest/v1/rpc/store_track_fingerprint_failure",
+                    headers={"apikey": key, "Authorization": f"Bearer {key}",
+                             "content-type": "application/json"},
+                    json={
+                        "p_track_id": track_id,
+                        "p_error": (error or "")[:2000],
+                        "p_download_size_bytes": download_size,
+                        "p_download_content_type": content_type,
+                    },
+                )
+                if resp.status_code >= 400:
+                    print(f"[Chromaprint] failure record HTTP {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                print(f"[Chromaprint] failure record exception: {e}")
+
+    def _list_pending_fingerprint(self, limit: int, max_retries: int = 3) -> list:
         import httpx
         url = _supabase_url()
         key = _supabase_key()
@@ -1645,7 +1706,7 @@ class ClapEmbedder:
                 f"{url}/rest/v1/rpc/list_tracks_needing_fingerprint",
                 headers={"apikey": key, "Authorization": f"Bearer {key}",
                          "content-type": "application/json"},
-                json={"p_limit": limit},
+                json={"p_limit": limit, "p_max_retries": max_retries},
             )
             resp.raise_for_status()
             return resp.json()
@@ -1653,10 +1714,12 @@ class ClapEmbedder:
     @modal.method()
     def chromaprint_backfill(self, limit: int = 50, dry_run: bool = False,
                               track_id: str | None = None,
-                              audio_url: str | None = None) -> dict:
-        """Chromaprint 지문 백필.
+                              audio_url: str | None = None,
+                              max_retries: int = 3) -> dict:
+        """Chromaprint 지문 백필 (X2.3 + 0244 진단 강화 + ffmpeg fallback).
         track_id 지정 시 단일 트랙 처리 (audio_url 미지정이면 DB 조회).
-        dryRun=true → 결과 계산하지만 DB 저장 skip + samples 응답.
+        dryRun=true → 결과 계산하지만 DB 저장 skip (실패도 기록 안함).
+        max_retries=3 까지만 실패 트랙 재처리.
         """
         if track_id:
             if not audio_url:
@@ -1664,62 +1727,118 @@ class ClapEmbedder:
                 url = _supabase_url(); key = _supabase_key()
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(
-                        f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
+                        f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url,title,artist",
                         headers={"apikey": key, "Authorization": f"Bearer {key}"},
                     )
                     resp.raise_for_status()
                     rows = resp.json()
                     audio_url = rows[0]["audio_url"] if rows else None
+                    title = rows[0].get("title") if rows else None
+                    artist = rows[0].get("artist") if rows else None
                 if not audio_url:
                     return {"ok": False, "error": "track_id not found or audio_url missing"}
-            tracks = [{"track_id": track_id, "audio_url": audio_url, "title": None}]
+            else:
+                title, artist = None, None
+            tracks = [{"track_id": track_id, "audio_url": audio_url, "title": title, "artist": artist}]
         else:
-            tracks = self._list_pending_fingerprint(limit)
+            tracks = self._list_pending_fingerprint(limit, max_retries)
             if not tracks:
-                return {"ok": True, "total_candidates": 0, "fingerprinted": 0, "samples": []}
+                return {"ok": True, "total_candidates": 0, "fingerprinted": 0, "samples": [], "failed_samples": []}
 
         import time
-        print(f"[Chromaprint] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks")
+        print(f"[Chromaprint] {'(dry) ' if dry_run else ''}backfill {len(tracks)} tracks (max_retries={max_retries})")
         done = 0
+        fallback_used = 0
         failed: list = []
         samples: list = []
         elapsed_total = 0.0
         for t in tracks:
             tid = t["track_id"]
             aurl = t.get("audio_url")
+            title = t.get("title")
+            artist = t.get("artist")
+            prior = t.get("prior_attempts") or 0
+
             if not aurl:
-                failed.append({"track_id": tid, "error": "no_audio_url"})
+                err = "no_audio_url"
+                if not dry_run:
+                    self._store_fingerprint_failure(tid, err)
+                failed.append({
+                    "track_id": tid, "title": title, "artist": artist,
+                    "audio_url": None, "error": err,
+                    "prior_attempts": prior, "stage": "no_url",
+                })
                 continue
+
+            download_size = None
+            content_type = None
+            http_status = None
             try:
                 t0 = time.time()
-                audio_bytes = self._download_audio_bytes(aurl)
-                fp = self._compute_chromaprint(audio_bytes)
+                # Download
+                try:
+                    audio_bytes, download_size, content_type, http_status = self._download_audio_bytes(aurl)
+                except Exception as de:
+                    raise RuntimeError(f"[download] HTTP/{http_status or '?'} {str(de)[:300]}")
+
+                # fpcalc + ffmpeg fallback
+                fp, stderr_log, used_fallback = self._compute_chromaprint_with_fallback(audio_bytes)
                 dt = time.time() - t0
                 elapsed_total += dt
+
                 if not dry_run:
-                    self._store_fingerprint(tid, fp)
+                    self._store_fingerprint(tid, fp, download_size, content_type, used_fallback)
                 done += 1
+                if used_fallback:
+                    fallback_used += 1
                 samples.append({
                     "track_id": tid,
-                    "title": t.get("title"),
+                    "title": title,
                     "duration_seconds": fp["duration_seconds"],
                     "fingerprint_len": len(fp["fingerprint"]),
                     "fingerprint_hash": fp["fingerprint_hash"][:16] + "...",
+                    "used_fallback": used_fallback,
+                    "fpcalc_stderr": stderr_log if stderr_log else None,
                     "elapsed_seconds": round(dt, 2),
                 })
                 if done % 10 == 0:
-                    print(f"[Chromaprint] {done}/{len(tracks)} done")
+                    print(f"[Chromaprint] {done}/{len(tracks)} done (fallback={fallback_used})")
             except Exception as e:
-                failed.append({"track_id": tid, "error": str(e)[:200]})
+                err_msg = str(e)[:1500]
+                if not dry_run:
+                    self._store_fingerprint_failure(tid, err_msg, download_size, content_type)
+                # 단계 분류
+                stage = "decode" if "fpcalc" in err_msg else ("download" if "[download]" in err_msg else "other")
+                failed.append({
+                    "track_id": tid,
+                    "title": title,
+                    "artist": artist,
+                    "audio_url": (aurl[:150] + '...') if aurl and len(aurl) > 150 else aurl,
+                    "download_size_bytes": download_size,
+                    "content_type": content_type,
+                    "http_status": http_status,
+                    "stage": stage,
+                    "prior_attempts": prior,
+                    "error": err_msg[:600],
+                })
+
+        # 실패 reason breakdown
+        breakdown: dict = {}
+        for f in failed:
+            stage = f.get("stage", "other")
+            breakdown[stage] = breakdown.get(stage, 0) + 1
+
         return {
             "ok": True,
             "dryRun": dry_run,
             "total_candidates": len(tracks),
             "fingerprinted": done,
+            "fallback_used": fallback_used,
             "failed_count": len(failed),
+            "failed_breakdown": breakdown,
             "avg_elapsed_seconds": round(elapsed_total / max(done, 1), 2),
-            "failed_samples": failed[:10],
-            "samples": samples[:20],
+            "failed_samples": failed[:20],
+            "samples": samples[:10],
         }
 
     @modal.method()
