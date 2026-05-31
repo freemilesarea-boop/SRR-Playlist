@@ -630,3 +630,48 @@ export async function excludeTrackGroup(trackId: string, groupKey: string, note?
   const { error } = await supabase.rpc('admin_exclude_track_group', { p_track_id: trackId, p_group_key: groupKey, p_note: note ?? null });
   if (error) throw error;
 }
+
+// ===== Phase X2.3 — Chromaprint Audio Fingerprint Duplicate Detection =====
+export interface DuplicateCandidate {
+  source_track_id: string;
+  candidate_track_id: string;
+  similarity: number;
+  source_title: string | null;
+  source_artist: string | null;
+  candidate_title: string | null;
+  candidate_artist: string | null;
+  source_duration: number | null;
+  candidate_duration: number | null;
+  duration_delta: number | null;
+  hash_exact: boolean;
+}
+
+export async function adminFindDuplicateTracks(
+  trackId: string,
+  threshold = 0.85,
+  maxResults = 20,
+  durationTolerance = 5.0,
+): Promise<DuplicateCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_find_duplicate_tracks', {
+    p_target_track_id: trackId,
+    p_similarity_threshold: threshold,
+    p_max_results: maxResults,
+    p_duration_tolerance: durationTolerance,
+  });
+  if (error) throw error;
+  return (data ?? []) as DuplicateCandidate[];
+}
+
+export async function adminFindAllDuplicateCandidates(
+  threshold = 0.85,
+  maxResults = 100,
+  durationTolerance = 3.0,
+): Promise<DuplicateCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_find_all_duplicate_candidates', {
+    p_similarity_threshold: threshold,
+    p_max_results: maxResults,
+    p_duration_tolerance: durationTolerance,
+  });
+  if (error) throw error;
+  return (data ?? []) as DuplicateCandidate[];
+}

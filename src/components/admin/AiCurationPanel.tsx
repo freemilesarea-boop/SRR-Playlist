@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Sparkles, RefreshCw, Play, Wand2, ListMusic, FlaskConical } from 'lucide-react';
 import {
   listAiCuration,
@@ -64,6 +64,9 @@ import {
   ignoreBusinessExclusion,
   reactivateBusinessExclusion,
   excludeTrackGroup,
+  adminFindDuplicateTracks,
+  adminFindAllDuplicateCandidates,
+  type DuplicateCandidate,
   type BusinessSkipSummary,
   type BusinessExclusionRow,
   type EmbeddingPendingRow,
@@ -103,7 +106,7 @@ import MetaApproveModal from '@/components/admin/MetaApproveModal';
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
 
-type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business';
+type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business' | 'duplicates';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -129,7 +132,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
+        {([['perf', '운영 성과'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['duplicates', '중복 음원 탐지'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -149,6 +152,7 @@ export default function AiCurationPanel() {
       {sub === 'flow' && <FlowTab />}
       {sub === 'reorder' && <ReorderTab />}
       {sub === 'business' && <BusinessReactionTab />}
+      {sub === 'duplicates' && <DuplicateDetectionTab />}
     </div>
   );
 }
@@ -1861,6 +1865,187 @@ function BusinessReactionTab() {
       {metaModal && (
         <MetaApproveModal trackId={metaModal.track_id} title={metaModal.title} canApprove={false}
           onClose={() => setMetaModal(null)} onDone={() => { setMetaModal(null); void load(); }} />
+      )}
+    </div>
+  );
+}
+
+// ===== Phase X2.3 — Chromaprint Duplicate Detection Tab =====
+// 정책: 자동 삭제/차단 금지. 관리자 경고만 제공.
+function DuplicateDetectionTab() {
+  const [threshold, setThreshold] = useState(0.85);
+  const [durationTolerance, setDurationTolerance] = useState(3.0);
+  const [maxResults, setMaxResults] = useState(100);
+  const [rows, setRows] = useState<DuplicateCandidate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [singleTrackId, setSingleTrackId] = useState('');
+  const [openCompareKey, setOpenCompareKey] = useState<string | null>(null);
+
+  const fmtDuration = (s: number | null): string => {
+    if (s == null) return '—';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+  const fmtSimilarity = (v: number): string => `${(v * 100).toFixed(1)}%`;
+
+  const runAll = useCallback(async () => {
+    setLoading(true);
+    setRows([]);
+    setOpenCompareKey(null);
+    try {
+      const data = await adminFindAllDuplicateCandidates(threshold, maxResults, durationTolerance);
+      setRows(data);
+      if (data.length === 0) toast.success('유사도 임계점 위 후보가 없어요.');
+      else toast.success(`후보 ${data.length}건 검출.`);
+    } catch (e) {
+      toast.error(`전수 탐지 실패: ${(e as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [threshold, maxResults, durationTolerance]);
+
+  const runSingle = useCallback(async () => {
+    if (!singleTrackId.trim()) {
+      toast.error('track_id 를 입력해 주세요.');
+      return;
+    }
+    setLoading(true);
+    setRows([]);
+    setOpenCompareKey(null);
+    try {
+      const data = await adminFindDuplicateTracks(singleTrackId.trim(), threshold, 20, 5.0);
+      setRows(data);
+      if (data.length === 0) toast.success('해당 트랙과 유사한 후보가 없어요.');
+      else toast.success(`유사 후보 ${data.length}건.`);
+    } catch (e) {
+      toast.error(`단일 탐지 실패: ${(e as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [singleTrackId, threshold]);
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl bg-bg-card p-3">
+        <h3 className="mb-2 text-sm font-bold">중복 음원 탐지 (Chromaprint)</h3>
+        <p className="text-[11px] text-ink-dim">
+          오디오 지문(Chromaprint) 기반 유사도 검사. 자동 삭제/차단은 하지 않으며, 관리자 경고용 목록만 제공합니다.
+          재인코딩(mp3↔wav)·길이 약간 다른 버전도 동일 음원으로 탐지됩니다.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex items-center gap-1.5">
+            <span className="text-ink-mute">유사도 임계점</span>
+            <input type="number" step="0.05" min="0.5" max="1" value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value) || 0.85)}
+              className="w-16 rounded bg-bg-deep px-1.5 py-0.5 text-xs" />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span className="text-ink-mute">길이 허용(초)</span>
+            <input type="number" step="0.5" min="0" max="30" value={durationTolerance}
+              onChange={(e) => setDurationTolerance(parseFloat(e.target.value) || 3)}
+              className="w-16 rounded bg-bg-deep px-1.5 py-0.5 text-xs" />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span className="text-ink-mute">최대 결과</span>
+            <input type="number" step="10" min="1" max="500" value={maxResults}
+              onChange={(e) => setMaxResults(parseInt(e.target.value, 10) || 100)}
+              className="w-16 rounded bg-bg-deep px-1.5 py-0.5 text-xs" />
+          </label>
+          <button onClick={() => void runAll()} disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> 전수 탐지 실행
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <input type="text" placeholder="단일 탐지용 track_id (UUID)" value={singleTrackId}
+            onChange={(e) => setSingleTrackId(e.target.value)}
+            className="w-72 rounded bg-bg-deep px-2 py-1 text-xs" />
+          <button onClick={() => void runSingle()} disabled={loading || !singleTrackId.trim()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-bg-deep px-3 py-1.5 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">
+            <Play size={13} /> 단일 트랙 탐지
+          </button>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-xs text-ink-dim">
+          {loading ? '탐지 중…' : '탐지 결과가 없어요. 임계점/허용폭을 조정해 보세요.'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl bg-bg-card">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim">
+                <th className="px-2 py-2 font-semibold">유사도</th>
+                <th className="px-2 py-2 font-semibold">기준 곡</th>
+                <th className="px-2 py-2 font-semibold">후보 곡</th>
+                <th className="px-2 py-2 font-semibold">길이 차이</th>
+                <th className="px-2 py-2 font-semibold">해시 일치</th>
+                <th className="px-2 py-2 font-semibold">비교</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const key = `${r.source_track_id}::${r.candidate_track_id}`;
+                const sevColor = r.similarity >= 0.95 ? 'text-rose-500' : r.similarity >= 0.90 ? 'text-amber-500' : 'text-emerald-500';
+                return (
+                  <Fragment key={key}>
+                    <tr className="border-b border-line/10">
+                      <td className={`px-2 py-2 font-bold ${sevColor}`}>{fmtSimilarity(r.similarity)}</td>
+                      <td className="px-2 py-2">
+                        <div className="font-semibold">{r.source_title ?? '(제목없음)'}</div>
+                        <div className="text-ink-dim">{r.source_artist ?? ''} · {fmtDuration(r.source_duration)}</div>
+                        <div className="text-[10px] text-ink-dim/70">{r.source_track_id.slice(0, 8)}…</div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="font-semibold">{r.candidate_title ?? '(제목없음)'}</div>
+                        <div className="text-ink-dim">{r.candidate_artist ?? ''} · {fmtDuration(r.candidate_duration)}</div>
+                        <div className="text-[10px] text-ink-dim/70">{r.candidate_track_id.slice(0, 8)}…</div>
+                      </td>
+                      <td className="px-2 py-2 text-ink-mute">{r.duration_delta != null ? `${r.duration_delta.toFixed(2)}s` : '—'}</td>
+                      <td className="px-2 py-2">
+                        {r.hash_exact ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-bold text-rose-600">EXACT</span> : <span className="text-ink-dim">approx</span>}
+                      </td>
+                      <td className="px-2 py-2">
+                        <button onClick={() => setOpenCompareKey(openCompareKey === key ? null : key)}
+                          className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent">
+                          {openCompareKey === key ? '닫기' : '비교 보기'}
+                        </button>
+                      </td>
+                    </tr>
+                    {openCompareKey === key && (
+                      <tr className="border-b border-line/10 bg-bg-deep/40">
+                        <td colSpan={6} className="px-3 py-3">
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div>
+                              <div className="mb-1 text-[11px] uppercase text-ink-dim">기준</div>
+                              <div className="font-semibold">{r.source_title ?? '(제목없음)'}</div>
+                              <div className="text-xs text-ink-mute">{r.source_artist ?? ''}</div>
+                              <div className="mt-1 text-[11px] text-ink-dim">길이: {fmtDuration(r.source_duration)} ({r.source_duration?.toFixed(2)}s)</div>
+                              <div className="text-[11px] text-ink-dim">track_id: <code>{r.source_track_id}</code></div>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-[11px] uppercase text-ink-dim">후보</div>
+                              <div className="font-semibold">{r.candidate_title ?? '(제목없음)'}</div>
+                              <div className="text-xs text-ink-mute">{r.candidate_artist ?? ''}</div>
+                              <div className="mt-1 text-[11px] text-ink-dim">길이: {fmtDuration(r.candidate_duration)} ({r.candidate_duration?.toFixed(2)}s)</div>
+                              <div className="text-[11px] text-ink-dim">track_id: <code>{r.candidate_track_id}</code></div>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[11px] text-ink-dim">
+                            관리자 경고 모드 — 자동 삭제/차단 없음. 필요 시 운영자가 수동 판단 후 처리해 주세요.
+                            (유사도 ≥95% = 사실상 동일, 90~95% = 재인코딩 가능성, 85~90% = 부분 유사)
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
