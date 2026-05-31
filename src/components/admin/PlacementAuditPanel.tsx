@@ -349,6 +349,23 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
               <p>· genre_ai_match: {data.ai_boost_breakdown.genre_ai_match ? '✓' : '✕'}</p>
               <p>· mood_ai overlap: {data.ai_boost_breakdown.mood_ai_overlap_count} 매치 (× 3, max 9)</p>
               <p>· store_ai overlap: {data.ai_boost_breakdown.store_ai_overlap_count} 매치 (× 10, max 20)</p>
+              {/* 🆕 X1.3.3 alias normalize 정보 */}
+              {data.ai_boost_breakdown.normalized_store_key && (
+                <p className="text-violet-300">
+                  · normalized_store_key:{' '}
+                  <span className="font-mono">{data.ai_boost_breakdown.normalized_store_key}</span>
+                  {data.ai_boost_breakdown.alias_match_source && (
+                    <span className="ml-1 text-[9px]">
+                      (alias source: {data.ai_boost_breakdown.alias_match_source})
+                    </span>
+                  )}
+                </p>
+              )}
+              {!data.ai_boost_breakdown.normalized_store_key && data.playlist.business_category && (
+                <p className="text-amber-400">
+                  ⚠️ business_category "{data.playlist.business_category}" alias 미매핑 — store_ai 비활성
+                </p>
+              )}
             </div>
           )}
         </div>
