@@ -156,9 +156,16 @@ export interface PlacementExplanation {
     ai_store_key: string | null;
   };
   scores: {
-    genre: number; mood: number; business: number; daypart: number;
-    bpm: number; energy: number; vocal: number; quality: number;
-    freshness: number; exclude_penalty: number;
+    genre_manual: number; genre_ai: number;
+    mood_manual: number; mood_ai: number;
+    store_manual: number; store_ai: number;
+    daypart: number; bpm: number; energy: number; vocal: number;
+    quality: number; freshness: number; exclude_penalty: number;
+  };
+  ai_boost_breakdown?: {
+    genre_ai_match: boolean;
+    mood_ai_overlap_count: number;
+    store_ai_overlap_count: number;
   };
   block_reasons: string[] | null;
   allow_exceptions: string[] | null;
@@ -194,6 +201,29 @@ export async function simulateAutoPlacement(trackId: string): Promise<Simulation
   const { data, error } = await supabase.rpc('admin_simulate_auto_placement', { p_track_id: trackId });
   if (error) throw error;
   return (data ?? []) as SimulationRow[];
+}
+
+// ===== Store Fit Gate v2 simulate (X2.1) =====
+export interface StoreFitV2Row {
+  playlist_id: string;
+  playlist_title: string;
+  business_category: string | null;
+  total_score: number;
+  genre_manual: number; genre_ai: number;
+  mood_manual: number; mood_ai: number;
+  store_manual: number; store_ai: number;
+  daypart: number; bpm: number; energy: number; vocal: number;
+  quality: number; freshness: number;
+  would_place: boolean;
+  decision: PlacementDecision;
+  genre_match: boolean; mood_match: boolean; business_match: boolean;
+  ai_store_match: boolean; allow_match: boolean; block_match: boolean;
+}
+
+export async function simulateStoreFitV2(trackId: string, top = 10): Promise<StoreFitV2Row[]> {
+  const { data, error } = await supabase.rpc('admin_simulate_storefit_v2', { p_track_id: trackId, p_top: top });
+  if (error) throw error;
+  return (data ?? []) as StoreFitV2Row[];
 }
 
 export async function explainPlacement(trackId: string, playlistId: string): Promise<PlacementExplanation> {

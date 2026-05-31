@@ -272,18 +272,24 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'su
 }
 
 function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: () => void }) {
-  const items: Array<{ label: string; value: number }> = [
-    { label: 'genre', value: data.scores.genre },
-    { label: 'mood', value: data.scores.mood },
-    { label: 'business', value: data.scores.business },
-    { label: 'daypart', value: data.scores.daypart },
-    { label: 'bpm', value: data.scores.bpm },
-    { label: 'energy', value: data.scores.energy },
-    { label: 'vocal', value: data.scores.vocal },
-    { label: 'quality', value: data.scores.quality },
-    { label: 'freshness', value: data.scores.freshness },
-    { label: 'exclude_penalty', value: data.scores.exclude_penalty },
+  const items: Array<{ label: string; value: number; group?: 'manual' | 'ai' | 'audio' }> = [
+    { label: 'genre_manual', value: data.scores.genre_manual, group: 'manual' },
+    { label: 'genre_ai', value: data.scores.genre_ai, group: 'ai' },
+    { label: 'mood_manual', value: data.scores.mood_manual, group: 'manual' },
+    { label: 'mood_ai', value: data.scores.mood_ai, group: 'ai' },
+    { label: 'store_manual', value: data.scores.store_manual, group: 'manual' },
+    { label: 'store_ai', value: data.scores.store_ai, group: 'ai' },
+    { label: 'daypart', value: data.scores.daypart, group: 'audio' },
+    { label: 'bpm', value: data.scores.bpm, group: 'audio' },
+    { label: 'energy', value: data.scores.energy, group: 'audio' },
+    { label: 'vocal', value: data.scores.vocal, group: 'audio' },
+    { label: 'quality', value: data.scores.quality, group: 'audio' },
+    { label: 'freshness', value: data.scores.freshness, group: 'audio' },
   ];
+  const manual_total = data.scores.genre_manual + data.scores.mood_manual + data.scores.store_manual;
+  const ai_total = data.scores.genre_ai + data.scores.mood_ai + data.scores.store_ai;
+  const audio_total = data.scores.daypart + data.scores.bpm + data.scores.energy
+                    + data.scores.vocal + data.scores.quality + data.scores.freshness;
   function toneOf(v: number): string {
     if (v > 0) return 'text-emerald-400';
     if (v < 0) return 'text-rose-400';
@@ -319,15 +325,32 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
           <button onClick={onClose} className="text-ink-mute hover:text-ink">✕</button>
         </header>
 
-        <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-bg-soft p-3">
-          {items.map((i) => (
-            <div key={i.label} className="flex items-center justify-between text-[11px]">
-              <span className="font-mono text-ink-mute">{i.label}</span>
-              <span className={`font-mono font-bold ${toneOf(i.value)}`}>
-                {i.value > 0 ? '+' : ''}{i.value}
-              </span>
+        <div className="space-y-2 rounded-xl bg-bg-soft p-3">
+          <div className="flex items-center justify-between text-[10px] font-mono text-ink-dim">
+            <span>점수 분해 — manual / ai / audio</span>
+            <span>총합 = manual({manual_total}) + ai({ai_total}) + audio({audio_total})</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {items.map((i) => (
+              <div key={i.label} className="flex items-center justify-between text-[11px]">
+                <span className="font-mono text-ink-mute">
+                  {i.group === 'ai' && <span className="mr-1 text-violet-400">🆕</span>}
+                  {i.label}
+                </span>
+                <span className={`font-mono font-bold ${toneOf(i.value)}`}>
+                  {i.value > 0 ? '+' : ''}{i.value}
+                </span>
+              </div>
+            ))}
+          </div>
+          {data.ai_boost_breakdown && (
+            <div className="border-t border-line/10 pt-2 text-[10px] text-ink-dim space-y-0.5">
+              <p className="font-mono">AI Boost (X2.1): max +34 (genre 5 + mood 9 + store 20)</p>
+              <p>· genre_ai_match: {data.ai_boost_breakdown.genre_ai_match ? '✓' : '✕'}</p>
+              <p>· mood_ai overlap: {data.ai_boost_breakdown.mood_ai_overlap_count} 매치 (× 3, max 9)</p>
+              <p>· store_ai overlap: {data.ai_boost_breakdown.store_ai_overlap_count} 매치 (× 10, max 20)</p>
             </div>
-          ))}
+          )}
         </div>
 
         <div className={`mt-3 rounded-xl p-3 text-center ${data.would_place ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
