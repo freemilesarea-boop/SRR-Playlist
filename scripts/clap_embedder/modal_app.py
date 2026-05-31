@@ -261,7 +261,7 @@ class ClapEmbedder:
         """list_taxonomy_genres RPC → 활성 장르 + name_en + name_ko 수집."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_taxonomy_genres",
@@ -355,7 +355,7 @@ class ClapEmbedder:
         """store_track_genre_prediction RPC 호출."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/store_track_genre_prediction",
@@ -376,7 +376,7 @@ class ClapEmbedder:
     def _list_pending_genre(self, limit: int) -> list:
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_genre_classification",
@@ -496,7 +496,7 @@ class ClapEmbedder:
         """list_taxonomy_moods RPC → 활성 mood 목록 (slug + name_en + name_ko)."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_taxonomy_moods",
@@ -593,7 +593,7 @@ class ClapEmbedder:
         """store_track_mood_prediction RPC 호출 (predicted_main_genre 보존)."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/store_track_mood_prediction",
@@ -613,7 +613,7 @@ class ClapEmbedder:
     def _list_pending_mood(self, limit: int) -> list:
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_mood_classification",
@@ -704,7 +704,7 @@ class ClapEmbedder:
         """list_taxonomy_store_types RPC → 활성 store_type 목록."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_taxonomy_store_types",
@@ -787,7 +787,7 @@ class ClapEmbedder:
         """store_track_storetype_prediction RPC 호출 (genre/mood 보존)."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/store_track_storetype_prediction",
@@ -807,7 +807,7 @@ class ClapEmbedder:
     def _list_pending_storetype(self, limit: int) -> list:
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_storetype_classification",
@@ -823,7 +823,7 @@ class ClapEmbedder:
         import httpx
 
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -1067,7 +1067,7 @@ class ClapEmbedder:
         import json
 
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -1104,7 +1104,7 @@ class ClapEmbedder:
         """list_tracks_needing_qc RPC."""
         import httpx
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{url}/rest/v1/rpc/list_tracks_needing_qc",
@@ -1135,7 +1135,7 @@ class ClapEmbedder:
         import httpx
 
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -1159,7 +1159,7 @@ class ClapEmbedder:
         import httpx
 
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -1197,7 +1197,7 @@ class ClapEmbedder:
         import httpx
 
         url = _supabase_url()
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        key = _supabase_key()
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
@@ -1323,7 +1323,7 @@ class ClapEmbedder:
             # 단일 모드 — audio_url 자동 조회 fallback
             if not audio_url:
                 import httpx
-                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                url = _supabase_url(); key = _supabase_key()
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(
                         f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
@@ -1412,7 +1412,7 @@ class ClapEmbedder:
         if track_id:
             if not audio_url:
                 import httpx
-                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                url = _supabase_url(); key = _supabase_key()
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(
                         f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
@@ -1478,7 +1478,7 @@ class ClapEmbedder:
         if track_id:
             if not audio_url:
                 import httpx
-                url = _supabase_url(); key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+                url = _supabase_url(); key = _supabase_key()
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(
                         f"{url}/rest/v1/tracks?id=eq.{track_id}&select=audio_url",
@@ -1576,11 +1576,15 @@ def _check_auth(item: dict):
     """공통 시크릿 검증 — QC_WORKER_SECRET env 가 있으면 body._auth 매칭 필수.
     env 미설정 시 우회 (dev). 인증 실패 시 401 JSONResponse 반환, 통과 시 None.
     """
-    expected = os.environ.get("QC_WORKER_SECRET")
+    # strip() — 일부 Modal Secret 입력 시 trailing newline 포함되는 사례 (httpx Illegal header value).
+    expected = os.environ.get("QC_WORKER_SECRET", "").strip()
     if not expected:
         print("[QC_AUTH] QC_WORKER_SECRET not set — bypassing auth (dev mode)")
         return None
-    if item.get("_auth") != expected:
+    client_auth = item.get("_auth") or ""
+    if isinstance(client_auth, str):
+        client_auth = client_auth.strip()
+    if client_auth != expected:
         from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=401,
