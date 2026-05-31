@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save, Eye, RotateCcw, Wrench, Filter } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save, Eye, RotateCcw, Wrench, Filter, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminGenerateQcQueueCandidates,
   adminGenerateFingerprintQcCandidates,
@@ -29,6 +29,7 @@ import {
 import { toast } from '@/store/toastStore';
 import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
 import BulkActionsModal from '@/components/admin/BulkActionsModal';
+import QcQueueRowDetail from '@/components/admin/QcQueueRowDetail';
 
 const SEVERITY_LABEL: Record<QcSeverity, string> = {
   CRITICAL: '심각',
@@ -90,6 +91,16 @@ function QcQueueInner() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [fpDetail, setFpDetail] = useState<{ queueId: string; data: FingerprintFailureDetail | null } | null>(null);
   const [auditFor, setAuditFor] = useState<QcQueueRowFull | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -404,14 +415,20 @@ function QcQueueInner() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-line/10">
+                <Fragment key={r.id}>
+                <tr className="border-b border-line/10">
                   <td className="px-2 py-1.5">
                     <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} />
                   </td>
                   <td className="px-2 py-1.5">
-                    <div className="font-semibold">{r.title ?? '(제목없음)'}</div>
-                    <div className="text-ink-dim">{r.artist ?? ''}</div>
-                    <div className="text-[10px] text-ink-dim/70">{r.main_genre ?? '—'} · {r.track_id.slice(0, 8)}…</div>
+                    <button onClick={() => toggleExpand(r.id)}
+                      className="-ml-1 mr-1 inline-flex items-center justify-center rounded text-ink-dim hover:bg-bg-deep hover:text-ink"
+                      title={expanded.has(r.id) ? '접기' : '펼치기 (미리듣기 + 즉시 조치)'}>
+                      {expanded.has(r.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <span className="font-semibold">{r.title ?? '(제목없음)'}</span>
+                    <div className="ml-5 text-ink-dim">{r.artist ?? ''}</div>
+                    <div className="ml-5 text-[10px] text-ink-dim/70">{r.main_genre ?? '—'} · {r.track_id.slice(0, 8)}…</div>
                   </td>
                   <td className="px-2 py-1.5">
                     <span className="rounded bg-bg-deep px-1.5 py-0.5 text-[10px] font-bold">
@@ -481,6 +498,21 @@ function QcQueueInner() {
                     </div>
                   </td>
                 </tr>
+                {expanded.has(r.id) && (
+                  <tr className="border-b border-line/10 bg-bg-deep/30">
+                    <td colSpan={7} className="p-2">
+                      <QcQueueRowDetail
+                        queueId={r.id}
+                        trackId={r.track_id}
+                        onChanged={() => { void load(); }}
+                        onResolved={() => {
+                          setExpanded((prev) => { const next = new Set(prev); next.delete(r.id); return next; });
+                        }}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

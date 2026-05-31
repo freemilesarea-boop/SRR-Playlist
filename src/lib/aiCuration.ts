@@ -1184,6 +1184,93 @@ export async function adminGetQcQueueAudit(
   return (data ?? []) as QcQueueAuditRow[];
 }
 
+// Phase 0265: QC 큐 inline 운영 조치
+export interface QcTrackContextPlaylist {
+  pt_id: string;
+  order_index: number;
+  placement_reason: string | null;
+  placed_by: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+  playlist_id: string;
+  playlist_name: string | null;
+  business_category: string | null;
+  normalized_slug: string | null;
+  fit_score: number | null;
+  fit_status: 'active' | 'review_needed' | 'excluded' | null;
+  fit_source: string | null;
+  reason: string | null;
+  reason_codes: string[] | null;
+  audio_score: number | null;
+  metadata_score: number | null;
+  behavior_score: number | null;
+  penalty_score: number | null;
+}
+
+export interface QcTrackContext {
+  queue: Record<string, unknown>;
+  track: {
+    id: string; title: string | null; artist: string | null; cover_url: string | null;
+    audio_url: string | null; duration: number | null;
+    main_genre: string | null; sub_genre: string | null;
+    mood: string | null; mood_tags: string[] | null; genre_tags: string[] | null;
+    suitable_store: string | null; business_tags: string[] | null;
+    bpm: number | null; energy_level: number | null;
+    instrumental: boolean | null; explicit_content: boolean | null;
+    language: string | null; vocal_type: string | null; admin_note: string | null;
+    audio_health_status: string | null;
+  };
+  audio_features: {
+    energy: number | null; instrumentalness: number | null;
+    acousticness: number | null; speechiness: number | null;
+    danceability: number | null; valence: number | null;
+    analyzer: string | null;
+  } | null;
+  playlists: QcTrackContextPlaylist[];
+}
+
+export async function adminGetQcTrackContext(queueId: string): Promise<QcTrackContext> {
+  const { data, error } = await supabase.rpc('admin_get_qc_track_context', {
+    p_queue_id: queueId,
+  });
+  if (error) throw error;
+  return data as QcTrackContext;
+}
+
+export type QcInlineAction = 'remove' | 'change_status' | 'update_metadata' | 'recompute';
+
+export interface QcActAndResolveResult {
+  ok: true;
+  action: QcInlineAction;
+  queue_id: string;
+  action_result: unknown;
+  resolved: boolean;
+}
+
+export async function adminQcActAndResolve(input: {
+  queueId: string;
+  action: QcInlineAction;
+  playlistId?: string | null;
+  payload?: Record<string, unknown> | null;
+  status?: 'active' | 'review_needed' | 'excluded' | null;
+  reason?: string | null;
+  adminNote?: string | null;
+  resolveAfter?: boolean;
+}): Promise<QcActAndResolveResult> {
+  const { data, error } = await supabase.rpc('admin_qc_act_and_resolve', {
+    p_queue_id: input.queueId,
+    p_action: input.action,
+    p_playlist_id: input.playlistId ?? null,
+    p_payload: input.payload ?? null,
+    p_status: input.status ?? null,
+    p_reason: input.reason ?? null,
+    p_admin_note: input.adminNote ?? null,
+    p_resolve_after: input.resolveAfter ?? false,
+  });
+  if (error) throw error;
+  return data as QcActAndResolveResult;
+}
+
 export async function adminListQcQueue(
   status: QcStatus = 'open',
   severity?: QcSeverity,
