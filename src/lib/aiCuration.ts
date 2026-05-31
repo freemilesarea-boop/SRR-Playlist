@@ -1309,3 +1309,79 @@ export async function adminListBehaviorComparison(limit = 50): Promise<BehaviorC
   if (error) throw error;
   return (data ?? []) as BehaviorComparisonRow[];
 }
+
+// ===== Phase X4.2 (0252) — Store Learning Engine =====
+export interface TrackStoreScoreRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  store_type_slug: string;
+  store_name_ko: string | null;
+  play_count: number;
+  unique_listener_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  replay_rate: number;
+  like_rate: number;
+  store_behavior_score: number;
+  confidence: number;
+  is_promotion_candidate: boolean;
+  is_demotion_candidate: boolean;
+}
+
+export interface StoreMismatchCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  store_type_slug: string;
+  store_name_ko: string | null;
+  play_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  store_behavior_score: number;
+  confidence: number;
+  risk_signals: string[];
+}
+
+export interface StoreLearningSummary {
+  total_rows: number;
+  distinct_tracks: number;
+  by_store: Record<string, {
+    rows: number; distinct_tracks: number; avg_score: number; avg_confidence: number;
+    high_confidence_rows: number; promotion_candidates: number; demotion_candidates: number;
+  }> | null;
+}
+
+export async function adminRecomputeTrackStoreBehaviorScores(windowDays = 30): Promise<{ ok: true; rows_upserted: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('recompute_track_store_behavior_scores', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; rows_upserted: number; elapsed_ms: number };
+}
+
+export async function adminListTrackStoreScores(
+  storeSlug?: string, windowDays = 30, limit = 200,
+): Promise<TrackStoreScoreRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_store_scores', {
+    p_store_slug: storeSlug ?? null, p_window_days: windowDays, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackStoreScoreRow[];
+}
+
+export async function adminListStoreMismatchCandidates(
+  windowDays = 30, minPlayCount = 10, limit = 200,
+): Promise<StoreMismatchCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_store_mismatch_candidates', {
+    p_window_days: windowDays, p_min_play_count: minPlayCount, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as StoreMismatchCandidate[];
+}
+
+export async function adminStoreLearningSummary(windowDays = 30): Promise<StoreLearningSummary | null> {
+  const { data, error } = await supabase.rpc('admin_store_learning_summary', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as StoreLearningSummary;
+}
