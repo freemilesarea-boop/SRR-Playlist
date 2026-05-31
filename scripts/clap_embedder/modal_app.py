@@ -56,10 +56,29 @@ def _supabase_url() -> str:
     """
     url = os.environ.get("SUPABASE_URL", "").strip().rstrip('/')
     if not url:
-        raise RuntimeError("SUPABASE_URL env var not set in Modal Secret")
+        # 진단 메시지 — Secret attachment 끊김 여부 확인용 (현재 env 보고)
+        env_keys_sample = sorted([k for k in os.environ.keys()
+                                  if 'SUPABASE' in k or 'QC' in k or 'KEY' in k])
+        raise RuntimeError(
+            f"SUPABASE_URL env var not set in Modal Secret. "
+            f"Available secret-like env keys: {env_keys_sample or '(none)'}. "
+            f"Check: modal secret inspect deudda-supabase + modal app deploy 재실행."
+        )
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "https://" + url
     return url
+
+
+def _supabase_key() -> str:
+    """SUPABASE_SERVICE_ROLE_KEY 명시 체크 — KeyError 대신 진단 메시지."""
+    k = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not k:
+        env_keys_sample = sorted([k for k in os.environ.keys() if 'SUPABASE' in k or 'KEY' in k])
+        raise RuntimeError(
+            f"SUPABASE_SERVICE_ROLE_KEY env var not set in Modal Secret. "
+            f"Available secret-like env keys: {env_keys_sample or '(none)'}."
+        )
+    return k
 
 
 # ----- Modal 앱 정의 -----
