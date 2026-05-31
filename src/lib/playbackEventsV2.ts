@@ -39,6 +39,7 @@ export interface PlaybackEventV2Input {
   playlistId?: string;
   businessId?: string;
   anonymousId?: string;
+  evidence?: Record<string, unknown>;  // X4.3.1: player_error 등 추가 컨텍스트
 }
 
 function detectDeviceType(): string {
@@ -86,6 +87,7 @@ export async function logPlaybackEventV2(input: PlaybackEventV2Input): Promise<v
       p_browser: detectBrowser(),
       p_os: detectOs(),
       p_anonymous_id: input.anonymousId ?? null,
+      p_evidence_json: input.evidence ?? null,
     });
   } catch (e) {
     if (import.meta.env.DEV) console.warn('[pev2] log failed', e);
@@ -135,4 +137,22 @@ export async function adminListEventQualityIssues(
   });
   if (error) throw error;
   return (data ?? []) as EventQualityIssue[];
+}
+
+export interface PlayerErrorRow {
+  id: number;
+  track_id: string | null;
+  session_id: string | null;
+  user_or_anon: string;
+  evidence_json: Record<string, unknown> | null;
+  created_at: string;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+}
+
+export async function adminRecentPlayerErrors(days = 7, limit = 50): Promise<PlayerErrorRow[]> {
+  const { data, error } = await supabase.rpc('admin_recent_player_errors', { p_days: days, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PlayerErrorRow[];
 }

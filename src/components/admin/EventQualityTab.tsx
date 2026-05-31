@@ -3,8 +3,10 @@ import { RefreshCw, AlertTriangle, Activity } from 'lucide-react';
 import {
   adminPlaybackEventSummary,
   adminListEventQualityIssues,
+  adminRecentPlayerErrors,
   type PlaybackEventSummary,
   type EventQualityIssue,
+  type PlayerErrorRow,
 } from '@/lib/playbackEventsV2';
 import { toast } from '@/store/toastStore';
 
@@ -35,17 +37,20 @@ export default function EventQualityTab() {
   const [days, setDays] = useState(1);
   const [summary, setSummary] = useState<PlaybackEventSummary | null>(null);
   const [issues, setIssues] = useState<EventQualityIssue[]>([]);
+  const [errors, setErrors] = useState<PlayerErrorRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, q] = await Promise.all([
+      const [s, q, e] = await Promise.all([
         adminPlaybackEventSummary(days),
         adminListEventQualityIssues(Math.max(days, 7), 200),
+        adminRecentPlayerErrors(Math.max(days, 7), 50),
       ]);
       setSummary(s);
       setIssues(q);
+      setErrors(e);
     } catch (e) {
       toast.error(`로딩 실패: ${(e as Error).message}`);
     } finally {
@@ -94,6 +99,14 @@ export default function EventQualityTab() {
             <Stat label="고유 사용자" v={summary.distinct_users} />
             <Stat label="고유 트랙" v={summary.distinct_tracks} />
             <Stat label="고유 세션" v={summary.distinct_sessions} />
+          </div>
+
+          {/* X4.3.1 — 신규 이벤트 타입 강조 카드 */}
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Stat label="like" v={summary.by_event_type?.like ?? 0} />
+            <Stat label="unlike" v={summary.by_event_type?.unlike ?? 0} />
+            <Stat label="replay" v={summary.by_event_type?.replay ?? 0} />
+            <Stat label="player_error" v={summary.by_event_type?.player_error ?? 0} />
           </div>
 
           <div className="rounded-xl bg-bg-card p-3">
@@ -229,6 +242,62 @@ export default function EventQualityTab() {
               </table>
             </div>
           </>
+        )}
+      </div>
+
+      {/* X4.3.1 — player_error 상세 리스트 */}
+      <div className="rounded-xl bg-bg-card p-3">
+        <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
+          <AlertTriangle size={12} className="text-rose-500" />
+          player_error 최근 목록 ({errors.length})
+        </h4>
+        {errors.length === 0 ? (
+          <p className="text-xs text-ink-dim">player_error 이벤트 없음.</p>
+        ) : (
+          <div className="max-h-96 overflow-y-auto rounded bg-bg-deep">
+            <table className="w-full text-left text-[11px]">
+              <thead className="sticky top-0 bg-bg-card">
+                <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                  <th className="px-2 py-1.5">시각</th>
+                  <th className="px-2 py-1.5">track / session</th>
+                  <th className="px-2 py-1.5">user/anon</th>
+                  <th className="px-2 py-1.5">device / browser</th>
+                  <th className="px-2 py-1.5">code</th>
+                  <th className="px-2 py-1.5">evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errors.map((e) => (
+                  <tr key={e.id} className="border-b border-line/10">
+                    <td className="px-2 py-1 text-[10px] text-ink-dim">{new Date(e.created_at).toLocaleString()}</td>
+                    <td className="px-2 py-1">
+                      <div className="text-[10px]">{e.track_id?.slice(0, 8) ?? '—'}…</div>
+                      <div className="text-[10px] text-ink-dim">{e.session_id?.slice(0, 10) ?? '—'}…</div>
+                    </td>
+                    <td className="px-2 py-1 text-[10px] text-ink-dim">{e.user_or_anon.slice(0, 12)}…</td>
+                    <td className="px-2 py-1 text-[10px] text-ink-mute">
+                      {e.device_type ?? '—'} · {e.browser ?? '—'} · {e.os ?? '—'}
+                    </td>
+                    <td className="px-2 py-1">
+                      <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-500">
+                        {(e.evidence_json as { code_name?: string })?.code_name ?? '?'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1">
+                      <details>
+                        <summary className="cursor-pointer text-[10px] text-ink-mute">
+                          {(e.evidence_json as { message?: string })?.message?.slice(0, 30) ?? 'detail'}…
+                        </summary>
+                        <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-[10px] text-ink-dim">
+                          {JSON.stringify(e.evidence_json, null, 2)}
+                        </pre>
+                      </details>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

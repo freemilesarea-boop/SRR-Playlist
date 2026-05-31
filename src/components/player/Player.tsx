@@ -316,6 +316,8 @@ export default function Player() {
   const pev2SessionRef = useRef<string>(`${getAnonymousId()}-${Date.now()}`);
   // X4.3 — milestone tracking refs (트랙 변경 시 reset)
   const pev2MilestonesRef = useRef<{ track: string | null; sent: Set<string> }>({ track: null, sent: new Set() });
+  // X4.3.1 — replay 감지: 같은 session 에서 이미 play_start 시작한 track 기록
+  const pev2StartedTracksRef = useRef<Map<string, number>>(new Map());
   const recentSentRef = useRef<string | null>(null);
   // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
   // 마운트 해제 후 stale next() 발화를 막는다.
@@ -398,6 +400,9 @@ export default function Player() {
     }
     // X4.3 — playback_events_v2 play_start (parallel layer, fit_score 영향 없음)
     pev2MilestonesRef.current = { track: current.id, sent: new Set() };
+    // X4.3.1 — 같은 session 에서 동일 track 2번째 이상이면 replay 별도 emit
+    const priorStarts = pev2StartedTracksRef.current.get(current.id) ?? 0;
+    pev2StartedTracksRef.current.set(current.id, priorStarts + 1);
     void logPlaybackEventV2({
       trackId: current.id, eventType: 'play_start',
       sessionId: pev2SessionRef.current,
@@ -406,6 +411,18 @@ export default function Player() {
       volume, muted: volume === 0,
       anonymousId: getAnonymousId(),
     });
+    if (priorStarts > 0) {
+      // 같은 session 내 2번째 이상 재생 → replay 이벤트 (milestone 아니라 중복 제한 없음)
+      void logPlaybackEventV2({
+        trackId: current.id, eventType: 'replay',
+        sessionId: pev2SessionRef.current,
+        trackDurationSeconds: current.duration ?? undefined,
+        playlistId: playlist?.id ?? undefined,
+        volume, muted: volume === 0,
+        anonymousId: getAnonymousId(),
+        evidence: { replay_count: priorStarts + 1 },
+      });
+    }
   }, [current?.id, playable, playing, userId, playlist?.id, current]);
 
   // X4.3 — 25/50/75/complete milestone (percentage 기반)
@@ -1108,6 +1125,27 @@ export default function Player() {
     });
 
     usePlaybackHealthStore.getState().reportPlaybackError(codeName);
+
+    // X4.3.1 — playback_events_v2 player_error (parallel layer)
+    if (current) {
+      void logPlaybackEventV2({
+        trackId: current.id, eventType: 'player_error',
+        sessionId: pev2SessionRef.current,
+        trackDurationSeconds: current.duration ?? undefined,
+        playlistId: playlist?.id ?? undefined,
+        volume, muted: volume === 0,
+        anonymousId: getAnonymousId(),
+        evidence: {
+          code: err?.code ?? null, code_name: codeName,
+          message: err?.message ?? null,
+          network_state: target.networkState,
+          ready_state: target.readyState,
+          audio_url: current.audio_url ?? null,
+          current_time: target.currentTime,
+          online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+        },
+      });
+    }
 
     // NETWORK(코드2): 스트리밍 중간 끊김 → 곡당 1회만 자동 재시도(load + 위치 복원 + play).
     // 자동 다음곡/토스트 없이 조용히 복구 시도. 재시도 후에도 실패하면 아래 정지 로직으로.

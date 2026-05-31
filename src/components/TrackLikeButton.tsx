@@ -5,6 +5,7 @@ import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { toggleTrackLike } from '@/lib/libraryApi';
 import { recordPlayEvent } from '@/lib/aiCuration';
 import { getAnonymousId } from '@/lib/analytics';
+import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
 
@@ -52,6 +53,11 @@ export default function TrackLikeButton({
       const res = await toggleTrackLike(target, next, userId);
       // AI 큐레이션 behavior — like/unlike (정산 미영향)
       void recordPlayEvent({ trackId, eventType: next ? 'like' : 'unlike', anonId: getAnonymousId() });
+      // X4.3.1 — playback_events_v2 like/unlike (parallel layer, behavior_score 영향 없음)
+      void logPlaybackEventV2({
+        trackId, eventType: next ? 'like' : 'unlike',
+        anonymousId: getAnonymousId(),
+      });
       if (res.warning) {
         // DB 실패했지만 localStorage 에 저장됨 — 한 번만 안내
         toast.info(
