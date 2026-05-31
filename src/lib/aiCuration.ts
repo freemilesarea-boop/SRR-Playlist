@@ -753,3 +753,155 @@ export async function adminMarkFingerprintQcRisk(trackId: string): Promise<strin
   if (error) throw error;
   return data as string;
 }
+
+// ===== Phase X3 (0246) — Admin Track Placement Editor =====
+export interface TrackPlacementDetail {
+  track: {
+    id: string; title: string | null; artist: string | null;
+    main_genre: string | null; sub_genre: string | null;
+    mood: string | null; mood_tags: string[] | null;
+    suitable_store: string | null; business_tags: string[] | null;
+    genre_tags: string[] | null; time_slots: string[] | null;
+    instrumental: boolean | null;
+    release_status: string | null; release_date: string | null;
+    audio_url_present: boolean; isrc_present: boolean;
+    locked_fields: string[];
+    [key: string]: unknown;
+  };
+  ai_prediction: {
+    predicted_main_genre: string | null;
+    predicted_sub_genres: string[] | null;
+    genre_confidence: number | null;
+    predicted_moods: string[] | null;
+    mood_confidence: number | null;
+    predicted_store_types: string[] | null;
+    store_type_confidence: number | null;
+    prediction_scores: Record<string, Record<string, number>> | null;
+    applied_at: string | null;
+    predicted_main_genre_ko: string | null;
+    predicted_moods_ko: string[] | null;
+    predicted_store_types_ko: string[] | null;
+  } | null;
+  exclusions: Array<{
+    id: string; store_type_slug: string; store_type_name_ko: string | null;
+    reason: string | null; created_at: string; created_by_name: string | null;
+  }>;
+  placements: Array<{
+    playlist_id: string; playlist_title: string;
+    business_category: string | null; daypart: string | null; ai_store_key: string | null;
+    fit_score: number | null; fit_status: string | null;
+    manual_score: number | null; ai_boost_total: number | null;
+    reason_codes: string[] | null;
+    in_playlist: boolean; order_index: number | null;
+    placement_reason: string | null;
+    is_excluded_by_admin: boolean;
+  }>;
+  audit_count: number;
+}
+
+export async function adminGetTrackPlacementDetail(trackId: string): Promise<TrackPlacementDetail> {
+  const { data, error } = await supabase.rpc('admin_get_track_placement_detail', { p_track_id: trackId });
+  if (error) throw error;
+  return data as TrackPlacementDetail;
+}
+
+export async function adminUpdateTrackMetadata(
+  trackId: string, fields: { title?: string; artist?: string; main_genre?: string; mood?: string; suitable_store?: string }, reason?: string,
+): Promise<{ ok: true; before: Record<string, unknown>; after: Record<string, unknown> }> {
+  const { data, error } = await supabase.rpc('admin_update_track_metadata', {
+    p_track_id: trackId,
+    p_title: fields.title ?? null,
+    p_artist: fields.artist ?? null,
+    p_main_genre: fields.main_genre ?? null,
+    p_mood: fields.mood ?? null,
+    p_suitable_store: fields.suitable_store ?? null,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before: Record<string, unknown>; after: Record<string, unknown> };
+}
+
+export async function adminApplyAiMetadataWithAudit(
+  trackId: string, scope: { genre: boolean; mood: boolean; store: boolean }, reason?: string,
+) {
+  const { data, error } = await supabase.rpc('admin_apply_ai_metadata_with_audit', {
+    p_track_id: trackId,
+    p_apply_genre: scope.genre,
+    p_apply_mood: scope.mood,
+    p_apply_store: scope.store,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function adminAddTrackExclusion(trackId: string, storeTypeSlug: string, reason?: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_add_track_exclusion', {
+    p_track_id: trackId, p_store_type_slug: storeTypeSlug, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminRemoveTrackExclusion(exclusionId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_remove_track_exclusion', { p_exclusion_id: exclusionId });
+  if (error) throw error;
+}
+
+export interface PreviewPlacementChanges {
+  remove_count: number;
+  keep_count: number;
+  new_candidate_count: number;
+  to_remove: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; current_fit_score: number | null; order_index: number | null; matched_exclusion_slug: string | null }>;
+  to_keep: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; current_fit_score: number | null; order_index: number | null }>;
+  new_candidates: Array<{ playlist_id: string; playlist_title: string; business_category: string | null; estimated_score: number; decision: string }>;
+}
+
+export async function adminPreviewPlacementChanges(trackId: string): Promise<PreviewPlacementChanges> {
+  const { data, error } = await supabase.rpc('admin_preview_placement_changes', { p_track_id: trackId });
+  if (error) throw error;
+  return data as PreviewPlacementChanges;
+}
+
+export async function adminRemoveMisplacedPlaylistTracks(
+  trackId: string, confirm: boolean, reason?: string,
+): Promise<{ preview: boolean; count: number; targets?: unknown[]; removed?: unknown[] }> {
+  const { data, error } = await supabase.rpc('admin_remove_misplaced_playlist_tracks', {
+    p_track_id: trackId, p_confirm: confirm, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data as { preview: boolean; count: number; targets?: unknown[]; removed?: unknown[] };
+}
+
+export async function adminRecomputeTrackFitScores(trackId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_recompute_track_fit_scores', { p_track_id: trackId });
+  if (error) throw error;
+  return data as number;
+}
+
+export interface TrackAuditEntry {
+  id: string; action_type: string;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
+  reason: string | null;
+  created_at: string;
+  admin_name: string | null;
+}
+
+export async function adminListTrackMetadataAudit(trackId: string, limit = 100): Promise<TrackAuditEntry[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_metadata_audit', {
+    p_track_id: trackId, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackAuditEntry[];
+}
+
+// taxonomy store types — exclusion picker 용
+export interface StoreTypeOption {
+  slug: string; name_ko: string; name_en: string;
+}
+export async function listTaxonomyStoreTypes(): Promise<StoreTypeOption[]> {
+  const { data, error } = await supabase.rpc('list_taxonomy_store_types');
+  if (error) throw error;
+  return (data ?? []) as StoreTypeOption[];
+}

@@ -110,6 +110,7 @@ import { fetchPlaylists } from '@/lib/api';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
@@ -258,6 +259,7 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<CurationFilter>(reviewOnly ? 'review_needed' : 'analyzed');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editorTrackId, setEditorTrackId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -395,11 +397,22 @@ function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolean }) {
                     className="inline-flex items-center gap-1 rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">
                     <RefreshCw size={12} /> 재분석
                   </button>
+                  <button onClick={() => setEditorTrackId(r.track_id)}
+                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-500 hover:bg-indigo-500/25">
+                    <Sparkles size={12} /> AI 메타/배치 관리
+                  </button>
                 </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {editorTrackId && (
+        <TrackPlacementEditor
+          trackId={editorTrackId}
+          onClose={() => setEditorTrackId(null)}
+          onMutated={() => { void load(); }}
+        />
       )}
     </div>
   );
