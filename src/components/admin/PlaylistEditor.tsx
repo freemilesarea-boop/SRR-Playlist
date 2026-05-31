@@ -22,6 +22,7 @@ import { fetchPlaylist, fetchPlaylistTracks } from '@/lib/api';
 import { fetchAllCurators, setPlaylistCurator, type CuratorListItem } from '@/lib/curatorApi';
 import { usePlaylistLock } from '@/hooks/usePlaylistLock';
 import { updateCuratorPlaylistThumbnail } from '@/lib/curatorStudioApi';
+import AdminPlaylistTrackInspector from '@/components/admin/AdminPlaylistTrackInspector';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
@@ -307,6 +308,12 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
           </ul>
         </SortableContext>
       </DndContext>
+      )}
+
+      {variant === 'admin' && (
+        <div className="mt-4 border-t border-line/10 pt-4">
+          <AdminPlaylistTrackInspector playlistId={playlistId} />
+        </div>
       )}
 
       {picker && !playlist.is_auto && (
