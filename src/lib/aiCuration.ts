@@ -1244,3 +1244,68 @@ export async function adminListBehaviorOutliers(
   if (error) throw error;
   return (data ?? []) as BehaviorOutlier[];
 }
+
+// ===== Phase X4.1 (0251) — Behavior Feedback Engine =====
+export interface PromotionDemotionCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  behavior_score: number;
+  confidence: number;
+  play_count: number;
+  completion_rate: number;
+  skip_rate: number;
+  like_rate: number;
+  avg_fit_score: number;
+  avg_final_fit_score: number;
+  avg_boost: number;
+  current_placement_count: number;
+}
+
+export interface BehaviorComparisonRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  play_count: number;
+  confidence: number;
+  behavior_score: number;
+  avg_fit_score: number;
+  avg_final_fit_score: number;
+  avg_boost: number;
+  is_promotion_candidate: boolean;
+  is_demotion_candidate: boolean;
+}
+
+export async function adminRecomputeBehaviorBoosts(windowDays = 30): Promise<{ ok: true; rows_updated: number; elapsed_ms: number }> {
+  const { data, error } = await supabase.rpc('admin_recompute_behavior_boosts', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as { ok: true; rows_updated: number; elapsed_ms: number };
+}
+
+export async function adminListPromotionCandidates(
+  minBehavior = 70, minConfidence = 0.30, limit = 100,
+): Promise<PromotionDemotionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_promotion_candidates', {
+    p_min_behavior: minBehavior, p_min_confidence: minConfidence, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PromotionDemotionCandidate[];
+}
+
+export async function adminListDemotionCandidates(
+  maxBehavior = 30, minConfidence = 0.30, limit = 100,
+): Promise<PromotionDemotionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_demotion_candidates', {
+    p_max_behavior: maxBehavior, p_min_confidence: minConfidence, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PromotionDemotionCandidate[];
+}
+
+export async function adminListBehaviorComparison(limit = 50): Promise<BehaviorComparisonRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_behavior_comparison', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as BehaviorComparisonRow[];
+}
