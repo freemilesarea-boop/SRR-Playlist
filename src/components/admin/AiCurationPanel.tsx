@@ -510,13 +510,40 @@ function FitTab() {
         <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '추천 후보가 없어요. (재계산을 눌러보세요)'}</p>
       ) : (
         <ul className="divide-y divide-line/10 rounded-xl bg-bg-card">
-          {rows.map((r) => (
-            <li key={r.track_id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-              <span className="min-w-0 truncate">{r.title ?? '(제목없음)'} · <span className="text-ink-dim">{r.artist ?? ''}</span></span>
-              <span className="shrink-0 text-[10px] text-ink-dim">{r.reason}</span>
-              <span className="shrink-0 font-bold tabular-nums text-emerald-600">{r.fit_score}</span>
-            </li>
-          ))}
+          {rows.map((r) => {
+            const aiBoost = r.ai_boost_total ?? 0;
+            const manual = r.manual_score;
+            return (
+              <li key={r.track_id} className="flex flex-col gap-1 px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    {r.title ?? '(제목없음)'} · <span className="text-ink-dim">{r.artist ?? ''}</span>
+                  </span>
+                  <span className="shrink-0 text-[10px] text-ink-dim">{r.reason}</span>
+                  <span className="shrink-0 font-bold tabular-nums text-emerald-600">{r.fit_score}</span>
+                </div>
+                {/* X2.2 — manual vs AI boost breakdown */}
+                {(manual != null || aiBoost > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-1 text-[10px] text-ink-dim">
+                    {manual != null && (
+                      <span className="rounded bg-bg-soft px-1.5 py-0.5 font-mono">manual {manual}</span>
+                    )}
+                    {aiBoost > 0 && (
+                      <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-violet-300">
+                        +AI {aiBoost} (g{r.ai_genre_score ?? 0}/m{r.ai_mood_score ?? 0}/s{r.ai_store_score ?? 0})
+                      </span>
+                    )}
+                    {r.normalized_store_slug && (
+                      <span className="rounded bg-bg-soft px-1.5 py-0.5 font-mono">{r.normalized_store_slug}</span>
+                    )}
+                    {r.reason_codes && r.reason_codes.length > 0 && (
+                      <span className="font-mono">{r.reason_codes.slice(0, 3).join(' / ')}</span>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

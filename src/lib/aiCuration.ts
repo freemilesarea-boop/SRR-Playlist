@@ -132,6 +132,14 @@ export interface FitScoreRow {
   title: string | null;
   artist: string | null;
   cover_url: string | null;
+  // X2.2 — fit score AI boost breakdown (nullable for backward compat)
+  manual_score?: number | null;
+  ai_store_score?: number | null;
+  ai_mood_score?: number | null;
+  ai_genre_score?: number | null;
+  ai_boost_total?: number | null;
+  normalized_store_slug?: string | null;
+  reason_codes?: string[] | null;
 }
 
 export async function getAiRecommendedTracksForPlaylist(playlistId: string, limit = 50): Promise<FitScoreRow[]> {
