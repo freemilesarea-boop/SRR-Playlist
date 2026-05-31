@@ -719,3 +719,37 @@ export async function adminResetFingerprintFailure(trackId: string): Promise<voi
   const { error } = await supabase.rpc('admin_reset_fingerprint_failure', { p_track_id: trackId });
   if (error) throw error;
 }
+
+// ===== 0245 — Audio corruption candidate queue =====
+export interface CorruptionCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  audio_url: string | null;
+  fingerprint_error: string | null;
+  retry_count: number;
+  attempted_at: string | null;
+  download_size_bytes: number | null;
+  download_content_type: string | null;
+  track_duration: number | null;
+  qc_risk_level: string | null;
+  qc_score: number | null;
+  qc_issues_count: number;
+  has_qc_report: boolean;
+}
+
+export async function adminListCorruptionCandidates(
+  limit = 100, onlyExhausted = false,
+): Promise<CorruptionCandidate[]> {
+  const { data, error } = await supabase.rpc('admin_list_corruption_candidates', {
+    p_limit: limit, p_only_exhausted: onlyExhausted,
+  });
+  if (error) throw error;
+  return (data ?? []) as CorruptionCandidate[];
+}
+
+export async function adminMarkFingerprintQcRisk(trackId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_mark_fingerprint_qc_risk', { p_track_id: trackId });
+  if (error) throw error;
+  return data as string;
+}

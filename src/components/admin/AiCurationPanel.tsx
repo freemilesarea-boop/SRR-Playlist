@@ -69,9 +69,12 @@ import {
   adminFingerprintFailureSummary,
   adminListFingerprintFailures,
   adminResetFingerprintFailure,
+  adminListCorruptionCandidates,
+  adminMarkFingerprintQcRisk,
   type DuplicateCandidate,
   type FingerprintFailureSummary,
   type FingerprintFailureRow,
+  type CorruptionCandidate,
   type BusinessSkipSummary,
   type BusinessExclusionRow,
   type EmbeddingPendingRow,
@@ -1944,6 +1947,70 @@ function DuplicateDetectionTab() {
     }
   };
 
+  // 0245 — 손상 음원 후보 큐
+  const [corruption, setCorruption] = useState<CorruptionCandidate[]>([]);
+  const [showCorruption, setShowCorruption] = useState(false);
+  const [corrBusy, setCorrBusy] = useState(false);
+  const [probeResults, setProbeResults] = useState<Record<string, { playable: boolean; duration?: number; error?: string; ms: number }>>({});
+
+  const loadCorruption = useCallback(async () => {
+    setCorrBusy(true);
+    try {
+      const list = await adminListCorruptionCandidates(200, false);
+      setCorruption(list);
+    } catch (e) {
+      toast.error(`손상 후보 조회 실패: ${(e as Error).message}`);
+    } finally {
+      setCorrBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { if (showCorruption) void loadCorruption(); }, [showCorruption, loadCorruption]);
+
+  // HTML5 Audio 로 재생 가능 여부 probe (브라우저 디코딩)
+  const probePlayability = useCallback((trackId: string, url: string) => {
+    if (!url) return;
+    const t0 = performance.now();
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.crossOrigin = 'anonymous';
+    const cleanup = () => { audio.src = ''; audio.removeAttribute('src'); };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      setProbeResults((prev) => ({ ...prev, [trackId]: { playable: false, error: 'timeout (10s)', ms: Math.round(performance.now() - t0) } }));
+    }, 10000);
+    audio.addEventListener('loadedmetadata', () => {
+      window.clearTimeout(timer);
+      const dur = isFinite(audio.duration) ? audio.duration : undefined;
+      cleanup();
+      setProbeResults((prev) => ({ ...prev, [trackId]: { playable: true, duration: dur, ms: Math.round(performance.now() - t0) } }));
+    }, { once: true });
+    audio.addEventListener('error', () => {
+      window.clearTimeout(timer);
+      const err = audio.error;
+      const codeMap: Record<number, string> = { 1: 'ABORTED', 2: 'NETWORK', 3: 'DECODE', 4: 'SRC_NOT_SUPPORTED' };
+      const reason = err ? `${codeMap[err.code] ?? err.code}: ${err.message ?? ''}` : 'unknown';
+      cleanup();
+      setProbeResults((prev) => ({ ...prev, [trackId]: { playable: false, error: reason, ms: Math.round(performance.now() - t0) } }));
+    }, { once: true });
+    audio.src = url;
+    audio.load();
+  }, []);
+
+  const markQcRisk = async (trackId: string) => {
+    if (!confirm('이 트랙을 QC 위험 큐(HIGH)에 등록하시겠어요? (자동 차단/삭제 없음)')) return;
+    setCorrBusy(true);
+    try {
+      await adminMarkFingerprintQcRisk(trackId);
+      toast.success('QC 위험 큐에 등록 — 기존 QC 워크플로에서 검토 가능.');
+      await loadCorruption();
+    } catch (e) {
+      toast.error(`QC 마크 실패: ${(e as Error).message}`);
+    } finally {
+      setCorrBusy(false);
+    }
+  };
+
   const runAll = useCallback(async () => {
     setLoading(true);
     setRows([]);
@@ -2083,6 +2150,130 @@ function DuplicateDetectionTab() {
             )}
             <p className="text-[10px] text-ink-dim">
               실패 트랙은 자동 삭제/차단되지 않습니다. 운영자가 수동으로 음원 교체 또는 "재시도 가능으로" 버튼으로 큐에 복귀시킬 수 있습니다.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 손상 음원 후보 큐 (X2.3 0245) */}
+      <div className="rounded-xl bg-bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold">손상 음원 후보 (Corruption Queue)</h3>
+          <button onClick={() => setShowCorruption((v) => !v)}
+            className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover">
+            {showCorruption ? '큐 닫기' : '큐 열기'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-ink-dim">
+          fingerprint_status=failed 트랙 + 메타데이터 비교 (tracks.duration vs. 다운로드 size/content_type) + 기존 QC report 신호.
+          자동 삭제/차단 없음. 운영자가 재생 가능 여부 확인 후 QC 위험 큐에 마크하거나 음원 교체.
+        </p>
+        {showCorruption && (
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-ink-mute">총 {corruption.length}건</span>
+              <button onClick={() => void loadCorruption()} disabled={corrBusy}
+                className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-0.5 text-xs hover:bg-bg-hover disabled:opacity-50">
+                <RefreshCw size={11} className={corrBusy ? 'animate-spin' : ''} /> 새로고침
+              </button>
+            </div>
+            {corruption.length === 0 ? (
+              <p className="rounded bg-bg-deep px-3 py-4 text-center text-xs text-ink-dim">
+                {corrBusy ? '조회 중…' : '손상 후보 없음.'}
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded bg-bg-deep">
+                <table className="w-full text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b border-line/10 text-ink-dim">
+                      <th className="px-2 py-1.5">곡</th>
+                      <th className="px-2 py-1.5">tracks.dur</th>
+                      <th className="px-2 py-1.5">size / type</th>
+                      <th className="px-2 py-1.5">QC report</th>
+                      <th className="px-2 py-1.5">재생 확인</th>
+                      <th className="px-2 py-1.5">조치</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corruption.map((c) => {
+                      const probe = probeResults[c.track_id];
+                      const trackDur = c.track_duration != null ? Number(c.track_duration) : null;
+                      const durMismatch = probe?.duration != null && trackDur != null
+                        ? Math.abs(probe.duration - trackDur) > 2 : false;
+                      return (
+                        <tr key={c.track_id} className="border-b border-line/10">
+                          <td className="px-2 py-1.5">
+                            <div className="font-semibold">{c.title ?? '(제목없음)'}</div>
+                            <div className="text-ink-dim">{c.artist ?? ''}</div>
+                            <div className="text-[10px] text-ink-dim/70">{c.track_id.slice(0, 8)}…</div>
+                            {c.audio_url && (
+                              <a href={c.audio_url} target="_blank" rel="noopener noreferrer"
+                                className="break-all text-[10px] text-accent hover:underline">
+                                {c.audio_url.length > 60 ? `${c.audio_url.slice(0, 60)}…` : c.audio_url}
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5 text-ink-mute">{fmtDuration(trackDur)}</td>
+                          <td className="px-2 py-1.5">
+                            <div>{fmtBytes(c.download_size_bytes)}</div>
+                            <div className="text-[10px] text-ink-dim">{c.download_content_type ?? '—'}</div>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {c.has_qc_report ? (
+                              <>
+                                <div className={`font-bold ${c.qc_risk_level === 'CRITICAL' ? 'text-rose-500' : c.qc_risk_level === 'HIGH' ? 'text-amber-500' : 'text-ink-mute'}`}>{c.qc_risk_level ?? '—'}</div>
+                                <div className="text-[10px] text-ink-dim">score {c.qc_score ?? '—'} · issues {c.qc_issues_count}</div>
+                              </>
+                            ) : <span className="text-ink-dim">없음</span>}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {!probe ? (
+                              <button onClick={() => probePlayability(c.track_id, c.audio_url ?? '')}
+                                disabled={!c.audio_url}
+                                className="rounded bg-accent/15 px-2 py-0.5 font-semibold text-accent disabled:opacity-40">
+                                재생 확인
+                              </button>
+                            ) : probe.playable ? (
+                              <div>
+                                <span className="rounded bg-emerald-500/20 px-1.5 font-bold text-emerald-500">PLAYABLE</span>
+                                <div className="text-[10px] text-ink-dim">
+                                  dur {probe.duration?.toFixed(1)}s
+                                  {durMismatch && <span className="ml-1 font-bold text-amber-500">≠ tracks.duration</span>}
+                                </div>
+                                <div className="text-[10px] text-ink-dim/70">{probe.ms}ms</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-500">UNPLAYABLE</span>
+                                <div className="text-[10px] text-rose-400/80">{probe.error}</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex flex-col gap-1">
+                              <button disabled={corrBusy} onClick={() => void markQcRisk(c.track_id)}
+                                className="rounded bg-rose-500/15 px-2 py-0.5 font-semibold text-rose-500 disabled:opacity-50">
+                                QC 위험 큐로 마크
+                              </button>
+                              <button disabled={corrBusy} onClick={() => void resetFailure(c.track_id)}
+                                className="rounded bg-accent/15 px-2 py-0.5 font-semibold text-accent disabled:opacity-50">
+                                재시도 가능으로
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[10px] text-ink-dim">
+              "재생 확인" = 브라우저 HTML5 Audio 로 metadata 로딩 시도 (preload=metadata).
+              브라우저는 fpcalc 보다 관대해서 truncated mp3 도 어느 정도 재생할 수 있어요.
+              브라우저는 OK 인데 fpcalc 만 실패 → 부분 손상 (tail truncation 등).
+              브라우저도 UNPLAYABLE → 심각한 손상. "QC 위험 큐로 마크" 는 audio_qc_reports 에
+              <code>FINGERPRINT_DECODE_FAILED</code> 이슈로 등록 (자동 차단/삭제 없음).
             </p>
           </div>
         )}
