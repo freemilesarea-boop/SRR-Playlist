@@ -1271,6 +1271,75 @@ export async function adminQcActAndResolve(input: {
   return data as QcActAndResolveResult;
 }
 
+// Phase 0267: Feedback Summary UI + Inspector Badge
+export type FeedbackAction =
+  | 'admin_removed' | 'admin_excluded' | 'admin_review_needed'
+  | 'admin_approved' | 'metadata_corrected';
+
+export interface FeedbackSummaryGenreRow {
+  main_genre: string;
+  removed: number;
+  excluded: number;
+  approved: number;
+  review_needed: number;
+  total: number;
+}
+
+export interface FeedbackRecentLog {
+  id: string;
+  track_id: string;
+  track_title: string | null;
+  artist_name: string | null;
+  main_genre: string | null;
+  playlist_id: string | null;
+  playlist_name: string | null;
+  store_type: string | null;
+  action: FeedbackAction;
+  admin_note: string | null;
+  before_fit_score: number | null;
+  after_fit_score: number | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface FeedbackSummary {
+  total: number;
+  by_action: Partial<Record<FeedbackAction, number>> | null;
+  by_store: Record<string, number> | null;
+  by_store_action: Record<string, Partial<Record<FeedbackAction, number>>> | null;
+  by_genre: FeedbackSummaryGenreRow[];
+  recent_logs: FeedbackRecentLog[];
+}
+
+export async function adminFeedbackSummary(): Promise<FeedbackSummary> {
+  const { data, error } = await supabase.rpc('admin_feedback_summary');
+  if (error) throw error;
+  return data as FeedbackSummary;
+}
+
+export interface TrackFeedbackRow {
+  id: string;
+  track_id: string;
+  store_type: string | null;
+  action: FeedbackAction;
+  playlist_id: string | null;
+  playlist_name: string | null;
+  before_fit_score: number | null;
+  after_fit_score: number | null;
+  admin_note: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function adminGetTrackFeedback(trackId: string): Promise<TrackFeedbackRow[]> {
+  const { data, error } = await supabase.rpc('admin_get_track_feedback', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as TrackFeedbackRow[];
+}
+
 export async function adminListQcQueue(
   status: QcStatus = 'open',
   severity?: QcSeverity,

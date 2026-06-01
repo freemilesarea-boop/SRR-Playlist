@@ -17,6 +17,7 @@ import {
   type AuditLogRow,
 } from '@/lib/adminPlaylistInspectorApi';
 import { toast } from '@/store/toastStore';
+import FeedbackBadges from '@/components/admin/FeedbackBadges';
 
 interface Props {
   playlistId: string;
@@ -125,6 +126,9 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                       {t.admin_note && (
                         <div className="mt-0.5 text-[10px] text-amber-500">📝 {t.admin_note}</div>
                       )}
+                      <div className="mt-0.5">
+                        <FeedbackBadges trackId={t.track_id} highlightStore={t.normalized_store_slug} />
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 text-[11px]">
                       <div>{t.main_genre ?? '—'}{t.sub_genre ? ` / ${t.sub_genre}` : ''}</div>

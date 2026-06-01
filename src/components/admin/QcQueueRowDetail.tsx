@@ -11,6 +11,7 @@ import {
 import type { TrackMetadataPayload } from '@/lib/adminPlaylistInspectorApi';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
+import FeedbackBadges from '@/components/admin/FeedbackBadges';
 import type { TrackRow } from '@/types/db';
 
 const STATUS_TONE: Record<string, string> = {
@@ -142,6 +143,9 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
               <span className="rounded bg-bg-card px-1.5 py-0.5">{t.mood ?? '—'}</span>
               {t.instrumental && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-500">instrumental</span>}
               {t.explicit_content && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-500">explicit</span>}
+            </div>
+            <div className="mt-1">
+              <FeedbackBadges trackId={trackId} hideIfEmpty />
             </div>
           </div>
         </div>
