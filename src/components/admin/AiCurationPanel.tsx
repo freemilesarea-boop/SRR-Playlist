@@ -832,7 +832,7 @@ function EmbeddingTab() {
   const loadPending = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, st] = await Promise.all([exportEmbeddingPending('openl3', 500), embeddingStatus('openl3').catch(() => null)]);
+      const [p, st] = await Promise.all([exportEmbeddingPending('laion-clap-music-v1', 500), embeddingStatus('laion-clap-music-v1').catch(() => null)]);
       setPending(p); setStatus(st);
     }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
@@ -842,7 +842,7 @@ function EmbeddingTab() {
 
   async function buildArchetypes() {
     setBusy(true);
-    try { const r = await buildStoreArchetypes('openl3', 8); toast.success(`매장 아키타입 생성 — ${r.built}개 매장`); await loadPending(); }
+    try { const r = await buildStoreArchetypes('laion-clap-music-v1', 8); toast.success(`매장 아키타입 생성 — ${r.built}개 매장`); await loadPending(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   }
@@ -976,7 +976,7 @@ function EmbeddingReviewTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows(await listEmbeddingReviewTracks(filter, 'openl3', 150)); }
+    try { setRows(await listEmbeddingReviewTracks(filter, 'laion-clap-music-v1', 150)); }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, [filter]);
@@ -985,13 +985,13 @@ function EmbeddingReviewTab() {
   async function toggle(tid: string) {
     if (openId === tid) { setOpenId(null); setCmp(null); return; }
     setOpenId(tid); setCmp(null); setCmpLoading(true);
-    try { setCmp(await getEmbeddingComparison(tid, 'openl3')); }
+    try { setCmp(await getEmbeddingComparison(tid, 'laion-clap-music-v1')); }
     catch (e) { toast.error(`비교 실패: ${(e as Error).message}`); }
     finally { setCmpLoading(false); }
   }
   async function act(fn: () => Promise<void>, msg: string, tid: string) {
     setBusy(true);
-    try { await fn(); toast.success(msg); if (openId === tid) setCmp(await getEmbeddingComparison(tid, 'openl3')); await load(); }
+    try { await fn(); toast.success(msg); if (openId === tid) setCmp(await getEmbeddingComparison(tid, 'laion-clap-music-v1')); await load(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   }
@@ -1038,7 +1038,7 @@ function EmbeddingReviewTab() {
                     {cmpLoading || !cmp ? (
                       <p className="py-3 text-center text-xs text-ink-dim">불러오는 중…</p>
                     ) : !cmp.has_embedding ? (
-                      <p className="rounded-lg bg-bg-soft/40 px-3 py-3 text-xs text-ink-mute">아직 임베딩 분석 전입니다. Colab 또는 worker 로 분석 후 import 해주세요. (model={cmp.model_name ?? 'openl3'})</p>
+                      <p className="rounded-lg bg-bg-soft/40 px-3 py-3 text-xs text-ink-mute">아직 임베딩 분석 전입니다. Colab 또는 worker 로 분석 후 import 해주세요. (model={cmp.model_name ?? 'laion-clap-music-v1'})</p>
                     ) : (
                       <div className="space-y-3">
                         {cmp.suspected_issues.length > 0 && (

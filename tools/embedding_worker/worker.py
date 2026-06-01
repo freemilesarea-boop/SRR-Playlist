@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 """
+[DEPRECATED — Phase X7] OpenL3 PoC Worker.
+
+⚠️ 이 워커는 X7 (2026-05-31) 이후 사용 안 함.
+DB 표준 model_version = 'laion-clap-music-v1' 과 미스매치 (이건 'openl3').
+참고용으로만 유지.
+
+→ 신규 워커: modal_clap_embedder.py (Modal T4 + CLAP)
+→ 배포 가이드: DEPLOY.md
+
+기존 PoC 동작:
+  - Mac mini / Colab CPU 에서 OpenL3 추론
+  - 곡당 ~3-8초 (CPU)
+  - 자동화 X, 관리자가 수동으로 export → run → import
+
 듣다 — Audio Embedding Worker (Mac mini 운영용 PoC 스켈레톤)
 
 역할:

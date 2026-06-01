@@ -292,7 +292,7 @@ export async function registerSkipViolations(): Promise<{ registered: number }> 
 
 // 임베딩 PoC — export(pending) / import(검증 후 upsert, dry-run 지원)
 export interface EmbeddingPendingRow { track_id: string; title: string | null; artist: string | null; audio_url: string | null; duration: number | null; }
-export async function exportEmbeddingPending(model = 'openl3', limit = 500): Promise<EmbeddingPendingRow[]> {
+export async function exportEmbeddingPending(model = 'laion-clap-music-v1', limit = 500): Promise<EmbeddingPendingRow[]> {
   const { data, error } = await supabase.rpc('admin_export_embedding_pending_tracks', { p_model: model, p_limit: limit });
   if (error) throw error;
   return (data ?? []) as EmbeddingPendingRow[];
@@ -322,38 +322,38 @@ export interface EmbeddingComparison {
   embedding_top5: Array<{ store_key: string; similarity: number }>;
   ai_status: string | null;
 }
-export async function listEmbeddingReviewTracks(filter = 'all', model = 'openl3', limit = 150): Promise<EmbeddingReviewRow[]> {
+export async function listEmbeddingReviewTracks(filter = 'all', model = 'laion-clap-music-v1', limit = 150): Promise<EmbeddingReviewRow[]> {
   const { data, error } = await supabase.rpc('admin_list_embedding_review_tracks', { p_filter: filter, p_model: model, p_limit: limit });
   if (error) throw error;
   return (data ?? []) as EmbeddingReviewRow[];
 }
-export async function getEmbeddingComparison(trackId: string, model = 'openl3'): Promise<EmbeddingComparison> {
+export async function getEmbeddingComparison(trackId: string, model = 'laion-clap-music-v1'): Promise<EmbeddingComparison> {
   const { data, error } = await supabase.rpc('admin_get_embedding_comparison', { p_track_id: trackId, p_model: model });
   if (error) throw error;
   return data as EmbeddingComparison;
 }
-export async function markEmbeddingReviewed(trackId: string, model = 'openl3', note?: string): Promise<void> {
+export async function markEmbeddingReviewed(trackId: string, model = 'laion-clap-music-v1', note?: string): Promise<void> {
   const { error } = await supabase.rpc('admin_mark_embedding_reviewed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
   if (error) throw error;
 }
-export async function markEmbeddingReanalysisNeeded(trackId: string, model = 'openl3', note?: string): Promise<void> {
+export async function markEmbeddingReanalysisNeeded(trackId: string, model = 'laion-clap-music-v1', note?: string): Promise<void> {
   const { error } = await supabase.rpc('admin_mark_embedding_reanalysis_needed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
   if (error) throw error;
 }
-export async function addStoreSeedCandidate(trackId: string, storeKey: string, model = 'openl3'): Promise<void> {
+export async function addStoreSeedCandidate(trackId: string, storeKey: string, model = 'laion-clap-music-v1'): Promise<void> {
   const { error } = await supabase.rpc('admin_add_store_seed_candidate', { p_track_id: trackId, p_store_key: storeKey, p_model: model });
   if (error) throw error;
 }
-export async function applyEmbeddingToAiMetadata(trackId: string, model = 'openl3'): Promise<void> {
+export async function applyEmbeddingToAiMetadata(trackId: string, model = 'laion-clap-music-v1'): Promise<void> {
   const { error } = await supabase.rpc('admin_apply_embedding_to_ai_metadata', { p_track_id: trackId, p_model: model });
   if (error) throw error;
 }
 export interface EmbeddingStatus { model: string; track_embeddings: number; store_archetypes: number; pending: number; embedding_dim: number | null; }
-export async function embeddingStatus(model = 'openl3'): Promise<EmbeddingStatus> {
+export async function embeddingStatus(model = 'laion-clap-music-v1'): Promise<EmbeddingStatus> {
   const { data, error } = await supabase.rpc('admin_embedding_status', { p_model: model });
   if (error) throw error; return data as EmbeddingStatus;
 }
-export async function buildStoreArchetypes(model = 'openl3', top = 8): Promise<{ built: number; skipped: unknown[] }> {
+export async function buildStoreArchetypes(model = 'laion-clap-music-v1', top = 8): Promise<{ built: number; skipped: unknown[] }> {
   const { data, error } = await supabase.rpc('admin_build_store_archetypes', { p_model: model, p_top: top });
   if (error) throw error; return data as { built: number; skipped: unknown[] };
 }
