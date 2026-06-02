@@ -361,6 +361,7 @@ values
   ('winebar','와인바','R&B Instrumental','rnb','instrumental','admin_policy_v1'),
   ('winebar','와인바','Blues Instrumental','blues','instrumental','admin_policy_v1'),
   ('winebar','와인바','City Pop Instrumental','city_pop','instrumental','admin_policy_v1'),
+  ('winebar','와인바','City Pop Vocal','city_pop','vocal','admin_policy_v1'),  -- 정책 보강 v1.1 (관리자 결정)
   -- 헬스
   ('gym','헬스','Hip-Hop Vocal/Rap','hiphop','vocal_rap','admin_policy_v1'),
   ('gym','헬스','K-Hip Hop Vocal/Rap','khiphop','vocal_rap','admin_policy_v1'),
@@ -374,6 +375,8 @@ values
   ('gym','헬스','Rock Instrumental','rock','instrumental','admin_policy_v1'),
   ('gym','헬스','Hip-Hop Vocal/Rap Instrumental','hiphop','instrumental','admin_policy_v1'),
   ('gym','헬스','K-Hip Hop Vocal/Rap Instrumental','khiphop','instrumental','admin_policy_v1'),
+  ('gym','헬스','K-Pop Vocal','kpop','vocal','admin_policy_v1'),               -- 정책 보강 v1.1 (관리자 결정)
+  ('gym','헬스','K-Pop Vocal/Rap','kpop','vocal_rap','admin_policy_v1'),        -- 정책 보강 v1.1 (관리자 결정)
   -- 호텔/라운지
   ('hotel','호텔/라운지','Lounge Instrumental','lounge','instrumental','admin_policy_v1'),
   ('hotel','호텔/라운지','Ambient Instrumental','ambient','instrumental','admin_policy_v1'),
