@@ -1340,6 +1340,90 @@ export async function adminGetTrackFeedback(trackId: string): Promise<TrackFeedb
   return (data ?? []) as TrackFeedbackRow[];
 }
 
+// Phase X5.4: MD 기반 매장 장르 정책
+export interface MdPolicySummary {
+  total_rules: number;
+  distinct_stores: number;
+  by_store: Record<string, number>;
+  by_vocal_policy: Record<'vocal' | 'instrumental', number>;
+}
+
+export interface MdPolicyRule {
+  store_type: string;
+  genre: string;
+  vocal_policy: 'vocal' | 'instrumental';
+  is_allowed: boolean;
+  priority: number;
+  source: string;
+}
+
+export interface MdPolicyViolationRow {
+  playlist_id: string;
+  playlist_name: string | null;
+  track_id: string;
+  track_title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  instrumental: boolean;
+  store_slug: string | null;
+  reason: string | null;
+  fit_score: number | null;
+  fit_status: string | null;
+  fit_source: string | null;
+}
+
+export interface MdPolicyDryRunResult {
+  dry_run: boolean;
+  total_playlist_tracks_scanned: number;
+  with_policy_defined: number;
+  violations: number;
+  admin_overrides_protected: number;
+  excluded_protected: number;
+  marked_review_needed: number;
+  by_store: Record<string, number>;
+  by_genre: Record<string, number>;
+  note: string;
+}
+
+export async function adminMdPolicySummary(): Promise<MdPolicySummary> {
+  const { data, error } = await supabase.rpc('admin_md_policy_summary');
+  if (error) throw error;
+  return data as MdPolicySummary;
+}
+
+export async function adminListMdPolicyRules(storeType?: string | null): Promise<MdPolicyRule[]> {
+  let q = supabase
+    .from('store_genre_placement_rules')
+    .select('store_type, genre, vocal_policy, is_allowed, priority, source')
+    .order('store_type', { ascending: true })
+    .order('vocal_policy', { ascending: true })
+    .order('genre', { ascending: true });
+  if (storeType) q = q.eq('store_type', storeType);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as MdPolicyRule[];
+}
+
+export async function adminListMdPolicyViolations(
+  store?: string | null, limit = 500,
+): Promise<MdPolicyViolationRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_md_policy_violations', {
+    p_store: store ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as MdPolicyViolationRow[];
+}
+
+export async function adminBackfillStoreGenrePolicyReview(
+  dryRun: boolean,
+): Promise<MdPolicyDryRunResult> {
+  const { data, error } = await supabase.rpc('admin_backfill_store_genre_policy_review', {
+    p_dry_run: dryRun,
+  });
+  if (error) throw error;
+  return data as MdPolicyDryRunResult;
+}
+
 export async function adminListQcQueue(
   status: QcStatus = 'open',
   severity?: QcSeverity,
