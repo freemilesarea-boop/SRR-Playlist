@@ -1424,6 +1424,47 @@ export async function adminBackfillStoreGenrePolicyReview(
   return data as MdPolicyDryRunResult;
 }
 
+// Phase X6.0: Anti-abuse daily user×track cap (KST 기준 3회)
+export interface AbuseSummary {
+  window_days: number;
+  total_raw_streams: number;
+  total_effective_streams: number;
+  total_excluded_by_cap: number;
+  distinct_users_affected: number;
+  distinct_tracks_affected: number;
+  distinct_user_track_day_caps: number;
+}
+
+export interface AbuseCandidateRow {
+  user_id: string;
+  user_email: string | null;
+  track_id: string;
+  track_title: string | null;
+  artist: string | null;
+  date_kst: string;
+  raw_plays: number;
+  effective_plays: number;
+  excluded_plays: number;
+  excluded_reason: string | null;
+  last_played_at: string;
+}
+
+export async function adminAbuseSummary(days = 7): Promise<AbuseSummary> {
+  const { data, error } = await supabase.rpc('admin_abuse_summary', { p_days: days });
+  if (error) throw error;
+  return data as AbuseSummary;
+}
+
+export async function adminListAbuseCandidates(
+  days = 7, minRaw = 10, minExcluded = 7, limit = 200,
+): Promise<AbuseCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_abuse_candidates', {
+    p_days: days, p_min_raw: minRaw, p_min_excluded: minExcluded, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as AbuseCandidateRow[];
+}
+
 export async function adminListQcQueue(
   status: QcStatus = 'open',
   severity?: QcSeverity,

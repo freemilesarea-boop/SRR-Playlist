@@ -120,11 +120,12 @@ import EventQualityTab from '@/components/admin/EventQualityTab';
 import GenreGuardrailTab from '@/components/admin/GenreGuardrailTab';
 import FeedbackSummaryTab from '@/components/admin/FeedbackSummaryTab';
 import MdPolicyTab from '@/components/admin/MdPolicyTab';
+import AbuseMonitorTab from '@/components/admin/AbuseMonitorTab';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
 
-type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight' | 'store_learning' | 'event_quality' | 'feedback_summary';
+type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight' | 'store_learning' | 'event_quality' | 'feedback_summary';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -150,7 +151,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['qc_queue', 'AI 검수 큐'], ['behavior', '행동 지표'], ['behavior_insight', '행동 인사이트'], ['store_learning', '매장 학습'], ['event_quality', '이벤트 품질'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['genre_guardrail', '장르 가드레일'], ['md_policy', '매장 장르 정책'], ['feedback_summary', '운영자 학습'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['duplicates', '중복 음원 탐지'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
+        {([['perf', '운영 성과'], ['qc_queue', 'AI 검수 큐'], ['behavior', '행동 지표'], ['behavior_insight', '행동 인사이트'], ['store_learning', '매장 학습'], ['event_quality', '이벤트 품질'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['genre_guardrail', '장르 가드레일'], ['md_policy', '매장 장르 정책'], ['abuse_monitor', '어뷰징 모니터'], ['feedback_summary', '운영자 학습'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['duplicates', '중복 음원 탐지'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -167,6 +168,7 @@ export default function AiCurationPanel() {
       {sub === 'guardrail' && <GuardrailDashboardTab />}
       {sub === 'genre_guardrail' && <GenreGuardrailTab />}
       {sub === 'md_policy' && <MdPolicyTab />}
+      {sub === 'abuse_monitor' && <AbuseMonitorTab />}
       {sub === 'feedback_summary' && <FeedbackSummaryTab />}
       {sub === 'highrisk' && <HighRiskTab />}
       {sub === 'rereview' && <RereviewTab />}
