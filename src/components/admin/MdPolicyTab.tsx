@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock } from 'lucide-react';
+import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock, CheckCircle2, Trash2 } from 'lucide-react';
 import {
   adminMdPolicySummary,
   adminListMdPolicyRules,
@@ -10,6 +10,10 @@ import {
   type MdPolicyViolationRow,
   type MdPolicyDryRunResult,
 } from '@/lib/aiCuration';
+import {
+  adminChangeTrackFitStatus,
+  adminRemoveTrackFromPlaylist,
+} from '@/lib/adminPlaylistInspectorApi';
 import { toast } from '@/store/toastStore';
 
 type ViolationTypeFilter = '' | 'md_policy_no_match' | 'md_policy_undefined_store';
@@ -53,6 +57,7 @@ export default function MdPolicyTab() {
   const [lastDryRun, setLastDryRun] = useState<MdPolicyDryRunResult | null>(null);
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
   const [applyConfirmText, setApplyConfirmText] = useState('');
+  const [actingKey, setActingKey] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -81,6 +86,37 @@ export default function MdPolicyTab() {
     } catch (e) {
       toast.error(`dry_run 실패: ${(e as Error).message}`);
     } finally { setBusy(false); }
+  }
+
+  async function approveActive(row: MdPolicyViolationRow) {
+    const key = `${row.playlist_id}:${row.track_id}`;
+    setActingKey(key);
+    try {
+      await adminChangeTrackFitStatus(row.playlist_id, row.track_id, 'active',
+        `md_policy_approved: ${row.store_slug ?? '-'} / ${row.main_genre ?? '-'}`);
+      toast.success(`승인 — ${row.track_title ?? row.track_id.slice(0, 8)} 재생 복구`);
+      setViolations((prev) => prev.map((v) =>
+        v.playlist_id === row.playlist_id && v.track_id === row.track_id
+          ? { ...v, fit_status: 'active', fit_source: 'admin' }
+          : v));
+    } catch (e) {
+      toast.error(`승인 실패: ${(e as Error).message}`);
+    } finally { setActingKey(null); }
+  }
+
+  async function removeFromPlaylist(row: MdPolicyViolationRow) {
+    if (!confirm(`정말 제거하시겠습니까?\n\n${row.track_title ?? ''} · ${row.artist ?? ''}\n→ ${row.playlist_name ?? row.playlist_id.slice(0, 8)}`)) return;
+    const key = `${row.playlist_id}:${row.track_id}`;
+    setActingKey(key);
+    try {
+      await adminRemoveTrackFromPlaylist(row.playlist_id, row.track_id,
+        `md_policy_removed: ${row.store_slug ?? '-'} / ${row.main_genre ?? '-'}`);
+      toast.success(`제거 완료 — ${row.track_title ?? row.track_id.slice(0, 8)}`);
+      setViolations((prev) => prev.filter((v) =>
+        !(v.playlist_id === row.playlist_id && v.track_id === row.track_id)));
+    } catch (e) {
+      toast.error(`제거 실패: ${(e as Error).message}`);
+    } finally { setActingKey(null); }
   }
 
   async function applyForReal() {
@@ -144,8 +180,8 @@ export default function MdPolicyTab() {
         </div>
         <p className="mt-1 text-[11px] text-ink-dim">
           MD 시드 정책(195 규칙 × 20 매장) 기반 매장별 허용 장르/보컬 검증.
-          <b className="ml-1 text-amber-500">review_needed</b> 마킹은 매장 정책 위반 곡 검토용.
-          <b className="ml-1 text-rose-500">excluded</b> 13건은 보호됨(중복 마킹 방지).
+          <b className="ml-1 text-amber-500">review_needed</b> 마킹 시 사업자 재생 큐에서 자동 숨김 (0274).
+          <b className="ml-1 text-rose-500">excluded</b> 보호 유지. <b>승인</b> = active 복구, <b>제거</b> = 플리에서 soft delete.
         </p>
       </div>
 
@@ -256,13 +292,17 @@ export default function MdPolicyTab() {
                     <th className="px-1.5 py-1">매장</th>
                     <th className="px-1.5 py-1">사유</th>
                     <th className="px-1.5 py-1 text-right">fit</th>
+                    <th className="px-1.5 py-1 text-right">액션</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredViolations.map((v) => {
                     const st = matchStatus(v);
+                    const key = `${v.playlist_id}:${v.track_id}`;
+                    const acting = actingKey === key;
+                    const isExcluded = st === 'excluded';
                     return (
-                      <tr key={`${v.playlist_id}:${v.track_id}`} className="border-b border-line/5">
+                      <tr key={key} className="border-b border-line/5">
                         <td className="px-1.5 py-1">
                           <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TONE[st]}`}>
                             {STATUS_LABEL[st]}
@@ -296,6 +336,22 @@ export default function MdPolicyTab() {
                         <td className="px-1.5 py-1 text-right tabular-nums">
                           {v.fit_score != null ? v.fit_score : '—'}
                           {v.fit_source === 'admin' && <Lock size={9} className="ml-0.5 inline text-amber-500" />}
+                        </td>
+                        <td className="px-1.5 py-1 text-right">
+                          <div className="inline-flex gap-1">
+                            <button onClick={() => void approveActive(v)}
+                              disabled={acting || isExcluded || st === 'active'}
+                              title={isExcluded ? 'excluded 보호 — 변경 불가' : 'active 로 복구 (재생 노출)'}
+                              className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500 hover:bg-emerald-500/25 disabled:opacity-30">
+                              <CheckCircle2 size={10} /> 승인
+                            </button>
+                            <button onClick={() => void removeFromPlaylist(v)}
+                              disabled={acting}
+                              title="플레이리스트에서 제거 (soft delete)"
+                              className="inline-flex items-center gap-0.5 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-500/25 disabled:opacity-30">
+                              <Trash2 size={10} /> 제거
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
