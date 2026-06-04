@@ -10,12 +10,13 @@
  *     context={{ current_playlist_id, current_track_id, queue_length }} />
  */
 import { useEffect, useState } from 'react';
-import { X, Send, MessageSquare, Loader2 } from 'lucide-react';
+import { X, Send, MessageSquare, Loader2, MessageCircle, Copy, Check } from 'lucide-react';
 import { createSupportInquiry, INQUIRY_TYPES, type InquiryType } from '@/lib/supportInquiryApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import KakaoChannelButtons from '@/components/KakaoChannelButtons';
-import { isKakaoChannelConfigured } from '@/lib/kakao';
+import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
+import { logSupportContactEvent } from '@/lib/supportContactApi';
 
 interface Props {
   open: boolean;
@@ -41,6 +42,9 @@ export default function SupportInquiryForm({
   const [contactPhone, setContactPhone] = useState('');
   const [wantsKakao, setWantsKakao] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // X6.2.11 — 폼 제출 성공 후 카톡 유도 단계
+  const [submittedDraft, setSubmittedDraft] = useState<string | null>(null);
+  const [kakaoCopied, setKakaoCopied] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -78,11 +82,27 @@ export default function SupportInquiryForm({
             : '문의가 접수되었습니다. 운영팀이 확인 후 연락드리겠습니다.');
       toast.success(msg);
       onSuccess?.(res.inquiry_id);
-      // 폼 reset + close
-      setTitleField('');
-      setBody('');
-      setWantsKakao(false);
-      onClose();
+
+      // X6.2.11 — 카톡 채널 있으면 즉시 카톡 유도 모달로 전환.
+      // 미리 prefilled 메시지 만들어 클립보드 복사 → 사용자가 채팅창에 붙여넣기.
+      if (isKakaoChannelConfigured()) {
+        const draft = [
+          `[문의: ${inquiryType}] ${titleField.trim()}`,
+          '',
+          body.trim(),
+          '',
+          `— 회원 ${user?.email ?? '익명'}`,
+          `접수번호: ${res.inquiry_id.slice(0, 8)}`,
+        ].join('\n');
+        setSubmittedDraft(draft);
+        setKakaoCopied(false);
+      } else {
+        // 카톡 채널 미설정 → 즉시 닫기
+        setTitleField('');
+        setBody('');
+        setWantsKakao(false);
+        onClose();
+      }
     } catch (e) {
       toast.error(`문의 전송 실패: ${(e as Error).message}`);
     } finally { setSubmitting(false); }
@@ -108,6 +128,78 @@ export default function SupportInquiryForm({
           </div>
         )}
 
+        {/* X6.2.11 — 폼 제출 성공 후 카톡 유도 단계 */}
+        {submittedDraft ? (
+          <div className="space-y-3 text-xs">
+            <div className="rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/30">
+              <p className="text-[12px] font-bold text-emerald-500">✓ 문의가 접수되었습니다</p>
+              <p className="mt-1 text-[11px] text-ink-mute">
+                운영팀 이메일에 자동으로 전달됐어요. 더 빠른 답변을 원하면 카톡으로도 보내주세요.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-[#FEE500]/15 p-3 ring-1 ring-[#FEE500]/40">
+              <p className="mb-2 text-[11px] font-bold flex items-center gap-1">
+                <MessageCircle size={12} className="text-[#191919]" />
+                카카오톡으로 한 번에 보내기
+              </p>
+              <p className="mb-2 text-[10px] text-ink-mute">
+                ① 아래 내용 복사 → ② 카톡 채널 채팅창 열기 → ③ 채팅창에 붙여넣고 전송
+              </p>
+              <div className="mb-2 max-h-32 overflow-y-auto rounded-lg bg-bg-card p-2 font-mono text-[10px] whitespace-pre-wrap text-ink">
+                {submittedDraft}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(submittedDraft);
+                      setKakaoCopied(true);
+                      toast.info('문의 내용을 복사했어요. 카톡 채팅창에 붙여넣고 전송하세요.');
+                    } catch {
+                      toast.error('복사 실패 — 직접 영역을 선택해서 복사해주세요.');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full bg-bg-card px-3 py-2 text-[11px] font-semibold hover:bg-bg-hover"
+                >
+                  {kakaoCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                  {kakaoCopied ? '복사됨' : '내용 복사'}
+                </button>
+                <button
+                  onClick={() => {
+                    void logSupportContactEvent({
+                      channel: 'kakao',
+                      action: 'open_chat',
+                      context: { after_form_submit: true },
+                    });
+                    openKakaoChannelChat();
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#FEE500] px-3 py-2 text-[11px] font-bold text-[#191919] hover:bg-[#FDD800]"
+                >
+                  <MessageCircle size={12} /> @듣다 채팅창 열기
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-ink-dim">
+                💡 카톡 메시지가 운영자에게 도착하려면 채팅창에 직접 붙여넣기 + 전송 버튼을 누르셔야 합니다.
+                카카오 정책상 자동 전송은 불가능합니다.
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setTitleField(''); setBody(''); setWantsKakao(false);
+                  setSubmittedDraft(null); setKakaoCopied(false);
+                  onClose();
+                }}
+                className="rounded-lg bg-bg-card px-3 py-2 text-xs font-semibold hover:bg-bg-hover"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         {isKakaoChannelConfigured() && (
           <div className="mb-3 rounded-xl bg-[#FEE500]/15 p-3 ring-1 ring-[#FEE500]/40">
             <p className="mb-1 text-[11px] font-bold">즉시 답변이 필요하면 카톡으로</p>
@@ -196,6 +288,8 @@ export default function SupportInquiryForm({
             {submitting ? '전송 중…' : '문의 보내기'}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
