@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { captureError } from '@/lib/sentry';
+import { consumeKakaoChatPending, openKakaoChannelChat } from '@/lib/kakao';
+import { logSupportContactEvent } from '@/lib/supportContactApi';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
 
@@ -56,6 +58,17 @@ export default function AuthCallbackPage() {
         /* noop */
       }
     }
+
+    // X6.2.12 — 사용자가 "카톡으로 문의" 누른 후 카카오 로그인했다면 채팅창 자동 오픈
+    if (consumeKakaoChatPending()) {
+      void logSupportContactEvent({
+        channel: 'kakao',
+        action: 'open_chat',
+        context: { after_kakao_login: true },
+      });
+      openKakaoChannelChat();
+    }
+
     navigate(target, { replace: true });
   }, [session, isProfileReady, profile?.account_type, navigate]);
 

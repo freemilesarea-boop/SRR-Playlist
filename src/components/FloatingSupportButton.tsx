@@ -18,9 +18,21 @@ import { Headphones, MessageCircle, MessageSquare, X } from 'lucide-react';
 import SupportInquiryForm from '@/components/SupportInquiryForm';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
-import { isKakaoChannelConfigured, openKakaoChannelChat, kakaoChannelChatUrl } from '@/lib/kakao';
+import {
+  isKakaoChannelConfigured,
+  openKakaoChannelChat,
+  kakaoChannelChatUrl,
+  setKakaoChatPending,
+} from '@/lib/kakao';
 import { logSupportContactEvent } from '@/lib/supportContactApi';
 import { toast } from '@/store/toastStore';
+import type { User } from '@supabase/supabase-js';
+
+/** 카카오 identity 가 있는지 (Supabase Auth user.identities 검사) */
+function hasKakaoIdentity(user: User | null | undefined): boolean {
+  if (!user?.identities) return false;
+  return user.identities.some((i) => i.provider === 'kakao');
+}
 
 const HIDDEN_PREFIXES = ['/admin', '/login', '/auth'];
 
@@ -49,8 +61,47 @@ export default function FloatingSupportButton() {
 
   const hasPlayer = queueLen > 0;
   const kakaoEnabled = isKakaoChannelConfigured();
+  const userHasKakao = hasKakaoIdentity(user);
   // 미니 플레이어 위로 — 큐 있으면 156px, 없으면 92px (safe-area 포함)
   const bottomPx = hasPlayer ? 156 : 92;
+
+  async function handleKakaoChatFlow() {
+    setMenuOpen(false);
+
+    void logSupportContactEvent({
+      channel: 'kakao',
+      action: 'open_chat',
+      context: { user_email: user?.email ?? null, kakao_linked: userHasKakao },
+    });
+
+    // 사례 1: 이미 카카오 identity 있음 → 즉시 채팅창 열기
+    if (userHasKakao) {
+      const ok = openKakaoChannelChat();
+      if (ok) {
+        toast.info(
+          user?.email
+            ? `채팅방에서 본인 이메일(${user.email})로 시작해주세요.`
+            : '채팅방에서 본인 이메일/매장명으로 시작해주세요.',
+        );
+      } else {
+        toast.error('카카오톡 채팅을 열 수 없어요. 잠시 후 다시 시도해주세요.');
+      }
+      return;
+    }
+
+    // 사례 2: 카카오 미연결 → 카카오 로그인부터 시작
+    toast.info('카카오 계정으로 로그인하면 채팅이 매끄럽게 연결돼요…');
+    setKakaoChatPending();
+    try {
+      await useAuthStore.getState().signInWithKakao();
+      // signInWithKakao 가 redirectTo 로 페이지 이동 — 이후 코드 실행 안 됨.
+    } catch (e) {
+      // OAuth 호출 자체 실패 → fallback 으로 그냥 채팅창 열기
+      if (import.meta.env.DEV) console.warn('[kakao] signInWithKakao failed', e);
+      toast.error('카카오 로그인 실패 — 채팅창을 직접 엽니다.');
+      openKakaoChannelChat();
+    }
+  }
 
   const node = (
     <>
@@ -89,33 +140,19 @@ export default function FloatingSupportButton() {
             {kakaoEnabled && (
               <div className="flex flex-col items-end gap-1">
                 <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void logSupportContactEvent({
-                      channel: 'kakao', action: 'open_chat',
-                      context: { user_email: user?.email ?? null },
-                    });
-                    const ok = openKakaoChannelChat();
-                    if (ok) {
-                      // 사용자에게 본인 이메일 명시를 유도 — 카카오 채널은 익명 사용자 표시
-                      const myEmail = user?.email;
-                      const msg = myEmail
-                        ? `채팅방에서 첫 메시지로 본인 이메일(${myEmail})을 적어주세요.`
-                        : '채팅방에서 첫 메시지에 본인 이메일/매장명을 적어주세요.';
-                      toast.info(msg);
-                    } else {
-                      toast.error('카카오톡 채팅을 열 수 없어요. 잠시 후 다시 시도해주세요.');
-                    }
-                  }}
+                  onClick={() => { void handleKakaoChatFlow(); }}
                   className="flex items-center gap-2 rounded-full bg-[#FEE500] py-2.5 pl-3 pr-4 text-sm font-semibold text-[#191919] shadow-elevated ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98]"
                   title={kakaoChannelChatUrl()}
                 >
                   <MessageCircle size={16} />
-                  <span>카카오톡 문의하기</span>
+                  <span>{userHasKakao ? '카카오톡 문의하기' : '카카오 로그인 + 카톡 문의'}</span>
                 </button>
                 <p className="max-w-[240px] rounded-md bg-bg-card/95 px-2 py-1.5 text-right text-[10px] leading-snug text-ink-dim shadow-card">
-                  채팅방에서 <b>본인 이메일/매장명 + 메시지</b>를 직접 전송해야 접수됩니다.
-                  카카오 정책상 사용자는 닉네임으로만 표시돼요.
+                  {userHasKakao ? (
+                    <>채팅방에서 <b>이메일/매장명 + 메시지</b>를 보내주시면 운영팀에 즉시 도착해요.</>
+                  ) : (
+                    <>카카오 로그인 후 자동으로 <b>@듣다 채팅창</b>이 열려요.</>
+                  )}
                 </p>
               </div>
             )}

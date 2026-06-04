@@ -92,6 +92,31 @@ export function kakaoChannelFriendUrl(): string {
   return id ? `https://pf.kakao.com/${id}/friend` : '';
 }
 
+// ===== 카카오 로그인 → 자동 채팅창 열기 (X6.2.12) =====
+// 사용자가 카카오로 로그인 안 된 상태에서 카톡 채팅 시도 시,
+// sessionStorage 에 flag 설정 → 카카오 OAuth → AuthCallback 에서 감지 → 채팅창 자동 오픈.
+
+const KAKAO_AFTER_LOGIN_KEY = 'srr-kakao-after-login';
+
+/** 카카오 OAuth 후 채팅창 자동 열기 예약 */
+export function setKakaoChatPending(): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(KAKAO_AFTER_LOGIN_KEY, 'open_chat');
+    }
+  } catch { /* noop */ }
+}
+
+/** 예약된 채팅창 자동 오픈 flag 를 소비 (한 번 읽고 삭제) */
+export function consumeKakaoChatPending(): boolean {
+  try {
+    if (typeof sessionStorage === 'undefined') return false;
+    const v = sessionStorage.getItem(KAKAO_AFTER_LOGIN_KEY);
+    sessionStorage.removeItem(KAKAO_AFTER_LOGIN_KEY);
+    return v === 'open_chat';
+  } catch { return false; }
+}
+
 export function isKakaoReady(): boolean {
   return typeof window !== 'undefined' && !!window.Kakao && window.Kakao.isInitialized();
 }
