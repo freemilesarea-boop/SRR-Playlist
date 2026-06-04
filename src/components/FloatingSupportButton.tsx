@@ -22,7 +22,16 @@ import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
 
 const HIDDEN_PREFIXES = ['/admin', '/login', '/auth'];
 
+// X6.2.6 — 모듈 로드 즉시 진단 마커. 브라우저 콘솔에 이 로그가 안 보이면
+// 해당 컴포넌트 모듈 자체가 클라이언트 번들에 로드되지 않은 것 = 배포 미반영.
+// eslint-disable-next-line no-console
+console.warn('[FAB MODULE LOADED] FloatingSupportButton.tsx X6.2.6', new Date().toISOString());
+
 export default function FloatingSupportButton() {
+  // X6.2.6 — 함수 시작 즉시 (분기 전) 무조건 1회 출력. console.warn 사용 (vite 가 production 에서 log 만 제거).
+  // eslint-disable-next-line no-console
+  console.warn('[FAB MOUNTED] render attempt', { ts: Date.now() });
+
   const user = useAuthStore((s) => s.user);
   const location = useLocation();
 
@@ -44,19 +53,17 @@ export default function FloatingSupportButton() {
   const hiddenByRoute = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p));
   const visible = !!user?.id && !hiddenByRoute;
 
-  // DEV 콘솔 진단
+  // 진단 콘솔 — console.warn 으로 production 에서도 출력 유지 (vite 가 log/info/debug 만 제거)
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
-      console.log('[FAB] state', {
-        path: location.pathname,
-        hasUser: !!user?.id,
-        hiddenByRoute,
-        visible,
-        mounted,
-        portalTarget: typeof document !== 'undefined' ? 'document.body' : 'none',
-      });
-    }
+    // eslint-disable-next-line no-console
+    console.warn('[FAB] state', {
+      path: location.pathname,
+      hasUser: !!user?.id,
+      hiddenByRoute,
+      visible,
+      mounted,
+      portalTarget: typeof document !== 'undefined' ? 'document.body' : 'none',
+    });
   }, [location.pathname, user?.id, hiddenByRoute, visible, mounted]);
 
   if (!visible || !mounted || typeof document === 'undefined') return null;
