@@ -783,7 +783,18 @@ export default function Player() {
   /* ---------- audio element handlers (active 만) ---------- */
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
     const target = e.currentTarget;
-    if (target !== activeRef()) return; // 다른 audio 이벤트 무시
+    // X6.2.13 — activeRef 가드 완화. currentSrc / current.audio_url 매칭 기반.
+    if (current?.audio_url && target.currentSrc) {
+      try {
+        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
+        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
+        if (trackPath !== srcPath) return; // 다른 트랙 audio 의 timeupdate 무시
+      } catch {
+        if (target !== activeRef()) return;
+      }
+    } else if (target !== activeRef()) {
+      return;
+    }
     const t = target.currentTime;
     setCurrentTime(t);
     accumulatePlaylistView(t);
@@ -899,15 +910,30 @@ export default function Player() {
 
   function onLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
     const target = e.currentTarget;
-    if (target !== activeRef()) return;
     const d = target.duration;
+    // X6.2.13 — activeRef 가드 완화. metadata 가 어떤 audio 에서 fire 됐든,
+    // 그 audio 의 currentSrc 가 현재 트랙의 audio_url 과 같은 path 면 처리.
+    // (매장 모드 / crossfade 등 activeIdx 가 다른 audio 를 가리킬 때 progress 0:00 멈춤 해결)
+    if (current?.audio_url && target.currentSrc) {
+      try {
+        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
+        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
+        if (trackPath !== srcPath) {
+          // preload 된 next track 의 metadata — 현재 트랙 progress 와 무관, 무시
+          return;
+        }
+      } catch {
+        // URL parse 실패 시 fallback — activeRef 검사로
+        if (target !== activeRef()) return;
+      }
+    } else if (target !== activeRef()) {
+      return;
+    }
     if (import.meta.env.DEV) {
       console.debug('[Player] loadedmetadata', { id: current?.id, duration: d, readyState: target.readyState, currentSrc: target.currentSrc });
     }
-    // 메타데이터가 정상 로드됨(유한 duration) → 타임아웃 가드 해제
     if (Number.isFinite(d) && d > 0) clearMetaTimer();
     if (Number.isFinite(d)) setDuration(d);
-    // 세션 복원 직후 한 번만 seek (queue/index 유지된 새로고침 케이스)
     if (
       pendingSeekSec != null &&
       pendingSeekSec > 1 &&
@@ -922,6 +948,30 @@ export default function Player() {
       }
     }
     setPendingSeek(null);
+  }
+
+  /** X6.2.13 — durationchange 이벤트도 처리 (일부 환경에서 loadedmetadata 가 0 으로 fire 후 duration 만 늦게 갱신) */
+  function onDurationChange(e: React.SyntheticEvent<HTMLAudioElement>) {
+    const target = e.currentTarget;
+    const d = target.duration;
+    if (!Number.isFinite(d) || d <= 0) return;
+    // current track 매칭
+    if (current?.audio_url && target.currentSrc) {
+      try {
+        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
+        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
+        if (trackPath !== srcPath) return;
+      } catch {
+        if (target !== activeRef()) return;
+      }
+    } else if (target !== activeRef()) {
+      return;
+    }
+    setDuration(d);
+    clearMetaTimer();
+    if (import.meta.env.DEV) {
+      console.debug('[Player] durationchange', { id: current?.id, duration: d });
+    }
   }
 
   function onCanPlay(e: React.SyntheticEvent<HTMLAudioElement>) {
@@ -1246,6 +1296,7 @@ export default function Player() {
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
+        onDurationChange={onDurationChange}
         onCanPlay={onCanPlay}
         onEnded={onEnded}
         onError={onError}
@@ -1256,6 +1307,7 @@ export default function Player() {
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
+        onDurationChange={onDurationChange}
         onCanPlay={onCanPlay}
         onEnded={onEnded}
         onError={onError}
