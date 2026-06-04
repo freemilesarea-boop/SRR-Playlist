@@ -15,6 +15,7 @@ import {
   addKakaoChannel,
   openKakaoChannelChat,
 } from '@/lib/kakao';
+import { logSupportContactEvent } from '@/lib/supportContactApi';
 
 interface Props {
   variant?: 'row' | 'chat-only' | 'add-only' | 'stacked';
@@ -42,7 +43,10 @@ export default function KakaoChannelButtons({
 
   const ChatBtn = (
     <button
-      onClick={() => void openKakaoChannelChat()}
+      onClick={() => {
+        void logSupportContactEvent({ channel: 'kakao', action: 'open_chat' });
+        openKakaoChannelChat();
+      }}
       className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#FEE500] font-semibold text-[#191919] hover:bg-[#FDD800] ${sizeClass}`}
     >
       <MessageCircle size={iconSize} /> {chatLabel}
@@ -51,7 +55,10 @@ export default function KakaoChannelButtons({
 
   const AddBtn = (
     <button
-      onClick={() => void addKakaoChannel()}
+      onClick={() => {
+        void logSupportContactEvent({ channel: 'kakao', action: 'add_friend' });
+        addKakaoChannel();
+      }}
       className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-bg-card font-semibold text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover hover:text-ink ${sizeClass}`}
     >
       <UserPlus size={iconSize} /> {addLabel}

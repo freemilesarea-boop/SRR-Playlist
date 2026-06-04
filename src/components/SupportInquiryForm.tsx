@@ -110,9 +110,10 @@ export default function SupportInquiryForm({
 
         {isKakaoChannelConfigured() && (
           <div className="mb-3 rounded-xl bg-[#FEE500]/15 p-3 ring-1 ring-[#FEE500]/40">
-            <p className="mb-2 text-[11px] font-bold">즉시 답변이 필요하면 카톡으로</p>
+            <p className="mb-1 text-[11px] font-bold">즉시 답변이 필요하면 카톡으로</p>
             <p className="mb-2 text-[10px] text-ink-mute">
-              운영팀 @듣다 채널에서 1:1 채팅으로 빠르게 답변드립니다.
+              @듣다 채널 채팅방이 열린 뒤 <b>메시지를 직접 보내야 접수</b>됩니다.
+              버튼 클릭만으로는 자동 전송되지 않습니다.
             </p>
             <KakaoChannelButtons variant="row" size="sm" />
           </div>
@@ -165,7 +166,8 @@ export default function SupportInquiryForm({
             <span className="text-[11px]">
               카카오톡으로 답변 받기 희망 (@듣다 채널)
               <span className="block text-[10px] text-ink-dim">
-                운영팀이 @듣다 카톡 채널로 답변드립니다. 빠른 답변을 원하면 위 "카톡으로 문의하기" 사용.
+                ⚠️ 자동 전송 아님. 체크 시 운영팀이 @듣다 채널로 응대 시도합니다.
+                즉시 답변을 원하면 위 "카톡으로 문의하기" 버튼을 눌러 채팅방을 열고 직접 메시지를 보내주세요.
               </span>
             </span>
           </label>
