@@ -117,11 +117,34 @@ export default function SupportInquiriesPanel() {
 
       {/* 카카오 채널 운영 체크리스트 — 카톡 문의가 안 도착할 때 검토 */}
       {isKakaoChannelConfigured() && (
-        <details className="rounded-xl bg-[#FEE500]/10 p-3 ring-1 ring-[#FEE500]/30 text-xs">
+        <details className="rounded-xl bg-[#FEE500]/10 p-3 ring-1 ring-[#FEE500]/30 text-xs" open>
           <summary className="cursor-pointer font-bold text-[#191919] dark:text-ink">
-            ⚠️ 카톡 문의가 도착하지 않는다면? — 채널 설정 체크리스트
+            ⚠️ 카톡 문의가 도착하지 않는다면? — 운영 확인 필수
           </summary>
-          <ul className="mt-2 space-y-1 text-[11px] text-ink-mute">
+
+          {/* 🔑 가장 중요 — 어디서 봐야 하는지 */}
+          <div className="mt-3 rounded-lg bg-rose-500/10 p-3 ring-1 ring-rose-500/30">
+            <p className="mb-2 text-[11px] font-bold text-rose-500">
+              ⚡ 카톡 채널 메시지는 운영자 "일반 카카오톡"에 안 옵니다!
+            </p>
+            <p className="mb-2 text-[10px] text-ink">
+              아래 둘 중 하나로 봐야 합니다:
+            </p>
+            <ul className="space-y-1 text-[10px] text-ink-mute">
+              <li>
+                ① <b>카카오톡 채널 관리자 웹</b>:{' '}
+                <a href="https://center-pf.kakao.com" target="_blank" rel="noreferrer"
+                  className="text-sky-500 hover:underline">center-pf.kakao.com</a>
+                {' '}→ @듣다 → 상담 → 1:1 채팅
+              </li>
+              <li>
+                ② <b>"카카오톡 채널 관리자" 모바일 앱</b> (별도 앱) — 앱스토어/플레이스토어 다운로드 → 채널 관리자 계정 로그인 → 푸시 알림 ON
+              </li>
+            </ul>
+          </div>
+
+          <p className="mt-3 mb-1 text-[11px] font-bold">채널 설정 체크리스트</p>
+          <ul className="space-y-1 text-[11px] text-ink-mute">
             <li>
               □ <b>카카오 채널 공개 ON</b> — <a href={kakaoChannelHomeUrl()} target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">@듣다 채널</a> 관리자 → 채널 검색 노출 "공개"
             </li>
@@ -129,21 +152,33 @@ export default function SupportInquiriesPanel() {
               □ <b>1:1 채팅 사용 ON</b> — 채널 관리자 → 1:1 채팅 → "사용함"
             </li>
             <li>
-              □ <b>채팅 알림 ON</b> — 채널 관리자 → 알림 설정 → 새 메시지 알림 활성화 (PC/모바일)
+              □ <b>1:1 채팅 운영 시간</b> — "24시간" 또는 적절한 시간대 (운영시간 외 메시지는 자동 응답으로만 처리됨)
             </li>
             <li>
-              □ <b>운영자 카카오 계정 채널 권한</b> — pf.kakao.com 에 운영자 계정 등록 + 답변 권한
+              □ <b>운영자 알림 설정 ON</b> — 채널 관리자 앱/웹 알림 + 모바일 OS 알림 권한 둘 다 활성화
+            </li>
+            <li>
+              □ <b>운영자 카카오 계정 채널 권한</b> — pf.kakao.com 채널 → 관리자 권한 부여
             </li>
             <li>
               □ <b>발송 URL 정상</b> — 현재 채팅 URL: <code className="rounded bg-bg-card px-1">{kakaoChannelChatUrl()}</code>
             </li>
             <li>
-              □ <b>사용자가 메시지를 실제로 전송했는지</b> — 버튼 클릭만으로는 자동 전송되지 않음. 채팅창 진입 후 직접 메시지 전송 필요.
-              <span className="block text-[10px] text-ink-dim">
-                support_contact_events 테이블의 channel='kakao' / action='open_chat' 이벤트는 클릭 추적용 — 실제 채팅 도착은 별개.
+              □ <b>사용자가 메시지를 실제로 전송했는지</b> — 버튼 클릭만으로는 자동 전송 X.
+              사용자가 채팅창 진입 후 직접 텍스트 입력 + 전송 필요.
+              <span className="block text-[10px] text-ink-dim mt-0.5">
+                support_contact_events 의 channel='kakao' / action='open_chat' = 클릭만 = 입장만 한 상태.
+                실제 메시지 도착은 카카오 측에서만 확인 가능.
               </span>
             </li>
           </ul>
+
+          <p className="mt-3 mb-1 text-[11px] font-bold">사용자 식별 (중요)</p>
+          <p className="text-[10px] text-ink-mute">
+            카카오 정책상 사용자는 <b>익명 닉네임</b>으로만 표시됨 (전화번호/이메일 노출 X).
+            우리 측 사용자와 매칭하려면 사용자가 <b>첫 메시지에 이메일/매장명을 직접 입력</b>해야 함.
+            FAB 카톡 버튼은 클릭 후 이 안내를 자동 토스트로 표시함.
+          </p>
         </details>
       )}
 

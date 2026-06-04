@@ -112,8 +112,8 @@ export default function SupportInquiryForm({
           <div className="mb-3 rounded-xl bg-[#FEE500]/15 p-3 ring-1 ring-[#FEE500]/40">
             <p className="mb-1 text-[11px] font-bold">즉시 답변이 필요하면 카톡으로</p>
             <p className="mb-2 text-[10px] text-ink-mute">
-              @듣다 채널 채팅방이 열린 뒤 <b>메시지를 직접 보내야 접수</b>됩니다.
-              버튼 클릭만으로는 자동 전송되지 않습니다.
+              @듣다 채널 채팅방이 열린 뒤 <b>본인 이메일/매장명 + 문의 내용</b>을 직접 메시지로 보내주세요.
+              카카오 정책상 사용자는 닉네임으로만 표시되어 별도 식별이 필요합니다.
             </p>
             <KakaoChannelButtons variant="row" size="sm" />
           </div>
