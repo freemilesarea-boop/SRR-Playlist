@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { getSessionId } from './analytics';
 
 export type ShareTargetType = 'playlist' | 'track' | 'business_qr';
-export type ShareMethod = 'web_share' | 'clipboard' | 'qr_download' | 'qr_view';
+export type ShareMethod = 'web_share' | 'clipboard' | 'qr_download' | 'qr_view' | 'kakao_share';
 
 /** 절대 URL 보장 */
 export function absoluteUrl(path: string): string {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Share2, QrCode } from 'lucide-react';
-import { performShare, type ShareTargetType } from '@/lib/shareApi';
+import { performShare, logShareEvent, type ShareTargetType } from '@/lib/shareApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
+import { isKakaoConfigured, shareTrackToKakao, sharePlaylistToKakao } from '@/lib/kakao';
 import QRCodeModal from './QRCodeModal';
 
 interface Props {
@@ -14,6 +15,14 @@ interface Props {
   /** sm: 아이콘만, md: 아이콘 + 라벨 */
   variant?: 'icon' | 'pill' | 'inline';
   showQrButton?: boolean;
+  /** 카카오 공유 버튼 노출 — pill 에서만 노출, 기본 true. */
+  showKakaoButton?: boolean;
+  /** Kakao 공유 카드용 — 곡/플리 메타. 없으면 url 만으로 단순 share. */
+  kakaoMeta?: {
+    coverUrl?: string | null;
+    artist?: string | null;
+    description?: string | null;
+  };
   className?: string;
 }
 
@@ -25,11 +34,15 @@ export default function ShareButton({
   targetId,
   variant = 'icon',
   showQrButton = true,
+  showKakaoButton = true,
+  kakaoMeta,
   className = '',
 }: Props) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const [qrOpen, setQrOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [kakaoBusy, setKakaoBusy] = useState(false);
+  const kakaoEnabled = isKakaoConfigured() && (targetType === 'track' || targetType === 'playlist');
 
   async function handleShare(e: React.MouseEvent) {
     e.preventDefault();
@@ -52,6 +65,35 @@ export default function ShareButton({
     setQrOpen(true);
   }
 
+  async function handleKakao(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (kakaoBusy) return;
+    setKakaoBusy(true);
+    try {
+      const ok = targetType === 'track' && targetId
+        ? await shareTrackToKakao({
+            trackId: targetId,
+            title, artist: kakaoMeta?.artist ?? null,
+            coverUrl: kakaoMeta?.coverUrl ?? null,
+            shareUrl: url,
+          })
+        : targetType === 'playlist' && targetId
+          ? await sharePlaylistToKakao({
+              playlistId: targetId,
+              title, description: kakaoMeta?.description ?? null,
+              coverUrl: kakaoMeta?.coverUrl ?? null,
+              shareUrl: url,
+            })
+          : false;
+      if (ok) {
+        void logShareEvent(targetType, targetId ?? null, 'kakao_share', userId);
+      } else {
+        toast.error('카카오톡 공유에 실패했어요.');
+      }
+    } finally { setKakaoBusy(false); }
+  }
+
   if (variant === 'pill') {
     return (
       <>
@@ -63,6 +105,16 @@ export default function ShareButton({
           >
             <Share2 size={14} /> 공유
           </button>
+          {showKakaoButton && kakaoEnabled && (
+            <button
+              onClick={handleKakao}
+              disabled={kakaoBusy}
+              title="카카오톡 공유"
+              className="inline-flex items-center gap-1 rounded-full bg-[#FEE500] px-3 py-2 text-xs font-semibold text-[#191919] hover:bg-[#FDD800] disabled:opacity-60"
+            >
+              <KakaoBubble /> 카카오톡
+            </button>
+          )}
           {showQrButton && (
             <button onClick={handleQr} className="btn-ghost px-3 py-2 text-xs">
               <QrCode size={14} /> QR
@@ -127,5 +179,13 @@ export default function ShareButton({
         />
       )}
     </>
+  );
+}
+
+function KakaoBubble() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 18 18" aria-hidden>
+      <path fill="currentColor" d="M9 1.5C4.582 1.5 1 4.27 1 7.69c0 2.226 1.522 4.18 3.808 5.27-.15.508-.96 3.236-.992 3.395 0 0-.02.166.087.23.107.063.232.014.232.014.225-.031 3.486-2.291 4.052-2.673A11.59 11.59 0 0 0 9 13.88c4.418 0 8-2.77 8-6.19S13.418 1.5 9 1.5z"/>
+    </svg>
   );
 }

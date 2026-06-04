@@ -146,10 +146,16 @@ export default function SupportInquiryForm({
             </label>
           </div>
 
-          <label className="flex items-center gap-2 rounded-lg bg-bg-card p-2.5">
+          <label className="flex items-start gap-2 rounded-lg bg-bg-card p-2.5">
             <input type="checkbox" checked={wantsKakao}
-              onChange={(e) => setWantsKakao(e.target.checked)} />
-            <span className="text-[11px]">카카오톡 상담 희망 (운영팀이 카카오톡으로 연락드립니다)</span>
+              onChange={(e) => setWantsKakao(e.target.checked)}
+              className="mt-0.5 shrink-0" />
+            <span className="text-[11px]">
+              카카오톡으로 답변 받기 희망
+              <span className="block text-[10px] text-ink-dim">
+                현재는 운영팀이 별도 채널/연락처로 직접 답변드립니다. 카카오 알림 자동 발송은 준비 중입니다.
+              </span>
+            </span>
           </label>
 
           {context && Object.keys(context).length > 0 && (
