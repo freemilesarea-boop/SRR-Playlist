@@ -14,6 +14,7 @@ import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
+import FloatingSupportButton from '@/components/FloatingSupportButton';
 import { LogoMark } from '@/components/Logo';
 
 // 홈/로그인은 즉시 로드, 나머지는 라우트 단위로 코드 스플리팅.
@@ -212,6 +213,8 @@ export default function App() {
         <>
           <GlobalGate />
           <Onboarding />
+          {/* X6.2.4 — FAB 는 createPortal 로 body 마운트. App 루트 트리에서 직접 마운트 → AppShell/라우트 의존성 0 */}
+          <FloatingSupportButton />
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />

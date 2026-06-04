@@ -8,7 +8,8 @@ import InstallPromptBanner from './InstallPromptBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
 import Footer from './common/Footer';
-import FloatingSupportButton from './FloatingSupportButton';
+// FloatingSupportButton 은 App.tsx 루트에서 마운트 (createPortal → document.body)
+// AppShell 내부 마운트 중단 — 어떤 컨테이너 의존성도 없도록 격리.
 import {
   restorePlayerSessionToStore,
   installPlayerSessionPersistence,
@@ -58,7 +59,6 @@ export default function AppShell() {
 
       <Player />
       <BottomNav />
-      <FloatingSupportButton />
     </div>
   );
 }
