@@ -91,11 +91,18 @@ export default function FloatingSupportButton() {
                 <button
                   onClick={() => {
                     setMenuOpen(false);
-                    // 클릭 로그 (fire-and-forget) → 운영 추적용
-                    void logSupportContactEvent({ channel: 'kakao', action: 'open_chat' });
+                    void logSupportContactEvent({
+                      channel: 'kakao', action: 'open_chat',
+                      context: { user_email: user?.email ?? null },
+                    });
                     const ok = openKakaoChannelChat();
                     if (ok) {
-                      toast.info('카카오톡 채널에서 메시지를 직접 보내야 접수됩니다.');
+                      // 사용자에게 본인 이메일 명시를 유도 — 카카오 채널은 익명 사용자 표시
+                      const myEmail = user?.email;
+                      const msg = myEmail
+                        ? `채팅방에서 첫 메시지로 본인 이메일(${myEmail})을 적어주세요.`
+                        : '채팅방에서 첫 메시지에 본인 이메일/매장명을 적어주세요.';
+                      toast.info(msg);
                     } else {
                       toast.error('카카오톡 채팅을 열 수 없어요. 잠시 후 다시 시도해주세요.');
                     }
@@ -106,8 +113,9 @@ export default function FloatingSupportButton() {
                   <MessageCircle size={16} />
                   <span>카카오톡 문의하기</span>
                 </button>
-                <p className="max-w-[220px] rounded-md bg-bg-card/95 px-2 py-1 text-right text-[10px] leading-snug text-ink-dim shadow-card">
-                  채팅방이 열린 뒤 메시지를 직접 보내야 접수됩니다.
+                <p className="max-w-[240px] rounded-md bg-bg-card/95 px-2 py-1.5 text-right text-[10px] leading-snug text-ink-dim shadow-card">
+                  채팅방에서 <b>본인 이메일/매장명 + 메시지</b>를 직접 전송해야 접수됩니다.
+                  카카오 정책상 사용자는 닉네임으로만 표시돼요.
                 </p>
               </div>
             )}
