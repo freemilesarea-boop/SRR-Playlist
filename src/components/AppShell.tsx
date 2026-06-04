@@ -8,6 +8,7 @@ import InstallPromptBanner from './InstallPromptBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
 import Footer from './common/Footer';
+import FloatingSupportButton from './FloatingSupportButton';
 import {
   restorePlayerSessionToStore,
   installPlayerSessionPersistence,
@@ -57,6 +58,7 @@ export default function AppShell() {
 
       <Player />
       <BottomNav />
+      <FloatingSupportButton />
     </div>
   );
 }
