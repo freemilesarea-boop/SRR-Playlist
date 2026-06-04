@@ -22,6 +22,8 @@ import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
+import SupportInquiryButton from '@/components/SupportInquiryButton';
+import MyInquiriesSection from '@/components/MyInquiriesSection';
 import { useThemeStore } from '@/store/themeStore';
 import {
   fetchMyArtistProfile,
@@ -104,7 +106,12 @@ export default function ProfilePage() {
             {planLabel}
           </p>
         </div>
+        <div className="ml-auto">
+          <SupportInquiryButton variant="chip" defaultType="기타" />
+        </div>
       </header>
+
+      <MyInquiriesSection />
 
       {/* 테마 설정 */}
       <section className="space-y-2">

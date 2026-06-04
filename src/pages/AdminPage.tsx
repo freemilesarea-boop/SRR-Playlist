@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Bell,
   Activity,
+  MessageSquare,
 } from 'lucide-react';
 import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
 import ArtistContractsList from '@/components/admin/ArtistContractsList';
@@ -69,11 +70,13 @@ import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
 import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel';
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
 import BusinessLivePanel from '@/components/admin/BusinessLivePanel';
+import SupportInquiriesPanel from '@/components/admin/SupportInquiriesPanel';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
   | 'dashboard'
   | 'business-live'
+  | 'support-inquiries'
   | 'members'
   | 'sales-agents'
   | 'sales-partners'
@@ -116,6 +119,7 @@ type Tab =
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'business-live', label: '매장 실시간', icon: <Activity size={14} /> },
+  { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
@@ -160,7 +164,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
 type Group = '운영' | '회원' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
 
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
-  { key: '운영', tabs: ['dashboard', 'business-live'] },
+  { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'sales-agents', 'free-trials'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
@@ -313,6 +317,7 @@ export default function AdminPage() {
       <AdminErrorBoundary resetKey={tab}>
         {tab === 'dashboard' && <Dashboard />}
         {tab === 'business-live' && <BusinessLivePanel />}
+        {tab === 'support-inquiries' && <SupportInquiriesPanel />}
         {tab === 'members' && <MembersList />}
         {tab === 'sales-agents' && <SalesAgentsList />}
         {tab === 'sales-partners' && <SalesPartnerApplications />}
