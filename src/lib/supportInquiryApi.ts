@@ -72,7 +72,23 @@ export async function createSupportInquiry(input: CreateInquiryInput): Promise<C
     p_attachments: input.attachments ?? [],
   });
   if (error) throw error;
-  return data as CreateInquiryResult;
+
+  // X6.2.10 — 문의 저장 성공 후 notify-new-inquiry Edge Function 호출.
+  // 본인 inquiry_id 만 통과 (function 내부 검증). 일반 사용자도 호출 가능.
+  // fire-and-forget — 발송 실패해도 문의 저장은 이미 성공.
+  const result = data as CreateInquiryResult;
+  if (result?.inquiry_id) {
+    void supabase.functions
+      .invoke('notify-new-inquiry', { body: { inquiry_id: result.inquiry_id } })
+      .then((res) => {
+        if (import.meta.env.DEV) console.log('[notify-new-inquiry]', res);
+      })
+      .catch((e) => {
+        if (import.meta.env.DEV) console.warn('[notify-new-inquiry] failed', e);
+      });
+  }
+
+  return result;
 }
 
 export interface MyInquiryRow {
