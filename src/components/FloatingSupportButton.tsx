@@ -18,7 +18,9 @@ import { Headphones, MessageCircle, MessageSquare, X } from 'lucide-react';
 import SupportInquiryForm from '@/components/SupportInquiryForm';
 import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
-import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
+import { isKakaoChannelConfigured, openKakaoChannelChat, kakaoChannelChatUrl } from '@/lib/kakao';
+import { logSupportContactEvent } from '@/lib/supportContactApi';
+import { toast } from '@/store/toastStore';
 
 const HIDDEN_PREFIXES = ['/admin', '/login', '/auth'];
 
@@ -85,16 +87,29 @@ export default function FloatingSupportButton() {
         {menuOpen && (
           <div className="flex flex-col items-end gap-1.5 animate-slide-up">
             {kakaoEnabled && (
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  void openKakaoChannelChat();
-                }}
-                className="flex items-center gap-2 rounded-full bg-[#FEE500] py-2.5 pl-3 pr-4 text-sm font-semibold text-[#191919] shadow-elevated ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98]"
-              >
-                <MessageCircle size={16} />
-                <span>카카오톡 문의하기</span>
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    // 클릭 로그 (fire-and-forget) → 운영 추적용
+                    void logSupportContactEvent({ channel: 'kakao', action: 'open_chat' });
+                    const ok = openKakaoChannelChat();
+                    if (ok) {
+                      toast.info('카카오톡 채널에서 메시지를 직접 보내야 접수됩니다.');
+                    } else {
+                      toast.error('카카오톡 채팅을 열 수 없어요. 잠시 후 다시 시도해주세요.');
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-full bg-[#FEE500] py-2.5 pl-3 pr-4 text-sm font-semibold text-[#191919] shadow-elevated ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98]"
+                  title={kakaoChannelChatUrl()}
+                >
+                  <MessageCircle size={16} />
+                  <span>카카오톡 문의하기</span>
+                </button>
+                <p className="max-w-[220px] rounded-md bg-bg-card/95 px-2 py-1 text-right text-[10px] leading-snug text-ink-dim shadow-card">
+                  채팅방이 열린 뒤 메시지를 직접 보내야 접수됩니다.
+                </p>
+              </div>
             )}
             <button
               onClick={() => {

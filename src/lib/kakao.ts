@@ -169,49 +169,48 @@ export async function shareTrackToKakao(params: {
 }
 
 /**
- * 카카오톡 채널 친구 추가 — SDK 우선, 미가능 시 URL fallback.
- * 호출자는 보통 button onClick 에서 사용.
+ * 카카오톡 채널 친구 추가 — 단순 window.open (안정성 우선).
+ * SDK 의 addChannel 은 일부 브라우저에서 silent fail 가능 → URL 방식으로 통일.
  */
-export async function addKakaoChannel(): Promise<boolean> {
-  const id = getKakaoChannelPublicId();
-  if (!id) return false;
-  const ok = await ensureKakaoReady();
-  if (ok && window.Kakao?.Channel) {
-    try {
-      window.Kakao.Channel.addChannel({ channelPublicId: id });
-      return true;
-    } catch (e) {
-      if (import.meta.env.DEV) console.warn('[kakao] addChannel SDK 실패, URL fallback', e);
-    }
+export function addKakaoChannel(): boolean {
+  const url = kakaoChannelFriendUrl();
+  if (!url) {
+    if (import.meta.env.DEV) console.warn('[kakao] channel public id 미설정');
+    return false;
   }
-  // fallback: 새 창으로 친구추가 페이지 오픈
-  if (typeof window !== 'undefined') {
-    window.open(`https://pf.kakao.com/${id}/friend`, '_blank', 'noopener,noreferrer');
-    return true;
-  }
-  return false;
+  if (typeof window === 'undefined') return false;
+  if (import.meta.env.DEV) console.log('[kakao] addChannel → open', url);
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  return win != null;
 }
 
 /**
- * 카카오톡 채널 1:1 채팅 시작 — SDK 우선, URL fallback.
+ * 카카오톡 채널 1:1 채팅 열기.
+ *
+ * 동작:
+ *   - PC: 새 탭에서 `https://pf.kakao.com/{id}/chat` 열림 → 웹 카톡 채팅 진입
+ *   - 모바일 (카톡 앱): universal link 로 카톡 앱 채팅방 자동 열림
+ *   - 모바일 (앱 없음): 브라우저에서 웹 카톡 채팅 진입
+ *
+ * SDK 의 Kakao.Channel.chat() 은 일부 환경에서 silent fail → window.open 직접 사용.
+ *
+ * @returns 새 창 열기 성공 여부 (popup blocker 차단 시 false)
  */
-export async function openKakaoChannelChat(): Promise<boolean> {
-  const id = getKakaoChannelPublicId();
-  if (!id) return false;
-  const ok = await ensureKakaoReady();
-  if (ok && window.Kakao?.Channel) {
-    try {
-      window.Kakao.Channel.chat({ channelPublicId: id });
-      return true;
-    } catch (e) {
-      if (import.meta.env.DEV) console.warn('[kakao] chat SDK 실패, URL fallback', e);
-    }
+export function openKakaoChannelChat(): boolean {
+  const url = kakaoChannelChatUrl();
+  if (!url) {
+    if (import.meta.env.DEV) console.warn('[kakao] channel public id 미설정');
+    return false;
   }
-  if (typeof window !== 'undefined') {
-    window.open(`https://pf.kakao.com/${id}/chat`, '_blank', 'noopener,noreferrer');
-    return true;
+  if (typeof window === 'undefined') return false;
+  if (import.meta.env.DEV) console.log('[kakao] openChat → open', url);
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!win) {
+    // popup blocker 차단 → 같은 탭으로 fallback
+    if (import.meta.env.DEV) console.warn('[kakao] window.open 차단, 같은 탭 이동');
+    window.location.href = url;
   }
-  return false;
+  return true;
 }
 
 /** 플레이리스트 공유 */
