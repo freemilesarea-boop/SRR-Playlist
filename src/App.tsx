@@ -211,36 +211,9 @@ export default function App() {
         />
       ) : (
         <>
-          {/* X6.2.6 — 배포 검증용 강제 TEST 마커. 이게 화면 우측하단에 보이면 = 배포 정상.
-              안 보이면 = 운영 환경이 이 commit 빌드를 사용하고 있지 않음 (Vercel 배포 브랜치 확인 필요).
-              FAB 정상 확인 후 제거 예정. */}
-          <div
-            data-testid="deploy-verify-marker"
-            data-marker-id="X6.2.6"
-            style={{
-              position: 'fixed',
-              right: '20px',
-              bottom: '20px',
-              width: '100px',
-              height: '100px',
-              background: 'red',
-              color: '#fff',
-              zIndex: 99999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '12px',
-              borderRadius: '8px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-              pointerEvents: 'none',
-            }}
-          >
-            TEST<br/>X6.2.6
-          </div>
           <GlobalGate />
           <Onboarding />
-          {/* X6.2.4 — FAB 는 createPortal 로 body 마운트. App 루트 트리에서 직접 마운트 → AppShell/라우트 의존성 0 */}
+          {/* FAB 는 createPortal 로 body 마운트 — AppShell/라우트 의존성 0 */}
           <FloatingSupportButton />
           <Suspense fallback={<RouteFallback />}>
             <Routes>

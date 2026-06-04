@@ -1,16 +1,15 @@
 /**
- * FloatingSupportButton — Phase X6.2.4 (Portal 진단 모드)
+ * FloatingSupportButton — Phase X6.2.7 (운영)
  *
- * 진단을 위해 body Portal + 인라인 style 강제.
- * - ReactDOM.createPortal → document.body 직접 마운트
- *   (AppShell 하위 어떤 컨테이너의 transform/overflow 도 무시)
- * - 모든 위치/색상 inline style — Tailwind purge 의존성 0
- * - FAB 배경 빨간색 → 화면 보이면 portal/css 정상, 안 보이면 React/auth 문제
- * - 디자인 원복은 진단 확인 후.
+ * 모든 인증된 페이지의 우측 하단 플로팅 문의 버튼.
+ * - createPortal → document.body 마운트 (AppShell/라우트 의존성 0)
+ * - 로그인 사용자만 노출
+ * - /admin/*, /login, /auth/* 라우트에서는 숨김
+ * - 미니 플레이어 / BottomNav 와 겹치지 않게 위치 자동 조정
  *
- * 동작은 동일:
- *   FAB 클릭 → 메뉴 (카톡 / 문의 남기기)
- *   ESC / 백드롭 클릭 → 메뉴 닫기
+ * 메뉴 항목:
+ *   1) 카카오톡 문의하기 — openKakaoChannelChat (@듣다 채널)
+ *   2) 문의 남기기 — SupportInquiryForm 모달
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -18,31 +17,22 @@ import { useLocation } from 'react-router-dom';
 import { Headphones, MessageCircle, MessageSquare, X } from 'lucide-react';
 import SupportInquiryForm from '@/components/SupportInquiryForm';
 import { useAuthStore } from '@/store/authStore';
+import { usePlayerStore } from '@/store/playerStore';
 import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
 
 const HIDDEN_PREFIXES = ['/admin', '/login', '/auth'];
 
-// X6.2.6 — 모듈 로드 즉시 진단 마커. 브라우저 콘솔에 이 로그가 안 보이면
-// 해당 컴포넌트 모듈 자체가 클라이언트 번들에 로드되지 않은 것 = 배포 미반영.
-// eslint-disable-next-line no-console
-console.warn('[FAB MODULE LOADED] FloatingSupportButton.tsx X6.2.6', new Date().toISOString());
-
 export default function FloatingSupportButton() {
-  // X6.2.6 — 함수 시작 즉시 (분기 전) 무조건 1회 출력. console.warn 사용 (vite 가 production 에서 log 만 제거).
-  // eslint-disable-next-line no-console
-  console.warn('[FAB MOUNTED] render attempt', { ts: Date.now() });
-
   const user = useAuthStore((s) => s.user);
+  const queueLen = usePlayerStore((s) => s.queue.length);
   const location = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // body 가 있을 때만 portal 마운트 (SSR / 초기화 안전 가드)
   useEffect(() => { setMounted(true); }, []);
 
-  // ESC 로 메뉴 닫기
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
@@ -53,141 +43,89 @@ export default function FloatingSupportButton() {
   const hiddenByRoute = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p));
   const visible = !!user?.id && !hiddenByRoute;
 
-  // 진단 콘솔 — console.warn 으로 production 에서도 출력 유지 (vite 가 log/info/debug 만 제거)
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.warn('[FAB] state', {
-      path: location.pathname,
-      hasUser: !!user?.id,
-      hiddenByRoute,
-      visible,
-      mounted,
-      portalTarget: typeof document !== 'undefined' ? 'document.body' : 'none',
-    });
-  }, [location.pathname, user?.id, hiddenByRoute, visible, mounted]);
-
   if (!visible || !mounted || typeof document === 'undefined') return null;
 
+  const hasPlayer = queueLen > 0;
   const kakaoEnabled = isKakaoChannelConfigured();
-
-  // ===== 진단 모드 인라인 style — Tailwind 의존 0 =====
-  const fabContainerStyle: React.CSSProperties = {
-    position: 'fixed',
-    right: '24px',
-    bottom: '120px',
-    zIndex: 9999,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: '8px',
-  };
-
-  const fabButtonStyle: React.CSSProperties = {
-    width: '56px',
-    height: '56px',
-    borderRadius: '9999px',
-    background: 'red', // 🔴 진단용 — 보이면 portal/CSS 정상. 확인 후 원복.
-    color: '#ffffff',
-    border: 'none',
-    boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-
-  const backdropStyle: React.CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.2)',
-    zIndex: 9998,
-    border: 'none',
-    cursor: 'default',
-  };
-
-  const menuItemKakaoStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    background: '#FEE500',
-    color: '#191919',
-    padding: '10px 16px 10px 12px',
-    borderRadius: '9999px',
-    fontWeight: 600,
-    fontSize: '14px',
-    border: 'none',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
-    cursor: 'pointer',
-  };
-
-  const menuItemFormStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    background: '#ffffff',
-    color: '#111111',
-    padding: '10px 16px 10px 12px',
-    borderRadius: '9999px',
-    fontWeight: 600,
-    fontSize: '14px',
-    border: '1px solid rgba(0,0,0,0.12)',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
-    cursor: 'pointer',
-  };
+  // 미니 플레이어 위로 — 큐 있으면 156px, 없으면 92px (safe-area 포함)
+  const bottomPx = hasPlayer ? 156 : 92;
 
   const node = (
     <>
+      {/* 백드롭 */}
       {menuOpen && (
         <button
           aria-label="메뉴 닫기"
-          style={backdropStyle}
           onClick={() => setMenuOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.2)',
+            zIndex: 49,
+            border: 'none',
+            cursor: 'default',
+          }}
         />
       )}
 
+      {/* FAB + 메뉴 컨테이너 */}
       <div
-        data-testid="floating-support-button"
-        data-fab-portal="body"
-        style={fabContainerStyle}
+        style={{
+          position: 'fixed',
+          right: 'max(16px, env(safe-area-inset-right))',
+          bottom: `calc(${bottomPx}px + env(safe-area-inset-bottom))`,
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: '8px',
+        }}
       >
+        {/* 메뉴 (위로 펼침) */}
         {menuOpen && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+          <div className="flex flex-col items-end gap-1.5 animate-slide-up">
             {kakaoEnabled && (
               <button
-                style={menuItemKakaoStyle}
                 onClick={() => {
                   setMenuOpen(false);
                   void openKakaoChannelChat();
                 }}
+                className="flex items-center gap-2 rounded-full bg-[#FEE500] py-2.5 pl-3 pr-4 text-sm font-semibold text-[#191919] shadow-elevated ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98]"
               >
                 <MessageCircle size={16} />
-                <span>카톡으로 바로 문의</span>
+                <span>카카오톡 문의하기</span>
               </button>
             )}
             <button
-              style={menuItemFormStyle}
               onClick={() => {
                 setMenuOpen(false);
                 setFormOpen(true);
               }}
+              className="flex items-center gap-2 rounded-full bg-bg-card py-2.5 pl-3 pr-4 text-sm font-semibold text-ink shadow-elevated ring-1 ring-line/20 transition hover:bg-bg-hover active:scale-[0.98]"
             >
-              <MessageSquare size={16} color="#7C3AED" />
+              <MessageSquare size={16} className="text-accent" />
               <span>문의 남기기</span>
             </button>
           </div>
         )}
 
+        {/* FAB — 보라 (DEUDDA accent) */}
         <button
           onClick={() => setMenuOpen((v) => !v)}
           aria-label={menuOpen ? '문의 메뉴 닫기' : '문의하기'}
           aria-expanded={menuOpen}
-          title="고객센터 / 문의하기 (진단 모드)"
-          style={fabButtonStyle}
+          title="문의하기"
+          className={`inline-flex h-14 w-14 items-center justify-center rounded-full shadow-elevated ring-1 ring-black/20 transition active:scale-95 ${
+            menuOpen
+              ? 'bg-bg-card text-ink-mute hover:bg-bg-hover'
+              : 'bg-accent text-white hover:opacity-95'
+          }`}
         >
-          {menuOpen ? <X size={22} /> : <Headphones size={24} />}
+          {menuOpen ? <X size={20} /> : <Headphones size={22} />}
         </button>
       </div>
 
+      {/* 문의 모달 — z-50 (기존 유지) */}
       <SupportInquiryForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
