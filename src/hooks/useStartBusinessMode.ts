@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi';
+import { findFallbackPlaylist } from '@/lib/businessFallbackApi';
 import { toast } from '@/store/toastStore';
 import { captureError } from '@/lib/sentry';
 import type { TrackRow } from '@/types/db';
@@ -72,9 +73,35 @@ export function useStartBusinessMode() {
           const tracks = await fetchPlaylistTracks(playlistId);
           playable = filterPlayableTracks(tracks).playable;
         }
+
+        // X6.0.1: 빈 큐 감지 시 같은 카테고리/daypart fallback 자동 시도
+        let fallbackUsed = false;
         if (playable.length === 0) {
-          toast.error(`${slotLabel}: 재생 가능한 음악이 없어요.`);
-          return false;
+          const originalPl = store.playlists.find((p) => p.id === playlistId) ?? null;
+          const candidate = await findFallbackPlaylist(
+            originalPl?.business_category ?? null,
+            originalPl?.daypart ?? null,
+          ).catch(() => null);
+          if (candidate && candidate.playlist_id !== playlistId) {
+            const fbTracks = await fetchPlaylistTracks(candidate.playlist_id);
+            const fbPlayable = filterPlayableTracks(fbTracks).playable;
+            if (fbPlayable.length > 0) {
+              playable = fbPlayable;
+              playlistId = candidate.playlist_id;
+              slotLabel = `${slotLabel} (fallback: ${candidate.title})`;
+              fallbackUsed = true;
+              if (import.meta.env.DEV) {
+                console.warn('[useStartBusinessMode] fallback used', {
+                  strategy: candidate.match_strategy,
+                  candidate: candidate.title,
+                });
+              }
+            }
+          }
+          if (playable.length === 0) {
+            toast.error('현재 시간대에 재생 가능한 곡이 없습니다. 관리자에게 문의해주세요.');
+            return false;
+          }
         }
         enableForBusinessMode();
         const playlist = store.playlists.find((p) => p.id === playlistId) ?? null;
@@ -87,7 +114,11 @@ export function useStartBusinessMode() {
           setLastSwitchedScheduleId(scheduleId);
           void logScheduleEvent(userId, scheduleId, playlistId, 'started');
         }
-        toast.success(`${slotLabel} 시작 (${playable.length}곡)`);
+        if (fallbackUsed) {
+          toast.info(`${slotLabel} 시작 (${playable.length}곡) — 원본 플리가 비어 자동 대체됨`);
+        } else {
+          toast.success(`${slotLabel} 시작 (${playable.length}곡)`);
+        }
         return true;
       } catch (e) {
         toast.error(e instanceof Error ? e.message : '재생 시작 실패');
