@@ -15,10 +15,23 @@ function isRemovedOrHidden(track: { release_status?: string | null; visibility_s
   return track.release_status === 'removed' || track.visibility_status === 'hidden' || track.removed_at != null;
 }
 
+/** audio_health_status='failed' 트랙은 재생 불가 (0278 X6.0.1 — 매장 납품 가드) */
+function isAudioHealthFailed(track: { audio_health_status?: string | null }): boolean {
+  return track.audio_health_status === 'failed' || track.audio_health_status === 'conversion_failed';
+}
+
+type PlayabilityFields = {
+  release_status?: string | null;
+  visibility_status?: string | null;
+  removed_at?: string | null;
+  audio_health_status?: string | null;
+};
+
 export function getTrackPlaybackState(
-  track: Pick<TrackRow, 'audio_url'> & { release_status?: string | null; visibility_status?: string | null; removed_at?: string | null },
+  track: Pick<TrackRow, 'audio_url'> & PlayabilityFields,
 ): TrackPlaybackState {
   if (isRemovedOrHidden(track)) return 'missing';
+  if (isAudioHealthFailed(track)) return 'error';
   const url = track.audio_url;
   if (url == null) return 'missing';
   const trimmed = typeof url === 'string' ? url.trim() : '';
@@ -62,8 +75,8 @@ export function filterPlayableTracks<T extends Pick<TrackRow, 'audio_url'>>(
   const playable: T[] = [];
   const dropped: T[] = [];
   for (const t of tracks) {
-    // 삭제/숨김 트랙은 재생 후보에서 제외 + audio_url 정상 검사
-    if (!isRemovedOrHidden(t as { release_status?: string | null; visibility_status?: string | null; removed_at?: string | null }) && isPlayableUrl(t.audio_url)) {
+    const fields = t as PlayabilityFields;
+    if (!isRemovedOrHidden(fields) && !isAudioHealthFailed(fields) && isPlayableUrl(t.audio_url)) {
       playable.push(t);
     } else {
       dropped.push(t);

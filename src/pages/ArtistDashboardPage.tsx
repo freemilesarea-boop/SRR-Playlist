@@ -35,6 +35,7 @@ import { createPayappSubscription } from '@/lib/subscriptionApi';
 import { CreditCard, Wallet, FileSignature } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3, TrendingUp } from 'lucide-react';
+import SupportInquiryButton from '@/components/SupportInquiryButton';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import ArtistBatchUploadForm from '@/components/artist/ArtistBatchUploadForm';
@@ -111,6 +112,9 @@ export default function ArtistDashboardPage() {
             <Mic2 size={20} className="text-accent" /> 아티스트 대시보드
           </h1>
           <p className="text-xs text-ink-mute">{artist?.artist_name ?? '—'}</p>
+        </div>
+        <div className="ml-auto">
+          <SupportInquiryButton variant="chip" defaultType="음원 등록 문의" />
         </div>
       </header>
 

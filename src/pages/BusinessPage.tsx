@@ -16,6 +16,7 @@ import {
   Sunrise,
   Sun,
   Moon,
+  MessageCircle,
 } from 'lucide-react';
 import { BUSINESS_CATEGORIES } from '@/lib/constants';
 import { fetchPlaylistCounts } from '@/lib/api';
@@ -34,6 +35,8 @@ import HomeRecommendation from '@/components/HomeRecommendation';
 import { gradientStyle } from '@/lib/cover';
 import { formatSlotTime, getCurrentSchedule, getNextSchedule } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
+import SupportInquiryButton from '@/components/SupportInquiryButton';
+import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
 
 /** 한글 카테고리 → 영문 business_tag */
 const BUSINESS_TAG_MAP: Record<string, string> = {
@@ -63,6 +66,7 @@ export default function BusinessPage() {
   const { profile: authProfile, user } = useAuthStore();
   const playing = usePlayerStore((s) => s.playing);
   const pausePlayer = usePlayerStore((s) => s.pause);
+  const queueLength = usePlayerStore((s) => s.queue.length);
 
   // === 통합 스토어 ===
   const schedules = useBusinessScheduleStore((s) => s.schedules);
@@ -184,6 +188,29 @@ export default function BusinessPage() {
             'OFF'
           )}
         </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          {isPlaying && isKakaoChannelConfigured() && (
+            <button
+              onClick={() => void openKakaoChannelChat()}
+              title="카톡으로 즉시 문의 (@듣다)"
+              className="inline-flex items-center gap-1 rounded-lg bg-[#FEE500] px-2.5 py-1.5 text-[11px] font-bold text-[#191919] hover:bg-[#FDD800]"
+            >
+              <MessageCircle size={12} /> 카톡 문의
+            </button>
+          )}
+          <SupportInquiryButton
+            variant={isPlaying ? 'alert' : 'chip'}
+            label={isPlaying ? '문제 신고 / 문의하기' : '문의하기'}
+            defaultType={isPlaying ? '재생 오류' : '플레이리스트 문의'}
+            title={isPlaying ? '매장 재생 문의' : '문의하기'}
+            context={isPlaying ? {
+              current_playlist_id: currentPlaylist?.id,
+              current_playlist_title: currentPlaylist?.title,
+              current_schedule_slot: current?.slot_name,
+              queue_length: queueLength,
+            } : undefined}
+          />
+        </div>
       </header>
 
       {/* === 첫 사용자 onboarding — 스케줄 없으면 최상단에 가이드 카드 + 자동 스크롤 === */}

@@ -26,7 +26,7 @@ function firstRouteFor(accountType: string | undefined | null): string {
 }
 
 export default function LoginPage() {
-  const { session, signInWithPassword, signInWithGoogle, resendSignupEmail } = useAuthStore();
+  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, resendSignupEmail } = useAuthStore();
   const profile = useAuthStore((s) => s.profile);
   const isProfileReady = useAuthStore((s) => s.isProfileReady);
   const location = useLocation();
@@ -59,6 +59,7 @@ export default function LoginPage() {
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [kakaoBusy, setKakaoBusy] = useState(false);
 
   // 60초 쿨다운 타이머 — Supabase resend rate limit 회피 + 사용자 피드백.
   function startResendCooldown() {
@@ -102,6 +103,17 @@ export default function LoginPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Google 로그인에 실패했어요.');
       setGoogleBusy(false);
+    }
+  }
+
+  async function onKakaoSignIn() {
+    setError(null);
+    setKakaoBusy(true);
+    try {
+      await signInWithKakao();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '카카오 로그인에 실패했어요.');
+      setKakaoBusy(false);
     }
   }
 
@@ -327,6 +339,27 @@ export default function LoginPage() {
                   </span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={onKakaoSignIn}
+                  disabled={kakaoBusy}
+                  className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#191919]/85 shadow-card ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+                  aria-label={mode === 'signin' ? '카카오로 로그인' : '카카오로 회원가입'}
+                >
+                  {kakaoBusy ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
+                  ) : (
+                    <KakaoLogo />
+                  )}
+                  <span>
+                    {kakaoBusy
+                      ? '카카오 처리 중…'
+                      : mode === 'signin'
+                        ? '카카오로 로그인'
+                        : '카카오로 회원가입'}
+                  </span>
+                </button>
+
                 {mode === 'signin' ? (
                   <button
                     type="button"
@@ -381,6 +414,17 @@ function GoogleLogo() {
       <path
         fill="#EA4335"
         d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
+
+function KakaoLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        fill="#191919"
+        d="M9 1.5C4.582 1.5 1 4.27 1 7.69c0 2.226 1.522 4.18 3.808 5.27-.15.508-.96 3.236-.992 3.395 0 0-.02.166.087.23.107.063.232.014.232.014.225-.031 3.486-2.291 4.052-2.673A11.59 11.59 0 0 0 9 13.88c4.418 0 8-2.77 8-6.19S13.418 1.5 9 1.5z"
       />
     </svg>
   );

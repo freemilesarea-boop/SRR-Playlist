@@ -117,12 +117,16 @@ import BehaviorTab from '@/components/admin/BehaviorTab';
 import BehaviorInsightTab from '@/components/admin/BehaviorInsightTab';
 import StoreLearningTab from '@/components/admin/StoreLearningTab';
 import EventQualityTab from '@/components/admin/EventQualityTab';
+import GenreGuardrailTab from '@/components/admin/GenreGuardrailTab';
+import FeedbackSummaryTab from '@/components/admin/FeedbackSummaryTab';
+import MdPolicyTab from '@/components/admin/MdPolicyTab';
+import AbuseMonitorTab from '@/components/admin/AbuseMonitorTab';
 import StoreGenrePolicyTab from '@/components/admin/StoreGenrePolicyTab';
 
 const APPROVABLE_STATUSES = ['submitted', 'review_pending', 'changes_requested'];
 const canApproveStatus = (s: string | null | undefined) => APPROVABLE_STATUSES.includes(s ?? '');
 
-type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight' | 'store_learning' | 'event_quality' | 'store_genre_policy';
+type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review' | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview' | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight' | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy';
 const BATCH = 15;
 
 const STORE_LABELS: Record<string, string> = {
@@ -148,7 +152,7 @@ export default function AiCurationPanel() {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {([['perf', '운영 성과'], ['store_genre_policy', '매장 장르 정책'], ['qc_queue', 'AI 검수 큐'], ['behavior', '행동 지표'], ['behavior_insight', '행동 인사이트'], ['store_learning', '매장 학습'], ['event_quality', '이벤트 품질'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['duplicates', '중복 음원 탐지'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
+        {([['perf', '운영 성과'], ['store_genre_policy', '매장 장르 정책 (v1)'], ['qc_queue', 'AI 검수 큐'], ['behavior', '행동 지표'], ['behavior_insight', '행동 인사이트'], ['store_learning', '매장 학습'], ['event_quality', '이벤트 품질'], ['pending', '분석 대기'], ['results', 'AI 판정 결과'], ['fit', '플레이리스트 적합도'], ['review', '위반/검토 후보'], ['guardrail', 'Guardrail 대시보드'], ['genre_guardrail', '장르 가드레일'], ['md_policy', '매장 장르 정책 (MD)'], ['abuse_monitor', '어뷰징 모니터'], ['feedback_summary', '운영자 학습'], ['highrisk', '고위험 검수'], ['rereview', '전체 재검수'], ['flow', 'Playlist Flow'], ['reorder', '자동 재배치'], ['business', '사업자 반응'], ['duplicates', '중복 음원 탐지'], ['embed_review', '임베딩 검증'], ['embedding', '임베딩(PoC)']] as [SubTab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
             className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${sub === k ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>
             {label}
@@ -163,6 +167,10 @@ export default function AiCurationPanel() {
       {sub === 'embedding' && <EmbeddingTab />}
       {sub === 'embed_review' && <EmbeddingReviewTab />}
       {sub === 'guardrail' && <GuardrailDashboardTab />}
+      {sub === 'genre_guardrail' && <GenreGuardrailTab />}
+      {sub === 'md_policy' && <MdPolicyTab />}
+      {sub === 'abuse_monitor' && <AbuseMonitorTab />}
+      {sub === 'feedback_summary' && <FeedbackSummaryTab />}
       {sub === 'highrisk' && <HighRiskTab />}
       {sub === 'rereview' && <RereviewTab />}
       {sub === 'flow' && <FlowTab />}
@@ -830,7 +838,7 @@ function EmbeddingTab() {
   const loadPending = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, st] = await Promise.all([exportEmbeddingPending('openl3', 500), embeddingStatus('openl3').catch(() => null)]);
+      const [p, st] = await Promise.all([exportEmbeddingPending('laion-clap-music-v1', 500), embeddingStatus('laion-clap-music-v1').catch(() => null)]);
       setPending(p); setStatus(st);
     }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
@@ -840,7 +848,7 @@ function EmbeddingTab() {
 
   async function buildArchetypes() {
     setBusy(true);
-    try { const r = await buildStoreArchetypes('openl3', 8); toast.success(`매장 아키타입 생성 — ${r.built}개 매장`); await loadPending(); }
+    try { const r = await buildStoreArchetypes('laion-clap-music-v1', 8); toast.success(`매장 아키타입 생성 — ${r.built}개 매장`); await loadPending(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   }
@@ -974,7 +982,7 @@ function EmbeddingReviewTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setRows(await listEmbeddingReviewTracks(filter, 'openl3', 150)); }
+    try { setRows(await listEmbeddingReviewTracks(filter, 'laion-clap-music-v1', 150)); }
     catch (e) { toast.error(`불러오기 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, [filter]);
@@ -983,13 +991,13 @@ function EmbeddingReviewTab() {
   async function toggle(tid: string) {
     if (openId === tid) { setOpenId(null); setCmp(null); return; }
     setOpenId(tid); setCmp(null); setCmpLoading(true);
-    try { setCmp(await getEmbeddingComparison(tid, 'openl3')); }
+    try { setCmp(await getEmbeddingComparison(tid, 'laion-clap-music-v1')); }
     catch (e) { toast.error(`비교 실패: ${(e as Error).message}`); }
     finally { setCmpLoading(false); }
   }
   async function act(fn: () => Promise<void>, msg: string, tid: string) {
     setBusy(true);
-    try { await fn(); toast.success(msg); if (openId === tid) setCmp(await getEmbeddingComparison(tid, 'openl3')); await load(); }
+    try { await fn(); toast.success(msg); if (openId === tid) setCmp(await getEmbeddingComparison(tid, 'laion-clap-music-v1')); await load(); }
     catch (e) { toast.error(`실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   }
@@ -1036,7 +1044,7 @@ function EmbeddingReviewTab() {
                     {cmpLoading || !cmp ? (
                       <p className="py-3 text-center text-xs text-ink-dim">불러오는 중…</p>
                     ) : !cmp.has_embedding ? (
-                      <p className="rounded-lg bg-bg-soft/40 px-3 py-3 text-xs text-ink-mute">아직 임베딩 분석 전입니다. Colab 또는 worker 로 분석 후 import 해주세요. (model={cmp.model_name ?? 'openl3'})</p>
+                      <p className="rounded-lg bg-bg-soft/40 px-3 py-3 text-xs text-ink-mute">아직 임베딩 분석 전입니다. Colab 또는 worker 로 분석 후 import 해주세요. (model={cmp.model_name ?? 'laion-clap-music-v1'})</p>
                     ) : (
                       <div className="space-y-3">
                         {cmp.suspected_issues.length > 0 && (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Calendar,
   Save,
@@ -7,7 +7,9 @@ import {
   Sun,
   Moon,
   ListMusic,
+  AlertTriangle,
 } from 'lucide-react';
+import { listPlaylistsWithPlayableCount, type PlaylistPlayableSummary } from '@/lib/businessFallbackApi';
 import {
   TEMPLATE_KEYS,
   createSchedule,
@@ -109,6 +111,17 @@ export default function BusinessScheduler() {
   const refresh = useBusinessScheduleStore((s) => s.refresh);
   const setLastSwitchedScheduleId = useBusinessScheduleStore((s) => s.setLastSwitchedScheduleId);
   const businessMode = useBusinessStore((s) => s.businessMode);
+
+  // X6.0.1 — 각 플리의 playable_count 로드 (빈 플리 경고용)
+  const [playableSummary, setPlayableSummary] = useState<PlaylistPlayableSummary[]>([]);
+  useEffect(() => {
+    void listPlaylistsWithPlayableCount().then(setPlayableSummary).catch(() => {});
+  }, []);
+  const playableMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of playableSummary) m.set(p.id, p.playable_count);
+    return m;
+  }, [playableSummary]);
 
   // 매장 정보 — 로컬 편집 버퍼 (store.profile 으로 동기화)
   const [profile, setProfile] = useState<BusinessProfile | null>(storeProfile);
@@ -496,6 +509,7 @@ export default function BusinessScheduler() {
                   otherPlaylists={otherPlaylists}
                   isCurrent={current?.slot_name === name}
                   isPlaying={businessMode && current?.slot_name === name}
+                  playableMap={playableMap}
                   onChange={(patch) =>
                     setSlots((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
                   }
@@ -526,6 +540,7 @@ export default function BusinessScheduler() {
               playlists={playlists}
               current={current}
               businessMode={businessMode}
+              playableMap={playableMap}
             />
             <SplitSlotGroup
               label="주말"
@@ -538,6 +553,7 @@ export default function BusinessScheduler() {
               playlists={playlists}
               current={current}
               businessMode={businessMode}
+              playableMap={playableMap}
             />
           </>
         )}
@@ -573,6 +589,7 @@ function SplitSlotGroup({
   playlists,
   current,
   businessMode,
+  playableMap,
 }: {
   label: string;
   sub: string;
@@ -584,6 +601,7 @@ function SplitSlotGroup({
   playlists: PlaylistRow[];
   current: BusinessSchedule | null;
   businessMode: boolean;
+  playableMap: Map<string, number>;
 }) {
   // 오늘이 이 그룹에 속하는지 판단 (NOW 강조)
   const todayDay = new Date().getDay();
@@ -613,6 +631,7 @@ function SplitSlotGroup({
             otherPlaylists={otherPlaylists}
             isCurrent={groupHasToday && current?.slot_name === name}
             isPlaying={groupHasToday && businessMode && current?.slot_name === name}
+            playableMap={playableMap}
             onChange={(patch) =>
               setData((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
             }
@@ -666,6 +685,7 @@ function SimpleSlotCard({
   otherPlaylists,
   isCurrent,
   isPlaying,
+  playableMap,
   onChange,
   onAutoMatch,
 }: {
@@ -675,12 +695,16 @@ function SimpleSlotCard({
   otherPlaylists: PlaylistRow[];
   isCurrent: boolean;
   isPlaying: boolean;
+  playableMap: Map<string, number>;
   onChange: (patch: Partial<SimpleSlot>) => void;
   onAutoMatch: () => void;
 }) {
   const Icon = name === '오전' ? Sunrise : name === '오후' ? Sun : Moon;
   const tone =
     name === '오전' ? 'text-amber-300' : name === '오후' ? 'text-orange-300' : 'text-indigo-300';
+  // X6.0.1 — 선택된 플리의 playable_count 확인 (빈 플리 경고)
+  const selectedPlayable = data.playlist_id != null ? playableMap.get(data.playlist_id) : undefined;
+  const isEmptyPlaylist = data.playlist_id != null && selectedPlayable !== undefined && selectedPlayable === 0;
   return (
     <div
       className={`relative overflow-hidden rounded-2xl p-3.5 ring-1 transition duration-smooth ease-emphasized ${
@@ -728,25 +752,33 @@ function SimpleSlotCard({
         <select
           value={data.playlist_id ?? ''}
           onChange={(e) => onChange({ playlist_id: e.target.value || null })}
-          className="input flex-1 py-1.5 text-xs"
+          className={`input flex-1 py-1.5 text-xs ${isEmptyPlaylist ? 'ring-1 ring-rose-500/50' : ''}`}
         >
           <option value="">플레이리스트 선택…</option>
           {businessOnly.length > 0 && (
             <optgroup label="사업자 전용">
-              {businessOnly.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
+              {businessOnly.map((p) => {
+                const cnt = playableMap.get(p.id);
+                const suffix = cnt !== undefined ? ` · ${cnt}곡` : '';
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.title}{suffix}{cnt === 0 ? ' ⚠️' : ''}
+                  </option>
+                );
+              })}
             </optgroup>
           )}
           {otherPlaylists.length > 0 && (
             <optgroup label="일반">
-              {otherPlaylists.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
+              {otherPlaylists.map((p) => {
+                const cnt = playableMap.get(p.id);
+                const suffix = cnt !== undefined ? ` · ${cnt}곡` : '';
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.title}{suffix}{cnt === 0 ? ' ⚠️' : ''}
+                  </option>
+                );
+              })}
             </optgroup>
           )}
         </select>
@@ -758,6 +790,16 @@ function SimpleSlotCard({
           <ListMusic size={12} /> 자동
         </button>
       </div>
+      {isEmptyPlaylist && (
+        <p className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-rose-500">
+          <AlertTriangle size={10} /> 선택된 플리에 재생 가능한 곡이 없어요. 다른 플리를 골라주세요.
+        </p>
+      )}
+      {selectedPlayable !== undefined && selectedPlayable > 0 && selectedPlayable < 5 && (
+        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-500">
+          <AlertTriangle size={10} /> 재생 가능 {selectedPlayable}곡 — 너무 적어 짧은 시간 후 반복됩니다.
+        </p>
+      )}
     </div>
   );
 }

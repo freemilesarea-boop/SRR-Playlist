@@ -292,7 +292,7 @@ export async function registerSkipViolations(): Promise<{ registered: number }> 
 
 // 임베딩 PoC — export(pending) / import(검증 후 upsert, dry-run 지원)
 export interface EmbeddingPendingRow { track_id: string; title: string | null; artist: string | null; audio_url: string | null; duration: number | null; }
-export async function exportEmbeddingPending(model = 'openl3', limit = 500): Promise<EmbeddingPendingRow[]> {
+export async function exportEmbeddingPending(model = 'laion-clap-music-v1', limit = 500): Promise<EmbeddingPendingRow[]> {
   const { data, error } = await supabase.rpc('admin_export_embedding_pending_tracks', { p_model: model, p_limit: limit });
   if (error) throw error;
   return (data ?? []) as EmbeddingPendingRow[];
@@ -322,38 +322,38 @@ export interface EmbeddingComparison {
   embedding_top5: Array<{ store_key: string; similarity: number }>;
   ai_status: string | null;
 }
-export async function listEmbeddingReviewTracks(filter = 'all', model = 'openl3', limit = 150): Promise<EmbeddingReviewRow[]> {
+export async function listEmbeddingReviewTracks(filter = 'all', model = 'laion-clap-music-v1', limit = 150): Promise<EmbeddingReviewRow[]> {
   const { data, error } = await supabase.rpc('admin_list_embedding_review_tracks', { p_filter: filter, p_model: model, p_limit: limit });
   if (error) throw error;
   return (data ?? []) as EmbeddingReviewRow[];
 }
-export async function getEmbeddingComparison(trackId: string, model = 'openl3'): Promise<EmbeddingComparison> {
+export async function getEmbeddingComparison(trackId: string, model = 'laion-clap-music-v1'): Promise<EmbeddingComparison> {
   const { data, error } = await supabase.rpc('admin_get_embedding_comparison', { p_track_id: trackId, p_model: model });
   if (error) throw error;
   return data as EmbeddingComparison;
 }
-export async function markEmbeddingReviewed(trackId: string, model = 'openl3', note?: string): Promise<void> {
+export async function markEmbeddingReviewed(trackId: string, model = 'laion-clap-music-v1', note?: string): Promise<void> {
   const { error } = await supabase.rpc('admin_mark_embedding_reviewed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
   if (error) throw error;
 }
-export async function markEmbeddingReanalysisNeeded(trackId: string, model = 'openl3', note?: string): Promise<void> {
+export async function markEmbeddingReanalysisNeeded(trackId: string, model = 'laion-clap-music-v1', note?: string): Promise<void> {
   const { error } = await supabase.rpc('admin_mark_embedding_reanalysis_needed', { p_track_id: trackId, p_model: model, p_note: note ?? null });
   if (error) throw error;
 }
-export async function addStoreSeedCandidate(trackId: string, storeKey: string, model = 'openl3'): Promise<void> {
+export async function addStoreSeedCandidate(trackId: string, storeKey: string, model = 'laion-clap-music-v1'): Promise<void> {
   const { error } = await supabase.rpc('admin_add_store_seed_candidate', { p_track_id: trackId, p_store_key: storeKey, p_model: model });
   if (error) throw error;
 }
-export async function applyEmbeddingToAiMetadata(trackId: string, model = 'openl3'): Promise<void> {
+export async function applyEmbeddingToAiMetadata(trackId: string, model = 'laion-clap-music-v1'): Promise<void> {
   const { error } = await supabase.rpc('admin_apply_embedding_to_ai_metadata', { p_track_id: trackId, p_model: model });
   if (error) throw error;
 }
 export interface EmbeddingStatus { model: string; track_embeddings: number; store_archetypes: number; pending: number; embedding_dim: number | null; }
-export async function embeddingStatus(model = 'openl3'): Promise<EmbeddingStatus> {
+export async function embeddingStatus(model = 'laion-clap-music-v1'): Promise<EmbeddingStatus> {
   const { data, error } = await supabase.rpc('admin_embedding_status', { p_model: model });
   if (error) throw error; return data as EmbeddingStatus;
 }
-export async function buildStoreArchetypes(model = 'openl3', top = 8): Promise<{ built: number; skipped: unknown[] }> {
+export async function buildStoreArchetypes(model = 'laion-clap-music-v1', top = 8): Promise<{ built: number; skipped: unknown[] }> {
   const { data, error } = await supabase.rpc('admin_build_store_archetypes', { p_model: model, p_top: top });
   if (error) throw error; return data as { built: number; skipped: unknown[] };
 }
@@ -1061,10 +1061,408 @@ export interface QcQueueSummary {
   by_source: Record<string, number> | null;
 }
 
-export async function adminGenerateQcQueueCandidates(): Promise<{ ok: true; by_rule: Record<string, number>; generated_total: number }> {
-  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates');
+export interface QcGenerateResult {
+  ok: true;
+  by_rule: Record<string, number | string>;
+  generated_total: number;
+  limit?: number;
+  issue?: string | null;
+}
+
+export async function adminGenerateQcQueueCandidates(
+  limit = 100,
+  issue?: string | null,
+  force = false,
+): Promise<QcGenerateResult> {
+  const { data, error } = await supabase.rpc('admin_generate_qc_queue_candidates', {
+    p_limit: limit,
+    p_issue: issue ?? null,
+    p_force: force,
+  });
+  if (error) {
+    if (/timeout/i.test(error.message)) {
+      throw new Error('DB timeout — batch size 를 줄여 다시 실행하세요 (현재 limit=' + limit + ')');
+    }
+    throw error;
+  }
+  return data as QcGenerateResult;
+}
+
+export async function adminGenerateFingerprintQcCandidates(
+  limit = 100,
+): Promise<QcGenerateResult> {
+  const { data, error } = await supabase.rpc('admin_generate_fingerprint_qc_candidates', {
+    p_limit: limit,
+  });
+  if (error) {
+    if (/timeout/i.test(error.message)) {
+      throw new Error('Fingerprint 후보 생성 timeout — limit 을 줄여 재시도하세요 (현재 ' + limit + ')');
+    }
+    throw error;
+  }
+  return data as QcGenerateResult;
+}
+
+// Phase 0264: QC 큐 처리 UX 강화
+export async function adminBulkReviewQcQueue(
+  ids: string[],
+  assignee?: string | null,
+  note?: string | null,
+): Promise<{ ok: true; count: number }> {
+  const { data, error } = await supabase.rpc('admin_bulk_review_qc_queue', {
+    p_ids: ids,
+    p_assignee: assignee ?? null,
+    p_note: note ?? null,
+  });
   if (error) throw error;
-  return data as { ok: true; by_rule: Record<string, number>; generated_total: number };
+  return data as { ok: true; count: number };
+}
+
+export interface FingerprintFailureDetail {
+  queue: Record<string, unknown> | null;
+  track: {
+    id: string; title: string | null; artist: string | null;
+    audio_url: string | null; audio_health_status: string | null;
+    audio_content_type: string | null; audio_content_length: number | null;
+  } | null;
+  fingerprint: {
+    track_id: string; fingerprint_status: string | null;
+    retry_count: number | null; fingerprint_error: string | null;
+    download_content_type: string | null; download_size_bytes: number | null;
+    fingerprint_attempted_at: string | null;
+  } | null;
+}
+
+export async function adminGetFingerprintFailureDetail(
+  queueId: string,
+): Promise<FingerprintFailureDetail> {
+  const { data, error } = await supabase.rpc('admin_get_fingerprint_failure_detail', {
+    p_queue_id: queueId,
+  });
+  if (error) throw error;
+  return data as FingerprintFailureDetail;
+}
+
+export async function adminRetryFingerprintForQueue(
+  queueId: string,
+  resetRetry = false,
+  note?: string | null,
+): Promise<{ ok: true; before_status: string; before_retry: number; reset: boolean }> {
+  const { data, error } = await supabase.rpc('admin_retry_fingerprint_for_queue', {
+    p_queue_id: queueId,
+    p_reset_retry: resetRetry,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: true; before_status: string; before_retry: number; reset: boolean };
+}
+
+export interface QcQueueAuditRow {
+  id: string;
+  queue_id: string;
+  track_id: string | null;
+  admin_user_id: string | null;
+  admin_name: string | null;
+  action: string;
+  before_status: string | null;
+  after_status: string | null;
+  before_assignee: string | null;
+  after_assignee: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export async function adminGetQcQueueAudit(
+  queueId?: string | null,
+  limit = 50,
+): Promise<QcQueueAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_get_qc_queue_audit', {
+    p_queue_id: queueId ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as QcQueueAuditRow[];
+}
+
+// Phase 0265: QC 큐 inline 운영 조치
+export interface QcTrackContextPlaylist {
+  pt_id: string;
+  order_index: number;
+  placement_reason: string | null;
+  placed_by: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+  playlist_id: string;
+  playlist_name: string | null;
+  business_category: string | null;
+  normalized_slug: string | null;
+  fit_score: number | null;
+  fit_status: 'active' | 'review_needed' | 'excluded' | null;
+  fit_source: string | null;
+  reason: string | null;
+  reason_codes: string[] | null;
+  audio_score: number | null;
+  metadata_score: number | null;
+  behavior_score: number | null;
+  penalty_score: number | null;
+}
+
+export interface QcTrackContext {
+  queue: Record<string, unknown>;
+  track: {
+    id: string; title: string | null; artist: string | null; cover_url: string | null;
+    audio_url: string | null; duration: number | null;
+    main_genre: string | null; sub_genre: string | null;
+    mood: string | null; mood_tags: string[] | null; genre_tags: string[] | null;
+    suitable_store: string | null; business_tags: string[] | null;
+    bpm: number | null; energy_level: number | null;
+    instrumental: boolean | null; explicit_content: boolean | null;
+    language: string | null; vocal_type: string | null; admin_note: string | null;
+    audio_health_status: string | null;
+  };
+  audio_features: {
+    energy: number | null; instrumentalness: number | null;
+    acousticness: number | null; speechiness: number | null;
+    danceability: number | null; valence: number | null;
+    analyzer: string | null;
+  } | null;
+  playlists: QcTrackContextPlaylist[];
+}
+
+export async function adminGetQcTrackContext(queueId: string): Promise<QcTrackContext> {
+  const { data, error } = await supabase.rpc('admin_get_qc_track_context', {
+    p_queue_id: queueId,
+  });
+  if (error) throw error;
+  return data as QcTrackContext;
+}
+
+export type QcInlineAction = 'remove' | 'change_status' | 'update_metadata' | 'recompute';
+
+export interface QcActAndResolveResult {
+  ok: true;
+  action: QcInlineAction;
+  queue_id: string;
+  action_result: unknown;
+  resolved: boolean;
+}
+
+export async function adminQcActAndResolve(input: {
+  queueId: string;
+  action: QcInlineAction;
+  playlistId?: string | null;
+  payload?: Record<string, unknown> | null;
+  status?: 'active' | 'review_needed' | 'excluded' | null;
+  reason?: string | null;
+  adminNote?: string | null;
+  resolveAfter?: boolean;
+}): Promise<QcActAndResolveResult> {
+  const { data, error } = await supabase.rpc('admin_qc_act_and_resolve', {
+    p_queue_id: input.queueId,
+    p_action: input.action,
+    p_playlist_id: input.playlistId ?? null,
+    p_payload: input.payload ?? null,
+    p_status: input.status ?? null,
+    p_reason: input.reason ?? null,
+    p_admin_note: input.adminNote ?? null,
+    p_resolve_after: input.resolveAfter ?? false,
+  });
+  if (error) throw error;
+  return data as QcActAndResolveResult;
+}
+
+// Phase 0267: Feedback Summary UI + Inspector Badge
+export type FeedbackAction =
+  | 'admin_removed' | 'admin_excluded' | 'admin_review_needed'
+  | 'admin_approved' | 'metadata_corrected';
+
+export interface FeedbackSummaryGenreRow {
+  main_genre: string;
+  removed: number;
+  excluded: number;
+  approved: number;
+  review_needed: number;
+  total: number;
+}
+
+export interface FeedbackRecentLog {
+  id: string;
+  track_id: string;
+  track_title: string | null;
+  artist_name: string | null;
+  main_genre: string | null;
+  playlist_id: string | null;
+  playlist_name: string | null;
+  store_type: string | null;
+  action: FeedbackAction;
+  admin_note: string | null;
+  before_fit_score: number | null;
+  after_fit_score: number | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface FeedbackSummary {
+  total: number;
+  by_action: Partial<Record<FeedbackAction, number>> | null;
+  by_store: Record<string, number> | null;
+  by_store_action: Record<string, Partial<Record<FeedbackAction, number>>> | null;
+  by_genre: FeedbackSummaryGenreRow[];
+  recent_logs: FeedbackRecentLog[];
+}
+
+export async function adminFeedbackSummary(): Promise<FeedbackSummary> {
+  const { data, error } = await supabase.rpc('admin_feedback_summary');
+  if (error) throw error;
+  return data as FeedbackSummary;
+}
+
+export interface TrackFeedbackRow {
+  id: string;
+  track_id: string;
+  store_type: string | null;
+  action: FeedbackAction;
+  playlist_id: string | null;
+  playlist_name: string | null;
+  before_fit_score: number | null;
+  after_fit_score: number | null;
+  admin_note: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function adminGetTrackFeedback(trackId: string): Promise<TrackFeedbackRow[]> {
+  const { data, error } = await supabase.rpc('admin_get_track_feedback', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as TrackFeedbackRow[];
+}
+
+// Phase X5.4: MD 기반 매장 장르 정책
+export interface MdPolicySummary {
+  total_rules: number;
+  distinct_stores: number;
+  by_store: Record<string, number>;
+  by_vocal_policy: Record<'vocal' | 'instrumental', number>;
+}
+
+export interface MdPolicyRule {
+  store_type: string;
+  genre: string;
+  vocal_policy: 'vocal' | 'instrumental';
+  is_allowed: boolean;
+  priority: number;
+  source: string;
+}
+
+export interface MdPolicyViolationRow {
+  playlist_id: string;
+  playlist_name: string | null;
+  track_id: string;
+  track_title: string | null;
+  artist: string | null;
+  main_genre: string | null;
+  instrumental: boolean;
+  store_slug: string | null;
+  reason: string | null;
+  fit_score: number | null;
+  fit_status: string | null;
+  fit_source: string | null;
+}
+
+export interface MdPolicyDryRunResult {
+  dry_run: boolean;
+  total_playlist_tracks_scanned: number;
+  with_policy_defined: number;
+  violations: number;
+  admin_overrides_protected: number;
+  excluded_protected: number;
+  marked_review_needed: number;
+  by_store: Record<string, number>;
+  by_genre: Record<string, number>;
+  note: string;
+}
+
+export async function adminMdPolicySummary(): Promise<MdPolicySummary> {
+  const { data, error } = await supabase.rpc('admin_md_policy_summary');
+  if (error) throw error;
+  return data as MdPolicySummary;
+}
+
+export async function adminListMdPolicyRules(storeType?: string | null): Promise<MdPolicyRule[]> {
+  let q = supabase
+    .from('store_genre_placement_rules')
+    .select('store_type, genre, vocal_policy, is_allowed, priority, source')
+    .order('store_type', { ascending: true })
+    .order('vocal_policy', { ascending: true })
+    .order('genre', { ascending: true });
+  if (storeType) q = q.eq('store_type', storeType);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as MdPolicyRule[];
+}
+
+export async function adminListMdPolicyViolations(
+  store?: string | null, limit = 500,
+): Promise<MdPolicyViolationRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_md_policy_violations', {
+    p_store: store ?? null, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as MdPolicyViolationRow[];
+}
+
+export async function adminBackfillStoreGenrePolicyReview(
+  dryRun: boolean,
+): Promise<MdPolicyDryRunResult> {
+  const { data, error } = await supabase.rpc('admin_backfill_store_genre_policy_review', {
+    p_dry_run: dryRun,
+  });
+  if (error) throw error;
+  return data as MdPolicyDryRunResult;
+}
+
+// Phase X6.0: Anti-abuse daily user×track cap (KST 기준 3회)
+export interface AbuseSummary {
+  window_days: number;
+  total_raw_streams: number;
+  total_effective_streams: number;
+  total_excluded_by_cap: number;
+  distinct_users_affected: number;
+  distinct_tracks_affected: number;
+  distinct_user_track_day_caps: number;
+}
+
+export interface AbuseCandidateRow {
+  user_id: string;
+  user_email: string | null;
+  track_id: string;
+  track_title: string | null;
+  artist: string | null;
+  date_kst: string;
+  raw_plays: number;
+  effective_plays: number;
+  excluded_plays: number;
+  excluded_reason: string | null;
+  last_played_at: string;
+}
+
+export async function adminAbuseSummary(days = 7): Promise<AbuseSummary> {
+  const { data, error } = await supabase.rpc('admin_abuse_summary', { p_days: days });
+  if (error) throw error;
+  return data as AbuseSummary;
+}
+
+export async function adminListAbuseCandidates(
+  days = 7, minRaw = 10, minExcluded = 7, limit = 200,
+): Promise<AbuseCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_abuse_candidates', {
+    p_days: days, p_min_raw: minRaw, p_min_excluded: minExcluded, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as AbuseCandidateRow[];
 }
 
 export async function adminListQcQueue(
@@ -1384,4 +1782,73 @@ export async function adminStoreLearningSummary(windowDays = 30): Promise<StoreL
   const { data, error } = await supabase.rpc('admin_store_learning_summary', { p_window_days: windowDays });
   if (error) throw error;
   return data as StoreLearningSummary;
+}
+
+// ===== X5.0 Genre Guardrails =====
+
+export type GenreGuardrailRuleType = 'hard_block' | 'soft_penalty' | 'bonus';
+
+export interface GenreGuardrailRow {
+  id: string;
+  genre_pattern: string;
+  store_slug: string;
+  rule_type: GenreGuardrailRuleType;
+  score_delta: number;
+  description: string | null;
+  is_active: boolean;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenreGuardrailSummary {
+  total: number;
+  active: number;
+  by_rule_type: Record<GenreGuardrailRuleType, number>;
+  by_store: Record<string, number>;
+}
+
+export async function adminListGenreGuardrails(storeSlug?: string | null): Promise<GenreGuardrailRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_genre_guardrails', {
+    p_store_slug: storeSlug ?? null,
+  });
+  if (error) throw error;
+  return (data ?? []) as GenreGuardrailRow[];
+}
+
+export async function adminGenreGuardrailSummary(): Promise<GenreGuardrailSummary | null> {
+  const { data, error } = await supabase.rpc('admin_genre_guardrail_summary');
+  if (error) throw error;
+  return data as GenreGuardrailSummary;
+}
+
+export async function adminUpsertGenreGuardrail(input: {
+  id?: string | null;
+  genre_pattern?: string | null;
+  store_slug?: string | null;
+  rule_type?: GenreGuardrailRuleType | null;
+  score_delta?: number | null;
+  description?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_upsert_genre_guardrail', {
+    p_id: input.id ?? null,
+    p_genre_pattern: input.genre_pattern ?? null,
+    p_store_slug: input.store_slug ?? null,
+    p_rule_type: input.rule_type ?? null,
+    p_score_delta: input.score_delta ?? null,
+    p_description: input.description ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function adminToggleGenreGuardrail(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('admin_toggle_genre_guardrail', { p_id: id });
+  if (error) throw error;
+  return data as boolean;
+}
+
+export async function adminDeleteGenreGuardrail(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_genre_guardrail', { p_id: id });
+  if (error) throw error;
 }

@@ -34,6 +34,7 @@ interface AuthState {
     metadata?: Record<string, string | null | undefined>,
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithKakao: () => Promise<void>;
   signOut: () => Promise<void>;
   /** 회원가입 인증 메일 재발송 — 메일 못 받았거나 만료된 경우 사용. */
   resendSignupEmail: (email: string) => Promise<void>;
@@ -227,6 +228,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw error;
+  },
+
+  signInWithKakao: async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'kakao',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        // X6.2: profile_nickname + account_email (필수) + talk_message (2차 카톡 알림 준비)
+        scopes: 'profile_nickname account_email talk_message',
+      },
     });
     if (error) throw error;
   },

@@ -54,8 +54,10 @@ export default function TrackLikeButton({
       // AI 큐레이션 behavior — like/unlike (정산 미영향)
       void recordPlayEvent({ trackId, eventType: next ? 'like' : 'unlike', anonId: getAnonymousId() });
       // X4.3.1 — playback_events_v2 like/unlike (parallel layer, behavior_score 영향 없음)
+      // 0279: RLS 가 session_id 필수 → like 토글 단위 synthetic session (anonId + Date.now)
       void logPlaybackEventV2({
         trackId, eventType: next ? 'like' : 'unlike',
+        sessionId: `like-${getAnonymousId()}-${Date.now()}`,
         anonymousId: getAnonymousId(),
       });
       if (res.warning) {

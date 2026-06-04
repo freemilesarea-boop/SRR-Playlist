@@ -22,6 +22,10 @@ import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
+import SupportInquiryButton from '@/components/SupportInquiryButton';
+import MyInquiriesSection from '@/components/MyInquiriesSection';
+import KakaoChannelButtons from '@/components/KakaoChannelButtons';
+import { isKakaoChannelConfigured } from '@/lib/kakao';
 import { useThemeStore } from '@/store/themeStore';
 import {
   fetchMyArtistProfile,
@@ -104,7 +108,26 @@ export default function ProfilePage() {
             {planLabel}
           </p>
         </div>
+        <div className="ml-auto">
+          <SupportInquiryButton variant="chip" defaultType="기타" />
+        </div>
       </header>
+
+      <MyInquiriesSection />
+
+      {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
+      <section className="space-y-2">
+        <div className="px-1">
+          <h2 className="text-sm font-bold tracking-tight">고객센터</h2>
+          <p className="text-[11px] text-ink-mute">
+            {isKakaoChannelConfigured() ? '@듣다 카카오톡 채널 — 빠른 답변' : '문의 폼으로 답변드립니다'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
+          {isKakaoChannelConfigured() && <KakaoChannelButtons variant="row" />}
+          <SupportInquiryButton variant="nav" label="문의 남기기" defaultType="기타" />
+        </div>
+      </section>
 
       {/* 테마 설정 */}
       <section className="space-y-2">
