@@ -24,6 +24,8 @@ import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
 import MyInquiriesSection from '@/components/MyInquiriesSection';
+import KakaoChannelButtons from '@/components/KakaoChannelButtons';
+import { isKakaoChannelConfigured } from '@/lib/kakao';
 import { useThemeStore } from '@/store/themeStore';
 import {
   fetchMyArtistProfile,
@@ -112,6 +114,19 @@ export default function ProfilePage() {
       </header>
 
       <MyInquiriesSection />
+
+      {/* 고객센터 / 카카오톡 채널 */}
+      {isKakaoChannelConfigured() && (
+        <section className="space-y-2">
+          <div className="px-1">
+            <h2 className="text-sm font-bold tracking-tight">고객센터</h2>
+            <p className="text-[11px] text-ink-mute">@듣다 카카오톡 채널 — 빠른 답변</p>
+          </div>
+          <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
+            <KakaoChannelButtons variant="row" />
+          </div>
+        </section>
+      )}
 
       {/* 테마 설정 */}
       <section className="space-y-2">

@@ -61,8 +61,35 @@ function getJsKey(): string {
   return (import.meta.env.VITE_KAKAO_JS_KEY as string | undefined) ?? '';
 }
 
+/** 카카오톡 채널 공개 ID (예: "_xgHxbGX"). pf.kakao.com URL 에서 추출. */
+export function getKakaoChannelPublicId(): string {
+  return (import.meta.env.VITE_KAKAO_CHANNEL_PUBLIC_ID as string | undefined) ?? '';
+}
+
 export function isKakaoConfigured(): boolean {
   return getJsKey().length > 0;
+}
+
+export function isKakaoChannelConfigured(): boolean {
+  return getKakaoChannelPublicId().length > 0;
+}
+
+/** 채널 공개 URL (홈) */
+export function kakaoChannelHomeUrl(): string {
+  const id = getKakaoChannelPublicId();
+  return id ? `https://pf.kakao.com/${id}` : '';
+}
+
+/** 채널 1:1 채팅 URL */
+export function kakaoChannelChatUrl(): string {
+  const id = getKakaoChannelPublicId();
+  return id ? `https://pf.kakao.com/${id}/chat` : '';
+}
+
+/** 채널 친구 추가 URL */
+export function kakaoChannelFriendUrl(): string {
+  const id = getKakaoChannelPublicId();
+  return id ? `https://pf.kakao.com/${id}/friend` : '';
 }
 
 export function isKakaoReady(): boolean {
@@ -139,6 +166,52 @@ export async function shareTrackToKakao(params: {
     if (import.meta.env.DEV) console.warn('[kakao] shareTrack failed', e);
     return false;
   }
+}
+
+/**
+ * 카카오톡 채널 친구 추가 — SDK 우선, 미가능 시 URL fallback.
+ * 호출자는 보통 button onClick 에서 사용.
+ */
+export async function addKakaoChannel(): Promise<boolean> {
+  const id = getKakaoChannelPublicId();
+  if (!id) return false;
+  const ok = await ensureKakaoReady();
+  if (ok && window.Kakao?.Channel) {
+    try {
+      window.Kakao.Channel.addChannel({ channelPublicId: id });
+      return true;
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[kakao] addChannel SDK 실패, URL fallback', e);
+    }
+  }
+  // fallback: 새 창으로 친구추가 페이지 오픈
+  if (typeof window !== 'undefined') {
+    window.open(`https://pf.kakao.com/${id}/friend`, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 카카오톡 채널 1:1 채팅 시작 — SDK 우선, URL fallback.
+ */
+export async function openKakaoChannelChat(): Promise<boolean> {
+  const id = getKakaoChannelPublicId();
+  if (!id) return false;
+  const ok = await ensureKakaoReady();
+  if (ok && window.Kakao?.Channel) {
+    try {
+      window.Kakao.Channel.chat({ channelPublicId: id });
+      return true;
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[kakao] chat SDK 실패, URL fallback', e);
+    }
+  }
+  if (typeof window !== 'undefined') {
+    window.open(`https://pf.kakao.com/${id}/chat`, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+  return false;
 }
 
 /** 플레이리스트 공유 */

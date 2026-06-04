@@ -16,6 +16,7 @@ import {
   type AdminInquiryRow, type InquiryDetail, type InquiryStatus, type InquiryPriority,
   type InquiryType, type SupportInquirySummary,
 } from '@/lib/supportInquiryApi';
+import { isKakaoChannelConfigured, openKakaoChannelChat, kakaoChannelChatUrl } from '@/lib/kakao';
 import { toast } from '@/store/toastStore';
 
 const STATUS_LABEL: Record<InquiryStatus, string> = {
@@ -278,6 +279,30 @@ function InquiryDetailView({
           <p className="text-[10px]">아티스트: {(detail.artist as { artist_name?: string }).artist_name ?? '—'}</p>
         )}
       </div>
+
+      {/* 카톡 답변 도구 — wants_kakao_contact 면 강조 */}
+      {isKakaoChannelConfigured() && (
+        <div className={`rounded-lg p-2.5 ${inq.wants_kakao_contact ? 'bg-[#FEE500]/20 ring-1 ring-[#FEE500]/40' : 'bg-bg-deep'}`}>
+          <p className="mb-1 text-[10px] font-bold text-ink-dim">
+            {inq.wants_kakao_contact ? '⚡ 카톡 답변 희망' : '카톡으로 답변 (선택)'}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => void openKakaoChannelChat()}
+              className="inline-flex items-center gap-1 rounded bg-[#FEE500] px-2.5 py-1 text-[10px] font-bold text-[#191919] hover:bg-[#FDD800]"
+            >
+              <MessageCircle size={10} /> @듣다 채널 채팅 열기
+            </button>
+            <a href={kakaoChannelChatUrl()} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded bg-bg-card px-2.5 py-1 text-[10px] text-ink-mute hover:text-ink">
+              <ExternalLink size={9} /> 새 창에서 열기
+            </a>
+          </div>
+          <p className="mt-1 text-[10px] text-ink-dim">
+            채널 채팅창에서 회원 이메일({inq.user_email ?? '—'}) 검색 → 1:1 응대
+          </p>
+        </div>
+      )}
 
       {/* 컨텍스트 */}
       {ctxEntries.length > 0 && (

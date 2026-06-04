@@ -16,6 +16,7 @@ import {
   Sunrise,
   Sun,
   Moon,
+  MessageCircle,
 } from 'lucide-react';
 import { BUSINESS_CATEGORIES } from '@/lib/constants';
 import { fetchPlaylistCounts } from '@/lib/api';
@@ -35,6 +36,7 @@ import { gradientStyle } from '@/lib/cover';
 import { formatSlotTime, getCurrentSchedule, getNextSchedule } from '@/lib/businessSchedulerApi';
 import { toast } from '@/store/toastStore';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
+import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
 
 /** 한글 카테고리 → 영문 business_tag */
 const BUSINESS_TAG_MAP: Record<string, string> = {
@@ -186,7 +188,16 @@ export default function BusinessPage() {
             'OFF'
           )}
         </button>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {isPlaying && isKakaoChannelConfigured() && (
+            <button
+              onClick={() => void openKakaoChannelChat()}
+              title="카톡으로 즉시 문의 (@듣다)"
+              className="inline-flex items-center gap-1 rounded-lg bg-[#FEE500] px-2.5 py-1.5 text-[11px] font-bold text-[#191919] hover:bg-[#FDD800]"
+            >
+              <MessageCircle size={12} /> 카톡 문의
+            </button>
+          )}
           <SupportInquiryButton
             variant={isPlaying ? 'alert' : 'chip'}
             label={isPlaying ? '문제 신고 / 문의하기' : '문의하기'}

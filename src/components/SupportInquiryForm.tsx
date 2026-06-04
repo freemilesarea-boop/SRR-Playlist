@@ -14,6 +14,8 @@ import { X, Send, MessageSquare, Loader2 } from 'lucide-react';
 import { createSupportInquiry, INQUIRY_TYPES, type InquiryType } from '@/lib/supportInquiryApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
+import KakaoChannelButtons from '@/components/KakaoChannelButtons';
+import { isKakaoChannelConfigured } from '@/lib/kakao';
 
 interface Props {
   open: boolean;
@@ -106,6 +108,16 @@ export default function SupportInquiryForm({
           </div>
         )}
 
+        {isKakaoChannelConfigured() && (
+          <div className="mb-3 rounded-xl bg-[#FEE500]/15 p-3 ring-1 ring-[#FEE500]/40">
+            <p className="mb-2 text-[11px] font-bold">즉시 답변이 필요하면 카톡으로</p>
+            <p className="mb-2 text-[10px] text-ink-mute">
+              운영팀 @듣다 채널에서 1:1 채팅으로 빠르게 답변드립니다.
+            </p>
+            <KakaoChannelButtons variant="row" size="sm" />
+          </div>
+        )}
+
         <div className="space-y-3 text-xs">
           <label className="block">
             <span className="font-semibold">문의 유형 *</span>
@@ -151,9 +163,9 @@ export default function SupportInquiryForm({
               onChange={(e) => setWantsKakao(e.target.checked)}
               className="mt-0.5 shrink-0" />
             <span className="text-[11px]">
-              카카오톡으로 답변 받기 희망
+              카카오톡으로 답변 받기 희망 (@듣다 채널)
               <span className="block text-[10px] text-ink-dim">
-                현재는 운영팀이 별도 채널/연락처로 직접 답변드립니다. 카카오 알림 자동 발송은 준비 중입니다.
+                운영팀이 @듣다 카톡 채널로 답변드립니다. 빠른 답변을 원하면 위 "카톡으로 문의하기" 사용.
               </span>
             </span>
           </label>
