@@ -98,7 +98,11 @@ export default function FloatingSupportButton() {
     } catch (e) {
       // OAuth 호출 자체 실패 → fallback 으로 그냥 채팅창 열기
       if (import.meta.env.DEV) console.warn('[kakao] signInWithKakao failed', e);
-      toast.error('카카오 로그인 실패 — 채팅창을 직접 엽니다.');
+      const raw = e instanceof Error ? e.message : '';
+      const friendly = /provider.*not.*enabled|unsupported provider|validation_failed/i.test(raw)
+        ? '카카오 로그인 설정이 완료되지 않았습니다. 채팅창을 직접 엽니다.'
+        : '카카오 로그인 실패 — 채팅창을 직접 엽니다.';
+      toast.error(friendly);
       openKakaoChannelChat();
     }
   }
