@@ -371,6 +371,55 @@ export async function adminRevokeCurator(userId: string) {
   return data as { ok: boolean; is_curator: boolean };
 }
 
+/* ---------- X6.10 Phase 3 — 관리자 plan_type 수동 변경 ---------- */
+
+export type AdminArtistPlanType = 'general_artist' | 'student_artist' | 'legacy_student' | null;
+
+export interface AdminUpdatePlanResult {
+  ok: true;
+  noop?: boolean;
+  user_id: string;
+  plan_type: AdminArtistPlanType;
+  plan_label?: string;
+  monthly_quota?: number;
+  before: AdminArtistPlanType;
+  account_type?: string;
+}
+
+export async function adminUpdateArtistPlanType(
+  userId: string,
+  planType: AdminArtistPlanType,
+  reason: string,
+): Promise<AdminUpdatePlanResult> {
+  const { data, error } = await supabase.rpc('admin_update_artist_plan_type', {
+    p_user_id: userId,
+    p_plan_type: planType,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as AdminUpdatePlanResult;
+}
+
+export interface PlanAuditRow {
+  id: number;
+  before_plan_type: string | null;
+  after_plan_type: string | null;
+  admin_user_id: string | null;
+  admin_email: string | null;
+  reason: string;
+  created_at: string;
+}
+
+export async function adminListArtistPlanAudit(
+  userId: string, limit = 20,
+): Promise<PlanAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_artist_plan_audit', {
+    p_user_id: userId, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PlanAuditRow[];
+}
+
 /**
  * 비밀번호 재설정 메일 발송 trigger — Edge Function 호출.
  * Supabase Auth 가 사용자에게 magic link 메일 발송.
