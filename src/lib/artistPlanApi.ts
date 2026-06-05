@@ -34,7 +34,15 @@ export async function fetchMyArtistPlan(): Promise<ArtistPlanInfo | null> {
   return row ?? null;
 }
 
-/** 코드 → 플랜 매핑 (가입 폼에서 코드 입력 즉시 플랜 안내) */
+/**
+ * 코드 → 플랜 힌트 (가입 폼 즉시 안내용).
+ *
+ * 보안 정책 (X6.12):
+ *   - 공개 코드만 클라이언트에 매핑 (PDWSFU = 일반 아티스트).
+ *   - 비공개 코드 (예: 수강생 전용) 는 절대 클라이언트 번들에 포함하지 않음.
+ *     사용자가 직접 입력하면 verify_sales_agent_code RPC 가 서버에서 plan_type 을
+ *     해석해 반환 → 클라이언트는 결과만 표시.
+ */
 export interface CodePlanHint {
   plan_type: Exclude<ArtistPlanType, null>;
   plan_label: string;
@@ -43,20 +51,8 @@ export interface CodePlanHint {
   highlights: string[];
 }
 
-const CODE_PLAN_MAP: Record<string, CodePlanHint> = {
-  C69947: {
-    plan_type: 'student_artist',
-    plan_label: '수강생 아티스트 PRO',
-    monthly_quota: 50,
-    description: '수강생 전용 PRO 플랜 · 월 50곡 유통',
-    highlights: [
-      '월 50곡 유통',
-      'VERIFIED 뱃지',
-      '플레이리스트 제작 가능',
-      '큐레이터 신청 가능',
-      '우선 검수',
-    ],
-  },
+const PUBLIC_PLAN_HINTS: Record<string, CodePlanHint> = {
+  // 공개 가능한 일반 아티스트 코드만 노출.
   PDWSFU: {
     plan_type: 'general_artist',
     plan_label: '일반 아티스트',
@@ -73,8 +69,26 @@ const CODE_PLAN_MAP: Record<string, CodePlanHint> = {
   },
 };
 
+/**
+ * 입력된 코드가 공개 매핑 (PDWSFU) 에 있는지만 확인.
+ * 매칭되지 않으면 null — 비공개 코드일 가능성이 있으므로 서버 검증으로 처리.
+ */
 export function getCodePlanHint(code: string): CodePlanHint | null {
-  return CODE_PLAN_MAP[code.trim().toUpperCase()] ?? null;
+  return PUBLIC_PLAN_HINTS[code.trim().toUpperCase()] ?? null;
+}
+
+/** 서버에서 받은 plan_type 으로 표시용 라벨/한도 생성 (코드 자체는 알 필요 없음). */
+export function planHintFromServer(
+  planType: Exclude<ArtistPlanType, null>,
+  serverLabel?: string,
+  serverQuota?: number,
+): { plan_label: string; monthly_quota: number; is_pro: boolean } {
+  const isPro = planType === 'student_artist';
+  return {
+    plan_label: serverLabel ?? (isPro ? '수강생 아티스트 PRO' : '일반 아티스트'),
+    monthly_quota: serverQuota ?? (isPro ? 50 : 5),
+    is_pro: isPro,
+  };
 }
 
 export const PLAN_BADGE_TONE: Record<string, string> = {

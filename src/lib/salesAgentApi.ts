@@ -92,6 +92,10 @@ export interface VerifiedSalesAgent {
   name: string;
   code: string;
   is_active: boolean;
+  // X6.12 — 서버가 코드별 plan 정보 직접 제공 (클라이언트가 코드 매핑을 알 필요 없음)
+  plan_type: 'general_artist' | 'student_artist' | 'legacy_student' | null;
+  plan_label: string;
+  monthly_quota: number;
 }
 
 /**
