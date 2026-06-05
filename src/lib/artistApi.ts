@@ -2165,10 +2165,16 @@ export interface AdminPayoutRow {
   user_id: string;
   artist_name: string | null;
   email: string | null;
+  // X6.14 — PII 필드 (모두 마스킹된 표시용; 원본은 admin_reveal_payout_pii 로만)
+  legal_name: string | null;
+  masked_rrn: string | null;
   bank_name: string;
-  /** 0061 — 항상 마스킹된 값만 RPC 에서 반환 (원본은 admin_reveal_payout_account 로) */
   masked_account_number: string;
   account_holder: string;
+  tax_withholding_type: TaxWithholdingType;
+  has_tax_consent: boolean;
+  tax_consent_at: string | null;
+  is_pii_complete: boolean;
   verification_status: 'pending' | 'verified' | 'rejected';
   rejected_reason: string | null;
   created_at: string;
@@ -2209,6 +2215,43 @@ export async function adminRevealPayoutAccount(opts: {
   });
   if (error) throw error;
   const row = (Array.isArray(data) ? data[0] : data) as RevealedPayoutAccount | undefined;
+  if (!row) throw new Error('empty response');
+  return row;
+}
+
+// X6.15 — RRN/계좌 PII 통합 reveal (admin only, audit + pii_type 분기)
+export type PiiRevealType = 'account_number' | 'resident_number' | 'full';
+
+export interface RevealedPayoutPii {
+  account_id: string;
+  legal_name: string | null;
+  resident_registration_number: string | null;
+  account_number: string | null;
+  bank_name: string;
+  account_holder: string;
+  tax_withholding_type: TaxWithholdingType;
+  tax_consent_at: string | null;
+  artist_user_id: string;
+  log_id: string;
+  viewed_at: string;
+}
+
+export async function adminRevealPayoutPii(opts: {
+  accountId: string;
+  reason: string;
+  piiType?: PiiRevealType;
+  settlementId?: string | null;
+}): Promise<RevealedPayoutPii> {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+  const { data, error } = await supabase.rpc('admin_reveal_payout_pii', {
+    p_account_id: opts.accountId,
+    p_reason: opts.reason,
+    p_pii_type: opts.piiType ?? 'full',
+    p_settlement_id: opts.settlementId ?? null,
+    p_user_agent: ua,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as RevealedPayoutPii | undefined;
   if (!row) throw new Error('empty response');
   return row;
 }
