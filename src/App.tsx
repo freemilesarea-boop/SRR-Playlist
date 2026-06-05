@@ -50,6 +50,8 @@ const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
 const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
 const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
 const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/SalespersonDashboardPage'));
+const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylistsPage'));
+const CuratorsListPage = lazyWithRetry(() => import('@/pages/CuratorsListPage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -226,8 +228,10 @@ export default function App() {
                 <Route path="/charts" element={<ChartPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/playlist/:id" element={<PlaylistPage />} />
+                <Route path="/playlists" element={<ExplorePlaylistsPage />} />
                 <Route path="/track/:id" element={<TrackSharePage />} />
                 <Route path="/curator/:handle" element={<CuratorProfilePage />} />
+                <Route path="/curators" element={<CuratorsListPage />} />
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/notice" element={<NoticePage />} />

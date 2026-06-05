@@ -1,4 +1,5 @@
 import { ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import PlaylistCard from './PlaylistCard';
 import type { PlaylistRow as PlaylistRowType } from '@/types/db';
 
@@ -13,6 +14,8 @@ interface Props {
   /** 가로 스크롤 (모바일) — false 면 그리드 */
   scroll?: boolean;
   variant?: 'sm' | 'md';
+  /** 모두 보기 링크 (있으면 우측 상단 Link 노출) */
+  seeAllHref?: string;
 }
 
 export default function PlaylistRow({
@@ -24,6 +27,7 @@ export default function PlaylistRow({
   covers,
   scroll = true,
   variant = 'sm',
+  seeAllHref,
 }: Props) {
   if (playlists.length === 0) {
     return (
@@ -46,10 +50,13 @@ export default function PlaylistRow({
           <h2 className="text-lg font-bold tracking-tight sm:text-xl">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs text-ink-mute">{subtitle}</p>}
         </div>
-        {playlists.length > 4 && (
-          <span className="hidden items-center gap-0.5 text-xs text-ink-dim sm:inline-flex">
+        {seeAllHref && (
+          <Link
+            to={seeAllHref}
+            className="inline-flex items-center gap-0.5 text-xs font-semibold text-accent hover:underline"
+          >
             모두 보기 <ChevronRight size={12} />
-          </span>
+          </Link>
         )}
       </div>
 
