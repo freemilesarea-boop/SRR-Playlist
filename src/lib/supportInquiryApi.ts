@@ -227,6 +227,66 @@ export async function adminUpdateInquiry(
   return data as { ok: true; inquiry_id: string };
 }
 
+// X6.3 — 답변 작성 + 사용자 이메일 자동 발송
+export interface SendReplyResult {
+  ok: true;
+  inquiry_id: string;
+  status: InquiryStatus;
+  user_email: string | null;
+  user_id: string | null;
+  inquiry_type: InquiryType;
+  title: string;
+}
+
+export async function adminSendInquiryReply(
+  inquiryId: string,
+  replyBody: string,
+  status: 'in_progress' | 'resolved' | 'closed' = 'resolved',
+): Promise<{ rpc: SendReplyResult; emailResult: { ok: boolean; sent_to?: string; error?: string } }> {
+  // 1. DB 업데이트 (admin_note, status, assigned, event 로깅)
+  const { data, error } = await supabase.rpc('admin_send_inquiry_reply', {
+    p_inquiry_id: inquiryId,
+    p_reply_body: replyBody,
+    p_status: status,
+  });
+  if (error) throw error;
+  const rpc = data as SendReplyResult;
+
+  // 2. Edge Function 호출 → 사용자 이메일 발송
+  let emailResult: { ok: boolean; sent_to?: string; error?: string } = { ok: false };
+  try {
+    const { data: efData } = await supabase.functions.invoke('notify-inquiry-reply', {
+      body: { inquiry_id: inquiryId },
+    });
+    emailResult = efData as { ok: boolean; sent_to?: string; error?: string };
+  } catch (e) {
+    emailResult = { ok: false, error: (e as Error).message };
+  }
+
+  return { rpc, emailResult };
+}
+
+// X6.3 — 특정 문의의 이벤트 타임라인 (audit log)
+export interface InquiryEventRow {
+  id: number;
+  event_type: 'created' | 'status_changed' | 'priority_changed' | 'note_updated'
+            | 'reply_sent' | 'reply_failed' | 'assigned'
+            | 'kakao_dispatched' | 'kakao_failed' | 'webhook_dispatched' | 'webhook_failed';
+  channel: 'email' | 'kakao_chat' | 'kakao_alimtalk' | 'kakao_friendtalk' | 'webhook' | null;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  detail: string | null;
+  created_at: string;
+}
+
+export async function adminListInquiryEvents(inquiryId: string): Promise<InquiryEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_inquiry_events', { p_inquiry_id: inquiryId });
+  if (error) throw error;
+  return (data ?? []) as InquiryEventRow[];
+}
+
 export interface SupportInquirySummary {
   window_days: number;
   total: number;

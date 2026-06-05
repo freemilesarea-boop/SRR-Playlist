@@ -11,16 +11,16 @@ import {
 } from 'lucide-react';
 import {
   adminListSupportInquiries, adminGetSupportInquiryDetail, adminUpdateInquiry,
-  adminSupportInquirySummary,
+  adminSupportInquirySummary, adminSendInquiryReply, adminListInquiryEvents,
   INQUIRY_TYPES,
   type AdminInquiryRow, type InquiryDetail, type InquiryStatus, type InquiryPriority,
-  type InquiryType, type SupportInquirySummary,
+  type InquiryType, type SupportInquirySummary, type InquiryEventRow,
 } from '@/lib/supportInquiryApi';
 import { isKakaoChannelConfigured, openKakaoChannelChat, kakaoChannelChatUrl, kakaoChannelHomeUrl } from '@/lib/kakao';
 import { toast } from '@/store/toastStore';
 
 const STATUS_LABEL: Record<InquiryStatus, string> = {
-  open: '접수', in_progress: '확인 중', resolved: '해결됨', closed: '종료',
+  open: '신규', in_progress: '처리중', resolved: '답변완료', closed: '종료',
 };
 const STATUS_TONE: Record<InquiryStatus, string> = {
   open: 'bg-amber-500/15 text-amber-500',
@@ -273,12 +273,16 @@ export default function SupportInquiriesPanel() {
               onClose={() => setSelectedId(null)}
               onChangeStatus={(s) => void setStatus(detail.inquiry.id, s)}
               onChangePriority={(p) => void setPriority(detail.inquiry.id, p)}
-              onSaveNote={async (note) => {
+              onSendReply={async (reply, status) => {
                 try {
-                  await adminUpdateInquiry(detail.inquiry.id, { admin_note: note });
-                  toast.success('답변 저장');
+                  const { emailResult } = await adminSendInquiryReply(detail.inquiry.id, reply, status);
+                  if (emailResult.ok) {
+                    toast.success(`답변 발송 — ${emailResult.sent_to} (${STATUS_LABEL[status]})`);
+                  } else {
+                    toast.error(`답변 저장됐으나 이메일 발송 실패: ${emailResult.error ?? '?'}`);
+                  }
                   await loadDetail();
-                } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
+                } catch (e) { toast.error(`답변 실패: ${(e as Error).message}`); }
               }}
             />
           ) : (
@@ -293,20 +297,32 @@ export default function SupportInquiriesPanel() {
 }
 
 function InquiryDetailView({
-  detail, onClose, onChangeStatus, onChangePriority, onSaveNote,
+  detail, onClose, onChangeStatus, onChangePriority, onSendReply,
 }: {
   detail: InquiryDetail;
   onClose: () => void;
   onChangeStatus: (s: InquiryStatus) => void;
   onChangePriority: (p: InquiryPriority) => void;
-  onSaveNote: (note: string) => Promise<void>;
+  onSendReply: (reply: string, status: 'in_progress' | 'resolved' | 'closed') => Promise<void>;
 }) {
   const inq = detail.inquiry;
   const [noteDraft, setNoteDraft] = useState(inq.admin_note ?? '');
-  const [saving, setSaving] = useState(false);
+  const [replyStatus, setReplyStatus] = useState<'in_progress' | 'resolved' | 'closed'>('resolved');
+  const [sending, setSending] = useState(false);
+  const [events, setEvents] = useState<InquiryEventRow[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const ctxEntries = useMemo(() => Object.entries(inq.context ?? {}), [inq.context]);
 
   useEffect(() => { setNoteDraft(inq.admin_note ?? ''); }, [inq.admin_note]);
+  useEffect(() => {
+    let alive = true;
+    setEventsLoading(true);
+    adminListInquiryEvents(inq.id)
+      .then((rows) => { if (alive) setEvents(rows); })
+      .catch(() => { /* silent */ })
+      .finally(() => { if (alive) setEventsLoading(false); });
+    return () => { alive = false; };
+  }, [inq.id, inq.updated_at]);
 
   return (
     <div className="space-y-3 text-xs">
@@ -429,18 +445,80 @@ function InquiryDetailView({
         </label>
       </div>
 
-      <div className="space-y-1">
-        <p className="text-[10px] font-bold text-ink-dim">운영팀 답변 / 메모</p>
+      {/* X6.3 — 답변 작성 + 이메일 자동 발송 */}
+      <div className="space-y-2 rounded-lg bg-bg-deep p-2.5">
+        <p className="text-[10px] font-bold text-ink-dim">운영팀 답변 (사용자 이메일로 자동 발송)</p>
         <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
-          placeholder="고객에게 보여질 답변 또는 운영 메모…"
-          rows={4} maxLength={2000}
+          placeholder="고객에게 보낼 답변 내용…"
+          rows={5} maxLength={4000}
           className="input w-full text-xs resize-y" />
-        <button onClick={async () => { setSaving(true); await onSaveNote(noteDraft); setSaving(false); }}
-          disabled={saving}
-          className="rounded bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
-          {saving ? '저장 중…' : '답변 저장'}
-        </button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="flex items-center gap-1.5 text-[11px]">
+            <span className="text-ink-dim">상태:</span>
+            <select value={replyStatus} onChange={(e) => setReplyStatus(e.target.value as 'in_progress' | 'resolved' | 'closed')}
+              className="rounded bg-bg-card px-2 py-1 text-[11px]">
+              <option value="in_progress">처리중</option>
+              <option value="resolved">답변완료</option>
+              <option value="closed">종료</option>
+            </select>
+          </label>
+          <button
+            onClick={async () => {
+              if (noteDraft.trim().length === 0) return;
+              setSending(true);
+              await onSendReply(noteDraft.trim(), replyStatus);
+              setSending(false);
+            }}
+            disabled={sending || noteDraft.trim().length === 0 || !inq.user_email}
+            title={!inq.user_email ? '회원 이메일 없음 — 발송 불가' : ''}
+            className="rounded bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50"
+          >
+            {sending ? '발송 중…' : `답변 보내기 → ${inq.user_email ?? '이메일 없음'}`}
+          </button>
+        </div>
+        <p className="text-[10px] text-ink-dim">
+          ⓘ "답변 보내기" 누르면 사용자 이메일로 발송 + 상태가 자동 변경됩니다.
+          향후 카카오 알림톡 / 채널 webhook 도 동일 트리거에서 분기 발송됩니다.
+        </p>
       </div>
+
+      {/* X6.3 — 이벤트 타임라인 (audit log) */}
+      <details className="rounded-lg bg-bg-deep p-2.5" open={events.length > 0 && events.length <= 5}>
+        <summary className="cursor-pointer text-[10px] font-bold text-ink-dim">
+          이벤트 타임라인 ({events.length})
+        </summary>
+        {eventsLoading ? (
+          <p className="mt-1 text-[10px] text-ink-dim">로딩…</p>
+        ) : events.length === 0 ? (
+          <p className="mt-1 text-[10px] text-ink-dim">기록 없음</p>
+        ) : (
+          <ul className="mt-1.5 space-y-1 text-[10px]">
+            {events.map((e) => (
+              <li key={e.id} className="flex items-start gap-2 rounded bg-bg-card p-1.5">
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                  e.event_type === 'reply_sent' ? 'bg-emerald-500/15 text-emerald-500'
+                  : e.event_type === 'reply_failed' || e.event_type.includes('failed') ? 'bg-rose-500/15 text-rose-500'
+                  : e.event_type === 'created' ? 'bg-sky-500/15 text-sky-500'
+                  : 'bg-ink/10 text-ink-mute'
+                }`}>
+                  {e.event_type}{e.channel ? `·${e.channel}` : ''}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {e.detail && <span className="block text-ink">{e.detail}</span>}
+                  {e.before_data && e.after_data && (
+                    <span className="block text-ink-dim font-mono text-[9px]">
+                      {JSON.stringify(e.before_data)} → {JSON.stringify(e.after_data)}
+                    </span>
+                  )}
+                  <span className="text-ink-dim">
+                    {e.actor_email ?? '시스템'} · {new Date(e.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
     </div>
   );
 }
