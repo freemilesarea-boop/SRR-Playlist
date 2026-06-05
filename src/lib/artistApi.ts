@@ -1432,6 +1432,80 @@ export async function submitArtistPayoutAccount(payload: {
   }
 }
 
+// ---------- X6.14 — 정산 PII 수집 (RRN + 동의) ----------
+
+export const TAX_CONSENT_TEXT =
+  '정산 및 원천징수 신고를 위해 주민등록번호를 수집·이용합니다. ' +
+  '수집된 정보는 세법상 신고 및 지급명세서 제출 목적으로만 사용됩니다.';
+
+export type TaxWithholdingType = 'business_income_3_3' | 'other_income_8_8' | 'none';
+
+export interface PayoutAccountMasked {
+  account_id: string;
+  legal_name: string | null;
+  masked_rrn: string | null;
+  bank_name: string;
+  masked_account_number: string;
+  account_holder: string;
+  tax_withholding_type: TaxWithholdingType;
+  has_tax_consent: boolean;
+  tax_consent_at: string | null;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  rejected_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  is_pii_complete: boolean;
+}
+
+export async function fetchMyPayoutAccountMasked(): Promise<PayoutAccountMasked | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_my_payout_account_masked');
+    if (error) return null;
+    const row = (data as PayoutAccountMasked[] | null)?.[0];
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function submitArtistPayoutAccountV2(payload: {
+  legal_name: string;
+  resident_registration_number: string;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  tax_consent_text: string;
+  tax_withholding_type?: TaxWithholdingType;
+}): Promise<{ ok: boolean; account_id?: string; verification_status?: string; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('submit_artist_payout_account_v2', {
+      p_legal_name: payload.legal_name,
+      p_resident_registration_number: payload.resident_registration_number,
+      p_bank_name: payload.bank_name,
+      p_account_number: payload.account_number,
+      p_account_holder: payload.account_holder,
+      p_tax_consent_text: payload.tax_consent_text,
+      p_tax_withholding_type: payload.tax_withholding_type ?? 'business_income_3_3',
+      p_consent_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    });
+    if (error) {
+      // 한국어 친절 메시지 매핑
+      const m = (error.message ?? '').toLowerCase();
+      const friendly =
+        m.includes('rrn_format_invalid') ? '주민등록번호 13자리를 정확히 입력해주세요.'
+        : m.includes('tax_consent_required') ? '동의가 필요합니다.'
+        : m.includes('legal_name_required') ? '실명을 입력해주세요.'
+        : m.includes('pii_encryption_key_not_configured') ? '정산 PII 암호화 키가 설정되지 않았습니다. 운영팀에 문의해주세요.'
+        : error.message;
+      return { ok: false, error: friendly };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return { ok: true, account_id: row?.account_id, verification_status: row?.verification_status };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
+
 // ---------- UPLOAD ELIGIBILITY ----------
 
 export type EligibilityReason =

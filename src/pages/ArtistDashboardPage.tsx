@@ -24,12 +24,17 @@ import {
   fetchArtistUploadEligibility,
   fetchMyPayoutAccount,
   submitArtistPayoutAccount,
+  fetchMyPayoutAccountMasked,
+  submitArtistPayoutAccountV2,
+  TAX_CONSENT_TEXT,
   type ArtistProfile,
   type MyArtistTrackRow,
   type ArtistStreamingSummaryRow,
   type ArtistDailyStreamRow,
   type UploadEligibility,
   type PayoutAccount,
+  type PayoutAccountMasked,
+  type TaxWithholdingType,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
 import { fetchMyArtistPlan, type ArtistPlanInfo, planBadgeTone } from '@/lib/artistPlanApi';
@@ -63,6 +68,8 @@ export default function ArtistDashboardPage() {
   const [daily, setDaily] = useState<ArtistDailyStreamRow[]>([]);
   const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
   const [payout, setPayout] = useState<PayoutAccount | null>(null);
+  // X6.14 — RRN 등 PII 포함된 마스킹 정보 (본인 화면용)
+  const [payoutMasked, setPayoutMasked] = useState<PayoutAccountMasked | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTrack, setEditingTrack] = useState<MyArtistTrackRow | null>(null);
   const [plan, setPlan] = useState<ArtistPlanInfo | null>(null);
@@ -71,13 +78,14 @@ export default function ArtistDashboardPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts, sm, dl, el, po, pl] = await Promise.all([
+      const [ap, ts, sm, dl, el, po, pom, pl] = await Promise.all([
         fetchMyArtistProfile(user.id),
         fetchMyArtistTracks(),
         fetchArtistStreamingSummary(),
         fetchArtistDailyStreams(30),
         fetchArtistUploadEligibility(),
         fetchMyPayoutAccount(user.id),
+        fetchMyPayoutAccountMasked(),
         fetchMyArtistPlan(),
       ]);
       setArtist(ap);
@@ -86,6 +94,7 @@ export default function ArtistDashboardPage() {
       setDaily(dl);
       setEligibility(el);
       setPayout(po);
+      setPayoutMasked(pom);
       setPlan(pl);
     } finally {
       setLoading(false);
@@ -137,6 +146,7 @@ export default function ArtistDashboardPage() {
         <UploadGate
           eligibility={eligibility}
           payout={payout}
+          payoutMasked={payoutMasked}
           membershipTier={profile?.membership_tier ?? null}
           userEmail={user?.email ?? ''}
           editingTrack={editingTrack}
@@ -281,6 +291,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
 function UploadGate({
   eligibility,
   payout,
+  payoutMasked,
   membershipTier,
   userEmail,
   editingTrack,
@@ -290,6 +301,7 @@ function UploadGate({
 }: {
   eligibility: UploadEligibility | null;
   payout: PayoutAccount | null;
+  payoutMasked: PayoutAccountMasked | null;
   membershipTier: 'free' | 'individual' | 'business' | null;
   userEmail: string;
   editingTrack?: MyArtistTrackRow | null;
@@ -326,7 +338,7 @@ function UploadGate({
   // payout 상태가 단일 진실의 원천 (RPC 실패에 영향받지 않음).
   const isPayoutVerified = payout?.verification_status === 'verified';
   if (!isPayoutVerified) {
-    return <PayoutAccountSection payout={payout} onSubmitted={onPayoutSubmitted} />;
+    return <PayoutAccountSection payout={payout} masked={payoutMasked} onSubmitted={onPayoutSubmitted} />;
   }
 
   // 모두 OK — 업로드 폼 + (참고용) 계좌 요약 카드
@@ -531,45 +543,69 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
 
 function PayoutAccountSection({
   payout,
+  masked,
   onSubmitted,
 }: {
   payout: PayoutAccount | null;
+  masked: PayoutAccountMasked | null;
   onSubmitted: () => void | Promise<void>;
 }) {
+  const [legalName, setLegalName] = useState(masked?.legal_name ?? '');
+  const [residentNumber, setResidentNumber] = useState('');
   const [bankName, setBankName] = useState(payout?.bank_name ?? '');
-  const [accountNumber, setAccountNumber] = useState(payout?.account_number ?? '');
+  const [accountNumber, setAccountNumber] = useState('');
   const [accountHolder, setAccountHolder] = useState(payout?.account_holder ?? '');
+  const [taxType, setTaxType] = useState<TaxWithholdingType>(
+    masked?.tax_withholding_type ?? 'business_income_3_3',
+  );
+  const [consentChecked, setConsentChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 폼 노출/입력 가능 조건
-  //   - payout 없음                       → 폼 표시 (신규 등록)
-  //   - verification_status='pending'    → 폼 숨김 (대기 중 정보만 표시)
-  //   - verification_status='rejected'   → 폼 표시 (재등록)
-  //   - verification_status='verified'   → 폼 숨김 (이 컴포넌트는 호출되지 않음)
   const status = payout?.verification_status;
-  const showForm = !payout || status === 'rejected';
+  // 폼 노출 조건 (X6.14):
+  //   - PII 미완료 (legal_name/rrn/계좌/동의 중 하나라도 없음) → 폼 표시
+  //   - 반려됨 → 폼 표시
+  //   - verified → 호출되지 않음
+  const showForm = !masked || !masked.is_pii_complete || status === 'rejected';
+
+  function formatRrn(raw: string): string {
+    // 숫자만 추출 후 6-7 형식으로 표시
+    const d = raw.replace(/\D/g, '').slice(0, 13);
+    return d.length > 6 ? `${d.slice(0, 6)}-${d.slice(6)}` : d;
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!legalName.trim()) return setError('실명을 입력해주세요');
+    const rrnDigits = residentNumber.replace(/\D/g, '');
+    if (rrnDigits.length !== 13) return setError('주민등록번호 13자리를 정확히 입력해주세요');
     if (!bankName.trim() || !accountNumber.trim() || !accountHolder.trim()) {
-      setError('은행명 / 계좌번호 / 예금주를 모두 입력해주세요');
-      return;
+      return setError('은행명 / 계좌번호 / 예금주를 모두 입력해주세요');
     }
+    if (!consentChecked) return setError('수집·이용 동의가 필요합니다');
+
     setBusy(true);
     try {
-      const res = await submitArtistPayoutAccount({
+      const res = await submitArtistPayoutAccountV2({
+        legal_name: legalName,
+        resident_registration_number: rrnDigits,
         bank_name: bankName,
         account_number: accountNumber,
         account_holder: accountHolder,
+        tax_consent_text: TAX_CONSENT_TEXT,
+        tax_withholding_type: taxType,
       });
       if (!res.ok) {
         setError(res.error ?? '계좌 등록 실패');
         toast.error(res.error ?? '계좌 등록 실패');
         return;
       }
-      toast.success('계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
+      // 입력 RRN/계좌 즉시 폐기 (메모리에 남기지 않음)
+      setResidentNumber('');
+      setAccountNumber('');
+      toast.success('정산 계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
       await onSubmitted();
     } catch (e) {
       const msg = e instanceof Error ? e.message : '계좌 등록 실패';
@@ -627,21 +663,54 @@ function PayoutAccountSection({
         </div>
       </div>
 
-      {/* pending 상태: 등록된 정보를 마스킹하여 표시 (재등록은 불가 — 관리자 처리 대기) */}
-      {status === 'pending' && payout && (
+      {/* pending 상태: 마스킹된 PII 정보 표시 (재등록은 verified 전까지 불가) */}
+      {status === 'pending' && masked && masked.is_pii_complete && (
         <div className="space-y-1 rounded-lg bg-bg-deep/50 p-3 text-[12px] ring-1 ring-line/10">
-          <Row2 label="은행" value={payout.bank_name} />
-          <Row2 label="계좌번호" value={maskAccountNumber(payout.account_number)} />
-          <Row2 label="예금주" value={payout.account_holder} />
+          <Row2 label="실명" value={masked.legal_name ?? '—'} />
+          <Row2 label="주민번호" value={masked.masked_rrn ?? '—'} />
+          <Row2 label="은행" value={masked.bank_name} />
+          <Row2 label="계좌번호" value={masked.masked_account_number} />
+          <Row2 label="예금주" value={masked.account_holder} />
+          <Row2 label="원천징수" value={taxWithholdingLabel(masked.tax_withholding_type)} />
+          <Row2 label="동의" value={masked.has_tax_consent ? '✓ 완료' : '미동의'} />
           <p className="pt-1 text-[11px] text-ink-dim">
             관리자 확인이 완료되면 이 화면 대신 업로드 폼이 표시됩니다.
           </p>
         </div>
       )}
 
-      {/* 신규 등록 / 반려 후 재등록 */}
+      {/* 신규 등록 / 반려 후 재등록 / PII 미완료 보완 */}
       {showForm && (
         <>
+          <Field label="실명 (주민등록상) *">
+            <input
+              type="text"
+              required
+              value={legalName}
+              onChange={(e) => setLegalName(e.target.value)}
+              placeholder="홍길동"
+              className="input"
+              autoComplete="name"
+            />
+          </Field>
+
+          <Field
+            label="주민등록번호 * (13자리)"
+            hint="평문 저장하지 않으며 암호화되어 보관됩니다. 본인 화면에서도 다시 표시되지 않습니다."
+          >
+            <input
+              type="password"
+              required
+              value={residentNumber}
+              onChange={(e) => setResidentNumber(formatRrn(e.target.value))}
+              placeholder="000000-0000000"
+              className="input font-mono"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={14}
+            />
+          </Field>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="은행명 *">
               <input
@@ -671,15 +740,49 @@ function PayoutAccountSection({
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder="숫자만 또는 하이픈 포함"
-              className="input"
+              className="input font-mono"
               inputMode="numeric"
+              autoComplete="off"
             />
           </Field>
 
+          <Field label="원천징수 유형 *">
+            <select
+              value={taxType}
+              onChange={(e) => setTaxType(e.target.value as TaxWithholdingType)}
+              className="input"
+            >
+              <option value="business_income_3_3">사업소득 (3.3%)</option>
+              <option value="other_income_8_8">기타소득 (8.8%)</option>
+              <option value="none">원천징수 없음</option>
+            </select>
+          </Field>
+
+          {/* X6.14 — 수집·이용 동의 */}
+          <div className="rounded-lg bg-bg-deep/40 p-3 text-[11px] ring-1 ring-line/10">
+            <p className="font-semibold text-ink">PII 수집·이용 동의 (필수)</p>
+            <p className="mt-1 leading-relaxed text-ink-mute">
+              {TAX_CONSENT_TEXT}
+            </p>
+            <label className="mt-2 flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-ink">위 내용에 동의합니다.</span>
+            </label>
+          </div>
+
           {error && <Alert tone="error">{error}</Alert>}
 
-          <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
-            {busy ? '등록 중…' : status === 'rejected' ? '계좌 다시 등록' : '계좌 등록'}
+          <button
+            type="submit"
+            disabled={busy || !consentChecked}
+            className="btn-primary w-full py-2.5"
+          >
+            {busy ? '등록 중…' : status === 'rejected' ? '정산 계좌 다시 등록' : '정산 계좌 등록'}
           </button>
           <p className="text-[11px] text-ink-dim">
             등록 후 관리자 확인까지 평균 1영업일이 소요됩니다.
@@ -688,6 +791,15 @@ function PayoutAccountSection({
       )}
     </form>
   );
+}
+
+function taxWithholdingLabel(t: TaxWithholdingType): string {
+  switch (t) {
+    case 'business_income_3_3': return '사업소득 3.3%';
+    case 'other_income_8_8': return '기타소득 8.8%';
+    case 'none': return '없음';
+    default: return t;
+  }
 }
 
 function Row2({ label, value }: { label: string; value: string }) {
