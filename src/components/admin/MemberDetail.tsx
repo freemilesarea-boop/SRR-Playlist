@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
+  GraduationCap, Music2, Shield, History,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -14,7 +15,11 @@ import {
   adminTriggerPasswordReset,
   adminGrantCurator,
   adminRevokeCurator,
+  adminUpdateArtistPlanType,
+  adminListArtistPlanAudit,
   type MemberDetail as MemberDetailType,
+  type AdminArtistPlanType,
+  type PlanAuditRow,
 } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
@@ -62,6 +67,56 @@ export default function MemberDetail({
   const [reasonText, setReasonText] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const [curatorBusy, setCuratorBusy] = useState(false);
+  // X6.10 Phase 3 — plan 변경
+  const [planTarget, setPlanTarget] = useState<AdminArtistPlanType | 'menu' | null>(null);
+  const [planReason, setPlanReason] = useState('');
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planAudit, setPlanAudit] = useState<PlanAuditRow[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
+
+  async function applyPlanChange() {
+    if (!planTarget || planTarget === 'menu') return;
+    const reason = planReason.trim();
+    if (!reason) {
+      toast.error('변경 사유를 입력해주세요');
+      return;
+    }
+    setPlanBusy(true);
+    try {
+      const res = await adminUpdateArtistPlanType(userId, planTarget, reason);
+      toast.success(
+        res.noop ? '이미 동일한 플랜이에요'
+        : `플랜 변경 완료 — ${res.plan_label} (월 ${res.monthly_quota}곡)`,
+      );
+      setPlanTarget(null);
+      setPlanReason('');
+      reload();
+      // audit 패널이 열려 있으면 갱신
+      if (showAudit) void loadPlanAudit();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function loadPlanAudit() {
+    try {
+      const rows = await adminListArtistPlanAudit(userId, 30);
+      setPlanAudit(rows);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  }
+
+  function togglePlanAudit() {
+    if (showAudit) {
+      setShowAudit(false);
+      return;
+    }
+    setShowAudit(true);
+    void loadPlanAudit();
+  }
 
   async function toggleCurator(grant: boolean) {
     setCuratorBusy(true);
@@ -229,13 +284,21 @@ export default function MemberDetail({
                 )}
               </div>
 
-              {/* X6.10 Phase 2 — 아티스트 플랜 정보 (artist 계정만) */}
+              {/* X6.10 Phase 2/3 — 아티스트 플랜 정보 + 수동 변경 (artist 계정만) */}
               {data.user.account_type === 'artist' && (
-                <div className="rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">
-                    아티스트 플랜
-                  </p>
-                  <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">
+                      아티스트 플랜
+                    </p>
+                    <button
+                      onClick={togglePlanAudit}
+                      className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-ink-mute hover:bg-bg-hover"
+                    >
+                      <History size={10} /> 변경 이력
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <KV label="plan_type" value={
                       data.user.plan_type === 'student_artist' ? '수강생 PRO'
                       : data.user.plan_type === 'general_artist' ? '일반'
@@ -249,6 +312,99 @@ export default function MemberDetail({
                         value={`${data.user.plan_used_this_month ?? 0}곡`} />
                     <KV label="잔여"
                         value={`${Math.max(0, (data.user.plan_monthly_quota ?? 50) - (data.user.plan_used_this_month ?? 0))}곡`} />
+                  </div>
+
+                  {/* 플랜 변경 버튼 그룹 */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <PlanButton
+                      icon={<Music2 size={12} />}
+                      label="일반 아티스트"
+                      active={data.user.plan_type === 'general_artist'}
+                      onClick={() => setPlanTarget('general_artist')}
+                    />
+                    <PlanButton
+                      icon={<GraduationCap size={12} />}
+                      label="수강생 PRO"
+                      active={data.user.plan_type === 'student_artist'}
+                      onClick={() => setPlanTarget('student_artist')}
+                    />
+                    <PlanButton
+                      icon={<Shield size={12} />}
+                      label="Legacy 유지"
+                      active={!data.user.plan_type || data.user.plan_type === 'legacy_student'}
+                      onClick={() => setPlanTarget(null)}
+                    />
+                  </div>
+
+                  {/* 변경 이력 패널 */}
+                  {showAudit && (
+                    <div className="mt-2 rounded-lg bg-bg-card/60 p-2 ring-1 ring-line/10">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">
+                        변경 이력 (최근 {planAudit.length})
+                      </p>
+                      {planAudit.length === 0 ? (
+                        <p className="mt-1 text-[11px] text-ink-dim">변경 이력 없음</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1">
+                          {planAudit.map((l) => (
+                            <li key={l.id} className="flex flex-wrap gap-1.5 text-[11px]">
+                              <span className="font-mono text-ink-dim">
+                                {new Date(l.created_at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                              <span className="text-ink-mute">
+                                {l.before_plan_type ?? 'legacy'} → <strong>{l.after_plan_type ?? 'legacy'}</strong>
+                              </span>
+                              <span className="text-ink-dim">by {l.admin_email ?? '?'}</span>
+                              <span className="w-full text-ink-mute">· {l.reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 플랜 변경 사유 입력 모달 */}
+              {planTarget !== null && planTarget !== 'menu' && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+                     onClick={() => !planBusy && setPlanTarget(null)}>
+                  <div className="w-full max-w-md rounded-xl bg-bg-card p-5 ring-1 ring-line/20"
+                       onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-sm font-bold">
+                      플랜 변경 — {' '}
+                      <span className="text-accent">
+                        {planTarget === 'general_artist' ? '일반 아티스트'
+                          : planTarget === 'student_artist' ? '수강생 아티스트 PRO'
+                          : 'Legacy 유지 (NULL)'}
+                      </span>
+                    </h3>
+                    <p className="mt-1 text-[11px] text-ink-mute">
+                      이 변경은 audit log 에 기록됩니다. 사유는 필수입니다.
+                    </p>
+                    <textarea
+                      value={planReason}
+                      onChange={(e) => setPlanReason(e.target.value)}
+                      rows={3}
+                      placeholder="예: 수강생 코드 등록 누락 / 결제 누락 / 운영 정책 변경"
+                      className="mt-3 w-full rounded-md bg-bg-soft px-2.5 py-1.5 text-xs ring-1 ring-line/20 focus:outline-none focus:ring-accent/30"
+                    />
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        disabled={planBusy}
+                        onClick={() => setPlanTarget(null)}
+                        className="rounded-md bg-bg-soft px-3 py-1.5 text-xs ring-1 ring-line/20 hover:bg-bg-hover disabled:opacity-50"
+                      >
+                        취소
+                      </button>
+                      <button
+                        disabled={planBusy || !planReason.trim()}
+                        onClick={() => void applyPlanChange()}
+                        className="rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-black hover:bg-accent/90 disabled:opacity-50"
+                      >
+                        {planBusy ? '저장 중…' : '변경 저장'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -788,6 +944,29 @@ function KV({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</p>
       <p className="mt-0.5 text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+function PlanButton({
+  icon, label, active, onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+        active
+          ? 'bg-accent/15 text-accent ring-accent/30'
+          : 'bg-bg-card text-ink-mute ring-line/20 hover:bg-bg-hover'
+      }`}
+    >
+      {icon} {label}
+      {active && <span className="ml-0.5 text-[9px] opacity-70">(현재)</span>}
+    </button>
   );
 }
 
