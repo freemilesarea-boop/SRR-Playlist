@@ -9,7 +9,16 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
-import RevealAccountButton from './RevealAccountButton';
+import RevealPiiButton from './RevealPiiButton';
+
+function taxLabel(t: string): string {
+  switch (t) {
+    case 'business_income_3_3': return '사업소득 3.3%';
+    case 'other_income_8_8': return '기타소득 8.8%';
+    case 'none': return '없음';
+    default: return t || '—';
+  }
+}
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   pending: { label: '확인 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
@@ -80,8 +89,8 @@ export default function PayoutVerificationList() {
       </div>
 
       <Alert tone="warning">
-        계좌번호는 민감정보입니다. 본인 명의 확인 후 승인해주세요. 화면에 마스킹 표시되며, 클릭
-        시 일시적으로 펼쳐집니다.
+        주민등록번호 / 계좌번호는 민감 PII 입니다. 본인 명의 + 동의 + 13자리 검증 확인 후
+        승인해주세요. 원본 보기 시 audit log 가 영구 기록됩니다.
       </Alert>
 
       <div className="overflow-x-auto rounded-2xl bg-bg-card ring-1 ring-line/10">
@@ -89,10 +98,9 @@ export default function PayoutVerificationList() {
           <thead>
             <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
               <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
-              <th className="px-3 py-2.5 text-left font-semibold">이메일</th>
-              <th className="px-3 py-2.5 text-left font-semibold">은행</th>
-              <th className="px-3 py-2.5 text-left font-semibold">계좌번호</th>
-              <th className="px-3 py-2.5 text-left font-semibold">예금주</th>
+              <th className="px-3 py-2.5 text-left font-semibold">실명 / RRN</th>
+              <th className="px-3 py-2.5 text-left font-semibold">은행 / 계좌</th>
+              <th className="px-3 py-2.5 text-left font-semibold">세금 / 동의</th>
               <th className="px-3 py-2.5 text-left font-semibold">상태</th>
               <th className="px-3 py-2.5 text-right font-semibold">등록일</th>
               <th className="px-3 py-2.5 text-right font-semibold">조치</th>
@@ -101,36 +109,67 @@ export default function PayoutVerificationList() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-xs text-ink-mute">
+                <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
                   불러오는 중…
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-xs text-ink-mute">
+                <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
                   등록된 정산 계좌가 없어요.
                 </td>
               </tr>
             )}
             {rows.map((r) => {
               const s = STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
+              const canReveal = r.verification_status === 'verified' && r.is_pii_complete;
               return (
-                <tr key={r.account_id} className="border-b border-line/10 last:border-b-0">
-                  <td className="px-3 py-2.5 font-medium">{r.artist_name ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-xs text-ink-mute">{r.email ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-xs">{r.bank_name}</td>
+                <tr key={r.account_id} className="border-b border-line/10 last:border-b-0 align-top">
+                  <td className="px-3 py-2.5">
+                    <p className="font-medium">{r.artist_name ?? '—'}</p>
+                    <p className="text-[10px] text-ink-mute">{r.email ?? '—'}</p>
+                  </td>
                   <td className="px-3 py-2.5 text-xs">
-                    {r.verification_status === 'verified' ? (
-                      <RevealAccountButton
-                        accountId={r.account_id}
-                        maskedValue={r.masked_account_number}
-                      />
-                    ) : (
-                      <code className="font-mono text-ink-mute">{r.masked_account_number}</code>
+                    <p className="font-medium">{r.legal_name ?? '—'}</p>
+                    <div className="mt-1">
+                      {canReveal && r.masked_rrn ? (
+                        <RevealPiiButton
+                          accountId={r.account_id}
+                          maskedValue={r.masked_rrn}
+                          piiType="resident_number"
+                          className="font-mono text-[11px]"
+                        />
+                      ) : (
+                        <code className="font-mono text-[11px] text-ink-mute">{r.masked_rrn ?? '—'}</code>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs">
+                    <p>{r.bank_name}</p>
+                    <p className="mt-0.5 text-[10px] text-ink-mute">예금주: {r.account_holder}</p>
+                    <div className="mt-1">
+                      {canReveal ? (
+                        <RevealPiiButton
+                          accountId={r.account_id}
+                          maskedValue={r.masked_account_number}
+                          piiType="account_number"
+                          className="font-mono text-[11px]"
+                        />
+                      ) : (
+                        <code className="font-mono text-[11px] text-ink-mute">{r.masked_account_number}</code>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-[11px]">
+                    <p>{taxLabel(r.tax_withholding_type)}</p>
+                    <p className={`mt-0.5 ${r.has_tax_consent ? 'text-emerald-300' : 'text-amber-300'}`}>
+                      {r.has_tax_consent ? '✓ 동의 완료' : '⚠ 미동의'}
+                    </p>
+                    {!r.is_pii_complete && (
+                      <p className="mt-0.5 text-[10px] font-semibold text-red-300">PII 미완료</p>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs">{r.account_holder}</td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.tone}`}>
                       {r.verification_status === 'pending' && <Clock size={9} />}
@@ -148,7 +187,8 @@ export default function PayoutVerificationList() {
                       {r.verification_status !== 'verified' && (
                         <button
                           onClick={() => verify(r.account_id)}
-                          disabled={busyId === r.account_id}
+                          disabled={busyId === r.account_id || !r.is_pii_complete}
+                          title={!r.is_pii_complete ? 'PII 미완료 — 승인 불가' : '승인'}
                           className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
                         >
                           <Check size={11} /> 승인
