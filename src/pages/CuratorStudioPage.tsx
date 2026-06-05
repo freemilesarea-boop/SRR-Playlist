@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Music2, Rocket, EyeOff, Pencil, X, ArrowLeft } from 'lucide-react';
+import { Plus, Music2, Rocket, EyeOff, Pencil, X, ArrowLeft, Lock } from 'lucide-react';
 import { fetchTracks } from '@/lib/api';
 import {
   fetchMyCuratorPlaylists,
@@ -9,6 +9,7 @@ import {
   unreleaseCuratorPlaylist,
   type MyCuratorPlaylist,
 } from '@/lib/curatorStudioApi';
+import { fetchMyArtistPlan, type ArtistPlanInfo } from '@/lib/artistPlanApi';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { useAuthStore } from '@/store/authStore';
 import { errorMessage } from '@/lib/errorMessage';
@@ -32,6 +33,13 @@ export default function CuratorStudioPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [plan, setPlan] = useState<ArtistPlanInfo | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchMyArtistPlan().then((p) => { if (alive) setPlan(p); });
+    return () => { alive = false; };
+  }, [userId]);
 
   async function load() {
     setLoading(true);
@@ -92,6 +100,23 @@ export default function CuratorStudioPage() {
             void load();
           }}
         />
+      </div>
+    );
+  }
+
+  // 일반 아티스트 플랜 — 플리 제작 권한 없음
+  if (plan?.plan_type === 'general_artist') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
+        <Lock size={32} className="text-ink-dim" />
+        <p className="text-base font-bold">일반 아티스트 플랜은 플레이리스트 제작 권한이 없어요</p>
+        <p className="text-sm text-ink-mute">
+          플레이리스트 제작 / 큐레이터 신청은 <strong>수강생 아티스트 PRO</strong> 부터 가능합니다.<br />
+          업그레이드 문의: freemilesarea@gmail.com
+        </p>
+        <Link to="/" className="btn-ghost mt-2 text-sm">
+          <ArrowLeft size={14} /> 홈으로
+        </Link>
       </div>
     );
   }
