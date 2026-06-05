@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Mic2, CheckCircle2, UserCheck, GraduationCap, Music2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
-import { getCodePlanHint, type CodePlanHint } from '@/lib/artistPlanApi';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
 
@@ -34,12 +33,6 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [salesAgent, setSalesAgent] = useState<VerifiedSalesAgent | null>(null);
   const [salesAgentError, setSalesAgentError] = useState<string | null>(null);
   const [salesAgentChecking, setSalesAgentChecking] = useState(false);
-
-  // 코드 입력 즉시 추론되는 플랜 안내 (검증 없이도 표시)
-  const codeHint: CodePlanHint | null = useMemo(
-    () => getCodePlanHint(salesAgentCode),
-    [salesAgentCode],
-  );
 
   function validate(): string | null {
     if (!realName.trim()) return '이름을 입력해주세요';
@@ -231,7 +224,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
       <hr className="border-line/10" />
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">아티스트 가입 코드 *</p>
 
-      {/* 두 플랜 카드 — 코드 입력 전에도 비교 가능하도록 항상 노출 */}
+      {/* 두 플랜 카드 — 일반 카드만 공개 코드 노출, 수강생 PRO 는 코드 미공개 */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <PlanCompareCard
           icon={<Music2 size={14} />}
@@ -240,16 +233,16 @@ export default function ArtistSignupForm({ onDone }: Props) {
           price="월 6,900원"
           bullets={['월 5곡 유통', '최대 10일 내 발매', '기본 검수 · 정산', '플리/큐레이터 불가']}
           tone="zinc"
-          active={codeHint?.plan_type === 'general_artist'}
+          active={salesAgent?.plan_type === 'general_artist'}
         />
         <PlanCompareCard
           icon={<GraduationCap size={14} />}
           title="수강생 아티스트 PRO"
-          highlight="C69947"
-          price="VERIFIED"
-          bullets={['월 50곡 유통', '플리 제작 가능', '큐레이터 신청 가능', '우선 검수']}
+          highlight="수강생 전용"
+          price="월 4,900원"
+          bullets={['월 50곡 유통', '플리 제작 가능', '큐레이터 신청 가능', '우선 검수', '수강생 전용 코드 필요']}
           tone="emerald"
-          active={codeHint?.plan_type === 'student_artist'}
+          active={salesAgent?.plan_type === 'student_artist'}
         />
       </div>
 
@@ -263,7 +256,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
               setSalesAgent(null);
               setSalesAgentError(null);
             }}
-            placeholder="PDWSFU 또는 C69947"
+            placeholder="가입 코드를 입력해주세요"
             className="input flex-1"
             autoCapitalize="characters"
           />
@@ -284,20 +277,31 @@ export default function ArtistSignupForm({ onDone }: Props) {
         {salesAgentError && (
           <p className={`mt-1 text-[11px] ${inlineToneClass.error}`}>유효하지 않은 코드입니다.</p>
         )}
-        {codeHint && !salesAgent && (
-          <p className={`mt-1 text-[11px] text-accent`}>
-            <strong>{codeHint.plan_label}</strong> 코드입니다. 코드 확인을 눌러주세요.
-          </p>
-        )}
-        {salesAgent && codeHint && (
+        {/* 검증 완료된 경우에만 — 서버가 반환한 plan_type 으로 안내. 코드 자체는 표시 안 함. */}
+        {salesAgent && salesAgent.plan_type === 'student_artist' && (
           <div className="mt-2 rounded-lg bg-emerald-500/10 p-2.5 ring-1 ring-emerald-500/20">
             <p className="text-[11px] font-bold text-emerald-300">
-              ✓ {codeHint.plan_label} 으로 가입됩니다
+              ✓ 수강생 아티스트 PRO 인증 완료
             </p>
             <p className="mt-0.5 text-[10px] text-ink-mute">
-              {codeHint.description} · 담당: {salesAgent.name}
+              월 50곡 유통 · 플리 제작 / 큐레이터 신청 가능
             </p>
           </div>
+        )}
+        {salesAgent && salesAgent.plan_type === 'general_artist' && (
+          <div className="mt-2 rounded-lg bg-accent/10 p-2.5 ring-1 ring-accent/20">
+            <p className="text-[11px] font-bold text-accent">
+              ✓ 일반 아티스트 가입 가능
+            </p>
+            <p className="mt-0.5 text-[10px] text-ink-mute">
+              월 6,900원 · 월 5곡 유통
+            </p>
+          </div>
+        )}
+        {salesAgent && !salesAgent.plan_type && (
+          <p className="mt-1 text-[11px] text-ink-mute">
+            ✓ 코드 확인됨 — 담당자에게 플랜 안내를 받아주세요.
+          </p>
         )}
       </Field>
       <Alert tone="warning">
