@@ -4,6 +4,7 @@ import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { isKakaoLoginEnabled } from '@/lib/kakao';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
@@ -346,26 +347,31 @@ export default function LoginPage() {
                   </span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={onKakaoSignIn}
-                  disabled={kakaoBusy}
-                  className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#191919]/85 shadow-card ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
-                  aria-label={mode === 'signin' ? '카카오로 로그인' : '카카오로 회원가입'}
-                >
-                  {kakaoBusy ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                  ) : (
-                    <KakaoLogo />
-                  )}
-                  <span>
-                    {kakaoBusy
-                      ? '카카오 처리 중…'
-                      : mode === 'signin'
-                        ? '카카오로 로그인'
-                        : '카카오로 회원가입'}
-                  </span>
-                </button>
+                {/* X6.13 — 카카오 OAuth 활성화 전까지 UI 숨김.
+                    심사 통과 후 VITE_ENABLE_KAKAO_LOGIN=true 로 재오픈.
+                    핸들러/상태는 그대로 유지. */}
+                {isKakaoLoginEnabled() && (
+                  <button
+                    type="button"
+                    onClick={onKakaoSignIn}
+                    disabled={kakaoBusy}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#191919]/85 shadow-card ring-1 ring-black/10 transition hover:bg-[#FDD800] active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+                    aria-label={mode === 'signin' ? '카카오로 로그인' : '카카오로 회원가입'}
+                  >
+                    {kakaoBusy ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
+                    ) : (
+                      <KakaoLogo />
+                    )}
+                    <span>
+                      {kakaoBusy
+                        ? '카카오 처리 중…'
+                        : mode === 'signin'
+                          ? '카카오로 로그인'
+                          : '카카오로 회원가입'}
+                    </span>
+                  </button>
+                )}
 
                 {mode === 'signin' ? (
                   <button

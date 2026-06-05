@@ -15,7 +15,7 @@ import { createSupportInquiry, INQUIRY_TYPES, type InquiryType } from '@/lib/sup
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import KakaoChannelButtons from '@/components/KakaoChannelButtons';
-import { isKakaoChannelConfigured, openKakaoChannelChat, setKakaoChatPending } from '@/lib/kakao';
+import { isKakaoChannelConfigured, isKakaoLoginEnabled, openKakaoChannelChat, setKakaoChatPending } from '@/lib/kakao';
 import { logSupportContactEvent } from '@/lib/supportContactApi';
 import type { User } from '@supabase/supabase-js';
 
@@ -171,32 +171,36 @@ export default function SupportInquiryForm({
                   {kakaoCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
                   {kakaoCopied ? '복사됨' : '내용 복사'}
                 </button>
-                <button
-                  onClick={async () => {
-                    const userHasKakao = hasKakaoIdentity(user);
-                    void logSupportContactEvent({
-                      channel: 'kakao',
-                      action: 'open_chat',
-                      context: { after_form_submit: true, kakao_linked: userHasKakao },
-                    });
-                    if (userHasKakao) {
-                      openKakaoChannelChat();
-                    } else {
-                      // 카카오 로그인 → 자동 채팅 오픈 (AuthCallback 처리)
-                      toast.info('카카오 로그인 후 자동으로 채팅창이 열려요.');
-                      setKakaoChatPending();
-                      try {
-                        await useAuthStore.getState().signInWithKakao();
-                      } catch {
+                {/* X6.13 — 카카오 OAuth 활성화 전까지 미연결 사용자에게 카카오 로그인
+                    버튼 숨김. 이미 카카오 연결된 사용자는 채널 채팅 진입만 사용. */}
+                {(hasKakaoIdentity(user) || isKakaoLoginEnabled()) && (
+                  <button
+                    onClick={async () => {
+                      const userHasKakao = hasKakaoIdentity(user);
+                      void logSupportContactEvent({
+                        channel: 'kakao',
+                        action: 'open_chat',
+                        context: { after_form_submit: true, kakao_linked: userHasKakao },
+                      });
+                      if (userHasKakao) {
                         openKakaoChannelChat();
+                      } else {
+                        // 카카오 로그인 → 자동 채팅 오픈 (AuthCallback 처리)
+                        toast.info('카카오 로그인 후 자동으로 채팅창이 열려요.');
+                        setKakaoChatPending();
+                        try {
+                          await useAuthStore.getState().signInWithKakao();
+                        } catch {
+                          openKakaoChannelChat();
+                        }
                       }
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#FEE500] px-3 py-2 text-[11px] font-bold text-[#191919] hover:bg-[#FDD800]"
-                >
-                  <MessageCircle size={12} />
-                  {hasKakaoIdentity(user) ? '@듣다 채팅창 열기' : '카카오 로그인 + 채팅창 열기'}
-                </button>
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#FEE500] px-3 py-2 text-[11px] font-bold text-[#191919] hover:bg-[#FDD800]"
+                  >
+                    <MessageCircle size={12} />
+                    {hasKakaoIdentity(user) ? '@듣다 채팅창 열기' : '카카오 로그인 + 채팅창 열기'}
+                  </button>
+                )}
               </div>
               <p className="mt-2 text-[10px] text-ink-dim">
                 💡 카톡 메시지가 운영자에게 도착하려면 채팅창에 직접 붙여넣기 + 전송 버튼을 누르셔야 합니다.

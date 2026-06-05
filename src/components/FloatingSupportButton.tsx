@@ -20,6 +20,7 @@ import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import {
   isKakaoChannelConfigured,
+  isKakaoLoginEnabled,
   openKakaoChannelChat,
   kakaoChannelChatUrl,
   setKakaoChatPending,
@@ -60,8 +61,11 @@ export default function FloatingSupportButton() {
   if (!visible || !mounted || typeof document === 'undefined') return null;
 
   const hasPlayer = queueLen > 0;
-  const kakaoEnabled = isKakaoChannelConfigured();
   const userHasKakao = hasKakaoIdentity(user);
+  // X6.13 — 카카오 OAuth 활성화 전까지 미연결 사용자에게 카카오 로그인 진입점 숨김.
+  // 이미 카카오 연결된 사용자는 채널 채팅 진입만 하므로 노출 유지.
+  const kakaoEnabled = isKakaoChannelConfigured() &&
+    (userHasKakao || isKakaoLoginEnabled());
   // 미니 플레이어 위로 — 큐 있으면 156px, 없으면 92px (safe-area 포함)
   const bottomPx = hasPlayer ? 156 : 92;
 
