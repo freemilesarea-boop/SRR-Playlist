@@ -74,6 +74,21 @@ export function isKakaoChannelConfigured(): boolean {
   return getKakaoChannelPublicId().length > 0;
 }
 
+/**
+ * 카카오 OAuth 로그인 활성화 여부 (X6.13 임시 조치).
+ *
+ * 카카오 비즈 앱 심사 / Supabase Auth provider 활성화가 완료되기 전까지
+ * 운영 UI 에서 카카오 로그인 진입점을 숨김. env 미정의 또는 'false' → 비활성.
+ * 심사 통과 후 `.env` 또는 Vercel 환경변수에 `VITE_ENABLE_KAKAO_LOGIN=true`
+ * 만 추가 + 재배포하면 즉시 노출 복구.
+ *
+ * 코드(상태/핸들러)는 그대로 유지 — 토글로 즉시 켤 수 있음.
+ */
+export function isKakaoLoginEnabled(): boolean {
+  const v = (import.meta.env.VITE_ENABLE_KAKAO_LOGIN as string | undefined) ?? '';
+  return String(v).toLowerCase() === 'true';
+}
+
 /** 채널 공개 URL (홈) */
 export function kakaoChannelHomeUrl(): string {
   const id = getKakaoChannelPublicId();
