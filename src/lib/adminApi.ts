@@ -66,6 +66,8 @@ export interface MemberRow {
   last_sign_in_at: string | null;
   // 0105 — 프로모션 사용 여부
   has_promotion?: boolean;
+  // X6.10 Phase 2 — 아티스트 플랜 (artist 계정만 의미 있음)
+  plan_type?: 'general_artist' | 'student_artist' | 'admin' | 'legacy_student' | null;
 }
 
 export interface MemberDetail {
@@ -87,6 +89,10 @@ export interface MemberDetail {
     account_type?: string;
     membership_tier?: string;
     is_curator?: boolean;
+    // X6.10 Phase 2 — 아티스트 플랜
+    plan_type?: 'general_artist' | 'student_artist' | 'admin' | 'legacy_student' | null;
+    plan_monthly_quota?: number;
+    plan_used_this_month?: number;
   };
   total_streams: number;
   total_listened_seconds: number;

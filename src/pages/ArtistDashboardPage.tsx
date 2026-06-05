@@ -32,7 +32,8 @@ import {
   type PayoutAccount,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
-import { CreditCard, Wallet, FileSignature } from 'lucide-react';
+import { fetchMyArtistPlan, type ArtistPlanInfo, planBadgeTone } from '@/lib/artistPlanApi';
+import { CreditCard, Wallet, FileSignature, GraduationCap, Music2, Shield } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
@@ -64,18 +65,20 @@ export default function ArtistDashboardPage() {
   const [payout, setPayout] = useState<PayoutAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTrack, setEditingTrack] = useState<MyArtistTrackRow | null>(null);
+  const [plan, setPlan] = useState<ArtistPlanInfo | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts, sm, dl, el, po] = await Promise.all([
+      const [ap, ts, sm, dl, el, po, pl] = await Promise.all([
         fetchMyArtistProfile(user.id),
         fetchMyArtistTracks(),
         fetchArtistStreamingSummary(),
         fetchArtistDailyStreams(30),
         fetchArtistUploadEligibility(),
         fetchMyPayoutAccount(user.id),
+        fetchMyArtistPlan(),
       ]);
       setArtist(ap);
       setTracks(ts);
@@ -83,6 +86,7 @@ export default function ArtistDashboardPage() {
       setDaily(dl);
       setEligibility(el);
       setPayout(po);
+      setPlan(pl);
     } finally {
       setLoading(false);
     }
@@ -117,6 +121,9 @@ export default function ArtistDashboardPage() {
           <SupportInquiryButton variant="chip" defaultType="음원 등록 문의" />
         </div>
       </header>
+
+      {/* 플랜 배지 */}
+      {plan && <ArtistPlanCard plan={plan} />}
 
       {/* 승인 상태 카드 */}
       {loading ? (
@@ -185,6 +192,35 @@ export default function ArtistDashboardPage() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function ArtistPlanCard({ plan }: { plan: ArtistPlanInfo }) {
+  const isPro = plan.is_verified_pro;
+  const isGeneral = plan.plan_type === 'general_artist';
+  const Icon = isPro ? GraduationCap : isGeneral ? Music2 : Shield;
+  return (
+    <div className={`rounded-2xl p-4 ring-1 ${planBadgeTone(plan.plan_type)}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Icon size={18} />
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-bold">{plan.plan_label}</h2>
+              {isPro && (
+                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-emerald-200">
+                  VERIFIED
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-[11px] opacity-80">
+              월 업로드 한도 <strong className="font-bold">{plan.monthly_quota}곡</strong>
+              {!plan.can_create_playlist && ' · 플리/큐레이터 제한'}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

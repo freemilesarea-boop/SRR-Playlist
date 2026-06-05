@@ -215,8 +215,25 @@ export default function MembersList() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-semibold ring-1 ring-line/10">
-                      {(m.account_type ?? 'individual') === 'business' ? '🏪 사업자' : '👤 일반'}
+                      {(m.account_type ?? 'individual') === 'business'
+                        ? '🏪 사업자'
+                        : (m.account_type === 'artist' ? '🎤 아티스트' : '👤 일반')}
                     </span>
+                    {m.account_type === 'artist' && m.plan_type === 'student_artist' && (
+                      <span className="ml-1 inline-flex rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                        PRO
+                      </span>
+                    )}
+                    {m.account_type === 'artist' && m.plan_type === 'general_artist' && (
+                      <span className="ml-1 inline-flex rounded-full bg-zinc-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-300">
+                        일반
+                      </span>
+                    )}
+                    {m.account_type === 'artist' && !m.plan_type && (
+                      <span className="ml-1 inline-flex rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                        legacy
+                      </span>
+                    )}
                     {m.signup_completed === false && (
                       <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] text-yellow-200">
                         미완료

@@ -228,6 +228,30 @@ export default function MemberDetail({
                   <KV label="PII 마스킹" value={fmtDateTime(data.user.pii_masked_at)} />
                 )}
               </div>
+
+              {/* X6.10 Phase 2 — 아티스트 플랜 정보 (artist 계정만) */}
+              {data.user.account_type === 'artist' && (
+                <div className="rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">
+                    아티스트 플랜
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <KV label="plan_type" value={
+                      data.user.plan_type === 'student_artist' ? '수강생 PRO'
+                      : data.user.plan_type === 'general_artist' ? '일반'
+                      : data.user.plan_type === 'legacy_student' ? 'legacy_student'
+                      : data.user.plan_type === 'admin' ? 'admin'
+                      : 'legacy (NULL)'
+                    } />
+                    <KV label="월 한도"
+                        value={`${data.user.plan_monthly_quota ?? 50}곡`} />
+                    <KV label="이번 달 사용"
+                        value={`${data.user.plan_used_this_month ?? 0}곡`} />
+                    <KV label="잔여"
+                        value={`${Math.max(0, (data.user.plan_monthly_quota ?? 50) - (data.user.plan_used_this_month ?? 0))}곡`} />
+                  </div>
+                </div>
+              )}
               {data.user.withdrawn_at && (
                 <Alert tone="error" title={`탈퇴 처리됨 · ${fmtDateTime(data.user.withdrawn_at)}`}>
                   <div className="space-y-0.5 text-[12px] leading-relaxed">
