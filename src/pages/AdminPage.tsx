@@ -71,6 +71,7 @@ import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel'
 import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
 import BusinessLivePanel from '@/components/admin/BusinessLivePanel';
 import SupportInquiriesPanel from '@/components/admin/SupportInquiriesPanel';
+import CuratorsAdminPanel from '@/components/admin/CuratorsAdminPanel';
 import { supabaseProjectRef } from '@/lib/supabase';
 
 type Tab =
@@ -78,6 +79,7 @@ type Tab =
   | 'business-live'
   | 'support-inquiries'
   | 'members'
+  | 'curators'
   | 'sales-agents'
   | 'sales-partners'
   | 'free-trials'
@@ -121,6 +123,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'business-live', label: '매장 실시간', icon: <Activity size={14} /> },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
+  { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
   { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
@@ -165,7 +168,7 @@ type Group = '운영' | '회원' | '매출/결제' | '아티스트' | '콘텐츠
 
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
-  { key: '회원', tabs: ['members', 'sales-agents', 'free-trials'] },
+  { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -319,6 +322,7 @@ export default function AdminPage() {
         {tab === 'business-live' && <BusinessLivePanel />}
         {tab === 'support-inquiries' && <SupportInquiriesPanel />}
         {tab === 'members' && <MembersList />}
+        {tab === 'curators' && <CuratorsAdminPanel />}
         {tab === 'sales-agents' && <SalesAgentsList />}
         {tab === 'sales-partners' && <SalesPartnerApplications />}
         {tab === 'free-trials' && <FreeTrialsPanel />}
