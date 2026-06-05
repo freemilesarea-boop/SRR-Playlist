@@ -112,7 +112,14 @@ export default function LoginPage() {
     try {
       await signInWithKakao();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '카카오 로그인에 실패했어요.');
+      const raw = err instanceof Error ? err.message : '';
+      // Supabase 에서 카카오 provider 비활성화일 때 raw JSON 메시지가 노출되는 것 방지.
+      const friendly = /provider.*not.*enabled|unsupported provider|validation_failed/i.test(raw)
+        ? '카카오 로그인 설정이 완료되지 않았습니다. 잠시 후 다시 시도하거나 운영팀에 문의해주세요.'
+        : raw || '카카오 로그인에 실패했어요.';
+      setError(friendly);
+      const { toast } = await import('@/store/toastStore');
+      toast.error(friendly);
       setKakaoBusy(false);
     }
   }

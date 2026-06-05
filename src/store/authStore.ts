@@ -237,8 +237,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       provider: 'kakao',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        // X6.2: profile_nickname + account_email (필수) + talk_message (2차 카톡 알림 준비)
-        scopes: 'profile_nickname account_email talk_message',
+        // X6.11: 로그인 목적의 최소 scope 만 — profile_nickname + account_email.
+        // talk_message 는 별도 권한 심사 + 사용자 동의 부담이 커서 제거. 알림톡 발송이
+        // 필요해지면 비즈 메시지 (알림톡/친구톡 API) 로 별도 솔루션 사용 권장.
+        scopes: 'profile_nickname account_email',
       },
     });
     if (error) throw error;
