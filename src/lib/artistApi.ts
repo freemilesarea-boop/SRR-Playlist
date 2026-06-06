@@ -1468,6 +1468,40 @@ export async function fetchMyPayoutAccountMasked(): Promise<PayoutAccountMasked 
   }
 }
 
+// X6.16 — 정산 보류 상태 안내 (본인 화면용)
+export type SettlementHoldReason =
+  | 'rrn_missing'
+  | 'account_missing'
+  | 'identity_not_verified'
+  | 'account_not_verified';
+
+export interface SettlementHoldStatus {
+  is_held: boolean;
+  hold_reasons: SettlementHoldReason[];
+  identity_verified: boolean;
+  has_payout_account: boolean;
+  payout_account_status: 'pending' | 'verified' | 'rejected' | null;
+  has_rrn: boolean;
+  has_tax_consent: boolean;
+  has_account_number: boolean;
+  held_settlement_count: number;
+  pending_payout_amount: number;
+  carried_over_amount: number;
+  total_pending_amount: number;
+  last_settlement_month: string | null;
+}
+
+export async function fetchMySettlementHoldStatus(): Promise<SettlementHoldStatus | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_my_settlement_hold_status');
+    if (error) return null;
+    const row = (data as SettlementHoldStatus[] | null)?.[0];
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function submitArtistPayoutAccountV2(payload: {
   legal_name: string;
   resident_registration_number: string;

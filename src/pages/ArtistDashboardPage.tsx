@@ -26,6 +26,7 @@ import {
   submitArtistPayoutAccount,
   fetchMyPayoutAccountMasked,
   submitArtistPayoutAccountV2,
+  fetchMySettlementHoldStatus,
   TAX_CONSENT_TEXT,
   type ArtistProfile,
   type MyArtistTrackRow,
@@ -35,6 +36,8 @@ import {
   type PayoutAccount,
   type PayoutAccountMasked,
   type TaxWithholdingType,
+  type SettlementHoldStatus,
+  type SettlementHoldReason,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
 import { fetchMyArtistPlan, type ArtistPlanInfo, planBadgeTone } from '@/lib/artistPlanApi';
@@ -73,12 +76,14 @@ export default function ArtistDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [editingTrack, setEditingTrack] = useState<MyArtistTrackRow | null>(null);
   const [plan, setPlan] = useState<ArtistPlanInfo | null>(null);
+  // X6.16 — 정산 보류 상태
+  const [holdStatus, setHoldStatus] = useState<SettlementHoldStatus | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts, sm, dl, el, po, pom, pl] = await Promise.all([
+      const [ap, ts, sm, dl, el, po, pom, pl, hs] = await Promise.all([
         fetchMyArtistProfile(user.id),
         fetchMyArtistTracks(),
         fetchArtistStreamingSummary(),
@@ -87,6 +92,7 @@ export default function ArtistDashboardPage() {
         fetchMyPayoutAccount(user.id),
         fetchMyPayoutAccountMasked(),
         fetchMyArtistPlan(),
+        fetchMySettlementHoldStatus(),
       ]);
       setArtist(ap);
       setTracks(ts);
@@ -96,6 +102,7 @@ export default function ArtistDashboardPage() {
       setPayout(po);
       setPayoutMasked(pom);
       setPlan(pl);
+      setHoldStatus(hs);
     } finally {
       setLoading(false);
     }
@@ -133,6 +140,9 @@ export default function ArtistDashboardPage() {
 
       {/* 플랜 배지 */}
       {plan && <ArtistPlanCard plan={plan} />}
+
+      {/* X6.16 — 정산 보류 안내 (사유 + 누적 금액 + 등록 유도) */}
+      {holdStatus && holdStatus.is_held && <SettlementHoldCard status={holdStatus} />}
 
       {/* 승인 상태 카드 */}
       {loading ? (
@@ -638,7 +648,7 @@ function PayoutAccountSection({
         : null;
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+    <form id="payout-account-form" onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
           <Wallet size={16} />
@@ -800,6 +810,118 @@ function taxWithholdingLabel(t: TaxWithholdingType): string {
     case 'none': return '없음';
     default: return t;
   }
+}
+
+const HOLD_REASON_LABEL: Record<SettlementHoldReason, { title: string; desc: string }> = {
+  identity_not_verified: {
+    title: '본인인증 미완료',
+    desc: '내 정보 → 본인인증을 완료해주세요.',
+  },
+  account_missing: {
+    title: '정산계좌 미등록',
+    desc: '본인 명의의 은행 계좌 정보를 등록해주세요.',
+  },
+  rrn_missing: {
+    title: '주민등록번호 미등록',
+    desc: '원천징수 신고를 위해 주민등록번호 + 동의가 필요합니다.',
+  },
+  account_not_verified: {
+    title: '계좌 검증 미완료',
+    desc: '관리자 검토 대기 중입니다. 평균 1영업일.',
+  },
+};
+
+function SettlementHoldCard({ status }: { status: SettlementHoldStatus }) {
+  const formatAmount = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  // 중복 reason 제거 + 우선순위 유지
+  const uniqueReasons = Array.from(new Set(status.hold_reasons));
+  const showRegisterCta = uniqueReasons.some((r) =>
+    r === 'rrn_missing' || r === 'account_missing' || r === 'account_not_verified',
+  );
+
+  function scrollToForm() {
+    const el = document.getElementById('payout-account-form');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-amber-500/10 p-4 ring-1 ring-amber-500/30">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
+          <Wallet size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-amber-100">
+            정산 보류 중
+            <span className="rounded-full bg-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-50">
+              지급 대기
+            </span>
+          </h2>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/80">
+            아래 사유가 해결되면 다음 정산 회차에 자동 지급됩니다.
+            정산금은 <strong>소멸되지 않고 누적</strong>됩니다.
+          </p>
+        </div>
+      </div>
+
+      {/* 누적 예상 정산금 */}
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-bg-deep/40 p-3 text-[12px] ring-1 ring-line/10">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">예상 정산금 (누적)</p>
+          <p className="mt-0.5 font-mono text-lg font-bold text-emerald-300">
+            {formatAmount(status.total_pending_amount)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">보류 회차</p>
+          <p className="mt-0.5 font-mono text-lg font-bold text-amber-200">
+            {status.held_settlement_count}회
+          </p>
+        </div>
+        {status.pending_payout_amount > 0 && (
+          <div className="col-span-2 text-[10px] text-ink-mute">
+            지급 대기 {formatAmount(status.pending_payout_amount)} · 이월 {formatAmount(status.carried_over_amount)}
+          </div>
+        )}
+      </div>
+
+      {/* 보류 사유 체크리스트 */}
+      {uniqueReasons.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-100/70">
+            보류 사유 ({uniqueReasons.length})
+          </p>
+          <ul className="space-y-1.5">
+            {uniqueReasons.map((r) => {
+              const meta = HOLD_REASON_LABEL[r];
+              return (
+                <li key={r} className="flex items-start gap-2 rounded-lg bg-bg-card/60 p-2.5 ring-1 ring-line/10">
+                  <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-[10px] font-bold text-amber-200">
+                    !
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-ink">{meta.title}</p>
+                    <p className="mt-0.5 text-[11px] text-ink-mute">{meta.desc}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* CTA */}
+      {showRegisterCta && (
+        <button
+          type="button"
+          onClick={scrollToForm}
+          className="btn-primary w-full py-2.5 text-xs"
+        >
+          정산 정보 등록하기
+        </button>
+      )}
+    </div>
+  );
 }
 
 function Row2({ label, value }: { label: string; value: string }) {
