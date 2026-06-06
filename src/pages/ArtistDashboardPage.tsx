@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
   Mic2,
   CheckCircle2,
@@ -141,8 +141,15 @@ export default function ArtistDashboardPage() {
       {/* 플랜 배지 */}
       {plan && <ArtistPlanCard plan={plan} />}
 
-      {/* X6.16 — 정산 보류 안내 (사유 + 누적 금액 + 등록 유도) */}
-      {holdStatus && holdStatus.is_held && <SettlementHoldCard status={holdStatus} />}
+      {/* X6.16 / X6.17 — 정산 보류 안내 (사유별 정확한 CTA 라우팅) */}
+      {holdStatus && holdStatus.is_held && (
+        <SettlementHoldCard
+          status={holdStatus}
+          eligibility={eligibility}
+          payout={payout}
+          membershipTier={profile?.membership_tier ?? null}
+        />
+      )}
 
       {/* 승인 상태 카드 */}
       {loading ? (
@@ -465,7 +472,7 @@ function ContractRequiredCard({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+    <div id="contract-required" className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
           <FileSignature size={16} />
@@ -520,7 +527,7 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
   }
 
   return (
-    <div className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+    <div id="payment-required" className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
           <CreditCard size={16} />
@@ -831,18 +838,127 @@ const HOLD_REASON_LABEL: Record<SettlementHoldReason, { title: string; desc: str
   },
 };
 
-function SettlementHoldCard({ status }: { status: SettlementHoldStatus }) {
-  const formatAmount = (n: number) => `${n.toLocaleString('ko-KR')}원`;
-  // 중복 reason 제거 + 우선순위 유지
-  const uniqueReasons = Array.from(new Set(status.hold_reasons));
-  const showRegisterCta = uniqueReasons.some((r) =>
-    r === 'rrn_missing' || r === 'account_missing' || r === 'account_not_verified',
-  );
-
-  function scrollToForm() {
-    const el = document.getElementById('payout-account-form');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+/**
+ * scrollToIdOrToast — 해당 id 요소가 DOM 에 있으면 스크롤, 없으면 toast.
+ * silent no-op 방지 (X6.17).
+ */
+function scrollToIdOrToast(id: string, fallbackMessage: string): void {
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    if (import.meta.env.DEV) console.warn(`[SettlementHoldCard] scroll target #${id} not in DOM`);
+    toast.info(fallbackMessage);
   }
+}
+
+interface HoldPrimaryAction {
+  label: string;
+  variant: 'primary' | 'disabled';
+  onClick: () => void;
+}
+
+/**
+ * 우선순위 결정 (앞쪽이 먼저 차단되는 단계):
+ *   1. 결제 미완료      → #payment-required 로 스크롤
+ *   2. 계약 미서명      → #contract-required 로 스크롤
+ *   3. 본인인증 미완료  → /profile 라우팅
+ *   4. 계좌 검증 대기   → toast (검토 대기 중)
+ *   5. RRN/계좌 누락    → #payout-account-form 로 스크롤
+ */
+function computeHoldPrimaryAction(
+  status: SettlementHoldStatus,
+  eligibility: UploadEligibility | null,
+  payout: PayoutAccount | null,
+  membershipTier: 'free' | 'individual' | 'business' | null,
+  navigate: (to: string) => void,
+): HoldPrimaryAction {
+  const reasons = new Set(status.hold_reasons);
+
+  const isPaid =
+    eligibility?.has_paid_membership === true ||
+    membershipTier === 'individual' ||
+    membershipTier === 'business';
+  if (!isPaid) {
+    return {
+      label: '결제 진행하기',
+      variant: 'primary',
+      onClick: () => scrollToIdOrToast(
+        'payment-required',
+        '음원 등록 결제를 먼저 완료해주세요.',
+      ),
+    };
+  }
+
+  const contractOk =
+    eligibility?.has_signed_contract !== false &&
+    (!eligibility?.contract_status || eligibility.contract_status === 'signed');
+  if (!contractOk) {
+    return {
+      label: '계약 진행하기',
+      variant: 'primary',
+      onClick: () => scrollToIdOrToast(
+        'contract-required',
+        '계약 서명을 먼저 완료해주세요.',
+      ),
+    };
+  }
+
+  if (reasons.has('identity_not_verified')) {
+    return {
+      label: '본인인증 하러가기',
+      variant: 'primary',
+      onClick: () => navigate('/profile'),
+    };
+  }
+
+  // account_not_verified 는 폼이 이미 제출된 상태 — 관리자 검토 대기
+  if (
+    reasons.has('account_not_verified') &&
+    !reasons.has('rrn_missing') &&
+    !reasons.has('account_missing')
+  ) {
+    return {
+      label: '검토 대기 중',
+      variant: 'disabled',
+      onClick: () => toast.info(
+        '정산 정보는 제출되었습니다. 관리자 검토를 기다려주세요. (평균 1영업일)',
+      ),
+    };
+  }
+
+  if (reasons.has('rrn_missing') || reasons.has('account_missing')) {
+    return {
+      label: '정산 정보 등록하기',
+      variant: 'primary',
+      onClick: () => scrollToIdOrToast(
+        'payout-account-form',
+        '정산 정보 입력 폼을 찾을 수 없어요. 화면을 새로고침해 주세요.',
+      ),
+    };
+  }
+
+  // fallback (정의되지 않은 사유 조합)
+  return {
+    label: '내 정보 확인하기',
+    variant: 'primary',
+    onClick: () => navigate('/profile'),
+  };
+}
+
+function SettlementHoldCard({
+  status, eligibility, payout, membershipTier,
+}: {
+  status: SettlementHoldStatus;
+  eligibility: UploadEligibility | null;
+  payout: PayoutAccount | null;
+  membershipTier: 'free' | 'individual' | 'business' | null;
+}) {
+  const navigate = useNavigate();
+  const formatAmount = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  const uniqueReasons = Array.from(new Set(status.hold_reasons));
+  const primary = computeHoldPrimaryAction(status, eligibility, payout, membershipTier, navigate);
+  const isDisabled = primary.variant === 'disabled';
 
   return (
     <div className="space-y-3 rounded-2xl bg-amber-500/10 p-4 ring-1 ring-amber-500/30">
@@ -910,16 +1026,19 @@ function SettlementHoldCard({ status }: { status: SettlementHoldStatus }) {
         </div>
       )}
 
-      {/* CTA */}
-      {showRegisterCta && (
-        <button
-          type="button"
-          onClick={scrollToForm}
-          className="btn-primary w-full py-2.5 text-xs"
-        >
-          정산 정보 등록하기
-        </button>
-      )}
+      {/* 사유별 정확한 CTA */}
+      <button
+        type="button"
+        onClick={primary.onClick}
+        aria-disabled={isDisabled}
+        className={
+          isDisabled
+            ? 'inline-flex w-full items-center justify-center rounded-full bg-amber-500/15 px-4 py-2.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-500/20 cursor-default'
+            : 'btn-primary w-full py-2.5 text-xs'
+        }
+      >
+        {primary.label}
+      </button>
     </div>
   );
 }
