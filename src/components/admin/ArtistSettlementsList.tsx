@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X } from 'lucide-react';
+import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X, Check } from 'lucide-react';
 import {
   adminListSettlements,
   adminGenerateMonthlySettlement,
@@ -63,6 +63,15 @@ const TAX_LABEL: Record<NonNullable<AdminSettlementRow['tax_withholding_type']>,
 // X6.27: held 도 수동 이월 가능 (paid / carried_over / disputed 만 차단).
 function carryoverEligible(r: AdminSettlementRow): boolean {
   return r.status === 'pending' || r.status === 'payable' || r.status === 'held';
+}
+
+// X6.29: 지급완료 처리 가능 행 — pending/payable/held + final>0 + 흡수되지 않은 row
+function markPaidEligible(r: AdminSettlementRow): boolean {
+  return (
+    (r.status === 'pending' || r.status === 'payable' || r.status === 'held')
+    && (r.final_payout_amount ?? 0) > 0
+    && r.merged_into_settlement_id == null
+  );
 }
 
 function defaultMonth(): string {
@@ -245,6 +254,13 @@ export default function ArtistSettlementsList() {
                         수동
                       </span>
                     )}
+                    {/* X6.29: paid 는 다음 달 이월 제외 */}
+                    {r.status === 'paid' && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            title="지급완료 — 다음 달 정산에 이월되지 않음">
+                        이월 대상 아님
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-right text-xs text-ink-mute align-top">{fmtDate(r.paid_at)}</td>
                   <td className="px-3 py-2.5 text-right align-top">
@@ -256,13 +272,23 @@ export default function ArtistSettlementsList() {
                       >
                         <Eye size={14} />
                       </button>
-                      {carryoverEligible(r) && (
+                      {carryoverEligible(r) && r.merged_into_settlement_id == null && (
                         <button
                           onClick={() => setCarryoverRow(r)}
                           className="rounded p-1.5 text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
                           title="이월 신청 — 다음 달로 넘기기"
                         >
                           <ArrowRightCircle size={14} />
+                        </button>
+                      )}
+                      {/* X6.29: 지급완료 처리 (pending/payable/held + final>0 + 미흡수) — 상세 모달의 확인 단계 거침 */}
+                      {markPaidEligible(r) && (
+                        <button
+                          onClick={() => setDetailId(r.id)}
+                          className="rounded p-1.5 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
+                          title="지급완료 처리 — 상세에서 확인 후 진행"
+                        >
+                          <Check size={14} />
                         </button>
                       )}
                     </div>

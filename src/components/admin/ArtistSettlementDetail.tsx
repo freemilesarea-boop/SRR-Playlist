@@ -57,6 +57,8 @@ interface DetailData {
     carried_over_to_month: string | null;
     carryover_reason: string | null;
     carried_over_at: string | null;
+    // X6.28 auto-merge 추적
+    merged_into_settlement_id: string | null;
   };
   artist: { nickname: string | null; email: string | null; artist_name: string | null };
   policy: {
@@ -119,11 +121,15 @@ export default function ArtistSettlementDetail({
     }
   }
 
-  async function handlePay(memo: string) {
+  async function handlePay(memo: string, forcePii: boolean = false) {
     setBusy(true);
     try {
-      await adminMarkSettlementPaid(settlementId, memo);
-      toast.success('지급 완료 처리됨 — 이후 immutable');
+      const r = await adminMarkSettlementPaid(settlementId, memo, forcePii);
+      if (r.already_paid) {
+        toast.info('이미 지급완료 처리된 정산입니다.');
+      } else {
+        toast.success(`지급 완료 처리됨 — ${r.before_status} → paid (이후 immutable, 다음 달 이월 제외)`);
+      }
       setPayModalOpen(false);
       await load();
       onChanged?.();
@@ -426,10 +432,11 @@ export default function ArtistSettlementDetail({
                   <Check size={12} /> Finalize
                 </button>
               )}
-              {/* X6.27: held 도 수동 이월 허용 (paid / carried_over / disputed 만 차단) */}
+              {/* X6.27 + X6.29: held 도 수동 이월 허용. paid / merged_into 는 차단 */}
               {(data.settlement.status === 'pending'
                 || data.settlement.status === 'payable'
-                || data.settlement.status === 'held') && (
+                || data.settlement.status === 'held')
+                && data.settlement.merged_into_settlement_id == null && (
                 <button
                   onClick={() => setCarryoverModalOpen(true)}
                   disabled={busy}
@@ -439,27 +446,39 @@ export default function ArtistSettlementDetail({
                   <ArrowRightCircle size={12} /> 이월 신청
                 </button>
               )}
+              {/* X6.29: 지급완료 처리 — pending/payable/held 모두 허용 (안전장치는 RPC 가 검증) */}
+              {(data.settlement.status === 'pending'
+                || data.settlement.status === 'payable'
+                || data.settlement.status === 'held')
+                && data.settlement.merged_into_settlement_id == null && (
+                <button
+                  onClick={() => setPayModalOpen(true)}
+                  disabled={busy || (data.settlement.final_payout_amount ?? 0) <= 0}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  title={(data.settlement.final_payout_amount ?? 0) <= 0
+                    ? '최종 지급액이 0원 — 지급완료 처리 불가 (이월 또는 finalize 필요)'
+                    : '실제 송금 완료 후 클릭'}
+                >
+                  <Check size={12} /> 지급완료 처리
+                </button>
+              )}
               {data.settlement.status === 'payable' && (
-                <>
-                  <button
-                    onClick={() => setPayModalOpen(true)}
-                    disabled={busy}
-                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    <Check size={12} /> 지급 완료 처리
-                  </button>
-                  <button
-                    onClick={() => setHoldModalOpen(true)}
-                    disabled={busy}
-                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-50"
-                  >
-                    <Pause size={12} /> 보류
-                  </button>
-                </>
+                <button
+                  onClick={() => setHoldModalOpen(true)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-50"
+                >
+                  <Pause size={12} /> 보류
+                </button>
               )}
               {data.settlement.status === 'paid' && (
                 <Alert tone="success">
-                  지급 완료 — 이후 모든 수정 차단 (immutable). 오류 발견 시 별도 adjustment row 생성.
+                  지급 완료 — 이후 모든 수정 차단 (immutable). 다음 달 이월에서도 제외됩니다.
+                  {data.settlement.paid_at != null && (
+                    <span className="ml-2 font-mono text-xs">
+                      지급일: {new Date(data.settlement.paid_at as string).toLocaleString('ko-KR')}
+                    </span>
+                  )}
                 </Alert>
               )}
               {data.settlement.status === 'carried_over' && data.settlement.is_manual_carryover && (
@@ -471,15 +490,19 @@ export default function ArtistSettlementDetail({
           </div>
         )}
 
-        {payModalOpen && (
+        {payModalOpen && data && (
           <ConfirmModal
-            title="지급 완료 처리"
+            title="지급완료 처리"
             tone="success"
-            warning="이후 모든 컬럼이 영구 immutable 됩니다. 실제 송금 완료 후에만 클릭하세요."
+            warning="이 정산을 지급완료 처리하면 이후 월 정산에 이월되지 않습니다. 계속하시겠습니까? 처리 후 모든 컬럼이 영구 immutable 됩니다."
             placeholder="지급 메모 (선택) — 송금 참조번호 등"
             busy={busy}
             onCancel={() => setPayModalOpen(false)}
-            onConfirm={handlePay}
+            onConfirm={(text, forcePii) => handlePay(text, forcePii ?? false)}
+            showForcePiiToggle={
+              data.settlement.status === 'held'
+              && (data.settlement.held_reason === 'pii_incomplete')
+            }
           />
         )}
         {holdModalOpen && (
@@ -587,6 +610,7 @@ function ConfirmModal({
   busy,
   onCancel,
   onConfirm,
+  showForcePiiToggle,
 }: {
   title: string;
   tone: 'success' | 'warning';
@@ -595,9 +619,12 @@ function ConfirmModal({
   required?: boolean;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (text: string) => void;
+  onConfirm: (text: string, forcePii?: boolean) => void;
+  // X6.29: 지급완료 처리 시 held + pii_incomplete 케이스에서 강제 override 토글 노출
+  showForcePiiToggle?: boolean;
 }) {
   const [text, setText] = useState('');
+  const [forcePii, setForcePii] = useState(false);
   return (
     <div
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-3 sm:items-center"
@@ -619,10 +646,24 @@ function ConfirmModal({
           className="input"
           placeholder={placeholder}
         />
+        {showForcePiiToggle && (
+          <label className="flex items-start gap-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs ring-1 ring-red-500/30">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={forcePii}
+              onChange={(e) => setForcePii(e.target.checked)}
+            />
+            <span className="text-ink">
+              <strong className="text-red-700 dark:text-red-300">PII 미완료 override</strong> — 본인 인증 / 정산 계좌 정보가
+              완료되지 않은 정산을 강제로 지급완료 처리합니다. (audit 기록됨)
+            </span>
+          </label>
+        )}
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">취소</button>
           <button
-            onClick={() => onConfirm(text)}
+            onClick={() => onConfirm(text, forcePii)}
             disabled={busy || (required && !text.trim())}
             className={`rounded-lg px-4 py-2 text-xs font-bold text-white disabled:opacity-50 ${
               tone === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600'
