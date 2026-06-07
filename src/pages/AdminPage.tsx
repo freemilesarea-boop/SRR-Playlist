@@ -32,6 +32,7 @@ import ArtistSettlementsList from '@/components/admin/ArtistSettlementsList';
 import TrackReviewList from '@/components/admin/TrackReviewList';
 import QcReviewQueuePanel from '@/components/admin/QcReviewQueuePanel';
 import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
+import PayoutIntakeAdminPanel from '@/components/admin/PayoutIntakeAdminPanel';
 import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
 import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
 import SalesAgentsList from '@/components/admin/SalesAgentsList';
@@ -93,6 +94,7 @@ type Tab =
   | 'artists'
   | 'artist-contracts'
   | 'payout-verification'
+  | 'payout-intake'
   | 'track-review'
   | 'qc-review'
   | 'artist-tracks'
@@ -138,6 +140,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'artist-contracts', label: '계약 관리', icon: <FileSignature size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
+  { key: 'payout-intake', label: '정산 정보 신청', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'qc-review', label: 'AI QC 검수', icon: <Sparkles size={14} /> },
   { key: 'artist-tracks', label: '음원 관리', icon: <Music size={14} /> },
@@ -175,6 +178,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
     tabs: [
       'artists',
       'artist-contracts',
+      'payout-intake',
       'payout-verification',
       'track-review',
       'qc-review',
@@ -337,6 +341,7 @@ export default function AdminPage() {
         {tab === 'artists' && <ArtistApprovalList />}
         {tab === 'artist-contracts' && <ArtistContractsList />}
         {tab === 'payout-verification' && <PayoutVerificationList />}
+        {tab === 'payout-intake' && <PayoutIntakeAdminPanel />}
         {tab === 'track-review' && <TrackReviewList />}
         {tab === 'qc-review' && <QcReviewQueuePanel />}
         {tab === 'artist-tracks' && <ArtistTrackManagementList />}
