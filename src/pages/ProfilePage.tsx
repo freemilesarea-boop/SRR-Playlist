@@ -16,6 +16,8 @@ import {
   XCircle,
   AlertTriangle,
   UserX,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
@@ -355,49 +357,81 @@ function WithdrawConfirmModal({
  * MVP: 운영팀 문의 안내 (NICE/KCB/토스 정식 연동은 별도 작업).
  */
 function IdentityVerificationSection({ identityVerified }: { identityVerified: boolean }) {
+  // X6.19: 가독성 개선 — 제목 강조, 색상 대비 WCAG AA, 모바일 줄바꿈, 문의 CTA.
+  if (identityVerified) {
+    return (
+      <section id="identity-verification" className="space-y-2 scroll-mt-4">
+        <div className="px-1">
+          <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
+          <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/10 p-4 ring-1 ring-emerald-500/30">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/25 text-emerald-200"
+            aria-hidden
+          >
+            <ShieldCheck size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-extrabold text-emerald-100">본인인증 완료</p>
+            <p className="mt-1 text-sm text-emerald-50/90">
+              정산 지급 요건 중 본인인증 단계가 확인됐어요.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="identity-verification" className="space-y-2 scroll-mt-4">
       <div className="px-1">
         <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
-        <p className="text-[11px] text-ink-mute">
-          정산 지급을 위한 본인 명의 확인
-        </p>
+        <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
       </div>
-      <div
-        className={`flex items-start gap-3 rounded-2xl p-4 ring-1 ${
-          identityVerified
-            ? 'bg-emerald-500/10 ring-emerald-500/20'
-            : 'bg-amber-500/10 ring-amber-500/30'
-        }`}
-      >
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-            identityVerified ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-          }`}
-          aria-hidden
-        >
-          {identityVerified ? '✓' : '!'}
-        </span>
-        <div className="min-w-0 flex-1">
-          {identityVerified ? (
-            <>
-              <p className="text-sm font-semibold text-emerald-100">본인인증 완료</p>
-              <p className="mt-0.5 text-[11px] text-emerald-100/80">
-                정산 지급 요건 중 본인인증 단계가 확인됐어요.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-amber-100">본인인증이 필요해요</p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/80">
-                정산 지급 전 본인 명의 확인이 필요합니다. 운영팀 검수를 통해 처리되며,
-                아래 문의 채널로 연락 주시면 평균 1영업일 내 처리해 드립니다.
-              </p>
-              <p className="mt-1 text-[10px] text-ink-dim">
-                ※ 본인인증 자동 연동(NICE/KCB/토스/카카오) 준비 중입니다.
-              </p>
-            </>
-          )}
+      <div className="rounded-2xl bg-amber-500/15 p-4 ring-1 ring-amber-500/40">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          {/* 좌측 아이콘 */}
+          <span
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-amber-100 sm:h-10 sm:w-10"
+            aria-hidden
+          >
+            <ShieldAlert size={22} />
+          </span>
+
+          {/* 본문 */}
+          <div className="min-w-0 flex-1 space-y-2">
+            {/* 1. 제목 — 크고 진하게 */}
+            <h3 className="text-lg font-extrabold leading-tight tracking-tight text-amber-50 sm:text-xl">
+              본인인증이 필요해요
+            </h3>
+
+            {/* 2. 핵심 문구 — accent 톤 강조 */}
+            <p className="text-sm font-semibold leading-relaxed text-amber-100">
+              정산금을 지급받기 위해 본인인증이 필요합니다.
+            </p>
+
+            {/* 3. 부가 설명 — 보조 톤 */}
+            <p className="text-[12px] leading-relaxed text-ink-mute">
+              운영팀 검수를 통해 처리되며 평균 1영업일 내 처리됩니다.
+            </p>
+
+            {/* 4. 준비중 배지 */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1 text-[10px] font-medium text-ink-mute ring-1 ring-line/15">
+              자동 본인인증(NICE/KCB/카카오) 준비 중
+            </span>
+          </div>
+
+          {/* 5. CTA — 데스크탑 우측, 모바일 하단 full-width */}
+          <div className="shrink-0 sm:self-center">
+            <SupportInquiryButton
+              variant="nav"
+              label="본인인증 문의하기"
+              defaultType="정산 문의"
+              context={{ topic: 'identity_verification', source: 'profile_section' }}
+              className="!w-full !bg-amber-500 !text-amber-950 hover:!bg-amber-400 sm:!w-auto"
+            />
+          </div>
         </div>
       </div>
     </section>
