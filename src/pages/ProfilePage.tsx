@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   CreditCard,
   Settings,
@@ -47,6 +47,25 @@ export default function ProfilePage() {
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
+  const location = useLocation();
+
+  // /profile#identity-verification 진입 시 해당 섹션으로 자동 스크롤
+  useLayoutEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    // mount 직후 DOM 갱신 대기 — requestAnimationFrame 2번
+    let raf1 = 0; let raf2 = 0;
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, [location.hash]);
 
   useEffect(() => {
     let alive = true;
@@ -114,6 +133,9 @@ export default function ProfilePage() {
       </header>
 
       <MyInquiriesSection />
+
+      {/* X6.18 — 본인인증 섹션 (정산 보류 카드의 본인인증 CTA scroll target) */}
+      <IdentityVerificationSection identityVerified={profile?.identity_verified === true} />
 
       {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
       <section className="space-y-2">
@@ -324,6 +346,61 @@ function WithdrawConfirmModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * X6.18 — 본인인증 섹션.
+ * 정산 보류 카드의 "본인인증 하러가기" CTA 의 scroll target.
+ * MVP: 운영팀 문의 안내 (NICE/KCB/토스 정식 연동은 별도 작업).
+ */
+function IdentityVerificationSection({ identityVerified }: { identityVerified: boolean }) {
+  return (
+    <section id="identity-verification" className="space-y-2 scroll-mt-4">
+      <div className="px-1">
+        <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
+        <p className="text-[11px] text-ink-mute">
+          정산 지급을 위한 본인 명의 확인
+        </p>
+      </div>
+      <div
+        className={`flex items-start gap-3 rounded-2xl p-4 ring-1 ${
+          identityVerified
+            ? 'bg-emerald-500/10 ring-emerald-500/20'
+            : 'bg-amber-500/10 ring-amber-500/30'
+        }`}
+      >
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+            identityVerified ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+          }`}
+          aria-hidden
+        >
+          {identityVerified ? '✓' : '!'}
+        </span>
+        <div className="min-w-0 flex-1">
+          {identityVerified ? (
+            <>
+              <p className="text-sm font-semibold text-emerald-100">본인인증 완료</p>
+              <p className="mt-0.5 text-[11px] text-emerald-100/80">
+                정산 지급 요건 중 본인인증 단계가 확인됐어요.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-amber-100">본인인증이 필요해요</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/80">
+                정산 지급 전 본인 명의 확인이 필요합니다. 운영팀 검수를 통해 처리되며,
+                아래 문의 채널로 연락 주시면 평균 1영업일 내 처리해 드립니다.
+              </p>
+              <p className="mt-1 text-[10px] text-ink-dim">
+                ※ 본인인증 자동 연동(NICE/KCB/토스/카카오) 준비 중입니다.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
