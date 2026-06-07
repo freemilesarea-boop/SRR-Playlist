@@ -123,7 +123,9 @@ export default function PayoutVerificationList() {
             )}
             {rows.map((r) => {
               const s = STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
-              const canReveal = r.verification_status === 'verified' && r.is_pii_complete;
+              // X6.21: pending 상태에서도 reveal 가능. 운영자가 RRN/계좌를 확인해야
+              // 승인 결정을 내릴 수 있으므로 verified 조건 제거. is_pii_complete 만 체크.
+              const canReveal = r.is_pii_complete;
               return (
                 <tr key={r.account_id} className="border-b border-line/10 last:border-b-0 align-top">
                   <td className="px-3 py-2.5">
