@@ -20,18 +20,30 @@ function fmtDate(s: string | null): string {
   return new Date(s).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' });
 }
 
+function currentKstMonth(): string {
+  // KST 기준 이번 달 1일 (YYYY-MM-01) — input[type=month] 호환 (YYYY-MM)
+  // KST = UTC+9 — 임의의 now() 가 같은 KST 월에 속함을 단순히 계산
+  const now = new Date();
+  // toLocaleDateString 으로 KST date 추출
+  const yyyy = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric' }).format(now);
+  const mm = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', month: '2-digit' }).format(now);
+  return `${yyyy}-${mm}`;
+}
+
 export default function SalesAgentsList() {
   const [rows, setRows] = useState<SalesAgentListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<SalesAgentListRow | 'new' | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // X6.30 — 월 선택 (YYYY-MM, KST)
+  const [monthInput, setMonthInput] = useState<string>(currentKstMonth());
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchSalesAgentList();
+      const data = await fetchSalesAgentList(`${monthInput}-01`);
       setRows(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -42,7 +54,8 @@ export default function SalesAgentsList() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthInput]);
 
   async function toggleActive(row: SalesAgentListRow) {
     try {
@@ -63,7 +76,27 @@ export default function SalesAgentsList() {
             {rows.length}명 · 사업자 가입 시 영업인 코드로 유입 추적
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* X6.30: KST 월 선택 — 누적 컬럼은 무관, 이번 달 컬럼만 영향 */}
+          <label className="inline-flex items-center gap-1.5 text-xs text-ink-mute">
+            <span>대상 월 (KST)</span>
+            <input
+              type="month"
+              value={monthInput}
+              onChange={(e) => setMonthInput(e.target.value || currentKstMonth())}
+              className="input w-auto text-sm"
+            />
+            {monthInput !== currentKstMonth() && (
+              <button
+                type="button"
+                onClick={() => setMonthInput(currentKstMonth())}
+                className="text-[10px] font-semibold text-accent hover:underline"
+                title="이번 달로 초기화"
+              >
+                초기화
+              </button>
+            )}
+          </label>
           <button
             onClick={() => void load()}
             className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-3 py-2 text-xs font-semibold ring-1 ring-line/10 hover:bg-bg-hover"
@@ -101,8 +134,11 @@ export default function SalesAgentsList() {
                 <th className="px-3 py-2.5 text-right font-semibold">누적 결제</th>
                 <th className="px-3 py-2.5 text-right font-semibold">수수료율</th>
                 <th className="px-3 py-2.5 text-right font-semibold">누적 정산액</th>
-                <th className="px-3 py-2.5 text-right font-semibold">이번 달 결제</th>
-                <th className="px-3 py-2.5 text-right font-semibold">이번 달 정산액</th>
+                <th className="px-3 py-2.5 text-right font-semibold">
+                  {monthInput} 결제
+                  <span className="ml-1 text-[9px] font-normal text-ink-dim">(건수)</span>
+                </th>
+                <th className="px-3 py-2.5 text-right font-semibold">{monthInput} 정산액</th>
                 <th className="px-3 py-2.5 text-right font-semibold">생성</th>
                 <th className="px-3 py-2.5 text-right font-semibold">최근 활동</th>
                 <th className="w-px px-3 py-2.5 text-right font-semibold">관리</th>
@@ -209,7 +245,13 @@ export default function SalesAgentsList() {
         />
       )}
 
-      {detailId && <SalesAgentDetailModal id={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && (
+        <SalesAgentDetailModal
+          id={detailId}
+          month={`${monthInput}-01`}
+          onClose={() => setDetailId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -394,14 +436,23 @@ function SalesAgentEditor({
 // ============================================
 // 상세 모달 — 연결된 사업자 + 결제 리스트
 // ============================================
-function SalesAgentDetailModal({ id, onClose }: { id: string; onClose: () => void }) {
+function SalesAgentDetailModal({
+  id,
+  month,
+  onClose,
+}: {
+  id: string;
+  // X6.30: list 와 동일 월을 따라가도록 prop 전달
+  month: string | null;
+  onClose: () => void;
+}) {
   const [data, setData] = useState<SalesAgentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetchSalesAgentDetail(id)
+    fetchSalesAgentDetail(id, month)
       .then((d) => {
         if (alive) setData(d);
       })
@@ -414,7 +465,7 @@ function SalesAgentDetailModal({ id, onClose }: { id: string; onClose: () => voi
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, month]);
 
   return (
     <div

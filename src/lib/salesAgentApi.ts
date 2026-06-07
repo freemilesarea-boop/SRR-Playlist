@@ -33,6 +33,9 @@ export interface SalesAgentListRow {
   created_at: string;
   updated_at: string;
   last_activity_at: string | null;
+  // X6.30 — 월 선택 시 어느 월의 결과인지 표기 (KST)
+  month_window_start: string | null;
+  month_window_end: string | null;
 }
 
 export interface SalesAgentDetail {
@@ -116,14 +119,28 @@ export async function verifySalesAgentCode(
   return rows[0] ?? null;
 }
 
-export async function fetchSalesAgentList(): Promise<SalesAgentListRow[]> {
-  const { data, error } = await supabase.rpc('admin_sales_agent_list');
+/**
+ * 영업인 통계 리스트 (X6.30).
+ * @param month  'YYYY-MM-01' (KST) — null 이면 현재 KST 월. 누적 컬럼은 month 무관.
+ */
+export async function fetchSalesAgentList(
+  month?: string | null,
+): Promise<SalesAgentListRow[]> {
+  const { data, error } = await supabase.rpc('admin_sales_agent_list', {
+    p_month: month ?? null,
+  });
   if (error) throw error;
   return (data ?? []) as SalesAgentListRow[];
 }
 
-export async function fetchSalesAgentDetail(id: string): Promise<SalesAgentDetail | null> {
-  const { data, error } = await supabase.rpc('admin_sales_agent_detail', { p_id: id });
+export async function fetchSalesAgentDetail(
+  id: string,
+  month?: string | null,
+): Promise<SalesAgentDetail | null> {
+  const { data, error } = await supabase.rpc('admin_sales_agent_detail', {
+    p_id: id,
+    p_month: month ?? null,
+  });
   if (error) throw error;
   return (data ?? null) as SalesAgentDetail | null;
 }
