@@ -37,9 +37,13 @@ const STATUS_LABEL: Record<string, { label: string; tone: string; icon: React.Re
   failed: { label: '실패', tone: 'bg-red-500/15 text-red-300', icon: <XCircle size={11} /> },
 };
 
-const PLAN_PRICE: Record<'individual' | 'business', number> = {
+// X6.24: 신규 아티스트 플랜 가격 매핑 추가. business 와 artist_general 모두
+// 6,900원이라 price 만으로 plan 추정 불가 → 가능하면 row.plan_type 우선 사용.
+const PLAN_PRICE: Record<'individual' | 'business' | 'artist_general' | 'artist_student', number> = {
   individual: 4900,
   business: 6900,
+  artist_general: 6900,
+  artist_student: 4900,
 };
 
 function maskAccount(num: string | null): string {
@@ -696,7 +700,26 @@ function WebhookRow({
     if (!reason) return;
     setBusy(true);
     try {
-      const planType: 'individual' | 'business' = row.price === 6900 ? 'business' : 'individual';
+      // X6.24: row.plan_type (DB 원본) 우선 사용.
+      // 6,900원이 business 와 artist_general 둘 다라 가격만으로는 구분 불가.
+      // 알 수 없는 값이면 운영자 확인 필요.
+      const ALLOWED = ['individual','business','artist_general','artist_student'] as const;
+      type AllowedPlan = (typeof ALLOWED)[number];
+      const fromRow = row.plan_type as string | null | undefined;
+      let planType: AllowedPlan;
+      if (fromRow && (ALLOWED as readonly string[]).includes(fromRow)) {
+        planType = fromRow as AllowedPlan;
+      } else if (row.price === 6900) {
+        toast.error('plan_type 불명 + 6,900원 결제 — business / artist_general 구분 불가. DB row 의 plan_type 확인 후 진행해주세요.');
+        setBusy(false);
+        return;
+      } else if (row.price === 4900) {
+        toast.error('plan_type 불명 + 4,900원 결제 — individual / artist_student 구분 불가. DB row 의 plan_type 확인 후 진행해주세요.');
+        setBusy(false);
+        return;
+      } else {
+        planType = 'individual';
+      }
       const res = await forceActivateMembership({
         user_id: row.matched_user_id,
         plan_type: planType,
@@ -978,13 +1001,13 @@ function ManualSyncForm({ onSynced }: { onSynced: () => void | Promise<void> }) 
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [amount, setAmount] = useState<number>(4900);
-  const [planType, setPlanType] = useState<'individual' | 'business'>('individual');
+  const [planType, setPlanType] = useState<'individual' | 'business' | 'artist_general' | 'artist_student'>('individual');
   const [paidAtLocal, setPaidAtLocal] = useState<string>(toLocalInput(new Date()));
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<AdminSyncPaymentResult | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  function onPlanChange(p: 'individual' | 'business') {
+  function onPlanChange(p: 'individual' | 'business' | 'artist_general' | 'artist_student') {
     setPlanType(p);
     setAmount(PLAN_PRICE[p]);
   }
@@ -1043,9 +1066,16 @@ function ManualSyncForm({ onSynced }: { onSynced: () => void | Promise<void> }) 
           <input type="tel" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} className="input" autoComplete="off" />
         </Field>
         <Field label="요금제 *">
-          <select required value={planType} onChange={(e) => onPlanChange(e.target.value as 'individual' | 'business')} className="input">
-            <option value="individual">individual (4,900원)</option>
-            <option value="business">business (6,900원)</option>
+          <select
+            required
+            value={planType}
+            onChange={(e) => onPlanChange(e.target.value as 'individual' | 'business' | 'artist_general' | 'artist_student')}
+            className="input"
+          >
+            <option value="individual">individual (legacy, 4,900원)</option>
+            <option value="business">business (매장, 6,900원)</option>
+            <option value="artist_general">artist_general (일반 아티스트, 6,900원)</option>
+            <option value="artist_student">artist_student (수강생 PRO, 4,900원)</option>
           </select>
         </Field>
         <Field label="결제 금액 *">

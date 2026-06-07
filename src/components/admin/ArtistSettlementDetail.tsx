@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Check, Pause, AlertTriangle, FileText } from 'lucide-react';
+import { X, Check, Pause, AlertTriangle, FileText, ArrowRightCircle } from 'lucide-react';
 import {
   adminSettlementDetail,
   adminFinalizeSettlement,
@@ -7,10 +7,20 @@ import {
   adminMarkSettlementHeld,
   type SettlementItem,
   type SettlementStatus,
+  type SettlementPayoutAccountSummary,
+  type SettlementAuditLog,
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import RevealAccountButton from './RevealAccountButton';
+import RevealPiiButton from './RevealPiiButton';
+import CarryoverModal from './CarryoverModal';
+
+const TAX_LABEL: Record<string, string> = {
+  business_income_3_3: '사업소득 3.3%',
+  other_income_8_8: '기타소득 8.8%',
+  none: '원천징수 없음',
+};
 
 function fmtKrw(n: number | null | undefined): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -19,6 +29,7 @@ function fmtKrw(n: number | null | undefined): string {
 interface DetailData {
   settlement: {
     id: string;
+    artist_user_id: string;
     settlement_month: string;
     status: SettlementStatus;
     payout_account_id: string | null;
@@ -40,6 +51,12 @@ interface DetailData {
     paid_at: string | null;
     payout_memo: string | null;
     held_reason: string | null;
+    // X6.25 carryover 메타데이터
+    is_manual_carryover: boolean;
+    carryover_applied: boolean;
+    carried_over_to_month: string | null;
+    carryover_reason: string | null;
+    carried_over_at: string | null;
   };
   artist: { nickname: string | null; email: string | null; artist_name: string | null };
   policy: {
@@ -49,7 +66,9 @@ interface DetailData {
     min_payout_amount: number;
     min_payout_basis: string;
   };
+  payout_account: SettlementPayoutAccountSummary | null;
   items: SettlementItem[];
+  audit_logs: SettlementAuditLog[];
 }
 
 export default function ArtistSettlementDetail({
@@ -67,6 +86,7 @@ export default function ArtistSettlementDetail({
   const [busy, setBusy] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -216,28 +236,108 @@ export default function ArtistSettlementDetail({
             </section>
 
             <section>
-              <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">지급 계좌 (snapshot)</h5>
-              <div className="space-y-1.5 rounded-xl bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
-                {data.settlement.payout_bank_name ? (
+              <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">정산 정보 (PII)</h5>
+              <div className="space-y-2 rounded-xl bg-bg-card px-3 py-2.5 text-xs ring-1 ring-line/10">
+                {data.payout_account ? (
                   <>
-                    <p>
-                      {data.settlement.payout_bank_name} · {data.settlement.payout_account_holder}
-                    </p>
-                    {data.settlement.payout_account_id ? (
+                    <PiiRow label="실명">
+                      <span className="font-medium">{data.payout_account.legal_name ?? '—'}</span>
+                    </PiiRow>
+                    <PiiRow label="주민등록번호">
+                      {data.payout_account.has_rrn && data.payout_account.id ? (
+                        <RevealPiiButton
+                          accountId={data.payout_account.id}
+                          piiType="resident_number"
+                          maskedValue={data.payout_account.rrn_masked}
+                          settlementId={data.settlement.id}
+                        />
+                      ) : (
+                        <span className="text-ink-dim">미입력</span>
+                      )}
+                    </PiiRow>
+                    <PiiRow label="은행 / 예금주">
+                      <span>
+                        {data.payout_account.bank_name ?? '—'} · {data.payout_account.account_holder ?? '—'}
+                      </span>
+                    </PiiRow>
+                    <PiiRow label="계좌번호">
+                      {data.payout_account.has_account_number && data.payout_account.id ? (
+                        <RevealPiiButton
+                          accountId={data.payout_account.id}
+                          piiType="account_number"
+                          maskedValue={data.payout_account.masked_account_number}
+                          settlementId={data.settlement.id}
+                        />
+                      ) : data.settlement.payout_account_id ? (
+                        <RevealAccountButton
+                          accountId={data.settlement.payout_account_id}
+                          maskedValue={data.settlement.masked_account_number}
+                          settlementId={data.settlement.id}
+                        />
+                      ) : (
+                        <span className="font-mono text-ink-dim">{data.settlement.masked_account_number ?? '—'}</span>
+                      )}
+                    </PiiRow>
+                    <PiiRow label="원천징수 유형">
+                      <span>
+                        {data.payout_account.tax_withholding_type
+                          ? (TAX_LABEL[data.payout_account.tax_withholding_type] ?? data.payout_account.tax_withholding_type)
+                          : '—'}
+                      </span>
+                    </PiiRow>
+                    <PiiRow label="정산 정보 상태">
+                      <PayoutStatusBadge status={data.payout_account.status} />
+                    </PiiRow>
+                  </>
+                ) : data.settlement.payout_bank_name ? (
+                  <>
+                    <p>{data.settlement.payout_bank_name} · {data.settlement.payout_account_holder}</p>
+                    {data.settlement.payout_account_id && (
                       <RevealAccountButton
                         accountId={data.settlement.payout_account_id}
                         maskedValue={data.settlement.masked_account_number}
                         settlementId={data.settlement.id}
                       />
-                    ) : (
-                      <p className="font-mono text-ink-mute">{data.settlement.masked_account_number}</p>
                     )}
+                    <p className="text-ink-dim text-[10px]">※ PII 등록 전 snapshot 만 노출 — 본인 인증 필요</p>
                   </>
                 ) : (
                   <p className="text-ink-dim">계좌 정보 없음</p>
                 )}
               </div>
             </section>
+
+            {data.settlement.is_manual_carryover && (
+              <section>
+                <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">수동 이월 정보</h5>
+                <div className="space-y-1 rounded-xl bg-amber-500/5 px-3 py-2.5 text-xs ring-1 ring-amber-500/30">
+                  <Row
+                    label="이월 금액"
+                    value={fmtKrw(data.settlement.carried_over_amount)}
+                    bold accent
+                  />
+                  <Row
+                    label="다음 정산월"
+                    value={data.settlement.carried_over_to_month?.slice(0, 7) ?? '—'}
+                  />
+                  <Row
+                    label="이월 처리 시점"
+                    value={data.settlement.carried_over_at
+                      ? new Date(data.settlement.carried_over_at).toLocaleString('ko-KR')
+                      : '—'}
+                  />
+                  <Row
+                    label="이월 반영 여부"
+                    value={data.settlement.carryover_applied ? '다음 달에 반영됨' : '대기 중'}
+                  />
+                  {data.settlement.carryover_reason && (
+                    <Alert tone="info" title="이월 사유">
+                      {data.settlement.carryover_reason}
+                    </Alert>
+                  )}
+                </div>
+              </section>
+            )}
 
             <section>
               <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
@@ -287,6 +387,35 @@ export default function ArtistSettlementDetail({
               <Alert tone="info" title="지급 메모">{data.settlement.payout_memo}</Alert>
             )}
 
+            {data.audit_logs && data.audit_logs.length > 0 && (
+              <section>
+                <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  관리자 액션 기록 ({data.audit_logs.length})
+                </h5>
+                <ul className="space-y-1 rounded-xl bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
+                  {data.audit_logs.map((log) => (
+                    <li key={log.id} className="border-b border-line/10 py-1 last:border-b-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] uppercase text-ink-dim">{log.action}</span>
+                        <span className="text-[10px] text-ink-dim">
+                          {new Date(log.created_at).toLocaleString('ko-KR')}
+                        </span>
+                      </div>
+                      {log.amount != null && (
+                        <p className="text-ink-mute">
+                          금액 {fmtKrw(log.amount)}
+                          {log.from_month && log.to_month
+                            ? ` · ${log.from_month.slice(0, 7)} → ${log.to_month.slice(0, 7)}`
+                            : ''}
+                        </p>
+                      )}
+                      {log.reason && <p className="text-ink">사유: {log.reason}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <section className="flex flex-wrap justify-end gap-2 border-t border-line/10 pt-3">
               {data.settlement.status === 'pending' && (
                 <button
@@ -295,6 +424,16 @@ export default function ArtistSettlementDetail({
                   className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:opacity-50"
                 >
                   <Check size={12} /> Finalize
+                </button>
+              )}
+              {(data.settlement.status === 'pending' || data.settlement.status === 'payable') && (
+                <button
+                  onClick={() => setCarryoverModalOpen(true)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-500/90 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-50"
+                  title="다음 달 정산으로 이월"
+                >
+                  <ArrowRightCircle size={12} /> 이월 신청
                 </button>
               )}
               {data.settlement.status === 'payable' && (
@@ -318,6 +457,11 @@ export default function ArtistSettlementDetail({
               {data.settlement.status === 'paid' && (
                 <Alert tone="success">
                   지급 완료 — 이후 모든 수정 차단 (immutable). 오류 발견 시 별도 adjustment row 생성.
+                </Alert>
+              )}
+              {data.settlement.status === 'carried_over' && data.settlement.is_manual_carryover && (
+                <Alert tone="info">
+                  수동 이월 처리됨 — 다음 달 ({data.settlement.carried_over_to_month?.slice(0, 7)}) 정산 생성 시 합산됩니다.
                 </Alert>
               )}
             </section>
@@ -347,8 +491,64 @@ export default function ArtistSettlementDetail({
             onConfirm={handleHold}
           />
         )}
+        {carryoverModalOpen && data && (
+          <CarryoverModal
+            row={{
+              id: data.settlement.id,
+              artist_user_id: data.settlement.artist_user_id,
+              artist_nickname: data.artist.nickname ?? '',
+              artist_email: data.artist.email ?? '',
+              settlement_month: data.settlement.settlement_month,
+              status: data.settlement.status,
+              final_payout_amount: data.settlement.final_payout_amount,
+              total_settlement_amount: data.settlement.total_settlement_amount,
+            } as Parameters<typeof CarryoverModal>[0]['row']}
+            onClose={() => setCarryoverModalOpen(false)}
+            onApplied={() => {
+              setCarryoverModalOpen(false);
+              void load();
+              onChanged?.();
+            }}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function PiiRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-2 border-b border-line/10 py-1 last:border-b-0">
+      <span className="shrink-0 text-ink-mute">{label}</span>
+      <span className="text-right">{children}</span>
+    </div>
+  );
+}
+
+function PayoutStatusBadge({
+  status,
+}: {
+  status: 'ready' | 'verified_partial' | 'pending';
+}) {
+  const meta: Record<typeof status, { tone: string; label: string }> = {
+    ready: {
+      tone: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+      label: '정산 가능 (PII 완료)',
+    },
+    verified_partial: {
+      tone: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+      label: 'PII 미완료',
+    },
+    pending: {
+      tone: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
+      label: '심사 대기',
+    },
+  };
+  const m = meta[status];
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${m.tone}`}>
+      {m.label}
+    </span>
   );
 }
 

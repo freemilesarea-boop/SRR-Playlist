@@ -158,7 +158,9 @@ export interface AdminSyncPaymentResult {
 export async function adminSyncPayappPayment(payload: {
   payapp_mul_no: string;
   amount: number;
-  plan_type: 'individual' | 'business';
+  // X6.24: artist_general / artist_student 도 수동 sync 지원.
+  // 서버 _internal_apply_payapp_paid_event 가 4개 plan 모두 허용 (0308 migration).
+  plan_type: 'individual' | 'business' | 'artist_general' | 'artist_student';
   approval_no?: string;
   buyer_email?: string;
   buyer_phone?: string;
@@ -401,6 +403,9 @@ export interface WebhookEventRow {
   paid_candidate: boolean;
   approval_no: string | null;
   created_at: string;
+  // X6.24: list_recent_webhook_events 가 matched_order_id 의 payment_orders.plan_type 을
+  // JOIN 해서 노출. 매칭 안 된 이벤트는 NULL.
+  plan_type: string | null;
 }
 
 export async function forceApplyPaidCandidate(
@@ -493,7 +498,7 @@ export interface ForceActivateResult {
 
 export async function forceActivateMembership(payload: {
   user_id: string;
-  plan_type?: 'individual' | 'business';
+  plan_type?: 'individual' | 'business' | 'artist_general' | 'artist_student';
   reason?: string;
   amount?: number;
 }): Promise<{ ok: boolean; result?: ForceActivateResult; error?: string }> {

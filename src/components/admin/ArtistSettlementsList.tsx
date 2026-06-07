@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Calculator, Eye, RefreshCw, Wallet, Pause, Check, X } from 'lucide-react';
+import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X } from 'lucide-react';
 import {
   adminListSettlements,
   adminGenerateMonthlySettlement,
-  adminFinalizeSettlement,
-  adminMarkSettlementPaid,
-  adminMarkSettlementHeld,
   type AdminSettlementRow,
   type SettlementStatus,
   type GenerateSettlementResult,
@@ -13,6 +10,7 @@ import {
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import ArtistSettlementDetail from './ArtistSettlementDetail';
+import CarryoverModal from './CarryoverModal';
 
 function fmtKrw(n: number | null | undefined): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -42,6 +40,30 @@ const STATUS_LABEL: Record<SettlementStatus, string> = {
   disputed: '분쟁',
 };
 
+const PAYOUT_STATUS_TONE: Record<NonNullable<AdminSettlementRow['payout_account_status']>, string> = {
+  ready: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+  verified_partial: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+  pending: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
+  missing: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-200',
+};
+
+const PAYOUT_STATUS_LABEL: Record<NonNullable<AdminSettlementRow['payout_account_status']>, string> = {
+  ready: '정산 가능',
+  verified_partial: 'PII 미완료',
+  pending: '심사 대기',
+  missing: '계좌 미등록',
+};
+
+const TAX_LABEL: Record<NonNullable<AdminSettlementRow['tax_withholding_type']>, string> = {
+  business_income_3_3: '사업소득 3.3%',
+  other_income_8_8: '기타소득 8.8%',
+  none: '원천징수 없음',
+};
+
+function carryoverEligible(r: AdminSettlementRow): boolean {
+  return r.status === 'pending' || r.status === 'payable';
+}
+
 function defaultMonth(): string {
   // 직전월 1일 (KST). 운영자가 이번 달 정산을 익월에 생성하는 패턴.
   const now = new Date();
@@ -61,6 +83,7 @@ export default function ArtistSettlementsList() {
   const [search, setSearch] = useState('');
   const [genModalOpen, setGenModalOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [carryoverRow, setCarryoverRow] = useState<AdminSettlementRow | null>(null);
 
   async function load() {
     setLoading(true);
@@ -149,11 +172,12 @@ export default function ArtistSettlementsList() {
 
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1400px] text-sm">
+          <table className="w-full min-w-[1800px] text-sm">
             <thead>
               <tr className="border-b border-line/10 text-[11px] uppercase text-ink-dim [&_th]:whitespace-nowrap">
                 <th className="px-3 py-2.5 text-left font-semibold">월</th>
                 <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
+                <th className="px-3 py-2.5 text-left font-semibold">정산 정보</th>
                 <th className="px-3 py-2.5 text-right font-semibold">gross</th>
                 <th className="px-3 py-2.5 text-right font-semibold">회사 수수료</th>
                 <th className="px-3 py-2.5 text-right font-semibold">영업인 수수료</th>
@@ -169,52 +193,72 @@ export default function ArtistSettlementsList() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
                     정산 데이터가 없어요. "월별 정산 생성" 으로 시작하세요.
                   </td>
                 </tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-line/10 hover:bg-bg-hover">
-                  <td className="px-3 py-2.5 font-mono text-xs">{fmtMonth(r.settlement_month)}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 font-mono text-xs align-top">{fmtMonth(r.settlement_month)}</td>
+                  <td className="px-3 py-2.5 align-top">
                     <p className="font-medium">{r.artist_nickname || '—'}</p>
                     <p className="text-xs text-ink-mute">{r.artist_email || '—'}</p>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtKrw(r.gross_settlement_amount)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute">−{fmtKrw(r.company_fee_amount)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute">−{fmtKrw(r.sales_agent_fee_amount)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td className="px-3 py-2.5 align-top text-xs">
+                    <PiiCell row={r} />
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums align-top">{fmtKrw(r.gross_settlement_amount)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">−{fmtKrw(r.company_fee_amount)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">−{fmtKrw(r.sales_agent_fee_amount)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums align-top">
                     {r.previous_carried_amount > 0 ? `+${fmtKrw(r.previous_carried_amount)}` : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-bold">{fmtKrw(r.total_settlement_amount)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute">
+                  <td className="px-3 py-2.5 text-right tabular-nums font-bold align-top">{fmtKrw(r.total_settlement_amount)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">
                     {r.withholding_tax_amount > 0 ? `−${fmtKrw(r.withholding_tax_amount)}` : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-bold text-accent">
+                  <td className="px-3 py-2.5 text-right tabular-nums font-bold text-accent align-top">
                     {fmtKrw(r.final_payout_amount)}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 align-top">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>
                       {STATUS_LABEL[r.status]}
                     </span>
+                    {r.is_manual_carryover && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200"
+                            title={`수동 이월 → ${r.carried_over_to_month ?? '?'}`}>
+                        수동
+                      </span>
+                    )}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs text-ink-mute">{fmtDate(r.paid_at)}</td>
-                  <td className="px-3 py-2.5 text-right">
-                    <button
-                      onClick={() => setDetailId(r.id)}
-                      className="rounded p-1.5 hover:bg-ink/5"
-                      title="상세"
-                    >
-                      <Eye size={14} />
-                    </button>
+                  <td className="px-3 py-2.5 text-right text-xs text-ink-mute align-top">{fmtDate(r.paid_at)}</td>
+                  <td className="px-3 py-2.5 text-right align-top">
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setDetailId(r.id)}
+                        className="rounded p-1.5 hover:bg-ink/5"
+                        title="상세 보기"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      {carryoverEligible(r) && (
+                        <button
+                          onClick={() => setCarryoverRow(r)}
+                          className="rounded p-1.5 text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
+                          title="이월 신청 — 다음 달로 넘기기"
+                        >
+                          <ArrowRightCircle size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -241,6 +285,46 @@ export default function ArtistSettlementsList() {
           onChanged={() => void load()}
         />
       )}
+
+      {carryoverRow && (
+        <CarryoverModal
+          row={carryoverRow}
+          onClose={() => setCarryoverRow(null)}
+          onApplied={() => {
+            setCarryoverRow(null);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PiiCell({ row }: { row: AdminSettlementRow }) {
+  const taxLabel =
+    row.tax_withholding_type && TAX_LABEL[row.tax_withholding_type]
+      ? TAX_LABEL[row.tax_withholding_type]
+      : null;
+  return (
+    <div className="space-y-0.5 text-[11px] leading-tight">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium text-ink">{row.legal_name || '—'}</span>
+        <span
+          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold ${PAYOUT_STATUS_TONE[row.payout_account_status]}`}
+          title={`정산 정보 상태: ${PAYOUT_STATUS_LABEL[row.payout_account_status]}`}
+        >
+          {PAYOUT_STATUS_LABEL[row.payout_account_status]}
+        </span>
+      </div>
+      <p className="font-mono text-ink-mute">{row.rrn_masked ?? (row.has_rrn ? '******-*******' : '주민번호 없음')}</p>
+      <p className="text-ink-mute">
+        <span>{row.bank_name ?? '—'}</span>
+        <span className="mx-1">·</span>
+        <span className="font-mono">{row.masked_account_number ?? '—'}</span>
+        <span className="mx-1">·</span>
+        <span>{row.account_holder ?? '—'}</span>
+      </p>
+      {taxLabel && <p className="text-ink-mute">{taxLabel}</p>}
     </div>
   );
 }

@@ -5,6 +5,11 @@ import App from './App';
 import './index.css';
 import { initSentry } from './lib/sentry';
 import { purgeBadAudioCaches } from './lib/swCache';
+import { redirectToProductionIfNeeded } from './lib/productionRedirect';
+
+// X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
+// 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
+redirectToProductionIfNeeded();
 
 // 0093 — Sentry 초기화 (DSN 없으면 silent skip, production 만 활성)
 void initSentry();
