@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isKakaoLoginEnabled } from '@/lib/kakao';
+import { detectInAppBrowser, type InAppBrowserName } from '@/lib/inAppBrowser';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
 import ArtistSignupForm from '@/components/auth/ArtistSignupForm';
+import InAppBrowserWarningModal from '@/components/auth/InAppBrowserWarningModal';
 import Logo from '@/components/Logo';
 
 type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
@@ -61,6 +63,24 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
+  const [inAppWarning, setInAppWarning] = useState<{ label: string | null; name: InAppBrowserName | null } | null>(null);
+  // X6.26 — Google OAuth callback 에서 error 가 붙어 돌아오면 친절한 메시지로 노출.
+  // AuthCallbackPage 가 `?error=oauth_callback_failed` 로 redirect 함.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const errParam = searchParams.get('error');
+    if (errParam) {
+      setError(
+        '앱 내 브라우저 또는 회사/학교 Google 계정에서는 로그인이 제한될 수 있습니다. ' +
+          'Chrome 또는 Safari에서 다시 시도하거나, 이메일로 가입/로그인해주세요.',
+      );
+      // URL 정리 — 새로고침 시 에러 반복 방지
+      const next = new URLSearchParams(searchParams);
+      next.delete('error');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 60초 쿨다운 타이머 — Supabase resend rate limit 회피 + 사용자 피드백.
   function startResendCooldown() {
@@ -97,12 +117,27 @@ export default function LoginPage() {
 
   async function onGoogleSignIn() {
     setError(null);
+    // X6.26 — 인앱브라우저 (카카오톡/인스타/네이버앱 등) 에서는 Google 이 정책상
+    // OAuth 를 차단하는 경우가 많아, 진행 전 안내 모달부터 띄움.
+    const det = detectInAppBrowser();
+    if (det.isInApp) {
+      setInAppWarning({ label: det.label, name: det.name });
+      return;
+    }
     setGoogleBusy(true);
     try {
       await signInWithGoogle();
       // redirectTo 로 페이지 이동되므로 도달 시점은 거의 없음
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google 로그인에 실패했어요.');
+      // raw provider 에러 노출 금지 — 사용자에게는 친절한 안내만.
+      const raw = err instanceof Error ? err.message : '';
+      const friendly =
+        '앱 내 브라우저 또는 회사/학교 Google 계정에서는 로그인이 제한될 수 있습니다. ' +
+        'Chrome 또는 Safari에서 다시 시도하거나, 이메일로 가입/로그인해주세요.';
+      // 진단용으로 콘솔에만 raw 흔적.
+      // eslint-disable-next-line no-console
+      if (raw) console.warn('[google-oauth]', raw);
+      setError(friendly);
       setGoogleBusy(false);
     }
   }
@@ -233,6 +268,7 @@ export default function LoginPage() {
                 <div className="relative">
                   <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-dim" />
                   <input
+                    id="email-input"
                     type="email"
                     required
                     autoComplete="email"
@@ -405,6 +441,25 @@ export default function LoginPage() {
           주민등록번호는 저장하지 않습니다. 외부 본인확인기관 결과만 보관합니다.
         </p>
       </div>
+
+      {inAppWarning && (
+        <InAppBrowserWarningModal
+          browserLabel={inAppWarning.label}
+          browserName={inAppWarning.name}
+          onClose={() => setInAppWarning(null)}
+          onContinueWithEmail={() => {
+            // 이메일 로그인 폼에 포커스 — signin 모드로 유지하고 email input 으로 스크롤
+            setMode('signin');
+            window.setTimeout(() => {
+              const el = document.getElementById('email-input');
+              if (el) {
+                el.focus();
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 50);
+          }}
+        />
+      )}
     </div>
   );
 }
