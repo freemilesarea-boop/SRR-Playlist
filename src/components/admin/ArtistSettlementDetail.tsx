@@ -426,7 +426,10 @@ export default function ArtistSettlementDetail({
                   <Check size={12} /> Finalize
                 </button>
               )}
-              {(data.settlement.status === 'pending' || data.settlement.status === 'payable') && (
+              {/* X6.27: held 도 수동 이월 허용 (paid / carried_over / disputed 만 차단) */}
+              {(data.settlement.status === 'pending'
+                || data.settlement.status === 'payable'
+                || data.settlement.status === 'held') && (
                 <button
                   onClick={() => setCarryoverModalOpen(true)}
                   disabled={busy}
@@ -502,6 +505,8 @@ export default function ArtistSettlementDetail({
               status: data.settlement.status,
               final_payout_amount: data.settlement.final_payout_amount,
               total_settlement_amount: data.settlement.total_settlement_amount,
+              // X6.27: held 케이스 안내 메시지 + 기존 보류 사유 노출
+              held_reason: data.settlement.held_reason ?? null,
             } as Parameters<typeof CarryoverModal>[0]['row']}
             onClose={() => setCarryoverModalOpen(false)}
             onApplied={() => {

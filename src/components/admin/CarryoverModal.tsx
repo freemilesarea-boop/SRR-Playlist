@@ -44,9 +44,12 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // X6.27: held 도 pending 과 동일하게 total_settlement_amount 사용
+  // (held 는 finalize 전이라 final_payout=0 인 게 일반적).
   const expectedAmount =
     row.status === 'payable' ? row.final_payout_amount : row.total_settlement_amount;
   const toMonth = nextMonth(row.settlement_month);
+  const isHeld = row.status === 'held';
 
   async function handleConfirm() {
     if (!reason.trim()) {
@@ -89,9 +92,25 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
           </button>
         </div>
 
-        <Alert tone="warning">
-          이 정산금을 다음 달 정산으로 이월합니다. 지급하지 않은 금액은 다음 달 이월금으로 합산됩니다.
-        </Alert>
+        {isHeld ? (
+          <Alert tone="warning">
+            현재 보류 중인 정산입니다. 이월 처리하면 다음 달 이월금으로 합산됩니다.
+          </Alert>
+        ) : (
+          <Alert tone="warning">
+            이 정산금을 다음 달 정산으로 이월합니다. 지급하지 않은 금액은 다음 달 이월금으로 합산됩니다.
+          </Alert>
+        )}
+
+        {isHeld && row.held_reason && (
+          <div className="rounded-xl bg-amber-500/5 px-3 py-2 text-xs ring-1 ring-amber-500/30">
+            <p className="font-semibold text-ink">현재 보류 사유</p>
+            <p className="mt-0.5 font-mono text-ink-mute">{row.held_reason}</p>
+            <p className="mt-1 text-[10px] text-ink-dim">
+              ※ 이월 후 audit log 의 detail.previous_held_reason 에 보존됩니다.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2 rounded-xl bg-bg-card p-3 text-sm ring-1 ring-line/10">
           <Row label="대상 아티스트" value={row.artist_nickname || row.artist_email || row.artist_user_id} />

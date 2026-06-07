@@ -60,8 +60,9 @@ const TAX_LABEL: Record<NonNullable<AdminSettlementRow['tax_withholding_type']>,
   none: '원천징수 없음',
 };
 
+// X6.27: held 도 수동 이월 가능 (paid / carried_over / disputed 만 차단).
 function carryoverEligible(r: AdminSettlementRow): boolean {
-  return r.status === 'pending' || r.status === 'payable';
+  return r.status === 'pending' || r.status === 'payable' || r.status === 'held';
 }
 
 function defaultMonth(): string {
@@ -181,7 +182,8 @@ export default function ArtistSettlementsList() {
                 <th className="px-3 py-2.5 text-right font-semibold">gross</th>
                 <th className="px-3 py-2.5 text-right font-semibold">회사 수수료</th>
                 <th className="px-3 py-2.5 text-right font-semibold">영업인 수수료</th>
-                <th className="px-3 py-2.5 text-right font-semibold">이월금</th>
+                <th className="px-3 py-2.5 text-right font-semibold" title="이번 달 정산 (수수료 차감 후, 이월 전)">당월정산</th>
+                <th className="px-3 py-2.5 text-right font-semibold" title="이전 미지급 정산 합산">이월금</th>
                 <th className="px-3 py-2.5 text-right font-semibold">총 정산</th>
                 <th className="px-3 py-2.5 text-right font-semibold">원천징수</th>
                 <th className="px-3 py-2.5 text-right font-semibold">최종 지급</th>
@@ -193,14 +195,14 @@ export default function ArtistSettlementsList() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={14} className="px-3 py-8 text-center text-xs text-ink-mute">
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-xs text-ink-mute">
+                  <td colSpan={14} className="px-3 py-8 text-center text-xs text-ink-mute">
                     정산 데이터가 없어요. "월별 정산 생성" 으로 시작하세요.
                   </td>
                 </tr>
@@ -218,8 +220,13 @@ export default function ArtistSettlementsList() {
                   <td className="px-3 py-2.5 text-right tabular-nums align-top">{fmtKrw(r.gross_settlement_amount)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">−{fmtKrw(r.company_fee_amount)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">−{fmtKrw(r.sales_agent_fee_amount)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums align-top" title="당월 net = gross − 수수료">
+                    {fmtKrw(r.artist_net_settlement)}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums align-top">
-                    {r.previous_carried_amount > 0 ? `+${fmtKrw(r.previous_carried_amount)}` : '—'}
+                    {r.previous_carried_amount > 0 ? (
+                      <span className="text-amber-600 dark:text-amber-300 font-semibold">+{fmtKrw(r.previous_carried_amount)}</span>
+                    ) : '—'}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums font-bold align-top">{fmtKrw(r.total_settlement_amount)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-ink-mute align-top">
