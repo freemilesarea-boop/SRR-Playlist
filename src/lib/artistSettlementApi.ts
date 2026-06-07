@@ -50,6 +50,9 @@ export interface AdminSettlementRow {
   carried_over_to_month: string | null;
   carryover_reason: string | null;
   held_reason: string | null;
+  // X6.28/X6.29 — auto-merge 추적 + paid 후 메모
+  merged_into_settlement_id: string | null;
+  payout_memo: string | null;
 }
 
 export interface SettlementItem {
@@ -126,15 +129,34 @@ export async function adminFinalizeSettlement(id: string): Promise<SettlementSta
   return (data as { status: SettlementStatus }).status;
 }
 
+export interface MarkPaidResult {
+  ok: boolean;
+  settlement_id: string;
+  status: 'paid';
+  before_status?: string;
+  audit_id?: number;
+  final_payout_amount?: number;
+  paid_at?: string;
+  already_paid?: boolean;
+}
+
+/**
+ * 정산 지급완료 처리 (X6.29).
+ * - 허용: pending / payable / held → paid (단, 안전장치 통과)
+ * - p_force_pii: held + pii_incomplete 케이스 명시적 override (기본 false)
+ */
 export async function adminMarkSettlementPaid(
   id: string,
   memo?: string | null,
-): Promise<void> {
-  const { error } = await supabase.rpc('admin_mark_settlement_paid', {
+  forcePii: boolean = false,
+): Promise<MarkPaidResult> {
+  const { data, error } = await supabase.rpc('admin_mark_settlement_paid', {
     p_settlement_id: id,
     p_payout_memo: memo ?? null,
+    p_force_pii: forcePii,
   });
   if (error) throw error;
+  return data as MarkPaidResult;
 }
 
 export async function adminMarkSettlementHeld(
