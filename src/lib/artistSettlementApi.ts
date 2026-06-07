@@ -34,6 +34,22 @@ export interface AdminSettlementRow {
   finalized_at: string | null;
   paid_at: string | null;
   created_at: string;
+  // X6.25 — payout PII (마스킹) + 이월 메타데이터
+  payout_account_id: string | null;
+  legal_name: string | null;
+  rrn_masked: string | null;           // e.g. 930407-*******
+  has_rrn: boolean;
+  bank_name: string | null;
+  masked_account_number: string | null; // e.g. ********3345
+  account_holder: string | null;
+  has_account_number: boolean;
+  tax_withholding_type: 'business_income_3_3' | 'other_income_8_8' | 'none' | null;
+  payout_account_status: 'ready' | 'verified_partial' | 'pending' | 'missing';
+  is_manual_carryover: boolean;
+  carryover_applied: boolean;
+  carried_over_to_month: string | null;
+  carryover_reason: string | null;
+  held_reason: string | null;
 }
 
 export interface SettlementItem {
@@ -146,17 +162,77 @@ export async function adminListSettlements(opts?: {
   return (data ?? []) as AdminSettlementRow[];
 }
 
+export interface SettlementPayoutAccountSummary {
+  id: string;
+  legal_name: string | null;
+  bank_name: string | null;
+  account_holder: string | null;
+  tax_withholding_type: string | null;
+  tax_consent_at: string | null;
+  verification_status: string;
+  has_rrn: boolean;
+  has_account_number: boolean;
+  rrn_masked: string | null;
+  masked_account_number: string | null;
+  status: 'ready' | 'verified_partial' | 'pending';
+}
+
+export interface SettlementAuditLog {
+  id: number;
+  action: string;
+  amount: number | null;
+  from_month: string | null;
+  to_month: string | null;
+  reason: string | null;
+  admin_user_id: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
 export async function adminSettlementDetail(id: string): Promise<{
-  settlement: Record<string, unknown> & { id: string; status: SettlementStatus };
+  settlement: Record<string, unknown> & {
+    id: string;
+    status: SettlementStatus;
+    is_manual_carryover?: boolean;
+    carryover_applied?: boolean;
+    carried_over_to_month?: string | null;
+    carryover_reason?: string | null;
+    carried_over_at?: string | null;
+    held_reason?: string | null;
+    payout_account_id?: string | null;
+  };
   artist: { nickname: string | null; email: string | null; artist_name: string | null };
   policy: Record<string, unknown>;
+  payout_account: SettlementPayoutAccountSummary | null;
   items: SettlementItem[];
+  audit_logs: SettlementAuditLog[];
 } | null> {
   const { data, error } = await supabase.rpc('admin_settlement_detail', { p_id: id });
   if (error) throw error;
   return (data as unknown) as ReturnType<typeof adminSettlementDetail> extends Promise<infer R>
     ? R
     : never;
+}
+
+export interface CarryoverResult {
+  ok: boolean;
+  settlement_id: string;
+  audit_id: number;
+  carryover_amount: number;
+  carried_over_to_month: string;
+  status: 'carried_over';
+}
+
+export async function adminCarryoverSettlement(
+  id: string,
+  reason: string,
+): Promise<CarryoverResult> {
+  const { data, error } = await supabase.rpc('admin_carryover_settlement', {
+    p_settlement_id: id,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as CarryoverResult;
 }
 
 export async function getMySettlements(): Promise<MySettlementRow[]> {
