@@ -426,8 +426,8 @@ function IdentityVerificationSection({ identityVerified }: { identityVerified: b
           <div className="shrink-0 sm:self-center">
             <SupportInquiryButton
               variant="nav"
-              label="본인인증 문의하기"
-              defaultType="정산 문의"
+              label="정산 정보 등록하기"
+              defaultType="정산 정보 등록"
               context={{ topic: 'identity_verification', source: 'profile_section' }}
               className="!w-full !bg-amber-500 !text-amber-950 hover:!bg-amber-400 sm:!w-auto"
             />
