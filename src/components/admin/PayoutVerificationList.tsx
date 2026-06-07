@@ -166,6 +166,14 @@ export default function PayoutVerificationList() {
                     <p className={`mt-0.5 ${r.has_tax_consent ? 'text-emerald-300' : 'text-amber-300'}`}>
                       {r.has_tax_consent ? '✓ 동의 완료' : '⚠ 미동의'}
                     </p>
+                    {r.tax_consent_at && (
+                      <p className="mt-0.5 text-[10px] text-ink-dim">
+                        {new Date(r.tax_consent_at).toLocaleString('ko-KR', {
+                          year: '2-digit', month: '2-digit', day: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
+                    )}
                     {!r.is_pii_complete && (
                       <p className="mt-0.5 text-[10px] font-semibold text-red-300">PII 미완료</p>
                     )}

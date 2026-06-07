@@ -36,6 +36,8 @@ export interface UserRow {
   pii_masked_at?: string | null;
   // 0098 — 큐레이터 권한
   is_curator?: boolean;
+  // 본인인증 (X6.18 에서 가시화)
+  identity_verified?: boolean;
 }
 
 export interface SalesAgentRow {

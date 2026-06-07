@@ -151,6 +151,16 @@ export default function ArtistDashboardPage() {
         />
       )}
 
+      {/* X6.18 — 정산 정보 입력 폼: UploadGate 의존성 제거.
+          payout 미verified 면 항상 노출 → 보류 카드 CTA 스크롤이 항상 작동. */}
+      {!loading && payout?.verification_status !== 'verified' && (
+        <PayoutAccountSection
+          payout={payout}
+          masked={payoutMasked}
+          onSubmitted={load}
+        />
+      )}
+
       {/* 승인 상태 카드 */}
       {loading ? (
         <div className="h-24 animate-pulse rounded-2xl bg-bg-card" />
@@ -351,12 +361,21 @@ function UploadGate({
     return <ContractRequiredCard contractStatus={eligibility.contract_status ?? 'not_created'} />;
   }
 
-  // 결제 완료 — 정산 계좌가 verified 가 아니면 무조건 등록/대기 섹션을 보여준다.
-  // payout 상태가 단일 진실의 원천 (RPC 실패에 영향받지 않음).
+  // X6.18 — 정산 정보 입력 폼은 부모(ArtistDashboardPage)가 직접 렌더링.
+  // UploadGate 는 verified 여부만 체크해서 안내만 표시 (중복 폼 차단).
   const isPayoutVerified = payout?.verification_status === 'verified';
   if (!isPayoutVerified) {
-    return <PayoutAccountSection payout={payout} masked={payoutMasked} onSubmitted={onPayoutSubmitted} />;
+    return (
+      <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <p className="text-sm font-semibold">정산 정보 등록 후 음원 업로드가 가능해요</p>
+        <p className="mt-1 text-xs text-ink-mute">
+          위 정산 정보 입력 폼을 작성하면 관리자 검토 후 업로드 권한이 활성화됩니다.
+        </p>
+      </div>
+    );
   }
+  // payoutMasked 는 verified 후 안내 카드/요약 표시에 사용
+  void payoutMasked; void onPayoutSubmitted;
 
   // 모두 OK — 업로드 폼 + (참고용) 계좌 요약 카드
   // 재제출 모드(editingTrack)는 무조건 단일 업로드. 신규는 단일/일괄 토글.
@@ -908,7 +927,9 @@ function computeHoldPrimaryAction(
     return {
       label: '본인인증 하러가기',
       variant: 'primary',
-      onClick: () => navigate('/profile'),
+      // X6.18: 큐레이터 프로필이 아닌 내 정보의 본인인증 섹션으로 이동.
+      // ProfilePage 의 useLayoutEffect 가 hash 를 보고 #identity-verification 으로 스크롤.
+      onClick: () => navigate('/profile#identity-verification'),
     };
   }
 
@@ -927,9 +948,20 @@ function computeHoldPrimaryAction(
     };
   }
 
-  if (reasons.has('rrn_missing') || reasons.has('account_missing')) {
+  // X6.18: 사유별로 라벨을 명확히. account_missing 우선 (계좌가 더 기본 단위).
+  if (reasons.has('account_missing')) {
     return {
-      label: '정산 정보 등록하기',
+      label: '정산계좌 등록하기',
+      variant: 'primary',
+      onClick: () => scrollToIdOrToast(
+        'payout-account-form',
+        '정산 정보 입력 폼을 찾을 수 없어요. 화면을 새로고침해 주세요.',
+      ),
+    };
+  }
+  if (reasons.has('rrn_missing')) {
+    return {
+      label: '주민등록번호 등록하기',
       variant: 'primary',
       onClick: () => scrollToIdOrToast(
         'payout-account-form',
