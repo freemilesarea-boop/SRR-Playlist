@@ -60,8 +60,9 @@ const TAX_LABEL: Record<NonNullable<AdminSettlementRow['tax_withholding_type']>,
   none: '원천징수 없음',
 };
 
+// X6.27: held 도 수동 이월 가능 (paid / carried_over / disputed 만 차단).
 function carryoverEligible(r: AdminSettlementRow): boolean {
-  return r.status === 'pending' || r.status === 'payable';
+  return r.status === 'pending' || r.status === 'payable' || r.status === 'held';
 }
 
 function defaultMonth(): string {
