@@ -496,7 +496,7 @@ export function formatEligibilityError(reasons: string[]): string {
     approval_sync_broken:
       '계정 상태 동기화 오류 — 관리자에게 문의해주세요 (artist_approval_status sync)',
     no_paid_membership:
-      '음원 업로드는 월 4,900원 정기이용권(individual) 결제 후 가능해요',
+      '음원 업로드는 아티스트 정기이용권 결제 후 가능해요 (대시보드의 결제 카드에서 진행)',
     no_signed_contract:
       '음원 유통 계약서 서명이 필요해요 (마이페이지 → 아티스트 → 계약서)',
     no_payout_account: '정산 계좌 등록이 필요해요',

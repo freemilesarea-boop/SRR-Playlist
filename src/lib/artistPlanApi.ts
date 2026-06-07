@@ -13,6 +13,8 @@ export type ArtistPlanType =
   | 'legacy_student'
   | null;
 
+export type PaymentPlanType = 'individual' | 'business' | 'artist_general' | 'artist_student';
+
 export interface ArtistPlanInfo {
   plan_type: ArtistPlanType;
   plan_label: string;
@@ -21,6 +23,9 @@ export interface ArtistPlanInfo {
   can_apply_curator: boolean;
   is_verified_pro: boolean;
   is_legacy: boolean;
+  // X6.22 — 결제 금액 단일 진입점 (서버 get_my_artist_plan 가 결정)
+  monthly_price: number;
+  payment_plan_type: PaymentPlanType;
 }
 
 /** 현재 로그인 사용자의 아티스트 플랜 정보. 로그인 안 됐으면 null. */

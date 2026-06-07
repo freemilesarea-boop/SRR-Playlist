@@ -57,7 +57,7 @@ export async function fetchSubscriptionPlans(): Promise<SubscriptionPlan[]> {
 }
 
 export async function createPayappSubscription(payload: {
-  plan_type: 'individual' | 'business';
+  plan_type: 'individual' | 'business' | 'artist_general' | 'artist_student';
   recvphone: string;
   promotion_code?: string | null;
 }): Promise<{ ok: boolean; payurl?: string; order_no?: string; error?: string; reason?: string }> {

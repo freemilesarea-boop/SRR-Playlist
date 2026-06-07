@@ -65,7 +65,7 @@ export default function ArtistContractPage() {
           } else if (/not approved/i.test(msg)) {
             setError('아티스트 승인이 완료된 후 계약서를 발행할 수 있어요. (관리자 승인 대기)');
           } else if (/not paid/i.test(msg) || /tier=/i.test(msg)) {
-            setError('월 4,900원 정기이용권(individual) 결제 완료 후 계약서를 발행할 수 있어요.');
+            setError('아티스트 정기이용권 결제 완료 후 계약서를 발행할 수 있어요. (대시보드의 결제 카드에서 진행)');
           } else if (/not artist/i.test(msg)) {
             setError('아티스트 계정이 아니에요.');
           } else if (/no active contract template/i.test(msg)) {
