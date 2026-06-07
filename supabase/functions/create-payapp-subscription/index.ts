@@ -103,7 +103,9 @@ serve(async (req) => {
   const planType = body.plan_type;
   const recvphone = (body.recvphone ?? '').replace(/\D/g, '');
   const promotionCode = (body.promotion_code ?? '').trim();
-  if (planType !== 'individual' && planType !== 'business') {
+  // X6.22 — 아티스트 플랜 분기 (artist_general 6,900 / artist_student 4,900)
+  const ALLOWED_PLANS = ['individual', 'business', 'artist_general', 'artist_student'] as const;
+  if (!ALLOWED_PLANS.includes(planType as (typeof ALLOWED_PLANS)[number])) {
     return json({ error: 'invalid plan_type' }, 400);
   }
   if (recvphone.length < 9) return json({ error: 'invalid phone' }, 400);

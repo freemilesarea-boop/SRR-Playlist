@@ -176,6 +176,7 @@ export default function ArtistDashboardPage() {
           payoutMasked={payoutMasked}
           membershipTier={profile?.membership_tier ?? null}
           userEmail={user?.email ?? ''}
+          plan={plan}
           editingTrack={editingTrack}
           onCancelEdit={() => setEditingTrack(null)}
           onUploaded={() => {
@@ -321,6 +322,7 @@ function UploadGate({
   payoutMasked,
   membershipTier,
   userEmail,
+  plan,
   editingTrack,
   onCancelEdit,
   onUploaded,
@@ -331,6 +333,7 @@ function UploadGate({
   payoutMasked: PayoutAccountMasked | null;
   membershipTier: 'free' | 'individual' | 'business' | null;
   userEmail: string;
+  plan: ArtistPlanInfo | null;
   editingTrack?: MyArtistTrackRow | null;
   onCancelEdit?: () => void;
   onUploaded: () => void | Promise<void>;
@@ -340,17 +343,16 @@ function UploadGate({
     return <div className="h-24 animate-pulse rounded-2xl bg-bg-card" />;
   }
 
-  // 결제 확인:
-  //   - RPC 가 살아있으면 eligibility.has_paid_membership 신뢰 (subscriptions 까지 검사)
-  //   - RPC 가 실패해도 profile.membership_tier 로 보강
-  // (0025 미적용 환경에서도 동작하도록 보강)
+  // 결제 확인 — artist 결제 흐름 (artist_general / artist_student) 시,
+  // membership_tier 가 'individual' 처럼 표시될 수도 있고 plan 별 별도 추적이
+  // 필요할 수 있으나 X6.22 시점에는 기존 isPaid 로직 그대로 활용.
   const isPaid =
     eligibility.has_paid_membership ||
     membershipTier === 'individual' ||
     membershipTier === 'business';
 
   if (!isPaid) {
-    return <PaymentRequiredCard userEmail={userEmail} />;
+    return <PaymentRequiredCard userEmail={userEmail} plan={plan} />;
   }
 
   // 계약 단계 게이트 (0057). RPC 결과가 없는 환경(0057 미적용)에서는 통과 처리.
@@ -520,9 +522,26 @@ function ContractRequiredCard({
   );
 }
 
-function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
+function PaymentRequiredCard({ userEmail, plan }: { userEmail: string; plan: ArtistPlanInfo | null }) {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // X6.22 — get_my_artist_plan 결과 기준 결제 금액/플랜 단일 진입점.
+  // plan 미로딩 시 legacy individual 4900 으로 폴백.
+  const priceWon = plan?.monthly_price ?? 4900;
+  const paymentPlanType = plan?.payment_plan_type ?? 'individual';
+  const isPro = plan?.is_verified_pro === true;
+  const isGeneralArtist = plan?.plan_type === 'general_artist';
+
+  // 헤드라인 / 안내 문구 동적
+  const heading = isPro
+    ? `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 수강생 PRO 요금제 결제`
+    : `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 요금제 결제`;
+  const description = isPro
+    ? `수강생 아티스트 PRO 정기이용권(월 ${priceWon.toLocaleString('ko-KR')}원) 결제 후 이용할 수 있어요. 결제 완료 후 자동으로 업로드 권한이 활성화됩니다.`
+    : isGeneralArtist
+    ? `일반 아티스트 정기이용권(월 ${priceWon.toLocaleString('ko-KR')}원) 결제 후 이용할 수 있어요. 결제 완료 후 자동으로 업로드 권한이 활성화됩니다.`
+    : `듣다 정기이용권(월 ${priceWon.toLocaleString('ko-KR')}원) 결제 후 이용할 수 있어요. 결제 완료 후 자동으로 업로드 권한이 활성화됩니다.`;
 
   async function onPay() {
     if (phone.replace(/\D/g, '').length < 9) {
@@ -532,7 +551,7 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
     setBusy(true);
     try {
       const res = await createPayappSubscription({
-        plan_type: 'individual',
+        plan_type: paymentPlanType,
         recvphone: phone,
       });
       if (res.ok && res.payurl) {
@@ -552,11 +571,8 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
           <CreditCard size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold">음원 업로드 — 월 4,900원 요금제 결제</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
-            아티스트 음원 업로드는 듣다 정기이용권(월 4,900원) 결제 후 이용할 수 있어요.
-            결제 완료 후 자동으로 업로드 권한이 활성화됩니다.
-          </p>
+          <h2 className="text-sm font-bold">{heading}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{description}</p>
         </div>
       </div>
       <input
@@ -568,7 +584,7 @@ function PaymentRequiredCard({ userEmail }: { userEmail: string }) {
         autoComplete="tel"
       />
       <button onClick={onPay} disabled={busy} className="btn-primary w-full py-2.5">
-        {busy ? '결제창 준비중…' : 'PayApp 으로 4,900원 결제하기'}
+        {busy ? '결제창 준비중…' : `PayApp 으로 ${priceWon.toLocaleString('ko-KR')}원 결제하기`}
       </button>
       <p className="text-[11px] text-ink-dim">
         결제 사용자: {userEmail} · 매월 자동 결제 · 마이페이지에서 즉시 해지 가능
