@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil } from 'lucide-react';
 import { applyAiMetadata } from '@/lib/aiCuration';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import AudioDistributionStatsCard from '@/components/admin/AudioDistributionStatsCard';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -300,6 +301,9 @@ export default function TrackReviewList() {
 
   return (
     <div className="space-y-3">
+      {/* X6.31 — KPI 카드 (전체 기간 / 월 선택 / 아티스트별) */}
+      <AudioDistributionStatsCard />
+
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
