@@ -21,12 +21,15 @@ import { isIosDevice, isAndroidDevice, type InAppBrowserName } from '@/lib/inApp
 interface Props {
   browserLabel: string | null;
   browserName: InAppBrowserName | null;
+  /** X6.33: PWA standalone 모드 — 라벨/안내문구를 "설치 앱" 으로 분기. */
+  isPwa?: boolean;
   onClose: () => void;
   onContinueWithEmail: () => void;
 }
 
 export default function InAppBrowserWarningModal({
   browserLabel,
+  isPwa,
   onClose,
   onContinueWithEmail,
 }: Props) {
@@ -90,11 +93,16 @@ export default function InAppBrowserWarningModal({
               <h3 id="inapp-modal-title" className="text-base font-bold">
                 Google 로그인이 차단될 수 있어요
               </h3>
-              {browserLabel && (
+              {isPwa ? (
+                <p className="mt-0.5 text-xs text-ink-mute">
+                  현재 <strong>설치된 앱 (홈 화면 추가)</strong> 으로 실행 중 — Google 정책상
+                  브라우저 UI 가 없는 환경에서 OAuth 가 차단됩니다.
+                </p>
+              ) : browserLabel ? (
                 <p className="mt-0.5 text-xs text-ink-mute">
                   현재 <strong>{browserLabel}</strong> 인앱브라우저에서 접속 중
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
           <button

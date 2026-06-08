@@ -147,3 +147,23 @@ export function isAndroidDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /Android/i.test(navigator.userAgent);
 }
+
+/**
+ * PWA standalone 모드 감지 (X6.33).
+ *   사용자가 "홈 화면에 추가" 로 설치한 경우. iOS Safari 는
+ *   `navigator.standalone`, Android Chrome 은
+ *   `matchMedia('(display-mode: standalone)')` 사용.
+ *
+ *   standalone 모드 자체는 정식 브라우저 코어이지만, **Google OAuth 가
+ *   브라우저 UI 부재를 이유로 "보안 브라우저 정책 미준수" 로 차단**하는
+ *   사례가 흔함 (특히 iOS). 따라서 인앱 브라우저와 동일 안내 필요.
+ */
+export function isPwaStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  if ((navigator as unknown as { standalone?: boolean }).standalone) return true;
+  try {
+    return window.matchMedia?.('(display-mode: standalone)').matches ?? false;
+  } catch {
+    return false;
+  }
+}
