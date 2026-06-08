@@ -114,6 +114,10 @@ export default function InAppBrowserWarningModal({
           <p className="leading-relaxed">
             <strong>Chrome</strong> 또는 <strong>Safari</strong>에서 열어주세요.
           </p>
+          <p className="text-[10px] leading-snug text-ink-mute">
+            ※ Google 의 <strong>"보안 브라우저 사용" 정책</strong>으로 인해 인앱 브라우저에서는
+            로그인 화면에 <code className="font-mono">403 disallowed_useragent</code> 오류가 표시됩니다.
+          </p>
         </div>
 
         <div className="space-y-2">
