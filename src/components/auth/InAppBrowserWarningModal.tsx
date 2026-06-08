@@ -21,12 +21,15 @@ import { isIosDevice, isAndroidDevice, type InAppBrowserName } from '@/lib/inApp
 interface Props {
   browserLabel: string | null;
   browserName: InAppBrowserName | null;
+  /** X6.33: PWA standalone 모드 — 라벨/안내문구를 "설치 앱" 으로 분기. */
+  isPwa?: boolean;
   onClose: () => void;
   onContinueWithEmail: () => void;
 }
 
 export default function InAppBrowserWarningModal({
   browserLabel,
+  isPwa,
   onClose,
   onContinueWithEmail,
 }: Props) {
@@ -90,11 +93,16 @@ export default function InAppBrowserWarningModal({
               <h3 id="inapp-modal-title" className="text-base font-bold">
                 Google 로그인이 차단될 수 있어요
               </h3>
-              {browserLabel && (
+              {isPwa ? (
+                <p className="mt-0.5 text-xs text-ink-mute">
+                  현재 <strong>설치된 앱 (홈 화면 추가)</strong> 으로 실행 중 — Google 정책상
+                  브라우저 UI 가 없는 환경에서 OAuth 가 차단됩니다.
+                </p>
+              ) : browserLabel ? (
                 <p className="mt-0.5 text-xs text-ink-mute">
                   현재 <strong>{browserLabel}</strong> 인앱브라우저에서 접속 중
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
           <button
@@ -113,6 +121,10 @@ export default function InAppBrowserWarningModal({
           </p>
           <p className="leading-relaxed">
             <strong>Chrome</strong> 또는 <strong>Safari</strong>에서 열어주세요.
+          </p>
+          <p className="text-[10px] leading-snug text-ink-mute">
+            ※ Google 의 <strong>"보안 브라우저 사용" 정책</strong>으로 인해 인앱 브라우저에서는
+            로그인 화면에 <code className="font-mono">403 disallowed_useragent</code> 오류가 표시됩니다.
           </p>
         </div>
 

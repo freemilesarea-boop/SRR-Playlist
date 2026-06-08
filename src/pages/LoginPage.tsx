@@ -5,7 +5,7 @@ import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isKakaoLoginEnabled } from '@/lib/kakao';
-import { detectInAppBrowser, type InAppBrowserName } from '@/lib/inAppBrowser';
+import { detectInAppBrowser, isPwaStandalone, type InAppBrowserName } from '@/lib/inAppBrowser';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
@@ -63,7 +63,12 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
-  const [inAppWarning, setInAppWarning] = useState<{ label: string | null; name: InAppBrowserName | null } | null>(null);
+  // X6.33: PWA standalone 케이스도 같은 모달 흐름 사용 — isPwa flag 로 분기.
+  const [inAppWarning, setInAppWarning] = useState<{
+    label: string | null;
+    name: InAppBrowserName | null;
+    isPwa: boolean;
+  } | null>(null);
   // X6.26 — Google OAuth callback 에서 error 가 붙어 돌아오면 친절한 메시지로 노출.
   // AuthCallbackPage 가 `?error=oauth_callback_failed` 로 redirect 함.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -119,9 +124,12 @@ export default function LoginPage() {
     setError(null);
     // X6.26 — 인앱브라우저 (카카오톡/인스타/네이버앱 등) 에서는 Google 이 정책상
     // OAuth 를 차단하는 경우가 많아, 진행 전 안내 모달부터 띄움.
+    // X6.33 — PWA standalone 모드 (홈 화면 추가 후 앱 실행) 도 Google 이
+    // 브라우저 UI 부재를 이유로 disallowed_useragent 로 차단. 동일 모달 노출.
     const det = detectInAppBrowser();
-    if (det.isInApp) {
-      setInAppWarning({ label: det.label, name: det.name });
+    const pwa = isPwaStandalone();
+    if (det.isInApp || pwa) {
+      setInAppWarning({ label: det.label, name: det.name, isPwa: pwa });
       return;
     }
     setGoogleBusy(true);
@@ -446,6 +454,7 @@ export default function LoginPage() {
         <InAppBrowserWarningModal
           browserLabel={inAppWarning.label}
           browserName={inAppWarning.name}
+          isPwa={inAppWarning.isPwa}
           onClose={() => setInAppWarning(null)}
           onContinueWithEmail={() => {
             // 이메일 로그인 폼에 포커스 — signin 모드로 유지하고 email input 으로 스크롤

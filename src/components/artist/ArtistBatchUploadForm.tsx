@@ -31,6 +31,7 @@ import { toast } from '@/store/toastStore';
 import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import AudioQcGuideCard from '@/components/artist/AudioQcGuideCard';
 import { captureError } from '@/lib/sentry';
 import {
   emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
@@ -563,6 +564,8 @@ export default function ArtistBatchUploadForm({
       }}
       className="space-y-4 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10"
     >
+      {/* X6.35: 업로드 전 음질 기준 + 자주 반려되는 사유 안내 */}
+      <AudioQcGuideCard />
       {quota && (
         <div className={`flex items-center justify-between rounded-xl p-3 text-[11px] leading-relaxed ring-1 ${
           quota.remaining === 0 ? 'bg-rose-500/10 text-rose-700 ring-rose-400/20'
