@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
+import { fetchMyTrackQcReport, type MyTrackQcRow } from '@/lib/audioQcGuideApi';
+import TrackQcBadge from '@/components/artist/TrackQcBadge';
 import {
   fetchMyArtistProfile,
   fetchMyArtistTracks,
@@ -67,6 +69,8 @@ export default function ArtistDashboardPage() {
   const { user, profile, loading: authLoading } = useAuthStore();
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [tracks, setTracks] = useState<MyArtistTrackRow[]>([]);
+  // X6.36 — 본인 트랙 QC 리포트 (track_id → row)
+  const [qcMap, setQcMap] = useState<Map<string, MyTrackQcRow>>(new Map());
   const [summary, setSummary] = useState<ArtistStreamingSummaryRow[]>([]);
   const [daily, setDaily] = useState<ArtistDailyStreamRow[]>([]);
   const [eligibility, setEligibility] = useState<UploadEligibility | null>(null);
@@ -83,7 +87,7 @@ export default function ArtistDashboardPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ap, ts, sm, dl, el, po, pom, pl, hs] = await Promise.all([
+      const [ap, ts, sm, dl, el, po, pom, pl, hs, qc] = await Promise.all([
         fetchMyArtistProfile(user.id),
         fetchMyArtistTracks(),
         fetchArtistStreamingSummary(),
@@ -93,9 +97,12 @@ export default function ArtistDashboardPage() {
         fetchMyPayoutAccountMasked(),
         fetchMyArtistPlan(),
         fetchMySettlementHoldStatus(),
+        // X6.36 — QC report fetch 실패해도 다른 데이터 영향 없음
+        fetchMyTrackQcReport(100).catch(() => [] as MyTrackQcRow[]),
       ]);
       setArtist(ap);
       setTracks(ts);
+      setQcMap(new Map(qc.map((r) => [r.track_id, r])));
       setSummary(sm);
       setDaily(dl);
       setEligibility(el);
@@ -220,6 +227,7 @@ export default function ArtistDashboardPage() {
               <MyTrackRow
                 key={t.track_id}
                 track={t}
+                qc={qcMap.get(t.track_id) ?? null}
                 onChanged={load}
                 onEdit={() => {
                   setEditingTrack(t);
@@ -1485,10 +1493,12 @@ function ArtistUploadForm({
 
 function MyTrackRow({
   track,
+  qc,
   onChanged,
   onEdit,
 }: {
   track: MyArtistTrackRow;
+  qc?: MyTrackQcRow | null;
   onChanged: () => void | Promise<void>;
   onEdit?: () => void;
 }) {
@@ -1533,6 +1543,14 @@ function MyTrackRow({
           {/* 0083 — 본인 트랙 한정 audio_health 안전 라벨 (원문 오류 X) */}
           {track.audio_health_status && track.audio_health_status !== 'unknown' && (
             <ArtistAudioHealthBadge status={track.audio_health_status} />
+          )}
+          {/* X6.36 — 본인 QC 점수 미니 뱃지 (점수/등급/클리핑 경고) */}
+          {qc && (
+            <TrackQcBadge
+              hasReport={qc.has_report}
+              qcScore={qc.qc_score}
+              clippingCount={qc.clipping_count}
+            />
           )}
         </div>
         {track.release_status === 'review_pending' && (
