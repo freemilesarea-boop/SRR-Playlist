@@ -3,6 +3,7 @@ import { Mic2, CheckCircle2, UserCheck, GraduationCap, Music2 } from 'lucide-rea
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
+import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
 
@@ -188,7 +189,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
       onDone(email.trim());
     } catch (err) {
       if (import.meta.env.DEV) console.error('[artist-signup] failed:', err);
-      setError(err instanceof Error ? err.message : '가입에 실패했어요');
+      setError(friendlyError(err, '가입에 실패했어요'));
     } finally {
       setBusy(false);
     }

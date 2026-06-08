@@ -12,6 +12,7 @@ import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
 import ArtistSignupForm from '@/components/auth/ArtistSignupForm';
 import InAppBrowserWarningModal from '@/components/auth/InAppBrowserWarningModal';
 import Logo from '@/components/Logo';
+import { friendlyError } from '@/lib/errorMessages';
 
 type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
 
@@ -112,9 +113,8 @@ export default function LoginPage() {
       toast.success('인증 메일을 다시 보냈어요. 받은편지함과 스팸함을 확인해주세요.');
       startResendCooldown();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '재발송 실패';
-      // Supabase rate limit 메시지 자체 노출 (대부분 60초 이내 재요청 시).
-      setError(msg);
+      // X6.38: 친화 메시지 매핑 (rate limit 등). 매칭 안 되면 '재발송 실패'
+      setError(friendlyError(err, '재발송 실패'));
     } finally {
       setResending(false);
     }
@@ -179,7 +179,8 @@ export default function LoginPage() {
     try {
       await signInWithPassword(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      // X6.38: 친화 메시지 (Invalid login credentials → "이메일/비밀번호 불일치" 등)
+      setError(friendlyError(err, '이메일 또는 비밀번호가 올바르지 않습니다.'));
     } finally {
       setBusy(false);
     }

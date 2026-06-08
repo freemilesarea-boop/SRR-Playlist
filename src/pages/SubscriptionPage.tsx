@@ -3,6 +3,7 @@ import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music, AlertTriangle
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   createPayappSubscription,
   cancelPayappSubscription,
@@ -181,7 +182,7 @@ export default function SubscriptionPage() {
       const reasonMsg = res.reason ? PROMO_REASON_MSG[res.reason] : undefined;
       toast.error(reasonMsg ?? res.error ?? 'PayApp 결제 생성 실패');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'PayApp 결제 생성 실패');
+      toast.error(friendlyError(e, 'PayApp 결제 생성 실패'));
     } finally {
       setBusy(null);
       setPhoneModal(null);
@@ -249,7 +250,7 @@ export default function SubscriptionPage() {
       setCancelModalOpen(false);
       await reloadFreshTier();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '구독 취소 실패');
+      toast.error(friendlyError(e, '구독 취소 실패'));
     } finally {
       setCanceling(false);
     }

@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { fetchMyTrackQcReport, type MyTrackQcRow } from '@/lib/audioQcGuideApi';
+import { friendlyError } from '@/lib/errorMessages';
 import TrackQcBadge from '@/components/artist/TrackQcBadge';
 import TrackQcDetailModal from '@/components/artist/TrackQcDetailModal';
 import {
@@ -681,7 +682,7 @@ function PayoutAccountSection({
       toast.success('정산 계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
       await onSubmitted();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '계좌 등록 실패';
+      const msg = friendlyError(e, '계좌 등록 실패');
       setError(msg);
       toast.error(msg);
     } finally {
