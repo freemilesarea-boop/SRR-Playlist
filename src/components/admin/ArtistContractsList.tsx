@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, X, RefreshCw, Eye, FileText, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListContracts,
   adminCreateContract,
@@ -329,8 +330,14 @@ function CreateContractModal({
     }
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
@@ -493,8 +500,14 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
     }
   }
 
+  const detailDialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(detailDialogRef, { onClose });
+
   return (
     <div
+      ref={detailDialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

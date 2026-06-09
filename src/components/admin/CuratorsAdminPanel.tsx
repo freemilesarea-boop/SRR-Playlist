@@ -1,8 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Search, UserX, Trash2, RotateCcw, ListTree,
   ShieldAlert, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListCurators,
   adminDeactivateCurator,
@@ -94,6 +95,9 @@ export default function CuratorsAdminPanel() {
     setReason('');
     setConfirmStep(1);
   }
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: closeModal, enabled: !!(selected && confirmMode) });
 
   async function doDeactivate() {
     if (!selected) return;
@@ -373,7 +377,7 @@ export default function CuratorsAdminPanel() {
 
       {/* Confirm Modal */}
       {selected && confirmMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={closeModal}>
+        <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={closeModal}>
           <div
             className="w-full max-w-md rounded-xl bg-bg-card p-5 ring-1 ring-line/20"
             onClick={(e) => e.stopPropagation()}

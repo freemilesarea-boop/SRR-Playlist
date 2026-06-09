@@ -10,11 +10,12 @@
  *
  * 안전: RLS 가 본인/admin 만 허용. 다른 사람 트랙 ID 넘기면 RPC 가 raise.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   X, AlertTriangle, AlertCircle, ShieldCheck, Activity,
   Loader2, Info, Music,
 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   validateTrackAudioQc,
   type TrackQcValidation,
@@ -44,14 +45,12 @@ export default function TrackQcDetailModal({ trackId, trackTitle, onClose }: Pro
     return () => { alive = false; };
   }, [trackId]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
       role="dialog"

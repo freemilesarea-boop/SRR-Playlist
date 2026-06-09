@@ -13,8 +13,9 @@
  *     건 아님. 안드로이드 인텐트 / iOS Safari deeplink 는 실패 가능 →
  *     "URL 복사" 가 가장 안정적인 폴백.
  */
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, AlertCircle, ExternalLink, Copy, Mail } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { toast } from '@/store/toastStore';
 import { isIosDevice, isAndroidDevice, type InAppBrowserName } from '@/lib/inAppBrowser';
 
@@ -38,15 +39,8 @@ export default function InAppBrowserWarningModal({
     typeof window !== 'undefined' ? window.location.href : '';
   const ios = isIosDevice();
   const android = isAndroidDevice();
-
-  useEffect(() => {
-    // ESC 키로 닫기
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
 
   async function handleCopy() {
     try {
@@ -76,6 +70,7 @@ export default function InAppBrowserWarningModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
       role="dialog"

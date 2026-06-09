@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, GripVertical, Plus, Music, X, ImageIcon } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   DndContext,
   closestCenter,
@@ -318,40 +319,66 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
       )}
 
       {picker && !playlist.is_auto && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center">
-          <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-bg-soft sm:rounded-2xl">
-            <div className="flex items-center justify-between border-b border-line/10 p-4">
-              <h3 className="text-sm font-semibold">트랙 선택</h3>
-              <button onClick={() => setPicker(false)} aria-label="닫기">
-                <X size={18} />
-              </button>
-            </div>
-            <ul className="max-h-[60vh] divide-y divide-line/10 overflow-y-auto">
-              {candidates.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex cursor-pointer items-center gap-3 p-3 hover:bg-bg-hover"
-                  onClick={() => {
-                    void addTrack(t);
-                    setPicker(false);
-                  }}
-                >
-                  <Music size={14} className="text-ink-dim" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{t.title}</p>
-                    <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
-                  </div>
-                </li>
-              ))}
-              {candidates.length === 0 && (
-                <li className="p-6 text-center text-sm text-ink-mute">
-                  추가할 수 있는 트랙이 없어요.
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
+        <PickerModal
+          candidates={candidates}
+          onClose={() => setPicker(false)}
+          onPick={(t) => { void addTrack(t); setPicker(false); }}
+        />
       )}
+    </div>
+  );
+}
+
+function PickerModal({
+  candidates,
+  onClose,
+  onPick,
+}: {
+  candidates: TrackRow[];
+  onClose: () => void;
+  onPick: (t: TrackRow) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-bg-soft sm:rounded-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-line/10 p-4">
+          <h3 className="text-sm font-semibold">트랙 선택</h3>
+          <button onClick={onClose} aria-label="닫기">
+            <X size={18} />
+          </button>
+        </div>
+        <ul className="max-h-[60vh] divide-y divide-line/10 overflow-y-auto">
+          {candidates.map((t) => (
+            <li
+              key={t.id}
+              className="flex cursor-pointer items-center gap-3 p-3 hover:bg-bg-hover"
+              onClick={() => onPick(t)}
+            >
+              <Music size={14} className="text-ink-dim" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{t.title}</p>
+                <p className="truncate text-xs text-ink-mute">{t.artist ?? '—'}</p>
+              </div>
+            </li>
+          ))}
+          {candidates.length === 0 && (
+            <li className="p-6 text-center text-sm text-ink-mute">
+              추가할 수 있는 트랙이 없어요.
+            </li>
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

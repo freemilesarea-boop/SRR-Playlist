@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { adminListArtistTracks, adminCountArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
 
 const PAGE_SIZE = 100;
@@ -91,6 +92,11 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
   const [metaModal, setMetaModal] = useState<{ track_id: string; title: string | null; canApprove: boolean } | null>(null);
   const [tagMeta, setTagMeta] = useState<SelectedMeta>(emptySelectedMeta);
   const [tagBusy, setTagBusy] = useState(false);
+
+  const delDialogRef = useRef<HTMLDivElement>(null);
+  const tagDialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(delDialogRef, { onClose: () => !delBusy && setDelModal(false), enabled: delModal });
+  useModalA11y(tagDialogRef, { onClose: () => !tagBusy && setTagModal(null), enabled: !!tagModal });
 
   async function openTagEditor(trackId: string, title: string) {
     setTagModal({ trackId, title });
@@ -686,6 +692,9 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
 
       {delModal && (
         <div
+          ref={delDialogRef}
+          role="dialog"
+          aria-modal="true"
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
           onClick={() => !delBusy && setDelModal(false)}
         >
@@ -754,6 +763,9 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       )}
       {tagModal && (
         <div
+          ref={tagDialogRef}
+          role="dialog"
+          aria-modal="true"
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
           onClick={() => !tagBusy && setTagModal(null)}
         >

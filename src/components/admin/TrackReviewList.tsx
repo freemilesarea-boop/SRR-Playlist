@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { applyAiMetadata } from '@/lib/aiCuration';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import AudioDistributionStatsCard from '@/components/admin/AudioDistributionStatsCard';
@@ -722,8 +723,13 @@ function BulkActionModal({
   const [reason, setReason] = useState('');
   const isReject = kind === 'reject';
   const title = isReject ? '선택 일괄 거절' : kind === 'approveAll' ? '현재 필터 전체 승인' : '선택 일괄 승인';
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: onCancel });
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onCancel}
     >

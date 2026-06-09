@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, X, RefreshCw, Pencil, Eye, Power } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   fetchSalesAgentList,
   fetchSalesAgentDetail,
@@ -328,8 +329,14 @@ function SalesAgentEditor({
     }
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

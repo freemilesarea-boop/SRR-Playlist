@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Music, ListMusic, Upload, Play, Pencil, Trash2, Save, X, Search } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { supabase } from '@/lib/supabase';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import { fetchAllCurators, fetchMyCuratorProfile, type CuratorListItem } from '@/lib/curatorApi';
@@ -631,8 +632,10 @@ function BulkEditPanel({
   onApply: () => Promise<void> | void;
   running: boolean;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: onCancel });
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
       <div className="w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-bg-card ring-1 ring-line/20 sm:max-h-[90vh] sm:rounded-2xl">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line/10 bg-bg-card px-4 py-3">
           <div>

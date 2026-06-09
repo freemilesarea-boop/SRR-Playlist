@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Edit, Trash2, RotateCcw, AlertTriangle, Ban, CheckCircle2, Calculator,
   Eye, EyeOff, Music, X, Save,
 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminGetPlaylistInspector,
   adminUpdateTrackMetadata,
@@ -307,8 +308,11 @@ function MetadataEditModal({
     finally { setSaving(false); }
   };
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-bg-deep p-4 shadow-2xl">
         <div className="mb-3 flex items-start justify-between">
           <div>
@@ -433,8 +437,10 @@ function RemoveConfirmModal({
     } catch (e) { toast.error(`제거 실패: ${(e as Error).message}`); }
     finally { setRemoving(false); }
   };
+  const removeDialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(removeDialogRef, { onClose });
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div ref={removeDialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl bg-bg-deep p-4">
         <h3 className="text-sm font-bold flex items-center gap-1">
           <Trash2 size={14} className="text-rose-500" /> 이 플레이리스트에서 제거
@@ -478,8 +484,10 @@ function StatusChangeModal({
     } catch (e) { toast.error(`status 변경 실패: ${(e as Error).message}`); }
     finally { setSubmitting(false); }
   };
+  const statusDialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(statusDialogRef, { onClose });
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div ref={statusDialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl bg-bg-deep p-4">
         <h3 className="text-sm font-bold">
           상태 변경 →{' '}
@@ -525,8 +533,10 @@ function AuditModal({
       .then(setLogs).catch((e) => toast.error(`audit 로딩 실패: ${e.message}`))
       .finally(() => setLoading(false));
   }, [track.track_id, playlistId]);
+  const auditDialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(auditDialogRef, { onClose });
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div ref={auditDialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-bg-deep p-4">
         <div className="mb-3 flex items-start justify-between">
           <div>

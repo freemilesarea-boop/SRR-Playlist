@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { formatTime } from '@/lib/format';
@@ -142,6 +143,14 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
+
+  // X6.48: expanded full-screen player Esc + focus trap (a11y)
+  // Esc 시 nested queue overlay 먼저 close, 없으면 expanded close
+  const expandedRef = useRef<HTMLDivElement>(null);
+  useModalA11y(expandedRef, {
+    onClose: () => (showQueue ? setShowQueue(false) : setExpanded(false)),
+    enabled: expanded,
+  });
 
   // DEV 전용 — 콘솔에서 audio 상태를 직접 들여다보기 위한 진단 헬퍼.
   // 사용: window.__playerDiag() → { active: {currentSrc, currentTime, volume, muted, ...}, next, store }
@@ -1441,7 +1450,7 @@ export default function Player() {
 
       {/* Expanded player overlay */}
       {expanded && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-bg pt-safe pb-safe animate-slide-up">
+        <div ref={expandedRef} role="dialog" aria-modal="true" aria-label="확장된 플레이어" className="fixed inset-0 z-40 flex flex-col bg-bg pt-safe pb-safe animate-slide-up">
           <div
             className="pointer-events-none absolute inset-0 scale-110 opacity-60 blur-3xl"
             style={gradientStyle(playlist?.category || current.title)}

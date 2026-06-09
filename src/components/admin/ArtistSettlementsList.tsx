@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X, Check } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListSettlements,
   adminGenerateMonthlySettlement,
@@ -411,8 +412,14 @@ function GenerateModal({
     }
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

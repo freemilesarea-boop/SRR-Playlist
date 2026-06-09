@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { adminRevealPayoutIntakePii, type IntakePiiType } from '@/lib/payoutIntakeAdminApi';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import { friendlyError } from '@/lib/errorMessages';
@@ -156,8 +157,13 @@ function ConfirmModal({
     piiType === 'resident_number' ? '본인 명의 확인' : '본인 명의 확인 / 정산 지급 처리',
   );
   const meta = LABEL[piiType];
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: onCancel });
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onCancel}
     >

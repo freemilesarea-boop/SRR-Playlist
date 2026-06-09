@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save, Eye, RotateCcw, Wrench, Filter, ChevronDown, ChevronRight } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminGenerateQcQueueCandidates,
   adminGenerateFingerprintQcCandidates,
@@ -561,8 +562,10 @@ function FingerprintDetailModal({
 }) {
   const fp = data?.fingerprint as any;
   const tr = data?.track;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl bg-bg-deep p-4">
         <div className="mb-3 flex items-start justify-between">
           <div>

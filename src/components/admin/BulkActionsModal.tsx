@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Sparkles, Ban, Calculator, Trash2, History, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminBulkApplyAiMetadata,
   adminBulkAddTrackExclusions,
@@ -30,9 +31,11 @@ export default function BulkActionsModal({
   const [tab, setTab] = useState<Tab>('ai');
   const [busy, setBusy] = useState(false);
   const completed = () => onCompleted?.();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 md:p-4">
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 md:p-4">
       <div className="flex h-[92vh] w-full max-w-4xl flex-col rounded-2xl bg-bg-deep shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-line/10 px-4 py-3">
           <div>
