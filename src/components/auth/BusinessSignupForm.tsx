@@ -198,7 +198,10 @@ export default function BusinessSignupForm({ onDone }: Props) {
           'srr-pending-signup',
           JSON.stringify({ type: 'business', email: email.trim(), profile: pendingProfile, bvp: pendingBvp }),
         );
-      } catch { /* noop */ }
+      } catch (storageErr) {
+        // localStorage 실패 시 DB 직접 update 로 복구되므로 차단은 안 함. 진단 로깅만.
+        console.warn('[business-signup] pending-signup cache write failed:', storageErr);
+      }
 
       const { data: sess } = await supabase.auth.getSession();
       if (sess.session?.user?.id) {

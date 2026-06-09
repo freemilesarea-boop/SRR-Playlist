@@ -103,7 +103,10 @@ Deno.serve(async (req: Request) => {
       p_error_code: resetErr ? 'RESET_FAILED' : null,
       p_error_message: resetErr?.message ?? null,
     });
-  } catch { /* silent — admin_log_operation 은 절대 caller 차단 안 함 */ }
+  } catch (logErr) {
+    // admin_log_operation 은 절대 caller 차단 안 함 (정책). 다만 audit 누락은 visibility 필요.
+    console.error('[admin-trigger-password-reset] audit log failed (audit gap):', logErr);
+  }
 
   if (resetErr) {
     return json({ error: 'reset failed', detail: resetErr.message }, 502);

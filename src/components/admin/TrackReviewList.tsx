@@ -817,8 +817,9 @@ function ReviewActionModal({
       try {
         const v = await getAdminSetting<boolean>('default_immediate_release');
         if (typeof v === 'boolean') setDefaultImmediate(v);
-      } catch {
-        // ignore — 기본값 true 유지
+      } catch (e) {
+        // 기본값 true 유지 — admin guard / 미설정 시 fallback. 진단 visibility 만.
+        console.warn('[TrackReviewList] default_immediate_release fetch failed:', e);
       }
     })();
   }, [kind]);

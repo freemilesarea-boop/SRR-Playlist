@@ -30,7 +30,10 @@ export default function ContentManagement() {
     const [pls, trs, aiTs] = await Promise.all([
       fetchPlaylists(),
       fetchTracks(),
-      listAdminTracksWithAi(1500).catch(() => [] as AdminTrackWithAi[]),
+      listAdminTracksWithAi(1500).catch((e) => {
+        console.warn('[ContentManagement] listAdminTracksWithAi failed — AI 메타 컬럼 비활성:', e);
+        return [] as AdminTrackWithAi[];
+      }),
     ]);
     setPlaylists(pls);
     setTracks(trs);
@@ -254,7 +257,10 @@ function AdminTrackList({
 
   useEffect(() => {
     if (!showStats) return;
-    aiCorrectionStats().then(setStats).catch(() => setStats([]));
+    aiCorrectionStats().then(setStats).catch((e) => {
+      console.warn('[ContentManagement] aiCorrectionStats failed:', e);
+      setStats([]);
+    });
   }, [showStats]);
 
   async function loadMismatches() {

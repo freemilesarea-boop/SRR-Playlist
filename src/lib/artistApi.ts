@@ -613,7 +613,10 @@ async function logUploadFailure(
       p_final_filesize: opts.finalFilesize ?? null,
       p_transcoding_status: opts.transcodingStatus ?? null,
     });
-  } catch { /* best-effort */ }
+  } catch (e) {
+    // best-effort — 로깅 자체가 실패해도 업로드 흐름은 막지 않음. 진단 visibility 만.
+    console.warn('[logUploadFailure] record_upload_integrity2 RPC failed:', e);
+  }
 }
 
 export async function uploadArtistTrack(input: UploadInput): Promise<UploadResult> {

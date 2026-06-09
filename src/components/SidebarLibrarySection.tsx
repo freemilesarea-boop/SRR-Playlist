@@ -54,8 +54,14 @@ export default function SidebarLibrarySection() {
     let alive = true;
     const userId = session.user?.id ?? null;
     Promise.all([
-      fetchFollowedPlaylists(userId).catch(() => []),
-      fetchFollowedUserPlaylists().catch(() => []),
+      fetchFollowedPlaylists(userId).catch((e) => {
+        console.warn('[SidebarLibrary] fetchFollowedPlaylists failed:', e);
+        return [];
+      }),
+      fetchFollowedUserPlaylists().catch((e) => {
+        console.warn('[SidebarLibrary] fetchFollowedUserPlaylists failed:', e);
+        return [];
+      }),
     ]).then(([cat, usr]) => {
       if (!alive) return;
       setFollowedCatalog(cat);

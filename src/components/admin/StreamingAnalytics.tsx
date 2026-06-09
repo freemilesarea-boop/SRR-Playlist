@@ -59,8 +59,9 @@ export default function StreamingAnalytics() {
       const n = typeof v === 'number' && v > 0 ? v : 3;
       setCapValue(n);
       setCapInput(String(n));
-    } catch {
-      // admin guard 차단 등 — fallback
+    } catch (e) {
+      // admin guard 차단 등 — fallback 으로 기본값 3 유지. 진단 visibility 만 확보.
+      console.warn('[StreamingAnalytics] loadCap fallback to default 3:', e);
     }
   }, []);
 
