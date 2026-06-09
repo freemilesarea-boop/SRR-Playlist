@@ -163,17 +163,28 @@ async function readPayload(req: Request): Promise<Record<string, string>> {
   return payloadFromForm(new URLSearchParams(text));
 }
 
-function buildEventKey(p: Record<string, string>): string {
+/**
+ * X6.43: buildEventKey 강화
+ *   - 정상 케이스: mul_no 또는 rebill_no 있으면 그대로 key 조립
+ *   - fallback: 32-bit signed hash → SHA-256 hex (collision risk 사실상 0)
+ *     deterministic 정렬 (Object.keys().sort()) 후 JSON 직렬화해서 동일
+ *     payload 가 다른 순서로 들어와도 동일 key 보장
+ */
+async function buildEventKey(p: Record<string, string>): Promise<string> {
   const mul = p.mul_no ?? p.mulno ?? '';
   const rebill = p.rebill_no ?? p.rebillno ?? '';
   const state = p.pay_state ?? p.paystate ?? '';
   const price = p.price ?? '';
   if (mul || rebill) return `payapp:${mul}:${rebill}:${state}:${price}`;
-  // mul_no 없으면 raw payload hash fallback
-  const raw = JSON.stringify(p);
-  let h = 0;
-  for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) | 0;
-  return `payapp:raw:${state}:${price}:${h}`;
+  // X6.43: deterministic + SHA-256 fallback
+  const keys = Object.keys(p).sort();
+  const normalized = JSON.stringify(Object.fromEntries(keys.map((k) => [k, p[k]])));
+  const data = new TextEncoder().encode(normalized);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `payapp:raw:${state}:${price}:${hex.slice(0, 32)}`;
 }
 
 interface Verification {
@@ -259,7 +270,7 @@ serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const payload = await readPayload(req);
-  const eventKey = buildEventKey(payload);
+  const eventKey = await buildEventKey(payload);
   // PayApp payload 필드명은 가맹점 설정/통보 채널마다 미세하게 다를 수 있어 후보 확장.
   const orderNo =
     pickField(payload, [
