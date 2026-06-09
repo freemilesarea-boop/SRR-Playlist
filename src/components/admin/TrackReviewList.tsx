@@ -22,6 +22,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 const PAGE_SIZE = 50;
 
@@ -234,7 +235,7 @@ export default function TrackReviewList() {
       setBulk(null);
       await load();
     } catch (e) {
-      toast.error(`일괄 승인 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`일괄 승인 실패: ${friendlyError(e)}`);
     } finally {
       setBulkBusy(false);
       setBulkProgress(null);
@@ -263,7 +264,7 @@ export default function TrackReviewList() {
       setBulk(null);
       await load();
     } catch (e) {
-      toast.error(`일괄 거절 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`일괄 거절 실패: ${friendlyError(e)}`);
     } finally {
       setBulkBusy(false);
       setBulkProgress(null);
@@ -292,7 +293,7 @@ export default function TrackReviewList() {
       setPage(0);
       await load();
     } catch (e) {
-      toast.error(`전체 승인 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`전체 승인 실패: ${friendlyError(e)}`);
     } finally {
       setBulkBusy(false);
       setBulkProgress(null);

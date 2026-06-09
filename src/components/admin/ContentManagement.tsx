@@ -13,6 +13,7 @@ import PlaylistEditor from '@/components/admin/PlaylistEditor';
 import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail, listAdminTracksWithAi, aiCorrectionStats, listSevereMismatches, bulkDeleteSevereMismatches, type AdminTrackMetadataFullInput, type AdminTrackDetail, type AdminTrackWithAi, type AiCorrectionStat, type MetadataMismatch } from '@/lib/adminTrackApi';
 import { bulkApplyHighConfidence } from '@/lib/trackAiPredictionsApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 type SubTab = 'playlists' | 'tracks';
 
@@ -107,7 +108,7 @@ export default function ContentManagement() {
       }
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '삭제 실패');
+      toast.error(friendlyError(e, '삭제 실패'));
     }
   }
 
@@ -262,7 +263,7 @@ function AdminTrackList({
       const rows = await listSevereMismatches(200);
       setMismatches(rows);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '불일치 조회 실패');
+      toast.error(friendlyError(e, '불일치 조회 실패'));
     }
   }
 
@@ -279,7 +280,7 @@ function AdminTrackList({
       await new Promise((r) => setTimeout(r, 500));
       window.location.reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '일괄 적용 실패');
+      toast.error(friendlyError(e, '일괄 적용 실패'));
     } finally {
       setBulkApplying(false);
     }
@@ -303,7 +304,7 @@ function AdminTrackList({
       await new Promise((res) => setTimeout(res, 500));
       window.location.reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '자동 정리 실패');
+      toast.error(friendlyError(e, '자동 정리 실패'));
     } finally {
       setCleaning(false);
     }
@@ -814,7 +815,7 @@ function AdminTrackRow({
         });
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '메타데이터 불러오기 실패');
+      toast.error(friendlyError(e, '메타데이터 불러오기 실패'));
     } finally {
       setLoadingDetail(false);
     }

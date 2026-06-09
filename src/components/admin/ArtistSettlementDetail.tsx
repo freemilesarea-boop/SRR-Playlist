@@ -12,6 +12,7 @@ import {
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 import RevealAccountButton from './RevealAccountButton';
 import RevealPiiButton from './RevealPiiButton';
 import CarryoverModal from './CarryoverModal';
@@ -97,7 +98,7 @@ export default function ArtistSettlementDetail({
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
       setData(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -115,7 +116,7 @@ export default function ArtistSettlementDetail({
       await load();
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Finalize 실패');
+      toast.error(friendlyError(e, 'Finalize 실패'));
     } finally {
       setBusy(false);
     }
@@ -134,7 +135,7 @@ export default function ArtistSettlementDetail({
       await load();
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '지급 처리 실패');
+      toast.error(friendlyError(e, '지급 처리 실패'));
     } finally {
       setBusy(false);
     }
@@ -149,7 +150,7 @@ export default function ArtistSettlementDetail({
       await load();
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '보류 처리 실패');
+      toast.error(friendlyError(e, '보류 처리 실패'));
     } finally {
       setBusy(false);
     }

@@ -10,6 +10,7 @@ import {
 } from '@/lib/moodPredictionApi';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * Phase X1.2 — CLAP zero-shot Mood 분류 결과 비교 / 1-click 적용.
@@ -41,7 +42,7 @@ export default function MoodPredictionPanel() {
       setRows(items);
       setStatus(st);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'mood 예측 조회 실패');
+      toast.error(friendlyError(err, 'mood 예측 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -60,7 +61,7 @@ export default function MoodPredictionPanel() {
       toast.success(`${res.previous_mood ?? '(빈 값)'} → ${res.applied_mood} (+태그 ${res.applied_mood_tags.length}) 적용`);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '적용 실패');
+      toast.error(friendlyError(err, '적용 실패'));
     } finally {
       setApplyingId(null);
     }

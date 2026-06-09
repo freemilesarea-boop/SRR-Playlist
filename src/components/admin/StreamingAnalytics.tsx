@@ -12,6 +12,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import { friendlyError } from '@/lib/errorMessages';
 import AdminErrorState from './AdminErrorState';
 import AudioHealthPanel from './AudioHealthPanel';
 
@@ -77,7 +78,7 @@ export default function StreamingAnalytics() {
       setCapValue(n);
       toast.success(`24시간 반복 제한값 ${n}회로 변경 — 이후 신규 이벤트부터 적용`);
     } catch (e) {
-      toast.error('변경 실패: ' + (e instanceof Error ? e.message : String(e)));
+      toast.error('변경 실패: ' + (friendlyError(e)));
     } finally {
       setCapBusy(false);
     }
@@ -108,7 +109,7 @@ export default function StreamingAnalytics() {
       setTopTracks(top);
       setBreakdown(bd);
     } catch (e) {
-      setEligError(e instanceof Error ? e.message : String(e));
+      setEligError(friendlyError(e));
     } finally {
       setEligLoading(false);
     }
@@ -487,7 +488,7 @@ function MonthlySettlementSummary() {
     try {
       setData(await adminGetMonthlyStreamingSummary(`${month}-01`));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }

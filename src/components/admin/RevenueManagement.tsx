@@ -10,6 +10,7 @@ import {
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 const KRW = (n: number) => `₩${(n ?? 0).toLocaleString('ko-KR')}`;
 const PLAN_LABEL: Record<string, string> = {
@@ -255,7 +256,7 @@ function AddModal({
       toast.success('매출이 등록됐어요.');
       await onSaved();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '등록 실패');
+      toast.error(friendlyError(e, '등록 실패'));
     } finally {
       setBusy(false);
     }

@@ -17,6 +17,7 @@ import { isPlayableUrl } from '@/lib/audio';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
 import type { TrackRow } from '@/types/db';
+import { friendlyError } from '@/lib/errorMessages';
 
 export default function ClapRecommendationPanel() {
   const [playlists, setPlaylists] = useState<ClapPlaylistRow[]>([]);
@@ -40,7 +41,7 @@ export default function ClapRecommendationPanel() {
       setPlaylists(rows);
       if (rows.length > 0 && !selectedId) setSelectedId(rows[0].playlist_id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '플레이리스트 불러오기 실패');
+      toast.error(friendlyError(e, '플레이리스트 불러오기 실패'));
     } finally {
       setLoadingPlaylists(false);
     }
@@ -53,7 +54,7 @@ export default function ClapRecommendationPanel() {
       const rows = await listClapRecommendations(selectedId, 20);
       setRecommendations(rows);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '추천 불러오기 실패');
+      toast.error(friendlyError(e, '추천 불러오기 실패'));
     } finally {
       setLoadingRecs(false);
     }
@@ -65,7 +66,7 @@ export default function ClapRecommendationPanel() {
       const rows = await listClapAutoApproved(30);
       setAutoApproved(rows);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '자동 첨부 이력 불러오기 실패');
+      toast.error(friendlyError(e, '자동 첨부 이력 불러오기 실패'));
     } finally {
       setLoadingAuto(false);
     }
@@ -88,7 +89,7 @@ export default function ClapRecommendationPanel() {
       toast.success(`${inserted}개 추천 후보 생성됨`);
       await Promise.all([reloadRecs(), reloadPlaylists()]);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '추천 생성 실패');
+      toast.error(friendlyError(e, '추천 생성 실패'));
     } finally {
       setGenerating(false);
     }
@@ -103,7 +104,7 @@ export default function ClapRecommendationPanel() {
       setAutoApproved((prev) => prev.filter((r) => r.recommendation_id !== row.recommendation_id));
       reloadPlaylists();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '롤백 실패');
+      toast.error(friendlyError(e, '롤백 실패'));
     } finally {
       setRollingBackId(null);
     }
@@ -122,7 +123,7 @@ export default function ClapRecommendationPanel() {
       setEditingAutoConfig(false);
       reloadPlaylists();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '설정 저장 실패');
+      toast.error(friendlyError(e, '설정 저장 실패'));
     }
   }
 
@@ -137,7 +138,7 @@ export default function ClapRecommendationPanel() {
       toast.success(selected.auto_attach_enabled ? '자동 첨부 OFF' : '자동 첨부 ON');
       reloadPlaylists();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '토글 실패');
+      toast.error(friendlyError(e, '토글 실패'));
     }
   }
 
@@ -149,7 +150,7 @@ export default function ClapRecommendationPanel() {
       setRecommendations((prev) => prev.filter((r) => r.id !== rec.id));
       reloadPlaylists();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '결정 실패');
+      toast.error(friendlyError(e, '결정 실패'));
     } finally {
       setDecidingId(null);
     }

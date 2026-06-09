@@ -18,6 +18,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { isPlayableUrl } from '@/lib/audio';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 export default function RecommendationTester() {
   const [timeSlot, setTimeSlot] = useState('');
@@ -43,7 +44,7 @@ export default function RecommendationTester() {
         toast.info('조건에 맞는 곡이 없어요. 메타데이터가 입력된 트랙이 있는지 확인하세요.');
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '추천 실패');
+      toast.error(friendlyError(e, '추천 실패'));
     } finally {
       setLoading(false);
     }

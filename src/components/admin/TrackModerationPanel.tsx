@@ -30,6 +30,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 const REJECT_TEMPLATES = [
   '권리 확인 불가',
@@ -97,7 +98,7 @@ export default function TrackModerationPanel({
       setEvents(e);
       setEmailJobs(j);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '로그 조회 실패');
+      toast.error(friendlyError(err, '로그 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -133,7 +134,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '승인 실패');
+      toast.error(friendlyError(e, '승인 실패'));
     } finally {
       setBusy(false);
     }
@@ -159,7 +160,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '반려 실패');
+      toast.error(friendlyError(e, '반려 실패'));
     } finally {
       setBusy(false);
     }
@@ -185,7 +186,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '수정 요청 실패');
+      toast.error(friendlyError(e, '수정 요청 실패'));
     } finally {
       setBusy(false);
     }
@@ -212,7 +213,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '제거 실패');
+      toast.error(friendlyError(e, '제거 실패'));
     } finally {
       setBusy(false);
     }
@@ -228,7 +229,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '복원 실패');
+      toast.error(friendlyError(e, '복원 실패'));
     } finally {
       setBusy(false);
     }
@@ -244,7 +245,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '숨김 실패');
+      toast.error(friendlyError(e, '숨김 실패'));
     } finally {
       setBusy(false);
     }
@@ -259,7 +260,7 @@ export default function TrackModerationPanel({
       await refresh();
       await onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '복원 실패');
+      toast.error(friendlyError(e, '복원 실패'));
     } finally {
       setBusy(false);
     }
@@ -280,7 +281,7 @@ export default function TrackModerationPanel({
       }
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '재발송 실패');
+      toast.error(friendlyError(e, '재발송 실패'));
     } finally {
       setBusy(false);
     }

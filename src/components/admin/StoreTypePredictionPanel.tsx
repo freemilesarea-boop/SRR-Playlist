@@ -10,6 +10,7 @@ import {
 } from '@/lib/storetypePredictionApi';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * Phase X1.3 — CLAP zero-shot Store Type 분류 결과 비교 / 1-click 적용.
@@ -40,7 +41,7 @@ export default function StoreTypePredictionPanel() {
       setRows(items);
       setStatus(st);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'store_type 예측 조회 실패');
+      toast.error(friendlyError(err, 'store_type 예측 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ export default function StoreTypePredictionPanel() {
       toast.success(`${res.previous_store ?? '(빈 값)'} → ${res.applied_store} 적용`);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '적용 실패');
+      toast.error(friendlyError(err, '적용 실패'));
     } finally {
       setApplyingId(null);
     }

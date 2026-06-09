@@ -4,6 +4,7 @@ import { adminUploadBrandLogo, adminClearBrandLogo, fetchBrandSettings } from '@
 import { useBrandStore } from '@/store/brandStore';
 import { toast } from '@/store/toastStore';
 import BrandLogo from '@/components/BrandLogo';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * 관리자 — 브랜드 로고 업로드/교체/제거.
@@ -32,7 +33,7 @@ export default function BrandSettingsPanel() {
       setLogoUrl(r.url ?? null);
       toast.success('로고를 업데이트했어요.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(friendlyError(err));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -48,7 +49,7 @@ export default function BrandSettingsPanel() {
       setLogoUrl(null);
       toast.success('기본 로고로 복원했어요.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(friendlyError(err));
     } finally {
       setBusy(false);
     }

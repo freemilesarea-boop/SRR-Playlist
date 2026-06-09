@@ -10,6 +10,7 @@ import {
 } from '@/lib/trackAiPredictionsApi';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 const ENERGY_LABELS: Record<number, string> = {
   1: '매우 차분',
@@ -43,7 +44,7 @@ export default function TrackAiMetadataPanel() {
       setItems(rows);
       setSummary(sum);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '불러오기 실패');
+      toast.error(friendlyError(e, '불러오기 실패'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function TrackAiMetadataPanel() {
       setItems((prev) => prev.filter((r) => r.id !== row.id));
       aiPredictionsSummary().then(setSummary).catch(() => {});
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '적용 실패');
+      toast.error(friendlyError(e, '적용 실패'));
     } finally {
       setApplyingId(null);
     }
@@ -76,7 +77,7 @@ export default function TrackAiMetadataPanel() {
       toast.success(`${count}개 트랙 메타데이터 일괄 적용 완료`);
       reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '일괄 적용 실패');
+      toast.error(friendlyError(e, '일괄 적용 실패'));
     } finally {
       setBulkApplying(false);
     }

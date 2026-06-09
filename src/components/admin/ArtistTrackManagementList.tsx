@@ -9,6 +9,7 @@ import AutoCover from '@/components/AutoCover';
 import TrackModerationPanel from './TrackModerationPanel';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
+import { friendlyError } from '@/lib/errorMessages';
 
 const APPROVABLE_RS = ['submitted', 'review_pending', 'changes_requested'];
 import {
@@ -102,7 +103,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
         recommended_dayparts: t.recommended_dayparts,
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '태그 조회 실패');
+      toast.error(friendlyError(e, '태그 조회 실패'));
     }
   }
   async function saveTags() {
@@ -116,7 +117,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       setTagModal(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '태그 수정 실패');
+      toast.error(friendlyError(e, '태그 수정 실패'));
     } finally {
       setTagBusy(false);
     }
@@ -129,7 +130,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       toast.success('음원을 복구했어요. (검수/발매 흐름으로 복귀)');
       await load();
     } catch (e) {
-      toast.error(`복구 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`복구 실패: ${friendlyError(e)}`);
     } finally {
       setRestoreBusyId(null);
     }
@@ -152,7 +153,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       toast.success('커버가 등록됐어요.');
       await load();
     } catch (e) {
-      toast.error(`커버 등록 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`커버 등록 실패: ${friendlyError(e)}`);
     } finally {
       setCoverBusyId(null);
     }
@@ -182,7 +183,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       setLastBatchSize(data.length);
     } catch (e) {
       if (seq !== requestSeqRef.current) return;
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       if (seq === requestSeqRef.current) setLoading(false);
     }
@@ -209,7 +210,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       setRows((prev) => [...prev, ...more.filter((r) => !have.has(r.track_id))]);
       setLastBatchSize(more.length);
     } catch (e) {
-      toast.error(`추가 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`추가 로드 실패: ${friendlyError(e)}`);
     } finally {
       setLoadingMore(false);
     }
@@ -273,7 +274,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           await adminTakedownTrack(id, reason);
           takedownOk += 1;
         } catch (e) {
-          fails.push(`${id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`);
+          fails.push(`${id.slice(0, 8)}: ${friendlyError(e)}`);
         }
       }
       // 2) 미발매곡 삭제
@@ -302,7 +303,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
       setDelReason('');
       await load();
     } catch (e) {
-      toast.error(`처리 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`처리 실패: ${friendlyError(e)}`);
     } finally {
       setDelBusy(false);
     }

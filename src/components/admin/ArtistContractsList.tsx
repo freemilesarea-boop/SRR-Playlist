@@ -21,6 +21,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 function fmtDate(s: string | null | undefined): string {
   if (!s) return '—';
@@ -67,7 +68,7 @@ export default function ArtistContractsList() {
       const data = await adminListContracts({ status: status || undefined, search: search || undefined });
       setRows(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -285,7 +286,7 @@ function CreateContractModal({
         }));
         if (alive) setArtists(mapped);
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       }
     })();
     return () => {
@@ -317,7 +318,7 @@ function CreateContractModal({
       toast.success('계약서가 발행됐어요. 아티스트가 동의하면 음원 등록 가능.');
       onCreated();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = friendlyError(e);
       setError(
         msg.includes('already exists')
           ? '이미 동일 버전 계약서가 존재해요. 버전을 변경해주세요.'
@@ -439,7 +440,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
       setEmailJobs(jobs);
       setEmailEvents(events);
     } catch (e) {
-      setEmailErr(e instanceof Error ? e.message : String(e));
+      setEmailErr(friendlyError(e));
     } finally {
       setEmailLoading(false);
     }
@@ -486,7 +487,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
       }
       await loadJobs();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '재발송 실패');
+      toast.error(friendlyError(e, '재발송 실패'));
     } finally {
       setBusy(false);
     }

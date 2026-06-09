@@ -9,6 +9,7 @@ import { Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { adminRevealPayoutIntakePii, type IntakePiiType } from '@/lib/payoutIntakeAdminApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 interface Props {
   submissionId: string;
@@ -90,7 +91,7 @@ export default function RevealIntakePiiButton({
         `${piiType === 'resident_number' ? '주민번호' : '계좌번호'} 원본 ${duration / 1000}초간 표시됨 — audit log 기록됨`,
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '원본 조회 실패');
+      toast.error(friendlyError(e, '원본 조회 실패'));
     } finally {
       setBusy(false);
     }

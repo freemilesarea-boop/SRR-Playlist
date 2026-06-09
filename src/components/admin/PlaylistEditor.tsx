@@ -25,6 +25,7 @@ import { updateCuratorPlaylistThumbnail } from '@/lib/curatorStudioApi';
 import AdminPlaylistTrackInspector from '@/components/admin/AdminPlaylistTrackInspector';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 interface Props {
   playlistId: string;
@@ -172,7 +173,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
       await reload();
       toast.success('썸네일을 변경했어요.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(friendlyError(e));
     } finally {
       setThumbBusy(false);
     }

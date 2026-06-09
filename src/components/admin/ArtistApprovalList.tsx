@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { repairArtistSignups } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 interface ArtistRow {
   user_id: string;
@@ -34,7 +35,7 @@ export default function ArtistApprovalList() {
       if (error) throw error;
       setRows((data ?? []) as ArtistRow[]);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '아티스트 목록 로드 실패');
+      toast.error(friendlyError(e, '아티스트 목록 로드 실패'));
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export default function ArtistApprovalList() {
       toast.success('승인 완료');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '승인 실패');
+      toast.error(friendlyError(e, '승인 실패'));
     } finally {
       setBusyId(null);
     }
@@ -68,7 +69,7 @@ export default function ArtistApprovalList() {
       toast.success('거절 완료');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '거절 실패');
+      toast.error(friendlyError(e, '거절 실패'));
     } finally {
       setBusyId(null);
     }

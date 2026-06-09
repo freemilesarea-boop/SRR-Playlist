@@ -3,6 +3,7 @@ import { Clock, Mail, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/store/toastStore';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
+import { friendlyError } from '@/lib/errorMessages';
 import AdminErrorState from './AdminErrorState';
 
 type Status = 'pending' | 'contacted' | 'approved' | 'rejected' | 'cancelled';
@@ -110,7 +111,7 @@ export default function SubscriptionRequests() {
       setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: next } : r)));
       toast.success(`상태를 ‘${STATUS_LABEL[next]}’ 로 변경했어요.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(friendlyError(e));
     } finally {
       setUpdatingId(null);
     }

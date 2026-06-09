@@ -19,6 +19,7 @@ import {
   type AdminNotification,
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 const SEV_TONE: Record<string, string> = {
   info: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-sky-400/30',
@@ -61,7 +62,7 @@ export default function AdminNotificationsBell() {
       const data = await adminListNotifications(false, 50);
       setList(data);
     } catch (e) {
-      toast.error('알림 조회 실패: ' + (e instanceof Error ? e.message : String(e)));
+      toast.error('알림 조회 실패: ' + (friendlyError(e)));
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export default function AdminNotificationsBell() {
       setList((l) => l.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
       await refreshCount();
     } catch (e) {
-      toast.error('처리 실패: ' + (e instanceof Error ? e.message : String(e)));
+      toast.error('처리 실패: ' + (friendlyError(e)));
     } finally {
       setBusy(false);
     }
@@ -111,7 +112,7 @@ export default function AdminNotificationsBell() {
       toast.success(`${n}건 확인 완료`);
       await Promise.all([loadList(), refreshCount()]);
     } catch (e) {
-      toast.error('처리 실패: ' + (e instanceof Error ? e.message : String(e)));
+      toast.error('처리 실패: ' + (friendlyError(e)));
     } finally {
       setBusy(false);
     }

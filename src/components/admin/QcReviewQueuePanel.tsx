@@ -11,6 +11,7 @@ import {
 } from '@/lib/qcApi';
 import QcReportCard from '@/components/admin/QcReportCard';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 export default function QcReviewQueuePanel() {
   const [rows, setRows] = useState<QcReviewQueueRow[]>([]);
@@ -26,7 +27,7 @@ export default function QcReviewQueuePanel() {
       setRows(r);
       setStatus(s);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'QC 큐 불러오기 실패');
+      toast.error(friendlyError(e, 'QC 큐 불러오기 실패'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ export default function QcReviewQueuePanel() {
       toast.success(`${count}개 트랙 QC 재시도 enqueue 됨`);
       setTimeout(reload, 1000);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '재시도 실패');
+      toast.error(friendlyError(e, '재시도 실패'));
     } finally {
       setRetrying(false);
     }

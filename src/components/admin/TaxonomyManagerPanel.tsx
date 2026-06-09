@@ -10,6 +10,7 @@ import {
   upsertTaxonomy,
 } from '@/lib/taxonomyApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * Phase X1.0 — DEUDDA DSP 분류 체계 관리.
@@ -43,7 +44,7 @@ export default function TaxonomyManagerPanel() {
       const data = await listAdminTaxonomy(kind);
       setItems(data);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '분류 목록 조회 실패');
+      toast.error(friendlyError(err, '분류 목록 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -108,7 +109,7 @@ export default function TaxonomyManagerPanel() {
       setDraft(null);
       await refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '저장 실패');
+      toast.error(friendlyError(err, '저장 실패'));
     } finally {
       setSaving(false);
     }
@@ -120,7 +121,7 @@ export default function TaxonomyManagerPanel() {
       toast.success(item.is_active ? '비활성화했어요.' : '활성화했어요.');
       await refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '상태 변경 실패');
+      toast.error(friendlyError(err, '상태 변경 실패'));
     }
   }
 
@@ -131,7 +132,7 @@ export default function TaxonomyManagerPanel() {
       toast.success('삭제했어요.');
       await refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '삭제 실패');
+      toast.error(friendlyError(err, '삭제 실패'));
     }
   }
 

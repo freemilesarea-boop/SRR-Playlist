@@ -10,6 +10,7 @@ import {
 } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 function fmtKrw(n: number): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -46,7 +47,7 @@ export default function SalesAgentsList() {
       const data = await fetchSalesAgentList(`${monthInput}-01`);
       setRows(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -63,7 +64,7 @@ export default function SalesAgentsList() {
       toast.success(row.is_active ? '비활성화됐어요.' : '활성화됐어요.');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '변경 실패');
+      toast.error(friendlyError(e, '변경 실패'));
     }
   }
 
@@ -285,7 +286,7 @@ function SalesAgentEditor({
       const c = await generateSalesAgentCode();
       setCode(c);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '코드 생성 실패');
+      toast.error(friendlyError(e, '코드 생성 실패'));
     }
   }
 
@@ -315,7 +316,7 @@ function SalesAgentEditor({
       toast.success(isNew ? '영업인이 추가됐어요.' : '저장됐어요.');
       onSaved();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '저장 실패';
+      const msg = friendlyError(err, '저장 실패');
       // 23505 → 중복 코드
       if (msg.includes('duplicate')) {
         setError('이미 사용 중인 영업인 코드예요. 다른 코드를 입력하거나 자동 생성을 눌러주세요.');
@@ -457,7 +458,7 @@ function SalesAgentDetailModal({
         if (alive) setData(d);
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       })
       .finally(() => {
         if (alive) setLoading(false);

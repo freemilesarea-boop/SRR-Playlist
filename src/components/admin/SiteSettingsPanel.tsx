@@ -3,6 +3,7 @@ import { Bell, Save, ShieldOff, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { fetchSiteSettings, adminUpdateSiteSettings, type SiteSettings } from '@/lib/siteSettingsApi';
 import { adminPurgeAllTracks, type PurgeAllResult } from '@/lib/adminTrackApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 export default function SiteSettingsPanel() {
   const [s, setS] = useState<SiteSettings | null>(null);
@@ -37,7 +38,7 @@ export default function SiteSettingsPanel() {
         `실패 ${result.failed}`,
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '실행 실패');
+      toast.error(friendlyError(e, '실행 실패'));
     } finally {
       setPurging(false);
     }
@@ -68,7 +69,7 @@ export default function SiteSettingsPanel() {
       setS(updated);
       toast.success('사이트 설정 저장 완료');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '저장 실패');
+      toast.error(friendlyError(e, '저장 실패'));
     } finally {
       setSaving(false);
     }

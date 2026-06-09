@@ -13,6 +13,7 @@ import {
 } from '@/lib/autoPlaylistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 export default function AutoPlaylistManager() {
   const [rows, setRows] = useState<AutoPlaylistRow[]>([]);
@@ -29,7 +30,7 @@ export default function AutoPlaylistManager() {
       setRows(list);
       setEnabled(en);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '조회 실패');
+      toast.error(friendlyError(e, '조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export default function AutoPlaylistManager() {
       toast.success(`자동 플레이리스트 ${r.created}개 생성 (이미 있으면 건너뜀)`);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '생성 실패');
+      toast.error(friendlyError(e, '생성 실패'));
     } finally { setBusy(false); }
   }
 
@@ -54,7 +55,7 @@ export default function AutoPlaylistManager() {
       toast.success(`자동 배치 완료 — ${r.tracks_processed ?? 0}곡 처리 · ${r.total_placed ?? 0}건 배치`);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '배치 실패');
+      toast.error(friendlyError(e, '배치 실패'));
     } finally { setBusy(false); }
   }
 
@@ -64,7 +65,7 @@ export default function AutoPlaylistManager() {
       setEnabled(r.enabled);
       toast.success(r.enabled ? '신규 발매 시 자동 배치 ON' : '자동 배치 OFF');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '설정 실패');
+      toast.error(friendlyError(e, '설정 실패'));
     }
   }
 
@@ -158,7 +159,7 @@ function PlacedList({ playlistId, onChanged }: { playlistId: string; onChanged: 
       setTracks((prev) => (prev ? prev.filter((t) => t.track_id !== trackId) : prev));
       void onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '제거 실패');
+      toast.error(friendlyError(e, '제거 실패'));
     }
   }
 
