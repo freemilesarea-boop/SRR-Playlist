@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Mic2, X } from 'lucide-react';
 import { submitArtistSignupProfile } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { useModalA11y } from '@/hooks/useModalA11y';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * 로그인한 일반 회원이 아티스트로 지원(전환)하는 모달.
@@ -61,15 +63,21 @@ export default function ArtistApplyModal({
       toast.success('아티스트 지원이 접수됐어요. 관리자 승인 후 음원 업로드가 가능해요.');
       await onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '지원 처리에 실패했어요. 다시 시도해주세요.');
+      setError(friendlyError(err, '지원 처리에 실패했어요. 다시 시도해주세요.'));
     } finally {
       setBusy(false);
     }
   }
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      role="dialog" aria-modal="true"
       onClick={onClose}
     >
       <div

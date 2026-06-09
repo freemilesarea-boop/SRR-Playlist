@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ListPlus, Plus, Check, X, Lock, Globe, ArrowRight } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   fetchMyPlaylistsForAdd,
   createMyPlaylistAndAddTrack,
@@ -130,8 +131,14 @@ function PickerModal({ trackId, onClose }: { trackId: string; onClose: () => voi
     navigate(`/my/playlist/${id}`);
   }
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog" aria-modal="true"
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

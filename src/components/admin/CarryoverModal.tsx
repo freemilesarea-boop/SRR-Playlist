@@ -8,8 +8,9 @@
  *     is_manual_carryover=true, carried_over_amount = 예상 금액 으로 설정
  *   - settlement_admin_audit_logs 에 audit 기록
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, ArrowRightCircle, AlertTriangle } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminCarryoverSettlement,
   type AdminSettlementRow,
@@ -74,8 +75,14 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
     }
   }
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog" aria-modal="true"
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
