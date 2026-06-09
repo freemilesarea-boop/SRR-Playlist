@@ -329,7 +329,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
   // 필터(status/search/removedView)가 바뀌면 선택 초기화 — 보이지 않는 곡 잠금 방지
   useEffect(() => {
     setSelected(new Set());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [filterKey]);
 
   // 하단 sentinel — 무한 스크롤 추가 로드

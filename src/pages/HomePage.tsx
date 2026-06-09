@@ -162,7 +162,7 @@ export default function HomePage() {
         .filter((p) => p.is_auto_generated)
         .sort((a, b) => (counts.get(b.id)?.playable ?? 0) - (counts.get(a.id)?.playable ?? 0))
         .slice(0, 12),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [playlists, counts],
   );
 

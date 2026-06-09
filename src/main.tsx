@@ -28,7 +28,7 @@ if (
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // 한 세션당 1회만 — 무한 reload 방지
     window.sessionStorage.setItem('sw-reloaded', '1');
-    // eslint-disable-next-line no-console
+     
     console.info('[sw] controllerchange — reloading once');
     window.location.reload();
   });

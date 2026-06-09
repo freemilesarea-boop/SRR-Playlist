@@ -178,7 +178,7 @@ export default function App() {
         : 'app'; // 비로그인: public 허용, private 은 RequireAuth 가 /login 처리
 
   if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
+     
     console.debug('[auth-route]', {
       path: window.location.pathname,
       isAuthReady, isProfileReady,

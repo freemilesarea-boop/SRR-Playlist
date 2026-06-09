@@ -1757,7 +1757,7 @@ export async function fetchArtistUploadEligibility(): Promise<UploadEligibility>
         details: (error as { details?: string }).details,
       };
       // 항상 출력 (production 운영 진단 가능하게)
-      // eslint-disable-next-line no-console
+       
       console.error('[eligibility] rpc error:', _lastEligibilityError);
       return errFallback();
     }

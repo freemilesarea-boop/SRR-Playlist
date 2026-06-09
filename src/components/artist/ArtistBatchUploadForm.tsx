@@ -47,7 +47,7 @@ function defaultReleaseDate(): string {
 }
 
 function titleFromFilename(filename: string): string {
-  return filename.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().slice(0, 80);
+  return filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 80);
 }
 
 function formatFileSize(bytes: number): string {

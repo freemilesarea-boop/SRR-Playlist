@@ -573,7 +573,7 @@ export default function Player() {
     if (trackChanged) {
       if (import.meta.env.DEV) {
         // 진단용 공식 포맷 ([audio] = 재생 직전 상태 스냅샷)
-        // eslint-disable-next-line no-console
+         
         console.log('[audio]', {
           id: current.id,
           title: current.title,
@@ -612,7 +612,7 @@ export default function Player() {
           const dur = a?.duration;
           if (usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id === trackId
               && (!a || !Number.isFinite(dur) || (dur ?? 0) <= 0)) {
-            // eslint-disable-next-line no-console
+             
             console.warn('[audio] metadata timeout — duration 0:00, 재생 불가 처리', {
               id: trackId, title: current.title, src: a?.currentSrc, readyState: a?.readyState, networkState: a?.networkState,
             });
@@ -1162,7 +1162,7 @@ export default function Player() {
     const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
     // iOS Safari 실기기 원격 디버깅용 — 프로덕션에서도 항상 상세 로그(에러는 드물어 spam 아님).
     // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
-    // eslint-disable-next-line no-console
+     
     // iOS Safari 실기기 디버깅용 상세 로그 (track/src/code/networkState/readyState/시간/상태/UA)
     console.warn('[audio:error]', {
       id: current?.id,
@@ -1211,7 +1211,7 @@ export default function Player() {
     if (err?.code === 2 && current && playing && !networkRetriedRef.current.has(current.id)) {
       networkRetriedRef.current.add(current.id);
       const resumeAt = target.currentTime || currentTime || 0;
-      // eslint-disable-next-line no-console
+       
       console.warn('[audio] NETWORK 오류 — 1회 자동 재시도', { id: current.id, title: current.title, resumeAt });
       try {
         target.load();

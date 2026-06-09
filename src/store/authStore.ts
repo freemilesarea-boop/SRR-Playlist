@@ -198,7 +198,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       nickname: nickname || email.split('@')[0],
       ...(metadata ?? {}),
     };
-    // eslint-disable-next-line no-console
+     
     console.log('[auth] signUp request:', { email, data });
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
@@ -206,12 +206,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       options: { data },
     });
     if (error) {
-      // eslint-disable-next-line no-console
+       
       console.error('[auth] signUp error:', error);
       throw error;
     }
     const ids = signUpData.user?.identities;
-    // eslint-disable-next-line no-console
+     
     console.log('[auth] signUp response:', {
       user_id: signUpData.user?.id,
       email_confirmed: signUpData.user?.email_confirmed_at != null,

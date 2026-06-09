@@ -143,7 +143,7 @@ export default function LoginPage() {
         '앱 내 브라우저 또는 회사/학교 Google 계정에서는 로그인이 제한될 수 있습니다. ' +
         'Chrome 또는 Safari에서 다시 시도하거나, 이메일로 가입/로그인해주세요.';
       // 진단용으로 콘솔에만 raw 흔적.
-      // eslint-disable-next-line no-console
+       
       if (raw) console.warn('[google-oauth]', raw);
       setError(friendly);
       setGoogleBusy(false);

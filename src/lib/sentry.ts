@@ -93,11 +93,11 @@ export async function initSentry(opts?: { userRole?: string | null }): Promise<v
       Sentry.setTag('user_role', opts.userRole);
     }
     initialized = true;
-    // eslint-disable-next-line no-console
+     
     console.info('[sentry] initialized', { env });
   } catch (e) {
     // SDK load 실패 — silent
-    // eslint-disable-next-line no-console
+     
     console.warn('[sentry] init failed:', e);
   }
 }
