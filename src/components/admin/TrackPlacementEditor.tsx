@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, RefreshCw, Save, Sparkles, Ban, Eye, Trash2, History, Calculator } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminGetTrackPlacementDetail,
   adminUpdateTrackMetadata,
@@ -53,8 +54,11 @@ export default function TrackPlacementEditor({
     onMutated?.();
   };
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 md:p-4">
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 md:p-4">
       <div className="flex h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-bg-deep shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-line/10 px-4 py-3">
           <div className="min-w-0">

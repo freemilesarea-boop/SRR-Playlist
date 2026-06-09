@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, AlertTriangle, History } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import {
   adminGetTrackTags, adminUpdateTrackTags, adminUpdateMetadataAndApprove, fetchMetadataAudit,
@@ -80,9 +81,11 @@ export default function MetaApproveModal({
 
   const blocked = result?.blocked_reasons ?? [];
   const sensitive = (result?.warnings?.length ?? 0) > 0;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-bg-card p-4" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="truncate text-sm font-bold">메타데이터 수정/승인 · {title ?? ''}</h3>

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Plus, Trash2, Shield, Ban, AlertTriangle, Sparkles, Power } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListGenreGuardrails,
   adminGenreGuardrailSummary,
@@ -48,6 +49,9 @@ export default function GenreGuardrailTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<EditForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: () => !saving && setEditOpen(false), enabled: editOpen });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -280,7 +284,7 @@ export default function GenreGuardrailTab() {
       </p>
 
       {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl bg-bg-deep p-4 shadow-2xl">
             <h3 className="mb-3 text-sm font-bold">{form.id ? '규칙 수정' : '규칙 추가'}</h3>
             <div className="space-y-2 text-xs">

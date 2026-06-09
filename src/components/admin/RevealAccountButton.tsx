@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { adminRevealPayoutAccount } from '@/lib/artistApi';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import { friendlyError } from '@/lib/errorMessages';
@@ -149,8 +150,13 @@ function ConfirmModal({
   onConfirm: (reason: string) => void;
 }) {
   const [reason, setReason] = useState('정산 지급 처리');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: onCancel });
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onCancel}
     >

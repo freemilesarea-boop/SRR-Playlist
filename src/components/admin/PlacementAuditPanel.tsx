@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw, Eye, Check, Pause, Trash2, ShieldCheck, Scan } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   flagPlacementRisks, listPlacementRisks, decidePlacementRisk,
   getPlacementRiskStatus, explainPlacement,
@@ -313,8 +314,11 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
     skip_below_threshold: { text: '✕ Threshold 미달', tone: 'bg-slate-500/15 text-slate-300' },
   };
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-bg-card p-5 ring-1 ring-line/10" onClick={(e) => e.stopPropagation()}>
         <header className="mb-3 flex items-start justify-between gap-2">
           <div>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, X, RefreshCw, Power, Trash2 } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListPromotionCodes,
   adminCreatePromotionCode,
@@ -257,8 +258,11 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
     }
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center" onClick={onClose}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center" onClick={onClose}>
       <div
         className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-bg-soft shadow-2xl ring-1 ring-line/15 sm:rounded-3xl animate-slide-up"
         onClick={(ev) => ev.stopPropagation()}
