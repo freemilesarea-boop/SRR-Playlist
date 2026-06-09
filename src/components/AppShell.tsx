@@ -35,7 +35,7 @@ export default function AppShell() {
       <Sidebar />
 
       {/* 모바일 전용 상단 우측 테마 토글 — lg+ 에서는 TopBar 안에 통합돼 숨김 */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe sm:px-6 lg:hidden">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe pl-safe pr-safe sm:px-6 lg:hidden">
         <div className="pointer-events-auto pt-2.5">
           <ThemeQuickToggle />
         </div>
