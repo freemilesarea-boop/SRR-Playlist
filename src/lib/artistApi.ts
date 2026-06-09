@@ -1794,6 +1794,8 @@ export interface StreamingExclusionBreakdown {
   muted_play: number;
   /** 0089 — 플레이어 볼륨 10% 미만 */
   low_player_volume: number;
+  /** X6.47 (0329) — 같은 user/anon+track 30s 내 중복 milestone_30s */
+  dedup_30s_window: number;
   total_excluded: number;
   total_eligible: number;
   days: number;
