@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Music, Store, Smartphone, Sparkles, Play, ArrowRight, X } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useInstallPrompt, isStandalone } from '@/hooks/useInstallPrompt';
@@ -90,8 +91,13 @@ export default function Onboarding() {
 
   if (!open) return null;
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose: close });
+
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"

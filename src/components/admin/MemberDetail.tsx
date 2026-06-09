@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
@@ -24,6 +24,7 @@ import {
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 type DangerAction = 'disable' | 'enable' | 'withdraw' | 'withdraw_repair' | 'mask_pii' | 'password_reset' | 'force_signout';
 interface PendingAction {
@@ -224,8 +225,14 @@ export default function MemberDetail({
     };
   }, [userId]);
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog" aria-modal="true"
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

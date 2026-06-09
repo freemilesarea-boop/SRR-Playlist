@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
 import { X, Download, Copy, Check, QrCode } from 'lucide-react';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   downloadBlob,
   logShareEvent,
@@ -66,9 +67,15 @@ export default function QRCodeModal({
     }
   }
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      role="dialog" aria-modal="true"
       onClick={onClose}
     >
       <div

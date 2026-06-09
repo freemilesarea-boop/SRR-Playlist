@@ -1,6 +1,8 @@
+import { useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Crown, X } from 'lucide-react';
 import type { GateMode } from '@/store/gateStore';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 export type { GateMode };
 
@@ -25,8 +27,14 @@ export default function SubscriptionGate({
       ? '/'
       : location.pathname + location.search;
 
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+
   return (
     <div
+      ref={dialogRef}
+      role="dialog" aria-modal="true"
       className="fixed inset-0 z-[95] flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >

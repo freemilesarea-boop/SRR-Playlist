@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Download, X, Share, Plus, CheckCircle2, MonitorSmartphone } from 'lucide-react';
 import { useInstallPrompt, isStandalone } from '@/hooks/useInstallPrompt';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 type Platform = 'ios' | 'android' | 'desktop-chrome' | 'other';
 
@@ -56,9 +57,24 @@ export default function InstallAppButton({
       </button>
 
       {showGuide && (
+        <GuideModalContent onClose={() => setShowGuide(false)} platform={platform} />
+      )}
+    </>
+  );
+}
+
+function GuideModalContent({ onClose, platform }: { onClose: () => void; platform: Platform }) {
+  // X6.42: focus trap + Esc
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalA11y(dialogRef, { onClose });
+  return (
+    <>
+      {true && (
         <div
+          ref={dialogRef}
+          role="dialog" aria-modal="true"
           className="fixed inset-0 z-[95] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-          onClick={() => setShowGuide(false)}
+          onClick={onClose}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -74,7 +90,7 @@ export default function InstallAppButton({
                   <p className="text-[11px] text-ink-mute">앱처럼 설치하면 더 안정적으로 재생됩니다.</p>
                 </div>
               </div>
-              <button onClick={() => setShowGuide(false)} aria-label="닫기" className="rounded-full p-1 text-ink-mute hover:bg-ink/5 hover:text-ink">
+              <button onClick={onClose} aria-label="닫기" className="rounded-full p-1 text-ink-mute hover:bg-ink/5 hover:text-ink">
                 <X size={18} />
               </button>
             </div>

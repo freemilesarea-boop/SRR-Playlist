@@ -7,9 +7,10 @@
  *
  * legacy 호환: site_settings.notice_enabled/title/body 도 첫 진입 시 active 공지로 변환 표시.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Bell } from 'lucide-react';
 import { fetchSiteSettings, type SiteSettings } from '@/lib/siteSettingsApi';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { listActiveSiteNotices, type ActiveSiteNotice } from '@/lib/siteNoticesApi';
 
 const HIDE_PREFIX = 'site_notice_hide_until_';
@@ -99,9 +100,13 @@ export default function SiteNoticeModal() {
 
   const totalActive = notices.length;
   const positionLabel = totalActive > 1 ? `${currentIdx + 1}/${totalActive}` : '';
+  // X6.42: focus trap + Esc + restore focus
+  const containerRef = useRef<HTMLDivElement>(null);
+  useModalA11y(containerRef, { onClose: () => current.dismissible && next(), enabled: !!current });
 
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center"
       onClick={current.dismissible ? next : undefined}
       role="dialog" aria-modal="true" aria-labelledby="site-notice-title"
