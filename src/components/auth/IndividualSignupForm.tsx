@@ -3,6 +3,7 @@ import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { verifyIdentityNow, type IdentityVerificationResult } from '@/lib/identityVerification';
+import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 
 interface Props {
@@ -44,7 +45,7 @@ export default function IndividualSignupForm({ onDone }: Props) {
       setIdentity(res);
       if (res.ok) toast.success('본인인증이 완료됐어요 (MVP mock)');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '본인인증 실패');
+      toast.error(friendlyError(e, '본인인증 실패'));
     } finally {
       setVerifying(false);
     }
@@ -113,7 +114,7 @@ export default function IndividualSignupForm({ onDone }: Props) {
       toast.success('회원가입이 완료됐어요. 이메일 인증 메일을 확인해주세요.');
       onDone(email.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : '가입에 실패했어요');
+      setError(friendlyError(err, '가입에 실패했어요'));
     } finally {
       setBusy(false);
     }

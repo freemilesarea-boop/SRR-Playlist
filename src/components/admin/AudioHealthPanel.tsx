@@ -25,6 +25,7 @@ import {
 } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 function fmtBytes(n: number | null): string {
   if (n === null || n === undefined) return '—';
@@ -72,7 +73,7 @@ export default function AudioHealthPanel() {
       setSummary(sum);
       setIssues(iss);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }

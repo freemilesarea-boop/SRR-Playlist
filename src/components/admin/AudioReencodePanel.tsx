@@ -10,6 +10,7 @@ import {
 } from '@/lib/audioReencode';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 type RowStatus =
   | { kind: 'idle' }
@@ -35,7 +36,7 @@ export default function AudioReencodePanel() {
       const rows = await listReencodeCandidates();
       setList(rows);
     } catch (e) {
-      toast.error(`목록 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`목록 로드 실패: ${friendlyError(e)}`);
     } finally {
       setLoading(false);
     }
@@ -55,7 +56,7 @@ export default function AudioReencodePanel() {
       setStatus(c.track_id, { kind: 'done' });
       return true;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = friendlyError(e);
       setStatus(c.track_id, { kind: 'error', message: msg });
       // 실패 영속화 → 사용자 플레이리스트/추천에서 제외 + 관리자 사유 표시
       await markConversionFailed(c.track_id, msg);
@@ -72,7 +73,7 @@ export default function AudioReencodePanel() {
       toast.success(`"${c.title}" MP3 교체 완료`);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = friendlyError(e);
       setStatus(c.track_id, { kind: 'error', message: msg });
       toast.error(`MP3 교체 실패: ${msg}`);
     }

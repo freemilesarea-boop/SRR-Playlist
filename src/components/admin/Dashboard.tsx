@@ -36,6 +36,7 @@ import {
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 const KRW = (n: number) => `₩${n.toLocaleString('ko-KR')}`;
 const NUM = (n: number) => n.toLocaleString('ko-KR');
@@ -81,7 +82,7 @@ export default function Dashboard() {
       await load();
       toast.success('오늘 집계를 갱신했어요.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '갱신 실패');
+      toast.error(friendlyError(e, '갱신 실패'));
     } finally {
       setRefreshing(false);
     }

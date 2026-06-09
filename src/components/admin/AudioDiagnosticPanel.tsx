@@ -6,6 +6,7 @@ import { getSwDiagnostics, resetServiceWorkerAndCaches, type SwDiagnostics } fro
 import type { TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 interface Row { id: string; title: string; artist: string | null; audio_url: string; release_status?: string | null; }
 
@@ -42,7 +43,7 @@ export default function AudioDiagnosticPanel() {
         .map((t) => ({ id: t.id, title: t.title, artist: t.artist, audio_url: t.audio_url, release_status: (t as { release_status?: string | null }).release_status }));
       setRows(list);
     } catch (e) {
-      toast.error(`목록 로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`목록 로드 실패: ${friendlyError(e)}`);
     } finally {
       setLoading(false);
     }

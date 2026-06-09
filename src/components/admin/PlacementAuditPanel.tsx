@@ -8,6 +8,7 @@ import {
   type PlacementRiskStatus, type PlacementExplanation,
 } from '@/lib/placementAuditApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * AI 배치 진단 — 관찰 모드 (0232):
@@ -43,7 +44,7 @@ export default function PlacementAuditPanel() {
       setRows(items);
       setStatus(st);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '큐 조회 실패');
+      toast.error(friendlyError(err, '큐 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function PlacementAuditPanel() {
         await reload();
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '스캔 실패');
+      toast.error(friendlyError(err, '스캔 실패'));
     } finally {
       setScanning(false);
     }
@@ -77,7 +78,7 @@ export default function PlacementAuditPanel() {
       toast.success(`${labels[decision]} 처리 완료`);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '결정 처리 실패');
+      toast.error(friendlyError(err, '결정 처리 실패'));
     } finally {
       setDecidingId(null);
     }
@@ -88,7 +89,7 @@ export default function PlacementAuditPanel() {
       const r = await explainPlacement(row.track_id, row.playlist_id);
       setExplainOpen(r);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '점수 분해 실패');
+      toast.error(friendlyError(err, '점수 분해 실패'));
     }
   }
 

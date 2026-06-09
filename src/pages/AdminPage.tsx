@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -25,55 +25,69 @@ import {
   Activity,
   MessageSquare,
 } from 'lucide-react';
-import ArtistApprovalList from '@/components/admin/ArtistApprovalList';
-import ArtistContractsList from '@/components/admin/ArtistContractsList';
-import ArtistTrackManagementList from '@/components/admin/ArtistTrackManagementList';
-import ArtistSettlementsList from '@/components/admin/ArtistSettlementsList';
-import TrackReviewList from '@/components/admin/TrackReviewList';
-import QcReviewQueuePanel from '@/components/admin/QcReviewQueuePanel';
-import PayoutVerificationList from '@/components/admin/PayoutVerificationList';
-import PayoutIntakeAdminPanel from '@/components/admin/PayoutIntakeAdminPanel';
-import PaymentSyncTool from '@/components/admin/PaymentSyncTool';
-import AdminOperationLogs from '@/components/admin/AdminOperationLogs';
-import SalesAgentsList from '@/components/admin/SalesAgentsList';
-import FreeTrialsPanel from '@/components/admin/FreeTrialsPanel';
-import AdminUsersList from '@/components/admin/AdminUsersList';
-import UploadIntegrityPanel from '@/components/admin/UploadIntegrityPanel';
-import BrandSettingsPanel from '@/components/admin/BrandSettingsPanel';
-import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
-import { fetchPlaylists, fetchTracks } from '@/lib/api';
-import type { PlaylistRow, TrackRow } from '@/types/db';
+// X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
 import Dashboard from '@/components/admin/Dashboard';
 import AdminNotificationsBell from '@/components/admin/AdminNotificationsBell';
-import MembersList from '@/components/admin/MembersList';
-import StreamingAnalytics from '@/components/admin/StreamingAnalytics';
-import RevenueManagement from '@/components/admin/RevenueManagement';
-import SubscriptionRequests from '@/components/admin/SubscriptionRequests';
-import ContentManagement from '@/components/admin/ContentManagement';
-import RecommendationTester from '@/components/admin/RecommendationTester';
-import PromotionCodes from '@/components/admin/PromotionCodes';
-import AutoPlaylistManager from '@/components/admin/AutoPlaylistManager';
 import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
-import AudioReencodePanel from '@/components/admin/AudioReencodePanel';
-import AudioDiagnosticPanel from '@/components/admin/AudioDiagnosticPanel';
-import MetadataViolationsList from '@/components/admin/MetadataViolationsList';
-import UploadAuditPanel from '@/components/admin/UploadAuditPanel';
-import AiCurationPanel from '@/components/admin/AiCurationPanel';
-import ClapRecommendationPanel from '@/components/admin/ClapRecommendationPanel';
-import TrackAiMetadataPanel from '@/components/admin/TrackAiMetadataPanel';
-import TaxonomyManagerPanel from '@/components/admin/TaxonomyManagerPanel';
-import GenrePredictionPanel from '@/components/admin/GenrePredictionPanel';
-import MoodPredictionPanel from '@/components/admin/MoodPredictionPanel';
-import StoreTypePredictionPanel from '@/components/admin/StoreTypePredictionPanel';
-import PlacementAuditPanel from '@/components/admin/PlacementAuditPanel';
-import SiteSettingsPanel from '@/components/admin/SiteSettingsPanel';
-import SiteNoticesManagerPanel from '@/components/admin/SiteNoticesManagerPanel';
-import SalesPartnerApplications from '@/components/admin/SalesPartnerApplications';
-import BusinessLivePanel from '@/components/admin/BusinessLivePanel';
-import SupportInquiriesPanel from '@/components/admin/SupportInquiriesPanel';
-import CuratorsAdminPanel from '@/components/admin/CuratorsAdminPanel';
+import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
+import { fetchPlaylists, fetchTracks } from '@/lib/api';
+import type { PlaylistRow, TrackRow } from '@/types/db';
 import { supabaseProjectRef } from '@/lib/supabase';
+
+// X6.39 — Lazy split — 41개 admin 탭 (탭 클릭 시 chunk 로드)
+const ArtistApprovalList = lazy(() => import('@/components/admin/ArtistApprovalList'));
+const ArtistContractsList = lazy(() => import('@/components/admin/ArtistContractsList'));
+const ArtistTrackManagementList = lazy(() => import('@/components/admin/ArtistTrackManagementList'));
+const ArtistSettlementsList = lazy(() => import('@/components/admin/ArtistSettlementsList'));
+const TrackReviewList = lazy(() => import('@/components/admin/TrackReviewList'));
+const QcReviewQueuePanel = lazy(() => import('@/components/admin/QcReviewQueuePanel'));
+const PayoutVerificationList = lazy(() => import('@/components/admin/PayoutVerificationList'));
+const PayoutIntakeAdminPanel = lazy(() => import('@/components/admin/PayoutIntakeAdminPanel'));
+const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
+const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
+const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
+const FreeTrialsPanel = lazy(() => import('@/components/admin/FreeTrialsPanel'));
+const AdminUsersList = lazy(() => import('@/components/admin/AdminUsersList'));
+const UploadIntegrityPanel = lazy(() => import('@/components/admin/UploadIntegrityPanel'));
+const BrandSettingsPanel = lazy(() => import('@/components/admin/BrandSettingsPanel'));
+const MembersList = lazy(() => import('@/components/admin/MembersList'));
+const StreamingAnalytics = lazy(() => import('@/components/admin/StreamingAnalytics'));
+const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
+const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
+const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
+const RecommendationTester = lazy(() => import('@/components/admin/RecommendationTester'));
+const PromotionCodes = lazy(() => import('@/components/admin/PromotionCodes'));
+const AutoPlaylistManager = lazy(() => import('@/components/admin/AutoPlaylistManager'));
+const AudioReencodePanel = lazy(() => import('@/components/admin/AudioReencodePanel'));
+const AudioDiagnosticPanel = lazy(() => import('@/components/admin/AudioDiagnosticPanel'));
+const MetadataViolationsList = lazy(() => import('@/components/admin/MetadataViolationsList'));
+const UploadAuditPanel = lazy(() => import('@/components/admin/UploadAuditPanel'));
+const AiCurationPanel = lazy(() => import('@/components/admin/AiCurationPanel'));
+const ClapRecommendationPanel = lazy(() => import('@/components/admin/ClapRecommendationPanel'));
+const TrackAiMetadataPanel = lazy(() => import('@/components/admin/TrackAiMetadataPanel'));
+const TaxonomyManagerPanel = lazy(() => import('@/components/admin/TaxonomyManagerPanel'));
+const GenrePredictionPanel = lazy(() => import('@/components/admin/GenrePredictionPanel'));
+const MoodPredictionPanel = lazy(() => import('@/components/admin/MoodPredictionPanel'));
+const StoreTypePredictionPanel = lazy(() => import('@/components/admin/StoreTypePredictionPanel'));
+const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAuditPanel'));
+const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPanel'));
+const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
+const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
+const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
+const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
+const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
+
+// X6.39 — lazy chunk 로드 중 표시할 fallback
+function TabSkeleton() {
+  return (
+    <div className="space-y-3 p-1" aria-live="polite" aria-busy="true">
+      <div className="h-7 w-48 animate-pulse rounded bg-bg-card" />
+      <div className="h-32 animate-pulse rounded-2xl bg-bg-card" />
+      <div className="h-32 animate-pulse rounded-2xl bg-bg-card" />
+    </div>
+  );
+}
 
 type Tab =
   | 'dashboard'
@@ -320,51 +334,55 @@ export default function AdminPage() {
       </nav>
 
       {/* 한 탭 패널의 렌더 throw 가 관리자 페이지 전체를 화이트스크린시키지 않도록 격리.
-          resetKey=tab 로 탭 전환 시 직전 탭의 에러 상태를 자동 초기화. */}
+          resetKey=tab 로 탭 전환 시 직전 탭의 에러 상태를 자동 초기화.
+          X6.39: lazy chunk 로드 중 fallback skeleton 표시. */}
       <AdminErrorBoundary resetKey={tab}>
+        {/* dashboard 는 eager 라 Suspense 밖에서 즉시 렌더 */}
         {tab === 'dashboard' && <Dashboard />}
-        {tab === 'business-live' && <BusinessLivePanel />}
-        {tab === 'support-inquiries' && <SupportInquiriesPanel />}
-        {tab === 'members' && <MembersList />}
-        {tab === 'curators' && <CuratorsAdminPanel />}
-        {tab === 'sales-agents' && <SalesAgentsList />}
-        {tab === 'sales-partners' && <SalesPartnerApplications />}
-        {tab === 'free-trials' && <FreeTrialsPanel />}
-        {tab === 'streaming' && <StreamingAnalytics />}
-        {tab === 'revenue' && <RevenueManagement />}
-        {tab === 'subscriptions' && <SubscriptionRequests />}
-        {tab === 'promotions' && <PromotionCodes />}
-        {tab === 'payment-sync' && <PaymentSyncTool />}
-        {tab === 'operation-logs' && <AdminOperationLogs />}
-        {tab === 'content' && <ContentManagement />}
-        {tab === 'auto-playlists' && <AutoPlaylistManager />}
-        {tab === 'artists' && <ArtistApprovalList />}
-        {tab === 'artist-contracts' && <ArtistContractsList />}
-        {tab === 'payout-verification' && <PayoutVerificationList />}
-        {tab === 'payout-intake' && <PayoutIntakeAdminPanel />}
-        {tab === 'track-review' && <TrackReviewList />}
-        {tab === 'qc-review' && <QcReviewQueuePanel />}
-        {tab === 'artist-tracks' && <ArtistTrackManagementList />}
-        {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
-        {tab === 'audio-reencode' && <AudioReencodePanel />}
-        {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
-        {tab === 'metadata-violations' && <MetadataViolationsList />}
-        {tab === 'upload-audit' && <UploadAuditPanel />}
-        {tab === 'ai-curation' && <AiCurationPanel />}
-        {tab === 'clap-curation' && <ClapRecommendationPanel />}
-        {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
-        {tab === 'ai-taxonomy' && <TaxonomyManagerPanel />}
-        {tab === 'ai-genre' && <GenrePredictionPanel />}
-        {tab === 'ai-mood' && <MoodPredictionPanel />}
-        {tab === 'ai-storetype' && <StoreTypePredictionPanel />}
-        {tab === 'placement-audit' && <PlacementAuditPanel />}
-        {tab === 'site-settings' && <SiteSettingsPanel />}
-        {tab === 'site-notices' && <SiteNoticesManagerPanel />}
-        {tab === 'artist-settlements' && <ArtistSettlementsList />}
-        {tab === 'recommendation' && <RecommendationTester />}
-        {tab === 'upload-integrity' && <UploadIntegrityPanel />}
-        {tab === 'brand' && <BrandSettingsPanel />}
-        {tab === 'admins' && <AdminUsersList />}
+        <Suspense fallback={<TabSkeleton />}>
+          {tab === 'business-live' && <BusinessLivePanel />}
+          {tab === 'support-inquiries' && <SupportInquiriesPanel />}
+          {tab === 'members' && <MembersList />}
+          {tab === 'curators' && <CuratorsAdminPanel />}
+          {tab === 'sales-agents' && <SalesAgentsList />}
+          {tab === 'sales-partners' && <SalesPartnerApplications />}
+          {tab === 'free-trials' && <FreeTrialsPanel />}
+          {tab === 'streaming' && <StreamingAnalytics />}
+          {tab === 'revenue' && <RevenueManagement />}
+          {tab === 'subscriptions' && <SubscriptionRequests />}
+          {tab === 'promotions' && <PromotionCodes />}
+          {tab === 'payment-sync' && <PaymentSyncTool />}
+          {tab === 'operation-logs' && <AdminOperationLogs />}
+          {tab === 'content' && <ContentManagement />}
+          {tab === 'auto-playlists' && <AutoPlaylistManager />}
+          {tab === 'artists' && <ArtistApprovalList />}
+          {tab === 'artist-contracts' && <ArtistContractsList />}
+          {tab === 'payout-verification' && <PayoutVerificationList />}
+          {tab === 'payout-intake' && <PayoutIntakeAdminPanel />}
+          {tab === 'track-review' && <TrackReviewList />}
+          {tab === 'qc-review' && <QcReviewQueuePanel />}
+          {tab === 'artist-tracks' && <ArtistTrackManagementList />}
+          {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
+          {tab === 'audio-reencode' && <AudioReencodePanel />}
+          {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
+          {tab === 'metadata-violations' && <MetadataViolationsList />}
+          {tab === 'upload-audit' && <UploadAuditPanel />}
+          {tab === 'ai-curation' && <AiCurationPanel />}
+          {tab === 'clap-curation' && <ClapRecommendationPanel />}
+          {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
+          {tab === 'ai-taxonomy' && <TaxonomyManagerPanel />}
+          {tab === 'ai-genre' && <GenrePredictionPanel />}
+          {tab === 'ai-mood' && <MoodPredictionPanel />}
+          {tab === 'ai-storetype' && <StoreTypePredictionPanel />}
+          {tab === 'placement-audit' && <PlacementAuditPanel />}
+          {tab === 'site-settings' && <SiteSettingsPanel />}
+          {tab === 'site-notices' && <SiteNoticesManagerPanel />}
+          {tab === 'artist-settlements' && <ArtistSettlementsList />}
+          {tab === 'recommendation' && <RecommendationTester />}
+          {tab === 'upload-integrity' && <UploadIntegrityPanel />}
+          {tab === 'brand' && <BrandSettingsPanel />}
+          {tab === 'admins' && <AdminUsersList />}
+        </Suspense>
       </AdminErrorBoundary>
     </div>
   );

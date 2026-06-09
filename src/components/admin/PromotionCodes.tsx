@@ -9,6 +9,7 @@ import {
 } from '@/lib/adminApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 function fmtDate(s: string | null): string {
   if (!s) return '—';
@@ -39,7 +40,7 @@ export default function PromotionCodes() {
     try {
       setRows(await adminListPromotionCodes());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -55,7 +56,7 @@ export default function PromotionCodes() {
       toast.success(r.is_active ? '비활성화됐어요.' : '활성화됐어요.');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '변경 실패');
+      toast.error(friendlyError(e, '변경 실패'));
     }
   }
 
@@ -66,7 +67,7 @@ export default function PromotionCodes() {
       toast.success('삭제됐어요.');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '삭제 실패');
+      toast.error(friendlyError(e, '삭제 실패'));
     }
   }
 
@@ -249,7 +250,7 @@ function CreatePromotionModal({ onClose, onSaved }: { onClose: () => void; onSav
       toast.success('프로모션 코드가 생성됐어요.');
       onSaved();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '생성 실패';
+      const msg = friendlyError(err, '생성 실패');
       setError(msg.includes('duplicate') ? '이미 사용 중인 코드예요.' : msg);
     } finally {
       setBusy(false);

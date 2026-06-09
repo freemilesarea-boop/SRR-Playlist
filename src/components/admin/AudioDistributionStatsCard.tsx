@@ -18,6 +18,7 @@ import {
   type TrackArtistOwner,
 } from '@/lib/audioDistributionStatsApi';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 type RangePreset = 'all' | 'this_month' | 'last_month' | 'custom';
 
@@ -76,7 +77,7 @@ export default function AudioDistributionStatsCard() {
       );
       setData(stats);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import {
   type UpsertSiteNoticeInput,
 } from '@/lib/siteNoticesApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 const AUDIENCE_LABELS: Record<NoticeAudience, string> = {
   all: '전체 (로그인+게스트)',
@@ -52,7 +53,7 @@ export default function SiteNoticesManagerPanel() {
       const rows = await adminListSiteNotices();
       setList(rows);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '공지 불러오기 실패');
+      toast.error(friendlyError(e, '공지 불러오기 실패'));
     } finally {
       setLoading(false);
     }
@@ -86,7 +87,7 @@ export default function SiteNoticesManagerPanel() {
       setEditingId(null);
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '저장 실패');
+      toast.error(friendlyError(e, '저장 실패'));
     } finally {
       setSaving(false);
     }
@@ -98,7 +99,7 @@ export default function SiteNoticesManagerPanel() {
       toast.success(n.is_active ? '비활성화됨' : '활성화됨');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '토글 실패');
+      toast.error(friendlyError(e, '토글 실패'));
     }
   }
 
@@ -109,7 +110,7 @@ export default function SiteNoticesManagerPanel() {
       toast.success('삭제됨');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '삭제 실패');
+      toast.error(friendlyError(e, '삭제 실패'));
     }
   }
 

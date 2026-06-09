@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Building2, CheckCircle2, UserCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   validateBusinessNumberFormat,
   formatBusinessNumber,
@@ -112,7 +113,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
         setBizError(res.message ?? '검증 실패');
       }
     } catch (e) {
-      setBizError(e instanceof Error ? e.message : '검증 오류');
+      setBizError(friendlyError(e, '검증 오류'));
     } finally {
       setVerifying(false);
     }
@@ -221,7 +222,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
       toast.success('사업자 회원가입이 완료됐어요. 이메일 인증 메일을 확인해주세요.');
       onDone(email.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : '가입에 실패했어요');
+      setError(friendlyError(err, '가입에 실패했어요'));
     } finally {
       setBusy(false);
     }

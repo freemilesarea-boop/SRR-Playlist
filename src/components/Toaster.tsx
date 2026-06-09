@@ -63,7 +63,7 @@ export default function Toaster() {
   const remove = useToastStore((s) => s.remove);
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-[200] flex flex-col items-center gap-2 px-3 pt-safe">
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-[200] flex flex-col items-center gap-2 px-3 pt-safe pl-safe pr-safe">
       {toasts.map((t) => {
         const v = VARIANTS[t.type];
         const Icon = v.icon;

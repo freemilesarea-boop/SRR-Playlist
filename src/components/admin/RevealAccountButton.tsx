@@ -18,6 +18,7 @@ import { Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { adminRevealPayoutAccount } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 const REVEAL_DURATION_MS = 30_000;
 
@@ -91,7 +92,7 @@ export default function RevealAccountButton({
       timeoutRef.current = window.setTimeout(hideNow, REVEAL_DURATION_MS);
       toast.warning('계좌번호 원본 30초간 표시됨 — audit log 기록됨');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '원본 조회 실패');
+      toast.error(friendlyError(e, '원본 조회 실패'));
     } finally {
       setBusy(false);
     }

@@ -3,6 +3,7 @@ import { Upload, X, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { safeExtension } from '@/lib/storagePath';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   MAIN_GENRES,
   SUB_GENRES_BY_MAIN,
@@ -67,7 +68,7 @@ async function verifyPublicUrl(
       contentType: res.headers.get('content-type') ?? undefined,
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'fetch failed' };
+    return { ok: false, error: friendlyError(e, 'fetch failed') };
   }
 }
 
@@ -270,7 +271,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
           detectedDuration = stdCheck.duration ?? detectedDuration;
         } catch (e) {
           throw new Error(
-            `브라우저에서 이 오디오를 변환하지 못했습니다 (${e instanceof Error ? e.message : 'unknown'}). ` +
+            `브라우저에서 이 오디오를 변환하지 못했습니다 (${friendlyError(e, 'unknown')}). ` +
               'WAV 또는 표준 MP3 파일로 다시 시도해주세요.',
           );
         }
@@ -337,7 +338,7 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
       toast.success(`업로드 완료: ${title}`);
       await onUploaded();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(friendlyError(err));
     } finally {
       setBusy(false);
       setProgress('');

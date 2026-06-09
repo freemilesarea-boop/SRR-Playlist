@@ -10,6 +10,7 @@ import {
 } from '@/lib/genrePredictionApi';
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 
 /**
  * Phase X1.1 — CLAP zero-shot 장르 분류 결과 비교 / 1-click 적용 패널.
@@ -41,7 +42,7 @@ export default function GenrePredictionPanel() {
       setRows(items);
       setStatus(st);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '장르 예측 조회 실패');
+      toast.error(friendlyError(err, '장르 예측 조회 실패'));
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,7 @@ export default function GenrePredictionPanel() {
       toast.success(`${res.previous_genre ?? '(빈 값)'} → ${res.applied_genre} 적용`);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '적용 실패');
+      toast.error(friendlyError(err, '적용 실패'));
     } finally {
       setApplyingId(null);
     }

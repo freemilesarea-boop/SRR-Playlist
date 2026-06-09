@@ -9,6 +9,7 @@ import {
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 import ArtistSettlementDetail from './ArtistSettlementDetail';
 import CarryoverModal from './CarryoverModal';
 
@@ -106,7 +107,7 @@ export default function ArtistSettlementsList() {
       });
       setRows(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -383,7 +384,7 @@ function GenerateModal({
       const r = await adminGenerateMonthlySettlement(`${monthInput}-01`, true);
       setDryResult(r);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -404,7 +405,7 @@ function GenerateModal({
       toast.success('정산서가 생성됐어요. 상세 확인 후 finalize 진행하세요.');
       onApplied();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

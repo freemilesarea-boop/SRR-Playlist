@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Handshake, Loader2, Phone, Mail, MapPin } from 'lucide-react';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 import {
   listSalesPartnerApplications, updateSalesPartnerApplication,
   type SalesPartnerApplication, type SalesPartnerStatus,
@@ -28,7 +29,7 @@ export default function SalesPartnerApplications() {
     setLoading(true);
     listSalesPartnerApplications(filter === 'all' ? undefined : filter)
       .then(setRows)
-      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .catch((e) => toast.error(friendlyError(e)))
       .finally(() => setLoading(false));
   }, [filter]);
   useEffect(() => { load(); }, [load]);
@@ -36,13 +37,13 @@ export default function SalesPartnerApplications() {
   async function setStatus(id: string, status: SalesPartnerStatus) {
     setBusy(id);
     try { await updateSalesPartnerApplication(id, status); toast.success(`상태 변경: ${STATUS_LABEL[status]}`); load(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : String(e)); }
+    catch (e) { toast.error(friendlyError(e)); }
     finally { setBusy(null); }
   }
   async function saveNote(id: string, note: string) {
     setBusy(id);
     try { await updateSalesPartnerApplication(id, undefined, note); toast.success('메모 저장'); }
-    catch (e) { toast.error(e instanceof Error ? e.message : String(e)); }
+    catch (e) { toast.error(friendlyError(e)); }
     finally { setBusy(null); }
   }
 

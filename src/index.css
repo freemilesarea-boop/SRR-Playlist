@@ -36,6 +36,10 @@
 
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
+  /* X6.40: 노치/Dynamic Island 좌우 잘림 방지 — fixed 요소에 적용 */
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
+  .px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }
 
 @layer components {

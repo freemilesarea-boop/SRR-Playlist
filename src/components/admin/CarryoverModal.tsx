@@ -16,6 +16,7 @@ import {
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import { friendlyError } from '@/lib/errorMessages';
 
 function fmtKrw(n: number | null | undefined): string {
   return `₩${(n ?? 0).toLocaleString()}`;
@@ -65,7 +66,7 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
       );
       onApplied();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = friendlyError(e);
       setError(msg);
       toast.error(msg);
     } finally {

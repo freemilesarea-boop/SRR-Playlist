@@ -9,6 +9,7 @@ import {
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 import MemberDetail from './MemberDetail';
 
 const PLAN_LABEL: Record<string, string> = {
@@ -95,7 +96,7 @@ export default function MembersList() {
       setRows((prev) => prev.map((r) => (r.id === id ? { ...r, role: newRole } : r)));
       toast.success('권한이 변경됐어요.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '변경 실패');
+      toast.error(friendlyError(e, '변경 실패'));
     }
   }
 
@@ -113,7 +114,7 @@ export default function MembersList() {
       );
       toast.success('플랜이 변경됐어요.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '변경 실패');
+      toast.error(friendlyError(e, '변경 실패'));
     }
   }
 

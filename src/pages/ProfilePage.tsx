@@ -22,6 +22,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
+import { friendlyError } from '@/lib/errorMessages';
 import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
@@ -90,7 +91,7 @@ export default function ProfilePage() {
       setWithdrawModalOpen(false);
       await signOut();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '탈퇴 요청 실패');
+      toast.error(friendlyError(e, '탈퇴 요청 실패'));
     } finally {
       setWithdrawing(false);
     }
