@@ -185,11 +185,11 @@ export default function TrackUploader({ onUploaded, onCancel }: Props) {
       console.debug('[upload] verify', { url: publicUrl, ...verify });
     }
     if (!verify.ok) {
-      // 업로드된 객체 정리 (best-effort)
+      // 업로드된 객체 정리 (best-effort) — 실패해도 throw 는 아래에서 별도로 함
       try {
         await supabase.storage.from(bucket).remove([path]);
-      } catch {
-        /* noop */
+      } catch (cleanupErr) {
+        console.warn('[upload] cleanup remove failed (object may leak):', { bucket, path, cleanupErr });
       }
       throw new Error(
         `업로드 후 URL 접근 불가 (status=${verify.status ?? 'network error'}). ` +

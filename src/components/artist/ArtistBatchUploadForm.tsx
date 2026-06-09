@@ -104,7 +104,10 @@ function saveRecoveryManifest(batchId: string, rows: TrackRow[]): void {
       items: rows.map((t) => ({ clientTrackId: t.id, filename: t.file.name, title: t.title, status: t.status })),
     };
     localStorage.setItem(RECOVERY_KEY, JSON.stringify(m));
-  } catch { /* noop */ }
+  } catch (e) {
+    // quota exceeded / private mode 등 — 복구 manifest 만 유실, 업로드는 진행됨
+    console.warn('[batch-upload] saveRecoveryManifest failed:', e);
+  }
 }
 function readRecoveryManifest(): RecoveryManifest | null {
   try {

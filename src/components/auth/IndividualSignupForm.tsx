@@ -92,7 +92,10 @@ export default function IndividualSignupForm({ onDone }: Props) {
           'srr-pending-signup',
           JSON.stringify({ type: 'individual', email: email.trim(), profile: pendingProfile }),
         );
-      } catch { /* noop */ }
+      } catch (storageErr) {
+        // localStorage 실패 시 DB 직접 update 로 복구되므로 차단은 안 함. 진단 로깅만.
+        console.warn('[individual-signup] pending-signup cache write failed:', storageErr);
+      }
 
       // 3) 즉시 로그인된 세션이 있으면 (이메일 컨펌 OFF 환경) 바로 users 업데이트 시도
       const { data: sess } = await supabase.auth.getSession();

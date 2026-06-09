@@ -149,7 +149,10 @@ function PlacedList({ playlistId, onChanged }: { playlistId: string; onChanged: 
   const [tracks, setTracks] = useState<PlacedTrack[] | null>(null);
   useEffect(() => {
     let alive = true;
-    adminPlaylistPlacedTracks(playlistId).then((t) => { if (alive) setTracks(t); }).catch(() => setTracks([]));
+    adminPlaylistPlacedTracks(playlistId).then((t) => { if (alive) setTracks(t); }).catch((e) => {
+      console.warn('[AutoPlaylistManager] adminPlaylistPlacedTracks failed:', { playlistId, e });
+      if (alive) setTracks([]);
+    });
     return () => { alive = false; };
   }, [playlistId]);
 

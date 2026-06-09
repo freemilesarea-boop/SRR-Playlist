@@ -201,7 +201,12 @@ async function sendOne(env: Env, job: PendingJob, appUrl: string): Promise<SendR
     });
     const raw = await res.text();
     let data: any = null;
-    try { data = JSON.parse(raw); } catch { /* */ }
+    try {
+      data = JSON.parse(raw);
+    } catch (parseErr) {
+      // Resend 가 가끔 비-JSON HTML 에러 페이지를 반환 — raw 가 보존되므로 fallback OK.
+      console.warn('[mod-dispatch] Resend response not JSON:', { parseErr: String(parseErr), preview: raw.slice(0, 200) });
+    }
     if (!res.ok) {
       const errMsg = (data && (data.message || data.error || data.name)) || `HTTP ${res.status}`;
       console.error('[mod-dispatch] Resend error:', {
