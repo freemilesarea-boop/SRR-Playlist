@@ -128,7 +128,6 @@ export default function RereviewTab() {
 
   const FILTERS: [string, string][] = [
     ['needs_re_review', '재검수 필요'], ['high_risk', '고위험'], ['quality_review_required', '품질 재검수'],
-    ['mastering_required', '마스터링 필요'],
     ['guardrail_hard', '매장 차단'], ['mismatch_high', '불일치 high'], ['low_trust', '저신뢰'],
     ['metadata_cleanup_required', '메타 정리/재분류'],
     ['store:hospital', '병원 충돌'], ['store:gym', '헬스장 충돌'], ['store:yoga', '요가 충돌'], ['store:kids_cafe', '키즈카페 충돌'],
@@ -152,7 +151,6 @@ export default function RereviewTab() {
           <PStat label="고위험" v={summary.high_risk_flags} />
           <PStat label="불일치 high" v={summary.mismatch_high} />
           <PStat label="품질 재검수" v={summary.quality_review_required} />
-          <PStat label="마스터링 필요" v={summary.mastering_required} />
           <PStat label="저신뢰 업로더" v={summary.low_trust_uploaders} />
           <PStat label="수정요청 대기" v={summary.fix_requested} />
           <PStat label="처리완료" v={summary.resolved_total} />

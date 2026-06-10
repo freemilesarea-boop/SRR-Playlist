@@ -54,18 +54,20 @@ export async function fetchQualityThresholds(): Promise<QualityThresholds> {
 
 /** 3단계 정책 검사 — 측정값을 기준과 비교해 pass/warning/reject 결정.
  *  - REJECT: analysis_failed / clipping(설정 시) / TP > true_peak_reject_max
+ *            / 볼륨(음압) 미달·초과 (LUFS lufs_min..lufs_max 밴드 밖)
  *  - PASS:   LUFS lufs_min..lufs_max AND TP <= true_peak_max
- *  - WARNING: 그 외 (업로드 허용)
+ *  - WARNING: 음압 정상 + TP true_peak_max..true_peak_reject_max (업로드 허용)
  */
 export function evaluateQuality(r: LoudnessResult, th: QualityThresholds): { grade: QualityGrade; reasons: string[] } {
   if (r.integrated_lufs == null) return { grade: 'reject', reasons: ['analysis_failed'] };
   if (th.block_on_clipping && r.clipping_detected) return { grade: 'reject', reasons: ['clipping'] };
   if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_reject_max) return { grade: 'reject', reasons: ['true_peak_reject'] };
+  // 볼륨(음압)이 권장 밴드를 벗어나면 업로드 차단 — 마스터링 후 재업로드 유도.
+  if (r.integrated_lufs < th.lufs_min) return { grade: 'reject', reasons: ['low_loudness'] };
+  if (r.integrated_lufs > th.lufs_max) return { grade: 'reject', reasons: ['high_loudness'] };
 
   const reasons: string[] = [];
   if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_max) reasons.push('true_peak');
-  if (r.integrated_lufs < th.lufs_min) reasons.push('low_loudness');
-  else if (r.integrated_lufs > th.lufs_max) reasons.push('high_loudness');
 
   return reasons.length === 0 ? { grade: 'pass', reasons: [] } : { grade: 'warning', reasons };
 }
@@ -89,12 +91,28 @@ export function buildQualityMessage(r: QualityResult, th: QualityThresholds): st
 
   if (r.grade === 'warning') {
     return (
-      '음원 볼륨이 권장 범위를 벗어났지만 업로드는 가능합니다.\n\n' +
+      'True Peak 이 권장값을 살짝 넘었지만 업로드는 가능합니다.\n\n' +
       '현재 측정값\n' +
       lines.join('\n') +
       '\n\n' +
-      `권장: ${th.lufs_min} ~ ${th.lufs_max} LUFS · True Peak ≤ ${th.true_peak_max} dBTP\n` +
-      '매장 환경에서 다른 곡과 볼륨 편차가 있을 수 있습니다.'
+      `권장: True Peak ≤ ${th.true_peak_max} dBTP (음압 ${th.lufs_min} ~ ${th.lufs_max} LUFS)\n` +
+      '매장 환경에서 일부 구간에 피크 왜곡 여지가 있을 수 있습니다.'
+    );
+  }
+
+  // reject — 볼륨(음압) 기준 미달/초과: 마스터링 유도 톤.
+  if (r.failure_reason === 'low_loudness' || r.failure_reason === 'high_loudness') {
+    const dir = r.failure_reason === 'low_loudness'
+      ? `권장 범위보다 낮습니다(${th.lufs_min} LUFS 미만).`
+      : `권장 범위보다 높습니다(${th.lufs_max} LUFS 초과).`;
+    return (
+      '음원 볼륨(음압)이 기준 범위를 벗어나 등록할 수 없습니다.\n\n' +
+      '측정된 음압이 ' + dir + '\n\n' +
+      '현재 측정값\n' +
+      lines.join('\n') +
+      '\n\n' +
+      `권장: ${th.lufs_min} ~ ${th.lufs_max} LUFS\n` +
+      '마스터링(음압 보정) 후 다시 업로드해주세요.'
     );
   }
 
