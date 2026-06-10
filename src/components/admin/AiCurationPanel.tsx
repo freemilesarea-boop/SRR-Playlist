@@ -44,7 +44,7 @@ type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 
 
 const TABS: [SubTab, string][] = [
   ['perf', '운영 성과'],
-  ['admin_learning', '관리자 학습'],
+  ['admin_learning', '🧠 검수 패턴 학습'],
   ['store_genre_policy', '매장 장르 정책 (v1)'],
   ['qc_queue', 'AI 검수 큐'],
   ['behavior', '행동 지표'],
