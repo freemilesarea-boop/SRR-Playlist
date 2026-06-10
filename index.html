@@ -50,5 +50,41 @@
   <body class="bg-bg text-ink antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!--
+      X6.52 — emergency SW/cache watchdog
+      배경: X6.49/X6.50 split 이후 새 chunk 명 변경. 모바일에서 stale SW 가
+      옛 chunk path 를 캐시 hit → 404 → blank screen 으로 stuck.
+      대처: 8초 안에 #root 에 children 이 없으면 SW unregister + cache clear 후 hard reload.
+      sessionStorage 로 1회만 실행 (무한 reload 방지).
+      이미 정상 렌더된 사용자는 영향 0 (children 있으면 noop).
+    -->
+    <script>
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        if (sessionStorage.getItem('srr-emergency-recovered') === '1') return;
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.children.length > 0) return; // 정상
+          try { sessionStorage.setItem('srr-emergency-recovered', '1'); } catch (e) {}
+          console.warn('[watchdog] app did not mount in 8s — SW unregister + cache clear + reload');
+          var p = Promise.resolve();
+          try {
+            p = navigator.serviceWorker.getRegistrations()
+              .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+              .catch(function () {});
+          } catch (e) {}
+          try {
+            if (typeof caches !== 'undefined') {
+              p = p.then(function () {
+                return caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                });
+              });
+            }
+          } catch (e) {}
+          p.finally(function () { window.location.reload(); });
+        }, 8000);
+      })();
+    </script>
   </body>
 </html>
