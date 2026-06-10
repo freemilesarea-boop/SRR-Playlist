@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Play, Pause, Music, Trash2, Ban, AlertTriangle, CheckCircle2, Calculator, Edit, RefreshCw, X, Save,
+  Play, Pause, Music, Trash2, Ban, AlertTriangle, CheckCircle2, Calculator, Edit, X, Save,
 } from 'lucide-react';
 import {
   adminGetQcTrackContext,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Calculator, AlertTriangle, ExternalLink } from 'lucide-react';
+import { RefreshCw, Calculator, ExternalLink } from 'lucide-react';
 import {
   adminRecomputeBehaviorScores,
   adminListBehaviorOutliers,

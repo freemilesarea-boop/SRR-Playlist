@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Music2, RefreshCw, Check, ArrowRight, Sparkles } from 'lucide-react';
+import { RefreshCw, Check, ArrowRight, Sparkles } from 'lucide-react';
 import {
   listGenrePredictions,
   applyAiGenreToTrack,

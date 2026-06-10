@@ -7,7 +7,6 @@ import {
   Clock,
   Headphones,
   Sparkles,
-  AlertCircle,
   ListMusic,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -20,7 +19,6 @@ import { fetchFollowedPlaylists } from '@/lib/playlistFollowApi';
 import { useAuthStore } from '@/store/authStore';
 import { useLikedTracksStore } from '@/store/likedTracksStore';
 import { usePlayerStore } from '@/store/playerStore';
-import { isPlayableUrl } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import TrackStateBadge from '@/components/TrackStateBadge';
 import { toast } from '@/store/toastStore';

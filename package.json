@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --max-warnings=10000",
+    "lint": "eslint src --max-warnings=0",
     "lint:fix": "eslint src --fix",
     "lint:migrations": "node scripts/lint-migrations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",

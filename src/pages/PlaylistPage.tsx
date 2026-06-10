@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useGateStore } from '@/store/gateStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { formatTime } from '@/lib/format';
-import { isPlayableTrack, countPlayable } from '@/lib/audio';
+import { countPlayable } from '@/lib/audio';
 import { filterPlayableTracks, getTrackPlaybackState } from '@/lib/trackPlayability';
 import TrackStateBadge from '@/components/TrackStateBadge';
 import { gradientStyle } from '@/lib/cover';

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * ContractMarkdown — 계약서 본문 전용 미니 마크다운 렌더러.
  *

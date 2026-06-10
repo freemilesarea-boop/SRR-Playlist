@@ -43,6 +43,8 @@ export function useBusinessAutoSwitch() {
     return () => window.clearInterval(id);
   }, [bumpTick]);
 
+  // tick 은 60s interval bump — 시간 경과로 current slot 가 바뀌어야 재계산 됨
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const current = useMemo(() => getCurrentSchedule(schedules), [schedules, tick]);
 
   // current slot 트랙 prefetch

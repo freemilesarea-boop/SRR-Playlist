@@ -42,17 +42,7 @@ export default function SupportInquiryForm({
   open, onClose, defaultType, context, title = '문의하기', successMessage, onSuccess,
 }: Props) {
   // X6.20 — '정산 정보 등록' 유형은 PII 가 평문으로 다뤄지지 않도록 별도 폼 위임.
-  // defaultType 이 '정산 정보 등록' 이면 SupportInquiryForm 대신 PayoutIntakeForm 렌더.
-  if (defaultType === '정산 정보 등록') {
-    return (
-      <PayoutIntakeForm
-        open={open}
-        onClose={onClose}
-        // onSuccess(inquiryId) → onSubmitted() 어댑터 (PayoutIntakeForm 은 인자 없음)
-        onSubmitted={onSuccess ? () => onSuccess('') : undefined}
-      />
-    );
-  }
+  // X6.53 — hooks 모두 호출 후 분기 (rules-of-hooks 준수, 옛 early-return 패턴 제거)
   const user = useAuthStore((s) => s.user);
   const [inquiryType, setInquiryType] = useState<InquiryType>(defaultType ?? '재생 오류');
   const [titleField, setTitleField] = useState('');
@@ -70,6 +60,18 @@ export default function SupportInquiryForm({
     if (defaultType) setInquiryType(defaultType);
     setContactEmail(user?.email ?? '');
   }, [open, defaultType, user?.email]);
+
+  // hooks 모두 호출 후 분기 — PayoutIntakeForm 위임 / 닫힘 상태 / 정상 폼
+  if (defaultType === '정산 정보 등록') {
+    return (
+      <PayoutIntakeForm
+        open={open}
+        onClose={onClose}
+        // onSuccess(inquiryId) → onSubmitted() 어댑터 (PayoutIntakeForm 은 인자 없음)
+        onSubmitted={onSuccess ? () => onSuccess('') : undefined}
+      />
+    );
+  }
 
   if (!open) return null;
 

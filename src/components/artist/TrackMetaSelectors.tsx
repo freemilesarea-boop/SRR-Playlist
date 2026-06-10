@@ -6,46 +6,9 @@ import {
 } from '@/lib/trackMetadataOptions';
 import { toast } from '@/store/toastStore';
 
-/** pill 형태 다중 선택 (max 제한) */
-function PillMulti({
-  label, options, selected, max, onChange, disabled, overMessage,
-}: {
-  label: string; options: Option[]; selected: string[]; max: number;
-  onChange: (next: string[]) => void; disabled?: boolean; overMessage?: string;
-}) {
-  function toggle(v: string) {
-    if (disabled) return;
-    if (selected.includes(v)) onChange(selected.filter((x) => x !== v));
-    else if (selected.length < max) onChange([...selected, v]);
-    else if (overMessage) toast.warning(overMessage);
-  }
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-dim">
-        {label} <span className={selected.length >= max ? 'text-accent' : 'text-ink-mute'}>· {selected.length}/{max}</span>
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((o) => {
-          const on = selected.includes(o.value);
-          const atMax = !on && selected.length >= max;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => toggle(o.value)}
-              disabled={disabled}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                on ? 'bg-accent text-black ring-1 ring-accent' : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:bg-bg-hover'
-              } ${atMax ? 'opacity-40' : ''}`}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+/** pill 형태 다중 선택 (max 제한) — TODO: GenrePicker / 외 다른 selector 가 inline 으로
+ * 처리하고 있어 PillMulti 는 현재 미사용. 향후 재사용 시 복원 (X6.53 dead-code 제거).
+ */
 
 function PillSingle({
   label, options, value, onChange, disabled, optional,

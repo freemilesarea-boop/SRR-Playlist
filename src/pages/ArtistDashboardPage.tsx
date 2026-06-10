@@ -27,7 +27,6 @@ import {
   fetchArtistDailyStreams,
   fetchArtistUploadEligibility,
   fetchMyPayoutAccount,
-  submitArtistPayoutAccount,
   fetchMyPayoutAccountMasked,
   submitArtistPayoutAccountV2,
   fetchMySettlementHoldStatus,

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  RefreshCw, MessageSquare, AlertOctagon, AlertTriangle, CheckCircle2, Clock,
+  RefreshCw, MessageSquare,
   Mail, Phone, MessageCircle, ExternalLink, FileText, X,
 } from 'lucide-react';
 import {

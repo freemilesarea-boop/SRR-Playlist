@@ -1,5 +1,7 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * Alert — 안내/오류/경고/성공 박스 공통 컴포넌트.
+ * 의도적으로 Alert + inlineToneClass 헬퍼를 같이 export.
  *
  * 라이트/다크 모드 양쪽에서 충분한 대비 보장. tone 별 색 토큰 통일.
  *

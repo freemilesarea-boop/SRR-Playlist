@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Sparkles, Ban, Calculator, Trash2, History, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { X, Ban, Calculator, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminBulkApplyAiMetadata,
