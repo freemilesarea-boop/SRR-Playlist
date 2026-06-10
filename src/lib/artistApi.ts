@@ -9,7 +9,6 @@
  */
 
 import { supabase, supabaseProjectRef } from './supabase';
-import { useAuthStore } from '@/store/authStore';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';

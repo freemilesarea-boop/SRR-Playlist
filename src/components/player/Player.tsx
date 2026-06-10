@@ -43,9 +43,6 @@ import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 
-/** 재생 불가 트랙 연속 스킵 상한 — 이 횟수 초과 시 강제 정지하고 안내. */
-const MAX_SKIP_ATTEMPTS = 5;
-
 /** HTMLMediaElement.error.code → 사람 읽기용 이름 */
 const MEDIA_ERROR_CODES: Record<number, string> = {
   1: 'ABORTED',
@@ -61,13 +58,6 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
  * 자동 next 무한 루프로 다시 시도하지 않게 한다.
  */
 const sessionFailedTrackIds = new Set<string>();
-
-/**
- * 0077 — toast dedup: 같은 트랙+에러 코드 조합은 30초 내 1회만 표시.
- * 키 형식: `${trackId}:${errCode}`. 메인페이지 진입 시 preload 에러 폭주 방지.
- */
-const recentErrorToasts = new Map<string, number>();
-const TOAST_DEDUP_MS = 30_000;
 
 /** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
 let lastErrorToastAt = 0;
@@ -268,6 +258,8 @@ export default function Player() {
     } catch {
       /* MediaMetadata 미지원 환경 silent */
     }
+    // current?.id/title/artist/cover_url 변경 시만 mediaSession 갱신 — current 전체는 의도적 제외 (잦은 ref 변경)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, current?.title, current?.artist, current?.cover_url, playlist?.title]);
 
   useEffect(() => {
@@ -290,6 +282,8 @@ export default function Player() {
       setH('previoustrack', null); setH('nexttrack', null);
       setH('seekto', null);
     };
+    // activeRef 는 ref 객체 (안정) — deps 에 포함하면 끝없는 재등록
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, toggle, prev, next, setCurrentTime]);
 
   // playbackState 동기화 — 잠금화면 play/pause 아이콘
@@ -298,6 +292,8 @@ export default function Player() {
     try {
       navigator.mediaSession.playbackState = current ? (playing ? 'playing' : 'paused') : 'none';
     } catch { /* noop */ }
+    // current 전체는 의도적 제외 — id 변경만 트리거
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, current?.id]);
 
   // 잠금화면 진행바(스크러버) — duration/position 동기화. floor(currentTime) 의존 → ~1초마다 갱신.
@@ -318,7 +314,6 @@ export default function Player() {
 
   /* ---------- analytics: start / 15s / 30s / complete ---------- */
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const profile = useAuthStore((s) => s.profile);
   const startedTrackIdRef = useRef<string | null>(null);
   const milestoneSentRef = useRef(false);
   // X4.3 — pev2 session id (페이지 로드당 stable, anonId + load time)
@@ -337,13 +332,6 @@ export default function Player() {
   const networkRetriedRef = useRef<Set<string>>(new Set());
   function clearMetaTimer() {
     if (metaTimerRef.current !== null) { window.clearTimeout(metaTimerRef.current); metaTimerRef.current = null; }
-  }
-  function scheduleNext(delayMs: number) {
-    if (nextTimerRef.current !== null) window.clearTimeout(nextTimerRef.current);
-    nextTimerRef.current = window.setTimeout(() => {
-      nextTimerRef.current = null;
-      next();
-    }, delayMs);
   }
   useEffect(() => {
     return () => {
@@ -432,6 +420,8 @@ export default function Player() {
         evidence: { replay_count: priorStarts + 1 },
       });
     }
+    // playlistContext/volume 의도적 제외 — stream start 는 트랙 시작 시만 트리거 (volume 변경마다 X)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, playable, playing, userId, playlist?.id, current]);
 
   // X4.3 — 25/50/75/complete milestone (percentage 기반)
@@ -491,6 +481,8 @@ export default function Player() {
         anonymousId: getAnonymousId(),
       });
     }
+    // current 전체는 의도적 제외 — id 변경만 트리거
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume, current?.id, playing, playlist?.id]);
 
   useEffect(() => {
@@ -512,6 +504,8 @@ export default function Player() {
         player_muted: volume === 0,
       });
     }
+    // volume 의도적 제외 — milestone 은 30초 도달 시만 1회 트리거 (볼륨 변경마다 재계산 X)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, current, userId, playlist?.id, playable, playing]);
 
   useEffect(() => {
@@ -749,6 +743,8 @@ export default function Player() {
       }
     };
     crossfadeRafRef.current = requestAnimationFrame(tick);
+    // activeRef / nextRef 는 ref 객체 (안정) — deps 포함 시 끝없는 재등록
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     crossfadeEnabled,
     crossfadeSeconds,

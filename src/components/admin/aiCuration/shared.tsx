@@ -1,4 +1,7 @@
 // AiCuration shared utilities (X6.49 — extracted from AiCurationPanel.tsx)
+// 의도적으로 constants (STORE_LABELS 등) 와 components (Metric/PStat/GuardrailBadges) 를 같이 export.
+// 14개 tab 에서 공통 import — 분리하면 import 폭증, HMR 영향은 dev only.
+/* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react';
 import {
   setTrackAudioFeatures,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, RefreshCw, Save, Sparkles, Ban, Eye, Trash2, History, Calculator } from 'lucide-react';
+import { X, RefreshCw, Save, Sparkles, Ban, Trash2, Calculator } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminGetTrackPlacementDetail,

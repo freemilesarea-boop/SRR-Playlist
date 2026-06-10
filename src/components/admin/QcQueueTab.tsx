@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, AlertTriangle, Settings, Save, Eye, RotateCcw, Wrench, Filter, ChevronDown, ChevronRight } from 'lucide-react';
+import { RefreshCw, Play, Check, X, Sparkles, ExternalLink, Eye, RotateCcw, Wrench, Filter, ChevronDown, ChevronRight } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminGenerateQcQueueCandidates,
@@ -560,6 +560,10 @@ function FingerprintDetailModal({
   onClose: () => void;
   onRetry: (resetRetry: boolean) => void;
 }) {
+  // fingerprint 는 fingerprint_status / chromaprint_hash / 동적 metadata 가 섞인
+  // 자유 형태 JSON — fingerprint_failures 테이블에서 그대로 pull. typed schema
+  // 정의 시 교체. 현재는 any 로 두고 사용처에서 안전 접근만.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fp = data?.fingerprint as any;
   const tr = data?.track;
   const dialogRef = useRef<HTMLDivElement>(null);

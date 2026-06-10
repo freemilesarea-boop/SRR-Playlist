@@ -26,7 +26,6 @@ import { useAuthStore } from '@/store/authStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessAutoSwitch } from '@/hooks/useBusinessAutoSwitch';
 import { useStartBusinessMode } from '@/hooks/useStartBusinessMode';
-import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import AutoCover from '@/components/AutoCover';
 import BusinessQRSection from '@/components/BusinessQRSection';
@@ -109,7 +108,10 @@ export default function BusinessPage() {
   );
 
   // === NOW = 현재 스케줄 슬롯 (single source of truth) ===
+  // tick 은 60s interval bump — 시간 경과로 current/next slot 가 바뀌어야 재계산 됨
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const current = useMemo(() => getCurrentSchedule(schedules), [schedules, tick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const next = useMemo(() => getNextSchedule(schedules), [schedules, tick]);
   const currentPlaylist = useMemo(() => {
     if (!current?.playlist_id) return null;

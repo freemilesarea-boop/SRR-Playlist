@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Edit, Trash2, RotateCcw, AlertTriangle, Ban, CheckCircle2, Calculator,
-  Eye, EyeOff, Music, X, Save,
+  Eye, Music, X, Save,
 } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {

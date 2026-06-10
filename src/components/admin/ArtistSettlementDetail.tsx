@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Check, Pause, AlertTriangle, FileText, ArrowRightCircle } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
@@ -92,7 +92,7 @@ export default function ArtistSettlementDetail({
   const [holdModalOpen, setHoldModalOpen] = useState(false);
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -103,11 +103,11 @@ export default function ArtistSettlementDetail({
     } finally {
       setLoading(false);
     }
-  }
+  }, [settlementId]);
 
   useEffect(() => {
     void load();
-  }, [settlementId]);
+  }, [load]);
 
   async function handleFinalize() {
     setBusy(true);
