@@ -439,7 +439,7 @@ export async function getUploaderDetail(userId: string): Promise<UploaderDetail>
 // 전체 재검수 배치
 export interface RereviewSummary {
   total_target: number; features_done: number; features_missing: number; features_failed: number;
-  quality_review_required: number; guardrail_hard_tracks: number; mismatch_high: number;
+  quality_review_required: number; mastering_required: number; guardrail_hard_tracks: number; mismatch_high: number;
   high_risk_flags: number; needs_re_review: number; low_trust_uploaders: number;
   fix_requested: number; resolved_total: number;
 }
