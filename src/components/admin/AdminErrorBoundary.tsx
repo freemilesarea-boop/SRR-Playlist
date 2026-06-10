@@ -33,7 +33,7 @@ export default class AdminErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
+       
       console.error('[AdminErrorBoundary]', error, info.componentStack);
     }
     // Sentry 로 전송 — 운영자 패널 한 곳이 죽으면 즉시 모니터링.

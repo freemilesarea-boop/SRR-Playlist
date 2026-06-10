@@ -16,7 +16,7 @@ export const supabaseProjectRef: string = (() => {
 })();
 
 // 어떤 프로젝트/DB 에 연결됐는지 즉시 확인 (배포본에서도 출력) — 업로드 미반영 진단용
-// eslint-disable-next-line no-console
+ 
 console.log('[SupabaseEnv]', {
   url: url ?? '(missing)',
   projectRef: supabaseProjectRef,

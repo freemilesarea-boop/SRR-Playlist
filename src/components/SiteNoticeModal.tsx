@@ -96,13 +96,17 @@ export default function SiteNoticeModal() {
     setCurrentIdx((i) => i + 1);
   }
 
+  // X6.42: focus trap + Esc + restore focus — hook 은 항상 호출, enabled 로 조건부
+  const containerRef = useRef<HTMLDivElement>(null);
+  useModalA11y(containerRef, {
+    onClose: () => current?.dismissible && next(),
+    enabled: !!current && loaded,
+  });
+
   if (!loaded || !current) return null;
 
   const totalActive = notices.length;
   const positionLabel = totalActive > 1 ? `${currentIdx + 1}/${totalActive}` : '';
-  // X6.42: focus trap + Esc + restore focus
-  const containerRef = useRef<HTMLDivElement>(null);
-  useModalA11y(containerRef, { onClose: () => current.dismissible && next(), enabled: !!current });
 
   return (
     <div

@@ -59,10 +59,10 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     // 1) core.js (same-origin) — 없으면 local asset missing
     let coreURL: string;
     try {
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] fetch core.js start', { url: `${base}/ffmpeg-core.js` });
       coreURL = await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript');
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] core.js loaded');
     } catch (e) {
       throw new Error(`ffmpeg core.js 로드 실패 (local asset missing: ${base}/ffmpeg-core.js): ${e instanceof Error ? e.message : String(e)}`);
@@ -71,10 +71,10 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     // 2) core.wasm (same-origin)
     let wasmURL: string;
     try {
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] fetch wasm start', { url: `${base}/ffmpeg-core.wasm` });
       wasmURL = await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm');
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] wasm loaded');
     } catch (e) {
       throw new Error(`ffmpeg wasm fetch 실패 (${base}/ffmpeg-core.wasm): ${e instanceof Error ? e.message : String(e)}`);
@@ -84,10 +84,10 @@ async function getFfmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     //    내부적으로 `import(coreURL).default` 로 ESM core 를 로드한다. 따라서 ESM 빌드
     //    (public/ffmpeg/ffmpeg-core.js = export default createFFmpegCore) 를 사용해야 한다.
     try {
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] load() start (module worker 생성 + ESM core import)');
       await ff.load({ coreURL, wasmURL });
-      // eslint-disable-next-line no-console
+       
       console.info('[ffmpeg] load success (worker + ESM core + wasm)');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

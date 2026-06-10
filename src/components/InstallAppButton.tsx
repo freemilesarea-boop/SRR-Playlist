@@ -68,14 +68,12 @@ function GuideModalContent({ onClose, platform }: { onClose: () => void; platfor
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, { onClose });
   return (
-    <>
-      {true && (
-        <div
-          ref={dialogRef}
-          role="dialog" aria-modal="true"
-          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-          onClick={onClose}
-        >
+    <div
+      ref={dialogRef}
+      role="dialog" aria-modal="true"
+      className="fixed inset-0 z-[95] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+    >
           <div
             onClick={(e) => e.stopPropagation()}
             className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
@@ -125,8 +123,6 @@ function GuideModalContent({ onClose, platform }: { onClose: () => void; platfor
             </p>
           </div>
         </div>
-      )}
-    </>
   );
 }
 

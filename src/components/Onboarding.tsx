@@ -89,11 +89,11 @@ export default function Onboarding() {
     }
   }
 
-  if (!open) return null;
-
-  // X6.42: focus trap + Esc
+  // X6.42: focus trap + Esc (hook 은 항상 호출 — enabled 로 조건부 작동)
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModalA11y(dialogRef, { onClose: close });
+  useModalA11y(dialogRef, { onClose: close, enabled: open });
+
+  if (!open) return null;
 
   return (
     <div

@@ -15,7 +15,7 @@ export async function purgeBadAudioCaches(): Promise<string[]> {
     const targets = keys.filter((k) => BAD_AUDIO_CACHE_RE.test(k));
     await Promise.all(targets.map((k) => caches.delete(k)));
     if (targets.length > 0) {
-      // eslint-disable-next-line no-console
+       
       console.info('[swCache] purged bad audio caches', targets);
     }
     return targets;

@@ -39,20 +39,20 @@ export default function ArtistContractPage() {
       if (!c) {
         try {
           // 항상 출력 (production 운영 진단). 실패 사유를 사용자에게도 노출.
-          // eslint-disable-next-line no-console
+           
           console.log('[contract] no row found — calling ensure_artist_contract_for_user');
           const id = await ensureMyContract();
-          // eslint-disable-next-line no-console
+           
           console.log('[contract] ensure returned contract_id:', id);
           c = await fetchMyContract();
           if (!c) {
             // ensure 가 id 를 반환했는데 fetchMyContract 가 빈 결과면 RLS / RPC 캐시 등 환경 문제
-            // eslint-disable-next-line no-console
+             
             console.warn('[contract] ensure ok but fetchMyContract still null. id=', id);
           }
         } catch (ensureErr) {
           const err = ensureErr as { code?: string; message?: string; details?: string; hint?: string };
-          // eslint-disable-next-line no-console
+           
           console.error('[contract] ensure_artist_contract_for_user failed:', {
             code: err.code, message: err.message, details: err.details, hint: err.hint,
           });
@@ -118,7 +118,7 @@ export default function ArtistContractPage() {
       setTimeout(() => navigate('/artist'), 800);
     } catch (e) {
       const err = e as { code?: string; message?: string; details?: string; hint?: string };
-      // eslint-disable-next-line no-console
+       
       console.error('[contract] sign_artist_contract failed:', {
         code: err.code, message: err.message, details: err.details, hint: err.hint,
       });

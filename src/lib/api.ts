@@ -56,7 +56,7 @@ export async function fetchPlaylistTracks(playlistId: string): Promise<TrackRow[
     .filter((t) => {
       const ok = isPublicPlayableTrack(t);
       if (!ok && import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
+         
         console.debug('[fetchPlaylistTracks] 제외:', { id: t.id, title: t.title, release_status: (t as { release_status?: string }).release_status, removed_at: (t as { removed_at?: string }).removed_at });
       }
       return ok;

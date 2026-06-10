@@ -13,7 +13,7 @@ export interface ReencodeCandidate {
 
 function log(trackId: string, title: string, step: string, data?: unknown) {
   // 단계별 상세 로그 — iOS/변환 디버깅용 (프로덕션 포함)
-  // eslint-disable-next-line no-console
+   
   console.info(`[reencode ${trackId.slice(0, 8)} "${title}"] ${step}`, data ?? '');
 }
 
@@ -25,13 +25,13 @@ export async function markConversionFailed(trackId: string, reason: string): Pro
       p_reason: reason.slice(0, 480),
     });
     if (error) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[reencode:markFailed] RPC error', {
         track_id: trackId, code: error.code, message: error.message, details: error.details, hint: error.hint,
       });
     }
   } catch (e) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[reencode:markFailed] threw', e);
   }
 }
@@ -156,7 +156,7 @@ async function replaceTrackAudio(c: ReencodeCandidate, newUrl: string): Promise<
     p_content_type: 'audio/mpeg',
   });
   if (error) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[reencode:replaceAudio] RPC error', {
       track_id: c.track_id, code: error.code, message: error.message, details: error.details, hint: error.hint,
     });

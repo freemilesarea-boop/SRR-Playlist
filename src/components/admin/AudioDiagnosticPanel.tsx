@@ -30,7 +30,7 @@ export default function AudioDiagnosticPanel() {
     setTimelines((p) => ({ ...p, [r.id]: 'running' }));
     const res = await capturePlaybackTimeline(r.audio_url);
     setTimelines((p) => ({ ...p, [r.id]: res }));
-    // eslint-disable-next-line no-console
+     
     console.info(`[audio-diag:timeline] "${r.title}"`, { ...res, userAgent: navigator.userAgent, url: r.audio_url });
   }
 
@@ -56,11 +56,11 @@ export default function AudioDiagnosticPanel() {
     try {
       const res = await probeTrackAudio(r.audio_url);
       setProbes((p) => ({ ...p, [r.id]: res }));
-      // eslint-disable-next-line no-console
+       
       console.info(`[audio-diag] "${r.title}"`, { ...res, userAgent: navigator.userAgent });
       return res.playable;
     } catch (e) {
-      // eslint-disable-next-line no-console
+       
       console.warn(`[audio-diag] "${r.title}" probe threw`, e);
       return false;
     }
@@ -72,7 +72,7 @@ export default function AudioDiagnosticPanel() {
     let ok = 0;
     for (const r of rows) {
       // 순차 — 모바일 메모리/네트워크 보호
-      // eslint-disable-next-line no-await-in-loop
+       
       if (await probeOne(r)) ok++;
     }
     setRunning(false);

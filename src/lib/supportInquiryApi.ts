@@ -255,7 +255,7 @@ export async function adminSendInquiryReply(
   const rpc = data as SendReplyResult;
 
   // 2. Edge Function 호출 → 사용자 이메일 발송
-  let emailResult: { ok: boolean; sent_to?: string; error?: string } = { ok: false };
+  let emailResult: { ok: boolean; sent_to?: string; error?: string };
   try {
     const { data: efData } = await supabase.functions.invoke('notify-inquiry-reply', {
       body: { inquiry_id: inquiryId },
