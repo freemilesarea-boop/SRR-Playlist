@@ -1852,3 +1852,47 @@ export async function adminDeleteGenreGuardrail(id: string): Promise<void> {
   const { error } = await supabase.rpc('admin_delete_genre_guardrail', { p_id: id });
   if (error) throw error;
 }
+
+// ============================================
+// 0332 (X6.58) — admin decision learning
+// ============================================
+
+export type DecisionType = 'approve' | 'remove' | 'exclude_store' | 'rereview';
+
+export interface DecisionClusterRow {
+  reason_key: string;
+  reason_display: string;
+  reason_variants: string[];
+  decision_type: DecisionType;
+  store_type: string | null;
+  sample_count: number;
+  feature_means: Record<string, number>;
+  last_decision_at: string | null;
+}
+
+export interface ClusterScoreRow {
+  reason_key: string;
+  reason_display: string;
+  decision_type: DecisionType;
+  store_type: string | null;
+  similarity_pct: number;       // 0~100
+  cluster_sample_count: number;
+}
+
+export async function adminListDecisionClusters(minSamples = 3): Promise<DecisionClusterRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_decision_clusters', { p_min_samples: minSamples });
+  if (error) throw error;
+  return (data ?? []) as DecisionClusterRow[];
+}
+
+export async function adminScoreTrackClusters(trackId: string): Promise<ClusterScoreRow[]> {
+  const { data, error } = await supabase.rpc('admin_score_track_clusters', { p_track_id: trackId });
+  if (error) throw error;
+  return (data ?? []) as ClusterScoreRow[];
+}
+
+export async function refreshDecisionPatternClusters(): Promise<{ ok: boolean; clusters_built: number; source_decisions: number; refreshed_at: string }> {
+  const { data, error } = await supabase.rpc('refresh_decision_pattern_clusters');
+  if (error) throw error;
+  return data as { ok: boolean; clusters_built: number; source_decisions: number; refreshed_at: string };
+}
