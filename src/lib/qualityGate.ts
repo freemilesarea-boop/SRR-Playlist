@@ -22,7 +22,7 @@ export interface QualityThresholds {
 
 const DEFAULT_THRESHOLDS: QualityThresholds = {
   enabled: true,
-  lufs_min: -14, lufs_max: -9,
+  lufs_min: -15, lufs_max: -9,
   true_peak_max: 0.0, true_peak_reject_max: 0.3,
   block_on_clipping: true,
 };
