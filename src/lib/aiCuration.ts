@@ -1896,3 +1896,70 @@ export async function refreshDecisionPatternClusters(): Promise<{ ok: boolean; c
   if (error) throw error;
   return data as { ok: boolean; clusters_built: number; source_decisions: number; refreshed_at: string };
 }
+
+// ============================================
+// 0333 (X6.60) — track pattern predictions (auto cluster trigger)
+// ============================================
+
+export interface TrackPredictionRow {
+  track_id: string;
+  track_title: string | null;
+  track_artist: string | null;
+  release_status: string | null;
+  visibility_status: string | null;
+  predicted_decision: DecisionType;
+  predicted_reason_key: string;
+  predicted_reason_display: string | null;
+  similarity_pct: number;
+  cluster_sample_count: number | null;
+  cluster_decision_total: number | null;
+  generated_at: string;
+  actual_decision: string | null;
+  actual_reason_key: string | null;
+  validated_at: string | null;
+  prediction_correct: boolean | null;
+}
+
+export interface PredictionAccuracy {
+  predicted_decision: string;
+  total: number;
+  validated: number;
+  correct: number;
+  wrong: number;
+  avg_correct_sim: number | null;
+  avg_wrong_sim: number | null;
+}
+
+export async function adminListTrackPredictions(opts: {
+  decision?: 'remove' | 'approve' | null;
+  minSimilarity?: number;
+  onlyUnvalidated?: boolean;
+  limit?: number;
+} = {}): Promise<TrackPredictionRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_track_predictions', {
+    p_decision: opts.decision ?? null,
+    p_min_similarity: opts.minSimilarity ?? 60,
+    p_only_unvalidated: opts.onlyUnvalidated ?? false,
+    p_limit: opts.limit ?? 100,
+  });
+  if (error) throw error;
+  return (data ?? []) as TrackPredictionRow[];
+}
+
+export async function adminPredictionAccuracySummary(): Promise<{ remove?: PredictionAccuracy; approve?: PredictionAccuracy } | null> {
+  const { data, error } = await supabase.rpc('admin_prediction_accuracy_summary');
+  if (error) throw error;
+  return data as { remove?: PredictionAccuracy; approve?: PredictionAccuracy } | null;
+}
+
+export async function adminBackfillTrackPredictions(limit = 2000): Promise<{ ok: boolean; tracks_processed: number; predictions_upserted: number; completed_at: string }> {
+  const { data, error } = await supabase.rpc('admin_backfill_track_predictions', { p_limit: limit });
+  if (error) throw error;
+  return data as { ok: boolean; tracks_processed: number; predictions_upserted: number; completed_at: string };
+}
+
+export async function adminSyncPredictionActuals(): Promise<{ ok: boolean; predictions_validated: number }> {
+  const { data, error } = await supabase.rpc('admin_sync_prediction_actuals');
+  if (error) throw error;
+  return data as { ok: boolean; predictions_validated: number };
+}
