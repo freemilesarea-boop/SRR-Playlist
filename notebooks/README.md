@@ -27,9 +27,9 @@ Supabase 에 적재하는 수동 batch 파이프라인.
 ### 4. 단계별 실행
 
 ```python
-# 셀 1: 의존성 설치 (3~5분, 1회만)
-!pip install -q laion-clap==1.1.6 librosa soundfile requests
-!pip install -q torch==2.1.0 torchaudio==2.1.0
+# 셀 1: 의존성 설치 (2~3분, 1회만)
+# Colab 기본 torch + 추가 패키지만 — pin 회피로 Python 3.12 호환성 확보 (X6.56)
+!pip install -q transformers librosa soundfile requests
 ```
 
 ```python

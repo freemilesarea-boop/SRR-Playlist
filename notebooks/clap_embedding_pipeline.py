@@ -5,11 +5,14 @@
   1) `track_embeddings` (track_id, embedding 512d, model_name='laion-clap-music-v1') 적재
   2) `store_archetype_embeddings` 텍스트 prompt 기반 적재 (27개 store_key)
 
-환경: Colab (GPU 권장) — laion-clap, librosa, requests
+환경: Colab (GPU 권장) — transformers, torch, librosa, requests
 인증: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (Colab Secrets)
-호환: 0170/0183 migration RPC (admin_import_track_embeddings, admin_export_embedding_pending_tracks)
+호환: 0170/0183/0331 migration RPC
 
-X6.55 (Phase 1: 수동 batch 로 임베딩 unlock — fit_score audio_score 활성화)
+X6.55 / X6.56:
+  - X6.55: 초기 laion_clap 패키지 기반
+  - X6.56: transformers.ClapModel 로 전환 (Colab Python 3.12 호환성 개선)
+           동일 모델 가중치 (laion/larger_clap_music), 동일 512-dim 출력
 """
 
 import io
@@ -19,21 +22,20 @@ from typing import Any, Optional
 
 import requests
 
+# HuggingFace 의 laion CLAP music model — 동일 가중치, 더 표준 패키지
+HF_MODEL_ID = 'laion/larger_clap_music'
+
+# DB 에는 동일 model_name 유지 (이미 0156 schema 에 'laion-clap-music-v1' 로 정의)
 MODEL_NAME = 'laion-clap-music-v1'
 MODEL_VERSION = 'v1'
 EMBEDDING_DIM = 512
-SEGMENT_START_SEC = 30  # 30초부터
-SEGMENT_DURATION_SEC = 30  # 30초간
-SAMPLE_RATE = 48000  # laion-clap 표준 입력
+SEGMENT_START_SEC = 30
+SEGMENT_DURATION_SEC = 30
+SAMPLE_RATE = 48000  # CLAP 표준 입력
 REQUEST_TIMEOUT = 60
-BATCH_UPLOAD_SIZE = 50  # admin_import_track_embeddings 호출 당 트랙 수
+BATCH_UPLOAD_SIZE = 50
 
 
-# -----------------------------------------------------------------------------
-# 매장 텍스트 prompt (CLAP text encoder 로 임베딩 — 매장 archetype 정의)
-# -----------------------------------------------------------------------------
-# 각 store_key 에 대한 자연어 묘사. 영어가 모델 학습 데이터의 주류라 영어 prompt 우선.
-# (한국 매장 컨텍스트 단어 추가는 매장 차별화 효과 미미 — 영어 음악 묘사가 핵심)
 STORE_PROMPTS: dict[str, str] = {
     'gym': 'high energy upbeat workout music with strong driving beat, electronic dance music',
     'pilates': 'calm focused instrumental music for stretching and pilates, ambient with steady rhythm',
@@ -66,20 +68,19 @@ STORE_PROMPTS: dict[str, str] = {
 
 
 # =============================================================================
-# 1. 모델 로드 (Colab 셀 3)
+# 1. 모델 로드 (transformers ClapModel + ClapProcessor)
 # =============================================================================
 def load_clap_model():
-    """laion-clap music 모델 로드. GPU 있으면 자동 사용."""
-    import laion_clap
+    """HuggingFace transformers 의 CLAP music model 로드. GPU 자동 사용."""
     import torch
+    from transformers import ClapModel, ClapProcessor
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f'[clap] device = {device}')
-
-    model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base', device=device)
-    # music_audioset_epoch_15_esc_90.14.pt = laion-clap music 사전훈련 체크포인트
-    model.load_ckpt()  # 기본 ckpt download (~1.5GB, 1회)
-    return model
+    print(f'[clap] device = {device} / model = {HF_MODEL_ID}')
+    model = ClapModel.from_pretrained(HF_MODEL_ID).to(device)
+    model.eval()
+    processor = ClapProcessor.from_pretrained(HF_MODEL_ID)
+    return {'model': model, 'processor': processor, 'device': device}
 
 
 # =============================================================================
@@ -118,34 +119,25 @@ def import_track_embeddings(url: str, key: str, rows: list[dict], dry_run: bool 
 
 
 # =============================================================================
-# 3. 오디오 다운로드 + 디코드 (30s segment from 30s mark)
+# 3. 오디오 다운로드 + 디코드
 # =============================================================================
-def download_and_decode(audio_url: str, duration_hint: Optional[float] = None) -> Optional['np.ndarray']:
-    """
-    오디오 URL → 30초 segment (30s~60s) → 48kHz mono float32 ndarray.
-
-    duration_hint < 60s 면 segment 시작점을 0 으로 (짧은 곡 안전).
-    실패 시 None 반환 (호출자가 skip).
-    """
+def download_and_decode(audio_url: str, duration_hint: Optional[float] = None):
+    """오디오 URL → 30초 segment → 48kHz mono float32 ndarray. 실패 시 None."""
     import numpy as np
     import librosa
 
     try:
-        # offset 결정 — 짧은 곡이면 처음부터
         offset = SEGMENT_START_SEC
         if duration_hint is not None and duration_hint < SEGMENT_START_SEC + SEGMENT_DURATION_SEC:
             offset = max(0, (duration_hint - SEGMENT_DURATION_SEC) / 2)
 
-        # librosa.load 는 URL 직접 지원 안 함 → requests 로 다운로드 후 BytesIO
         r = requests.get(audio_url, timeout=REQUEST_TIMEOUT, stream=True)
         r.raise_for_status()
         buf = io.BytesIO(r.content)
 
-        # 디코드 + 리샘플 + 모노
-        y, sr = librosa.load(buf, sr=SAMPLE_RATE, mono=True, offset=offset, duration=SEGMENT_DURATION_SEC)
+        y, _sr = librosa.load(buf, sr=SAMPLE_RATE, mono=True, offset=offset, duration=SEGMENT_DURATION_SEC)
         if y.size == 0:
             return None
-        # laion-clap 표준 입력 float32, [-1, 1] range
         return y.astype(np.float32)
     except Exception as e:
         print(f'[decode] FAIL: {audio_url[:80]}... — {type(e).__name__}: {e}')
@@ -153,17 +145,22 @@ def download_and_decode(audio_url: str, duration_hint: Optional[float] = None) -
 
 
 # =============================================================================
-# 4. 임베딩 추출
+# 4. 임베딩 추출 (transformers 방식)
 # =============================================================================
-def embed_audio(model, audio_array) -> Optional[list[float]]:
-    """laion-clap 모듈로 512-dim 임베딩 추출."""
-    import numpy as np
+def embed_audio(ctx: dict, audio_array) -> Optional[list[float]]:
+    """ClapProcessor + ClapModel.get_audio_features 로 512-dim 추출."""
     import torch
 
     try:
+        inputs = ctx['processor'](
+            audios=audio_array,
+            return_tensors='pt',
+            sampling_rate=SAMPLE_RATE,
+        ).to(ctx['device'])
         with torch.no_grad():
-            emb = model.get_audio_embedding_from_data(x=np.expand_dims(audio_array, 0), use_tensor=False)
-        vec = emb[0]
+            emb = ctx['model'].get_audio_features(**inputs)
+        # emb: (1, 512) tensor
+        vec = emb[0].cpu().numpy()
         if len(vec) != EMBEDDING_DIM:
             print(f'[embed] dim mismatch: {len(vec)} != {EMBEDDING_DIM}')
             return None
@@ -173,13 +170,19 @@ def embed_audio(model, audio_array) -> Optional[list[float]]:
         return None
 
 
-def embed_text(model, prompt: str) -> Optional[list[float]]:
-    """laion-clap 텍스트 임베딩 — 매장 archetype 용."""
+def embed_text(ctx: dict, prompt: str) -> Optional[list[float]]:
+    """ClapProcessor + ClapModel.get_text_features 로 512-dim 추출."""
     import torch
+
     try:
+        inputs = ctx['processor'](
+            text=[prompt],
+            return_tensors='pt',
+            padding=True,
+        ).to(ctx['device'])
         with torch.no_grad():
-            emb = model.get_text_embedding([prompt], use_tensor=False)
-        vec = emb[0]
+            emb = ctx['model'].get_text_features(**inputs)
+        vec = emb[0].cpu().numpy()
         if len(vec) != EMBEDDING_DIM:
             return None
         return [float(v) for v in vec]
@@ -189,19 +192,12 @@ def embed_text(model, prompt: str) -> Optional[list[float]]:
 
 
 # =============================================================================
-# 5. 트랙 batch 처리 (Colab 셀 4)
+# 5. 트랙 batch 처리
 # =============================================================================
-def process_track_batch(model, url: str, key: str, limit: int = 1000) -> dict:
+def process_track_batch(ctx, url: str, key: str, limit: int = 1000) -> dict:
     """
     미적재 트랙을 batch 로 처리.
-
-    흐름:
-      1) RPC 로 pending 목록 fetch
-      2) 트랙별로: 다운로드 → 디코드 → 임베딩
-      3) BATCH_UPLOAD_SIZE 마다 import_track_embeddings 호출
-      4) 결과 집계 반환
-
-    실패한 트랙은 errors 에 기록되고 다음 트랙 계속.
+    ctx: load_clap_model() 결과 {'model', 'processor', 'device'}
     """
     pending = fetch_pending_tracks(url, key, limit)
     total = len(pending)
@@ -218,7 +214,7 @@ def process_track_batch(model, url: str, key: str, limit: int = 1000) -> dict:
     for idx, t in enumerate(pending, 1):
         track_id = t.get('track_id')
         audio_url = t.get('audio_url')
-        title = t.get('title', '')[:40]
+        title = (t.get('title') or '')[:40]
         duration = t.get('duration')
 
         if not audio_url:
@@ -234,7 +230,7 @@ def process_track_batch(model, url: str, key: str, limit: int = 1000) -> dict:
             print('decode_fail')
             continue
 
-        emb = embed_audio(model, audio)
+        emb = embed_audio(ctx, audio)
         if emb is None:
             errors.append({'track_id': track_id, 'reason': 'embed_failed'})
             failed += 1
@@ -255,13 +251,11 @@ def process_track_batch(model, url: str, key: str, limit: int = 1000) -> dict:
         eta = (total - idx) / max(rate, 0.001)
         print(f'OK  ({succeeded}/{total} · {rate:.1f}/s · ETA {eta/60:.1f}min)')
 
-        # batch upload
         if len(rows) >= BATCH_UPLOAD_SIZE:
             res = import_track_embeddings(url, key, rows, dry_run=False)
             print(f'  → uploaded {res.get("imported", 0)} (skipped {res.get("skipped", 0)})')
             rows = []
 
-    # 남은 row flush
     if rows:
         res = import_track_embeddings(url, key, rows, dry_run=False)
         print(f'  → final flush uploaded {res.get("imported", 0)}')
@@ -272,24 +266,16 @@ def process_track_batch(model, url: str, key: str, limit: int = 1000) -> dict:
 
 
 # =============================================================================
-# 6. 매장 아키타입 (텍스트 prompt 기반, Colab 셀 5)
+# 6. 매장 아키타입 (텍스트 prompt 기반)
 # =============================================================================
-def build_store_archetypes_from_text(model, url: str, key: str) -> dict:
-    """
-    STORE_PROMPTS 각각을 CLAP text encoder 로 임베딩 → store_archetype_embeddings 적재.
-
-    이유: ai_store_fit 이 비어있어 admin_build_store_archetypes (seed-track 경로) 작동 불가.
-    CLAP 은 text-audio contrastive 학습이라 text 임베딩과 audio 임베딩이 같은 공간 →
-    text prompt 로 archetype 정의 가능.
-
-    호출 RPC: admin_import_store_archetypes (X6.55 / migration 0331). pgvector 직접 cast 처리.
-    """
+def build_store_archetypes_from_text(ctx, url: str, key: str) -> dict:
+    """STORE_PROMPTS 27개 → CLAP text embedding → 0331 RPC 로 적재."""
     rows: list[dict] = []
     embed_failed: list[dict] = []
 
     for store_key, prompt in STORE_PROMPTS.items():
         print(f'[store] {store_key} ← "{prompt[:50]}..."', end=' ... ')
-        emb = embed_text(model, prompt)
+        emb = embed_text(ctx, prompt)
         if emb is None:
             embed_failed.append({'store_key': store_key, 'reason': 'embed_failed'})
             print('FAIL')
@@ -307,7 +293,6 @@ def build_store_archetypes_from_text(model, url: str, key: str) -> dict:
     if not rows:
         return {'ok': False, 'built': 0, 'failed': embed_failed, 'reason': 'no embeddings'}
 
-    # 0331 RPC: admin_import_store_archetypes (vector cast + upsert 처리)
     res = _rpc(url, key, 'admin_import_store_archetypes', {'p_rows': rows})
     res.setdefault('failed', [])
     res['failed'].extend(embed_failed)
@@ -316,7 +301,7 @@ def build_store_archetypes_from_text(model, url: str, key: str) -> dict:
 
 
 # =============================================================================
-# 7. 사용 예시 (Colab 또는 local 실행)
+# 7. 로컬 실행용
 # =============================================================================
 if __name__ == '__main__':
     SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
@@ -327,18 +312,18 @@ if __name__ == '__main__':
     print('=' * 60)
     print('Step 1: load CLAP model (1-2 min)')
     print('=' * 60)
-    clap = load_clap_model()
+    ctx = load_clap_model()
 
     print('\n' + '=' * 60)
     print('Step 2: process tracks (limit=1000)')
     print('=' * 60)
-    result = process_track_batch(clap, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, limit=1000)
+    result = process_track_batch(ctx, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, limit=1000)
     print(result)
 
     print('\n' + '=' * 60)
     print('Step 3: build store archetypes from text prompts')
     print('=' * 60)
-    result = build_store_archetypes_from_text(clap, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    result = build_store_archetypes_from_text(ctx, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     print(result)
 
     print('\n' + '=' * 60)
