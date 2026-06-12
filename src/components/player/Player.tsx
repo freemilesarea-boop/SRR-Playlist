@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAuthStore } from '@/store/authStore';
+import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -126,6 +127,7 @@ export default function Player() {
   } = usePlayerStore();
 
   const { crossfadeEnabled, crossfadeSeconds, autoplayRecommendations } = usePlaybackSettingsStore();
+  const businessMode = useBusinessStore((s) => s.businessMode);
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
@@ -329,7 +331,8 @@ export default function Player() {
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
   // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
-  const networkRetriedRef = useRef<Set<string>>(new Set());
+  // X6.62: 매장모드 신뢰성 — Set → Map (트랙별 retry 횟수). 매장 3회 / 일반 1회.
+  const networkRetriedRef = useRef<Map<string, number>>(new Map());
   function clearMetaTimer() {
     if (metaTimerRef.current !== null) { window.clearTimeout(metaTimerRef.current); metaTimerRef.current = null; }
   }
@@ -1207,27 +1210,38 @@ export default function Player() {
       });
     }
 
-    // NETWORK(코드2): 스트리밍 중간 끊김 → 곡당 1회만 자동 재시도(load + 위치 복원 + play).
-    // 자동 다음곡/토스트 없이 조용히 복구 시도. 재시도 후에도 실패하면 아래 정지 로직으로.
-    if (err?.code === 2 && current && playing && !networkRetriedRef.current.has(current.id)) {
-      networkRetriedRef.current.add(current.id);
+    // NETWORK(코드2): 스트리밍 중간 끊김 → 자동 재시도.
+    // X6.62: 매장모드 3회 (지수 백오프), 일반 사용자 1회.
+    // 자동 다음곡/토스트 없이 조용히 복구 시도. 한도 후에도 실패하면 아래 정지 로직.
+    const maxRetries = businessMode ? 3 : 1;
+    const retryCount = networkRetriedRef.current.get(current?.id ?? '') ?? 0;
+    if (err?.code === 2 && current && playing && retryCount < maxRetries) {
+      networkRetriedRef.current.set(current.id, retryCount + 1);
       const resumeAt = target.currentTime || currentTime || 0;
-       
-      console.warn('[audio] NETWORK 오류 — 1회 자동 재시도', { id: current.id, title: current.title, resumeAt });
-      try {
-        target.load();
-        const onceCanPlay = () => {
-          target.removeEventListener('canplay', onceCanPlay);
-          try {
-            if (resumeAt > 0 && Number.isFinite(target.duration) && resumeAt < target.duration) {
-              target.currentTime = resumeAt;
-            }
-          } catch { /* noop */ }
-          const pr = target.play();
-          if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 onError 가 처리 */ });
-        };
-        target.addEventListener('canplay', onceCanPlay, { once: true });
-      } catch { /* noop */ }
+      const backoffMs = retryCount === 0 ? 0 : 1000 * Math.pow(2, retryCount - 1); // 0/1000/2000ms
+
+      console.warn('[audio] NETWORK 오류 — 자동 재시도', { id: current.id, title: current.title, resumeAt, retry: retryCount + 1, max: maxRetries, backoffMs });
+      const doRetry = () => {
+        try {
+          target.load();
+          const onceCanPlay = () => {
+            target.removeEventListener('canplay', onceCanPlay);
+            try {
+              if (resumeAt > 0 && Number.isFinite(target.duration) && resumeAt < target.duration) {
+                target.currentTime = resumeAt;
+              }
+            } catch { /* noop */ }
+            const pr = target.play();
+            if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 onError 가 처리 */ });
+          };
+          target.addEventListener('canplay', onceCanPlay, { once: true });
+        } catch { /* noop */ }
+      };
+      if (backoffMs > 0) {
+        window.setTimeout(doRetry, backoffMs);
+      } else {
+        doRetry();
+      }
       return; // 정지/토스트 없이 재시도
     }
 
@@ -1235,6 +1249,23 @@ export default function Player() {
     const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
     if (current && isPermanent) {
       sessionFailedTrackIds.add(current.id);
+    }
+
+    // X6.62: 매장모드 + 영구 오류 + 큐가 1곡 초과 시 자동 다음곡 (무인 운영 무음 방지).
+    // 매장 사업자는 손가락 댈 수 없는 환경 — 곡 1개 손상되면 자동 skip 해서 음악 유지.
+    // 일반 사용자는 기존 동작 (정지 + 에러 표시) 유지.
+    if (current && isPermanent && playing && businessMode && queue.length > 1) {
+
+      console.warn('[audio] 매장모드 영구 오류 — 자동 다음곡 시도 (3s 후)', { id: current.id });
+      window.setTimeout(() => {
+        // 여전히 같은 곡이 멈춰있고 매장모드면 next() 호출
+        const st = usePlayerStore.getState();
+        if (st.playing === false && st.queue[st.index]?.id === current.id) {
+          st.next();
+          // playing 다시 true 로 (next() 가 다음 트랙 set 후 자동 play 호출됨)
+          usePlayerStore.setState({ playing: true });
+        }
+      }, 3000);
     }
 
     // 재생 에러 = "곡 종료"가 아니다 → 다음 곡으로 자동 이동하지 않고 현재 곡에서 정지.
