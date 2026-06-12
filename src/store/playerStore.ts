@@ -146,12 +146,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ currentTime: 0, pendingSeekSec: null });
       return;
     }
-    // 0091-fix — 큐 1곡 + repeat='all' 무한 루프 가드:
-    // 같은 곡으로 자동 점프하면 raw stream_events 가 무한 누적됨.
-    // (24h cap 으로 eligible 은 보호되지만 raw 카운트는 보호 안 됨)
-    // → 자동 정지 (사용자가 직접 재생 클릭하면 다시 시작)
+    // 0091-fix → X6.62: 큐 1곡 + repeat='all' 은 자동 정지하지 않고 loopback.
+    // 기존: stream_events 무한 누적 우려로 자동 정지. → 매장 야간 1곡 plr 자동 무음 문제.
+    // 현재: X6.47 30s dedup + X6.46 24h cap 으로 raw count 도 보호됨.
+    // queue=1 일 때 repeat='all' 은 repeat='one' 과 동등하게 트랙 재시작.
     if (queue.length <= 1) {
-      set({ playing: false, currentTime: 0, pendingSeekSec: null });
+      if (repeat === 'all') {
+        set({ currentTime: 0, pendingSeekSec: null, playing: true });
+      } else {
+        set({ playing: false, currentTime: 0, pendingSeekSec: null });
+      }
       return;
     }
     if (shuffle && shuffleOrder.length === queue.length) {
