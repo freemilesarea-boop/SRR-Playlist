@@ -733,6 +733,11 @@ export default function Player() {
         // 스왑 완료
         activeAudio.pause();
         activeAudio.currentTime = 0;
+        // X6.61 — 크로스페이드 후 jumpTo 가 current.id 를 nextTrack 으로 바꾸면
+        // /* track sync */ useEffect 가 재진입해 audio.src 를 재설정 → 정상 재생 중인
+        // nextAudio 가 reload 되어 무음 발생 (매장모드 다음곡 무음 버그).
+        // jumpTo 이전에 lastTrackIdRef 를 미리 설정해 trackChanged=false 로 만든다.
+        lastTrackIdRef.current = nextTrack.id;
         // active 교체
         const becomeActive: 0 | 1 = activeIdx === 0 ? 1 : 0;
         setActiveIdx(becomeActive);
