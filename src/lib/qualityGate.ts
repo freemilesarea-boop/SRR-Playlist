@@ -53,19 +53,24 @@ export async function fetchQualityThresholds(): Promise<QualityThresholds> {
 }
 
 /** 3단계 정책 검사 — 측정값을 기준과 비교해 pass/warning/reject 결정.
- *  - REJECT: analysis_failed / clipping(설정 시) / TP > true_peak_reject_max
+ *  X6.61 fix — 서버 (compute_quality_grade) 와 정책 sync:
+ *    서버: LUFS 가 [lufs_min, lufs_max] 밖이면 reject.
+ *    클라이언트: 이전엔 warning 처리 → 업로드 통과 → 서버 reject 저장 → "마스터링 안된 음원 유통 성공"
+ *  - REJECT: analysis_failed / clipping(설정 시) / TP > true_peak_reject_max /
+ *            LUFS [lufs_min..lufs_max] 밖 (서버 정책)
  *  - PASS:   LUFS lufs_min..lufs_max AND TP <= true_peak_max
- *  - WARNING: 그 외 (업로드 허용)
+ *  - WARNING: PASS 밴드 안인데 TP 가 true_peak_max~true_peak_reject_max 사이
  */
 export function evaluateQuality(r: LoudnessResult, th: QualityThresholds): { grade: QualityGrade; reasons: string[] } {
   if (r.integrated_lufs == null) return { grade: 'reject', reasons: ['analysis_failed'] };
   if (th.block_on_clipping && r.clipping_detected) return { grade: 'reject', reasons: ['clipping'] };
   if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_reject_max) return { grade: 'reject', reasons: ['true_peak_reject'] };
+  // X6.61 — LUFS 범위 밖은 REJECT (서버와 동일 정책)
+  if (r.integrated_lufs < th.lufs_min) return { grade: 'reject', reasons: ['low_loudness'] };
+  if (r.integrated_lufs > th.lufs_max) return { grade: 'reject', reasons: ['high_loudness'] };
 
   const reasons: string[] = [];
   if (r.true_peak_dbtp != null && r.true_peak_dbtp > th.true_peak_max) reasons.push('true_peak');
-  if (r.integrated_lufs < th.lufs_min) reasons.push('low_loudness');
-  else if (r.integrated_lufs > th.lufs_max) reasons.push('high_loudness');
 
   return reasons.length === 0 ? { grade: 'pass', reasons: [] } : { grade: 'warning', reasons };
 }
