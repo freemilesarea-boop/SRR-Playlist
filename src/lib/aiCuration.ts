@@ -320,7 +320,8 @@ export interface RegressionWeightSuggestion {
 export interface WeightRegressionRow {
   id: string;
   computed_at: string;
-  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  // X6.76 — 'expired' added (auto-marked after 7d no review by cron_expire_stale_weight_suggestions)
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'expired';
   sample_size: number;
   suggestion: {
     fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
@@ -367,7 +368,7 @@ export async function adminDecideWeightRegression(
 }
 
 export async function adminListWeightRegressions(
-  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'all' = 'pending',
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'expired' | 'all' = 'pending',
   limit = 20,
 ): Promise<WeightRegressionRow[]> {
   const { data, error } = await supabase.rpc('admin_list_weight_regressions', { p_status: status, p_limit: limit });

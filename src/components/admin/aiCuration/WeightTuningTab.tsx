@@ -488,6 +488,7 @@ export default function WeightTuningTab() {
                     <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
                       r.status === 'approved' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                       : r.status === 'rejected' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                      : r.status === 'expired' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                       : 'bg-ink/10 text-ink-dim'
                     }`}>{r.status}</span>
                     N={r.sample_size}
