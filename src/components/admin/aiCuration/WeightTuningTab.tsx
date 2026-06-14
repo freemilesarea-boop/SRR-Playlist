@@ -27,6 +27,9 @@ import {
   adminListWeightOverrides,
   adminDeleteWeightOverride,
   adminListWeightRegressionRuns,
+  adminListFitRecomputeJobs,
+  adminListWeightEffects,
+  adminTakeWeightEffectSnapshot,
   type AiScoringConfig,
   type WeightDiagnostics,
   type WeightSuggestion,
@@ -34,6 +37,8 @@ import {
   type WeightRegressionRow,
   type WeightOverrideRow,
   type WeightRegressionRunRow,
+  type FitRecomputeJobRow,
+  type WeightEffectRow,
 } from '@/lib/aiCuration';
 import { toast } from '@/store/toastStore';
 
@@ -79,6 +84,8 @@ export default function WeightTuningTab() {
   const [recentRegressions, setRecentRegressions] = useState<WeightRegressionRow[]>([]);
   const [overrides, setOverrides] = useState<WeightOverrideRow[]>([]);
   const [cronRuns, setCronRuns] = useState<WeightRegressionRunRow[]>([]);
+  const [recomputeJobs, setRecomputeJobs] = useState<FitRecomputeJobRow[]>([]);
+  const [effects, setEffects] = useState<WeightEffectRow[]>([]);
   const [draft, setDraft] = useState<Partial<AiScoringConfig>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,7 +97,7 @@ export default function WeightTuningTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, d, s, h, pending, recent, ovrs, runs] = await Promise.all([
+      const [c, d, s, h, pending, recent, ovrs, runs, jobs, effs] = await Promise.all([
         getAiScoringConfig(),
         adminWeightDiagnostics(30),
         adminSuggestWeightAdjustment(30),
@@ -99,12 +106,16 @@ export default function WeightTuningTab() {
         adminListWeightRegressions('all', 20),
         adminListWeightOverrides(),
         adminListWeightRegressionRuns(10),
+        adminListFitRecomputeJobs(20),
+        adminListWeightEffects(null, 30),
       ]);
       setConfig(c); setDiag(d); setSuggest(s); setHistory(h);
       setPendingRegressions(pending);
       setRecentRegressions(recent);
       setOverrides(ovrs);
       setCronRuns(runs);
+      setRecomputeJobs(jobs);
+      setEffects(effs);
       setDraft({});
     } catch (e) {
       toast.error(`불러오기 실패: ${(e as Error).message}`);
@@ -135,6 +146,20 @@ export default function WeightTuningTab() {
       toast.error(`회귀 실행 실패: ${(e as Error).message}`);
     } finally {
       setRegressing(false);
+    }
+  }
+
+  async function takeAfterSnapshot(suggestionId: string) {
+    if (!confirm('지금 \'after\' snapshot 을 측정할까요? (자동 측정은 적용 후 7일 경과 시)')) return;
+    setBusy(true);
+    try {
+      await adminTakeWeightEffectSnapshot(suggestionId, 'after');
+      toast.success('after snapshot 측정 완료');
+      await load();
+    } catch (e) {
+      toast.error(`측정 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -609,6 +634,142 @@ export default function WeightTuningTab() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {/* 3d. fit_score 자동 재계산 큐 (Phase 4d) */}
+      <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <header className="mb-2 flex items-center gap-2">
+          <RefreshCw size={14} className="text-ink-mute" />
+          <h4 className="text-sm font-bold">fit_score 자동 재계산 큐 ({recomputeJobs.length}건)</h4>
+          <span className="ml-auto rounded-full bg-ink/10 px-2 py-0.5 text-[10px] text-ink-dim">
+            pg_cron 2분 간격 처리 / 5000 pair/배치
+          </span>
+        </header>
+        <p className="mb-2 text-[11px] text-ink-mute">
+          가중치 변경(base config 또는 segment override) 시 자동으로 큐에 적재 → cron 이 batch 처리.
+          batch 한도 초과 시 다음 cron 틱에서 이어서 계산 (pending 으로 복귀).
+        </p>
+        {recomputeJobs.length === 0 && <p className="text-[11px] text-ink-dim">재계산 작업 없음</p>}
+        {recomputeJobs.length > 0 && (
+          <ul className="space-y-1 text-[11px]">
+            {recomputeJobs.map((j) => {
+              const pct = j.total_count && j.total_count > 0
+                ? Math.round((j.processed_count ?? 0) * 100 / j.total_count) : 0;
+              return (
+              <li key={j.id} className="rounded-lg bg-bg-soft p-2 ring-1 ring-line/5">
+                <div className="flex items-baseline justify-between">
+                  <span>
+                    <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
+                      j.status === 'done' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : j.status === 'running' ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+                      : j.status === 'error' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    }`}>{j.status}</span>
+                    <span className="font-mono text-ink">{j.scope}</span>
+                    <span className="ml-1 text-ink-mute">[{j.trigger_source ?? '?'}]</span>
+                    {j.total_count != null && (
+                      <span className="ml-1 font-mono text-[10px] text-ink-dim">
+                        {j.processed_count ?? 0}/{j.total_count} ({pct}%)
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-ink-dim">
+                    {new Date(j.enqueued_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                  </span>
+                </div>
+                {j.error && <p className="mt-0.5 font-mono text-[10px] text-rose-700 dark:text-rose-300">{j.error}</p>}
+              </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* 3e. 가중치 변경 효과 대시보드 (Phase 4d) */}
+      <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <header className="mb-2 flex items-center gap-2">
+          <TrendingUp size={14} className="text-accent" />
+          <h4 className="text-sm font-bold">가중치 변경 효과 (before/after, {effects.length}건)</h4>
+          <span className="ml-auto rounded-full bg-ink/10 px-2 py-0.5 text-[10px] text-ink-dim">
+            after 자동: 적용 7일 후 daily cron
+          </span>
+        </header>
+        <p className="mb-2 text-[11px] text-ink-mute">
+          승인 시 before snapshot 자동 측정 → 적용 7일 후 after snapshot 으로 비교.
+          Δ completion ↑ 이면 가중치 변경이 사용자 만족 향상으로 이어진 신호.
+        </p>
+        {effects.length === 0 && <p className="text-[11px] text-ink-dim">측정 이력 없음 — 회귀 승인 시 자동 시작</p>}
+        {effects.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-left text-ink-mute">
+                  <th className="pb-1">segment</th>
+                  <th className="pb-1 text-right">avg fit</th>
+                  <th className="pb-1 text-right">fit≥70%</th>
+                  <th className="pb-1 text-right">avg compl.</th>
+                  <th className="pb-1 text-right">avg skip</th>
+                  <th className="pb-1 text-right">N</th>
+                  <th className="pb-1"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {effects.map((e) => {
+                  const segLabel = (!e.store_type && !e.daypart) ? 'global'
+                    : `${e.store_type ?? '*'}${e.daypart ? '/' + e.daypart : ''}`;
+                  const hasAfter = e.after_taken_at !== null;
+                  return (
+                    <tr key={e.suggestion_id} className="border-t border-line/5">
+                      <td className="py-1 text-ink">{segLabel}</td>
+                      <td className="py-1 text-right font-mono">
+                        {e.before_avg_fit?.toFixed(1) ?? '-'} → {e.after_avg_fit?.toFixed(1) ?? '?'}
+                        {hasAfter && (
+                          <span className={`ml-1 text-[10px] ${(e.delta_fit ?? 0) > 0 ? 'text-emerald-700 dark:text-emerald-300' : (e.delta_fit ?? 0) < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-ink-dim'}`}>
+                            ({(e.delta_fit ?? 0) >= 0 ? '+' : ''}{e.delta_fit?.toFixed(1)})
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 text-right font-mono">
+                        {e.before_pct_high?.toFixed(1) ?? '-'}% → {e.after_pct_high?.toFixed(1) ?? '?'}%
+                      </td>
+                      <td className="py-1 text-right font-mono">
+                        {((e.before_avg_completion ?? 0) * 100).toFixed(1)}% → {hasAfter ? ((e.after_avg_completion ?? 0) * 100).toFixed(1) + '%' : '?'}
+                        {hasAfter && (
+                          <span className={`ml-1 text-[10px] ${(e.delta_completion ?? 0) > 0 ? 'text-emerald-700 dark:text-emerald-300' : (e.delta_completion ?? 0) < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-ink-dim'}`}>
+                            ({(e.delta_completion ?? 0) >= 0 ? '+' : ''}{((e.delta_completion ?? 0) * 100).toFixed(2)}%p)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 text-right font-mono">
+                        {((e.before_avg_skip ?? 0) * 100).toFixed(1)}% → {hasAfter ? ((e.after_avg_skip ?? 0) * 100).toFixed(1) + '%' : '?'}
+                        {hasAfter && (
+                          <span className={`ml-1 text-[10px] ${(e.delta_skip ?? 0) < 0 ? 'text-emerald-700 dark:text-emerald-300' : (e.delta_skip ?? 0) > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-ink-dim'}`}>
+                            ({(e.delta_skip ?? 0) >= 0 ? '+' : ''}{((e.delta_skip ?? 0) * 100).toFixed(2)}%p)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 text-right font-mono text-ink-mute">
+                        {e.before_sample ?? '-'} / {e.after_sample ?? '?'}
+                      </td>
+                      <td className="py-1 text-right">
+                        {!hasAfter && (
+                          <button
+                            onClick={() => void takeAfterSnapshot(e.suggestion_id)}
+                            disabled={busy}
+                            title="지금 after snapshot 측정"
+                            className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-40"
+                          >
+                            측정
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

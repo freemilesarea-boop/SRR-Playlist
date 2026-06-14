@@ -420,6 +420,72 @@ export async function adminListWeightRegressionRuns(limit = 20): Promise<WeightR
   return (data ?? []) as WeightRegressionRunRow[];
 }
 
+// ============================================
+// X6.71 / Phase 4d — fit_score 자동 recompute 큐 + segment 효과 측정
+// ============================================
+export interface FitRecomputeJobRow {
+  id: string;
+  scope: string;
+  store_type: string | null;
+  daypart: string | null;
+  status: 'pending' | 'running' | 'done' | 'error';
+  enqueued_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  processed_count: number | null;
+  total_count: number | null;
+  trigger_source: string | null;
+  error: string | null;
+}
+
+export interface WeightEffectRow {
+  suggestion_id: string;
+  store_type: string | null;
+  daypart: string | null;
+  before_avg_fit: number | null;
+  after_avg_fit: number | null;
+  delta_fit: number | null;
+  before_pct_high: number | null;
+  after_pct_high: number | null;
+  delta_pct_high: number | null;
+  before_avg_completion: number | null;
+  after_avg_completion: number | null;
+  delta_completion: number | null;
+  before_avg_skip: number | null;
+  after_avg_skip: number | null;
+  delta_skip: number | null;
+  before_sample: number | null;
+  after_sample: number | null;
+  before_taken_at: string | null;
+  after_taken_at: string | null;
+  applied_at: string | null;
+}
+
+export async function adminListFitRecomputeJobs(limit = 30): Promise<FitRecomputeJobRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_fit_recompute_jobs', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as FitRecomputeJobRow[];
+}
+
+export async function adminListWeightEffects(suggestionId: string | null = null, limit = 30): Promise<WeightEffectRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_weight_effects', {
+    p_suggestion_id: suggestionId, p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as WeightEffectRow[];
+}
+
+export async function adminTakeWeightEffectSnapshot(
+  suggestionId: string,
+  type: 'before' | 'after' = 'after',
+): Promise<{ ok: boolean; suggestion_id: string; type: string }> {
+  const { data, error } = await supabase.rpc('admin_take_weight_effect_snapshot', {
+    p_suggestion_id: suggestionId, p_snapshot_type: type,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; suggestion_id: string; type: string };
+}
+
 export interface PlayEventInput {
   trackId: string;
   playlistId?: string | null;
