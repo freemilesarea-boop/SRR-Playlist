@@ -27,6 +27,7 @@ import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
 import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/analytics';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
+import { captureBusinessError } from '@/lib/sentry';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -648,6 +649,15 @@ export default function Player() {
               id: trackId, title: current.title, src: a?.currentSrc, readyState: a?.readyState, networkState: a?.networkState,
             });
             usePlaybackHealthStore.getState().reportPlaybackError('META_TIMEOUT');
+            // X6.67 — 매장 무인환경에서는 무음 (사용자 보이지 않음) → Sentry alert.
+            if (businessMode) {
+              void captureBusinessError(new Error('META_TIMEOUT'), 'player.meta_timeout', {
+                trackId, title: current.title,
+                audioUrl: current.audio_url,
+                readyState: a?.readyState, networkState: a?.networkState,
+                queueLength: usePlayerStore.getState().queue.length,
+              });
+            }
             setErrored(true);
             pause();
           }
@@ -1349,6 +1359,19 @@ export default function Player() {
       return; // 정지/토스트 없이 재시도
     }
 
+    // X6.67 — NETWORK 재시도 한도 초과 (code=2 인데 retry < max 분기에 안 들어옴 = 모두 소진).
+    // 매장 무인환경에서 한 트랙이 maxRetries 만큼 실패 = 진짜 장애. Sentry alert.
+    if (err?.code === 2 && businessMode && current && retryCount >= maxRetries) {
+      void captureBusinessError(new Error('NETWORK_RETRY_EXHAUSTED'), 'player.network_retry_exhausted', {
+        trackId: current.id, title: current.title,
+        audioUrl: current.audio_url,
+        retries: retryCount, max: maxRetries,
+        readyState: target.readyState, networkState: target.networkState,
+        online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+        queueLength: queue.length,
+      });
+    }
+
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
     if (current && isPermanent) {
@@ -1361,6 +1384,13 @@ export default function Player() {
     if (current && isPermanent && playing && businessMode && queue.length > 1) {
 
       console.warn('[audio] 매장모드 영구 오류 — 자동 다음곡 시도 (3s 후)', { id: current.id });
+      // X6.67 — 매장 자동 스킵된 트랙 = 검수자/아티스트가 인지 못함. Sentry 로 운영 알림.
+      void captureBusinessError(new Error('PERMANENT_AUDIO_ERROR_AUTO_SKIPPED'), 'player.permanent_error_business', {
+        trackId: current.id, title: current.title,
+        audioUrl: current.audio_url,
+        codeName, code: err?.code ?? null,
+        queueLength: queue.length,
+      });
       window.setTimeout(() => {
         // 여전히 같은 곡이 멈춰있고 매장모드면 next() 호출
         const st = usePlayerStore.getState();

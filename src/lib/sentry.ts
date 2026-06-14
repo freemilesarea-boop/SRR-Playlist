@@ -113,3 +113,49 @@ export async function captureError(err: unknown, context?: Record<string, unknow
     // noop
   }
 }
+
+/**
+ * X6.67 — 매장 무인 운영 중 발생한 critical 오류 capture.
+ *
+ * 일반 captureError 와의 차이:
+ *   - tag: business_mode=true, alert_priority=high → Sentry alert rule 에서 1순위로 필터
+ *   - fingerprint: scope 단위 묶음 → 같은 매장에서 반복되는 동일 오류는 1 issue 로 그룹화
+ *   - level: 'error' (자동)
+ *
+ * 사용 예 (Player.tsx 등 매장 핵심 경로):
+ *   captureBusinessError(new Error('NETWORK_RETRY_EXHAUSTED'), 'player.network_retry', { trackId, retries: 3 })
+ *
+ * 운영자 alert 설정 (Sentry UI):
+ *   - Project Alerts → Create Alert
+ *   - Trigger: tag:business_mode=true AND tag:alert_priority=high
+ *   - Action: Email / Slack / Webhook (매장 운영팀 채널)
+ *   docs/SENTRY_ALERTS.md 참고.
+ */
+export async function captureBusinessError(
+  err: unknown,
+  scope: string,
+  context?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
+    if (!dsn || !import.meta.env.PROD) return;
+    const Sentry = await import('@sentry/react');
+    Sentry.withScope((s) => {
+      s.setTag('business_mode', 'true');
+      s.setTag('alert_priority', 'high');
+      s.setTag('scope', scope);
+      // 같은 scope+errorName 묶음으로 그룹화 (한 매장 반복 오류 = 1 issue)
+      const errName = err instanceof Error ? err.name + ':' + (err.message ?? '') : String(err);
+      s.setFingerprint(['business', scope, errName.slice(0, 80)]);
+      s.setLevel('error');
+      if (context) s.setExtras(deepMask(context));
+      if (err instanceof Error) {
+        Sentry.captureException(err);
+      } else {
+        Sentry.captureMessage(String(err), 'error');
+      }
+    });
+  } catch {
+    // noop
+  }
+}
