@@ -339,6 +339,21 @@ export async function adminComputeRegressionWeights(windowDays = 30): Promise<Re
   return data as RegressionWeightSuggestion;
 }
 
+// X6.70 — segment 별 회귀 (store_type/daypart null = global)
+export async function adminComputeRegressionWeightsSegmented(
+  windowDays = 30,
+  storeType: string | null = null,
+  daypart: string | null = null,
+): Promise<RegressionWeightSuggestion> {
+  const { data, error } = await supabase.rpc('admin_compute_regression_weights', {
+    p_window_days: windowDays,
+    p_store_type: storeType,
+    p_daypart: daypart,
+  });
+  if (error) throw error;
+  return data as RegressionWeightSuggestion;
+}
+
 export async function adminDecideWeightRegression(
   id: string,
   approve: boolean,
@@ -358,6 +373,51 @@ export async function adminListWeightRegressions(
   const { data, error } = await supabase.rpc('admin_list_weight_regressions', { p_status: status, p_limit: limit });
   if (error) throw error;
   return (data ?? []) as WeightRegressionRow[];
+}
+
+// ============================================
+// X6.70 / Phase 4c — segment overrides + cron 실행 이력
+// ============================================
+export interface WeightOverrideRow {
+  id: string;
+  store_type: string | null;
+  daypart: string | null;
+  fit_audio_w: number;
+  fit_meta_w: number;
+  fit_behavior_w: number;
+  fit_penalty_w: number;
+  source: string;
+  source_suggestion_id: string | null;
+  updated_at: string;
+  updated_by: string | null;
+  updated_by_name: string | null;
+}
+
+export interface WeightRegressionRunRow {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  triggered_by: string;
+  result: { ok: boolean; total_segments: number; queued: number; skipped: number; segments: unknown[] } | null;
+  error: string | null;
+}
+
+export async function adminListWeightOverrides(): Promise<WeightOverrideRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_weight_overrides');
+  if (error) throw error;
+  return (data ?? []) as WeightOverrideRow[];
+}
+
+export async function adminDeleteWeightOverride(id: string): Promise<{ ok: boolean; deleted: boolean }> {
+  const { data, error } = await supabase.rpc('admin_delete_weight_override', { p_id: id });
+  if (error) throw error;
+  return data as { ok: boolean; deleted: boolean };
+}
+
+export async function adminListWeightRegressionRuns(limit = 20): Promise<WeightRegressionRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_weight_regression_runs', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as WeightRegressionRunRow[];
 }
 
 export interface PlayEventInput {

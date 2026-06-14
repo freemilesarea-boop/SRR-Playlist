@@ -14,23 +14,53 @@
  * 정책: 완전 자동 적용 없음. admin 이 항상 최종 결정.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Sparkles, History, AlertTriangle, TrendingUp, TrendingDown, FlaskConical, Check, X as XIcon } from 'lucide-react';
+import { RefreshCw, Sparkles, History, AlertTriangle, TrendingUp, TrendingDown, FlaskConical, Check, X as XIcon, Store, Clock, Trash2, CalendarClock } from 'lucide-react';
 import {
   getAiScoringConfig,
   updateAiScoringConfig,
   adminWeightDiagnostics,
   adminSuggestWeightAdjustment,
   adminListWeightHistory,
-  adminComputeRegressionWeights,
+  adminComputeRegressionWeightsSegmented,
   adminListWeightRegressions,
   adminDecideWeightRegression,
+  adminListWeightOverrides,
+  adminDeleteWeightOverride,
+  adminListWeightRegressionRuns,
   type AiScoringConfig,
   type WeightDiagnostics,
   type WeightSuggestion,
   type WeightHistoryRow,
   type WeightRegressionRow,
+  type WeightOverrideRow,
+  type WeightRegressionRunRow,
 } from '@/lib/aiCuration';
 import { toast } from '@/store/toastStore';
+
+const STORE_TYPES = [
+  { value: '', label: '전체 매장' },
+  { value: 'cafe', label: '카페' },
+  { value: 'restaurant', label: '레스토랑' },
+  { value: 'hotel', label: '호텔' },
+  { value: 'salon', label: '살롱/뷰티' },
+  { value: 'fitness', label: '피트니스' },
+  { value: 'hospital', label: '병원' },
+  { value: 'office', label: '오피스' },
+  { value: 'boutique', label: '편집샵' },
+  { value: 'winebar', label: '와인바' },
+  { value: 'bakery', label: '베이커리' },
+  { value: 'study_cafe', label: '스터디 카페' },
+  { value: 'kids_zone', label: '키즈존' },
+];
+
+const DAYPARTS = [
+  { value: '', label: '전체 시간대' },
+  { value: 'morning', label: '아침 (morning)' },
+  { value: 'lunch', label: '점심 (lunch)' },
+  { value: 'afternoon', label: '오후 (afternoon)' },
+  { value: 'evening', label: '저녁 (evening)' },
+  { value: 'late', label: '심야 (late)' },
+];
 
 const WEIGHT_KEYS = ['fit_audio_w', 'fit_meta_w', 'fit_behavior_w', 'fit_penalty_w'] as const;
 const WEIGHT_LABEL: Record<typeof WEIGHT_KEYS[number], string> = {
@@ -47,25 +77,34 @@ export default function WeightTuningTab() {
   const [history, setHistory] = useState<WeightHistoryRow[]>([]);
   const [pendingRegressions, setPendingRegressions] = useState<WeightRegressionRow[]>([]);
   const [recentRegressions, setRecentRegressions] = useState<WeightRegressionRow[]>([]);
+  const [overrides, setOverrides] = useState<WeightOverrideRow[]>([]);
+  const [cronRuns, setCronRuns] = useState<WeightRegressionRunRow[]>([]);
   const [draft, setDraft] = useState<Partial<AiScoringConfig>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [regressing, setRegressing] = useState(false);
+  // X6.70 — segment selector
+  const [segStoreType, setSegStoreType] = useState('');
+  const [segDaypart, setSegDaypart] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, d, s, h, pending, recent] = await Promise.all([
+      const [c, d, s, h, pending, recent, ovrs, runs] = await Promise.all([
         getAiScoringConfig(),
         adminWeightDiagnostics(30),
         adminSuggestWeightAdjustment(30),
         adminListWeightHistory(20),
-        adminListWeightRegressions('pending', 5),
-        adminListWeightRegressions('all', 10),
+        adminListWeightRegressions('pending', 20),
+        adminListWeightRegressions('all', 20),
+        adminListWeightOverrides(),
+        adminListWeightRegressionRuns(10),
       ]);
       setConfig(c); setDiag(d); setSuggest(s); setHistory(h);
       setPendingRegressions(pending);
       setRecentRegressions(recent);
+      setOverrides(ovrs);
+      setCronRuns(runs);
       setDraft({});
     } catch (e) {
       toast.error(`불러오기 실패: ${(e as Error).message}`);
@@ -78,17 +117,38 @@ export default function WeightTuningTab() {
   async function runRegression() {
     setRegressing(true);
     try {
-      const res = await adminComputeRegressionWeights(30);
+      const res = await adminComputeRegressionWeightsSegmented(
+        30,
+        segStoreType || null,
+        segDaypart || null,
+      );
+      const segLabel = (segStoreType || segDaypart)
+        ? ` [${segStoreType || '*'}/${segDaypart || '*'}]`
+        : ' [global]';
       if (res.queued) {
-        toast.success(`회귀 큐 적재됨 (sample N=${res.sample_size})`);
+        toast.success(`회귀 큐 적재됨${segLabel} (sample N=${res.sample_size})`);
       } else {
-        toast.info(`큐 안됨: ${res.reason ?? '미상'} (sample=${res.sample_size ?? 0})`);
+        toast.info(`큐 안됨${segLabel}: ${res.reason ?? '미상'} (sample=${res.sample_size ?? 0})`);
       }
       await load();
     } catch (e) {
       toast.error(`회귀 실행 실패: ${(e as Error).message}`);
     } finally {
       setRegressing(false);
+    }
+  }
+
+  async function deleteOverride(id: string) {
+    if (!confirm('이 segment override 를 삭제할까요? base config 가중치로 fallback 됩니다.')) return;
+    setBusy(true);
+    try {
+      await adminDeleteWeightOverride(id);
+      toast.success('override 삭제됨');
+      await load();
+    } catch (e) {
+      toast.error(`삭제 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -286,32 +346,55 @@ export default function WeightTuningTab() {
         </section>
       )}
 
-      {/* 2b. 회귀 가중치 + 승인 큐 (Phase 4b) */}
+      {/* 2b. 회귀 가중치 + 승인 큐 + segment (Phase 4b + 4c) */}
       <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <header className="mb-3 flex items-center gap-2">
           <FlaskConical size={14} className="text-accent" />
-          <h4 className="text-sm font-bold">회귀 가중치 최적화 (Phase 4b)</h4>
-          <button
-            onClick={() => void runRegression()}
-            disabled={regressing || busy}
-            className="ml-auto rounded-md bg-accent px-3 py-1 text-[11px] font-bold text-black hover:opacity-90 disabled:opacity-40"
-          >
-            {regressing ? '실행 중…' : '회귀 실행 + 큐 적재'}
-          </button>
+          <h4 className="text-sm font-bold">회귀 가중치 최적화 (Phase 4b/4c)</h4>
         </header>
         <p className="mb-3 text-[11px] text-ink-mute">
           PostgreSQL 내장 회귀 (regr_slope, regr_r2) 로 sub-score 별 R² 정규화 → 큐에 pending 으로 적재.
-          관리자 승인 시 자동 적용 + history 자동 audit. 표본 50 미만 또는 R² 합 0.05 미만이면 큐 안됨.
+          매장/시간대 segment 선택 후 회귀 시 segment override 로 저장 (base config 보호). 자동 cron: 매주 월 13:00 KST.
         </p>
+        {/* X6.70 — segment selector + 회귀 실행 */}
+        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-bg-soft p-2 ring-1 ring-line/10">
+          <label className="text-[11px]">
+            <span className="block text-ink-mute"><Store size={10} className="inline" /> 매장</span>
+            <select value={segStoreType} onChange={(e) => setSegStoreType(e.target.value)} className="input mt-0.5 text-xs">
+              {STORE_TYPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px]">
+            <span className="block text-ink-mute"><Clock size={10} className="inline" /> 시간대</span>
+            <select value={segDaypart} onChange={(e) => setSegDaypart(e.target.value)} className="input mt-0.5 text-xs">
+              {DAYPARTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+          </label>
+          <button
+            onClick={() => void runRegression()}
+            disabled={regressing || busy}
+            className="ml-auto rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-black hover:opacity-90 disabled:opacity-40"
+          >
+            {regressing ? '실행 중…' : '회귀 실행 + 큐 적재'}
+          </button>
+        </div>
 
         {pendingRegressions.length === 0 && (
           <p className="text-[11px] text-ink-dim">대기 중인 제안 없음</p>
         )}
 
-        {pendingRegressions.map((r) => (
+        {pendingRegressions.map((r) => {
+          const segStore = (r.suggestion as Record<string, unknown>).store_type as string | null | undefined;
+          const segDp = (r.suggestion as Record<string, unknown>).daypart as string | null | undefined;
+          const segLabel = (!segStore && !segDp) ? '전체 (global)'
+            : `${segStore ?? '*'}${segDp ? ' / ' + segDp : ''}`;
+          return (
           <div key={r.id} className="mb-2 rounded-xl bg-amber-500/5 p-3 ring-1 ring-amber-400/20">
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-xs font-bold text-ink">대기 (sample N={r.sample_size})</span>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <span className="text-xs font-bold text-ink">
+                대기 · <span className="text-accent">{segLabel}</span>
+                <span className="ml-1 font-normal text-ink-mute">(sample N={r.sample_size})</span>
+              </span>
               <span className="text-[10px] text-ink-dim">
                 {new Date(r.computed_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
               </span>
@@ -366,7 +449,8 @@ export default function WeightTuningTab() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* 최근 결정된 회귀 (간단 목록) */}
         {recentRegressions.filter((r) => r.status !== 'pending').length > 0 && (
@@ -436,6 +520,96 @@ export default function WeightTuningTab() {
             </button>
           </div>
         </div>
+      </section>
+
+      {/* 3b. Segment Overrides (Phase 4c) */}
+      <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <header className="mb-2 flex items-center gap-2">
+          <Store size={14} className="text-ink-mute" />
+          <h4 className="text-sm font-bold">Segment overrides ({overrides.length}건)</h4>
+        </header>
+        <p className="mb-2 text-[11px] text-ink-mute">
+          매장/시간대 별 가중치 override. 매칭 우선순위: (매장+시간대) → (매장만) → (시간대만) → base config.
+        </p>
+        {overrides.length === 0 && <p className="text-[11px] text-ink-dim">override 없음 — 모든 트랙이 base config 가중치 사용 중</p>}
+        {overrides.length > 0 && (
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-left text-ink-mute">
+                <th className="pb-1">매장</th>
+                <th className="pb-1">시간대</th>
+                <th className="pb-1 text-right">audio</th>
+                <th className="pb-1 text-right">meta</th>
+                <th className="pb-1 text-right">behavior</th>
+                <th className="pb-1 text-right">penalty</th>
+                <th className="pb-1">source</th>
+                <th className="pb-1"></th>
+              </tr>
+            </thead>
+            <tbody className="font-mono">
+              {overrides.map((o) => (
+                <tr key={o.id} className="border-t border-line/5">
+                  <td className="py-1 text-ink">{o.store_type ?? '*'}</td>
+                  <td className="py-1 text-ink">{o.daypart ?? '*'}</td>
+                  <td className="py-1 text-right text-ink">{Number(o.fit_audio_w).toFixed(2)}</td>
+                  <td className="py-1 text-right text-ink">{Number(o.fit_meta_w).toFixed(2)}</td>
+                  <td className="py-1 text-right text-ink">{Number(o.fit_behavior_w).toFixed(2)}</td>
+                  <td className="py-1 text-right text-ink">{Number(o.fit_penalty_w).toFixed(2)}</td>
+                  <td className="py-1 text-[10px] text-ink-mute">{o.source}</td>
+                  <td className="py-1 text-right">
+                    <button
+                      onClick={() => void deleteOverride(o.id)}
+                      disabled={busy}
+                      title="override 삭제"
+                      className="text-rose-600 hover:text-rose-700 disabled:opacity-40"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* 3c. Cron Runs (Phase 4c) */}
+      <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <header className="mb-2 flex items-center gap-2">
+          <CalendarClock size={14} className="text-ink-mute" />
+          <h4 className="text-sm font-bold">자동 회귀 실행 이력 ({cronRuns.length}건)</h4>
+          <span className="ml-auto rounded-full bg-ink/10 px-2 py-0.5 text-[10px] text-ink-dim">
+            schedule: 매주 월 13:00 KST (pg_cron)
+          </span>
+        </header>
+        {cronRuns.length === 0 && <p className="text-[11px] text-ink-dim">실행 이력 없음</p>}
+        {cronRuns.length > 0 && (
+          <ul className="space-y-1 text-[11px]">
+            {cronRuns.map((r) => (
+              <li key={r.id} className="rounded-lg bg-bg-soft p-2 ring-1 ring-line/5">
+                <div className="flex items-baseline justify-between">
+                  <span>
+                    <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
+                      r.error ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                      : r.finished_at ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    }`}>{r.error ? 'error' : r.finished_at ? 'done' : 'running'}</span>
+                    {r.triggered_by}
+                    {r.result && (
+                      <span className="ml-1 font-mono text-[10px] text-ink-mute">
+                        queued={r.result.queued} skipped={r.result.skipped} (total {r.result.total_segments})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-ink-dim">
+                    {new Date(r.started_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                  </span>
+                </div>
+                {r.error && <p className="mt-0.5 font-mono text-[10px] text-rose-700 dark:text-rose-300">{r.error}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* 4. History */}
