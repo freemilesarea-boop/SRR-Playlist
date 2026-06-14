@@ -1908,6 +1908,8 @@ export interface TrackPredictionRow {
   release_status: string | null;
   visibility_status: string | null;
   predicted_decision: DecisionType;
+  /** X6.65 — exclude_store 예측의 매장 slug (cafe, hospital, ...) */
+  store_type: string | null;
   predicted_reason_key: string;
   predicted_reason_display: string | null;
   similarity_pct: number;
@@ -1966,12 +1968,13 @@ export async function adminSyncPredictionActuals(): Promise<{ ok: boolean; predi
 
 // ============================================
 // X6.64 — TrackReviewList 예측 badge 용 batch fetch
+// X6.65 — store_type 추가 (exclude_store 매장별 예측 노출)
 // ============================================
 export async function adminGetTrackPredictionsBatch(trackIds: string[]): Promise<TrackPredictionRow[]> {
   if (trackIds.length === 0) return [];
   const { data, error } = await supabase
     .from('track_pattern_predictions')
-    .select('track_id,predicted_decision,predicted_reason_key,predicted_reason_display,similarity_pct,cluster_sample_count,cluster_decision_total,generated_at,actual_decision,actual_reason_key,validated_at')
+    .select('track_id,predicted_decision,store_type,predicted_reason_key,predicted_reason_display,similarity_pct,cluster_sample_count,cluster_decision_total,generated_at,actual_decision,actual_reason_key,validated_at')
     .in('track_id', trackIds);
   if (error) throw error;
   return (data ?? []).map((r) => ({
@@ -1981,6 +1984,7 @@ export async function adminGetTrackPredictionsBatch(trackIds: string[]): Promise
     release_status: null,
     visibility_status: null,
     predicted_decision: r.predicted_decision,
+    store_type: r.store_type ?? null,
     predicted_reason_key: r.predicted_reason_key,
     predicted_reason_display: r.predicted_reason_display,
     similarity_pct: r.similarity_pct,
@@ -1993,3 +1997,36 @@ export async function adminGetTrackPredictionsBatch(trackIds: string[]): Promise
     prediction_correct: null,
   })) as TrackPredictionRow[];
 }
+
+// ============================================
+// X6.65 — Phase 3c: 표준 거절 사유 (UI dropdown 강제용)
+// ============================================
+export interface CanonicalRejectReason {
+  reason_key: string;
+  label: string;
+  description: string | null;
+  sort_order: number;
+}
+
+/**
+ * 8개 표준 거절 사유 (SQL `_normalize_decision_reason` 의 pattern 과 1:1 대응).
+ * dropdown 선택 → label 텍스트가 reason 으로 저장됨 → 서버 정규화 시 reason_key 매핑.
+ * cluster 학습 정확도 + cross-검수자 일관성 확보.
+ */
+export async function listCanonicalRejectReasons(): Promise<CanonicalRejectReason[]> {
+  const { data, error } = await supabase.rpc('list_canonical_reject_reasons');
+  if (error) throw error;
+  return (data ?? []) as CanonicalRejectReason[];
+}
+
+/** 정적 fallback (RPC 실패 시) — SQL 0334 와 동일 값 유지. */
+export const FALLBACK_CANONICAL_REJECT_REASONS: CanonicalRejectReason[] = [
+  { reason_key: 'audio_quality_low', label: '음질 부족', description: 'EBU R128 외, 노이즈, 클리핑, 마스터링 부족 등', sort_order: 1 },
+  { reason_key: 'duration_invalid', label: '곡 길이 부적절', description: '너무 짧거나 김', sort_order: 2 },
+  { reason_key: 'metadata_invalid', label: '메타데이터 오류', description: '장르/분위기/제목/아티스트명', sort_order: 3 },
+  { reason_key: 'store_mismatch', label: '매장 분위기 부적합', description: '특정 매장 컨셉과 안 맞음', sort_order: 4 },
+  { reason_key: 'filename_invalid', label: '파일명/제목 오류', description: '제목/아티스트명 오타', sort_order: 5 },
+  { reason_key: 'reupload_required', label: '재업로드 필요', description: '파일 자체 문제 (손상/포맷)', sort_order: 6 },
+  { reason_key: 'copyright_issue', label: '저작권 문제', description: '권리 확인 불가, 샘플링 미신고', sort_order: 7 },
+  { reason_key: 'duplicate', label: '중복 음원', description: '이미 등록된 곡', sort_order: 8 },
+];

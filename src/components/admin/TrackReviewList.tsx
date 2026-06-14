@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil, Brain, AlertTriangle } from 'lucide-react';
+import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil, Brain, AlertTriangle, Store } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { applyAiMetadata, adminGetTrackPredictionsBatch, type TrackPredictionRow } from '@/lib/aiCuration';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import AudioDistributionStatsCard from '@/components/admin/AudioDistributionStatsCard';
+import RejectReasonSelector from '@/components/admin/RejectReasonSelector';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -777,16 +778,13 @@ function BulkActionModal({
           </p>
         </Alert>
         {isReject && (
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-ink-mute">아티스트에게 노출될 거절 사유 (전체 공통)</span>
-            <textarea
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="input"
-              placeholder="예: 권리 확인 불가, 메타데이터 부족 등"
-            />
-          </label>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-ink-mute">
+              아티스트에게 노출될 거절 사유 (전체 공통) — 표준 분류 선택
+            </p>
+            {/* X6.65 — 표준 사유 dropdown 강제 (cluster 학습 정확도 향상) */}
+            <RejectReasonSelector onChange={setReason} disabled={busy} />
+          </div>
         )}
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <button onClick={onCancel} disabled={busy} className="btn-ghost px-3 py-2 text-xs">
@@ -896,23 +894,26 @@ function ReviewActionModal({
             <p className="mt-0.5 text-[11px] opacity-80">발매일 {releaseDate}</p>
           )}
         </Alert>
-        {(kind === 'reject' || kind === 'changes') && (
+        {kind === 'reject' && (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-ink-mute">
+              거절 사유 — 표준 분류 선택 (거절 시 즉시 서비스 미노출 → "삭제 음원" 탭으로 이동)
+            </p>
+            {/* X6.65 — 표준 사유 dropdown 강제 (cluster 학습 정확도 향상) */}
+            <RejectReasonSelector onChange={setReason} disabled={busy} />
+          </div>
+        )}
+        {kind === 'changes' && (
           <label className="block space-y-1">
             <span className="text-xs font-semibold text-ink-mute">
-              {kind === 'reject'
-                ? '거절 사유 (거절 시 즉시 서비스 미노출 → "삭제 음원" 탭으로 이동)'
-                : '아티스트에게 노출될 수정 요청 사유'}
+              아티스트에게 노출될 수정 요청 사유
             </span>
             <textarea
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="input"
-              placeholder={
-                kind === 'reject'
-                  ? '예: 권리 확인 불가, 메타데이터 부족, 음질 문제, AI 정책 위반 가능성 등'
-                  : '예: 가사 보완 필요, 커버 이미지 재업로드 등'
-              }
+              placeholder="예: 가사 보완 필요, 커버 이미지 재업로드 등"
             />
           </label>
         )}
@@ -1024,16 +1025,39 @@ function DiagChip({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+// X6.65 — store slug → Korean label (taxonomy_store_types 0228 와 동일)
+const STORE_LABEL: Record<string, string> = {
+  cafe: '카페',
+  hospital: '병원',
+  hotel: '호텔',
+  restaurant: '레스토랑',
+  fitness: '피트니스',
+  boutique: '편집샵',
+  office: '오피스',
+  study_cafe: '스터디 카페',
+  bakery: '베이커리',
+  beauty_shop: '뷰티샵',
+  kids_zone: '키즈존',
+};
+
 /**
  * X6.64 — 검수 화면 자동 예측 badge.
- * 한 트랙당 최대 2개 예측 (remove + approve 각 top match).
- * remove ≥60% 강조 (검수 우선순위 신호). approve 는 참고용.
+ * X6.65 — exclude_store 예측 추가: 매장별 부적합 cluster 매칭 시 매장명 표시.
+ *
+ * 한 트랙당 최대 N개 badge:
+ *   - remove (global) ≥60% — 검수 우선순위 신호
+ *   - approve (global) ≥60% — 통과 가능 참고
+ *   - exclude_store (per store) ≥55% — 매장별 부적합 신호
  */
 function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }) {
   if (predictions.length === 0) return null;
-  // remove + approve 분리, similarity 높은 순
-  const remove = predictions.find((p) => p.predicted_decision === 'remove');
-  const approve = predictions.find((p) => p.predicted_decision === 'approve');
+  const remove = predictions.find((p) => p.predicted_decision === 'remove' && !p.store_type);
+  const approve = predictions.find((p) => p.predicted_decision === 'approve' && !p.store_type);
+  // 매장별 exclude_store — similarity 높은 순으로 정렬, 최대 3개 표시
+  const excludeStores = predictions
+    .filter((p) => p.predicted_decision === 'exclude_store' && p.store_type)
+    .sort((a, b) => b.similarity_pct - a.similarity_pct)
+    .slice(0, 3);
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       {remove && (
@@ -1050,6 +1074,18 @@ function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }
           <AlertTriangle size={9} /> {remove.predicted_reason_display ?? remove.predicted_reason_key} {remove.similarity_pct.toFixed(0)}%
         </span>
       )}
+      {excludeStores.map((p) => {
+        const storeName = p.store_type ? (STORE_LABEL[p.store_type] ?? p.store_type) : '';
+        return (
+          <span
+            key={`${p.predicted_decision}-${p.store_type}`}
+            className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900 ring-1 ring-violet-300/40 dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-400/30"
+            title={`AI 예측: ${storeName} 매장 부적합 cluster (${p.predicted_reason_display ?? p.predicted_reason_key}) 와 ${p.similarity_pct.toFixed(0)}% 유사 (학습 샘플 ${p.cluster_sample_count ?? '?'}곡)`}
+          >
+            <Store size={9} /> {storeName} 부적합 {p.similarity_pct.toFixed(0)}%
+          </span>
+        );
+      })}
       {approve && approve.similarity_pct >= 60 && (
         <span
           className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-300/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-400/30"
