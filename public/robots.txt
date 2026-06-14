@@ -1,2 +1,26 @@
+# DEUDDA (듣다) — robots.txt
+# 모든 검색엔진 크롤러 허용 + 비공개/개인정보 경로 차단
+
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /login
+Disallow: /auth/
+Disallow: /profile
+Disallow: /my/
+Disallow: /subscription
+Disallow: /library
+Disallow: /business
+Disallow: /artist
+Disallow: /sales
+Disallow: /payment/
+
+# Google
+User-agent: Googlebot
+Allow: /
+
+# Naver
+User-agent: Yeti
+Allow: /
+
+Sitemap: https://www.deudda.com/sitemap.xml
