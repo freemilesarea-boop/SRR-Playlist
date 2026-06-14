@@ -57,8 +57,42 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
  * 모듈 스코프라 페이지 이동/컴포넌트 언마운트해도 유지 (브라우저 탭 단위).
  * SRC_NOT_SUPPORTED / DECODE 등 "재생 불가" 가 확정된 트랙을 같은 세션에서
  * 자동 next 무한 루프로 다시 시도하지 않게 한다.
+ *
+ * X6.66 — 24시간+ 매장 무중단 운영 시 무한 누적 방지 (truncateSetOldest 로 cap).
  */
 const sessionFailedTrackIds = new Set<string>();
+
+// X6.66 — track-id 기반 Map/Set 무한 성장 차단 (매장 24h+ 무중단 운영 대비).
+// 한 매장이 한 달 연속 운영해도 메모리 안정. JS Map/Set 은 삽입 순서 유지 → LRU 트림.
+const MAX_TRACK_HISTORY = 500;
+
+function truncateMapOldest<K, V>(map: Map<K, V>, max: number): number {
+  if (map.size <= max) return 0;
+  let removed = 0;
+  const overflow = map.size - max;
+  const iter = map.keys();
+  for (let i = 0; i < overflow; i++) {
+    const { value, done } = iter.next();
+    if (done) break;
+    map.delete(value);
+    removed += 1;
+  }
+  return removed;
+}
+
+function truncateSetOldest<T>(set: Set<T>, max: number): number {
+  if (set.size <= max) return 0;
+  let removed = 0;
+  const overflow = set.size - max;
+  const iter = set.values();
+  for (let i = 0; i < overflow; i++) {
+    const { value, done } = iter.next();
+    if (done) break;
+    set.delete(value);
+    removed += 1;
+  }
+  return removed;
+}
 
 /** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
 let lastErrorToastAt = 0;
@@ -698,12 +732,27 @@ export default function Player() {
       heartbeatId = window.setInterval(() => tryResume('heartbeat'), 30_000);
     }
 
+    // X6.66 — track-id 기반 Map/Set 1시간마다 prune (24h+ 매장 무중단 누적 차단).
+    // 일반 사용자는 1세션이 짧아 불필요 → 매장 모드 한정.
+    let pruneId: number | null = null;
+    if (businessMode) {
+      pruneId = window.setInterval(() => {
+        const a = truncateMapOldest(pev2StartedTracksRef.current, MAX_TRACK_HISTORY);
+        const b = truncateMapOldest(networkRetriedRef.current, MAX_TRACK_HISTORY);
+        const c = truncateSetOldest(sessionFailedTrackIds, MAX_TRACK_HISTORY);
+        if (a + b + c > 0) {
+          console.info('[player] track-history prune', { started: a, network: b, failed: c });
+        }
+      }, 60 * 60 * 1000); // 1h
+    }
+
     return () => {
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('pageshow', onPageShow);
       window.removeEventListener('focus', onFocus);
       if (heartbeatId !== null) window.clearInterval(heartbeatId);
+      if (pruneId !== null) window.clearInterval(pruneId);
     };
     // activeRef 는 ref function (안정), businessMode 변경 시만 heartbeat 재설정
     // eslint-disable-next-line react-hooks/exhaustive-deps
