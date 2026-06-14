@@ -1834,6 +1834,10 @@ export default function Player() {
                       {tPlayable && (
                         <AddToPlaylistButton trackId={t.id} variant="bare" size={16} className="text-ink-mute" />
                       )}
+                      {/* X6.74: 큐에서 직접 매장 제외 (현재 재생 외 트랙, business 한정 — 내부에서 가드) */}
+                      {!isCurrent && (
+                        <BusinessExcludeButton trackId={t.id} variant="compact" skipAfter={false} />
+                      )}
                     </li>
                   );
                 })}
