@@ -27,11 +27,13 @@ const REASON_OPTIONS = [
 
 interface Props {
   trackId: string;
-  /** 컬러 모드 — 확장(검은 배경)/일반 */
+  /** 컬러 모드 — expanded(검은 배경 player) / compact(밝은 list inline) */
   variant?: 'expanded' | 'compact';
+  /** true(기본): 제외 후 다음 곡 자동. false: 큐 항목 등 현재 재생 외 트랙용. */
+  skipAfter?: boolean;
 }
 
-export default function BusinessExcludeButton({ trackId, variant = 'expanded' }: Props) {
+export default function BusinessExcludeButton({ trackId, variant = 'expanded', skipAfter = true }: Props) {
   const businessMode = useBusinessStore((s) => s.businessMode);
   const selectedCategory = useBusinessStore((s) => s.selectedCategory);
   const playerNext = usePlayerStore((s) => s.next);
@@ -48,13 +50,18 @@ export default function BusinessExcludeButton({ trackId, variant = 'expanded' }:
     try {
       const res = await businessExcludeTrack(trackId, slug!, reasonKey);
       setDone(true);
-      toast.success(`"${selectedCategory}" 매장에서 제외됨 — ${res.reason}. 다음 곡으로 넘어갑니다.`);
+      const tail = skipAfter ? ' 다음 곡으로 넘어갑니다.' : '';
+      toast.success(`"${selectedCategory}" 매장에서 제외됨 — ${res.reason}.${tail}`);
       setOpen(false);
-      // 1초 후 다음 곡으로 (사용자가 토스트 인지 + 가중치 재계산은 비동기)
-      window.setTimeout(() => {
-        playerNext();
-        setDone(false);
-      }, 800);
+      if (skipAfter) {
+        window.setTimeout(() => {
+          playerNext();
+          setDone(false);
+        }, 800);
+      } else {
+        // 큐 항목 — 다음곡 호출 안 함. 잠깐 확인 표시 후 복귀.
+        window.setTimeout(() => setDone(false), 1500);
+      }
     } catch (e) {
       const msg = (e as Error).message ?? String(e);
       if (msg.includes('business plan required')) {
@@ -67,9 +74,12 @@ export default function BusinessExcludeButton({ trackId, variant = 'expanded' }:
     }
   }
 
-  const baseCls = variant === 'expanded'
-    ? 'border-0 bg-white/10 backdrop-blur ring-white/15 text-white/90 hover:text-white'
-    : 'bg-bg-soft text-ink-mute ring-line/10 hover:text-ink';
+  const isCompact = variant === 'compact';
+  const baseCls = isCompact
+    ? 'bg-bg-soft text-ink-mute ring-line/10 hover:text-rose-600 dark:hover:text-rose-300'
+    : 'border-0 bg-white/10 backdrop-blur ring-white/15 text-white/90 hover:text-white';
+  const sizeCls = isCompact ? 'h-7 w-7' : 'h-9 w-9';
+  const iconSize = isCompact ? 12 : 16;
 
   return (
     <div className="relative inline-flex">
@@ -77,22 +87,24 @@ export default function BusinessExcludeButton({ trackId, variant = 'expanded' }:
         type="button"
         disabled={busy || done}
         onClick={(e) => {
+          e.stopPropagation();
           if (e.altKey || e.shiftKey) {
             setOpen((v) => !v);
             return;
           }
           void doExclude('store_mismatch');
         }}
-        onContextMenu={(e) => { e.preventDefault(); setOpen((v) => !v); }}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
         title={`이 곡 "${selectedCategory}" 매장 제외 (Shift/Alt+click → 사유 선택)`}
         aria-label="매장에서 이 곡 제외"
-        className={`inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 transition disabled:opacity-50 ${baseCls}`}
+        className={`inline-flex items-center justify-center rounded-full ring-1 transition disabled:opacity-50 ${sizeCls} ${baseCls}`}
       >
-        {done ? <Check size={16} /> : <Ban size={16} />}
+        {done ? <Check size={iconSize} /> : <Ban size={iconSize} />}
       </button>
       {open && (
         <div
           role="menu"
+          onClick={(e) => e.stopPropagation()}
           className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl bg-bg-card p-1.5 text-xs shadow-2xl ring-1 ring-line/20"
         >
           <p className="mb-1 px-2 py-0.5 text-[10px] font-semibold text-ink-mute">사유 선택</p>
@@ -101,7 +113,7 @@ export default function BusinessExcludeButton({ trackId, variant = 'expanded' }:
               key={r.key}
               type="button"
               disabled={busy}
-              onClick={() => void doExclude(r.key)}
+              onClick={(e) => { e.stopPropagation(); void doExclude(r.key); }}
               className="block w-full rounded-md px-2 py-1.5 text-left text-ink hover:bg-bg-hover disabled:opacity-40"
             >
               {r.label}
@@ -109,7 +121,7 @@ export default function BusinessExcludeButton({ trackId, variant = 'expanded' }:
           ))}
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={(e) => { e.stopPropagation(); setOpen(false); }}
             className="mt-0.5 block w-full rounded-md px-2 py-1 text-left text-[11px] text-ink-dim hover:bg-bg-hover"
           >
             취소
