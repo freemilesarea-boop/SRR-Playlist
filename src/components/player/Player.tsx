@@ -655,6 +655,61 @@ export default function Player() {
   }, [volume, activeIdx, crossfading]);
 
   /* ============================================
+   * X6.63 — visibility/online resume + 매장 heartbeat
+   * ----------------------------------------------
+   * iOS Safari / mobile background → 앱 복귀 시 HTMLAudioElement.paused=true
+   * 인데 playerStore.playing=true 인 경우 자동 무음. 사용자 별도 클릭 필요.
+   * → visibilitychange / online / pageshow / focus 시 active audio 자동 resume.
+   *
+   * 매장모드 추가 보호: 30초마다 heartbeat 로 playing=true 인데 audio.paused
+   * 인 케이스 감지해 resume 시도. (이벤트가 안 발화되는 silent suspend 대비)
+   * ============================================ */
+  useEffect(() => {
+    const tryResume = (reason: string) => {
+      const audio = activeRef();
+      if (!audio) return;
+      const st = usePlayerStore.getState();
+      if (!st.playing) return;            // 사용자 의도적 일시정지
+      if (!audio.paused) return;          // 이미 재생 중
+      if (!audio.src) return;             // src 미설정 (track sync effect 가 처리)
+
+      console.info('[player] auto-resume', { reason, id: st.queue[st.index]?.id });
+      const p = audio.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch((e) => {
+
+          console.warn('[player] auto-resume failed', { reason, err: e instanceof Error ? e.message : String(e) });
+        });
+      }
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') tryResume('visibility'); };
+    const onOnline = () => tryResume('online');
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) tryResume('pageshow'); };
+    const onFocus = () => tryResume('focus');
+
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onFocus);
+
+    // 매장모드 heartbeat — 30초마다 silent suspend 감지 + 복구
+    let heartbeatId: number | null = null;
+    if (businessMode) {
+      heartbeatId = window.setInterval(() => tryResume('heartbeat'), 30_000);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onFocus);
+      if (heartbeatId !== null) window.clearInterval(heartbeatId);
+    };
+    // activeRef 는 ref function (안정), businessMode 변경 시만 heartbeat 재설정
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessMode]);
+
+  /* ============================================
    * Crossfade 엔진
    * ============================================ */
   const crossfadeRafRef = useRef<number | null>(null);
