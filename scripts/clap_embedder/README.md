@@ -1,7 +1,32 @@
-# DEUDDA CLAP Embedder (Modal)
+# DEUDDA CLAP Embedder
 
 LAION-CLAP 모델로 트랙 오디오 → 512차원 임베딩 추출.
-Modal serverless GPU 위에서 동작 (A10G, $1.10/시간).
+
+## 🟢 가장 빠른 진입 — 로컬 worker (X6.77)
+
+**Modal 계정/배포 모두 불필요. 노트북에서 한 줄.**
+
+```bash
+pip install -r requirements.txt
+export SUPABASE_URL='https://nsoesrvwkxqifjcxzvol.supabase.co'
+export SUPABASE_SERVICE_ROLE_KEY='<service_role>'  # Supabase Dashboard → API
+python local_worker.py --backfill-all --loop
+```
+
+- 노트북 GPU (NVIDIA 8GB+): 847건 ~15~45분
+- M1/M2/M3 Mac: ~1~2시간
+- 일반 CPU: ~4~7시간 (밤새 OK)
+
+장점: 무료(전기세만), 외부 인프라 의존 0, 진단 로그 즉시 확인.
+단점: 노트북 켜둬야 함, 신곡 자동 처리는 안 됨 (백필 전용).
+
+신곡까지 자동화하려면 아래 Modal 배포로 전환.
+
+---
+
+## Modal serverless GPU (자동화 — A10G $1.10/h)
+
+신곡 자동 트리거 + 백필 모두 처리. 노트북 안 켜도 됨.
 
 ## 1. 사전 준비
 

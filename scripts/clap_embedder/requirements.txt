@@ -1,0 +1,9 @@
+# DEUDDA CLAP local worker — X6.77
+# Modal 없이 노트북/VPS 에서 직접 실행할 때 사용.
+# (Modal 사용 시 modal_app.py 의 modal.Image.pip_install 이 자동 처리)
+torch>=2.0.0
+transformers>=4.40.0
+librosa>=0.10.0
+numpy>=1.24.0
+httpx>=0.27.0
+soundfile>=0.12.0

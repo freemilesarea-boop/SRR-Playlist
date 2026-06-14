@@ -1,4 +1,4 @@
-# CLAP Embedding 자동 파이프라인 (Phase 6 / X6.73)
+# CLAP Embedding 자동 파이프라인 (Phase 6 / X6.73, 로컬 worker X6.77)
 
 dev 머지 후 운영자가 한 번만 해야 하는 설정 가이드.
 
@@ -11,9 +11,39 @@ migration 0340 + pg_cron 으로 이미 자동:
 - pg_cron 15분 간격 → `cron_reap_stale_embedding_jobs()` → 30분 timeout 자동 error 마킹
 - backend 가 완료 시 `store_track_embedding` + `admin_mark_embedding_job_done` 호출 → status='done'
 
-## 운영자 1회 설정 (5분)
+## 운영자 1회 설정
 
-### A안: Modal worker 배포 (권장, 처리 빠르고 비용 명확)
+### 🟢 0안: 로컬 worker 한 줄 실행 (X6.77 신규, 가장 빠름 / 가장 권장)
+
+Modal 계정/배포 없이 노트북에서 바로 실행:
+
+```bash
+cd scripts/clap_embedder
+pip install -r requirements.txt
+export SUPABASE_URL='https://nsoesrvwkxqifjcxzvol.supabase.co'
+export SUPABASE_SERVICE_ROLE_KEY='<service_role>'  # Supabase Dashboard → API
+python local_worker.py --backfill-all --loop
+```
+
+처음 실행: HuggingFace 에서 모델 ~2GB 다운로드 (이후 재사용).
+
+**소요 시간 (847건 백필 기준)**:
+- 노트북 GPU (NVIDIA 8GB+): 15~45분
+- M1/M2/M3 Mac: 1~2시간
+- 일반 노트북 CPU: 4~7시간 (밤새 돌리기)
+
+장점:
+- 무료 (전기세만), 외부 인프라 의존 0
+- 진단 로그 즉시 확인
+- 중간 종료 후 재실행 OK (큐 idempotent)
+
+단점:
+- 노트북 켜둬야 함
+- 신곡 자동 처리는 안 됨 (백필만)
+
+> 신곡까지 자동 처리하려면 0안으로 백필 완료 후 A/B 중 하나로 전환.
+
+### A안: Modal worker 배포 (자동화 권장, 처리 빠르고 비용 명확)
 
 scripts/clap_embedder/README.md 의 1~2단계 그대로 진행:
 
