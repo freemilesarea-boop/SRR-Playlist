@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Search, ExternalLink, Wallet, ChevronDown, ChevronRight, Trash2, AlertTriangle, ImagePlus, Loader2 } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { adminListArtistTracks, adminCountArtistTracks, adminBulkDeleteTracks, adminTakedownTrack, adminRestoreTrack, uploadAdminTrackCover, adminSetTrackCover, type AdminTrackRow } from '@/lib/artistApi';
+import RejectReasonSelector from '@/components/admin/RejectReasonSelector';
 
 const PAGE_SIZE = 100;
 import { toast } from '@/store/toastStore';
@@ -718,20 +719,18 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                 </p>
               )}
             </Alert>
-            <label className="block space-y-1">
-              <span className="text-[11px] font-semibold text-ink-mute">처리 사유 * (5자 이상)</span>
-              <textarea
-                rows={2}
-                value={delReason}
-                onChange={(e) => setDelReason(e.target.value)}
-                placeholder="예: 아티스트 요청으로 공개 중단 / 테스트 업로드 정리"
-                className="input text-sm"
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold text-ink-mute">처리 사유 — 표준 분류 선택 (5자 이상)</p>
+              {/* X6.65 — 표준 사유 dropdown 강제 (cluster 학습 정확도) */}
+              <RejectReasonSelector
+                onChange={setDelReason}
                 disabled={delBusy}
+                notePlaceholder="예: 아티스트 요청으로 공개 중단 / 테스트 업로드 정리"
               />
               {!reasonValid && delReason.length > 0 && (
                 <span className="text-[10px] text-red-500">사유를 5자 이상 입력해주세요.</span>
               )}
-            </label>
+            </div>
             {selectedDeletable > 0 && (
               <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-bg-card p-3 text-xs ring-1 ring-line/10">
                 <input

@@ -31,16 +31,7 @@ import {
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import { friendlyError } from '@/lib/errorMessages';
-
-const REJECT_TEMPLATES = [
-  '권리 확인 불가',
-  '메타데이터 부족',
-  '음질 문제',
-  '중복 업로드',
-  'AI 정책 위반 가능성',
-  '부적절한 콘텐츠',
-  '커버 이미지 문제',
-];
+import RejectReasonSelector from '@/components/admin/RejectReasonSelector';
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '초안',
@@ -358,31 +349,29 @@ export default function TrackModerationPanel({
       {actionPanel && (
         <div className="space-y-2 rounded-xl bg-bg-card p-3 ring-1 ring-accent/40">
           <p className="text-xs font-bold text-ink">
-            {actionPanel === 'reject' && '반려 사유'}
+            {actionPanel === 'reject' && '반려 사유 — 표준 분류 선택'}
             {actionPanel === 'changes' && '수정 요청 사유'}
-            {actionPanel === 'takedown' && '제거 사유 (최소 5자)'}
+            {actionPanel === 'takedown' && '제거 사유 — 표준 분류 + 메모 (최소 5자)'}
           </p>
-          {actionPanel !== 'takedown' && (
-            <div className="flex flex-wrap gap-1">
-              {REJECT_TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setReasonText((prev) => (prev ? prev + '\n' + t : t))}
-                  className="rounded-full bg-bg-soft px-2 py-0.5 text-[10px] text-ink-mute ring-1 ring-line/10 hover:text-ink"
-                >
-                  + {t}
-                </button>
-              ))}
-            </div>
+          {/* X6.65 — reject/takedown 은 표준 dropdown 강제 (cluster 학습 정확도) */}
+          {(actionPanel === 'reject' || actionPanel === 'takedown') && (
+            <RejectReasonSelector
+              onChange={setReasonText}
+              disabled={busy}
+              notePlaceholder={actionPanel === 'takedown'
+                ? '제거 사유 보충 설명 (선택, 아티스트에 전달)'
+                : '아티스트에 전달할 보충 메모 (선택)'}
+            />
           )}
-          <textarea
-            rows={3}
-            value={reasonText}
-            onChange={(e) => setReasonText(e.target.value)}
-            placeholder="아티스트에게 전달될 메모"
-            className="input text-[12px]"
-          />
+          {actionPanel === 'changes' && (
+            <textarea
+              rows={3}
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              placeholder="아티스트에게 전달될 메모"
+              className="input text-[12px]"
+            />
+          )}
           <div className="flex gap-2">
             <button type="button" onClick={() => { setActionPanel(null); setReasonText(''); }} className="btn-ghost flex-1 py-1.5 text-xs">
               취소
