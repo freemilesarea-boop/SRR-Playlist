@@ -213,6 +213,8 @@ export default function EmbeddingTab() {
             </div>
             <span className="block text-[10px] text-ink-dim">
               비워두면 dispatcher 정지. 설정 안내: <code>docs/CLAP_EMBEDDING_PIPELINE.md</code>
+              <br />
+              <b>🟢 가장 빠른 백필 (Modal 불필요)</b>: 노트북에서 <code>cd scripts/clap_embedder &amp;&amp; pip install -r requirements.txt &amp;&amp; python local_worker.py --backfill-all --loop</code>
             </span>
           </label>
         </div>
