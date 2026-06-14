@@ -219,6 +219,77 @@ export async function updateAiScoringConfig(patch: Partial<AiScoringConfig>): Pr
   return data as AiScoringConfig;
 }
 
+// ============================================
+// X6.68 / Phase 4 — fit_score 가중치 진단 + 제안 + history
+// ============================================
+export interface WeightDiagnostics {
+  ok: boolean;
+  window_days: number;
+  min_play_count: number;
+  sample_size: number;
+  confidence: 'high' | 'medium' | 'low';
+  mismatches: {
+    high_fit_high_skip: number;
+    high_fit_high_skip_pct: number | null;
+    low_fit_high_completion: number;
+    low_fit_high_completion_pct: number | null;
+  };
+  correlations: {
+    audio_vs_completion: number;
+    meta_vs_completion: number;
+    behavior_vs_completion: number;
+    penalty_vs_completion: number;
+  };
+  computed_at: string;
+}
+
+export interface WeightSuggestion {
+  ok: boolean;
+  suggestion: {
+    fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  } | null;
+  current?: {
+    fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  };
+  diffs?: {
+    fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  };
+  max_drift?: number;
+  high_drift?: boolean;
+  reason?: string;
+  sample_size?: number;
+  min_required?: number;
+  diagnostics: WeightDiagnostics;
+  note?: string;
+}
+
+export interface WeightHistoryRow {
+  changed_at: string;
+  changed_by: string | null;
+  changed_by_name: string | null;
+  old_config: AiScoringConfig & Record<string, unknown>;
+  new_config: AiScoringConfig & Record<string, unknown>;
+  reason: string | null;
+}
+
+export async function adminWeightDiagnostics(windowDays = 30): Promise<WeightDiagnostics> {
+  const { data, error } = await supabase.rpc('admin_weight_diagnostics', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as WeightDiagnostics;
+}
+
+export async function adminSuggestWeightAdjustment(windowDays = 30): Promise<WeightSuggestion> {
+  const { data, error } = await supabase.rpc('admin_suggest_weight_adjustment', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as WeightSuggestion;
+}
+
+export async function adminListWeightHistory(limit = 20): Promise<WeightHistoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_weight_history', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as WeightHistoryRow[];
+}
+
 export interface PlayEventInput {
   trackId: string;
   playlistId?: string | null;

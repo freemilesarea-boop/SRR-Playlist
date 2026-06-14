@@ -25,6 +25,7 @@ import ReorderTab from '@/components/admin/aiCuration/ReorderTab';
 import BusinessReactionTab from '@/components/admin/aiCuration/BusinessReactionTab';
 import DuplicateDetectionTab from '@/components/admin/aiCuration/DuplicateDetectionTab';
 import AdminLearningTab from '@/components/admin/aiCuration/AdminLearningTab';
+import WeightTuningTab from '@/components/admin/aiCuration/WeightTuningTab';
 
 import QcQueueTab from '@/components/admin/QcQueueTab';
 import BehaviorTab from '@/components/admin/BehaviorTab';
@@ -40,11 +41,13 @@ import StoreGenrePolicyTab from '@/components/admin/StoreGenrePolicyTab';
 type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review'
   | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview'
   | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight'
-  | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy' | 'admin_learning';
+  | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy' | 'admin_learning'
+  | 'weight_tuning';
 
 const TABS: [SubTab, string][] = [
   ['perf', '운영 성과'],
   ['admin_learning', '🧠 검수 패턴 학습'],
+  ['weight_tuning', '⚖️ 가중치 튜닝'],
   ['store_genre_policy', '매장 장르 정책 (v1)'],
   ['qc_queue', 'AI 검수 큐'],
   ['behavior', '행동 지표'],
@@ -92,6 +95,7 @@ export default function AiCurationPanel() {
       </div>
       {sub === 'perf' && <PerformanceTab />}
       {sub === 'admin_learning' && <AdminLearningTab />}
+      {sub === 'weight_tuning' && <WeightTuningTab />}
       {sub === 'pending' && <PendingTab />}
       {sub === 'results' && <ResultsTab />}
       {sub === 'fit' && <FitTab />}
