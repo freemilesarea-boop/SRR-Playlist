@@ -38,6 +38,7 @@ import { recordTrackSkip, recordBusinessEarlySkip, type SkipReason } from '@/lib
 import { recordPlayEvent } from '@/lib/aiCuration';
 import AutoCover from '@/components/AutoCover';
 import TrackLikeButton from '@/components/TrackLikeButton';
+import BusinessExcludeButton from '@/components/player/BusinessExcludeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
@@ -1691,6 +1692,8 @@ export default function Player() {
                   className="border-0 bg-white/10 backdrop-blur ring-white/15 text-white/90 hover:text-white"
                 />
                 <AddToPlaylistButton trackId={current.id} variant="player" />
+                {/* X6.72 — 매장 모드 1-click 제외 (business 플랜만, 클라이언트 가드는 컴포넌트 내부) */}
+                <BusinessExcludeButton trackId={current.id} variant="expanded" />
                 {!playable && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
                     <AlertCircle size={11} /> 음원 준비중
