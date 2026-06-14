@@ -290,6 +290,76 @@ export async function adminListWeightHistory(limit = 20): Promise<WeightHistoryR
   return (data ?? []) as WeightHistoryRow[];
 }
 
+// ============================================
+// X6.69 / Phase 4b — 회귀 가중치 최적화 + admin approval queue
+// ============================================
+export interface RegressionStats {
+  audio: { slope: number; r2: number };
+  meta: { slope: number; r2: number };
+  behavior: { slope: number; r2: number };
+  penalty: { slope: number; r2: number };
+  n: number;
+  window_days: number;
+  min_play_count: number;
+}
+
+export interface RegressionWeightSuggestion {
+  ok: boolean;
+  queued: boolean;
+  suggestion_id?: string;
+  suggestion?: {
+    fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  };
+  regression: RegressionStats;
+  sample_size?: number;
+  min_required?: number;
+  reason?: string;
+  sum_r2?: number;
+}
+
+export interface WeightRegressionRow {
+  id: string;
+  computed_at: string;
+  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  sample_size: number;
+  suggestion: {
+    fit_audio_w: number; fit_meta_w: number; fit_behavior_w: number; fit_penalty_w: number;
+  };
+  regression: RegressionStats;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  applied_at: string | null;
+}
+
+export async function adminComputeRegressionWeights(windowDays = 30): Promise<RegressionWeightSuggestion> {
+  const { data, error } = await supabase.rpc('admin_compute_regression_weights', { p_window_days: windowDays });
+  if (error) throw error;
+  return data as RegressionWeightSuggestion;
+}
+
+export async function adminDecideWeightRegression(
+  id: string,
+  approve: boolean,
+  note?: string,
+): Promise<{ ok: boolean; approved: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_decide_weight_regression', {
+    p_id: id, p_approve: approve, p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; approved: boolean; id: string };
+}
+
+export async function adminListWeightRegressions(
+  status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'all' = 'pending',
+  limit = 20,
+): Promise<WeightRegressionRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_weight_regressions', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as WeightRegressionRow[];
+}
+
 export interface PlayEventInput {
   trackId: string;
   playlistId?: string | null;

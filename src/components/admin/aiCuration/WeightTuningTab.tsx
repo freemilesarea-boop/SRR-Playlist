@@ -14,17 +14,21 @@
  * 정책: 완전 자동 적용 없음. admin 이 항상 최종 결정.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Sparkles, History, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { RefreshCw, Sparkles, History, AlertTriangle, TrendingUp, TrendingDown, FlaskConical, Check, X as XIcon } from 'lucide-react';
 import {
   getAiScoringConfig,
   updateAiScoringConfig,
   adminWeightDiagnostics,
   adminSuggestWeightAdjustment,
   adminListWeightHistory,
+  adminComputeRegressionWeights,
+  adminListWeightRegressions,
+  adminDecideWeightRegression,
   type AiScoringConfig,
   type WeightDiagnostics,
   type WeightSuggestion,
   type WeightHistoryRow,
+  type WeightRegressionRow,
 } from '@/lib/aiCuration';
 import { toast } from '@/store/toastStore';
 
@@ -41,20 +45,27 @@ export default function WeightTuningTab() {
   const [diag, setDiag] = useState<WeightDiagnostics | null>(null);
   const [suggest, setSuggest] = useState<WeightSuggestion | null>(null);
   const [history, setHistory] = useState<WeightHistoryRow[]>([]);
+  const [pendingRegressions, setPendingRegressions] = useState<WeightRegressionRow[]>([]);
+  const [recentRegressions, setRecentRegressions] = useState<WeightRegressionRow[]>([]);
   const [draft, setDraft] = useState<Partial<AiScoringConfig>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [regressing, setRegressing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, d, s, h] = await Promise.all([
+      const [c, d, s, h, pending, recent] = await Promise.all([
         getAiScoringConfig(),
         adminWeightDiagnostics(30),
         adminSuggestWeightAdjustment(30),
         adminListWeightHistory(20),
+        adminListWeightRegressions('pending', 5),
+        adminListWeightRegressions('all', 10),
       ]);
       setConfig(c); setDiag(d); setSuggest(s); setHistory(h);
+      setPendingRegressions(pending);
+      setRecentRegressions(recent);
       setDraft({});
     } catch (e) {
       toast.error(`불러오기 실패: ${(e as Error).message}`);
@@ -63,6 +74,38 @@ export default function WeightTuningTab() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  async function runRegression() {
+    setRegressing(true);
+    try {
+      const res = await adminComputeRegressionWeights(30);
+      if (res.queued) {
+        toast.success(`회귀 큐 적재됨 (sample N=${res.sample_size})`);
+      } else {
+        toast.info(`큐 안됨: ${res.reason ?? '미상'} (sample=${res.sample_size ?? 0})`);
+      }
+      await load();
+    } catch (e) {
+      toast.error(`회귀 실행 실패: ${(e as Error).message}`);
+    } finally {
+      setRegressing(false);
+    }
+  }
+
+  async function decideRegression(id: string, approve: boolean) {
+    const note = approve ? null : prompt('거부 사유 (선택)') ?? null;
+    if (approve && !confirm('이 회귀 제안을 승인하고 가중치를 즉시 적용할까요?')) return;
+    setBusy(true);
+    try {
+      await adminDecideWeightRegression(id, approve, note ?? undefined);
+      toast.success(approve ? '승인 + 가중치 적용됨' : '거부됨');
+      await load();
+    } catch (e) {
+      toast.error(`처리 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function applyDraft() {
     if (Object.keys(draft).length === 0) return;
@@ -242,6 +285,113 @@ export default function WeightTuningTab() {
               : suggest.reason ?? '미제공'}</b>
         </section>
       )}
+
+      {/* 2b. 회귀 가중치 + 승인 큐 (Phase 4b) */}
+      <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <header className="mb-3 flex items-center gap-2">
+          <FlaskConical size={14} className="text-accent" />
+          <h4 className="text-sm font-bold">회귀 가중치 최적화 (Phase 4b)</h4>
+          <button
+            onClick={() => void runRegression()}
+            disabled={regressing || busy}
+            className="ml-auto rounded-md bg-accent px-3 py-1 text-[11px] font-bold text-black hover:opacity-90 disabled:opacity-40"
+          >
+            {regressing ? '실행 중…' : '회귀 실행 + 큐 적재'}
+          </button>
+        </header>
+        <p className="mb-3 text-[11px] text-ink-mute">
+          PostgreSQL 내장 회귀 (regr_slope, regr_r2) 로 sub-score 별 R² 정규화 → 큐에 pending 으로 적재.
+          관리자 승인 시 자동 적용 + history 자동 audit. 표본 50 미만 또는 R² 합 0.05 미만이면 큐 안됨.
+        </p>
+
+        {pendingRegressions.length === 0 && (
+          <p className="text-[11px] text-ink-dim">대기 중인 제안 없음</p>
+        )}
+
+        {pendingRegressions.map((r) => (
+          <div key={r.id} className="mb-2 rounded-xl bg-amber-500/5 p-3 ring-1 ring-amber-400/20">
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="text-xs font-bold text-ink">대기 (sample N={r.sample_size})</span>
+              <span className="text-[10px] text-ink-dim">
+                {new Date(r.computed_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+              </span>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-left text-ink-mute">
+                  <th className="pb-0.5">가중치</th>
+                  <th className="pb-0.5 text-right">현재</th>
+                  <th className="pb-0.5 text-right">제안</th>
+                  <th className="pb-0.5 text-right">R²</th>
+                  <th className="pb-0.5 text-right">slope</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {WEIGHT_KEYS.map((k) => {
+                  const cur = config[k];
+                  const next = r.suggestion[k];
+                  const diff = next - cur;
+                  const featKey = k === 'fit_audio_w' ? 'audio'
+                    : k === 'fit_meta_w' ? 'meta'
+                      : k === 'fit_behavior_w' ? 'behavior' : 'penalty';
+                  const reg = r.regression[featKey];
+                  return (
+                    <tr key={k} className="border-t border-line/5">
+                      <td className="py-0.5 font-sans text-ink">{WEIGHT_LABEL[k]}</td>
+                      <td className="py-0.5 text-right text-ink-mute">{cur.toFixed(2)}</td>
+                      <td className={`py-0.5 text-right font-bold ${diff > 0.01 ? 'text-emerald-700 dark:text-emerald-300' : diff < -0.01 ? 'text-rose-700 dark:text-rose-300' : 'text-ink'}`}>
+                        {next.toFixed(2)}
+                      </td>
+                      <td className="py-0.5 text-right text-ink-mute">{reg.r2.toFixed(3)}</td>
+                      <td className="py-0.5 text-right text-ink-dim">{reg.slope.toFixed(4)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="mt-2 flex gap-1.5">
+              <button
+                onClick={() => void decideRegression(r.id, true)}
+                disabled={busy}
+                className="flex-1 inline-flex items-center justify-center gap-1 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-40"
+              >
+                <Check size={12} /> 승인 + 적용
+              </button>
+              <button
+                onClick={() => void decideRegression(r.id, false)}
+                disabled={busy}
+                className="flex-1 inline-flex items-center justify-center gap-1 rounded-md bg-bg-soft px-3 py-1.5 text-xs font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink disabled:opacity-40"
+              >
+                <XIcon size={12} /> 거부
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* 최근 결정된 회귀 (간단 목록) */}
+        {recentRegressions.filter((r) => r.status !== 'pending').length > 0 && (
+          <details className="mt-3 text-[11px]">
+            <summary className="cursor-pointer text-ink-mute">최근 회귀 ({recentRegressions.length}건)</summary>
+            <ul className="mt-1 space-y-0.5">
+              {recentRegressions.map((r) => (
+                <li key={r.id} className="flex items-baseline justify-between rounded bg-bg-soft px-2 py-0.5">
+                  <span>
+                    <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
+                      r.status === 'approved' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : r.status === 'rejected' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                      : 'bg-ink/10 text-ink-dim'
+                    }`}>{r.status}</span>
+                    N={r.sample_size}
+                    {' · '}
+                    {WEIGHT_KEYS.map((k) => r.suggestion[k].toFixed(2)).join('/')}
+                  </span>
+                  <span className="text-ink-dim">{new Date(r.computed_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'short' })}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
 
       {/* 3. 수동 편집 */}
       <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
