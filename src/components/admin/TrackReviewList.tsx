@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil } from 'lucide-react';
+import { Music, Check, X, MessageSquareWarning, Play, FileText, Wallet, ChevronDown, ChevronRight, Wand2, Pencil, Brain, AlertTriangle } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
-import { applyAiMetadata } from '@/lib/aiCuration';
+import { applyAiMetadata, adminGetTrackPredictionsBatch, type TrackPredictionRow } from '@/lib/aiCuration';
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import AudioDistributionStatsCard from '@/components/admin/AudioDistributionStatsCard';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
@@ -64,6 +64,9 @@ export default function TrackReviewList() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<string | null>(null);
 
+  // X6.64: 검수 화면에 자동 예측 badge 표시 — track_pattern_predictions 배치 fetch
+  const [predictionsByTrack, setPredictionsByTrack] = useState<Map<string, TrackPredictionRow[]>>(new Map());
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,6 +77,27 @@ export default function TrackReviewList() {
       setRows(data);
       setCounts(cnt);
       setSelected(new Set());
+
+      // 예측 배치 fetch (실패 silent — badge 만 못 보임)
+      const ids = data.map((r) => r.track_id);
+      if (ids.length > 0) {
+        adminGetTrackPredictionsBatch(ids)
+          .then((preds) => {
+            const m = new Map<string, TrackPredictionRow[]>();
+            for (const p of preds) {
+              const arr = m.get(p.track_id) ?? [];
+              arr.push(p);
+              m.set(p.track_id, arr);
+            }
+            setPredictionsByTrack(m);
+          })
+          .catch((e) => {
+            console.warn('[TrackReviewList] prediction batch fetch failed:', e);
+            setPredictionsByTrack(new Map());
+          });
+      } else {
+        setPredictionsByTrack(new Map());
+      }
     } finally {
       setLoading(false);
     }
@@ -420,7 +444,11 @@ export default function TrackReviewList() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="truncate text-sm font-semibold">{r.title}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="truncate text-sm font-semibold">{r.title}</p>
+                        {/* X6.64: 자동 예측 badge — track_pattern_predictions (0333) 기반 */}
+                        <PredictionBadges predictions={predictionsByTrack.get(r.track_id) ?? []} />
+                      </div>
                       {r.track_code && (
                         <code className="inline-block rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[10px] text-ink-mute">
                           {r.track_code}
@@ -992,6 +1020,44 @@ function DiagChip({ ok, label }: { ok: boolean; label: string }) {
       }`}
     >
       {ok ? '✓' : '⏳'} {label}
+    </span>
+  );
+}
+
+/**
+ * X6.64 — 검수 화면 자동 예측 badge.
+ * 한 트랙당 최대 2개 예측 (remove + approve 각 top match).
+ * remove ≥60% 강조 (검수 우선순위 신호). approve 는 참고용.
+ */
+function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }) {
+  if (predictions.length === 0) return null;
+  // remove + approve 분리, similarity 높은 순
+  const remove = predictions.find((p) => p.predicted_decision === 'remove');
+  const approve = predictions.find((p) => p.predicted_decision === 'approve');
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {remove && (
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ring-1 ${
+            remove.similarity_pct >= 75
+              ? 'bg-rose-100 text-rose-900 ring-rose-300/40 dark:bg-rose-500/20 dark:text-rose-200 dark:ring-rose-400/30'
+              : remove.similarity_pct >= 65
+                ? 'bg-amber-100 text-amber-900 ring-amber-300/40 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-400/30'
+                : 'bg-orange-100 text-orange-900 ring-orange-300/40 dark:bg-orange-500/15 dark:text-orange-200'
+          }`}
+          title={`AI 예측: ${remove.predicted_reason_display ?? remove.predicted_reason_key} 와 ${remove.similarity_pct.toFixed(0)}% 유사 (학습 샘플 ${remove.cluster_sample_count ?? '?'}곡)`}
+        >
+          <AlertTriangle size={9} /> {remove.predicted_reason_display ?? remove.predicted_reason_key} {remove.similarity_pct.toFixed(0)}%
+        </span>
+      )}
+      {approve && approve.similarity_pct >= 60 && (
+        <span
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-300/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-400/30"
+          title={`AI 예측: 통과 cluster 와 ${approve.similarity_pct.toFixed(0)}% 유사`}
+        >
+          <Brain size={9} /> 통과 가능 {approve.similarity_pct.toFixed(0)}%
+        </span>
+      )}
     </span>
   );
 }

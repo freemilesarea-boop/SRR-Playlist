@@ -1963,3 +1963,33 @@ export async function adminSyncPredictionActuals(): Promise<{ ok: boolean; predi
   if (error) throw error;
   return data as { ok: boolean; predictions_validated: number };
 }
+
+// ============================================
+// X6.64 — TrackReviewList 예측 badge 용 batch fetch
+// ============================================
+export async function adminGetTrackPredictionsBatch(trackIds: string[]): Promise<TrackPredictionRow[]> {
+  if (trackIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('track_pattern_predictions')
+    .select('track_id,predicted_decision,predicted_reason_key,predicted_reason_display,similarity_pct,cluster_sample_count,cluster_decision_total,generated_at,actual_decision,actual_reason_key,validated_at')
+    .in('track_id', trackIds);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    track_id: r.track_id,
+    track_title: null,
+    track_artist: null,
+    release_status: null,
+    visibility_status: null,
+    predicted_decision: r.predicted_decision,
+    predicted_reason_key: r.predicted_reason_key,
+    predicted_reason_display: r.predicted_reason_display,
+    similarity_pct: r.similarity_pct,
+    cluster_sample_count: r.cluster_sample_count,
+    cluster_decision_total: r.cluster_decision_total,
+    generated_at: r.generated_at,
+    actual_decision: r.actual_decision,
+    actual_reason_key: r.actual_reason_key,
+    validated_at: r.validated_at,
+    prediction_correct: null,
+  })) as TrackPredictionRow[];
+}
