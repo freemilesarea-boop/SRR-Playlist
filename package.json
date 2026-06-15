@@ -31,6 +31,7 @@
     "react-qr-code": "^2.0.15",
     "react-router-dom": "^6.27.0",
     "recharts": "^2.13.0",
+    "write-excel-file": "^4.1.1",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

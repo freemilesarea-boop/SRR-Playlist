@@ -14,6 +14,7 @@ import {
 } from '@/lib/salespersonApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
+import { downloadXlsx } from '@/lib/exportExcel';
 
 const won = (n: number | null | undefined) => `₩${(n ?? 0).toLocaleString('ko-KR')}`;
 const dt = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '—');
@@ -59,13 +60,18 @@ export default function SalespersonDashboardPage() {
     catch (e) { toast.error(`상세 실패: ${(e as Error).message}`); setDetailId(null); }
     finally { setDetailLoading(false); }
   }
-  function downloadCsv() {
-    const head = '매장명,사업자,상태,결제,가입일,최근재생,30일재생,월구독료,예상수수료,위험';
-    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const body = enriched.map(({ s, risk }) => [s.store_name, s.owner_name, s.subscription_status, s.payment_status, s.joined_at?.slice(0, 10), s.last_play_at?.slice(0, 10) ?? '', s.plays_30d, s.monthly_amount, s.est_commission, risk.reason ?? '정상'].map(esc).join(',')).join('\n');
-    const blob = new Blob(['﻿' + head + '\n' + body], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `영업매장_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
-    URL.revokeObjectURL(a.href);
+  async function downloadExcel() {
+    const headers = ['매장명', '사업자', '상태', '결제', '가입일', '최근재생', '30일재생', '월구독료', '예상수수료', '위험'];
+    const rows = enriched.map(({ s, risk }) => [
+      s.store_name, s.owner_name, s.subscription_status, s.payment_status,
+      s.joined_at?.slice(0, 10) ?? '', s.last_play_at?.slice(0, 10) ?? '',
+      s.plays_30d, s.monthly_amount, s.est_commission, risk.reason ?? '정상',
+    ]);
+    try {
+      await downloadXlsx(`영업매장_${new Date().toISOString().slice(0, 10)}.xlsx`, headers, rows);
+    } catch (e) {
+      toast.error(`엑셀 내보내기 실패: ${(e as Error).message}`);
+    }
   }
 
   if (loading) return <SkeletonPage />;
@@ -105,7 +111,7 @@ export default function SalespersonDashboardPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setRiskOnly((v) => !v)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition ${riskOnly ? 'bg-rose-500/15 text-rose-500' : 'bg-bg-soft text-ink-mute hover:bg-bg-hover'}`}>⚠ 위험만</button>
-            <button onClick={downloadCsv} className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover"><Download size={12} /> CSV</button>
+            <button onClick={() => void downloadExcel()} className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover"><Download size={12} /> Excel</button>
             <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover"><RefreshCw size={12} /> 새로고침</button>
           </div>
         </div>
