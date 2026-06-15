@@ -55,6 +55,19 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
 };
 
 /**
+ * X6.79 — iOS/iPadOS Safari 감지.
+ * WebKit 은 audio.volume setter 를 무시 (Apple 정책) → 슬라이더 작동 X.
+ * iPadOS 13+ 는 navigator.platform='MacIntel' 로 위장하므로 maxTouchPoints 로 추가 판별.
+ */
+function isIOSSafari(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  // iPadOS 위장 케이스
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
+/**
  * 세션당 1회만 실패 처리되는 트랙 id 집합.
  * 모듈 스코프라 페이지 이동/컴포넌트 언마운트해도 유지 (브라우저 탭 단위).
  * SRC_NOT_SUPPORTED / DECODE 등 "재생 불가" 가 확정된 트랙을 같은 세션에서
@@ -715,8 +728,26 @@ export default function Player() {
       if (!audio) return;
       const st = usePlayerStore.getState();
       if (!st.playing) return;            // 사용자 의도적 일시정지
-      if (!audio.paused) return;          // 이미 재생 중
       if (!audio.src) return;             // src 미설정 (track sync effect 가 처리)
+
+      // X6.79 — 재생 중이지만 무음(volume=0 또는 muted) 케이스 자동 복원.
+      // 매장 2-3곡 후 silent 버그 대응: crossfade swap race / OS background
+      // suspend 후 volume 이 0 으로 남는 케이스 모두 흡수.
+      const storeVol = st.volume;
+      if (storeVol > 0) {
+        if (audio.muted) {
+          console.warn('[player] silent silence detected — unmute', { reason, id: st.queue[st.index]?.id });
+          audio.muted = false;
+        }
+        if (audio.volume === 0 && !crossfading) {
+          console.warn('[player] silent silence detected — restore volume', {
+            reason, id: st.queue[st.index]?.id, restored: storeVol,
+          });
+          audio.volume = storeVol;
+        }
+      }
+
+      if (!audio.paused) return;          // 이미 재생 중 (위 무음 복원만 수행)
 
       console.info('[player] auto-resume', { reason, id: st.queue[st.index]?.id });
       const p = audio.play();
@@ -856,6 +887,15 @@ export default function Player() {
         // nextAudio 가 reload 되어 무음 발생 (매장모드 다음곡 무음 버그).
         // jumpTo 이전에 lastTrackIdRef 를 미리 설정해 trackChanged=false 로 만든다.
         lastTrackIdRef.current = nextTrack.id;
+        // X6.79 — stale targetVol 무력화: 현재 store volume 으로 명시적 재설정.
+        // tick 중 슬라이더 조작 시 targetVol 캡처 시점의 값이라 stale → 매장 2-3곡 후 무음.
+        // setActiveIdx 후 useEffect 가 동기화하긴 하지만 React batch 순서로 race 가능 → 사전 보정.
+        const storeVol = usePlayerStore.getState().volume;
+        if (nextAudio) {
+          nextAudio.volume = storeVol;
+          if (nextAudio.muted) nextAudio.muted = false;
+        }
+        if (activeAudio) activeAudio.volume = 0;
         // active 교체
         const becomeActive: 0 | 1 = activeIdx === 0 ? 1 : 0;
         setActiveIdx(becomeActive);
@@ -1600,6 +1640,14 @@ export default function Player() {
             <span className="w-9 shrink-0 text-right font-mono text-[11px] text-ink-mute tabular-nums">
               {Math.round(volume * 100)}
             </span>
+          </div>
+        )}
+        {/* X6.79 — iOS/iPadOS Safari 는 audio.volume setter 를 무시 (WebKit 정책).
+            매장 iPad 에서 슬라이더 안 먹힘 문제 안내. 데스크탑/안드로이드 정상. */}
+        {volumePopover && isIOSSafari() && (
+          <div className="px-3 py-1 text-[10px] leading-tight text-amber-700 dark:text-amber-300">
+            ⚠️ iPhone/iPad 에서는 슬라이더가 작동하지 않습니다.
+            기기 측면 <b>볼륨 ↑↓ 하드웨어 버튼</b> 으로 조절해주세요.
           </div>
         )}
         <div className="relative mx-2 mt-1.5 h-1 rounded-full bg-ink/10">
