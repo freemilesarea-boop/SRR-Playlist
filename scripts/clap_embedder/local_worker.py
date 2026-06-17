@@ -137,6 +137,16 @@ class LocalEmbedder:
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             feat = self.model.get_audio_features(**inputs)
+        # X6.83 — transformers 5.x 에서 get_audio_features() 가 ModelOutput 객체 반환.
+        # 4.x 는 Tensor 직접 반환. 둘 다 호환:
+        if not isinstance(feat, torch.Tensor):
+            for attr in ("audio_embeds", "pooler_output"):
+                v = getattr(feat, attr, None)
+                if v is not None:
+                    feat = v
+                    break
+            else:
+                feat = feat.last_hidden_state.mean(dim=1)
         feat = feat / (feat.norm(dim=-1, keepdim=True) + 1e-9)
         vec = feat.squeeze(0).cpu().numpy().astype(np.float32).tolist()
         if len(vec) != EMBEDDING_DIM:
