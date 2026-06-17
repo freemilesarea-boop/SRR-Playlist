@@ -28,7 +28,18 @@ interface PlayerState {
   /** 세션 복원 직후 audio 가 loadedmetadata 될 때 적용할 seek 위치 (초). 한 번 소비 후 null. */
   pendingSeekSec: number | null;
 
-  setQueue: (tracks: TrackRow[], startIndex?: number, playlist?: PlaylistRow | null, context?: PlaylistContext | null) => void;
+  /**
+   * X6.80 — opts.dailySeedShuffle: 매장 모드에서 매일 다른 순서로 셔플.
+   * shuffle=true 와 함께 사용 → buildSeededShuffleOrder(todayKstSeed) 적용.
+   * (true → 같은 날엔 일관, 다음날 자동 다른 순서)
+   */
+  setQueue: (
+    tracks: TrackRow[],
+    startIndex?: number,
+    playlist?: PlaylistRow | null,
+    context?: PlaylistContext | null,
+    opts?: { dailySeedShuffle?: boolean },
+  ) => void;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -86,6 +97,51 @@ function buildShuffleOrder(len: number, startIndex: number): number[] {
   return [startIndex, ...arr];
 }
 
+/**
+ * X6.80 — daily seed 기반 셔플 (매장 매일 다른 순서 보장).
+ * 같은 seed → 같은 순서 (하루 안에선 일관). 다음날 seed 변경 → 다른 순서.
+ * Mulberry32 (간단/빠름/충돌적음) PRNG.
+ */
+function seededRandom(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildSeededShuffleOrder(len: number, startIndex: number, seed: number): number[] {
+  const rand = seededRandom(seed);
+  const arr = Array.from({ length: len }, (_, i) => i).filter((i) => i !== startIndex);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return [startIndex, ...arr];
+}
+
+/** YYYYMMDD 정수 (KST 기준) — 매장모드 daily shuffle seed. */
+function todayKstSeed(): number {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000); // UTC+9
+  return kst.getUTCFullYear() * 10000 + (kst.getUTCMonth() + 1) * 100 + kst.getUTCDate();
+}
+
+/** track_id 기준 중복 제거 (첫 번째 occurrence 유지, 순서 보존). */
+function dedupeByTrackId<T extends { id: string }>(tracks: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const t of tracks) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  return out;
+}
+
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
   index: 0,
@@ -101,17 +157,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffleOrder: [],
   pendingSeekSec: null,
 
-  setQueue: (tracks, startIndex = 0, playlist = null, context = null) => {
+  setQueue: (tracks, startIndex = 0, playlist = null, context = null, opts) => {
     // 안전장치: 재생 불가(audio_url null/빈문자열/형식이상) 트랙은 큐에서 제외.
     // 호출 측에서 이미 filterPlayableTracks 를 호출했으면 이 단계는 no-op.
     // 호출 측이 잊었어도 무한 next() 캐스케이드를 차단한다.
     const target = tracks[Math.max(0, Math.min(startIndex, tracks.length - 1))];
-    const filtered = tracks.filter(isPlayableTrack);
-    const dropped = tracks.length - filtered.length;
-    if (dropped > 0 && import.meta.env.DEV) {
+    const playable = tracks.filter(isPlayableTrack);
+    const droppedUnplayable = tracks.length - playable.length;
+
+    // X6.80 — track_id 중복 제거 (매장모드 중복 연속재생 버그 차단).
+    // 원인: playlist_tracks 재추가/Phase 7 daily refresh + autoplay 추천이
+    // 같은 곡을 큐에 두 번 넣을 수 있음.
+    const filtered = dedupeByTrackId(playable);
+    const droppedDup = playable.length - filtered.length;
+
+    if ((droppedUnplayable > 0 || droppedDup > 0) && import.meta.env.DEV) {
       console.warn(
-        `[playerStore] setQueue: ${dropped}곡이 재생 불가(audio_url 없음/형식이상)여서 큐에서 제외됨. ` +
-          '호출 측에서 filterPlayableTracks() 로 미리 거르는 것을 권장.',
+        `[playerStore] setQueue: 재생불가 ${droppedUnplayable}곡 + 중복 ${droppedDup}곡 제외. ` +
+          '호출 측에서 filterPlayableTracks() / dedup 으로 미리 거르는 것을 권장.',
       );
     }
     if (filtered.length === 0) {
@@ -122,6 +185,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // 원본의 target 트랙이 살아남았으면 그 위치를, 아니면 0
     const idx = target ? Math.max(0, filtered.findIndex((t) => t.id === target.id)) : 0;
     const safeIdx = idx < 0 ? 0 : idx;
+    const useShuffle = get().shuffle;
+    // X6.80 — daily seed shuffle (매장모드 매일 다른 순서)
+    const shuffleOrder = useShuffle
+      ? (opts?.dailySeedShuffle
+          ? buildSeededShuffleOrder(filtered.length, safeIdx, todayKstSeed())
+          : buildShuffleOrder(filtered.length, safeIdx))
+      : [];
     set({
       queue: filtered,
       index: safeIdx,
@@ -131,7 +201,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTime: 0,
       duration: 0,
       pendingSeekSec: null,
-      shuffleOrder: get().shuffle ? buildShuffleOrder(filtered.length, safeIdx) : [],
+      shuffleOrder,
     });
   },
 

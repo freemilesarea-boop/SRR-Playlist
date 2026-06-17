@@ -1247,14 +1247,22 @@ export default function Player() {
     if (recs.length === 0) return false;
     const playable = recs.filter((r) => isPlayableUrl(r.audio_url));
     if (playable.length === 0) return false;
+    // X6.80 — 큐에 이미 있는 곡 제외 (중복 연속재생 차단)
+    // 추천 결과에 현재 큐 트랙이 포함되면 그대로 [...queue, ...playable] 시 동일곡 재생됨.
+    const queueIds = new Set(queue.map((t) => t.id));
+    const fresh = playable.filter((r) => !queueIds.has(r.id));
+    if (fresh.length === 0) {
+      if (import.meta.env.DEV) console.debug('[Player] autoplay: 추천곡 모두 큐에 이미 있음 → skip');
+      return false;
+    }
     // 기존 큐에 이어 붙임 + 첫 추천곡으로 점프
-    const newQueue = [...queue, ...playable];
+    const newQueue = [...queue, ...fresh];
     usePlayerStore.setState({
       queue: newQueue,
       index: queue.length,
       playing: true,
       currentTime: 0,
-      shuffleOrder: shuffle ? [...shuffleOrder, ...playable.map((_, i) => queue.length + i)] : [],
+      shuffleOrder: shuffle ? [...shuffleOrder, ...fresh.map((_, i) => queue.length + i)] : [],
     });
     // 0091-fix — toast dedup (10분 윈도우, 큐 끝 반복 시 폭주 방지)
     const now = Date.now();
