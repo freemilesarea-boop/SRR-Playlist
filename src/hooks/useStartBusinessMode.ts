@@ -107,7 +107,8 @@ export function useStartBusinessMode() {
         const playlist = store.playlists.find((p) => p.id === playlistId) ?? null;
         setShuffle(true);
         setRepeat('all');
-        setQueue(playable, 0, playlist);
+        // X6.80 — daily seed shuffle: 매장 매일 다른 순서 (오늘 KST 기준)
+        setQueue(playable, 0, playlist, null, { dailySeedShuffle: true });
         playAction();
         setBusinessMode(true);
         if (scheduleId) {

@@ -104,9 +104,11 @@ export function useBusinessAutoSwitch() {
           return;
         }
         const playlist = playlists.find((p) => p.id === targetPlaylistId) ?? null;
-        setQueue(playable, 0, playlist);
         setRepeat('all');
         setShuffle(true);
+        // X6.80 — 시간대 전환 시에도 daily seed shuffle 적용 (매일 다른 순서)
+        // setShuffle 을 먼저 호출해야 setQueue 내부의 get().shuffle 이 true 임
+        setQueue(playable, 0, playlist, null, { dailySeedShuffle: true });
         playAction();
         if (import.meta.env.DEV) console.debug('[StoreEngine] playback switched', { tracks: playable.length, isInitial, slot: targetSlotName });
         setLastSwitchedScheduleId(targetScheduleId);
