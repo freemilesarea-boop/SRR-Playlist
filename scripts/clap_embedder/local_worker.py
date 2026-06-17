@@ -68,6 +68,9 @@ def _env(name: str) -> str:
 
 def _client() -> httpx.Client:
     url = _env("SUPABASE_URL").rstrip("/")
+    # X6.82 — protocol 자동 보정 (사용자가 'https://' 빠뜨려도 동작)
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
     key = _env("SUPABASE_SERVICE_ROLE_KEY")
     return httpx.Client(
         base_url=f"{url}/rest/v1",
