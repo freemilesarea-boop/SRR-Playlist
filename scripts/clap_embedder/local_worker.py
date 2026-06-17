@@ -128,7 +128,9 @@ class LocalEmbedder:
         print(f"[clap] ready.")
 
     def embed(self, audio: np.ndarray, sr: int) -> list[float]:
-        inputs = self.processor(audios=audio, sampling_rate=sr, return_tensors="pt")
+        # X6.81 — transformers 4.57+ 에서 'audios' 키워드 deprecated → 'audio' 단수형 사용
+        # 4.x 라인은 둘 다 받지만 deprecation 메시지가 ValueError 로 raise 됨.
+        inputs = self.processor(audio=audio, sampling_rate=sr, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             feat = self.model.get_audio_features(**inputs)
