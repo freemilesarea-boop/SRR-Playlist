@@ -102,14 +102,17 @@ alter table public.playlist_track_fit_scores
 
 
 -- =============================================================================
--- 3. _ai_compute_fit — reaction_adjustment 통합 (0342 base 유지 + 추가)
---    변경점만 표시:
---      * v_store_id := playlists.created_by_user_id
---      * v_reaction_adj := _ai_reaction_adjustment(track_id, v_store_id, v_normalized_slug)
---      * v_fit := clamp(0..100, v_manual + v_ai_boost + v_reaction_adj)  ← 추가
---      * guardrail penalty 는 그대로 v_fit 에 적용 (우선순위 유지)
---      * reason_codes 에 'reaction_adj_*' 추가
---      * insert/update 시 reaction_adjustment 저장
+-- 3. _ai_compute_fit — reaction_adjustment 통합 (0342 base 유지, minimal patch)
+--    변경점 (9 items, 실제 운영 DB 적용 기준):
+--      #2 declare:  v_reaction_adj numeric := 0
+--      #3 ai_boost 직후:  v_reaction_adj := _ai_reaction_adjustment(p_track_id, null, null)
+--                        (1순위 직접 매장 tier 는 X6.88+ 에서 store_id 연결 후 적용)
+--      #4 v_fit:  + v_reaction_adj 추가, clamp 0..100 유지
+--      #5 v_reason:  reaction 값 추가
+--      #6 insert columns:  reaction_adjustment
+--      #7 values:  v_reaction_adj
+--      #8 on conflict:  reaction_adjustment = excluded.reaction_adjustment
+--      #9 guardrail penalty:  reaction 적용 후 그대로 (우선순위 유지)
 -- =============================================================================
 create or replace function public._ai_compute_fit(p_playlist_id uuid, p_track_id uuid)
 returns void
@@ -124,13 +127,11 @@ declare
   v_ai_genre int := 0; v_ai_mood int := 0; v_ai_store int := 0; v_ai_boost int := 0;
   v_mood_overlap int := 0;
   v_reason_codes text[] := '{}';
-  v_w record;  -- X6.70 segment-resolved weights
-  v_store_id uuid;        -- X6.86 — 매장(=playlist owner) id
-  v_reaction_adj numeric := 0;  -- X6.86 — reaction 보정값
+  v_w record;
+  v_reaction_adj numeric := 0;  -- X6.86 NEW (#2)
 begin
   select * into cfg from public.ai_scoring_config where id=1;
-  select id, business_category, category, daypart, genre_tags, mood_tags, situation_tags,
-         ai_store_key, created_by_user_id
+  select id, business_category, category, daypart, genre_tags, mood_tags, situation_tags, ai_store_key
     into pl from public.playlists where id=p_playlist_id;
   if pl.id is null then return; end if;
   select * into ai from public.track_ai_metadata where track_id=p_track_id;
@@ -138,7 +139,6 @@ begin
 
   v_key := coalesce(nullif(btrim(pl.ai_store_key),''),
                     public._ai_playlist_store_key(pl.business_category, pl.category, pl.daypart));
-
   v_normalized_slug := public.normalize_store_label(pl.business_category);
   select * into v_w from public._ai_resolve_weights(v_normalized_slug, pl.daypart);
 
@@ -204,18 +204,13 @@ begin
 
   v_ai_boost := v_ai_genre + v_ai_mood + v_ai_store;
 
-  -- X6.86 — reaction soft adjustment (guardrail 前 적용, clamp 0..100)
-  v_store_id := pl.created_by_user_id;
-  v_reaction_adj := public._ai_reaction_adjustment(p_track_id, v_store_id, v_normalized_slug);
-  if v_reaction_adj is null then v_reaction_adj := 0; end if;
+  -- X6.86 NEW (#3): reaction soft adjustment (2순위 aggregate 만, 1순위 store tier 비활성)
+  v_reaction_adj := coalesce(public._ai_reaction_adjustment(p_track_id, null, null), 0);
 
+  -- X6.86 NEW (#4): + v_reaction_adj, clamp 0..100 유지
   v_fit := least(100, greatest(0, v_manual + v_ai_boost + v_reaction_adj));
 
-  if v_reaction_adj <> 0 then
-    v_reason_codes := array_append(v_reason_codes,
-      'reaction_adj_' || case when v_reaction_adj > 0 then '+' else '' end || v_reaction_adj::text);
-  end if;
-
+  -- X6.86 NEW (#9): guardrail penalty 는 reaction 적용 후 그대로 (우선순위 유지)
   if v_key is not null then
     gr := public._ai_check_store_guardrails(p_track_id, v_key);
     if (gr->>'excluded')::boolean then
@@ -226,10 +221,11 @@ begin
     end if;
   end if;
 
-  -- 0241 호환 status 값 (CHECK: active|excluded|review_needed)
   v_status := case when v_excluded then 'excluded'
                    when v_fit < cfg.fit_exclude_cutoff then 'review_needed'
                    else 'active' end;
+
+  -- X6.86 NEW (#5): reason 문자열에 reaction 값 추가
   v_reason := format('audio %s · meta %s · behavior %s · penalty %s · manual %s · ai_boost +%s · reaction %s · [w:%s]',
     round(v_audio), round(v_meta), round(v_behav), round(v_pen),
     round(v_manual), v_ai_boost,
@@ -240,13 +236,13 @@ begin
     playlist_id, track_id, fit_score, audio_score, metadata_score, behavior_score, penalty_score,
     manual_score, ai_genre_score, ai_mood_score, ai_store_score, ai_boost_total,
     normalized_store_slug, reason_codes, reason, source, status, updated_at, final_fit_score,
-    reaction_adjustment
+    reaction_adjustment  -- X6.86 NEW (#6)
   ) values (
     p_playlist_id, p_track_id, round(v_fit),
     round(v_audio), round(v_meta), round(v_behav), round(v_pen),
     round(v_manual), v_ai_genre, v_ai_mood, v_ai_store, v_ai_boost,
     v_normalized_slug, v_reason_codes, v_reason, 'algorithm', v_status, now(), round(v_fit),
-    v_reaction_adj
+    v_reaction_adj  -- X6.86 NEW (#7)
   )
   on conflict (playlist_id, track_id) do update set
     fit_score = excluded.fit_score, audio_score = excluded.audio_score,
@@ -260,7 +256,7 @@ begin
     status = case when public.playlist_track_fit_scores.source='admin'
                   then public.playlist_track_fit_scores.status else excluded.status end,
     updated_at = now(), final_fit_score = excluded.final_fit_score,
-    reaction_adjustment = excluded.reaction_adjustment;
+    reaction_adjustment = excluded.reaction_adjustment;  -- X6.86 NEW (#8)
 end;
 $$;
 
