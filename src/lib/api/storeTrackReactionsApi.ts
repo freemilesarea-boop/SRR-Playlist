@@ -74,3 +74,95 @@ export async function upsertStoreTrackReaction(
   }
   return data as StoreTrackReaction;
 }
+// =============================================================================
+// X6.85 — Store Learning Dashboard (admin only)
+// 단일 RPC `admin_store_learning_dashboard(p_window_days)` 가 7개 섹션을 반환.
+// =============================================================================
+
+export interface StoreLearningOverview {
+  total_likes: number;
+  total_dislikes: number;
+  recent_likes: number;
+  recent_dislikes: number;
+  unique_stores: number;
+  unique_tracks: number;
+  total_reactions: number;
+  like_ratio: number | null;
+}
+
+export interface StoreLearningTrackRow {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  genre: string | null;
+  like_count: number;
+  dislike_count: number;
+  like_ratio?: number | null;
+  dislike_ratio?: number | null;
+  fit_score: number | null;
+}
+
+export interface StoreLearningDailyPoint {
+  date: string; // YYYY-MM-DD
+  likes: number;
+  dislikes: number;
+}
+
+export interface StoreLearningStoreTypeRow {
+  store_type: string;
+  likes: number;
+  dislikes: number;
+  like_ratio: number | null;
+  reactions: number;
+  stores: number;
+}
+
+export interface StoreLearningGenreRow {
+  genre: string;
+  likes: number;
+  dislikes: number;
+  like_ratio: number | null;
+  reactions: number;
+  tracks: number;
+}
+
+export type StoreLearningReadinessStatus = 'LOW' | 'MEDIUM' | 'READY';
+
+export interface StoreLearningReadiness {
+  score: number;
+  status: StoreLearningReadinessStatus;
+  breakdown: {
+    reaction_score: number;
+    store_score: number;
+    track_score: number;
+    total_reactions: number;
+    unique_stores: number;
+    unique_tracks: number;
+  };
+}
+
+export interface StoreLearningDashboard {
+  overview: StoreLearningOverview;
+  topLiked: StoreLearningTrackRow[];
+  topDisliked: StoreLearningTrackRow[];
+  dailyTrend: StoreLearningDailyPoint[];
+  storeTypes: StoreLearningStoreTypeRow[];
+  genres: StoreLearningGenreRow[];
+  readiness: StoreLearningReadiness;
+  window_days: number;
+  computed_at: string;
+}
+
+/** X6.85 — admin dashboard. window_days 기본 30. */
+export async function adminStoreLearningDashboard(
+  windowDays = 30,
+): Promise<StoreLearningDashboard> {
+  const { data, error } = await supabase.rpc('admin_store_learning_dashboard', {
+    p_window_days: windowDays,
+  });
+  if (error) {
+    console.error('[storeTrackReactionsApi] dashboard failed', error);
+    throw error;
+  }
+  return data as StoreLearningDashboard;
+}
