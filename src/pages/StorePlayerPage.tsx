@@ -8,8 +8,10 @@ import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
+import { useAuthStore } from '@/store/authStore';
 import AutoCover from '@/components/AutoCover';
 import InstallAppButton from '@/components/InstallAppButton';
+import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
 
 /**
@@ -40,6 +42,9 @@ export default function StorePlayerPage() {
   useEffect(() => {
     setBusinessMode(true);
   }, [setBusinessMode]);
+
+  // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
+  const storeId = useAuthStore((s) => s.user?.id ?? null);
 
   const current = queue[index];
   const upcoming =
@@ -81,13 +86,23 @@ export default function StorePlayerPage() {
               <AutoCover title={current.title} category={current.genre} imageUrl={current.cover_url} size="lg" />
             </div>
 
-            <div className="space-y-1 text-center">
+            <div className="space-y-2 text-center">
               <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{current.title}</h1>
               <p className="text-base text-white/70">{current.artist ?? '—'}</p>
               {playlist && (
                 <p className="inline-flex items-center gap-1 text-xs text-white/50">
                   <ListMusic size={12} /> {playlist.title}
                 </p>
+              )}
+              {/* X6.84 — 매장주 행동 데이터 (👍/👎) 수집. 로그인 + current 트랙 있을 때만. */}
+              {storeId && current?.id && (
+                <div className="flex justify-center pt-2">
+                  <StoreTrackReactionButtons
+                    storeId={storeId}
+                    trackId={current.id}
+                    playlistId={playlist?.id ?? null}
+                  />
+                </div>
               )}
             </div>
 
