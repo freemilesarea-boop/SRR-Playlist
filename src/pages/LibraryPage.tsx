@@ -43,32 +43,55 @@ export default function LibraryPage() {
 
   async function load() {
     setLoading(true);
-    try {
-      const [overview, lp, fp, rp] = await Promise.all([
-        fetchLibraryOverview(userId),
-        userId
-          ? supabase
-              .from('likes')
-              .select('created_at, playlists(*)')
-              .eq('user_id', userId)
-              .order('created_at', { ascending: false })
-              .then(({ data }) => {
-                const rows = (data ?? []) as unknown as Array<{ playlists: PlaylistRow }>;
-                return rows.map((r) => r.playlists).filter(Boolean);
-              })
-          : Promise.resolve([] as PlaylistRow[]),
-        fetchFollowedPlaylists(userId),
-        userId ? fetchRecentPlaylists(userId, 12) : Promise.resolve([] as PlaylistRow[]),
-      ]);
-      setData(overview);
-      setLikedPlaylists(lp);
-      setFollowedPlaylists(fp);
-      setRecentPlaylists(rp);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '보관함 로드 실패');
-    } finally {
-      setLoading(false);
+    // X6.88 hotfix — Promise.allSettled 로 부분 실패 허용.
+    // liked_tracks 가 정상이어도 likes/followed/recent 중 1건 fail 시 보관함 전체가
+    // "로드 실패" 로 떨어지던 회귀 수정 (Supabase usage limit / RLS 회귀 등 envelope).
+    const tasks = await Promise.allSettled([
+      fetchLibraryOverview(userId),
+      userId
+        ? supabase
+            .from('likes')
+            .select('created_at, playlists(*)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(200)
+            .then(({ data, error }) => {
+              if (error) {
+                console.warn('[LibraryPage] likes fetch failed', error);
+                return [] as PlaylistRow[];
+              }
+              const rows = (data ?? []) as unknown as Array<{ playlists: PlaylistRow }>;
+              return rows.map((r) => r.playlists).filter(Boolean);
+            })
+        : Promise.resolve([] as PlaylistRow[]),
+      fetchFollowedPlaylists(userId).catch((e) => {
+        console.warn('[LibraryPage] followed fetch failed', e);
+        return [] as PlaylistRow[];
+      }),
+      userId
+        ? fetchRecentPlaylists(userId, 12).catch((e) => {
+            console.warn('[LibraryPage] recent fetch failed', e);
+            return [] as PlaylistRow[];
+          })
+        : Promise.resolve([] as PlaylistRow[]),
+    ]);
+    const overviewRes = tasks[0];
+    const likedPlRes = tasks[1];
+    const followedRes = tasks[2];
+    const recentRes = tasks[3];
+
+    if (overviewRes.status === 'fulfilled') {
+      setData(overviewRes.value);
+    } else {
+      console.error('[LibraryPage] overview failed', overviewRes.reason);
+      // overview 자체 실패는 빈 화면 — 토스트만, ContinueCard/Liked 빈 상태로
+      setData({ liked_tracks: [], recently_played: [], continue: null, recommended_playlists: [] });
+      toast.info('일부 보관함 데이터를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
     }
+    setLikedPlaylists(likedPlRes.status === 'fulfilled' ? likedPlRes.value : []);
+    setFollowedPlaylists(followedRes.status === 'fulfilled' ? followedRes.value : []);
+    setRecentPlaylists(recentRes.status === 'fulfilled' ? recentRes.value : []);
+    setLoading(false);
   }
 
   // 좋아요 store 의 ids 가 바뀌면 (= 다른 화면에서 토글 후 진입) 또는

@@ -108,30 +108,37 @@ export async function fetchLikedTrackIds(userId: string | null): Promise<Set<str
 }
 
 /** 좋아요한 곡 목록 — DB + localStorage union, snapshot fallback 가능 */
-export async function fetchLikedTracks(userId: string | null): Promise<TrackRow[]> {
+export async function fetchLikedTracks(
+  userId: string | null,
+  limit = 500,
+): Promise<TrackRow[]> {
   const local = readLikedLocal();
   // 비로그인: snapshot 그대로
   if (!userId) {
     return applyDemoMode(local.map(snapshotToTrack));
   }
 
-  // 로그인: DB + 로컬 union
+  // 로그인: DB + 로컬 union (limit 적용 — usage limit 환경 보호)
   let dbTracks: TrackRow[] = [];
   try {
     const { data, error } = await supabase
       .from('liked_tracks')
       .select('created_at, tracks(*)')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (!error) {
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) {
+      // X6.88 — usage limit / 4xx / 5xx → 로컬 snapshot 으로 graceful fallback
+      console.warn('[libraryApi] liked_tracks fetch failed', error);
+    } else {
       const rows = (data ?? []) as unknown as Array<{ created_at: string; tracks: TrackRow }>;
       dbTracks = rows.map((r) => r.tracks).filter(Boolean);
     }
-  } catch {
-    /* fall through */
+  } catch (e) {
+    console.warn('[libraryApi] liked_tracks network failed', e);
   }
 
-  // DB 가 비어있고 로컬에 있다면 → 로컬 snapshot 사용 (마이그레이션 미적용 케이스)
+  // DB 가 비어있고 로컬에 있다면 → 로컬 snapshot 사용 (마이그레이션 미적용/장애 케이스)
   if (dbTracks.length === 0 && local.length > 0) {
     return applyDemoMode(local.map(snapshotToTrack));
   }
@@ -562,12 +569,15 @@ export interface LibraryOverview {
 export async function fetchLibraryOverview(
   userId: string | null,
 ): Promise<LibraryOverview> {
-  // 항상 RPC + 개별 fetch 결과를 union 해서 가장 풍부한 데이터 반환
-  const [liked, recent, cont] = await Promise.all([
+  // X6.88 — Promise.allSettled 로 부분 실패 허용. 1건이 죽어도 나머지는 표시.
+  const results = await Promise.allSettled([
     fetchLikedTracks(userId),
     fetchRecentlyPlayedTracks(userId, 20),
     fetchContinueListening(userId),
   ]);
+  const liked = results[0].status === 'fulfilled' ? results[0].value : [];
+  const recent = results[1].status === 'fulfilled' ? results[1].value : [];
+  const cont = results[2].status === 'fulfilled' ? results[2].value : null;
 
   let recommended: PlaylistRow[] = [];
   if (userId) {
