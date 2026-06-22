@@ -36,12 +36,17 @@ export default function StorePlayerPage() {
   const { online, failedCount, wakeLockSupported, wakeLockActive, todayPlayCount } =
     usePlaybackHealthStore();
   const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
+  // X6.88.1 — 직접 URL 진입(/store/player) 경로에서도 localStorage 정규화 보장.
+  // useStartBusinessMode 를 거치지 않는 진입에 대비.
+  const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
 
   // 매장 모드 진입 → businessMode ON (App 의 useWakeLock(businessMode && playing) 가 화면 꺼짐 방지)
+  // + crossfade 강제 OFF (localStorage 정규화)
   useEffect(() => {
     setBusinessMode(true);
-  }, [setBusinessMode]);
+    enableForBusinessMode();
+  }, [setBusinessMode, enableForBusinessMode]);
 
   // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
   const storeId = useAuthStore((s) => s.user?.id ?? null);
