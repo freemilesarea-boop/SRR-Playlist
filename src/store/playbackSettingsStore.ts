@@ -98,12 +98,18 @@ export const usePlaybackSettingsStore = create<PlaybackSettingsState>((set, get)
     write(next);
   },
 
-  /** 매장 모드 시작 시 호출. 사용자가 직접 설정한 값이 있으면 그대로 둠. */
+  /** 매장 모드 시작 시 호출. 사용자가 직접 설정한 값이 있으면 그대로 둠.
+   *
+   *  X6.88 (긴급 안정성) — 매장 모드 crossfade 기본값 OFF.
+   *  사유: rAF 기반 crossfade tick 이 hidden tab 에서 throttle/정지 → 양쪽 audio
+   *  동시 재생 + crossfading state stuck → 자동재생 정지. (매장 운영 치명적)
+   *  매장 BGM 은 무중단 안정성 > 부드러운 전환. 일반 사용자는 영향 없음.
+   *  setCrossfadeSeconds(>0) 등으로 명시 활성화하면 그대로 동작 (userOverride 보존). */
   enableForBusinessMode: () => {
     if (get().userOverride) return;
     const next = {
-      crossfadeEnabled: true,
-      crossfadeSeconds: 5 as CrossfadeSeconds,
+      crossfadeEnabled: false,
+      crossfadeSeconds: 0 as CrossfadeSeconds,
       userOverride: false,
       autoplayRecommendations: get().autoplayRecommendations,
     };
