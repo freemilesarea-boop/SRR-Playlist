@@ -758,20 +758,50 @@ export default function Player() {
         });
       }
     };
-    const onVis = () => { if (document.visibilityState === 'visible') tryResume('visibility'); };
+    // X6.88 — stuck crossfade 감지 + 강제 완료.
+    // visibility/focus/pageshow/heartbeat 진입 시 양쪽 audio 동시 재생이면 즉시 swap.
+    // rAF stall (hidden tab throttle) 로 fade 가 멈춰서 2곡 동시 들리는 케이스 차단.
+    const recoverStuckCrossfade = (trigger: string) => {
+      const a = audioARef.current;
+      const b = audioBRef.current;
+      const bothAudible = !!(a && !a.paused && b && !b.paused);
+      if (bothAudible && forceCompleteCrossfadeRef.current) {
+        console.warn('[player] stuck crossfade recovered', { trigger });
+        forceCompleteCrossfadeRef.current(`stuck_${trigger}`);
+      }
+    };
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        console.info('[player] visibility resume');
+        recoverStuckCrossfade('visibility');
+        tryResume('visibility');
+      }
+    };
     const onOnline = () => tryResume('online');
-    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) tryResume('pageshow'); };
-    const onFocus = () => tryResume('focus');
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        recoverStuckCrossfade('pageshow');
+        tryResume('pageshow');
+      }
+    };
+    const onFocus = () => {
+      recoverStuckCrossfade('focus');
+      tryResume('focus');
+    };
 
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('online', onOnline);
     window.addEventListener('pageshow', onPageShow);
     window.addEventListener('focus', onFocus);
 
-    // 매장모드 heartbeat — 30초마다 silent suspend 감지 + 복구
+    // 매장모드 heartbeat — 30초마다 silent suspend 감지 + 복구 + stuck crossfade 감지
     let heartbeatId: number | null = null;
     if (businessMode) {
-      heartbeatId = window.setInterval(() => tryResume('heartbeat'), 30_000);
+      heartbeatId = window.setInterval(() => {
+        tryResume('heartbeat');
+        recoverStuckCrossfade('heartbeat');
+      }, 30_000);
     }
 
     // X6.66 — track-id 기반 Map/Set 1시간마다 prune (24h+ 매장 무중단 누적 차단).
@@ -806,6 +836,9 @@ export default function Player() {
   const crossfadeRafRef = useRef<number | null>(null);
   const crossfadeTimeoutRef = useRef<number | null>(null);
   const triggeredAtTrackIdRef = useRef<string | null>(null);
+  // X6.88 — 진행 중인 crossfade 의 force-complete 핸들 (idempotent).
+  // visibility/heartbeat/onEnded 가 stuck crossfade 를 감지하면 이걸 호출.
+  const forceCompleteCrossfadeRef = useRef<((reason: string) => void) | null>(null);
 
   function cancelCrossfade() {
     if (crossfadeRafRef.current !== null) {
@@ -816,6 +849,7 @@ export default function Player() {
       window.clearTimeout(crossfadeTimeoutRef.current);
       crossfadeTimeoutRef.current = null;
     }
+    forceCompleteCrossfadeRef.current = null;  // X6.88
     setCrossfading(false);
     triggeredAtTrackIdRef.current = null;
   }
@@ -870,8 +904,51 @@ export default function Player() {
     const targetVol = volume;
     const durationMs = crossfadeSeconds * 1000;
     const startedAt = performance.now();
+    const swapToIdx: 0 | 1 = activeIdx === 0 ? 1 : 0;
+
+    // X6.88 — completeSwap: idempotent. rAF tick / setTimeout safety / 외부 force 가 모두 호출.
+    // 첫 호출만 실행, 이후는 no-op. crossfade rAF stall (hidden tab) 에서도 swap 보장.
+    let completed = false;
+    const completeSwap = (reason: string) => {
+      if (completed) return;
+      completed = true;
+      console.info('[player] crossfade complete', {
+        reason, from: current.id, to: nextTrack.id, elapsedMs: Math.round(performance.now() - startedAt),
+      });
+      // 양쪽 audio 안전 처리 — 어떤 reason 이든 active 즉시 pause
+      if (activeAudio) {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+        activeAudio.volume = 0;
+      }
+      // X6.61 — jumpTo 이전에 lastTrackIdRef 설정 → track sync useEffect 가 nextAudio.src 재설정 안 함
+      lastTrackIdRef.current = nextTrack.id;
+      // X6.79 — stale targetVol 보정: 현재 store volume 으로 nextAudio 볼륨 설정
+      const storeVol = usePlayerStore.getState().volume;
+      if (nextAudio) {
+        nextAudio.volume = storeVol;
+        if (nextAudio.muted) nextAudio.muted = false;
+      }
+      setActiveIdx(swapToIdx);
+      setCrossfading(false);
+      if (crossfadeRafRef.current !== null) {
+        cancelAnimationFrame(crossfadeRafRef.current);
+        crossfadeRafRef.current = null;
+      }
+      if (crossfadeTimeoutRef.current !== null) {
+        window.clearTimeout(crossfadeTimeoutRef.current);
+        crossfadeTimeoutRef.current = null;
+      }
+      forceCompleteCrossfadeRef.current = null;
+      // playerStore 의 index 도 다음으로 (jumpTo 가 src 재설정하면 안 되니 단순 set)
+      jumpTo(nextIdx);
+    };
+
+    // 외부 (visibility / heartbeat / onEnded) 에서 호출 가능하게 expose
+    forceCompleteCrossfadeRef.current = completeSwap;
 
     const tick = () => {
+      if (completed) return;  // X6.88 — setTimeout/forceComplete 가 먼저 끝낸 경우 guard
       const now = performance.now();
       const t = Math.min(1, (now - startedAt) / durationMs);
       if (activeAudio) activeAudio.volume = Math.max(0, targetVol * (1 - t));
@@ -879,33 +956,18 @@ export default function Player() {
       if (t < 1) {
         crossfadeRafRef.current = requestAnimationFrame(tick);
       } else {
-        // 스왑 완료
-        activeAudio.pause();
-        activeAudio.currentTime = 0;
-        // X6.61 — 크로스페이드 후 jumpTo 가 current.id 를 nextTrack 으로 바꾸면
-        // /* track sync */ useEffect 가 재진입해 audio.src 를 재설정 → 정상 재생 중인
-        // nextAudio 가 reload 되어 무음 발생 (매장모드 다음곡 무음 버그).
-        // jumpTo 이전에 lastTrackIdRef 를 미리 설정해 trackChanged=false 로 만든다.
-        lastTrackIdRef.current = nextTrack.id;
-        // X6.79 — stale targetVol 무력화: 현재 store volume 으로 명시적 재설정.
-        // tick 중 슬라이더 조작 시 targetVol 캡처 시점의 값이라 stale → 매장 2-3곡 후 무음.
-        // setActiveIdx 후 useEffect 가 동기화하긴 하지만 React batch 순서로 race 가능 → 사전 보정.
-        const storeVol = usePlayerStore.getState().volume;
-        if (nextAudio) {
-          nextAudio.volume = storeVol;
-          if (nextAudio.muted) nextAudio.muted = false;
-        }
-        if (activeAudio) activeAudio.volume = 0;
-        // active 교체
-        const becomeActive: 0 | 1 = activeIdx === 0 ? 1 : 0;
-        setActiveIdx(becomeActive);
-        setCrossfading(false);
-        crossfadeRafRef.current = null;
-        // playerStore 의 index 도 다음으로 (jumpTo 가 src 재설정하면 안 되니 단순 set)
-        jumpTo(nextIdx);
+        completeSwap('raf');
       }
     };
     crossfadeRafRef.current = requestAnimationFrame(tick);
+
+    // X6.88 — Safety net: rAF stall (탭 hidden / page throttle) 시에도 swap 보장.
+    // setTimeout 은 background 에서도 fire (≥1초 throttle 가능, 정지 X).
+    // 정상 케이스에서는 tick 이 먼저 completeSwap 호출 → 이 setTimeout 은 no-op.
+    crossfadeTimeoutRef.current = window.setTimeout(
+      () => completeSwap('safety_timeout'),
+      durationMs + 1000,
+    );
     // activeRef / nextRef 는 ref 객체 (안정) — deps 포함 시 끝없는 재등록
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1274,18 +1336,19 @@ export default function Player() {
   }
 
   function onEnded(e: React.SyntheticEvent<HTMLAudioElement>) {
-    // active 가 ended 인 경우만 next 호출 (next audio 가 끝난건 무시)
-    if (e.currentTarget !== activeRef()) return;
-    if (crossfading) return; // crossfade 가 swap 처리
+    // active 가 ended 인 경우만 처리 (next-preload 가 어쩌다 끝난 경우 무시)
+    if (e.currentTarget !== activeRef()) {
+      console.debug('[player] ended ignored', { reason: 'not_active' });
+      return;
+    }
 
     // 자연 종료 — 다음 트랙 변경 시 스킵으로 집계하지 않도록 표시.
     if (current) naturalEndRef.current = current.id;
 
-    // AI 큐레이션 behavior 이벤트 — complete (자연 종료만; network error 는 onError 라 여기 안 옴)
+    // 분석 이벤트는 crossfading 여부와 무관하게 항상 기록 (트랙 A 가 자연 종료한 사실은 동일)
     if (current && playlistContext?.type === 'catalog') {
       void recordPlayEvent({ trackId: current.id, playlistId: playlistContext.id, eventType: 'complete', played: duration || currentTime || 0, duration: duration || null, anonId: getAnonymousId() });
     }
-
     if (current) {
       void trackStream({
         user_id: userId,
@@ -1310,6 +1373,21 @@ export default function Player() {
       });
       void clearContinueListening(current.id, userId);
     }
+
+    // X6.88 — crossfading=true 인데 active 가 ended 면 rAF tick 이 정지/stuck 가능.
+    // 큐를 죽이지 않도록 force-complete 호출 → completeSwap 안에서 jumpTo 로 queue 진행.
+    if (crossfading) {
+      if (forceCompleteCrossfadeRef.current) {
+        console.warn('[player] ended handled — forcing stuck crossfade swap');
+        forceCompleteCrossfadeRef.current('active_ended');
+        return; // completeSwap 이 jumpTo 호출. next() 별도 호출 X.
+      }
+      // forceCompleteRef 가 비어있는데 crossfading=true: state 불일치 (정상 swap 직후
+      // setState 직전 race 등). fall through 해서 next() 가 처리.
+      console.warn('[player] ended with crossfading=true but no force ref — falling through to next()');
+    }
+    console.debug('[player] ended handled — natural completion');
+
     // 자동 이어추천이 큐를 늘렸으면 next() 가 자연스럽게 동작 (마지막 → 새 곡)
     const endedId = current?.id ?? null;
     void maybeAutoplayRecommendations().then((added) => {
