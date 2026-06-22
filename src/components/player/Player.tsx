@@ -856,6 +856,9 @@ export default function Player() {
 
   /** 트랙 종료 X초 전 도달 시 crossfade 시작 */
   const startCrossfade = useCallback(() => {
+    // X6.88.1 — 매장 모드 hard runtime guard. localStorage 상태/사용자 override 무관
+    // 매장에서는 어떤 경우에도 crossfade 가 동작하지 않음 (rAF stall 회귀 절대 차단).
+    if (businessMode) return;
     // 가드 — 모든 조건 충족할 때만 진행
     if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
     if (!playing) return;
@@ -971,6 +974,7 @@ export default function Player() {
     // activeRef / nextRef 는 ref 객체 (안정) — deps 포함 시 끝없는 재등록
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    businessMode,
     crossfadeEnabled,
     crossfadeSeconds,
     crossfading,
@@ -990,6 +994,8 @@ export default function Player() {
 
   // duration - crossfadeSeconds 도달 감지 (강화된 가드)
   useEffect(() => {
+    // X6.88.1 — 매장 모드 hard guard (localStorage 와 무관)
+    if (businessMode) return;
     if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
     if (!playing) return;
     if (crossfading) return;
@@ -1001,7 +1007,7 @@ export default function Player() {
     if (remaining <= crossfadeSeconds && remaining > 0.2) {
       startCrossfade();
     }
-  }, [currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, playing, repeat, startCrossfade]);
+  }, [businessMode, currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, playing, repeat, startCrossfade]);
 
   // 사용자 next/prev 시 fade 취소
   useEffect(() => {
