@@ -6,10 +6,12 @@ import {
   adminFinalizeSettlement,
   adminMarkSettlementPaid,
   adminMarkSettlementHeld,
+  adminSettlementVersionHistory,
   type SettlementItem,
   type SettlementStatus,
   type SettlementPayoutAccountSummary,
   type SettlementAuditLog,
+  type SettlementVersionRow,
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -91,6 +93,7 @@ export default function ArtistSettlementDetail({
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [holdModalOpen, setHoldModalOpen] = useState(false);
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
+  const [versions, setVersions] = useState<SettlementVersionRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,6 +101,16 @@ export default function ArtistSettlementDetail({
     try {
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
       setData(d);
+      // X6.45: 동일 (월, 아티스트) 의 version 이력 조회 (재생성 시 누적)
+      try {
+        const vs = await adminSettlementVersionHistory(
+          d.settlement.settlement_month,
+          d.settlement.artist_user_id,
+        );
+        setVersions(vs);
+      } catch {
+        setVersions([]);
+      }
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -427,6 +440,55 @@ export default function ArtistSettlementDetail({
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {versions.length > 1 && (
+              <section>
+                <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  버전 이력 ({versions.length}) — 재생성 시마다 version+1, 최신만 활성
+                </h5>
+                <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                      <tr>
+                        <th className="px-3 py-2 text-left">ver</th>
+                        <th className="px-3 py-2 text-left">상태</th>
+                        <th className="px-3 py-2 text-right">총 정산</th>
+                        <th className="px-3 py-2 text-right">최종 지급</th>
+                        <th className="px-3 py-2 text-right">생성 시각</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {versions.map((v) => (
+                        <tr
+                          key={v.id}
+                          className={`border-b border-line/10 last:border-b-0 ${
+                            v.id === data.settlement.id ? 'bg-accent/5' : ''
+                          }`}
+                        >
+                          <td className="px-3 py-2 font-mono">
+                            v{v.version}
+                            {v.is_current && (
+                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                현재
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">{v.status}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.total_settlement_amount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.final_payout_amount)}</td>
+                          <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
+                            {new Date(v.created_at).toLocaleString('ko-KR')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-1 text-[10px] text-ink-dim">
+                  ※ 이전 version 은 봉인되어 finalize/지급 처리할 수 없습니다.
+                </p>
               </section>
             )}
 
