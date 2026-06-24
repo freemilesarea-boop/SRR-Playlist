@@ -53,6 +53,31 @@ export interface AdminSettlementRow {
   // X6.28/X6.29 — auto-merge 추적 + paid 후 메모
   merged_into_settlement_id: string | null;
   payout_memo: string | null;
+  // X6.45 — 버전 관리 (pending/held 재생성 시 version+1, 최신만 is_current)
+  version: number;
+  is_current: boolean;
+}
+
+/** X6.45 — 동일 (월, 아티스트) 의 정산 version 이력 1건 */
+export interface SettlementVersionRow {
+  id: string;
+  settlement_month: string;
+  artist_user_id: string;
+  version: number;
+  is_current: boolean;
+  status: SettlementStatus;
+  gross_settlement_amount: number;
+  artist_net_settlement: number;
+  previous_carried_amount: number;
+  total_settlement_amount: number;
+  withholding_tax_amount: number;
+  final_payout_amount: number;
+  carried_over_amount: number;
+  meets_min_payout: boolean;
+  created_at: string;
+  updated_at: string | null;
+  finalized_at: string | null;
+  paid_at: string | null;
 }
 
 export interface SettlementItem {
@@ -182,6 +207,22 @@ export async function adminListSettlements(opts?: {
   });
   if (error) throw error;
   return (data ?? []) as AdminSettlementRow[];
+}
+
+/**
+ * 동일 (월, 아티스트) 정산의 전체 version 이력 조회 (관리자).
+ * 최신 version 이 is_current=true. 재생성 시마다 version+1 이 쌓임.
+ */
+export async function adminSettlementVersionHistory(
+  settlementMonth: string,
+  artistUserId: string,
+): Promise<SettlementVersionRow[]> {
+  const { data, error } = await supabase.rpc('admin_settlement_version_history', {
+    p_settlement_month: settlementMonth,
+    p_artist_user_id: artistUserId,
+  });
+  if (error) throw error;
+  return (data ?? []) as SettlementVersionRow[];
 }
 
 export interface SettlementPayoutAccountSummary {

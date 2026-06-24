@@ -250,6 +250,14 @@ export default function ArtistSettlementsList() {
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>
                       {STATUS_LABEL[r.status]}
                     </span>
+                    {(r.version ?? 1) > 1 && (
+                      <span
+                        className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200"
+                        title={`재생성 ${(r.version ?? 1) - 1}회 — 상세에서 이전 version 조회 가능`}
+                      >
+                        v{r.version}
+                      </span>
+                    )}
                     {r.is_manual_carryover && (
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200"
                             title={`수동 이월 → ${r.carried_over_to_month ?? '?'}`}>
@@ -395,7 +403,7 @@ function GenerateModal({
     if (!dryResult) return;
     if (
       !window.confirm(
-        `${monthInput} 정산서를 실제 생성합니다.\n생성: ${dryResult.generated}건, 덮어쓰기: ${dryResult.overwritten}건, 스킵: ${dryResult.skipped}건.\n계속할까요?`,
+        `${monthInput} 정산서를 실제 생성합니다.\n신규: ${dryResult.generated}건, 재생성(version+1): ${dryResult.overwritten}건, 스킵(FINALIZED/PAID): ${dryResult.skipped}건.\n기존 정산은 삭제되지 않고 이전 version 으로 보존됩니다. 계속할까요?`,
       )
     )
       return;
@@ -435,8 +443,10 @@ function GenerateModal({
         </div>
 
         <Alert tone="warning">
-          반드시 <strong>dry-run</strong> 으로 먼저 검토하세요. 실제 생성은 status='pending' 만
-          덮어쓰며 payable/paid/carried_over/held/disputed 는 절대 수정하지 않습니다.
+          반드시 <strong>dry-run</strong> 으로 먼저 검토하세요.{' '}
+          <strong>PENDING 상태 정산은 재생성 시 최신 데이터로 덮어쓰기 됩니다.
+          FINALIZED/PAID 상태만 잠금됩니다.</strong>{' '}
+          기존 정산은 삭제되지 않고 version 으로 보존되며, 최신 version 만 활성화됩니다.
         </Alert>
 
         <label className="block space-y-1">
@@ -481,8 +491,8 @@ function GenerateModal({
               />
               <Kv label="총 유효 스트림" value={dryResult.total_pool_streams.toLocaleString() + '건'} />
               <Kv label="신규 생성" value={`${dryResult.generated}건`} />
-              <Kv label="덮어쓰기 (pending)" value={`${dryResult.overwritten}건`} />
-              <Kv label="스킵 (finalized)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
+              <Kv label="재생성 (version+1)" value={`${dryResult.overwritten}건`} />
+              <Kv label="스킵 (FINALIZED/PAID)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
               <Kv label="지급 대상" value={`${dryResult.payable}건`} />
               <Kv label="이월 (5만원 미만)" value={`${dryResult.carried_over}건`} />
               <Kv label="총 최종 지급액" value={fmtKrw(dryResult.total_final_payout)} tone="text-accent font-bold" />
