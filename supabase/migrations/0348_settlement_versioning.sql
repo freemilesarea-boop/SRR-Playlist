@@ -180,6 +180,14 @@ begin
 
     v_pii_ready := public.artist_payout_account_ready(v_artist.artist_user_id);
 
+    -- streaming_revenues 는 immutable 트리거가 UPDATE 를 차단하므로
+    -- (0060 설계 의도: RPC 는 DELETE+INSERT). 재생성 시 ON CONFLICT DO UPDATE 가
+    -- 트리거에 걸리지 않도록 이 아티스트·월 snapshot 을 먼저 삭제 후 재삽입한다.
+    if not p_dry_run then
+      delete from public.streaming_revenues
+      where revenue_month = p_month and artist_user_id = v_artist.artist_user_id;
+    end if;
+
     v_gross := 0;
     for v_track in
       select et.track_id, et.track_code, t.title as track_title,

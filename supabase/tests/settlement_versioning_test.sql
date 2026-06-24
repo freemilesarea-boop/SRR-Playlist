@@ -95,10 +95,13 @@ begin
     true, 2640, 77360, 0, 'pending', 1, true
   ) returning id into v_v1;
 
+  -- v1 에 100개 settlement_items 박제 (예: 트랙 100개)
   insert into public.settlement_items (
     settlement_id, artist_user_id, track_code, track_title,
     stream_count, pool_revenue_share
-  ) values (v_v1, v_artist, 'TST-001', 'Versioning Test', 10, 80000);
+  )
+  select v_v1, v_artist, 'V1-' || g, 'Track ' || g, 10, 800
+  from generate_series(1, 100) g;
 
   -- === 재생성 시뮬레이션: v1 봉인 → v2 생성 (요구사항 2, 3) ===
   update public.artist_settlements set is_current = false, updated_at = now() where id = v_v1;
@@ -114,6 +117,14 @@ begin
     true, 3168, 92832, 0, 'pending', 2, true
   ) returning id into v_v2;
 
+  -- v2 에 101개 settlement_items 박제 (재생성 시 트랙 1개 증가 시나리오)
+  insert into public.settlement_items (
+    settlement_id, artist_user_id, track_code, track_title,
+    stream_count, pool_revenue_share
+  )
+  select v_v2, v_artist, 'V2-' || g, 'Track ' || g, 12, 950
+  from generate_series(1, 101) g;
+
   -- (2) 기존 row 보존 — 2개 version 존재
   select count(*) into v_cnt from public.artist_settlements
   where settlement_month = v_month and artist_user_id = v_artist;
@@ -124,9 +135,28 @@ begin
   where settlement_month = v_month and artist_user_id = v_artist and is_current;
   assert v_cnt = 1, 'is_current 는 정확히 1건이어야 함 (found=' || v_cnt || ')';
 
-  -- (2) v1 의 settlement_items 가 삭제되지 않고 보존됨
+  -- (2) settlement_items 가 version 별 settlement_id 로 완전 분리 보관됨
+  --     v1=100 유지, v2=101 — 재생성 시 items 가 삭제되지 않고 새 version 으로 복제 생성
   select count(*) into v_cnt from public.settlement_items where settlement_id = v_v1;
-  assert v_cnt = 1, '이전 version 의 settlement_items 가 보존되어야 함 (found=' || v_cnt || ')';
+  assert v_cnt = 100, 'v1 의 settlement_items 100개가 보존되어야 함 (found=' || v_cnt || ')';
+
+  select count(*) into v_cnt from public.settlement_items where settlement_id = v_v2;
+  assert v_cnt = 101, 'v2 의 settlement_items 101개가 생성되어야 함 (found=' || v_cnt || ')';
+
+  -- 두 version 의 items 가 서로 다른 settlement_id 로 분리됨
+  select count(distinct settlement_id) into v_cnt
+  from public.settlement_items where settlement_id in (v_v1, v_v2);
+  assert v_cnt = 2, 'items 는 version 별 distinct settlement_id 로 분리되어야 함';
+
+  -- 관리자 컨텍스트 (admin_settlement_detail 호출 전 필요)
+  perform set_config('request.jwt.claims', json_build_object('sub', v_admin::text)::text, true);
+
+  -- 상세 조회 시 v1=100개, v2=101개 (요구사항 예시 그대로)
+  select jsonb_array_length((public.admin_settlement_detail(v_v1)) -> 'items') into v_cnt;
+  assert v_cnt = 100, 'admin_settlement_detail(v1) 은 100개 items 를 반환해야 함 (found=' || v_cnt || ')';
+
+  select jsonb_array_length((public.admin_settlement_detail(v_v2)) -> 'items') into v_cnt;
+  assert v_cnt = 101, 'admin_settlement_detail(v2) 은 101개 items 를 반환해야 함 (found=' || v_cnt || ')';
 
   -- (3) partial unique index 가 2번째 is_current 삽입을 차단
   v_ok := false;
