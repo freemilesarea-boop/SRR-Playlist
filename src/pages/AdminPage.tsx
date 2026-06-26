@@ -13,6 +13,7 @@ import {
   ScrollText,
   Handshake,
   Store as StoreIcon,
+  Building2,
   FileSignature,
   Ticket,
   Smartphone,
@@ -76,6 +77,7 @@ const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPane
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
+const EnterpriseOverviewPanel = lazy(() => import('@/components/admin/EnterpriseOverviewPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -97,6 +99,7 @@ type Tab =
   | 'support-inquiries'
   | 'members'
   | 'curators'
+  | 'enterprise-overview'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -143,6 +146,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
+  { key: 'enterprise-overview', label: '엔터프라이즈 종합', icon: <Building2 size={14} /> },
   { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
@@ -185,11 +189,12 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
-type Group = '운영' | '회원' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
+type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
 
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
-  { key: '회원', tabs: ['members', 'curators', 'franchise', 'sales-agents', 'free-trials'] },
+  { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -348,6 +353,7 @@ export default function AdminPage() {
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
           {tab === 'curators' && <CuratorsAdminPanel />}
+          {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
           {tab === 'franchise' && <FranchiseManagementPanel />}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}

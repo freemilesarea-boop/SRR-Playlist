@@ -376,3 +376,78 @@ export async function updateStorePlayerHeartbeat(
     console.warn('[franchiseApi] heartbeat failed', error);
   }
 }
+
+// =============================================================================
+// X6.90 — Franchise admin gating + Enterprise dashboards
+// =============================================================================
+
+export interface MyFranchiseAdmin {
+  is_franchise_admin: boolean;
+  franchise_id?: string;
+  franchise_name?: string;
+  franchise_slug?: string | null;
+  franchise_status?: FranchiseStatus;
+  admin_role?: FranchiseAdminRole;
+}
+
+export interface EnterpriseOverview {
+  total_franchises: number;
+  total_brands: number;
+  total_linked_stores: number;
+  online_stores: number;
+  offline_stores: number;
+  active_policies: number;
+  recent_policy_updates: Array<{
+    policy_id: string;
+    policy_name: string;
+    franchise_id: string;
+    franchise_name: string | null;
+    updated_at: string;
+  }>;
+  per_franchise: Array<{
+    franchise_id: string;
+    name: string;
+    slug: string | null;
+    status: FranchiseStatus;
+    store_count: number;
+    online_count: number;
+    active_policy_count: number;
+    current_default_policy: { id: string; name: string } | null;
+    estimated_monthly_revenue: number;
+  }>;
+  offline_threshold_seconds: number;
+  computed_at: string;
+}
+
+export async function getMyFranchiseAdmin(): Promise<MyFranchiseAdmin> {
+  const { data, error } = await supabase.rpc('get_my_franchise_admin');
+  if (error) {
+    console.warn('[franchiseApi] my_franchise_admin failed', error);
+    return { is_franchise_admin: false };
+  }
+  return data as MyFranchiseAdmin;
+}
+
+export async function adminEnterpriseOverview(): Promise<EnterpriseOverview> {
+  const { data, error } = await supabase.rpc('admin_enterprise_overview');
+  if (error) { console.error('[franchiseApi] enterprise overview failed', error); throw error; }
+  return data as EnterpriseOverview;
+}
+
+export async function getMyFranchiseHqDashboard(): Promise<FranchiseDashboard & { admin_role: FranchiseAdminRole }> {
+  const { data, error } = await supabase.rpc('get_my_franchise_hq_dashboard');
+  if (error) { console.error('[franchiseApi] hq dashboard failed', error); throw error; }
+  return data as FranchiseDashboard & { admin_role: FranchiseAdminRole };
+}
+
+export async function getMyFranchiseSyncStatus(): Promise<FranchiseSyncStatusRow[]> {
+  const { data, error } = await supabase.rpc('get_my_franchise_sync_status');
+  if (error) { console.error('[franchiseApi] my sync status failed', error); throw error; }
+  return (data ?? []) as FranchiseSyncStatusRow[];
+}
+
+export async function getMyFranchisePolicies(): Promise<FranchiseMusicPolicy[]> {
+  const { data, error } = await supabase.rpc('get_my_franchise_policies');
+  if (error) { console.error('[franchiseApi] my policies failed', error); throw error; }
+  return (data ?? []) as FranchiseMusicPolicy[];
+}
