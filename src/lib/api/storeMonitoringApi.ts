@@ -137,8 +137,15 @@ export async function storeHeartbeat(input: StoreHeartbeatInput): Promise<void> 
     p_device_identifier: input.deviceIdentifier ?? null,
   });
   if (error) {
-    // heartbeat 실패는 silent — 재생을 막지 않음
-    console.warn('[storeMonitoringApi] heartbeat failed', error);
+    // heartbeat 실패는 silent — 재생을 막지 않음. 단, console.warn 으로 디버깅 가능.
+    console.warn('[storeMonitoringApi] heartbeat failed', error, {
+      storeId: input.storeId, status: input.playerStatus, trackId: input.currentTrackId,
+    });
+  } else if (import.meta.env.DEV) {
+    // DEV 모드에서만 성공 로그 (운영 환경 콘솔 소음 차단)
+    console.info('[storeMonitoringApi] heartbeat ok', {
+      storeId: input.storeId, status: input.playerStatus, trackId: input.currentTrackId,
+    });
   }
 }
 
