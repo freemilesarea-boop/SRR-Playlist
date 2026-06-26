@@ -29,13 +29,33 @@ export function useStoreHeartbeat({ storeId, enabled }: UseStoreHeartbeatOptions
   const lastTrackIdRef = useRef<string | null>(null);
   const trackStartedAtRef = useRef<string | null>(null);
 
-  // 트랙 변경 시 started_at 갱신
+  // Phase 1-4 — 트랙 변경 시 즉시 heartbeat fire (60s 대기 안 함).
+  // Real-time Now Playing UI 가 즉시 새 곡 반영 가능하게 함.
+  // 60s 주기 heartbeat 와 별개로 ad-hoc 1회 추가 호출.
   useEffect(() => {
-    if (currentTrackId && currentTrackId !== lastTrackIdRef.current) {
-      lastTrackIdRef.current = currentTrackId;
-      trackStartedAtRef.current = new Date().toISOString();
+    if (!currentTrackId || currentTrackId === lastTrackIdRef.current) return;
+    const newStartedAt = new Date().toISOString();
+    lastTrackIdRef.current = currentTrackId;
+    trackStartedAtRef.current = newStartedAt;
+    // 즉시 fire (storeId / enabled 가드)
+    if (enabled && storeId) {
+      void storeHeartbeat({
+        storeId,
+        appVersion: APP_VERSION,
+        playerStatus: usePlayerStore.getState().playing ? 'playing' : 'paused',
+        currentTrackId,
+        currentTrackStartedAt: newStartedAt,
+        volume: Math.round((usePlayerStore.getState().volume ?? 0) * 100),
+        deviceModel: getDeviceModel(),
+        deviceOs: getDeviceOs(),
+        connectionType: getConnectionType(),
+        batteryLevel: null,
+        wifiSsid: null,
+        deviceIdentifier: null,
+        playbackError: null,
+      });
     }
-  }, [currentTrackId]);
+  }, [currentTrackId, enabled, storeId]);
 
   // Heartbeat — Player mount 시 시작, unmount 시 정리
   useEffect(() => {
