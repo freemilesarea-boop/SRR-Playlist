@@ -78,6 +78,7 @@ const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNotice
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 const EnterpriseOverviewPanel = lazy(() => import('@/components/admin/EnterpriseOverviewPanel'));
+const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/EnterpriseAccountsPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -100,6 +101,7 @@ type Tab =
   | 'members'
   | 'curators'
   | 'enterprise-overview'
+  | 'enterprise-accounts'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -147,6 +149,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
   { key: 'enterprise-overview', label: '엔터프라이즈 종합', icon: <Building2 size={14} /> },
+  { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
@@ -194,7 +197,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -354,6 +357,7 @@ export default function AdminPage() {
           {tab === 'members' && <MembersList />}
           {tab === 'curators' && <CuratorsAdminPanel />}
           {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
+          {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
           {tab === 'franchise' && <FranchiseManagementPanel />}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}
