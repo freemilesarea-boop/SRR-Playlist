@@ -12,6 +12,7 @@ import {
   Trash2,
   ScrollText,
   Handshake,
+  Store as StoreIcon,
   FileSignature,
   Ticket,
   Smartphone,
@@ -74,6 +75,7 @@ const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAudit
 const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPanel'));
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
+const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -95,6 +97,7 @@ type Tab =
   | 'support-inquiries'
   | 'members'
   | 'curators'
+  | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
   | 'free-trials'
@@ -140,6 +143,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
+  { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
   { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
@@ -185,7 +189,7 @@ type Group = '운영' | '회원' | '매출/결제' | '아티스트' | '콘텐츠
 
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
-  { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
+  { key: '회원', tabs: ['members', 'curators', 'franchise', 'sales-agents', 'free-trials'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -344,6 +348,7 @@ export default function AdminPage() {
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
           {tab === 'curators' && <CuratorsAdminPanel />}
+          {tab === 'franchise' && <FranchiseManagementPanel />}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}
           {tab === 'free-trials' && <FreeTrialsPanel />}

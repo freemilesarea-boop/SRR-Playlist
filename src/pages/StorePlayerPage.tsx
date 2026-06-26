@@ -13,6 +13,9 @@ import AutoCover from '@/components/AutoCover';
 import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
+// X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링 + 60s heartbeat).
+// 프랜차이즈 연결 매장만 적용; 일반 매장은 hook 이 no-op.
+import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 
 /**
  * 매장 재생 모드(키오스크) — 전역 <Player> 의 오디오 엔진/큐를 그대로 사용하는 풀스크린 UI.
@@ -51,6 +54,10 @@ export default function StorePlayerPage() {
   // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
   const storeId = useAuthStore((s) => s.user?.id ?? null);
 
+  // X6.89 — 본사 정책 자동 동기화. 프랜차이즈 연결된 매장만 정책 적용,
+  // 미연결 매장은 has_franchise_policy=false 로 기존 큐 그대로 사용 (회귀 0).
+  const franchiseSync = useFranchisePolicySync({ storeId, enabled: !!storeId });
+
   const current = queue[index];
   const upcoming =
     repeat === 'one'
@@ -74,6 +81,14 @@ export default function StorePlayerPage() {
             {online ? <Wifi size={12} /> : <WifiOff size={12} />}
             {online ? '온라인' : '오프라인 — 재연결 대기'}
           </span>
+          {franchiseSync.policy?.has_franchise_policy && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200"
+              title={`본사 정책: ${franchiseSync.policy.policy_name ?? ''} · 슬롯: ${franchiseSync.policy.matched_slot?.slot_name ?? '—'}`}
+            >
+              <Sparkles size={12} /> 본사 정책 자동 동기화
+            </span>
+          )}
         </div>
         <button
           onClick={() => navigate('/business')}
