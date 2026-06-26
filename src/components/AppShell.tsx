@@ -16,9 +16,19 @@ import {
   revalidateRestoredQueue,
 } from '@/lib/playerSession';
 import { useBrandStore } from '@/store/brandStore';
+// Phase 1-3 fix — heartbeat 를 AppShell 레벨에서 mount.
+// 이전: StorePlayerPage 한정 → /store/player 안 가면 heartbeat 0. BusinessPage 운영 시 미수신.
+// 이후: businessMode 진입 시점부터 모든 페이지에서 heartbeat (zustand 전역 상태 기반).
+import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
+import { useAuthStore } from '@/store/authStore';
+import { useBusinessStore } from '@/store/businessStore';
 
 export default function AppShell() {
   const loadBrand = useBrandStore((s) => s.load);
+  // heartbeat: business mode + storeId 양쪽 true 일 때만
+  const storeId = useAuthStore((s) => s.user?.id ?? null);
+  const businessMode = useBusinessStore((s) => s.businessMode);
+  useStoreHeartbeat({ storeId, enabled: businessMode && !!storeId });
   useEffect(() => {
     // 새로고침/탭종료 후 큐+위치 복원 (자동재생은 X — 사용자 ▶ 누르면 시작)
     const restored = restorePlayerSessionToStore();
