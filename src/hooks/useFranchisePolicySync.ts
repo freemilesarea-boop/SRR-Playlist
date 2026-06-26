@@ -124,9 +124,11 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
     }
   }, [enabled, storeId, currentTrackId, state.policy, setQueue]);
 
-  // Heartbeat (60s) — 매장 정책 hook 활성 시
+  // Heartbeat (60s) — 프랜차이즈 정책이 실제로 적용된 매장만 fire.
+  // 회귀 0 보장: 미연결 매장은 store_policy_sync_status row 도 생성 안 함.
+  const hasFranchise = state.policy?.has_franchise_policy === true;
   useEffect(() => {
-    if (!enabled || !storeId) return;
+    if (!enabled || !storeId || !hasFranchise) return;
     let cancelled = false;
     const send = () => {
       if (cancelled) return;
@@ -136,7 +138,7 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
     send();
     const id = window.setInterval(send, HEARTBEAT_INTERVAL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [enabled, storeId, playing, currentTrackId, index]);
+  }, [enabled, storeId, hasFranchise, playing, currentTrackId, index]);
 
   return state;
 }
