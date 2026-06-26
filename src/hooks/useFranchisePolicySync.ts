@@ -12,9 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   getStoreActiveMusicPolicy,
-  updateStorePlayerHeartbeat,
   type StoreActiveMusicPolicy,
-  type PlayerStatus,
 } from '@/lib/api/franchiseApi';
 import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
@@ -22,7 +20,8 @@ import { usePlayerStore } from '@/store/playerStore';
 import type { PlaylistRow } from '@/types/db';
 
 const POLL_INTERVAL_MS = 60_000;
-const HEARTBEAT_INTERVAL_MS = 60_000;
+// X6.90 / Phase 1-3 — heartbeat 는 useStoreHeartbeat 에서 처리 (중복 제거).
+// 이 hook 은 정책 폴링/스왑 전담.
 
 interface UseFranchisePolicySyncOptions {
   storeId: string | null;
@@ -49,9 +48,7 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
   });
   const lastAppliedKeyRef = useRef<string | null>(null);
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const playing = usePlayerStore((s) => s.playing);
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id);
-  const index = usePlayerStore((s) => s.index);
   const queueLength = usePlayerStore((s) => s.queue.length);
 
   // 정책 조회 + 변경 시 큐 적용
@@ -124,21 +121,8 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
     }
   }, [enabled, storeId, currentTrackId, state.policy, setQueue]);
 
-  // Heartbeat (60s) — 프랜차이즈 정책이 실제로 적용된 매장만 fire.
-  // 회귀 0 보장: 미연결 매장은 store_policy_sync_status row 도 생성 안 함.
-  const hasFranchise = state.policy?.has_franchise_policy === true;
-  useEffect(() => {
-    if (!enabled || !storeId || !hasFranchise) return;
-    let cancelled = false;
-    const send = () => {
-      if (cancelled) return;
-      const status: PlayerStatus = playing ? 'playing' : (index >= 0 ? 'paused' : 'stopped');
-      void updateStorePlayerHeartbeat(storeId, status, currentTrackId ?? null);
-    };
-    send();
-    const id = window.setInterval(send, HEARTBEAT_INTERVAL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [enabled, storeId, hasFranchise, playing, currentTrackId, index]);
+  // X6.90 / Phase 1-3 — heartbeat 는 useStoreHeartbeat 에서 통합 처리.
+  // 이 hook 의 heartbeat 책임 제거 (중복 호출 차단).
 
   return state;
 }
