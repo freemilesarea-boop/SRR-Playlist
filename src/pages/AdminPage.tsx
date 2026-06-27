@@ -80,6 +80,7 @@ const FranchiseManagementPanel = lazy(() => import('@/components/admin/Franchise
 const EnterpriseOverviewPanel = lazy(() => import('@/components/admin/EnterpriseOverviewPanel'));
 const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/EnterpriseAccountsPanel'));
 const EnterpriseRegionsPanel = lazy(() => import('@/components/admin/EnterpriseRegionsPanel'));
+const EnterpriseMonthlySettlementsPanel = lazy(() => import('@/components/admin/EnterpriseMonthlySettlementsPanel'));
 const StoreMonitoringPanel = lazy(() => import('@/components/admin/StoreMonitoringPanel'));
 const StoreNowPlayingPanel = lazy(() => import('@/components/admin/StoreNowPlayingPanel'));
 const PolicyDeploymentPanel = lazy(() => import('@/components/admin/PolicyDeploymentPanel'));
@@ -107,6 +108,7 @@ type Tab =
   | 'enterprise-overview'
   | 'enterprise-accounts'
   | 'enterprise-regions'
+  | 'enterprise-monthly-settlements'
   | 'store-monitoring'
   | 'store-now-playing'
   | 'policy-deployment'
@@ -159,6 +161,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-overview', label: '엔터프라이즈 종합', icon: <Building2 size={14} /> },
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
+  { key: 'enterprise-monthly-settlements', label: '본사 월 정산', icon: <Wallet size={14} /> },
   { key: 'store-monitoring', label: '매장 상태', icon: <Activity size={14} /> },
   { key: 'store-now-playing', label: '실시간 재생', icon: <Music size={14} /> },
   { key: 'policy-deployment', label: '정책 적용률', icon: <ShieldCheck size={14} /> },
@@ -406,6 +409,7 @@ export default function AdminPage() {
           {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
           {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
+          {tab === 'enterprise-monthly-settlements' && <EnterpriseMonthlySettlementsPanel />}
           {tab === 'store-monitoring' && <StoreMonitoringPanel />}
           {tab === 'store-now-playing' && <StoreNowPlayingPanel />}
           {tab === 'policy-deployment' && (
