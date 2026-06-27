@@ -155,8 +155,8 @@ function DashboardContent({
         ))}
       </section>
 
-      {/* Phase 1-9 — 정산 가능 금액 (placeholder, Phase 1-10 enterprise_revenue 모델 별도) */}
-      <SettlementPreviewCard />
+      {/* Phase 1-10 — 예상 정산금 (active_store_count × per_store_commission) */}
+      <SettlementPreviewCard preview={dashboard.commission_preview} />
 
       {/* Phase 1-9 — 매장 현황 카드 (전체/활성/정지/inactive/최근 7일) */}
       {dashboard.store_stats && <StoreStatsCard stats={dashboard.store_stats} />}
@@ -797,28 +797,77 @@ function InviteCodeRow({
 }
 
 /**
- * 정산 가능 금액 placeholder — Phase 1-10 enterprise_revenue 모델 별도 진행.
- * Phase 1-9 는 UI 자리만 잡고 계산 X (Q1=B).
+ * 예상 정산금 카드 — Phase 1-10.
+ *   estimated = active_store_count × floor(monthly_store_price × commission_rate / 100)
+ *
+ * 단가 / 수수료율은 HQ read-only. 변경은 admin 만.
+ * 월마감 / 지급확정 / 세금계산서 발행은 다음 Phase.
  */
-function SettlementPreviewCard() {
+function SettlementPreviewCard({
+  preview,
+}: { preview?: import('@/lib/api/enterpriseHqApi').EnterpriseHqCommissionPreview }) {
+  if (!preview) {
+    return (
+      <section className="rounded-2xl bg-gradient-to-br from-emerald-500/5 to-emerald-500/0 p-4 ring-1 ring-emerald-500/15">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-1.5">
+            <Wallet size={14} className="text-emerald-300" /> 예상 정산금
+          </h3>
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+            준비중
+          </span>
+        </div>
+        <p className="mt-2 text-[11px] text-ink-mute">
+          매장 활성 후 자동으로 계산됩니다.
+        </p>
+      </section>
+    );
+  }
+
+  const fmt = (n: number) => n.toLocaleString('ko-KR');
+
   return (
-    <section className="rounded-2xl bg-gradient-to-br from-emerald-500/5 to-emerald-500/0 p-4 ring-1 ring-emerald-500/15">
+    <section className="rounded-2xl bg-gradient-to-br from-emerald-500/8 to-emerald-500/0 p-4 ring-1 ring-emerald-500/20">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold flex items-center gap-1.5">
-          <Wallet size={14} className="text-emerald-300" /> 정산 가능 금액
+          <Wallet size={14} className="text-emerald-300" /> 예상 정산금 (이번 달)
         </h3>
         <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-          준비중
+          예상치
         </span>
       </div>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-2xl font-extrabold text-ink-dim tabular-nums">—</span>
+        <span className="text-3xl font-extrabold tabular-nums text-emerald-300">
+          {fmt(preview.estimated_monthly_commission)}
+        </span>
         <span className="text-xs text-ink-mute">원</span>
       </div>
-      <p className="mt-2 text-[11px] text-ink-mute">
-        실 정산금 계산은 다음 단계에서 제공됩니다. (매장 사용량 · 정책 단가 집계)
+      <p className="mt-1 text-[11px] text-ink-mute">
+        활성 매장 {fmt(preview.active_store_count)}개 × 매장당 {fmt(preview.per_store_commission)}원
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <PreviewKV k="매장당 기준 금액" v={`${fmt(preview.monthly_store_price)}원`} />
+        <PreviewKV k="수수료율" v={`${preview.commission_rate}%`} hint="read-only" />
+        <PreviewKV k="매장당 정산금" v={`${fmt(preview.per_store_commission)}원`} />
+        <PreviewKV k="활성 매장 수" v={`${fmt(preview.active_store_count)}개`} />
+      </dl>
+      <p className="mt-3 text-[10px] text-ink-dim">
+        수수료율 / 단가는 계약 조건이며 관리자만 변경할 수 있습니다.
+        실제 월마감 / 지급확정은 다음 단계에서 제공됩니다.
       </p>
     </section>
+  );
+}
+
+function PreviewKV({ k, v, hint }: { k: string; v: string; hint?: string }) {
+  return (
+    <div className="rounded-lg bg-bg-deep px-3 py-2">
+      <dt className="text-[10px] text-ink-dim flex items-center gap-1">
+        {k}
+        {hint && <span className="text-[9px] text-ink-dim/70">({hint})</span>}
+      </dt>
+      <dd className="mt-0.5 text-xs font-bold tabular-nums">{v}</dd>
+    </div>
   );
 }
 

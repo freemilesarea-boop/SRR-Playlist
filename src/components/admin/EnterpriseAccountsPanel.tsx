@@ -1000,11 +1000,12 @@ function SettlementReviewModal({
               </dl>
             </div>
 
-            {/* Phase 1-9 §3 — 지급 설정 (admin 만 수정) */}
+            {/* Phase 1-9 §3 + 1-10 — 지급 설정 + 수수료율 (admin 만 수정) */}
             <PaymentSettingsEditor
               enterpriseAccountId={target.id}
               currentMethod={settlement?.settlement_method ?? 'monthly'}
               currentMinimumPayout={settlement?.minimum_payout ?? 0}
+              currentCommissionRate={settlement?.commission_rate ?? 20}
               onSaved={() => { void load(); onReviewed(); }}
             />
 
@@ -1125,28 +1126,46 @@ function SettlementStatusInline({ status }: { status: 'unregistered' | 'reviewin
 // =============================================================================
 
 function PaymentSettingsEditor({
-  enterpriseAccountId, currentMethod, currentMinimumPayout, onSaved,
+  enterpriseAccountId, currentMethod, currentMinimumPayout, currentCommissionRate, onSaved,
 }: {
   enterpriseAccountId: string;
   currentMethod: SettlementMethod;
   currentMinimumPayout: number;
+  currentCommissionRate: number;
   onSaved: () => void;
 }) {
   const [method, setMethod] = useState<SettlementMethod>(currentMethod);
   const [minimumPayout, setMinimumPayout] = useState<string>(String(currentMinimumPayout));
+  const [commissionRate, setCommissionRate] = useState<string>(String(currentCommissionRate));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setMethod(currentMethod);
     setMinimumPayout(String(currentMinimumPayout));
-  }, [currentMethod, currentMinimumPayout]);
+    setCommissionRate(String(currentCommissionRate));
+  }, [currentMethod, currentMinimumPayout, currentCommissionRate]);
 
-  const dirty = method !== currentMethod || Number(minimumPayout) !== currentMinimumPayout;
+  const dirty =
+    method !== currentMethod
+    || Number(minimumPayout) !== currentMinimumPayout
+    || Number(commissionRate) !== currentCommissionRate;
+
+  // Phase 1-10 — 미리보기 (단가 4,900원 고정)
+  const MONTHLY_STORE_PRICE = 4900;
+  const rateNum = Number(commissionRate);
+  const previewPerStore = Number.isFinite(rateNum) && rateNum >= 0 && rateNum <= 100
+    ? Math.floor((MONTHLY_STORE_PRICE * rateNum) / 100)
+    : 0;
 
   const onSave = async () => {
-    const num = parseInt(minimumPayout, 10);
-    if (Number.isNaN(num) || num < 0) {
+    const minNum = parseInt(minimumPayout, 10);
+    if (Number.isNaN(minNum) || minNum < 0) {
       toast.error('최소 지급금액은 0 이상 숫자여야 합니다.');
+      return;
+    }
+    const rateValue = Number(commissionRate);
+    if (!Number.isFinite(rateValue) || rateValue < 0 || rateValue > 100) {
+      toast.error('수수료율은 0~100 사이 숫자여야 합니다.');
       return;
     }
     setSaving(true);
@@ -1154,7 +1173,8 @@ function PaymentSettingsEditor({
       await adminUpdateEnterprisePaymentSettings({
         enterpriseAccountId,
         settlementMethod: method,
-        minimumPayout: num,
+        minimumPayout: minNum,
+        commissionRate: rateValue,
       });
       toast.success('지급 설정이 저장되었습니다.');
       onSaved();
@@ -1193,6 +1213,22 @@ function PaymentSettingsEditor({
             disabled={saving}
             className="w-full rounded bg-bg px-2 py-1.5 text-xs tabular-nums"
           />
+        </label>
+        <label className="col-span-2 block space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+            수수료율 (%) — 매장당 정산금 계산용
+          </span>
+          <input
+            type="number" min={0} max={100} step={0.5}
+            value={commissionRate}
+            onChange={(e) => setCommissionRate(e.target.value)}
+            disabled={saving}
+            className="w-full rounded bg-bg px-2 py-1.5 text-xs tabular-nums"
+          />
+          <span className="block text-[10px] text-ink-dim">
+            매장당 기준 금액 {MONTHLY_STORE_PRICE.toLocaleString('ko-KR')}원 × {commissionRate || 0}% =
+            {' '}<b className="text-emerald-300">{previewPerStore.toLocaleString('ko-KR')}원</b> / 매장
+          </span>
         </label>
       </div>
       <button
