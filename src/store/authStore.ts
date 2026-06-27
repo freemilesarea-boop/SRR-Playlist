@@ -125,6 +125,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             if (import.meta.env.DEV) console.error('[auth] applyPendingSignup error:', e);
           }
         })();
+        // Phase 1-6 — enterprise invite claim 캐시 적용 (이메일 인증 ON 환경 보조)
+        // pendingEnterpriseClaim 모듈은 자체적으로 idempotent + 실패 시 캐시 보존.
+        // 일반/사업자/아티스트 가입 흐름과 완전 독립 — 캐시 없으면 즉시 no-op.
+        void (async () => {
+          try {
+            const { applyPendingEnterpriseClaimOnLogin } = await import('@/lib/pendingEnterpriseClaim');
+            const email = session?.user?.email ?? null;
+            const r = await applyPendingEnterpriseClaimOnLogin(email);
+            if (r.ok && r.type && !r.skipped) {
+              const { toast } = await import('@/store/toastStore');
+              toast.success(
+                r.type === 'hq'
+                  ? '본사 계정이 연결되었습니다.'
+                  : '매장이 본사와 연결되었습니다.',
+              );
+              await get().refreshProfile();
+            } else if (!r.ok && r.reason && !r.skipped) {
+              const { toast } = await import('@/store/toastStore');
+              toast.warning(`엔터프라이즈 연결 실패: ${r.reason}`);
+            }
+          } catch (e) {
+            if (import.meta.env.DEV) console.error('[auth] applyPendingEnterpriseClaim error:', e);
+          }
+        })();
         void (async () => {
           try {
             const { mergePersonalLibrary } = await import('@/lib/personalLibraryApi');

@@ -10,11 +10,20 @@ import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTy
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
 import ArtistSignupForm from '@/components/auth/ArtistSignupForm';
+import EnterpriseHqSignupForm from '@/components/auth/EnterpriseHqSignupForm';
+import EnterpriseStoreSignupForm from '@/components/auth/EnterpriseStoreSignupForm';
 import InAppBrowserWarningModal from '@/components/auth/InAppBrowserWarningModal';
 import Logo from '@/components/Logo';
 import { friendlyError } from '@/lib/errorMessages';
 
-type Mode = 'signin' | 'signup-type' | 'signup-individual' | 'signup-business' | 'signup-artist';
+type Mode =
+  | 'signin'
+  | 'signup-type'
+  | 'signup-individual'
+  | 'signup-business'
+  | 'signup-artist'
+  | 'signup-enterprise-hq'
+  | 'signup-enterprise-store';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
 
@@ -189,7 +198,9 @@ export default function LoginPage() {
   function onTypeSelect(t: AccountType) {
     if (t === 'individual') setMode('signup-individual');
     else if (t === 'business') setMode('signup-business');
-    else setMode('signup-artist');
+    else if (t === 'artist') setMode('signup-artist');
+    else if (t === 'enterprise-hq') setMode('signup-enterprise-hq');
+    else setMode('signup-enterprise-store');
   }
 
   const showBackButton = mode !== 'signin';
@@ -357,6 +368,24 @@ export default function LoginPage() {
 
             {mode === 'signup-artist' && (
               <ArtistSignupForm
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
+            )}
+
+            {mode === 'signup-enterprise-hq' && (
+              <EnterpriseHqSignupForm
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
+            )}
+
+            {mode === 'signup-enterprise-store' && (
+              <EnterpriseStoreSignupForm
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);

@@ -1,6 +1,11 @@
-import { User, Store, Mic2 } from 'lucide-react';
+import { User, Store, Mic2, Building2, MapPin } from 'lucide-react';
 
-export type AccountType = 'individual' | 'business' | 'artist';
+export type AccountType =
+  | 'individual'
+  | 'business'
+  | 'artist'
+  | 'enterprise-hq'
+  | 'enterprise-store';
 
 interface Props {
   value: AccountType | null;
@@ -26,11 +31,24 @@ const TYPES: { key: AccountType; icon: React.ReactNode; title: string; desc: str
     title: '아티스트 회원',
     desc: '본인 음원 등록 · 관리자 승인 필요',
   },
+  // Phase 1-6 — 본사가 사전 발급한 초대코드로 셀프 가입
+  {
+    key: 'enterprise-hq',
+    icon: <Building2 size={18} />,
+    title: '엔터프라이즈 본사 담당자',
+    desc: '본사 초대코드로 가입 · 본사 대시보드 접근',
+  },
+  {
+    key: 'enterprise-store',
+    icon: <MapPin size={18} />,
+    title: '엔터프라이즈 매장',
+    desc: '매장 초대코드로 가입 · 본사 정책 자동 적용',
+  },
 ];
 
 export default function SignupTypeSelector({ value, onSelect }: Props) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {TYPES.map((t) => (
         <button
           key={t.key}
