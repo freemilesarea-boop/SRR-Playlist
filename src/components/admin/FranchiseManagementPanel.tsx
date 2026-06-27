@@ -15,7 +15,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, Plus, ArrowLeft, Settings, Store as StoreIcon, Activity,
   Wifi, WifiOff, Music, ChevronRight, X, Calendar, Send, Link as LinkIcon,
+  Building2,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import {
   adminListFranchises,
   adminCreateFranchise,
@@ -224,6 +226,14 @@ function FranchiseListView({ onOpen }: { onOpen: (id: string) => void }) {
 // View 2: 프랜차이즈 상세 (KPI + 4 tabs)
 // =============================================================================
 
+// Phase 1-6 — 이 franchise 가 어떤 enterprise_account 와 연결됐는지 표시용
+interface FranchiseEnterpriseLink {
+  enterprise_account_id: string;
+  role: 'primary' | 'secondary';
+  enterprise_name: string;
+  brand_code: string | null;
+}
+
 function FranchiseDetail({
   franchiseId, onBack, initialTab, onPolicyCreatedReturn,
 }: {
@@ -235,6 +245,7 @@ function FranchiseDetail({
   const [dashboard, setDashboard] = useState<FranchiseDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<DetailTab>(initialTab ?? 'stores');
+  const [enterpriseLinks, setEnterpriseLinks] = useState<FranchiseEnterpriseLink[]>([]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -247,7 +258,43 @@ function FranchiseDetail({
     }
   }, [franchiseId]);
 
-  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
+  // Phase 1-6 — enterprise 연결 표시 (super_admin RLS 통과)
+  const loadEnterpriseLinks = useCallback(async () => {
+    try {
+      type RowShape = {
+        enterprise_account_id: string;
+        role: 'primary' | 'secondary';
+        enterprise_accounts: { enterprise_name: string; brand_code: string | null } | null;
+      };
+      const { data, error } = await supabase
+        .from('enterprise_franchises')
+        .select('enterprise_account_id, role, enterprise_accounts(enterprise_name, brand_code)')
+        .eq('franchise_id', franchiseId)
+        .is('deleted_at', null)
+        .returns<RowShape[]>();
+      if (error) {
+        console.warn('[FranchiseManagementPanel] enterprise links load failed', error);
+        setEnterpriseLinks([]);
+        return;
+      }
+      setEnterpriseLinks(
+        (data ?? []).map((r) => ({
+          enterprise_account_id: r.enterprise_account_id,
+          role: r.role,
+          enterprise_name: r.enterprise_accounts?.enterprise_name ?? '(이름 없음)',
+          brand_code: r.enterprise_accounts?.brand_code ?? null,
+        })),
+      );
+    } catch (e) {
+      console.warn('[FranchiseManagementPanel] enterprise links load error', e);
+      setEnterpriseLinks([]);
+    }
+  }, [franchiseId]);
+
+  useEffect(() => {
+    void loadDashboard();
+    void loadEnterpriseLinks();
+  }, [loadDashboard, loadEnterpriseLinks]);
 
   return (
     <div className="space-y-3">
@@ -263,6 +310,40 @@ function FranchiseDetail({
           className="ml-auto inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-50">
           <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
         </button>
+      </div>
+
+      {/* Phase 1-6 — enterprise 연결 표시 (수동 매장 연결 위주 UX 안내) */}
+      <div className="rounded-xl bg-bg-card p-3 text-xs">
+        {enterpriseLinks.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-ink-mute">연결된 본사:</span>
+            {enterpriseLinks.map((l) => (
+              <span key={l.enterprise_account_id}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  l.role === 'primary'
+                    ? 'bg-accent/15 text-accent ring-1 ring-accent/30'
+                    : 'bg-ink/10 text-ink-mute ring-1 ring-line/10'
+                }`}
+                title={l.role === 'primary' ? '매장 초대코드의 주 연결 대상' : '보조 연결'}
+              >
+                <Building2 size={10} /> {l.enterprise_name}
+                {l.brand_code && <span className="font-mono opacity-70">· {l.brand_code}</span>}
+                {l.role === 'primary' && <span className="opacity-75">primary</span>}
+              </span>
+            ))}
+            <span className="ml-auto text-[10px] text-ink-dim">
+              매장은 초대코드 회원가입으로 자동 연결됩니다. 아래 "매장 연결" 은 고급/수동 경로.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-ink-dim">
+            <Building2 size={11} />
+            <span>이 프랜차이즈는 아직 어떤 엔터프라이즈 본사와도 연결되지 않았습니다.</span>
+            <span className="ml-auto text-[10px]">
+              본사 계정 관리 탭에서 "첫 프랜차이즈" 로 매핑하거나 별도 매핑 RPC 사용.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* KPI */}

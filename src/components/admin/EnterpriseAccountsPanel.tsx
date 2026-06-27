@@ -12,18 +12,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, Plus, Search, X, AlertCircle, Building2,
   CheckCircle2, Mail, Phone, Pencil, Trash2, Power,
+  Key, Copy, RotateCw,
 } from 'lucide-react';
 import {
   adminListEnterpriseAccounts,
-  adminCreateEnterpriseAccount,
+  adminCreateEnterpriseAccountV2,
   adminUpdateEnterpriseAccount,
   adminSetEnterpriseAccountStatus,
   adminSoftDeleteEnterpriseAccount,
   adminEnterpriseAccountKpi,
+  adminRotateEnterpriseInviteCode,
+  adminGetEnterpriseInviteSummary,
   type EnterpriseAccount,
   type EnterpriseAccountStatus,
   type EnterpriseAccountRole,
   type EnterpriseAccountKpi,
+  type EnterpriseAccountV2CreateResult,
+  type EnterpriseInviteCodeKind,
+  type EnterpriseInviteSummary,
 } from '@/lib/api/enterpriseAccountsApi';
 import { toast } from '@/store/toastStore';
 
@@ -55,6 +61,7 @@ export default function EnterpriseAccountsPanel() {
   const [offset, setOffset] = useState(0);
   const [editTarget, setEditTarget] = useState<EnterpriseAccount | 'new' | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnterpriseAccount | null>(null);
+  const [inviteTarget, setInviteTarget] = useState<EnterpriseAccount | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -211,7 +218,15 @@ export default function EnterpriseAccountsPanel() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b border-line/5 hover:bg-bg-hover/30">
-                    <td className="px-3 py-2 font-semibold">{r.enterprise_name}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-semibold">{r.enterprise_name}</div>
+                      {r.brand_code && (
+                        <div className="text-[10px] text-ink-dim font-mono">{r.brand_code}</div>
+                      )}
+                      {!r.onboarding_enabled && (
+                        <div className="text-[10px] text-amber-300">초대 가입 OFF</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{r.manager_name}</td>
                     <td className="px-3 py-2 text-ink-mute">{r.manager_email}</td>
                     <td className="px-3 py-2 text-ink-mute">{r.manager_phone ?? '—'}</td>
@@ -224,6 +239,7 @@ export default function EnterpriseAccountsPanel() {
                       <RowActions
                         row={r} busy={busyId === r.id}
                         onEdit={() => setEditTarget(r)}
+                        onInvite={() => setInviteTarget(r)}
                         onSetStatus={(s) => void handleSetStatus(r.id, s)}
                         onDelete={() => setDeleteTarget(r)}
                       />
@@ -255,7 +271,14 @@ export default function EnterpriseAccountsPanel() {
                     </div>
                   )}
                 </div>
+                {r.brand_code && (
+                  <div className="mt-1 text-[10px] text-ink-dim font-mono">{r.brand_code}</div>
+                )}
                 <div className="mt-2 flex gap-1">
+                  <button onClick={() => setInviteTarget(r)}
+                    className="rounded bg-accent/20 px-2 py-1 text-[11px] font-bold text-accent">
+                    초대코드
+                  </button>
                   <button onClick={() => setEditTarget(r)}
                     className="flex-1 rounded bg-bg-deep px-2 py-1 text-[11px] font-bold">편집</button>
                   <button onClick={() => setDeleteTarget(r)}
@@ -291,6 +314,11 @@ export default function EnterpriseAccountsPanel() {
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => void handleDelete()} />
       )}
+      {inviteTarget && (
+        <InviteCodesModal target={inviteTarget}
+          onClose={() => setInviteTarget(null)}
+          onRotated={() => { void load(); }} />
+      )}
     </div>
   );
 }
@@ -322,15 +350,21 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
 }
 
 function RowActions({
-  row, busy, onEdit, onSetStatus, onDelete,
+  row, busy, onEdit, onInvite, onSetStatus, onDelete,
 }: {
   row: EnterpriseAccount; busy: boolean;
   onEdit: () => void;
+  onInvite: () => void;
   onSetStatus: (s: EnterpriseAccountStatus) => void;
   onDelete: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1">
+      <button onClick={onInvite} disabled={busy}
+        title="초대코드 관리"
+        className="rounded bg-accent/20 p-1 hover:bg-accent/30 disabled:opacity-50">
+        <Key size={11} className="text-accent" />
+      </button>
       <button onClick={onEdit} disabled={busy}
         title="편집"
         className="rounded bg-sky-500/20 p-1 hover:bg-sky-500/30 disabled:opacity-50">
@@ -403,7 +437,13 @@ function EditModal({
   const [role, setRole] = useState<EnterpriseAccountRole>(t?.role ?? 'enterprise_manager');
   const [status, setStatus] = useState<EnterpriseAccountStatus>(t?.status ?? 'active');
   const [notes, setNotes] = useState(t?.notes ?? '');
+
+  // Phase 1-6 — 신규 생성 시 자동 코드 + (옵션) brand_code / franchise_name
+  const [brandCode, setBrandCode] = useState('');
+  const [franchiseName, setFranchiseName] = useState('');
+
   const [saving, setSaving] = useState(false);
+  const [createdCodes, setCreatedCodes] = useState<EnterpriseAccountV2CreateResult | null>(null);
 
   const canSave = !!enterpriseName.trim() && !!managerName.trim() && !!managerEmail.trim();
 
@@ -412,15 +452,21 @@ function EditModal({
     setSaving(true);
     try {
       if (isNew) {
-        await adminCreateEnterpriseAccount({
+        // v2 — 자동 코드 생성 + 옵션 franchise 매핑
+        const r = await adminCreateEnterpriseAccountV2({
           enterpriseName: enterpriseName.trim(),
           managerName: managerName.trim(),
           managerEmail: managerEmail.trim(),
           managerPhone: managerPhone.trim() || null,
           role, status, notes: notes.trim() || null,
+          brandCode: brandCode.trim().toUpperCase() || null,
+          franchiseName: franchiseName.trim() || null,
         });
         toast.success('본사 계정이 추가되었습니다');
-      } else if (t) {
+        setCreatedCodes(r);  // 성공 화면으로 전환 — 코드 표시
+        return;
+      }
+      if (t) {
         await adminUpdateEnterpriseAccount(t.id, {
           enterpriseName: enterpriseName.trim(),
           managerName: managerName.trim(),
@@ -429,14 +475,49 @@ function EditModal({
           role, status, notes: notes.trim(),
         });
         toast.success('수정되었습니다');
+        onSaved();
       }
-      onSaved();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setSaving(false);
     }
   };
+
+  // 생성 성공 후 코드 확인 화면
+  if (createdCodes) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => { onSaved(); }}>
+        <div onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold">엔터프라이즈가 생성되었습니다</h3>
+            <button onClick={() => { onSaved(); }} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
+          </div>
+          <p className="text-[11px] text-ink-mute">
+            아래 초대코드를 본사 담당자/매장에게 전달하세요. 이후 본사 계정 목록의 키 아이콘에서 다시 확인할 수 있습니다.
+          </p>
+          <div className="mt-3 space-y-2">
+            {createdCodes.codes.brand_code && (
+              <CodeRow label="브랜드 코드" value={createdCodes.codes.brand_code} />
+            )}
+            {createdCodes.codes.hq_invite_code && (
+              <CodeRow label="본사 담당자 가입 코드" value={createdCodes.codes.hq_invite_code}
+                       hint="본사 담당자 가입용 코드입니다." />
+            )}
+            {createdCodes.codes.store_invite_code && (
+              <CodeRow label="매장 가입 코드" value={createdCodes.codes.store_invite_code}
+                       hint="매장 계정이 가입할 때 사용하는 코드입니다." />
+            )}
+          </div>
+          <button onClick={() => { onSaved(); }}
+            className="mt-4 w-full rounded bg-accent px-3 py-2 font-bold text-black hover:bg-accent/90">
+            확인
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -472,6 +553,29 @@ function EditModal({
               </select>
             </Field>
           </div>
+          {isNew && (
+            <>
+              <hr className="border-line/10" />
+              <p className="text-[11px] font-bold uppercase tracking-wider text-accent">초대 온보딩 (선택)</p>
+              <Field label="브랜드 코드 (선택)">
+                <input value={brandCode}
+                  onChange={(e) => setBrandCode(e.target.value)}
+                  placeholder="예: KUU (비우면 자동 생성)"
+                  className="input font-mono uppercase" />
+                <span className="block text-[11px] text-ink-dim mt-1">
+                  초대코드 prefix 로 사용. 비워두면 ENT-/STORE- 형식 자동 생성.
+                </span>
+              </Field>
+              <Field label="첫 프랜차이즈 (선택)">
+                <input value={franchiseName} onChange={(e) => setFranchiseName(e.target.value)}
+                  placeholder="예: 쿠우쿠우 본사"
+                  className="input" />
+                <span className="block text-[11px] text-ink-dim mt-1">
+                  입력 시 franchise 생성 + primary 매핑 자동 (매장 초대코드 가입의 연결 대상).
+                </span>
+              </Field>
+            </>
+          )}
           <Field label="메모">
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input min-h-[60px]" />
           </Field>
@@ -481,6 +585,216 @@ function EditModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Invite Codes Modal — 코드 확인 / 복사 / 재발급
+// =============================================================================
+
+function InviteCodesModal({
+  target, onClose, onRotated,
+}: { target: EnterpriseAccount; onClose: () => void; onRotated: () => void }) {
+  const [summary, setSummary] = useState<EnterpriseInviteSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rotating, setRotating] = useState<EnterpriseInviteCodeKind | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await adminGetEnterpriseInviteSummary(target.id);
+      setSummary(r);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [target.id]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleRotate = async (kind: EnterpriseInviteCodeKind) => {
+    const label = kind === 'hq' ? '본사' : kind === 'store' ? '매장' : '본사+매장';
+    if (!confirm(`${label} 초대코드를 재발급하시겠습니까?\n기존 코드는 더 이상 사용할 수 없습니다.`)) return;
+    setRotating(kind);
+    try {
+      const r = await adminRotateEnterpriseInviteCode({
+        enterpriseAccountId: target.id, codeType: kind,
+      });
+      if (r.success) {
+        toast.success(`${label} 초대코드가 재발급되었습니다.`);
+        await load();
+        onRotated();
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRotating(null);
+    }
+  };
+
+  const ea = summary?.enterprise_account ?? target;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-1.5">
+            <Key size={14} /> 초대코드 — {ea.enterprise_name}
+          </h3>
+          <button onClick={onClose} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
+        </div>
+
+        {loading && <div className="space-y-2"><div className="h-10 animate-pulse rounded bg-bg-deep" /><div className="h-10 animate-pulse rounded bg-bg-deep" /></div>}
+
+        {error && (
+          <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+            <AlertCircle size={12} className="inline mr-1" />{error}
+            <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 ml-2 font-bold">재시도</button>
+          </div>
+        )}
+
+        {summary && !loading && (
+          <div className="space-y-3">
+            <div className="rounded bg-bg-deep p-3 space-y-2">
+              {ea.brand_code && <CodeRow label="브랜드 코드" value={ea.brand_code} />}
+              {ea.hq_invite_code && (
+                <CodeRowWithAction
+                  label="본사 담당자 가입 코드"
+                  value={ea.hq_invite_code}
+                  hint="본사 담당자 가입용 코드입니다."
+                  onRotate={() => void handleRotate('hq')}
+                  rotating={rotating === 'hq'}
+                />
+              )}
+              {ea.store_invite_code && (
+                <CodeRowWithAction
+                  label="매장 가입 코드"
+                  value={ea.store_invite_code}
+                  hint="매장 계정이 가입할 때 사용하는 코드입니다."
+                  onRotate={() => void handleRotate('store')}
+                  rotating={rotating === 'store'}
+                />
+              )}
+              {!ea.hq_invite_code && !ea.store_invite_code && (
+                <p className="text-[11px] text-ink-mute">
+                  초대코드가 아직 발급되지 않았습니다. "본사+매장 재발급"으로 동시 생성하세요.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs">
+              <button
+                disabled={rotating !== null}
+                onClick={() => void handleRotate('both')}
+                className="flex-1 rounded bg-accent/15 px-3 py-2 font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/25 disabled:opacity-50"
+              >
+                <RotateCw size={11} className={`inline mr-1 ${rotating === 'both' ? 'animate-spin' : ''}`} />
+                본사+매장 한꺼번에 재발급
+              </button>
+            </div>
+
+            <div className="rounded bg-bg-deep p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-1">연결 상태</p>
+              <ul className="space-y-1 text-[11px]">
+                <li>온보딩 활성화: <b>{ea.onboarding_enabled ? 'ON' : 'OFF'}</b></li>
+                <li>지역 자율 등록: <b>{ea.allow_self_register_region ? '허용' : '비허용'}</b></li>
+                <li>연결 프랜차이즈: <b>{summary.franchises.length}개</b></li>
+                <li>등록 지역: <b>{summary.regions.length}개</b></li>
+                <li>매장 수: <b>{summary.store_count}개</b></li>
+                {ea.invite_code_rotated_at && (
+                  <li className="text-ink-mute">
+                    마지막 재발급: {new Date(ea.invite_code_rotated_at).toLocaleString('ko-KR')}
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            {summary.recent_claims.length > 0 && (
+              <div className="rounded bg-bg-deep p-3">
+                <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-1">최근 가입 시도 (최신 5개)</p>
+                <ul className="space-y-1 text-[11px]">
+                  {summary.recent_claims.slice(0, 5).map((c) => (
+                    <li key={c.id} className="flex items-center gap-2">
+                      <span className={`inline-block w-12 rounded px-1 text-[10px] text-center ${
+                        c.status === 'success' ? 'bg-emerald-500/20 text-emerald-300' :
+                        c.status === 'failed' ? 'bg-rose-500/20 text-rose-300' :
+                        'bg-amber-500/20 text-amber-300'
+                      }`}>{c.status}</span>
+                      <span className="text-ink-dim w-8 text-[10px]">{c.claim_type === 'hq_admin' ? '본사' : '매장'}</span>
+                      <span className="flex-1 truncate">
+                        {c.store_name_input || c.brand_name_input || '—'}
+                        {c.region_name_input && ` · ${c.region_name_input}`}
+                      </span>
+                      <span className="text-ink-dim text-[10px]">
+                        {new Date(c.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CodeRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
+      <div className="mt-0.5 flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-bg px-2 py-1 font-mono text-sm font-semibold">{value}</code>
+        <button
+          type="button"
+          onClick={() => { void navigator.clipboard.writeText(value).then(() => toast.success('복사됨')).catch(() => toast.error('복사 실패')); }}
+          className="rounded bg-bg p-1.5 hover:bg-bg-hover"
+          title="복사"
+        >
+          <Copy size={11} />
+        </button>
+      </div>
+      {hint && <p className="mt-1 text-[10px] text-ink-dim">{hint}</p>}
+    </div>
+  );
+}
+
+function CodeRowWithAction({
+  label, value, hint, onRotate, rotating,
+}: {
+  label: string; value: string; hint?: string;
+  onRotate: () => void; rotating: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
+      <div className="mt-0.5 flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-bg px-2 py-1 font-mono text-sm font-semibold">{value}</code>
+        <button
+          type="button"
+          onClick={() => { void navigator.clipboard.writeText(value).then(() => toast.success('복사됨')).catch(() => toast.error('복사 실패')); }}
+          className="rounded bg-bg p-1.5 hover:bg-bg-hover"
+          title="복사"
+        >
+          <Copy size={11} />
+        </button>
+        <button
+          type="button"
+          onClick={onRotate}
+          disabled={rotating}
+          className="rounded bg-amber-500/15 p-1.5 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+          title="재발급"
+        >
+          <RotateCw size={11} className={rotating ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      {hint && <p className="mt-1 text-[10px] text-ink-dim">{hint}</p>}
     </div>
   );
 }
