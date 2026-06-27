@@ -82,6 +82,7 @@ const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/Enterprise
 const EnterpriseRegionsPanel = lazy(() => import('@/components/admin/EnterpriseRegionsPanel'));
 const StoreMonitoringPanel = lazy(() => import('@/components/admin/StoreMonitoringPanel'));
 const StoreNowPlayingPanel = lazy(() => import('@/components/admin/StoreNowPlayingPanel'));
+const PolicyDeploymentPanel = lazy(() => import('@/components/admin/PolicyDeploymentPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -108,6 +109,7 @@ type Tab =
   | 'enterprise-regions'
   | 'store-monitoring'
   | 'store-now-playing'
+  | 'policy-deployment'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -159,6 +161,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
   { key: 'store-monitoring', label: '매장 상태', icon: <Activity size={14} /> },
   { key: 'store-now-playing', label: '실시간 재생', icon: <Music size={14} /> },
+  { key: 'policy-deployment', label: '정책 적용률', icon: <ShieldCheck size={14} /> },
   { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
@@ -206,7 +209,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'store-monitoring', 'store-now-playing', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -370,6 +373,7 @@ export default function AdminPage() {
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
           {tab === 'store-monitoring' && <StoreMonitoringPanel />}
           {tab === 'store-now-playing' && <StoreNowPlayingPanel />}
+          {tab === 'policy-deployment' && <PolicyDeploymentPanel />}
           {tab === 'franchise' && <FranchiseManagementPanel />}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}
