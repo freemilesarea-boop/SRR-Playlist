@@ -29,9 +29,6 @@ export function useStoreHeartbeat({ storeId, enabled }: UseStoreHeartbeatOptions
   const lastTrackIdRef = useRef<string | null>(null);
   const trackStartedAtRef = useRef<string | null>(null);
 
-  // DEBUG — hook 실행 + 가드 상태 가시화 (운영 환경 포함, heartbeat 0 추적)
-  console.log('useStoreHeartbeat mounted', { enabled, storeId });
-
   // Phase 1-4 — 트랙 변경 시 즉시 heartbeat fire (60s 대기 안 함).
   // Real-time Now Playing UI 가 즉시 새 곡 반영 가능하게 함.
   // 60s 주기 heartbeat 와 별개로 ad-hoc 1회 추가 호출.
@@ -67,7 +64,6 @@ export function useStoreHeartbeat({ storeId, enabled }: UseStoreHeartbeatOptions
 
     const send = (status: StorePlayerStatus) => {
       if (cancelled) return;
-      console.log('sending heartbeat');  // DEBUG: send() 진입 직전
       void storeHeartbeat({
         storeId,
         appVersion: APP_VERSION,

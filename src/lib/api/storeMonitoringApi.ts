@@ -136,12 +136,10 @@ export async function storeHeartbeat(input: StoreHeartbeatInput): Promise<void> 
     p_playback_error: input.playbackError ?? null,
     p_device_identifier: input.deviceIdentifier ?? null,
   };
-  console.log(payload);  // DEBUG: RPC 호출 직전 payload
-  const result = await supabase.rpc('store_heartbeat', payload);
-  console.log(result);   // DEBUG: RPC 결과 (성공/실패 둘 다)
-  if (result.error) {
+  const { error } = await supabase.rpc('store_heartbeat', payload);
+  if (error) {
     // heartbeat 실패는 silent — 재생을 막지 않음. 단, console.warn 으로 디버깅 가능.
-    console.warn('[storeMonitoringApi] heartbeat failed', result.error, {
+    console.warn('[storeMonitoringApi] heartbeat failed', error, {
       storeId: input.storeId, status: input.playerStatus, trackId: input.currentTrackId,
     });
   }
