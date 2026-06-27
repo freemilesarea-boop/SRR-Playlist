@@ -144,8 +144,24 @@ export default function ProfilePage() {
 
       <MyInquiriesSection />
 
-      {/* X6.18 — 본인인증 섹션 (정산 보류 카드의 본인인증 CTA scroll target) */}
-      <IdentityVerificationSection identityVerified={profile?.identity_verified === true} />
+      {/* Phase 1-8 hotfix — Enterprise HQ / 매장 카드를 상단으로 이동.
+          본인인증 섹션은 enterprise 사용자에게는 부적절 (본사 settlement 별도 흐름) → 아래에서 gate. */}
+      {!enterpriseRole.loading && enterpriseRole.role.is_hq && (
+        <EnterpriseHqProfileCard role={enterpriseRole.role} />
+      )}
+      {!enterpriseRole.loading
+        && !enterpriseRole.role.is_hq
+        && enterpriseRole.storeInfo.is_store && (
+        <EnterpriseStoreInfoCard info={enterpriseRole.storeInfo} />
+      )}
+
+      {/* X6.18 — 본인인증 섹션 (정산 보류 카드의 본인인증 CTA scroll target)
+          Phase 1-8 hotfix — HQ / 매장 사용자는 별도 settlement 흐름 사용 → 숨김.
+          enterpriseRole.loading 동안에도 깜빡임 방지 위해 false fallback (기존 동작 유지). */}
+      {(enterpriseRole.loading
+        || (!enterpriseRole.role.is_hq && !enterpriseRole.storeInfo.is_store)) && (
+        <IdentityVerificationSection identityVerified={profile?.identity_verified === true} />
+      )}
 
       {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
       <section className="space-y-2">
@@ -248,16 +264,8 @@ export default function ProfilePage() {
         </button>
       </section>
 
-      {/* Phase 1-7 — enterprise HQ / 매장 우선 표시.
-          HQ 또는 매장 사용자에게는 ArtistManagementCard (아티스트 CTA) 를 노출하지 않음. */}
-      {!enterpriseRole.loading && enterpriseRole.role.is_hq && (
-        <EnterpriseHqProfileCard role={enterpriseRole.role} />
-      )}
-      {!enterpriseRole.loading
-        && !enterpriseRole.role.is_hq
-        && enterpriseRole.storeInfo.is_store && (
-        <EnterpriseStoreInfoCard info={enterpriseRole.storeInfo} />
-      )}
+      {/* Phase 1-7 — enterprise HQ / 매장 우선 표시 — Phase 1-8 hotfix 로 상단으로 이동됨.
+          이 위치는 ArtistManagementCard 분기 가드 유지를 위해 비워둠. */}
 
       {/* 아티스트 관리/등록 카드 — artist_profiles(approval_status) 가 source of truth.
           프로필이 있거나 account_type=artist 이면 노출. 미러(account_type/artist_approval_status)
@@ -449,8 +457,8 @@ function IdentityVerificationSection({ identityVerified }: { identityVerified: b
           <div className="shrink-0 sm:self-center">
             <SupportInquiryButton
               variant="nav"
-              label="정산 정보 등록하기"
-              defaultType="정산 정보 등록"
+              label="본인인증 요청하기"
+              defaultType="계정/로그인 문의"
               context={{ topic: 'identity_verification', source: 'profile_section' }}
               className="!w-full !bg-amber-500 !text-amber-950 hover:!bg-amber-400 sm:!w-auto"
             />
