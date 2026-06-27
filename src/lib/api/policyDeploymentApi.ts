@@ -144,6 +144,42 @@ export interface PolicyDeploymentRecomputeResult {
 }
 
 // =============================================================================
+// Deployable policies (모달 dropdown 공급)
+// =============================================================================
+
+export interface DeployablePolicy {
+  policy_id: string;
+  policy_name: string;
+  policy_description: string | null;
+  policy_status: 'draft' | 'active' | 'archived';
+  is_default: boolean;
+  effective_from: string | null;
+  effective_until: string | null;
+  updated_at: string;
+  created_at: string;
+  franchise_id: string;
+  franchise_name: string | null;
+  latest_version_number: number;
+  target_store_count: number;
+  active_store_count: number;
+}
+
+export interface DeployablePolicyListParams {
+  search?: string | null;
+  franchiseId?: string | null;
+  enterpriseAccountId?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DeployablePolicyListResponse {
+  success: boolean;
+  data: DeployablePolicy[];
+  pagination: { total: number; limit: number; offset: number; has_more: boolean };
+  computed_at: string;
+}
+
+// =============================================================================
 // RPC wrappers
 // =============================================================================
 
@@ -214,6 +250,41 @@ export async function markPolicyTargetFailed(
     p_reason: reason,
   });
   if (error) { console.error('[policyDeploymentApi] mark_failed failed', error); throw error; }
+}
+
+export async function listDeployablePolicies(
+  params: DeployablePolicyListParams = {},
+): Promise<DeployablePolicyListResponse> {
+  const fallback: DeployablePolicyListResponse = {
+    success: false,
+    data: [],
+    pagination: {
+      total: 0,
+      limit: params.limit ?? 50,
+      offset: params.offset ?? 0,
+      has_more: false,
+    },
+    computed_at: new Date(0).toISOString(),
+  };
+  const { data, error } = await supabase.rpc('admin_list_deployable_policies', {
+    p_search: params.search ?? null,
+    p_franchise_id: params.franchiseId ?? null,
+    p_enterprise_account_id: params.enterpriseAccountId ?? null,
+    p_limit: params.limit ?? 50,
+    p_offset: params.offset ?? 0,
+  });
+  if (error) {
+    console.error('[policyDeploymentApi] deployable policies failed', error);
+    throw new Error(`배포 가능한 정책 목록을 불러올 수 없습니다 — ${error.message}`);
+  }
+  if (!data) return fallback;
+  const res = data as Partial<DeployablePolicyListResponse>;
+  return {
+    success: res.success ?? true,
+    data: Array.isArray(res.data) ? res.data : [],
+    pagination: res.pagination ?? fallback.pagination,
+    computed_at: res.computed_at ?? new Date().toISOString(),
+  };
 }
 
 export async function retryPolicyDeploymentTargets(
