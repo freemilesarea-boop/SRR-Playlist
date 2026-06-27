@@ -121,7 +121,7 @@ export interface StoreHeartbeatInput {
 // =============================================================================
 
 export async function storeHeartbeat(input: StoreHeartbeatInput): Promise<void> {
-  const { error } = await supabase.rpc('store_heartbeat', {
+  const payload = {
     p_store_id: input.storeId ?? null,
     p_app_version: input.appVersion ?? null,
     p_battery_level: input.batteryLevel ?? null,
@@ -135,15 +135,13 @@ export async function storeHeartbeat(input: StoreHeartbeatInput): Promise<void> 
     p_player_status: input.playerStatus ?? 'unknown',
     p_playback_error: input.playbackError ?? null,
     p_device_identifier: input.deviceIdentifier ?? null,
-  });
-  if (error) {
+  };
+  console.log(payload);  // DEBUG: RPC 호출 직전 payload
+  const result = await supabase.rpc('store_heartbeat', payload);
+  console.log(result);   // DEBUG: RPC 결과 (성공/실패 둘 다)
+  if (result.error) {
     // heartbeat 실패는 silent — 재생을 막지 않음. 단, console.warn 으로 디버깅 가능.
-    console.warn('[storeMonitoringApi] heartbeat failed', error, {
-      storeId: input.storeId, status: input.playerStatus, trackId: input.currentTrackId,
-    });
-  } else if (import.meta.env.DEV) {
-    // DEV 모드에서만 성공 로그 (운영 환경 콘솔 소음 차단)
-    console.info('[storeMonitoringApi] heartbeat ok', {
+    console.warn('[storeMonitoringApi] heartbeat failed', result.error, {
       storeId: input.storeId, status: input.playerStatus, trackId: input.currentTrackId,
     });
   }
