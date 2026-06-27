@@ -11,17 +11,19 @@
  *   - 매장 플레이어 / heartbeat / now-playing 절대 영향 X
  *   - 이 패널은 관측 레이어. apply_franchise_policy 자동 트리거 X (Phase 1-6 별도 PR)
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Search, AlertCircle, Building2, MapPin, ListChecks, Plus, X,
   CheckCircle2, Clock, XCircle, AlertTriangle, RotateCcw, Calculator, PlayCircle,
+  ChevronDown, Star, Inbox,
 } from 'lucide-react';
 import {
   listPolicyDeployments, getPolicyDeploymentKpi, getPolicyDeploymentDetail,
   createPolicyDeployment, recomputePolicyDeployment, retryPolicyDeploymentTargets,
-  markPolicyTargetFailed,
+  markPolicyTargetFailed, listDeployablePolicies,
   type PolicyDeployment, type PolicyDeploymentKpi, type PolicyDeploymentStatus,
   type PolicyDeploymentDetail, type PolicyDeploymentTargetStatus,
+  type DeployablePolicy,
 } from '@/lib/api/policyDeploymentApi';
 import {
   adminListFranchises, type FranchiseListRow,
@@ -725,6 +727,14 @@ function DetailDrawer({
 // Create Modal
 // =============================================================================
 
+function buildAutoDeploymentName(policy: DeployablePolicy): string {
+  const now = new Date();
+  const stamp =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ` +
+    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return `${policy.policy_name} v${policy.latest_version_number} 배포 - ${stamp}`;
+}
+
 function CreateDeploymentModal({
   franchises, enterprises, onClose, onCreated,
 }: {
@@ -733,23 +743,76 @@ function CreateDeploymentModal({
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
-  const [policyId, setPolicyId] = useState('');
+  const [policies, setPolicies] = useState<DeployablePolicy[]>([]);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policiesError, setPoliciesError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const [selected, setSelected] = useState<DeployablePolicy | null>(null);
   const [deploymentName, setDeploymentName] = useState('');
   const [enterpriseAccountId, setEnterpriseAccountId] = useState('');
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const userEditedNameRef = useRef(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // debounce 300ms
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  // modal open 시 + 검색어 변경 시 정책 목록 fetch
+  useEffect(() => {
+    setPoliciesLoading(true);
+    setPoliciesError(null);
+    listDeployablePolicies({ search: debouncedSearch || null, limit: 50 })
+      .then((r) => { setPolicies(r.data); })
+      .catch((e) => { setPoliciesError((e as Error).message); setPolicies([]); })
+      .finally(() => setPoliciesLoading(false));
+  }, [debouncedSearch]);
+
+  // dropdown 외부 클릭 닫기
+  useEffect(() => {
+    function onClick(ev: MouseEvent) {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(ev.target as Node)) setDropdownOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  // 정책 선택 시 — 사용자가 배포명을 손대지 않은 경우만 자동 생성
+  function onSelect(p: DeployablePolicy) {
+    setSelected(p);
+    setDropdownOpen(false);
+    setSearch('');
+    if (!userEditedNameRef.current) {
+      setDeploymentName(buildAutoDeploymentName(p));
+    }
+  }
+
+  const onNameChange = (v: string) => {
+    userEditedNameRef.current = true;
+    setDeploymentName(v);
+  };
+
   const onSubmit = async () => {
     setErr(null);
-    if (!policyId.trim()) { setErr('정책 ID 가 필요합니다.'); return; }
+    if (!selected) { setErr('배포할 정책을 선택하세요.'); return; }
     setBusy(true);
     try {
       const r = await createPolicyDeployment({
-        policyId: policyId.trim(),
+        policyId: selected.policy_id,
         deploymentName: deploymentName.trim() || null,
         enterpriseAccountId: enterpriseAccountId || null,
       });
-      alert(`배포 생성 완료 — ${r.target_store_count}개 매장 대상`);
+      alert(`배포 생성 완료 — ${r.target_store_count}개 매장 대상 (v${r.policy_version_number})`);
       await onCreated();
     } catch (e) {
       setErr((e as Error).message);
@@ -761,7 +824,7 @@ function CreateDeploymentModal({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl bg-bg-card p-4 shadow-2xl ring-1 ring-line/10"
+        className="w-full max-w-lg rounded-2xl bg-bg-card p-4 shadow-2xl ring-1 ring-line/10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -771,31 +834,162 @@ function CreateDeploymentModal({
           </button>
         </div>
         <p className="mt-1 text-[11px] text-ink-dim">
-          기존 정책의 franchise 에 active 로 연결된 모든 매장이 자동으로 snapshot 됩니다.
+          정책을 선택하면 해당 franchise 의 active 매장이 자동으로 snapshot 됩니다.
           정책 적용 자체는 별도로 apply_franchise_policy 호출이 필요합니다 (Phase 1-6 자동 연결 예정).
         </p>
 
+        {/* 정책 검색/선택 dropdown */}
+        <div className="mt-3 text-xs" ref={dropdownRef}>
+          <div className="text-ink-dim mb-1">배포할 정책 *</div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setDropdownOpen((v) => !v)}
+              className="flex w-full items-center justify-between rounded bg-bg-deep px-3 py-2 text-left hover:bg-bg-hover"
+            >
+              {selected ? (
+                <span className="truncate">
+                  <span className="font-semibold">{selected.policy_name}</span>
+                  {selected.franchise_name && (
+                    <span className="text-ink-dim"> · {selected.franchise_name}</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-ink-mute">배포할 정책을 선택하세요</span>
+              )}
+              <ChevronDown size={12} className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg bg-bg shadow-2xl ring-1 ring-line/20">
+                <div className="border-b border-line/10 p-2">
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-dim" />
+                    <input
+                      type="text" autoFocus value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="정책명 / 설명 / 프랜차이즈 검색"
+                      className="w-full rounded bg-bg-deep pl-7 pr-2 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto">
+                  {policiesLoading ? (
+                    <div className="px-3 py-6 text-center text-[11px] text-ink-mute">
+                      <RefreshCw size={14} className="mx-auto mb-1 animate-spin opacity-60" />
+                      불러오는 중…
+                    </div>
+                  ) : policiesError ? (
+                    <div className="px-3 py-4 text-[11px] text-rose-300">
+                      <AlertCircle size={12} className="inline mr-1" />{policiesError}
+                    </div>
+                  ) : policies.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-[11px] text-ink-mute">
+                      <Inbox size={16} className="mx-auto mb-1 opacity-50" />
+                      {debouncedSearch
+                        ? '검색 결과가 없습니다.'
+                        : '배포 가능한 정책이 없습니다. 먼저 프랜차이즈 정책을 생성하세요.'}
+                    </div>
+                  ) : (
+                    <ul>
+                      {policies.map((p) => (
+                        <li key={p.policy_id}>
+                          <button
+                            type="button"
+                            onClick={() => onSelect(p)}
+                            className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-bg-hover ${
+                              selected?.policy_id === p.policy_id ? 'bg-accent/10' : ''
+                            }`}
+                          >
+                            <div className="flex w-full items-center gap-2">
+                              <span className="font-semibold truncate flex-1">{p.policy_name}</span>
+                              {p.is_default && <Star size={10} className="text-amber-300" />}
+                              <span className="text-[10px] text-ink-dim shrink-0">
+                                {new Date(p.updated_at).toLocaleDateString('ko-KR')}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-ink-mute flex items-center gap-2 flex-wrap">
+                              {p.franchise_name && (
+                                <span className="flex items-center gap-0.5"><Building2 size={8} />{p.franchise_name}</span>
+                              )}
+                              <span className="text-accent">v{p.latest_version_number}</span>
+                              <span>대상 {p.target_store_count}개 매장</span>
+                              {p.active_store_count > 0 && (
+                                <span className="text-emerald-300">온라인 {p.active_store_count}</span>
+                              )}
+                            </div>
+                            {p.policy_description && (
+                              <div className="text-[10px] text-ink-dim line-clamp-1 mt-0.5">
+                                {p.policy_description}
+                              </div>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 선택된 정책 카드 */}
+        {selected && (
+          <div className="mt-3 rounded-lg bg-bg-deep p-3 ring-1 ring-accent/30 text-xs">
+            <div className="text-[10px] uppercase tracking-wider text-ink-dim mb-1">선택된 정책</div>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold">{selected.policy_name}</span>
+                  {selected.is_default && <Star size={10} className="text-amber-300" />}
+                </div>
+                <div className="mt-0.5 text-[11px] text-ink-mute flex flex-wrap items-center gap-2">
+                  <span className="text-accent">v{selected.latest_version_number}</span>
+                  <span>대상 {selected.target_store_count}개 매장</span>
+                  {selected.active_store_count > 0 && (
+                    <span className="text-emerald-300">온라인 {selected.active_store_count}</span>
+                  )}
+                </div>
+                {selected.franchise_name && (
+                  <div className="mt-0.5 text-[11px] text-ink-mute flex items-center gap-1">
+                    <Building2 size={10} /> {selected.franchise_name}
+                  </div>
+                )}
+                {selected.policy_description && (
+                  <p className="mt-1 text-[11px] text-ink whitespace-pre-line">{selected.policy_description}</p>
+                )}
+                <div className="mt-1 text-[10px] font-mono text-ink-dim">
+                  정책 ID: {selected.policy_id}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelected(null); userEditedNameRef.current = false; setDeploymentName(''); }}
+                className="rounded-full bg-bg-card p-1 text-ink-dim hover:bg-bg-hover hover:text-rose-300"
+                aria-label="선택 해제"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 배포명 + 엔터프라이즈 */}
         <div className="mt-3 space-y-2 text-xs">
           <label className="block">
-            <span className="text-ink-dim">정책 ID *</span>
+            <span className="text-ink-dim">배포명</span>
             <input
-              type="text" value={policyId} onChange={(e) => setPolicyId(e.target.value)}
-              placeholder="franchise_music_policies.id (UUID)"
-              className="mt-0.5 w-full rounded bg-bg-deep px-2 py-1.5 font-mono text-[11px]"
-            />
-            <p className="mt-1 text-[10px] text-ink-dim">
-              프랜차이즈 관리 탭에서 정책 ID 를 복사하세요.
-              {franchises.length > 0 && ` (등록된 프랜차이즈: ${franchises.length}개)`}
-            </p>
-          </label>
-
-          <label className="block">
-            <span className="text-ink-dim">배포명 (선택)</span>
-            <input
-              type="text" value={deploymentName} onChange={(e) => setDeploymentName(e.target.value)}
-              placeholder="비워두면 자동 생성 (정책명 + 버전 + 시각)"
+              type="text" value={deploymentName} onChange={(e) => onNameChange(e.target.value)}
+              placeholder="정책 선택 시 자동 생성됩니다"
               className="mt-0.5 w-full rounded bg-bg-deep px-2 py-1.5"
             />
+            <p className="mt-1 text-[10px] text-ink-dim">
+              {userEditedNameRef.current
+                ? '사용자가 수정 — 정책을 바꿔도 덮어쓰지 않습니다.'
+                : '정책을 선택하면 "정책명 v버전 배포 - 시각" 으로 자동 생성됩니다.'}
+            </p>
           </label>
 
           <label className="block">
@@ -811,6 +1005,7 @@ function CreateDeploymentModal({
             </select>
             <p className="mt-1 text-[10px] text-ink-dim">
               엔터프라이즈 담당자(auth_user_id) 가 자기 배포만 조회할 수 있도록 묶입니다.
+              {franchises.length > 0 && ` (등록된 프랜차이즈: ${franchises.length}개)`}
             </p>
           </label>
         </div>
@@ -827,8 +1022,8 @@ function CreateDeploymentModal({
           </button>
           <button
             onClick={() => void onSubmit()}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-bold text-black hover:bg-accent/90 disabled:opacity-50"
+            disabled={busy || !selected}
+            className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-bold text-black hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />} 생성
           </button>
