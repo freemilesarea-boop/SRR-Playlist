@@ -29,13 +29,18 @@ import { setPendingEnterpriseClaim } from '@/lib/pendingEnterpriseClaim';
 
 interface Props {
   onDone: (email: string) => void;
+  /** Phase 1-9 — 초대 링크에서 미리 채워진 값 */
+  initialBrandName?: string;
+  initialInviteCode?: string;
 }
 
-export default function EnterpriseHqSignupForm({ onDone }: Props) {
+export default function EnterpriseHqSignupForm({
+  onDone, initialBrandName = '', initialInviteCode = '',
+}: Props) {
   const { signUpWithPassword } = useAuthStore();
 
-  const [brandName, setBrandName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [brandName, setBrandName] = useState(initialBrandName);
+  const [inviteCode, setInviteCode] = useState(initialInviteCode);
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState<Extract<EnterpriseInviteValidateResult, { success: true }> | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);

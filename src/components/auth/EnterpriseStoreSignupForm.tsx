@@ -30,6 +30,9 @@ import { setPendingEnterpriseClaim } from '@/lib/pendingEnterpriseClaim';
 
 interface Props {
   onDone: (email: string) => void;
+  /** Phase 1-9 — 초대 링크에서 미리 채워진 값 */
+  initialBrandName?: string;
+  initialInviteCode?: string;
 }
 
 type VerifiedInvite = Extract<EnterpriseInviteValidateResult, { success: true }>;
@@ -53,11 +56,13 @@ async function claimWithRetry(
   return last ?? { success: false, reason: '매장 연결에 실패했습니다.' };
 }
 
-export default function EnterpriseStoreSignupForm({ onDone }: Props) {
+export default function EnterpriseStoreSignupForm({
+  onDone, initialBrandName = '', initialInviteCode = '',
+}: Props) {
   const { signUpWithPassword } = useAuthStore();
 
-  const [brandName, setBrandName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [brandName, setBrandName] = useState(initialBrandName);
+  const [inviteCode, setInviteCode] = useState(initialInviteCode);
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState<VerifiedInvite | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);

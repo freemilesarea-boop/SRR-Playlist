@@ -106,15 +106,55 @@ export interface EnterpriseHqDashboardAccount {
   last_login_at: string | null;
 }
 
+export interface EnterpriseHqStoreStats {
+  total: number;
+  active: number;
+  inactive: number;
+  suspended: number;
+  joined_7d: number;
+}
+
+export interface EnterpriseHqRegionDistributionItem {
+  region_id: string | null;
+  region_name: string;
+  region_code: string | null;
+  region_status: string;
+  active_count: number;
+  total_count: number;
+}
+
+/**
+ * Phase 1-10 — 본사 예상 정산금 미리보기.
+ *   per_store_commission = floor(monthly_store_price * commission_rate / 100)
+ *   estimated_monthly_commission = active_store_count * per_store_commission
+ *
+ * paid_store_count 는 현 시점(Q1=A) active_store_count 와 동일.
+ * 추후 매장별 결제 도입 시 별도 컬럼으로 분리.
+ */
+export interface EnterpriseHqCommissionPreview {
+  monthly_store_price: number;
+  commission_rate: number;
+  per_store_commission: number;
+  active_store_count: number;
+  paid_store_count: number;
+  estimated_monthly_commission: number;
+  computed_at: string;
+}
+
 export interface EnterpriseHqDashboard {
   success: boolean;
   enterprise_account: EnterpriseHqDashboardAccount;
   franchises: EnterpriseHqFranchiseSummary[];
   regions: EnterpriseHqRegionSummary[];
   store_count: number;
+  // Phase 1-9 additions (optional for back-compat)
+  store_stats?: EnterpriseHqStoreStats;
+  region_distribution?: EnterpriseHqRegionDistributionItem[];
   recent_stores: EnterpriseHqRecentStore[];
   business_profile: EnterpriseBusinessProfile | null;
   business_profile_present: boolean;
+  // Phase 1-10 — 예상 정산금 (admin 만 commission_rate 변경)
+  commission_preview?: EnterpriseHqCommissionPreview;
   computed_at: string;
 }
 
@@ -243,6 +283,7 @@ export interface EnterpriseSettlementSummary {
   settlement_status: SettlementStatus;
   settlement_method: SettlementMethod;
   minimum_payout: number;
+  commission_rate?: number;
   rejection_reason: string | null;
   submitted_at: string | null;
   reviewed_at: string | null;
@@ -266,12 +307,14 @@ export async function getMyEnterpriseSettlement(): Promise<EnterpriseSettlementG
   return data as EnterpriseSettlementGetResult;
 }
 
+/**
+ * HQ 가 수정 가능한 정산 필드 (Phase 1-9 §3).
+ * settlement_method / minimum_payout 은 계약 조건이므로 admin RPC 전용 — 제외.
+ */
 export interface EnterpriseSettlementUpsertInput {
   bankName?: string | null;
   accountNumber?: string | null;
   accountHolder?: string | null;
-  settlementMethod?: SettlementMethod | null;
-  minimumPayout?: number | null;
   businessLicensePath?: string | null;
   bankbookPath?: string | null;
 }
@@ -290,8 +333,9 @@ export async function upsertMyEnterpriseSettlement(
     p_bank_name: input.bankName ?? null,
     p_account_number: input.accountNumber ?? null,
     p_account_holder: input.accountHolder ?? null,
-    p_settlement_method: input.settlementMethod ?? null,
-    p_minimum_payout: input.minimumPayout ?? null,
+    // settlement_method / minimum_payout: 의도적으로 null — admin RPC 전용
+    p_settlement_method: null,
+    p_minimum_payout: null,
     p_business_license_path: input.businessLicensePath ?? null,
     p_bankbook_path: input.bankbookPath ?? null,
   });
@@ -314,6 +358,7 @@ export interface EnterpriseSettlementFull {
   settlement_status: SettlementStatus;
   settlement_method: SettlementMethod;
   minimum_payout: number;
+  commission_rate?: number;
   rejection_reason: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -387,6 +432,40 @@ export async function adminUpdateEnterpriseSettlementStatus(
     throw new Error(error.message || '상태 변경에 실패했습니다.');
   }
   return data as { success: boolean; settlement_status: SettlementStatus; reviewed_at: string };
+}
+
+// ----- admin payment settings (Phase 1-9 §3 + Phase 1-10) — 계약 조건 -----
+export interface AdminUpdatePaymentSettingsInput {
+  enterpriseAccountId: string;
+  settlementMethod: SettlementMethod;
+  minimumPayout: number;
+  /** Phase 1-10 — 수수료율 %. null/undefined 면 기존 값 유지. */
+  commissionRate?: number | null;
+}
+
+export interface AdminUpdatePaymentSettingsResult {
+  success: boolean;
+  enterprise_account_id: string;
+  settlement_method: SettlementMethod;
+  minimum_payout: number;
+  commission_rate: number;
+  updated_at: string;
+}
+
+export async function adminUpdateEnterprisePaymentSettings(
+  input: AdminUpdatePaymentSettingsInput,
+): Promise<AdminUpdatePaymentSettingsResult> {
+  const { data, error } = await supabase.rpc('admin_update_enterprise_payment_settings', {
+    p_enterprise_account_id: input.enterpriseAccountId,
+    p_settlement_method: input.settlementMethod,
+    p_minimum_payout: input.minimumPayout,
+    p_commission_rate: input.commissionRate ?? null,
+  });
+  if (error) {
+    console.error('[enterpriseHqApi] admin update payment settings failed', error);
+    throw new Error(error.message || '지급 설정 변경에 실패했습니다.');
+  }
+  return data as AdminUpdatePaymentSettingsResult;
 }
 
 // ----- storage helpers -----
