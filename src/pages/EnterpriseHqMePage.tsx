@@ -447,7 +447,7 @@ function SettlementSections({ enterpriseAccountId }: { enterpriseAccountId: stri
         enterpriseAccountId={enterpriseAccountId}
         onSaved={() => void load()}
       />
-      <PaymentSettingsCard data={data} onSaved={() => void load()} />
+      <PaymentSettingsCard data={data} />
     </>
   );
 }
@@ -654,52 +654,19 @@ function DocumentUpload({
 }
 
 
-// ----- 지급 설정 card -----
+// ----- 지급 설정 card (Phase 1-9 §3 — read-only, 계약 조건) -----
+//
+// settlement_method / minimum_payout 은 계약 조건이므로 관리자만 변경 가능.
+// HQ 화면에서는 현재 값만 표시한다 (RPC 호출 없음).
 function PaymentSettingsCard({
-  data, onSaved,
-}: { data: EnterpriseSettlementGetResult | null; onSaved: () => void }) {
+  data,
+}: { data: EnterpriseSettlementGetResult | null }) {
   const existing = data?.settlement ?? null;
-  const [method, setMethod] = useState<SettlementMethod>(existing?.settlement_method ?? 'monthly');
-  const [minimumPayout, setMinimumPayout] = useState<string>(
+  const method: SettlementMethod = existing?.settlement_method ?? 'monthly';
+  const minimumPayout: number =
     existing?.minimum_payout !== undefined && existing?.minimum_payout !== null
-      ? String(existing.minimum_payout)
-      : '0',
-  );
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setMethod(existing?.settlement_method ?? 'monthly');
-    setMinimumPayout(
-      existing?.minimum_payout !== undefined && existing?.minimum_payout !== null
-        ? String(existing.minimum_payout)
-        : '0',
-    );
-  }, [existing]);
-
-  const isApproved = existing?.settlement_status === 'approved';
-  // 관리자 승인 후 수정 가능 — 미승인 상태에서는 disabled
-  const canEdit = isApproved;
-
-  const onSave = async () => {
-    const num = parseInt(minimumPayout, 10);
-    if (Number.isNaN(num) || num < 0) {
-      toast.error('최소 지급금액은 0 이상 숫자여야 합니다.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await upsertMyEnterpriseSettlement({
-        settlementMethod: method,
-        minimumPayout: num,
-      });
-      toast.success('지급 설정이 저장되었습니다.');
-      onSaved();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
+      ? existing.minimum_payout
+      : 0;
 
   return (
     <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
@@ -707,17 +674,15 @@ function PaymentSettingsCard({
         <h3 className="text-sm font-bold flex items-center gap-1.5">
           <Wallet size={14} /> 지급 설정
         </h3>
-        {!isApproved && (
-          <span className="text-[10px] text-ink-mute">관리자 승인 후 수정 가능</span>
-        )}
+        <span className="text-[10px] text-ink-mute">관리자 전용</span>
       </div>
       <p className="mt-1 text-[11px] text-ink-mute">
-        정산 방식과 최소 지급금액. 정산 정보 승인 후 변경 가능합니다.
+        지급 설정은 계약 조건에 따라 관리자만 변경할 수 있습니다.
       </p>
       <div className="mt-3 space-y-2 text-xs">
         <Field label="정산 방식">
-          <select value={method} onChange={(e) => setMethod(e.target.value as SettlementMethod)}
-            disabled={!canEdit} className="input">
+          <select value={method} disabled aria-readonly="true"
+            className="input opacity-70 cursor-not-allowed">
             <option value="monthly">{SETTLEMENT_METHOD_LABEL.monthly}</option>
             <option value="weekly">{SETTLEMENT_METHOD_LABEL.weekly}</option>
             <option value="manual">{SETTLEMENT_METHOD_LABEL.manual}</option>
@@ -725,17 +690,10 @@ function PaymentSettingsCard({
         </Field>
         <Field label="최소 지급금액 (원)">
           <input
-            type="number" min={0} step={1000}
-            value={minimumPayout}
-            onChange={(e) => setMinimumPayout(e.target.value)}
-            disabled={!canEdit}
-            className="input tabular-nums" />
+            type="text" readOnly
+            value={minimumPayout.toLocaleString('ko-KR')}
+            className="input tabular-nums opacity-70 cursor-not-allowed" />
         </Field>
-        <button onClick={() => void onSave()} disabled={saving || !canEdit}
-          className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-bg hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed">
-          {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-          {saving ? '저장 중…' : '지급 설정 저장'}
-        </button>
       </div>
     </section>
   );

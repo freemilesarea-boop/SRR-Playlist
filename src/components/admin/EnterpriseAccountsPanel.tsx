@@ -13,15 +13,20 @@ import {
   RefreshCw, Plus, Search, X, AlertCircle, Building2,
   CheckCircle2, Mail, Phone, Pencil, Trash2, Power,
   Key, Copy, RotateCw, Wallet, FileText, Download, ThumbsUp, ThumbsDown,
+  Save,
 } from 'lucide-react';
 import {
   adminGetEnterpriseSettlement,
   adminGetEnterpriseDocuments,
   adminUpdateEnterpriseSettlementStatus,
+  adminUpdateEnterprisePaymentSettings,
   createEnterpriseDocumentSignedUrl,
   type AdminEnterpriseSettlementResult,
 } from '@/lib/api/enterpriseHqApi';
-import { SETTLEMENT_STATUS_LABEL, SETTLEMENT_METHOD_LABEL } from '@/lib/enterprisePlaceholders';
+import {
+  SETTLEMENT_STATUS_LABEL, SETTLEMENT_METHOD_LABEL,
+  type SettlementMethod,
+} from '@/lib/enterprisePlaceholders';
 import {
   adminListEnterpriseAccounts,
   adminCreateEnterpriseAccountV2,
@@ -990,15 +995,18 @@ function SettlementReviewModal({
                 <KV k="은행" v={settlement?.bank_name} />
                 <KV k="예금주" v={settlement?.account_holder} />
                 <KV k="계좌번호" v={settlement?.account_number} mono colSpan />
-                <KV k="정산 방식" v={settlement?.settlement_method
-                  ? SETTLEMENT_METHOD_LABEL[settlement.settlement_method] : null} />
-                <KV k="최소 지급금액"
-                  v={settlement?.minimum_payout !== undefined && settlement?.minimum_payout !== null
-                    ? `${settlement.minimum_payout.toLocaleString('ko-KR')}원` : null} />
                 <KV k="제출일"
                   v={settlement?.submitted_at ? new Date(settlement.submitted_at).toLocaleString('ko-KR') : null} colSpan />
               </dl>
             </div>
+
+            {/* Phase 1-9 §3 — 지급 설정 (admin 만 수정) */}
+            <PaymentSettingsEditor
+              enterpriseAccountId={target.id}
+              currentMethod={settlement?.settlement_method ?? 'monthly'}
+              currentMinimumPayout={settlement?.minimum_payout ?? 0}
+              onSaved={() => { void load(); onReviewed(); }}
+            />
 
             {/* 증빙 */}
             <div className="rounded-lg bg-bg-deep p-3">
@@ -1107,5 +1115,95 @@ function SettlementStatusInline({ status }: { status: 'unregistered' | 'reviewin
     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${map[status]}`}>
       {SETTLEMENT_STATUS_LABEL[status]}
     </span>
+  );
+}
+
+
+// =============================================================================
+// Phase 1-9 §3 — Payment Settings Editor (admin only)
+//   계약 조건이므로 관리자만 변경 가능. HQ 화면에서는 read-only 표시.
+// =============================================================================
+
+function PaymentSettingsEditor({
+  enterpriseAccountId, currentMethod, currentMinimumPayout, onSaved,
+}: {
+  enterpriseAccountId: string;
+  currentMethod: SettlementMethod;
+  currentMinimumPayout: number;
+  onSaved: () => void;
+}) {
+  const [method, setMethod] = useState<SettlementMethod>(currentMethod);
+  const [minimumPayout, setMinimumPayout] = useState<string>(String(currentMinimumPayout));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setMethod(currentMethod);
+    setMinimumPayout(String(currentMinimumPayout));
+  }, [currentMethod, currentMinimumPayout]);
+
+  const dirty = method !== currentMethod || Number(minimumPayout) !== currentMinimumPayout;
+
+  const onSave = async () => {
+    const num = parseInt(minimumPayout, 10);
+    if (Number.isNaN(num) || num < 0) {
+      toast.error('최소 지급금액은 0 이상 숫자여야 합니다.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await adminUpdateEnterprisePaymentSettings({
+        enterpriseAccountId,
+        settlementMethod: method,
+        minimumPayout: num,
+      });
+      toast.success('지급 설정이 저장되었습니다.');
+      onSaved();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg bg-bg-deep p-3">
+      <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">
+        지급 설정 (계약 조건 — admin 만 수정)
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">정산 방식</span>
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value as SettlementMethod)}
+            disabled={saving}
+            className="w-full rounded bg-bg px-2 py-1.5 text-xs"
+          >
+            <option value="monthly">{SETTLEMENT_METHOD_LABEL.monthly}</option>
+            <option value="weekly">{SETTLEMENT_METHOD_LABEL.weekly}</option>
+            <option value="manual">{SETTLEMENT_METHOD_LABEL.manual}</option>
+          </select>
+        </label>
+        <label className="block space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">최소 지급금액 (원)</span>
+          <input
+            type="number" min={0} step={1000}
+            value={minimumPayout}
+            onChange={(e) => setMinimumPayout(e.target.value)}
+            disabled={saving}
+            className="w-full rounded bg-bg px-2 py-1.5 text-xs tabular-nums"
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        onClick={() => void onSave()}
+        disabled={saving || !dirty}
+        className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded bg-accent px-3 py-2 text-xs font-bold text-bg hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        {saving ? <RefreshCw size={11} className="animate-spin" /> : <Save size={11} />}
+        {saving ? '저장 중…' : '지급 설정 저장'}
+      </button>
+    </div>
   );
 }

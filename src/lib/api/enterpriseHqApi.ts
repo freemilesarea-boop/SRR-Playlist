@@ -286,12 +286,14 @@ export async function getMyEnterpriseSettlement(): Promise<EnterpriseSettlementG
   return data as EnterpriseSettlementGetResult;
 }
 
+/**
+ * HQ 가 수정 가능한 정산 필드 (Phase 1-9 §3).
+ * settlement_method / minimum_payout 은 계약 조건이므로 admin RPC 전용 — 제외.
+ */
 export interface EnterpriseSettlementUpsertInput {
   bankName?: string | null;
   accountNumber?: string | null;
   accountHolder?: string | null;
-  settlementMethod?: SettlementMethod | null;
-  minimumPayout?: number | null;
   businessLicensePath?: string | null;
   bankbookPath?: string | null;
 }
@@ -310,8 +312,9 @@ export async function upsertMyEnterpriseSettlement(
     p_bank_name: input.bankName ?? null,
     p_account_number: input.accountNumber ?? null,
     p_account_holder: input.accountHolder ?? null,
-    p_settlement_method: input.settlementMethod ?? null,
-    p_minimum_payout: input.minimumPayout ?? null,
+    // settlement_method / minimum_payout: 의도적으로 null — admin RPC 전용
+    p_settlement_method: null,
+    p_minimum_payout: null,
     p_business_license_path: input.businessLicensePath ?? null,
     p_bankbook_path: input.bankbookPath ?? null,
   });
@@ -407,6 +410,36 @@ export async function adminUpdateEnterpriseSettlementStatus(
     throw new Error(error.message || '상태 변경에 실패했습니다.');
   }
   return data as { success: boolean; settlement_status: SettlementStatus; reviewed_at: string };
+}
+
+// ----- admin payment settings (Phase 1-9 §3) — 계약 조건 -----
+export interface AdminUpdatePaymentSettingsInput {
+  enterpriseAccountId: string;
+  settlementMethod: SettlementMethod;
+  minimumPayout: number;
+}
+
+export interface AdminUpdatePaymentSettingsResult {
+  success: boolean;
+  enterprise_account_id: string;
+  settlement_method: SettlementMethod;
+  minimum_payout: number;
+  updated_at: string;
+}
+
+export async function adminUpdateEnterprisePaymentSettings(
+  input: AdminUpdatePaymentSettingsInput,
+): Promise<AdminUpdatePaymentSettingsResult> {
+  const { data, error } = await supabase.rpc('admin_update_enterprise_payment_settings', {
+    p_enterprise_account_id: input.enterpriseAccountId,
+    p_settlement_method: input.settlementMethod,
+    p_minimum_payout: input.minimumPayout,
+  });
+  if (error) {
+    console.error('[enterpriseHqApi] admin update payment settings failed', error);
+    throw new Error(error.message || '지급 설정 변경에 실패했습니다.');
+  }
+  return data as AdminUpdatePaymentSettingsResult;
 }
 
 // ----- storage helpers -----
