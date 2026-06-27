@@ -12,8 +12,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, Plus, Search, X, AlertCircle, Building2,
   CheckCircle2, Mail, Phone, Pencil, Trash2, Power,
-  Key, Copy, RotateCw,
+  Key, Copy, RotateCw, Wallet, FileText, Download, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
+import {
+  adminGetEnterpriseSettlement,
+  adminGetEnterpriseDocuments,
+  adminUpdateEnterpriseSettlementStatus,
+  createEnterpriseDocumentSignedUrl,
+  type AdminEnterpriseSettlementResult,
+} from '@/lib/api/enterpriseHqApi';
+import { SETTLEMENT_STATUS_LABEL, SETTLEMENT_METHOD_LABEL } from '@/lib/enterprisePlaceholders';
 import {
   adminListEnterpriseAccounts,
   adminCreateEnterpriseAccountV2,
@@ -62,6 +70,7 @@ export default function EnterpriseAccountsPanel() {
   const [editTarget, setEditTarget] = useState<EnterpriseAccount | 'new' | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnterpriseAccount | null>(null);
   const [inviteTarget, setInviteTarget] = useState<EnterpriseAccount | null>(null);
+  const [settlementTarget, setSettlementTarget] = useState<EnterpriseAccount | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -240,6 +249,7 @@ export default function EnterpriseAccountsPanel() {
                         row={r} busy={busyId === r.id}
                         onEdit={() => setEditTarget(r)}
                         onInvite={() => setInviteTarget(r)}
+                        onSettlement={() => setSettlementTarget(r)}
                         onSetStatus={(s) => void handleSetStatus(r.id, s)}
                         onDelete={() => setDeleteTarget(r)}
                       />
@@ -319,6 +329,11 @@ export default function EnterpriseAccountsPanel() {
           onClose={() => setInviteTarget(null)}
           onRotated={() => { void load(); }} />
       )}
+      {settlementTarget && (
+        <SettlementReviewModal target={settlementTarget}
+          onClose={() => setSettlementTarget(null)}
+          onReviewed={() => { void load(); }} />
+      )}
     </div>
   );
 }
@@ -350,16 +365,22 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
 }
 
 function RowActions({
-  row, busy, onEdit, onInvite, onSetStatus, onDelete,
+  row, busy, onEdit, onInvite, onSettlement, onSetStatus, onDelete,
 }: {
   row: EnterpriseAccount; busy: boolean;
   onEdit: () => void;
   onInvite: () => void;
+  onSettlement: () => void;
   onSetStatus: (s: EnterpriseAccountStatus) => void;
   onDelete: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1">
+      <button onClick={onSettlement} disabled={busy}
+        title="정산 검토"
+        className="rounded bg-emerald-500/20 p-1 hover:bg-emerald-500/30 disabled:opacity-50">
+        <Wallet size={11} className="text-emerald-300" />
+      </button>
       <button onClick={onInvite} disabled={busy}
         title="초대코드 관리"
         className="rounded bg-accent/20 p-1 hover:bg-accent/30 disabled:opacity-50">
@@ -839,5 +860,252 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</span>
       {children}
     </label>
+  );
+}
+
+
+// =============================================================================
+// Phase 1-8 — Settlement Review Modal (admin)
+// =============================================================================
+
+function SettlementReviewModal({
+  target, onClose, onReviewed,
+}: { target: EnterpriseAccount; onClose: () => void; onReviewed: () => void }) {
+  const [data, setData] = useState<AdminEnterpriseSettlementResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [businessLicensePath, setBusinessLicensePath] = useState<string | null>(null);
+  const [bankbookPath, setBankbookPath] = useState<string | null>(null);
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [acting, setActing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [summary, docs] = await Promise.all([
+        adminGetEnterpriseSettlement(target.id),
+        adminGetEnterpriseDocuments(target.id),
+      ]);
+      setData(summary);
+      setBusinessLicensePath(docs.business_license_path);
+      setBankbookPath(docs.bankbook_path);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [target.id]);
+  useEffect(() => { void load(); }, [load]);
+
+  const openSigned = async (path: string | null) => {
+    if (!path) { toast.error('등록된 파일이 없습니다.'); return; }
+    try {
+      const url = await createEnterpriseDocumentSignedUrl(path);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const onApprove = async () => {
+    if (!confirm('정산 정보를 승인하시겠습니까?')) return;
+    setActing(true);
+    try {
+      await adminUpdateEnterpriseSettlementStatus({
+        enterpriseAccountId: target.id, status: 'approved',
+      });
+      toast.success('승인 완료');
+      await load();
+      onReviewed();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setActing(false); }
+  };
+
+  const onReject = async () => {
+    if (!rejectReason.trim()) {
+      toast.error('반려 사유를 입력하세요.');
+      return;
+    }
+    setActing(true);
+    try {
+      await adminUpdateEnterpriseSettlementStatus({
+        enterpriseAccountId: target.id, status: 'rejected', rejectionReason: rejectReason.trim(),
+      });
+      toast.success('반려 처리됨');
+      setRejectMode(false);
+      setRejectReason('');
+      await load();
+      onReviewed();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setActing(false); }
+  };
+
+  const ea = data?.enterprise_account ?? null;
+  const business = data?.business_profile ?? null;
+  const settlement = data?.settlement ?? null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-1.5">
+            <Wallet size={14} /> 정산 검토 — {ea?.enterprise_name ?? target.enterprise_name}
+          </h3>
+          <button onClick={onClose} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
+        </div>
+
+        {loading && <div className="h-40 animate-pulse rounded bg-bg-deep" />}
+        {error && (
+          <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+            <AlertCircle size={12} className="inline mr-1" />{error}
+            <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="space-y-4 text-xs">
+            {/* 사업자 정보 */}
+            <div className="rounded-lg bg-bg-deep p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">사업자 정보</p>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <KV k="회사명" v={business?.company_name} />
+                <KV k="사업자번호" v={business?.business_number} />
+                <KV k="대표자" v={business?.representative_name} />
+                <KV k="주소" v={business?.business_address} colSpan />
+                <KV k="담당 연락처" v={business?.contact_phone} />
+                <KV k="세금계산서 이메일" v={business?.tax_invoice_email} />
+                <KV k="정산 담당자" v={business?.settlement_contact_name} />
+                <KV k="정산 담당자 연락처" v={business?.settlement_contact_phone} />
+                <KV k="정산 담당자 이메일" v={business?.settlement_contact_email} colSpan />
+              </dl>
+            </div>
+
+            {/* 정산 정보 */}
+            <div className="rounded-lg bg-bg-deep p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">정산 정보 (admin 전체 조회)</p>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <KV k="은행" v={settlement?.bank_name} />
+                <KV k="예금주" v={settlement?.account_holder} />
+                <KV k="계좌번호" v={settlement?.account_number} mono colSpan />
+                <KV k="정산 방식" v={settlement?.settlement_method
+                  ? SETTLEMENT_METHOD_LABEL[settlement.settlement_method] : null} />
+                <KV k="최소 지급금액"
+                  v={settlement?.minimum_payout !== undefined && settlement?.minimum_payout !== null
+                    ? `${settlement.minimum_payout.toLocaleString('ko-KR')}원` : null} />
+                <KV k="제출일"
+                  v={settlement?.submitted_at ? new Date(settlement.submitted_at).toLocaleString('ko-KR') : null} colSpan />
+              </dl>
+            </div>
+
+            {/* 증빙 */}
+            <div className="rounded-lg bg-bg-deep p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">증빙서류 (Signed URL 10분 만료)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void openSigned(businessLicensePath)}
+                  disabled={!businessLicensePath}
+                  className="flex items-center justify-center gap-1 rounded bg-bg-card px-3 py-2 font-semibold hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <FileText size={12} /> 사업자등록증
+                  {businessLicensePath ? <Download size={11} /> : <span className="text-[10px] text-ink-dim">(미등록)</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openSigned(bankbookPath)}
+                  disabled={!bankbookPath}
+                  className="flex items-center justify-center gap-1 rounded bg-bg-card px-3 py-2 font-semibold hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <FileText size={12} /> 통장사본
+                  {bankbookPath ? <Download size={11} /> : <span className="text-[10px] text-ink-dim">(미등록)</span>}
+                </button>
+              </div>
+            </div>
+
+            {/* 상태 + 액션 */}
+            <div className="rounded-lg bg-bg-deep p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">정산 상태</p>
+              {settlement ? (
+                <SettlementStatusInline status={settlement.settlement_status} />
+              ) : (
+                <span className="text-[11px] text-ink-mute">{SETTLEMENT_STATUS_LABEL.unregistered}</span>
+              )}
+              {settlement?.rejection_reason && (
+                <p className="mt-1 text-[11px] text-rose-300">반려 사유: {settlement.rejection_reason}</p>
+              )}
+              {settlement?.reviewed_at && (
+                <p className="mt-1 text-[10px] text-ink-dim">
+                  검토 시각: {new Date(settlement.reviewed_at).toLocaleString('ko-KR')}
+                </p>
+              )}
+
+              {!rejectMode ? (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void onApprove()}
+                    disabled={acting || !settlement}
+                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-emerald-500/20 px-3 py-2 font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30"
+                  >
+                    <ThumbsUp size={12} /> 승인
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectMode(true)}
+                    disabled={acting || !settlement}
+                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-rose-500/20 px-3 py-2 font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30"
+                  >
+                    <ThumbsDown size={12} /> 반려
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="반려 사유를 입력하세요 (HQ 가 확인 후 재제출)"
+                    className="w-full rounded bg-bg px-2 py-1.5 text-xs min-h-[60px]"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => void onReject()} disabled={acting || !rejectReason.trim()}
+                      className="flex-1 rounded bg-rose-500/30 px-3 py-2 font-bold text-rose-200 disabled:opacity-30">
+                      반려 처리
+                    </button>
+                    <button onClick={() => { setRejectMode(false); setRejectReason(''); }}
+                      className="rounded bg-bg-card px-3 py-2 font-bold hover:bg-bg-hover">취소</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KV({ k, v, colSpan, mono }: { k: string; v: string | null | undefined; colSpan?: boolean; mono?: boolean }) {
+  return (
+    <div className={colSpan ? 'col-span-2' : ''}>
+      <dt className="text-[10px] text-ink-dim">{k}</dt>
+      <dd className={mono ? 'font-mono text-[11px]' : 'text-[11px]'}>{v ?? '—'}</dd>
+    </div>
+  );
+}
+
+function SettlementStatusInline({ status }: { status: 'unregistered' | 'reviewing' | 'approved' | 'rejected' }) {
+  const map = {
+    unregistered: 'bg-ink/10 text-ink-mute',
+    reviewing:    'bg-amber-500/15 text-amber-300',
+    approved:     'bg-emerald-500/15 text-emerald-300',
+    rejected:     'bg-rose-500/15 text-rose-300',
+  } as const;
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${map[status]}`}>
+      {SETTLEMENT_STATUS_LABEL[status]}
+    </span>
   );
 }
