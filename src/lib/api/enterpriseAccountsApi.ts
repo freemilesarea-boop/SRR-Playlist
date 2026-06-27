@@ -27,6 +27,13 @@ export interface EnterpriseAccount {
   deleted_at: string | null;
   created_by: string | null;
   updated_by: string | null;
+  // Phase 1-6 — 0363 invite onboarding 컬럼 (additive)
+  brand_code: string | null;
+  hq_invite_code: string | null;
+  store_invite_code: string | null;
+  invite_code_rotated_at: string | null;
+  onboarding_enabled: boolean;
+  allow_self_register_region: boolean;
 }
 
 export interface EnterpriseAccountListParams {
@@ -165,4 +172,250 @@ export async function recordEnterpriseLogin(authUserId?: string): Promise<void> 
     // silent — 로그인 자체를 막지 않음
     console.warn('[enterpriseAccountsApi] record_login failed', error);
   }
+}
+
+
+// =============================================================================
+// Phase 1-6 — Invite Onboarding (additive, 기존 RPC 변경 X)
+// SQL: supabase/migrations/0363_enterprise_invite_onboarding.sql
+// =============================================================================
+
+export type EnterpriseInviteClaimType = 'hq_admin' | 'store';
+export type EnterpriseInviteCodeKind = 'hq' | 'store' | 'both';
+export type EnterpriseInviteClaimStatus = 'success' | 'failed' | 'pending';
+export type EnterpriseFranchiseRole = 'primary' | 'secondary';
+
+export interface EnterpriseInviteCodes {
+  brand_code: string | null;
+  hq_invite_code: string | null;
+  store_invite_code: string | null;
+}
+
+// ----- admin_create_enterprise_account_v2 -----
+export interface EnterpriseAccountV2CreateInput extends EnterpriseAccountCreateInput {
+  brandCode?: string | null;
+  hqInviteCode?: string | null;
+  storeInviteCode?: string | null;
+  franchiseName?: string | null;
+  franchiseSlug?: string | null;
+}
+
+export interface EnterpriseAccountV2CreateResult {
+  success: boolean;
+  enterprise_account: EnterpriseAccount;
+  franchise_id: string | null;
+  codes: EnterpriseInviteCodes;
+}
+
+export async function adminCreateEnterpriseAccountV2(
+  input: EnterpriseAccountV2CreateInput,
+): Promise<EnterpriseAccountV2CreateResult> {
+  const { data, error } = await supabase.rpc('admin_create_enterprise_account_v2', {
+    p_enterprise_name: input.enterpriseName,
+    p_manager_name: input.managerName,
+    p_manager_email: input.managerEmail,
+    p_manager_phone: input.managerPhone ?? null,
+    p_brand_code: input.brandCode ?? null,
+    p_hq_invite_code: input.hqInviteCode ?? null,
+    p_store_invite_code: input.storeInviteCode ?? null,
+    p_franchise_name: input.franchiseName ?? null,
+    p_franchise_slug: input.franchiseSlug ?? null,
+    p_role: input.role ?? 'enterprise_manager',
+    p_status: input.status ?? 'active',
+  });
+  if (error) {
+    console.error('[enterpriseAccountsApi] create_v2 failed', error);
+    throw error;
+  }
+  return data as EnterpriseAccountV2CreateResult;
+}
+
+// ----- admin_rotate_enterprise_invite_code -----
+export interface EnterpriseInviteRotateInput {
+  enterpriseAccountId: string;
+  codeType: EnterpriseInviteCodeKind;
+  customCode?: string | null;
+}
+
+export interface EnterpriseInviteRotateResult {
+  success: boolean;
+  codes: {
+    hq_invite_code: string | null;
+    store_invite_code: string | null;
+  };
+  rotated_at: string;
+}
+
+export async function adminRotateEnterpriseInviteCode(
+  input: EnterpriseInviteRotateInput,
+): Promise<EnterpriseInviteRotateResult> {
+  const { data, error } = await supabase.rpc('admin_rotate_enterprise_invite_code', {
+    p_enterprise_account_id: input.enterpriseAccountId,
+    p_code_type: input.codeType,
+    p_custom_code: input.customCode ?? null,
+  });
+  if (error) {
+    console.error('[enterpriseAccountsApi] rotate_invite failed', error);
+    throw error;
+  }
+  return data as EnterpriseInviteRotateResult;
+}
+
+// ----- admin_get_enterprise_invite_summary -----
+export interface EnterpriseFranchiseMapping {
+  id: string;
+  name: string;
+  slug: string | null;
+  status: string;
+  role: EnterpriseFranchiseRole;
+}
+
+export interface EnterpriseRegionSummary {
+  id: string;
+  region_name: string;
+  region_code: string | null;
+  status: string;
+}
+
+export interface EnterpriseInviteClaimRecord {
+  id: string;
+  claim_type: EnterpriseInviteClaimType;
+  status: EnterpriseInviteClaimStatus;
+  brand_name_input: string | null;
+  store_name_input: string | null;
+  region_name_input: string | null;
+  failure_reason: string | null;
+  invite_code_last4: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+export interface EnterpriseInviteSummary {
+  success: boolean;
+  enterprise_account: EnterpriseAccount;
+  franchises: EnterpriseFranchiseMapping[];
+  regions: EnterpriseRegionSummary[];
+  store_count: number;
+  recent_claims: EnterpriseInviteClaimRecord[];
+  computed_at: string;
+}
+
+export async function adminGetEnterpriseInviteSummary(
+  enterpriseAccountId: string,
+): Promise<EnterpriseInviteSummary> {
+  const { data, error } = await supabase.rpc('admin_get_enterprise_invite_summary', {
+    p_enterprise_account_id: enterpriseAccountId,
+  });
+  if (error) {
+    console.error('[enterpriseAccountsApi] invite_summary failed', error);
+    throw error;
+  }
+  return data as EnterpriseInviteSummary;
+}
+
+// ----- validate_enterprise_invite (anon allowed) -----
+export interface EnterpriseInviteValidateInput {
+  brandName: string;
+  inviteCode: string;
+  claimType: EnterpriseInviteClaimType;
+}
+
+export interface EnterpriseInviteAllowedRegion {
+  id: string;
+  region_name: string;
+  region_code: string | null;
+}
+
+export type EnterpriseInviteValidateResult =
+  | {
+      success: true;
+      enterprise_account_id: string;
+      enterprise_name: string;
+      brand_code: string | null;
+      claim_type: EnterpriseInviteClaimType;
+      allow_self_register_region: boolean;
+      allowed_regions: EnterpriseInviteAllowedRegion[];
+    }
+  | { success: false; reason: string };
+
+export async function validateEnterpriseInvite(
+  input: EnterpriseInviteValidateInput,
+): Promise<EnterpriseInviteValidateResult> {
+  const { data, error } = await supabase.rpc('validate_enterprise_invite', {
+    p_brand_name: input.brandName,
+    p_invite_code: input.inviteCode,
+    p_claim_type: input.claimType,
+  });
+  if (error) {
+    // 네트워크/RLS 오류는 generic 메시지로 → 정보 누설 방지 + 사용자 친화
+    console.warn('[enterpriseAccountsApi] validate_invite failed', error);
+    return { success: false, reason: '검증 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' };
+  }
+  return data as EnterpriseInviteValidateResult;
+}
+
+// ----- claim_enterprise_hq_account -----
+export interface EnterpriseHqClaimInput {
+  brandName: string;
+  inviteCode: string;
+  userAgent?: string | null;
+}
+
+export type EnterpriseHqClaimResult =
+  | { success: true; enterprise_account_id: string; claim_id: string }
+  | { success: false; reason: string };
+
+export async function claimEnterpriseHqAccount(
+  input: EnterpriseHqClaimInput,
+): Promise<EnterpriseHqClaimResult> {
+  const { data, error } = await supabase.rpc('claim_enterprise_hq_account', {
+    p_brand_name: input.brandName,
+    p_invite_code: input.inviteCode,
+    p_user_agent: input.userAgent ?? null,
+  });
+  if (error) {
+    console.error('[enterpriseAccountsApi] claim_hq failed', error);
+    // RPC raise exception 의 사용자 친화 메시지 그대로 노출
+    const message = (error.message ?? '본사 계정 연결에 실패했습니다.').toString();
+    return { success: false, reason: message };
+  }
+  return data as EnterpriseHqClaimResult;
+}
+
+// ----- claim_enterprise_store_account -----
+export interface EnterpriseStoreClaimInput {
+  brandName: string;
+  inviteCode: string;
+  storeName: string;
+  regionName: string;
+  userAgent?: string | null;
+}
+
+export type EnterpriseStoreClaimResult =
+  | {
+      success: true;
+      enterprise_account_id: string;
+      franchise_id: string;
+      enterprise_region_id: string;
+      franchise_store_id: string;
+      claim_id: string;
+    }
+  | { success: false; reason: string };
+
+export async function claimEnterpriseStoreAccount(
+  input: EnterpriseStoreClaimInput,
+): Promise<EnterpriseStoreClaimResult> {
+  const { data, error } = await supabase.rpc('claim_enterprise_store_account', {
+    p_brand_name: input.brandName,
+    p_invite_code: input.inviteCode,
+    p_store_name: input.storeName,
+    p_region_name: input.regionName,
+    p_user_agent: input.userAgent ?? null,
+  });
+  if (error) {
+    console.error('[enterpriseAccountsApi] claim_store failed', error);
+    const message = (error.message ?? '매장 연결에 실패했습니다.').toString();
+    return { success: false, reason: message };
+  }
+  return data as EnterpriseStoreClaimResult;
 }
