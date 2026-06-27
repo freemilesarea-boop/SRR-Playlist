@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -263,6 +263,13 @@ export default function AdminPage() {
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
 
+  // Phase 1-5.1 — cross-탭 deep link: 정책 적용률 → 프랜차이즈 관리 (정책 탭) → 정책 생성 후 자동 복귀.
+  // pendingFranchiseDeepLink: 한 번 자동 진입 후 consume.
+  // pendingFranchiseReturnTo: 정책 생성 성공 시 복귀할 탭. 사용자가 수동으로 다른 탭으로 가면 자동 클리어.
+  const [pendingFranchiseDeepLink, setPendingFranchiseDeepLink] =
+    useState<'stores' | 'policies' | 'schedule' | 'sync' | null>(null);
+  const [pendingFranchiseReturnTo, setPendingFranchiseReturnTo] = useState<Tab | null>(null);
+
   useEffect(() => { fetchMyAdminPermissions().then(setPerms).catch(() => {}); }, []);
   const visibleTabs = TABS.filter((t) => !t.superOnly || perms?.is_super_admin);
   const tabsInGroup = visibleTabs.filter((t) =>
@@ -274,6 +281,34 @@ export default function AdminPage() {
     setTab(next);
     setGroup(groupOf(next));
   }
+
+  // franchise 탭에서 벗어나면 deep-link / return 상태 클리어 (재진입 시 재발화 방지)
+  useEffect(() => {
+    if (tab !== 'franchise') {
+      setPendingFranchiseDeepLink(null);
+      setPendingFranchiseReturnTo(null);
+    }
+  }, [tab]);
+
+  const requestFranchisePolicyNav = useCallback(() => {
+    setPendingFranchiseDeepLink('policies');
+    setPendingFranchiseReturnTo('policy-deployment');
+    setTab('franchise');
+    setGroup(groupOf('franchise'));
+  }, []);
+
+  const consumeFranchiseDeepLink = useCallback(() => {
+    setPendingFranchiseDeepLink(null);
+  }, []);
+
+  const returnFromFranchiseAfterPolicy = useCallback(() => {
+    const target = pendingFranchiseReturnTo;
+    setPendingFranchiseReturnTo(null);
+    if (target) {
+      setTab(target);
+      setGroup(groupOf(target));
+    }
+  }, [pendingFranchiseReturnTo]);
 
   // 그룹 클릭 시 그 그룹의 첫 가시 탭으로 자동 진입 — 빈 panel 회피
   function selectGroup(next: Group) {
@@ -374,9 +409,19 @@ export default function AdminPage() {
           {tab === 'store-monitoring' && <StoreMonitoringPanel />}
           {tab === 'store-now-playing' && <StoreNowPlayingPanel />}
           {tab === 'policy-deployment' && (
-            <PolicyDeploymentPanel onNavigateToTab={(k) => selectTab(k as Tab)} />
+            <PolicyDeploymentPanel
+              onRequestFranchisePolicyNav={requestFranchisePolicyNav}
+            />
           )}
-          {tab === 'franchise' && <FranchiseManagementPanel />}
+          {tab === 'franchise' && (
+            <FranchiseManagementPanel
+              initialDetailTab={pendingFranchiseDeepLink ?? undefined}
+              onConsumedDeepLink={consumeFranchiseDeepLink}
+              onPolicyCreatedReturn={
+                pendingFranchiseReturnTo ? returnFromFranchiseAfterPolicy : undefined
+              }
+            />
+          )}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}
           {tab === 'free-trials' && <FreeTrialsPanel />}

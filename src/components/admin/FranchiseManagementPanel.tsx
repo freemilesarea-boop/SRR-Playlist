@@ -50,15 +50,62 @@ type DetailTab = 'stores' | 'policies' | 'schedule' | 'sync';
 
 const DAY_KO = ['', '월', '화', '수', '목', '금', '토', '일'];
 
-export default function FranchiseManagementPanel() {
+export interface FranchiseManagementPanelProps {
+  /**
+   * Phase 1-5.1 deep-link — 패널 mount 시 첫 franchise 자동 선택 + 지정 detail 탭으로 진입.
+   * (정책 적용률 → "프랜차이즈 관리로 이동" 플로우용)
+   */
+  initialDetailTab?: DetailTab;
+  /** deep-link 사용 후 AdminPage 가 state 를 clear 하도록 통지 */
+  onConsumedDeepLink?: () => void;
+  /**
+   * 새 정책 생성 성공 시 호출 — AdminPage 가 정책 적용률 탭으로 자동 복귀.
+   * 미전달 시 일반 저장 동작 (현재 모달 유지).
+   */
+  onPolicyCreatedReturn?: () => void;
+}
+
+export default function FranchiseManagementPanel({
+  initialDetailTab,
+  onConsumedDeepLink,
+  onPolicyCreatedReturn,
+}: FranchiseManagementPanelProps = {}) {
   const [view, setView] = useState<View>('list');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [autoJumpAttempted, setAutoJumpAttempted] = useState(false);
+
+  // Phase 1-5.1 — deep-link 첫 자동 진입 (1회만)
+  useEffect(() => {
+    if (autoJumpAttempted) return;
+    if (!initialDetailTab) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await adminListFranchises();
+        if (cancelled) return;
+        if (rows.length > 0) {
+          setActiveId(rows[0].id);
+          setView('detail');
+        } else {
+          toast.info('등록된 프랜차이즈가 없습니다. 먼저 프랜차이즈를 생성하세요.');
+        }
+      } catch (e) {
+        toast.error(`프랜차이즈 목록 로딩 실패: ${(e as Error).message}`);
+      } finally {
+        setAutoJumpAttempted(true);
+        onConsumedDeepLink?.();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [autoJumpAttempted, initialDetailTab, onConsumedDeepLink]);
 
   if (view === 'detail' && activeId) {
     return (
       <FranchiseDetail
         franchiseId={activeId}
+        initialTab={initialDetailTab}
         onBack={() => { setView('list'); setActiveId(null); }}
+        onPolicyCreatedReturn={onPolicyCreatedReturn}
       />
     );
   }
@@ -177,10 +224,17 @@ function FranchiseListView({ onOpen }: { onOpen: (id: string) => void }) {
 // View 2: 프랜차이즈 상세 (KPI + 4 tabs)
 // =============================================================================
 
-function FranchiseDetail({ franchiseId, onBack }: { franchiseId: string; onBack: () => void }) {
+function FranchiseDetail({
+  franchiseId, onBack, initialTab, onPolicyCreatedReturn,
+}: {
+  franchiseId: string;
+  onBack: () => void;
+  initialTab?: DetailTab;
+  onPolicyCreatedReturn?: () => void;
+}) {
   const [dashboard, setDashboard] = useState<FranchiseDashboard | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<DetailTab>('stores');
+  const [tab, setTab] = useState<DetailTab>(initialTab ?? 'stores');
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -241,7 +295,13 @@ function FranchiseDetail({ franchiseId, onBack }: { franchiseId: string; onBack:
       </div>
 
       {tab === 'stores' && <StoreManagementTab franchiseId={franchiseId} onChanged={() => void loadDashboard()} />}
-      {tab === 'policies' && <PoliciesTab franchiseId={franchiseId} onApplied={() => void loadDashboard()} />}
+      {tab === 'policies' && (
+        <PoliciesTab
+          franchiseId={franchiseId}
+          onApplied={() => void loadDashboard()}
+          onPolicyCreatedReturn={onPolicyCreatedReturn}
+        />
+      )}
       {tab === 'schedule' && <ScheduleTab dashboard={dashboard} />}
       {tab === 'sync' && <SyncStatusTab franchiseId={franchiseId} />}
     </div>
@@ -366,7 +426,13 @@ function StoreManagementTab({ franchiseId, onChanged }: { franchiseId: string; o
 // Tab: 정책
 // =============================================================================
 
-function PoliciesTab({ franchiseId, onApplied }: { franchiseId: string; onApplied: () => void }) {
+function PoliciesTab({
+  franchiseId, onApplied, onPolicyCreatedReturn,
+}: {
+  franchiseId: string;
+  onApplied: () => void;
+  onPolicyCreatedReturn?: () => void;
+}) {
   const [policies, setPolicies] = useState<FranchiseMusicPolicy[]>([]);
   const [loading, setLoading] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
@@ -447,6 +513,10 @@ function PoliciesTab({ franchiseId, onApplied }: { franchiseId: string; onApplie
           franchiseId={franchiseId} policy={editPolicy}
           onClose={() => { setShowBuilder(false); setEditPolicy(null); }}
           onSaved={() => { setShowBuilder(false); setEditPolicy(null); void load(); }}
+          onFirstSaveReturn={
+            // 신규 정책 (editPolicy=null) 작성 + AdminPage 가 복귀 요청한 상태에서만 활성화
+            editPolicy === null ? onPolicyCreatedReturn : undefined
+          }
         />
       )}
       {applyPolicy && (
@@ -748,8 +818,19 @@ function ApplyPolicyModal({
 }
 
 function MusicPolicyBuilderModal({
-  franchiseId, policy, onClose, onSaved,
-}: { franchiseId: string; policy: FranchiseMusicPolicy | null; onClose: () => void; onSaved: () => void }) {
+  franchiseId, policy, onClose, onSaved, onFirstSaveReturn,
+}: {
+  franchiseId: string;
+  policy: FranchiseMusicPolicy | null;
+  onClose: () => void;
+  onSaved: () => void;
+  /**
+   * Phase 1-5.1 — 신규 정책 첫 저장 성공 시 호출.
+   * 제공되면: toast 표시 + 2s 후 자동으로 모달 닫고 호출 (AdminPage 가 정책 적용률로 복귀).
+   * 미제공: 기존 동작 (모달 유지 → 사용자가 슬롯 편집 가능).
+   */
+  onFirstSaveReturn?: () => void;
+}) {
   // onSaved 는 사용자가 모달 닫을 때 부모 목록 새로고침 트리거 — 닫기 버튼에 바인딩
   const handleClose = () => { onSaved(); onClose(); };
   const [name, setName] = useState(policy?.name ?? '');
@@ -777,6 +858,7 @@ function MusicPolicyBuilderModal({
   const savePolicy = async () => {
     setSaving(true);
     try {
+      const wasNew = policyId == null;
       const saved = await adminUpsertPolicy({
         franchiseId, name: name.trim(), description: description.trim() || null,
         status: status as 'draft' | 'active' | 'archived',
@@ -785,7 +867,18 @@ function MusicPolicyBuilderModal({
         isDefault, policyId,
       });
       setPolicyId(saved.id);
-      toast.success('정책 저장됨');
+
+      if (wasNew && onFirstSaveReturn) {
+        // Phase 1-5.1 — deep-link 진입 시: 자동 복귀 모드
+        toast.success('정책이 생성되었습니다. 잠시 후 정책 배포 화면으로 이동합니다.');
+        window.setTimeout(() => {
+          onSaved();
+          onClose();
+          onFirstSaveReturn();
+        }, 2000);
+      } else {
+        toast.success('정책 저장됨');
+      }
     } catch (e) { toast.error((e as Error).message); }
     finally { setSaving(false); }
   };

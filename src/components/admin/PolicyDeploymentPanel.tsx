@@ -73,13 +73,15 @@ const TARGET_LABEL: Record<PolicyDeploymentTargetStatus, string> = {
 
 export interface PolicyDeploymentPanelProps {
   /**
-   * 다른 admin 탭으로 이동시키는 콜백 (AdminPage 의 selectTab 래퍼).
-   * Empty state 의 "프랜차이즈 관리로 이동" 버튼에서 사용.
+   * "프랜차이즈 관리로 이동" 버튼 콜백.
+   * AdminPage 가 deep-link 를 set 하고 franchise 탭으로 자동 이동시킴
+   * → 첫 franchise 의 정책 탭 자동 진입
+   * → 정책 생성 성공 시 자동으로 정책 적용률 화면으로 복귀
    */
-  onNavigateToTab?: (tab: string) => void;
+  onRequestFranchisePolicyNav?: () => void;
 }
 
-export default function PolicyDeploymentPanel({ onNavigateToTab }: PolicyDeploymentPanelProps = {}) {
+export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: PolicyDeploymentPanelProps = {}) {
   const [rows, setRows] = useState<PolicyDeployment[]>([]);
   const [total, setTotal] = useState(0);
   const [kpi, setKpi] = useState<PolicyDeploymentKpi | null>(null);
@@ -334,7 +336,10 @@ export default function PolicyDeploymentPanel({ onNavigateToTab }: PolicyDeploym
         <SkeletonRows />
       ) : !loading && rows.length === 0 && !error ? (
         hasDeployablePolicy === false ? (
-          <NoPolicyEmptyState onNavigate={() => onNavigateToTab?.('franchise')} canNavigate={!!onNavigateToTab} />
+          <NoPolicyEmptyState
+            onNavigate={() => onRequestFranchisePolicyNav?.()}
+            canNavigate={!!onRequestFranchisePolicyNav}
+          />
         ) : (
           <EmptyState onCreate={() => setShowCreate(true)} />
         )
@@ -607,15 +612,22 @@ function NoPolicyEmptyState({
       <AlertTriangle size={28} className="mx-auto mb-2 text-amber-300 opacity-80" />
       <p className="font-semibold mb-1 text-ink">배포 가능한 정책이 없습니다.</p>
       <p>
-        먼저 <b className="text-ink">프랜차이즈 관리</b> 에서 음악 정책을 생성해야 합니다.
+        정책 배포를 시작하려면 먼저 <b className="text-ink">프랜차이즈 관리</b> 에서
+        <br />
+        음악 정책을 생성하세요.
       </p>
       {canNavigate ? (
-        <button
-          onClick={onNavigate}
-          className="mt-3 inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 font-bold text-black hover:bg-accent/90"
-        >
-          <StoreIcon size={12} /> 프랜차이즈 관리로 이동 <ArrowRight size={12} />
-        </button>
+        <>
+          <button
+            onClick={onNavigate}
+            className="mt-3 inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 font-bold text-black hover:bg-accent/90"
+          >
+            <StoreIcon size={12} /> 프랜차이즈 관리로 이동 <ArrowRight size={12} />
+          </button>
+          <p className="mt-2 text-[10px] text-ink-dim">
+            정책 생성 후 자동으로 배포 화면으로 돌아옵니다.
+          </p>
+        </>
       ) : (
         <p className="mt-3 text-[11px] text-ink-dim">
           좌측 <b>엔터프라이즈 → 프랜차이즈 관리</b> 탭에서 정책을 추가하세요.
