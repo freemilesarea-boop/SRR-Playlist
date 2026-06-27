@@ -16,8 +16,9 @@ import { formatTime } from '@/lib/format';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
 // 프랜차이즈 연결 매장만 적용; 일반 매장은 hook 이 no-op.
 import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
-// Phase 1-3 fix — heartbeat 는 AppShell 에서 mount (모든 페이지 커버).
-// /store/player 외 BusinessPage 등에서도 매장 모드 진입 시 heartbeat 발생.
+// Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
+// StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
+import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
 
 /**
  * 매장 재생 모드(키오스크) — 전역 <Player> 의 오디오 엔진/큐를 그대로 사용하는 풀스크린 UI.
@@ -60,7 +61,9 @@ export default function StorePlayerPage() {
   // 미연결 매장은 has_franchise_policy=false 로 기존 큐 그대로 사용 (회귀 0).
   const franchiseSync = useFranchisePolicySync({ storeId, enabled: !!storeId });
 
-  // Phase 1-3 fix — heartbeat 는 AppShell 에서 mount. 여기 중복 호출 제거.
+  // Phase 1-3 — 매장 관제 heartbeat. /store/player 진입 시점부터 60s 주기 +
+  // 트랙 변경 즉시 fire. heartbeat 실패는 silent (player 재생 절대 방해 X).
+  useStoreHeartbeat({ storeId, enabled: !!storeId });
 
   const current = queue[index];
   const upcoming =
