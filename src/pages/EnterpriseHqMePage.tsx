@@ -16,7 +16,8 @@ import { Link, Navigate } from 'react-router-dom';
 import {
   Building2, RefreshCw, AlertCircle, ArrowLeft, Store, MapPin, Save,
   Key, CheckCircle2, Sparkles, Banknote, FileText, Upload, AlertTriangle,
-  Clock as ClockIcon, XCircle, Wallet,
+  Clock as ClockIcon, XCircle, Wallet, Copy, Link2, BarChart3, TrendingUp,
+  PauseCircle, PowerOff,
 } from 'lucide-react';
 import {
   getMyEnterpriseDashboard, upsertMyEnterpriseBusinessProfileV2,
@@ -154,29 +155,55 @@ function DashboardContent({
         ))}
       </section>
 
+      {/* Phase 1-9 — 정산 가능 금액 (placeholder, Phase 1-10 enterprise_revenue 모델 별도) */}
+      <SettlementPreviewCard />
+
+      {/* Phase 1-9 — 매장 현황 카드 (전체/활성/정지/inactive/최근 7일) */}
+      {dashboard.store_stats && <StoreStatsCard stats={dashboard.store_stats} />}
+
+      {/* Phase 1-9 — 지역별 매장 분포 */}
+      {dashboard.region_distribution && dashboard.region_distribution.length > 0 && (
+        <RegionDistributionCard items={dashboard.region_distribution} />
+      )}
+
       {/* 사업자 정보 (v2 — 정산 담당자 포함) */}
       <BusinessProfileEditor dashboard={dashboard} onSaved={onSaved} />
 
       {/* 정산 정보 + 증빙서류 + 지급 설정 (Phase 1-8) */}
       <SettlementSections enterpriseAccountId={dashboard.enterprise_account.id} />
 
-      {/* 초대코드 안내 (display only) */}
+      {/* 초대코드 안내 — Phase 1-9: 코드 복사 + 초대 링크 복사 */}
       <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <h3 className="text-sm font-bold flex items-center gap-1.5">
           <Key size={14} /> 초대코드 안내
         </h3>
         <p className="mt-1 text-[11px] text-ink-mute">
-          매장과 본사 담당자 추가 가입에 사용되는 코드입니다. 재발급은 관리자에게 요청하세요.
+          매장과 본사 담당자 추가 가입에 사용되는 코드/링크입니다. 재발급은 관리자에게 요청하세요.
         </p>
         <div className="mt-3 space-y-2">
-          <CodeRow label="본사 담당자 가입" value={ea.hq_invite_code} />
-          <CodeRow label="매장 가입" value={ea.store_invite_code} />
+          <InviteCodeRow
+            label="본사 담당자 가입"
+            code={ea.hq_invite_code}
+            inviteUrl={ea.hq_invite_code
+              ? buildInviteUrl('enterprise-hq', ea.enterprise_name, ea.hq_invite_code)
+              : null}
+          />
+          <InviteCodeRow
+            label="매장 가입"
+            code={ea.store_invite_code}
+            inviteUrl={ea.store_invite_code
+              ? buildInviteUrl('enterprise-store', ea.enterprise_name, ea.store_invite_code)
+              : null}
+          />
         </div>
         {ea.invite_code_rotated_at && (
           <p className="mt-2 text-[10px] text-ink-dim">
             마지막 재발급: {new Date(ea.invite_code_rotated_at).toLocaleString('ko-KR')}
           </p>
         )}
+        <p className="mt-2 text-[10px] text-ink-dim">
+          QR 코드 발급은 다음 단계에 제공됩니다.
+        </p>
       </section>
 
       {/* 최근 매장 */}
@@ -739,32 +766,177 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function CodeRow({ label, value }: { label: string; value: string | null }) {
-  if (!value) {
+// =============================================================================
+// Phase 1-9 — invite link builder + new cards
+// =============================================================================
+
+/**
+ * 가입 초대 링크 빌더.
+ * /login?signup=enterprise-hq|store&brand=<encoded>&code=<encoded>
+ * LoginPage URLSearchParams 파서가 이 형식을 인식하여 가입 모드 자동 전환 + prefill.
+ */
+function buildInviteUrl(
+  kind: 'enterprise-hq' | 'enterprise-store',
+  brandName: string,
+  inviteCode: string,
+): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const brand = encodeURIComponent(brandName);
+  const code = encodeURIComponent(inviteCode);
+  return `${origin}/login?signup=${kind}&brand=${brand}&code=${code}`;
+}
+
+function copyToClipboard(value: string, successMsg = '복사됨') {
+  void navigator.clipboard.writeText(value)
+    .then(() => toast.success(successMsg))
+    .catch(() => toast.error('복사 실패'));
+}
+
+function InviteCodeRow({
+  label, code, inviteUrl,
+}: { label: string; code: string | null; inviteUrl: string | null }) {
+  if (!code) {
     return (
-      <div>
+      <div className="rounded-lg bg-bg-deep px-3 py-2">
         <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
         <p className="mt-0.5 text-[11px] text-ink-mute">발급되지 않음</p>
       </div>
     );
   }
   return (
-    <div>
+    <div className="rounded-lg bg-bg-deep px-3 py-2">
       <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
-      <div className="mt-0.5 flex items-center gap-2">
-        <code className="flex-1 truncate rounded bg-bg-deep px-2 py-1 font-mono text-sm font-semibold">{value}</code>
+      <div className="mt-1 flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-bg-card px-2 py-1 font-mono text-sm font-semibold">
+          {code}
+        </code>
         <button
           type="button"
-          onClick={() => {
-            void navigator.clipboard.writeText(value)
-              .then(() => toast.success('복사됨'))
-              .catch(() => toast.error('복사 실패'));
-          }}
-          className="rounded bg-bg-deep p-1.5 text-xs font-semibold hover:bg-bg-hover"
+          onClick={() => copyToClipboard(code, '초대코드 복사됨')}
+          className="inline-flex items-center gap-1 rounded bg-bg-card px-2 py-1 text-[11px] font-semibold hover:bg-bg-hover"
+          title="초대코드 복사"
         >
-          복사
+          <Copy size={11} /> 코드
         </button>
+        {inviteUrl && (
+          <button
+            type="button"
+            onClick={() => copyToClipboard(inviteUrl, '초대 링크 복사됨')}
+            className="inline-flex items-center gap-1 rounded bg-accent/15 px-2 py-1 text-[11px] font-semibold text-accent ring-1 ring-accent/30 hover:bg-accent/20"
+            title="초대 링크 복사 (브랜드/코드 prefill)"
+          >
+            <Link2 size={11} /> 링크
+          </button>
+        )}
       </div>
+      {inviteUrl && (
+        <p className="mt-1 break-all text-[10px] text-ink-dim">
+          {inviteUrl}
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * 정산 가능 금액 placeholder — Phase 1-10 enterprise_revenue 모델 별도 진행.
+ * Phase 1-9 는 UI 자리만 잡고 계산 X (Q1=B).
+ */
+function SettlementPreviewCard() {
+  return (
+    <section className="rounded-2xl bg-gradient-to-br from-emerald-500/5 to-emerald-500/0 p-4 ring-1 ring-emerald-500/15">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold flex items-center gap-1.5">
+          <Wallet size={14} className="text-emerald-300" /> 정산 가능 금액
+        </h3>
+        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+          준비중
+        </span>
+      </div>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-2xl font-extrabold text-ink-dim tabular-nums">—</span>
+        <span className="text-xs text-ink-mute">원</span>
+      </div>
+      <p className="mt-2 text-[11px] text-ink-mute">
+        실 정산금 계산은 다음 단계에서 제공됩니다. (매장 사용량 · 정책 단가 집계)
+      </p>
+    </section>
+  );
+}
+
+/**
+ * 매장 현황 카드 — 전체 / 활성 / inactive / suspended / 최근 7일 가입.
+ */
+function StoreStatsCard({ stats }: { stats: import('@/lib/api/enterpriseHqApi').EnterpriseHqStoreStats }) {
+  const items = [
+    { label: '전체',       value: stats.total,      icon: <Store size={11} />,        tone: 'text-ink' },
+    { label: '활성',       value: stats.active,     icon: <CheckCircle2 size={11} />, tone: 'text-emerald-300' },
+    { label: '비활성',     value: stats.inactive,   icon: <PowerOff size={11} />,     tone: 'text-ink-mute' },
+    { label: '정지',       value: stats.suspended,  icon: <PauseCircle size={11} />,  tone: 'text-rose-300' },
+    { label: '최근 7일 +', value: stats.joined_7d,  icon: <TrendingUp size={11} />,   tone: 'text-sky-300' },
+  ];
+  return (
+    <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <h3 className="text-sm font-bold flex items-center gap-1.5">
+        <Store size={14} /> 매장 현황
+      </h3>
+      <div className="mt-3 grid grid-cols-5 gap-2">
+        {items.map((it) => (
+          <div key={it.label} className="rounded-lg bg-bg-deep p-2 text-center">
+            <div className={`flex items-center justify-center gap-1 text-[10px] ${it.tone}`}>
+              {it.icon}
+            </div>
+            <p className={`mt-0.5 text-lg font-extrabold tabular-nums ${it.tone}`}>{it.value}</p>
+            <p className="mt-0.5 text-[9px] text-ink-dim truncate">{it.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 지역별 매장 분포 — active_count 기준 정렬, 막대 비율 표시.
+ */
+function RegionDistributionCard({
+  items,
+}: { items: import('@/lib/api/enterpriseHqApi').EnterpriseHqRegionDistributionItem[] }) {
+  const max = items.reduce((m, it) => Math.max(m, it.total_count), 0) || 1;
+  return (
+    <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+      <h3 className="text-sm font-bold flex items-center gap-1.5">
+        <BarChart3 size={14} /> 지역별 매장 분포
+      </h3>
+      <ul className="mt-3 space-y-2">
+        {items.map((it) => {
+          const widthPct = Math.round((it.total_count / max) * 100);
+          const key = it.region_id ?? '__unassigned__';
+          return (
+            <li key={key} className="text-xs">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-semibold">
+                  <MapPin size={10} className="inline mr-1 text-ink-mute" />
+                  {it.region_name}
+                  {it.region_code && (
+                    <span className="ml-1 text-[10px] font-mono text-ink-dim">{it.region_code}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-ink-mute">
+                  <span className="font-bold text-emerald-300">{it.active_count}</span>
+                  <span className="mx-0.5 text-ink-dim">/</span>
+                  {it.total_count}
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-bg-deep">
+                <div
+                  className="h-full rounded-full bg-accent/60 transition-all"
+                  style={{ width: `${widthPct}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

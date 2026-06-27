@@ -63,6 +63,10 @@ export default function LoginPage() {
     return firstRouteFor(profile?.account_type);
   }
   const [mode, setMode] = useState<Mode>('signin');
+  // Phase 1-9 — 초대 링크 prefill (?signup=enterprise-hq&brand=...&code=...)
+  const [enterprisePrefill, setEnterprisePrefill] = useState<{
+    brandName: string; inviteCode: string;
+  } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +96,21 @@ export default function LoginPage() {
       // URL 정리 — 새로고침 시 에러 반복 방지
       const next = new URLSearchParams(searchParams);
       next.delete('error');
+      setSearchParams(next, { replace: true });
+    }
+
+    // Phase 1-9 — 초대 링크 prefill
+    // /login?signup=enterprise-hq&brand=<encoded>&code=<encoded>
+    // /login?signup=enterprise-store&brand=<encoded>&code=<encoded>
+    const signupParam = searchParams.get('signup');
+    if (signupParam === 'enterprise-hq' || signupParam === 'enterprise-store') {
+      const brand = searchParams.get('brand') ?? '';
+      const code = searchParams.get('code') ?? '';
+      setMode(signupParam === 'enterprise-hq' ? 'signup-enterprise-hq' : 'signup-enterprise-store');
+      setEnterprisePrefill({ brandName: brand, inviteCode: code });
+      // URL 정리 — 새로고침 시 prefill 반복 안내 방지
+      const next = new URLSearchParams(searchParams);
+      next.delete('signup'); next.delete('brand'); next.delete('code');
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,6 +396,8 @@ export default function LoginPage() {
 
             {mode === 'signup-enterprise-hq' && (
               <EnterpriseHqSignupForm
+                initialBrandName={enterprisePrefill?.brandName ?? ''}
+                initialInviteCode={enterprisePrefill?.inviteCode ?? ''}
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);
@@ -386,6 +407,8 @@ export default function LoginPage() {
 
             {mode === 'signup-enterprise-store' && (
               <EnterpriseStoreSignupForm
+                initialBrandName={enterprisePrefill?.brandName ?? ''}
+                initialInviteCode={enterprisePrefill?.inviteCode ?? ''}
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);

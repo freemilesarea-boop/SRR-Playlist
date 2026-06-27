@@ -106,12 +106,32 @@ export interface EnterpriseHqDashboardAccount {
   last_login_at: string | null;
 }
 
+export interface EnterpriseHqStoreStats {
+  total: number;
+  active: number;
+  inactive: number;
+  suspended: number;
+  joined_7d: number;
+}
+
+export interface EnterpriseHqRegionDistributionItem {
+  region_id: string | null;
+  region_name: string;
+  region_code: string | null;
+  region_status: string;
+  active_count: number;
+  total_count: number;
+}
+
 export interface EnterpriseHqDashboard {
   success: boolean;
   enterprise_account: EnterpriseHqDashboardAccount;
   franchises: EnterpriseHqFranchiseSummary[];
   regions: EnterpriseHqRegionSummary[];
   store_count: number;
+  // Phase 1-9 additions (optional for back-compat)
+  store_stats?: EnterpriseHqStoreStats;
+  region_distribution?: EnterpriseHqRegionDistributionItem[];
   recent_stores: EnterpriseHqRecentStore[];
   business_profile: EnterpriseBusinessProfile | null;
   business_profile_present: boolean;
