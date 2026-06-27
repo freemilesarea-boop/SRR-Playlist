@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Search, AlertCircle, Building2, MapPin, ListChecks, Plus, X,
   CheckCircle2, Clock, XCircle, AlertTriangle, RotateCcw, Calculator, PlayCircle,
-  ChevronDown, Star, Inbox,
+  ChevronDown, Star, Inbox, Store as StoreIcon, ArrowRight,
 } from 'lucide-react';
 import {
   listPolicyDeployments, getPolicyDeploymentKpi, getPolicyDeploymentDetail,
@@ -71,7 +71,17 @@ const TARGET_LABEL: Record<PolicyDeploymentTargetStatus, string> = {
   failed: '실패', skipped: '제외', stale: '구버전',
 };
 
-export default function PolicyDeploymentPanel() {
+export interface PolicyDeploymentPanelProps {
+  /**
+   * "프랜차이즈 관리로 이동" 버튼 콜백.
+   * AdminPage 가 deep-link 를 set 하고 franchise 탭으로 자동 이동시킴
+   * → 첫 franchise 의 정책 탭 자동 진입
+   * → 정책 생성 성공 시 자동으로 정책 적용률 화면으로 복귀
+   */
+  onRequestFranchisePolicyNav?: () => void;
+}
+
+export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: PolicyDeploymentPanelProps = {}) {
   const [rows, setRows] = useState<PolicyDeployment[]>([]);
   const [total, setTotal] = useState(0);
   const [kpi, setKpi] = useState<PolicyDeploymentKpi | null>(null);
@@ -79,6 +89,21 @@ export default function PolicyDeploymentPanel() {
   const [enterprises, setEnterprises] = useState<EnterpriseAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // null = 미확인 / true = 정책 ≥1개 / false = 0개 (배포 생성 차단)
+  const [hasDeployablePolicy, setHasDeployablePolicy] = useState<boolean | null>(null);
+
+  const checkDeployablePolicies = useCallback(async () => {
+    try {
+      const r = await listDeployablePolicies({ limit: 1 });
+      setHasDeployablePolicy(r.data.length > 0);
+    } catch (e) {
+      // RPC 실패 / 권한 부족 → null 로 두고 기본 동작 허용 (false 단정하지 않음)
+      console.warn('[PolicyDeployment] deployable policies check failed', e);
+      setHasDeployablePolicy(null);
+    }
+  }, []);
+  useEffect(() => { void checkDeployablePolicies(); }, [checkDeployablePolicies]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PolicyDeploymentStatus | ''>('');
@@ -208,12 +233,20 @@ export default function PolicyDeploymentPanel() {
           <div className="flex items-center gap-2 text-xs">
             <button
               onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 font-bold text-black hover:bg-accent/90"
+              disabled={hasDeployablePolicy === false}
+              title={hasDeployablePolicy === false
+                ? '먼저 프랜차이즈 관리에서 음악 정책을 생성하세요'
+                : undefined}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 font-bold ${
+                hasDeployablePolicy === false
+                  ? 'bg-bg-deep text-ink-dim cursor-not-allowed'
+                  : 'bg-accent text-black hover:bg-accent/90'
+              }`}
             >
               <Plus size={11} /> 배포 생성
             </button>
             <button
-              onClick={() => void load()}
+              onClick={() => { void load(); void checkDeployablePolicies(); }}
               disabled={loading}
               className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover disabled:opacity-50"
             >
@@ -302,7 +335,14 @@ export default function PolicyDeploymentPanel() {
       {loading && rows.length === 0 ? (
         <SkeletonRows />
       ) : !loading && rows.length === 0 && !error ? (
-        <EmptyState onCreate={() => setShowCreate(true)} />
+        hasDeployablePolicy === false ? (
+          <NoPolicyEmptyState
+            onNavigate={() => onRequestFranchisePolicyNav?.()}
+            canNavigate={!!onRequestFranchisePolicyNav}
+          />
+        ) : (
+          <EmptyState onCreate={() => setShowCreate(true)} />
+        )
       ) : (
         <>
           {/* Desktop table */}
@@ -560,6 +600,39 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         <Plus size={12} /> 배포 생성
       </button>
+    </div>
+  );
+}
+
+function NoPolicyEmptyState({
+  onNavigate, canNavigate,
+}: { onNavigate: () => void; canNavigate: boolean }) {
+  return (
+    <div className="rounded-xl bg-bg-card p-8 text-center text-xs text-ink-mute">
+      <AlertTriangle size={28} className="mx-auto mb-2 text-amber-300 opacity-80" />
+      <p className="font-semibold mb-1 text-ink">배포 가능한 정책이 없습니다.</p>
+      <p>
+        정책 배포를 시작하려면 먼저 <b className="text-ink">프랜차이즈 관리</b> 에서
+        <br />
+        음악 정책을 생성하세요.
+      </p>
+      {canNavigate ? (
+        <>
+          <button
+            onClick={onNavigate}
+            className="mt-3 inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 font-bold text-black hover:bg-accent/90"
+          >
+            <StoreIcon size={12} /> 프랜차이즈 관리로 이동 <ArrowRight size={12} />
+          </button>
+          <p className="mt-2 text-[10px] text-ink-dim">
+            정책 생성 후 자동으로 배포 화면으로 돌아옵니다.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-[11px] text-ink-dim">
+          좌측 <b>엔터프라이즈 → 프랜차이즈 관리</b> 탭에서 정책을 추가하세요.
+        </p>
+      )}
     </div>
   );
 }
