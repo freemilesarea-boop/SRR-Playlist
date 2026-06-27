@@ -38,6 +38,9 @@ import {
 } from '@/lib/artistApi';
 import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
 import PushNotificationToggle from '@/components/PushNotificationToggle';
+import EnterpriseHqProfileCard from '@/components/profile/EnterpriseHqProfileCard';
+import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCard';
+import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import {
   usePlaybackSettingsStore,
   CROSSFADE_OPTIONS,
@@ -51,6 +54,10 @@ export default function ProfilePage() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
   const location = useLocation();
+
+  // Phase 1-7 — enterprise HQ / 매장 역할 판별 (RPC 1회 호출).
+  // RPC 실패 / 미적용 환경은 모두 false fallback → 기존 흐름 회귀 0.
+  const enterpriseRole = useEnterpriseSelfRole(user?.id ?? null);
 
   // /profile#identity-verification 진입 시 해당 섹션으로 자동 스크롤
   useLayoutEffect(() => {
@@ -241,10 +248,25 @@ export default function ProfilePage() {
         </button>
       </section>
 
+      {/* Phase 1-7 — enterprise HQ / 매장 우선 표시.
+          HQ 또는 매장 사용자에게는 ArtistManagementCard (아티스트 CTA) 를 노출하지 않음. */}
+      {!enterpriseRole.loading && enterpriseRole.role.is_hq && (
+        <EnterpriseHqProfileCard role={enterpriseRole.role} />
+      )}
+      {!enterpriseRole.loading
+        && !enterpriseRole.role.is_hq
+        && enterpriseRole.storeInfo.is_store && (
+        <EnterpriseStoreInfoCard info={enterpriseRole.storeInfo} />
+      )}
+
       {/* 아티스트 관리/등록 카드 — artist_profiles(approval_status) 가 source of truth.
           프로필이 있거나 account_type=artist 이면 노출. 미러(account_type/artist_approval_status)
-          가 깨져도 카드가 사라지지 않도록 카드 내부에서 프로필을 직접 조회한다. */}
-      {user?.id && (
+          가 깨져도 카드가 사라지지 않도록 카드 내부에서 프로필을 직접 조회한다.
+          Phase 1-7 — enterprise HQ / 매장 사용자에게는 노출하지 않음. */}
+      {user?.id
+        && !enterpriseRole.loading
+        && !enterpriseRole.role.is_hq
+        && !enterpriseRole.storeInfo.is_store && (
         <ArtistManagementCard
           userId={user.id}
           userEmail={user.email ?? ''}
