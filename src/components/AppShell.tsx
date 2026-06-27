@@ -28,6 +28,13 @@ export default function AppShell() {
   // heartbeat: business mode + storeId 양쪽 true 일 때만
   const storeId = useAuthStore((s) => s.user?.id ?? null);
   const businessMode = useBusinessStore((s) => s.businessMode);
+  // DEBUG — heartbeat 게이트 가시화 (사용자 console 에서 직접 확인)
+  // 운영 환경에서도 출력 (heartbeat 0 문제 추적 중)
+  console.log('AppShell heartbeat', {
+    businessMode,
+    storeId,
+    enabled: businessMode && !!storeId,
+  });
   useStoreHeartbeat({ storeId, enabled: businessMode && !!storeId });
   useEffect(() => {
     // 새로고침/탭종료 후 큐+위치 복원 (자동재생은 X — 사용자 ▶ 누르면 시작)
