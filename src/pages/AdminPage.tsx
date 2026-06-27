@@ -373,7 +373,9 @@ export default function AdminPage() {
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
           {tab === 'store-monitoring' && <StoreMonitoringPanel />}
           {tab === 'store-now-playing' && <StoreNowPlayingPanel />}
-          {tab === 'policy-deployment' && <PolicyDeploymentPanel />}
+          {tab === 'policy-deployment' && (
+            <PolicyDeploymentPanel onNavigateToTab={(k) => selectTab(k as Tab)} />
+          )}
           {tab === 'franchise' && <FranchiseManagementPanel />}
           {tab === 'sales-agents' && <SalesAgentsList />}
           {tab === 'sales-partners' && <SalesPartnerApplications />}
