@@ -35,6 +35,10 @@ const ROOTS = ['src/components/admin', 'src/components/enterprise'];
 const SKIP_FILES = new Set([
   'src/lib/adminTones.ts',
 ]);
+// Design System 정의 파일들 — 솔리드 톤 (bg-red-600 등) 명시적 사용 허용
+const SKIP_DIRS = [
+  'src/components/admin/ui',
+];
 
 // Forbidden regex patterns (with descriptive labels)
 const FORBIDDEN = [
@@ -112,6 +116,7 @@ for (const root of ROOTS) {
   for (const f of files) {
     const rel = relative(process.cwd(), f);
     if (SKIP_FILES.has(rel)) continue;
+    if (SKIP_DIRS.some((d) => rel.startsWith(d + '/'))) continue;
     const lines = readFileSync(f, 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (isWhitelistedLine(line)) return;

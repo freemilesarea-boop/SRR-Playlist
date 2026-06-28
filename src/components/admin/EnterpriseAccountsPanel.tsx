@@ -45,6 +45,7 @@ import {
   type EnterpriseInviteSummary,
 } from '@/lib/api/enterpriseAccountsApi';
 import { toast } from '@/store/toastStore';
+import { LastLoginBadge } from '@/components/admin/ui';
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: EnterpriseAccountStatus; label: string }> = [
   { value: 'active', label: '정상' },
@@ -247,7 +248,7 @@ export default function EnterpriseAccountsPanel() {
                     <td className="px-3 py-2"><RoleBadge role={r.role} /></td>
                     <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
                     <td className="px-3 py-2 text-right text-[11px]">
-                      <LastLoginCell iso={r.last_login_at} />
+                      <LastLoginBadge iso={r.last_login_at} />
                     </td>
                     <td className="px-3 py-2 text-right">
                       <RowActions
@@ -282,7 +283,7 @@ export default function EnterpriseAccountsPanel() {
                   <div className="flex items-center gap-1"><RoleBadge role={r.role} /></div>
                   <div className="text-[10px]">
                     <span className="text-ink-dim">최근 로그인: </span>
-                    <LastLoginCell iso={r.last_login_at} layout="mobile" />
+                    <LastLoginBadge iso={r.last_login_at} layout="mobile" />
                   </div>
                 </div>
                 {r.brand_code && (
@@ -368,59 +369,7 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
   return <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${v.cls}`}>{v.ko}</span>;
 }
 
-// =============================================================================
-// last_login 표시 — yyyy.MM.dd HH:mm + 최근 7일 강조
-// =============================================================================
-
-function formatLoginDateTime(iso: string | null): string {
-  if (!iso) return '로그인 전';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '로그인 전';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}.${mm}.${dd} ${hh}:${mi}`;
-}
-
-function isRecentLogin(iso: string | null, days = 7): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return false;
-  return d.getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
-}
-
-function LastLoginCell({ iso, layout = 'desktop' }: {
-  iso: string | null;
-  layout?: 'desktop' | 'mobile';
-}) {
-  const recent = isRecentLogin(iso);
-  const text = formatLoginDateTime(iso);
-  if (layout === 'mobile') {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <span className={iso ? 'text-ink-mute' : 'text-ink-dim italic'}>{text}</span>
-        {recent && (
-          <span className="inline-flex items-center rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 ring-1 ring-emerald-400/50">
-            7일 내
-          </span>
-        )}
-      </span>
-    );
-  }
-  return (
-    <div className="inline-flex items-center justify-end gap-1.5">
-      <span className={iso ? 'text-ink-mute tabular-nums' : 'text-ink-dim italic'}>{text}</span>
-      {recent && (
-        <span className="inline-flex items-center rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 ring-1 ring-emerald-400/50">
-          7일 내
-        </span>
-      )}
-    </div>
-  );
-}
-
+// last_login 표시는 LastLoginBadge (@/components/admin/ui) 사용 — 디자인 시스템 v2 (PR #197 helper 대체).
 
 function RowActions({
   row, busy, onEdit, onInvite, onSettlement, onSetStatus, onDelete,
