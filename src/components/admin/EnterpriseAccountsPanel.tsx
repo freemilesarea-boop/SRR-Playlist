@@ -592,12 +592,12 @@ function EditModal({
                   초대코드 prefix 로 사용. 비워두면 ENT-/STORE- 형식 자동 생성.
                 </span>
               </Field>
-              <Field label="첫 프랜차이즈 (선택)">
+              <Field label="프랜차이즈명 (비워두면 본사명으로 자동 생성)">
                 <input value={franchiseName} onChange={(e) => setFranchiseName(e.target.value)}
                   placeholder="예: 쿠우쿠우 본사"
                   className="input" />
                 <span className="block text-[11px] text-ink-dim mt-1">
-                  입력 시 franchise 생성 + primary 매핑 자동 (매장 초대코드 가입의 연결 대상).
+                  매장 초대코드 가입의 연결 대상. 비워두면 본사명으로 자동 생성됩니다 (0373 trigger).
                 </span>
               </Field>
             </>
