@@ -1,18 +1,20 @@
 /**
- * EnterpriseRegionsPanel — Enterprise Phase 1-2.
+ * EnterpriseRegionsPanel — Enterprise Phase 1-2 v2 (Region Management 완성).
  *
- * 본사별 지역 (서울/경기/부산 등) 관리. enterprise_accounts FK 기반.
- * - KPI 4개 + 본사 select + 검색 + 상태 필터 + 페이지네이션
- * - Create / Edit Modal (region_code 자동 대문자)
- * - 상태 변경 / Soft delete / Recount (수동)
- * - loading / empty / error 상태 + 모바일 카드형
+ * 본사별 지역 관리.
+ * - 컬럼: 지역명/매장수/온라인/오프라인/24h/적용정책/최근배포/상태/액션
+ * - KPI: 전체 지역 / 활성 / 매장 / 온라인 / 오프라인
+ * - CRUD + 상태 변경 + Soft Delete + 정책 연결 (기본 정책)
+ * - 상세 Drawer 모달 (지역 정보 + 정책 + 매장 카운트 + 향후 확장 영역)
+ * - 검색: 지역명/코드/매니저/이메일/본사명/정책명
  *
- * 매장 ↔ 지역 매핑은 Phase 1-3 이후 (현재 store_count 는 수동/0).
+ * 무변경: DB 계산식 / RPC 시그니처 (update 만 +default_policy_id) / RLS
+ * SQL: 0352 (table+RPC) + 0353 (assign_store) + 0375 (v2 extension)
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  RefreshCw, Plus, Search, X, AlertCircle, MapPin, Building2,
-  Pencil, Trash2, RotateCcw, Power, CheckCircle2,
+  RefreshCw, Plus, MapPin, Building2, Pencil, Trash2, RotateCcw, Power,
+  Wifi, WifiOff, Clock, ShieldCheck,
 } from 'lucide-react';
 import {
   listEnterpriseRegions,
@@ -31,28 +33,47 @@ import {
   type EnterpriseAccount,
 } from '@/lib/api/enterpriseAccountsApi';
 import { toast } from '@/store/toastStore';
+import {
+  AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge,
+  AdminButton, AdminEmpty, AdminSkeleton, AdminAlert, AdminModal,
+  AdminTooltip,
+  type AdminToneName,
+} from '@/components/admin/ui';
+import { adminTypography } from '@/lib/adminTypography';
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: EnterpriseRegionStatus; label: string }> = [
-  { value: 'active', label: '정상' },
-  { value: 'inactive', label: '비활성' },
-  { value: 'suspended', label: '정지' },
+  { value: 'active',      label: '정상' },
+  { value: 'inactive',    label: '비활성' },
+  { value: 'maintenance', label: '점검중' },
+  { value: 'suspended',   label: '정지' },
 ];
 
-const PAGE_SIZE = 25;
+const STATUS_TONE: Record<EnterpriseRegionStatus, AdminToneName> = {
+  active:      'success',
+  inactive:    'neutral',
+  maintenance: 'warning',
+  suspended:   'danger',
+};
+
+const STATUS_LABEL: Record<EnterpriseRegionStatus, string> = {
+  active: '정상', inactive: '비활성', maintenance: '점검중', suspended: '정지',
+};
+
+const PAGE_SIZE = 50;
 
 export default function EnterpriseRegionsPanel() {
   const [rows, setRows] = useState<EnterpriseRegion[]>([]);
   const [total, setTotal] = useState(0);
   const [kpi, setKpi] = useState<EnterpriseRegionKpi | null>(null);
-  const [accounts, setAccounts] = useState<EnterpriseAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [accountFilter, setAccountFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<EnterpriseRegionStatus | ''>('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<EnterpriseRegionStatus | ''>('');
+  const [enterpriseFilter, setEnterpriseFilter] = useState<string>('');
   const [offset, setOffset] = useState(0);
+  const [accounts, setAccounts] = useState<EnterpriseAccount[]>([]);
   const [editTarget, setEditTarget] = useState<EnterpriseRegion | 'new' | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<EnterpriseRegion | null>(null);
+  const [detailTarget, setDetailTarget] = useState<EnterpriseRegion | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -61,12 +82,13 @@ export default function EnterpriseRegionsPanel() {
     try {
       const [list, k] = await Promise.all([
         listEnterpriseRegions({
-          enterpriseAccountId: accountFilter || null,
+          enterpriseAccountId: enterpriseFilter || null,
           search: search.trim() || null,
           status: statusFilter || null,
-          limit: PAGE_SIZE, offset,
+          limit: PAGE_SIZE,
+          offset,
         }),
-        getEnterpriseRegionKpi(accountFilter || undefined),
+        getEnterpriseRegionKpi(enterpriseFilter || undefined),
       ]);
       setRows(list.data);
       setTotal(list.pagination.total);
@@ -76,20 +98,18 @@ export default function EnterpriseRegionsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [accountFilter, search, statusFilter, offset]);
+  }, [search, statusFilter, enterpriseFilter, offset]);
 
   useEffect(() => { void load(); }, [load]);
 
-  // 본사 목록 (모달/필터용)
+  // 본사 select 옵션 (한 번만 로드)
   useEffect(() => {
-    void adminListEnterpriseAccounts({ limit: 200 })
-      .then((r) => setAccounts(r.data))
-      .catch((e) => toast.error(`본사 목록 로딩 실패: ${(e as Error).message}`));
+    let alive = true;
+    adminListEnterpriseAccounts({ limit: 200, offset: 0 })
+      .then((r) => { if (alive) setAccounts(r.data); })
+      .catch(() => {});
+    return () => { alive = false; };
   }, []);
-
-  const onSearchChange = (v: string) => { setSearch(v); setOffset(0); };
-  const onAccountChange = (v: string) => { setAccountFilter(v); setOffset(0); };
-  const onStatusChange = (v: EnterpriseRegionStatus | '') => { setStatusFilter(v); setOffset(0); };
 
   const handleSetStatus = async (id: string, status: EnterpriseRegionStatus) => {
     setBusyId(id);
@@ -101,158 +121,184 @@ export default function EnterpriseRegionsPanel() {
     finally { setBusyId(null); }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setBusyId(deleteTarget.id);
+  const handleSoftDelete = async (r: EnterpriseRegion) => {
+    if (!confirm(`'${r.region_name}' 지역을 삭제하시겠습니까? (Soft Delete)`)) return;
+    setBusyId(r.id);
     try {
-      await softDeleteEnterpriseRegion(deleteTarget.id);
-      toast.success('지역이 비활성 보관되었습니다');
-      setDeleteTarget(null);
+      await softDeleteEnterpriseRegion(r.id);
+      toast.success('삭제되었습니다');
       await load();
     } catch (e) { toast.error(`삭제 실패: ${(e as Error).message}`); }
     finally { setBusyId(null); }
   };
 
-  const handleRecount = async () => {
-    setLoading(true);
+  const handleRecount = async (r: EnterpriseRegion) => {
+    setBusyId(r.id);
     try {
-      const result = await recountEnterpriseRegionStores();
-      toast.success(`${result.updated_count}개 지역 재계산 — ${result.note}`);
+      const res = await recountEnterpriseRegionStores(r.id);
+      toast.success(`매장 수 재계산: ${res.note}`);
       await load();
     } catch (e) { toast.error(`재계산 실패: ${(e as Error).message}`); }
+    finally { setBusyId(null); }
   };
 
   const kpiCards = useMemo(() => {
     if (!kpi) return null;
     return [
-      { label: '전체 지역', value: kpi.total_regions, tone: 'text-ink' },
-      { label: '활성', value: kpi.active_regions, tone: 'text-emerald-300' },
-      { label: '총 매장 수', value: kpi.total_stores, tone: 'text-sky-300' },
-      { label: '정책 적용 지역', value: kpi.regions_with_policy_applied, tone: 'text-accent' },
+      { label: '전체 지역', value: kpi.total_regions, icon: <MapPin size={14} />, tone: 'primary' as AdminToneName },
+      { label: '활성',     value: kpi.active_regions, icon: <ShieldCheck size={14} />, tone: 'success' as AdminToneName },
+      { label: '전체 매장', value: kpi.total_stores,  icon: <Building2 size={14} />, tone: 'info' as AdminToneName },
+      { label: '온라인',   value: kpi.online_stores ?? 0, icon: <Wifi size={14} />,   tone: 'success' as AdminToneName },
+      { label: '오프라인', value: kpi.offline_stores ?? 0, icon: <WifiOff size={14} />,
+        tone: (kpi.offline_stores ?? 0) > 0 ? ('danger' as AdminToneName) : ('neutral' as AdminToneName) },
     ];
   }, [kpi]);
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl bg-bg-card p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold flex items-center gap-1.5">
-            <MapPin size={14} /> 지역 관리
-            <span className="text-[10px] font-normal text-ink-dim">(Enterprise Phase 1-2)</span>
-          </h3>
-          <div className="flex items-center gap-2 text-xs">
-            <button onClick={() => void handleRecount()} disabled={loading}
-              title="매장 수 재계산"
-              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover disabled:opacity-50">
-              <RotateCcw size={11} /> 재계산
-            </button>
-            <button onClick={() => void load()} disabled={loading}
-              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover disabled:opacity-50">
-              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
-            </button>
-            <button onClick={() => setEditTarget('new')} disabled={accounts.length === 0}
-              title={accounts.length === 0 ? '본사 계정을 먼저 추가하세요' : ''}
-              className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 font-bold text-black hover:bg-accent/90 disabled:opacity-50">
-              <Plus size={11} /> 지역 추가
-            </button>
-          </div>
+    <AdminSection
+      title={<><MapPin size={14} /> 지역 관리</>}
+      badge={<span className={adminTypography.hint}>(Phase 1-2 v2)</span>}
+      description="본사별 지역 (서울/경기/부산 등) 관리. 지역에 매장과 기본 정책을 연결할 수 있습니다."
+      action={
+        <div className="flex items-center gap-2">
+          <AdminButton tone="neutral" variant="subtle" size="sm"
+            leftIcon={<RefreshCw size={11} className={loading ? 'animate-spin' : ''} />}
+            onClick={() => void load()} disabled={loading}>
+            새로고침
+          </AdminButton>
+          <AdminButton tone="primary" variant="solid" size="sm"
+            leftIcon={<Plus size={11} />}
+            onClick={() => setEditTarget('new')}>
+            지역 추가
+          </AdminButton>
         </div>
-        <p className="mt-1 text-[11px] text-ink-dim">
-          본사별 지역을 관리합니다 (서울/경기/부산 등). 매장 ↔ 지역 매핑은 Phase 1-3 에서 자동 연결됩니다.
-        </p>
-      </div>
-
-      {/* KPI */}
-      {kpiCards && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      }
+    >
+      {kpiCards ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {kpiCards.map((c) => (
-            <div key={c.label} className="rounded-lg bg-bg-card p-3 ring-1 ring-line/10">
-              <div className="text-[10px] uppercase tracking-wider text-ink-dim">{c.label}</div>
-              <div className={`mt-1 text-lg font-extrabold tabular-nums ${c.tone}`}>{c.value}</div>
-            </div>
+            <AdminStatCard key={c.label} tone={c.tone} icon={c.icon} label={c.label}
+              value={c.value.toLocaleString('ko-KR')} />
           ))}
         </div>
-      )}
+      ) : <AdminSkeleton variant="kpi" />}
 
-      {/* 필터 */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-card p-3 text-xs">
-        <select value={accountFilter} onChange={(e) => onAccountChange(e.target.value)}
-          className="rounded bg-bg-deep px-2 py-1">
-          <option value="">전체 본사</option>
-          {accounts
-            .filter((a) => a.status === 'active' || a.status === 'invited')
-            .map((a) => (
-              <option key={a.id} value={a.id}>{a.enterprise_name}</option>
-            ))}
-        </select>
-        <div className="relative">
-          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-dim" />
-          <input type="text" placeholder="지역명/코드/담당자/이메일 검색"
-            value={search} onChange={(e) => onSearchChange(e.target.value)}
-            className="rounded bg-bg-deep pl-7 pr-2 py-1 w-64 max-w-full" />
-        </div>
-        <select value={statusFilter} onChange={(e) => onStatusChange(e.target.value as EnterpriseRegionStatus | '')}
-          className="rounded bg-bg-deep px-2 py-1">
-          <option value="">전체 상태</option>
-          {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <span className="ml-auto text-ink-dim">{total}개 (페이지 {Math.floor(offset / PAGE_SIZE) + 1})</span>
-      </div>
+      <AdminSearch
+        value={search}
+        onChange={(v) => { setSearch(v); setOffset(0); }}
+        placeholder="지역명/코드/담당자/이메일/본사명/정책명 검색"
+        filters={
+          <>
+            <select
+              value={enterpriseFilter}
+              onChange={(e) => { setEnterpriseFilter(e.target.value); setOffset(0); }}
+              className="rounded bg-bg-deep px-2 py-1.5 text-xs"
+              aria-label="본사 필터"
+            >
+              <option value="">전체 본사</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.enterprise_name}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value as EnterpriseRegionStatus | ''); setOffset(0); }}
+              className="rounded bg-bg-deep px-2 py-1.5 text-xs"
+              aria-label="상태 필터"
+            >
+              <option value="">전체 상태</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </>
+        }
+        trailing={
+          (search || statusFilter || enterpriseFilter) ? (
+            <AdminButton tone="neutral" variant="subtle" size="sm"
+              onClick={() => { setSearch(''); setStatusFilter(''); setEnterpriseFilter(''); setOffset(0); }}>
+              초기화
+            </AdminButton>
+          ) : null
+        }
+      />
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
-          <AlertCircle size={12} /> {error}
-          <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
-        </div>
+        <AdminAlert tone="danger" title="목록 로드 실패" description={error}
+          action={<AdminButton tone="danger" variant="subtle" size="sm" onClick={() => void load()}>재시도</AdminButton>} />
       )}
 
-      {/* Empty / Skeleton / Table */}
       {loading && rows.length === 0 ? (
-        <SkeletonRows />
-      ) : !loading && rows.length === 0 && !error ? (
-        <EmptyState
-          onAdd={() => setEditTarget('new')}
-          hasAccounts={accounts.length > 0}
+        <AdminSkeleton variant="table" rows={5} />
+      ) : rows.length === 0 ? (
+        <AdminEmpty
+          icon={<MapPin size={20} />}
+          title="등록된 지역이 없습니다"
+          description="상단 '지역 추가' 버튼으로 지역을 등록하세요."
+          action={
+            <AdminButton tone="primary" leftIcon={<Plus size={11} />} onClick={() => setEditTarget('new')}>
+              지역 추가
+            </AdminButton>
+          }
         />
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl bg-bg-card">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
-                  <th className="px-3 py-2">본사</th>
-                  <th className="px-3 py-2">지역명</th>
-                  <th className="px-3 py-2">코드</th>
-                  <th className="px-3 py-2">담당자</th>
+          <div className="hidden md:block overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
+            <table className="w-full min-w-[1000px] text-xs">
+              <thead className="bg-bg-deep text-[10px] uppercase tracking-wider text-ink-dim">
+                <tr>
+                  <th className="px-3 py-2 text-left">지역</th>
+                  <th className="px-3 py-2 text-left">본사</th>
                   <th className="px-3 py-2 text-right">매장</th>
-                  <th className="px-3 py-2">정책 적용</th>
-                  <th className="px-3 py-2">상태</th>
+                  <th className="px-3 py-2 text-right">온라인</th>
+                  <th className="px-3 py-2 text-right">오프라인</th>
+                  <th className="px-3 py-2 text-right">24h</th>
+                  <th className="px-3 py-2 text-left">기본 정책</th>
+                  <th className="px-3 py-2 text-left">최근 배포</th>
+                  <th className="px-3 py-2 text-center">상태</th>
                   <th className="px-3 py-2 text-right">액션</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-line/10">
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-line/5 hover:bg-bg-hover/30">
-                    <td className="px-3 py-2 font-semibold">{r.enterprise_name ?? '—'}</td>
-                    <td className="px-3 py-2">{r.region_name}</td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-sky-300">{r.region_code}</td>
+                  <tr key={r.id}
+                    onClick={() => setDetailTarget(r)}
+                    className="cursor-pointer hover:bg-bg-hover/40">
                     <td className="px-3 py-2">
-                      <div className="text-ink">{r.manager_name ?? '—'}</div>
-                      {r.manager_email && <div className="text-[10px] text-ink-mute">{r.manager_email}</div>}
+                      <div className={adminTypography.bodyStrong}>{r.region_name}</div>
+                      <div className={`font-mono ${adminTypography.hint}`}>{r.region_code}</div>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.store_count}</td>
+                    <td className="px-3 py-2 text-ink-mute">{r.enterprise_name ?? '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.store_count.toLocaleString('ko-KR')}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-300">{(r.online_count ?? 0).toLocaleString('ko-KR')}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      <span className={(r.offline_count ?? 0) > 0 ? 'text-rose-300' : 'text-ink-mute'}>
+                        {(r.offline_count ?? 0).toLocaleString('ko-KR')}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{(r.recent_24h_count ?? 0).toLocaleString('ko-KR')}</td>
+                    <td className="px-3 py-2">
+                      {r.default_policy_name
+                        ? <span className="text-ink">{r.default_policy_name}</span>
+                        : <span className={adminTypography.hint}>미설정</span>}
+                    </td>
                     <td className="px-3 py-2 text-[10px] text-ink-mute tabular-nums">
                       {r.last_policy_applied_at
                         ? new Date(r.last_policy_applied_at).toLocaleDateString('ko-KR')
                         : '—'}
                     </td>
-                    <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
-                    <td className="px-3 py-2 text-right">
-                      <RowActions row={r} busy={busyId === r.id}
+                    <td className="px-3 py-2 text-center">
+                      <AdminBadge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</AdminBadge>
+                    </td>
+                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <RowActions
+                        row={r} busy={busyId === r.id}
                         onEdit={() => setEditTarget(r)}
+                        onRecount={() => void handleRecount(r)}
                         onSetStatus={(s) => void handleSetStatus(r.id, s)}
-                        onDelete={() => setDeleteTarget(r)} />
+                        onDelete={() => void handleSoftDelete(r)}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -263,33 +309,32 @@ export default function EnterpriseRegionsPanel() {
           {/* Mobile cards */}
           <div className="space-y-2 md:hidden">
             {rows.map((r) => (
-              <div key={r.id} className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+              <div key={r.id}
+                onClick={() => setDetailTarget(r)}
+                className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10 cursor-pointer">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-sm">{r.region_name}
-                      <span className="ml-2 font-mono text-[10px] text-sky-300">{r.region_code}</span>
-                    </div>
-                    <div className="text-[11px] text-ink-mute flex items-center gap-1">
-                      <Building2 size={10} /> {r.enterprise_name ?? '—'}
-                    </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-ink">{r.region_name}</div>
+                    <div className={`font-mono ${adminTypography.hint}`}>{r.region_code}</div>
                   </div>
-                  <StatusBadge status={r.status} />
+                  <AdminBadge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</AdminBadge>
                 </div>
-                <div className="mt-2 space-y-1 text-[11px] text-ink-mute">
-                  {r.manager_name && <div>담당: {r.manager_name}</div>}
-                  {r.manager_email && <div>{r.manager_email}</div>}
-                  {r.manager_phone && <div>{r.manager_phone}</div>}
-                  <div className="text-[10px] text-ink-dim">
-                    매장 {r.store_count}곳 · 정책 {r.last_policy_applied_at
-                      ? new Date(r.last_policy_applied_at).toLocaleDateString('ko-KR')
-                      : '미적용'}
+                <div className={`mt-1 ${adminTypography.muted}`}>{r.enterprise_name ?? '—'}</div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                  <span className="text-ink-mute">매장 <b className="text-ink">{r.store_count}</b></span>
+                  <span className="text-ink-mute">온라인 <b className="text-emerald-300">{r.online_count ?? 0}</b></span>
+                  <span className="text-ink-mute">오프라인 <b className={(r.offline_count ?? 0) > 0 ? 'text-rose-300' : 'text-ink-mute'}>{r.offline_count ?? 0}</b></span>
+                </div>
+                {r.default_policy_name && (
+                  <div className={`mt-1 ${adminTypography.hint}`}>
+                    정책: <span className="text-ink">{r.default_policy_name}</span>
                   </div>
-                </div>
-                <div className="mt-2 flex gap-1">
-                  <button onClick={() => setEditTarget(r)}
-                    className="flex-1 rounded bg-bg-deep px-2 py-1 text-[11px] font-bold">편집</button>
-                  <button onClick={() => setDeleteTarget(r)}
-                    className="rounded bg-rose-500/20 px-2 py-1 text-[11px] font-bold text-rose-300">삭제</button>
+                )}
+                <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
+                  <AdminButton tone="neutral" variant="subtle" size="sm" leftIcon={<Pencil size={10} />}
+                    onClick={() => setEditTarget(r)}>편집</AdminButton>
+                  <AdminButton tone="danger" variant="subtle" size="sm" leftIcon={<Trash2 size={10} />}
+                    onClick={() => void handleSoftDelete(r)}>삭제</AdminButton>
                 </div>
               </div>
             ))}
@@ -297,150 +342,126 @@ export default function EnterpriseRegionsPanel() {
 
           {/* Pagination */}
           {total > PAGE_SIZE && (
-            <div className="flex items-center justify-between rounded-xl bg-bg-card px-3 py-2 text-xs">
-              <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">이전</button>
-              <span className="text-ink-mute">
-                {offset + 1} – {Math.min(offset + PAGE_SIZE, total)} / {total}
-              </span>
-              <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}
-                className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">다음</button>
+            <div className="flex items-center justify-between text-xs text-ink-mute">
+              <span>{offset + 1} – {Math.min(offset + PAGE_SIZE, total)} / {total.toLocaleString('ko-KR')}</span>
+              <div className="flex gap-2">
+                <AdminButton tone="neutral" variant="subtle" size="sm" disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>이전</AdminButton>
+                <AdminButton tone="neutral" variant="subtle" size="sm" disabled={offset + PAGE_SIZE >= total}
+                  onClick={() => setOffset(offset + PAGE_SIZE)}>다음</AdminButton>
+              </div>
             </div>
           )}
         </>
       )}
 
       {editTarget && (
-        <EditModal target={editTarget} accounts={accounts}
-          defaultAccountId={accountFilter || undefined}
+        <RegionEditModal
+          target={editTarget}
+          accounts={accounts}
           onClose={() => setEditTarget(null)}
-          onSaved={() => { setEditTarget(null); void load(); }} />
+          onSaved={() => { setEditTarget(null); void load(); }}
+        />
       )}
-      {deleteTarget && (
-        <DeleteConfirmModal target={deleteTarget}
-          busy={busyId === deleteTarget.id}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => void handleDelete()} />
+
+      {detailTarget && (
+        <RegionDetailModal
+          region={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onEdit={() => { setEditTarget(detailTarget); setDetailTarget(null); }}
+        />
       )}
-    </div>
+    </AdminSection>
   );
 }
 
-// =============================================================================
-// Subcomponents
-// =============================================================================
 
-function StatusBadge({ status }: { status: EnterpriseRegionStatus }) {
-  const map: Record<EnterpriseRegionStatus, { ko: string; cls: string }> = {
-    active:    { ko: '정상',    cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' },
-    inactive:  { ko: '비활성',  cls: 'bg-ink/15 text-ink-mute ring-line/20' },
-    suspended: { ko: '정지',    cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50' },
-  };
-  const v = map[status];
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${v.cls}`}>{v.ko}</span>;
-}
+// =============================================================================
+// Row actions
+// =============================================================================
 
 function RowActions({
-  row, busy, onEdit, onSetStatus, onDelete,
+  row, busy, onEdit, onRecount, onSetStatus, onDelete,
 }: {
   row: EnterpriseRegion; busy: boolean;
   onEdit: () => void;
+  onRecount: () => void;
   onSetStatus: (s: EnterpriseRegionStatus) => void;
   onDelete: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1">
-      <button onClick={onEdit} disabled={busy} title="편집"
-        className="rounded bg-sky-500/20 p-1 hover:bg-sky-500/30 disabled:opacity-50">
-        <Pencil size={11} className="text-sky-300" />
-      </button>
+      <AdminTooltip label="편집">
+        <AdminButton tone="neutral" variant="subtle" size="sm" onClick={onEdit} disabled={busy}>
+          <Pencil size={11} />
+        </AdminButton>
+      </AdminTooltip>
+      <AdminTooltip label="매장 수 재계산">
+        <AdminButton tone="info" variant="subtle" size="sm" onClick={onRecount} disabled={busy}>
+          <RotateCcw size={11} />
+        </AdminButton>
+      </AdminTooltip>
       {row.status === 'active' ? (
-        <button onClick={() => onSetStatus('suspended')} disabled={busy} title="정지"
-          className="rounded bg-amber-500/20 p-1 hover:bg-amber-500/30 disabled:opacity-50">
-          <Power size={11} className="text-amber-300" />
-        </button>
+        <AdminTooltip label="비활성화">
+          <AdminButton tone="warning" variant="subtle" size="sm"
+            onClick={() => onSetStatus('inactive')} disabled={busy}>
+            <Power size={11} />
+          </AdminButton>
+        </AdminTooltip>
       ) : (
-        <button onClick={() => onSetStatus('active')} disabled={busy} title="활성화"
-          className="rounded bg-emerald-500/20 p-1 hover:bg-emerald-500/30 disabled:opacity-50">
-          <CheckCircle2 size={11} className="text-emerald-300" />
-        </button>
+        <AdminTooltip label="활성화">
+          <AdminButton tone="success" variant="subtle" size="sm"
+            onClick={() => onSetStatus('active')} disabled={busy}>
+            <Power size={11} />
+          </AdminButton>
+        </AdminTooltip>
       )}
-      <button onClick={onDelete} disabled={busy} title="삭제"
-        className="rounded bg-rose-500/20 p-1 hover:bg-rose-500/30 disabled:opacity-50">
-        <Trash2 size={11} className="text-rose-300" />
-      </button>
+      <AdminTooltip label="삭제 (Soft Delete)">
+        <AdminButton tone="danger" variant="subtle" size="sm" onClick={onDelete} disabled={busy}>
+          <Trash2 size={11} />
+        </AdminButton>
+      </AdminTooltip>
     </div>
   );
 }
 
-function EmptyState({ onAdd, hasAccounts }: { onAdd: () => void; hasAccounts: boolean }) {
-  return (
-    <div className="rounded-xl bg-bg-card px-6 py-12 text-center">
-      <MapPin size={32} className="mx-auto text-ink-dim" />
-      <p className="mt-3 text-sm font-bold">등록된 지역이 없습니다.</p>
-      <p className="mt-1 text-[11px] text-ink-mute">
-        {hasAccounts ? '첫 지역을 추가해보세요 (예: 서울 / SEOUL).' : '먼저 본사 계정을 추가해야 합니다.'}
-      </p>
-      {hasAccounts && (
-        <button onClick={onAdd}
-          className="mt-4 inline-flex items-center gap-1 rounded bg-accent px-3 py-2 text-xs font-bold text-black">
-          <Plus size={12} /> 지역 추가
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <div className="space-y-2">
-      <div className="hidden md:block rounded-xl bg-bg-card">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-12 animate-pulse border-b border-line/5 bg-bg-deep/30" />
-        ))}
-      </div>
-      <div className="space-y-2 md:hidden">
-        {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-bg-card" />)}
-      </div>
-    </div>
-  );
-}
 
 // =============================================================================
 // Edit / Create Modal
 // =============================================================================
 
-function EditModal({
-  target, accounts, defaultAccountId, onClose, onSaved,
+function RegionEditModal({
+  target, accounts, onClose, onSaved,
 }: {
   target: EnterpriseRegion | 'new';
   accounts: EnterpriseAccount[];
-  defaultAccountId?: string;
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
   const isNew = target === 'new';
-  const t = isNew ? null : target;
-  const [accountId, setAccountId] = useState<string>(t?.enterprise_account_id ?? defaultAccountId ?? '');
-  const [regionName, setRegionName] = useState(t?.region_name ?? '');
-  const [regionCode, setRegionCode] = useState(t?.region_code ?? '');
-  const [managerName, setManagerName] = useState(t?.manager_name ?? '');
-  const [managerEmail, setManagerEmail] = useState(t?.manager_email ?? '');
-  const [managerPhone, setManagerPhone] = useState(t?.manager_phone ?? '');
-  const [status, setStatus] = useState<EnterpriseRegionStatus>(t?.status ?? 'active');
-  const [notes, setNotes] = useState(t?.notes ?? '');
+  const r = isNew ? null : target;
+
+  const [enterpriseAccountId, setEnterpriseAccountId] = useState(r?.enterprise_account_id ?? '');
+  const [regionName, setRegionName] = useState(r?.region_name ?? '');
+  const [regionCode, setRegionCode] = useState(r?.region_code ?? '');
+  const [managerName, setManagerName] = useState(r?.manager_name ?? '');
+  const [managerEmail, setManagerEmail] = useState(r?.manager_email ?? '');
+  const [managerPhone, setManagerPhone] = useState(r?.manager_phone ?? '');
+  const [status, setStatus] = useState<EnterpriseRegionStatus>(r?.status ?? 'active');
+  const [notes, setNotes] = useState(r?.notes ?? '');
   const [saving, setSaving] = useState(false);
 
-  const canSave = !!accountId && !!regionName.trim() && !!regionCode.trim();
+  const canSave = !!regionName.trim() && !!regionCode.trim()
+    && (isNew ? !!enterpriseAccountId : true);
 
   const onSave = async () => {
-    if (!canSave) return;
     setSaving(true);
     try {
       if (isNew) {
         await createEnterpriseRegion({
-          enterpriseAccountId: accountId,
+          enterpriseAccountId,
           regionName: regionName.trim(),
-          regionCode: regionCode.trim().toUpperCase(),
+          regionCode: regionCode.trim(),
           managerName: managerName.trim() || null,
           managerEmail: managerEmail.trim() || null,
           managerPhone: managerPhone.trim() || null,
@@ -448,128 +469,189 @@ function EditModal({
           notes: notes.trim() || null,
         });
         toast.success('지역이 추가되었습니다');
-      } else if (t) {
-        await updateEnterpriseRegion(t.id, {
+      } else {
+        await updateEnterpriseRegion(r!.id, {
           regionName: regionName.trim(),
-          regionCode: regionCode.trim().toUpperCase(),
-          managerName: managerName.trim(),
-          managerEmail: managerEmail.trim(),
-          managerPhone: managerPhone.trim(),
+          regionCode: regionCode.trim(),
+          managerName: managerName.trim() || null,
+          managerEmail: managerEmail.trim() || null,
+          managerPhone: managerPhone.trim() || null,
           status,
-          notes: notes.trim(),
+          notes: notes.trim() || null,
         });
-        toast.success('수정되었습니다');
+        toast.success('지역이 수정되었습니다');
       }
       onSaved();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
+    finally { setSaving(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold">{isNew ? '지역 추가' : '지역 편집'}</h3>
-          <button onClick={onClose} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
-        </div>
-        <div className="space-y-3">
+    <AdminModal
+      open onClose={onClose}
+      size="md"
+      title={isNew ? '지역 추가' : `지역 편집 — ${r?.region_name}`}
+      footer={
+        <>
+          <AdminButton tone="neutral" variant="subtle" onClick={onClose} disabled={saving}>취소</AdminButton>
+          <AdminButton tone="primary" variant="solid" loading={saving}
+            onClick={() => void onSave()} disabled={!canSave || saving}>
+            {isNew ? '추가' : '저장'}
+          </AdminButton>
+        </>
+      }
+    >
+      <div className="space-y-2 text-xs">
+        {isNew && (
           <Field label="본사 *">
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}
-              disabled={!isNew /* 기존 지역의 본사는 변경 불가 (FK 정합성) */}
+            <select value={enterpriseAccountId} onChange={(e) => setEnterpriseAccountId(e.target.value)}
               className="input">
               <option value="">선택…</option>
-              {accounts
-                .filter((a) => a.status === 'active' || a.status === 'invited')
-                .map((a) => (
-                  <option key={a.id} value={a.id}>{a.enterprise_name}</option>
-                ))}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.enterprise_name}</option>
+              ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="지역명 *">
-              <input value={regionName} onChange={(e) => setRegionName(e.target.value)}
-                placeholder="서울" className="input" />
-            </Field>
-            <Field label="지역 코드 * (자동 대문자)">
-              <input value={regionCode}
-                onChange={(e) => setRegionCode(e.target.value.toUpperCase())}
-                placeholder="SEOUL" className="input font-mono" />
-            </Field>
-          </div>
-          <Field label="담당자명">
-            <input value={managerName} onChange={(e) => setManagerName(e.target.value)} className="input" />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="이메일">
-              <input type="email" value={managerEmail}
-                onChange={(e) => setManagerEmail(e.target.value)} className="input" />
-            </Field>
-            <Field label="전화번호">
-              <input value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)}
-                placeholder="010-0000-0000" className="input" />
-            </Field>
-          </div>
-          <Field label="상태">
-            <select value={status} onChange={(e) => setStatus(e.target.value as EnterpriseRegionStatus)} className="input">
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </Field>
-          <Field label="메모">
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input min-h-[60px]" />
-          </Field>
-          <button disabled={!canSave || saving} onClick={() => void onSave()}
-            className="w-full rounded bg-accent px-3 py-2 font-bold text-black hover:bg-accent/90 disabled:opacity-50">
-            {saving ? '저장 중…' : isNew ? '추가' : '저장'}
-          </button>
-        </div>
+        )}
+        <Field label="지역명 *">
+          <input value={regionName} onChange={(e) => setRegionName(e.target.value)}
+            placeholder="예: 서울" className="input" />
+        </Field>
+        <Field label="지역 코드 *" hint="대문자 + 영문/숫자 (저장 시 자동 대문자화)">
+          <input value={regionCode} onChange={(e) => setRegionCode(e.target.value.toUpperCase())}
+            placeholder="예: SEOUL" className="input font-mono uppercase" />
+        </Field>
+        <Field label="담당자명">
+          <input value={managerName} onChange={(e) => setManagerName(e.target.value)} className="input" />
+        </Field>
+        <Field label="담당자 이메일">
+          <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)}
+            className="input" />
+        </Field>
+        <Field label="담당자 전화">
+          <input type="tel" value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)}
+            className="input" />
+        </Field>
+        <Field label="상태">
+          <select value={status} onChange={(e) => setStatus(e.target.value as EnterpriseRegionStatus)}
+            className="input">
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="메모">
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            className="input min-h-[60px]" />
+        </Field>
       </div>
-    </div>
+    </AdminModal>
   );
 }
 
-function DeleteConfirmModal({
-  target, busy, onCancel, onConfirm,
-}: { target: EnterpriseRegion; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+
+// =============================================================================
+// Detail Modal — 지역 정보 + 정책 + 매장 + 향후 확장 영역
+// =============================================================================
+
+function RegionDetailModal({
+  region, onClose, onEdit,
+}: {
+  region: EnterpriseRegion;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-        <div className="flex items-start gap-3">
-          <div className="rounded-full bg-rose-500/25 p-2"><Trash2 size={18} className="text-rose-300" /></div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold">지역 삭제</h3>
-            <p className="mt-1 text-xs text-ink-mute">
-              <b>{target.region_name}</b> ({target.region_code}) 지역을 삭제하시겠습니까?
-            </p>
-            <p className="mt-1 text-[10px] text-ink-dim">
-              이 지역은 삭제되지 않고 비활성 보관됩니다.
-            </p>
-          </div>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <button onClick={onCancel} disabled={busy}
-            className="flex-1 rounded bg-bg-deep px-3 py-2 text-xs font-bold hover:bg-bg-hover disabled:opacity-50">
-            취소
-          </button>
-          <button onClick={onConfirm} disabled={busy}
-            className="flex-1 rounded bg-rose-500 px-3 py-2 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-50">
-            {busy ? '삭제 중…' : '비활성 보관'}
-          </button>
-        </div>
+    <AdminModal
+      open onClose={onClose} size="lg"
+      title={<><MapPin size={14} /> {region.region_name}</>}
+      headerExtra={<AdminBadge tone={STATUS_TONE[region.status]}>{STATUS_LABEL[region.status]}</AdminBadge>}
+      footer={
+        <>
+          <AdminButton tone="neutral" variant="subtle" onClick={onClose}>닫기</AdminButton>
+          <AdminButton tone="primary" variant="solid" leftIcon={<Pencil size={11} />} onClick={onEdit}>
+            편집
+          </AdminButton>
+        </>
+      }
+    >
+      <div className="space-y-3 text-xs">
+        <AdminCard title="지역 정보">
+          <dl className="grid grid-cols-2 gap-2 text-[11px]">
+            <KV k="지역명" v={region.region_name} />
+            <KV k="코드" v={region.region_code} mono />
+            <KV k="본사" v={region.enterprise_name ?? '—'} />
+            <KV k="담당자" v={region.manager_name ?? '—'} />
+            <KV k="이메일" v={region.manager_email ?? '—'} />
+            <KV k="전화" v={region.manager_phone ?? '—'} />
+            {region.notes && <KV k="메모" v={region.notes} colSpan />}
+            <KV k="생성" v={new Date(region.created_at).toLocaleString('ko-KR')} />
+            <KV k="수정" v={new Date(region.updated_at).toLocaleString('ko-KR')} />
+          </dl>
+        </AdminCard>
+
+        <AdminCard title="매장 / 접속">
+          <dl className="grid grid-cols-4 gap-2 text-[11px]">
+            <KV k="전체 매장" v={`${region.store_count.toLocaleString('ko-KR')}개`} />
+            <KV k="온라인" v={`${(region.online_count ?? 0).toLocaleString('ko-KR')}개`} />
+            <KV k="오프라인" v={`${(region.offline_count ?? 0).toLocaleString('ko-KR')}개`} />
+            <KV k="24h" v={`${(region.recent_24h_count ?? 0).toLocaleString('ko-KR')}개`} />
+          </dl>
+        </AdminCard>
+
+        <AdminCard title="기본 정책">
+          {region.default_policy_name ? (
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className={adminTypography.bodyStrong}>{region.default_policy_name}</div>
+                {region.default_policy_status && (
+                  <div className={adminTypography.hint}>status: {region.default_policy_status}</div>
+                )}
+              </div>
+              {region.last_policy_applied_at && (
+                <div className={adminTypography.hint}>
+                  <Clock size={10} className="inline mr-0.5" />
+                  최근 배포 {new Date(region.last_policy_applied_at).toLocaleString('ko-KR')}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className={adminTypography.description}>기본 정책 미설정 — 편집에서 연결할 수 있습니다.</p>
+          )}
+        </AdminCard>
+
+        <AdminCard title="향후 확장">
+          <ul className={`list-disc pl-5 ${adminTypography.description} space-y-0.5`}>
+            <li>예약/이벤트/시즌/긴급 정책</li>
+            <li>지역별 AI 추천 / 배포 통계</li>
+            <li>최근 장애 · 변경 이력 timeline</li>
+          </ul>
+        </AdminCard>
       </div>
-    </div>
+    </AdminModal>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+
+// =============================================================================
+// Small helpers
+// =============================================================================
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">{label}</span>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-mute">{label}</span>
       {children}
+      {hint && <span className="block text-[10px] text-ink-dim">{hint}</span>}
     </label>
+  );
+}
+
+function KV({ k, v, colSpan, mono }: { k: string; v: string; colSpan?: boolean; mono?: boolean }) {
+  return (
+    <div className={colSpan ? 'col-span-2' : ''}>
+      <dt className="text-[10px] text-ink-dim">{k}</dt>
+      <dd className={`${mono ? 'font-mono' : ''} text-[11px] text-ink`}>{v}</dd>
+    </div>
   );
 }

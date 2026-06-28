@@ -1,14 +1,17 @@
 /**
- * enterpriseRegionsApi — Enterprise Phase 1-2.
+ * enterpriseRegionsApi — Enterprise Phase 1-2 v2 (Region Management 완성).
  *
- * 본사별 지역 (서울/경기/부산 등) 관리. enterprise_accounts FK 기반.
- * 매장 ↔ 지역 매핑은 Phase 1-3 이후 추가 (현재 store_count 는 0/수동).
+ * 본사별 지역 (서울/경기/부산 등) 관리.
+ * - status: active / inactive / suspended / maintenance (0375)
+ * - default_policy_id: 지역 기본 정책 FK (franchise_music_policies) (0375)
+ * - list 응답 확장: default_policy_name/status, online_count, recent_24h_count, offline_count
+ * - kpi 응답 확장: online_stores, offline_stores, maintenance_regions
  *
- * SQL: supabase/migrations/0352_enterprise_regions.sql
+ * SQL: supabase/migrations/0352, 0375
  */
 import { supabase } from '@/lib/supabase';
 
-export type EnterpriseRegionStatus = 'active' | 'inactive' | 'suspended';
+export type EnterpriseRegionStatus = 'active' | 'inactive' | 'suspended' | 'maintenance';
 
 export interface EnterpriseRegion {
   id: string;
@@ -22,14 +25,20 @@ export interface EnterpriseRegion {
   store_count: number;
   last_policy_applied_at: string | null;
   notes: string | null;
+  default_policy_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
   created_by: string | null;
   updated_by: string | null;
-  // joined from enterprise_accounts (list RPC 만)
+  // joined fields (list RPC 만)
   enterprise_name?: string | null;
   enterprise_manager_email?: string | null;
+  default_policy_name?: string | null;
+  default_policy_status?: string | null;
+  online_count?: number;
+  recent_24h_count?: number;
+  offline_count?: number;
 }
 
 export interface EnterpriseRegionListParams {
@@ -71,14 +80,22 @@ export interface EnterpriseRegionUpdateInput {
   managerPhone?: string | null;
   status?: EnterpriseRegionStatus | null;
   notes?: string | null;
+  /** Priority 1-2 (0375) — 지역 기본 정책 변경 */
+  defaultPolicyId?: string | null;
 }
 
 export interface EnterpriseRegionKpi {
   total_regions: number;
   active_regions: number;
   inactive_regions: number;
+  /** 0375 — maintenance 상태 카운트 */
+  maintenance_regions?: number;
   suspended_regions: number;
   total_stores: number;
+  /** 0375 — sync_status JOIN 기반 (5min threshold) */
+  online_stores?: number;
+  /** 0375 — sync_status JOIN 기반 */
+  offline_stores?: number;
   regions_with_policy_applied: number;
   computed_at: string;
 }
@@ -137,6 +154,7 @@ export async function updateEnterpriseRegion(
     p_manager_phone: input.managerPhone ?? null,
     p_status: input.status ?? null,
     p_notes: input.notes ?? null,
+    p_default_policy_id: input.defaultPolicyId ?? null,
   });
   if (error) { console.error('[enterpriseRegionsApi] update failed', error); throw error; }
   return data as EnterpriseRegion;
