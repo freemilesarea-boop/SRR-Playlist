@@ -1,0 +1,50 @@
+name: Lint · Admin Tones
+
+# PR 및 default branch push 시 admin/enterprise 컴포넌트의
+# hardcode 색상 회귀를 차단.
+#
+# 검사 대상: src/components/admin/**, src/components/enterprise/**
+# 정책 정의: src/lib/adminTones.ts  (PRs #190 / #191)
+# 스크립트:   scripts/lint-admin-tones.mjs  (PR #192)
+# whitelist:  ternary dimming / readonly input / icon-only / dark: variant 등 (PR #194)
+#
+# 위반 시 PR check 실패 — 머지 차단.
+# 신규 admin 컴포넌트는 adminTones / adminTonesLight 객체 사용 권장.
+
+on:
+  pull_request:
+    paths:
+      - 'src/components/admin/**'
+      - 'src/components/enterprise/**'
+      - 'src/lib/adminTones.ts'
+      - 'scripts/lint-admin-tones.mjs'
+      - 'package.json'
+      - '.github/workflows/lint-tones.yml'
+  push:
+    branches:
+      - claude/playlist-mvp-development-2JmTJ
+    paths:
+      - 'src/components/admin/**'
+      - 'src/components/enterprise/**'
+      - 'src/lib/adminTones.ts'
+      - 'scripts/lint-admin-tones.mjs'
+
+jobs:
+  lint-tones:
+    name: Lint admin tones (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # package.json + scripts/ 만 필요 — 별도 cache 안 함 (npm install skip).
+          # 스크립트는 의존성 없는 순수 Node (readdirSync/readFileSync)이라 npm ci 불필요.
+
+      - name: Run lint:tones:strict
+        run: |
+          node --version
+          npm run lint:tones:strict
