@@ -85,6 +85,7 @@ const StoreMonitoringPanel = lazy(() => import('@/components/admin/StoreMonitori
 const StoreNowPlayingPanel = lazy(() => import('@/components/admin/StoreNowPlayingPanel'));
 const PolicyDeploymentPanel = lazy(() => import('@/components/admin/PolicyDeploymentPanel'));
 const PolicyAutomationPanel = lazy(() => import('@/components/admin/PolicyAutomationPanel'));
+const EnterpriseAnnouncementsPanel = lazy(() => import('@/components/admin/EnterpriseAnnouncementsPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -114,6 +115,7 @@ type Tab =
   | 'store-now-playing'
   | 'policy-deployment'
   | 'policy-automation'
+  | 'enterprise-announcements'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -168,6 +170,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'store-now-playing', label: '실시간 재생', icon: <Music size={14} /> },
   { key: 'policy-deployment', label: '음악 배포 현황', icon: <ShieldCheck size={14} /> },
   { key: 'policy-automation', label: '자동 음악 스케줄', icon: <ShieldCheck size={14} /> },
+  { key: 'enterprise-announcements', label: '안내/광고 음원', icon: <Music size={14} /> },
   { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
   { key: 'sales-agents', label: '영업인 관리', icon: <Handshake size={14} /> },
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
@@ -215,7 +218,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -425,6 +428,7 @@ export default function AdminPage() {
               onRequestFranchisePolicyNav={() => requestFranchisePolicyNav('policy-automation')}
             />
           )}
+          {tab === 'enterprise-announcements' && <EnterpriseAnnouncementsPanel />}
           {tab === 'franchise' && (
             <FranchiseManagementPanel
               initialDetailTab={pendingFranchiseDeepLink ?? undefined}

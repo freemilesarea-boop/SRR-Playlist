@@ -19,6 +19,7 @@ import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 // Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
 // StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
 import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
+import AnnouncementOverlay from '@/components/store/AnnouncementOverlay';
 
 /**
  * 매장 재생 모드(키오스크) — 전역 <Player> 의 오디오 엔진/큐를 그대로 사용하는 풀스크린 UI.
@@ -233,6 +234,9 @@ export default function StorePlayerPage() {
           <InstallAppButton variant="ghost" label="매장용 앱 설치" />
         </div>
       </footer>
+
+      {/* Priority 5 — 광고/안내 음원 오버레이 (BGM 사이 삽입). Player 로직 무수정. */}
+      <AnnouncementOverlay storeId={storeId} />
     </div>
   );
 }
