@@ -212,7 +212,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
