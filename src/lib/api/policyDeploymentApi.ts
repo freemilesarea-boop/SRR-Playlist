@@ -147,6 +147,9 @@ export interface PolicyDeploymentRecomputeResult {
 // Deployable policies (모달 dropdown 공급)
 // =============================================================================
 
+export type DeployablePlaylistSourceType =
+  | 'manual' | 'curated' | 'auto' | 'business' | 'user' | 'legacy';
+
 export interface DeployablePolicy {
   policy_id: string;
   policy_name: string;
@@ -162,6 +165,64 @@ export interface DeployablePolicy {
   latest_version_number: number;
   target_store_count: number;
   active_store_count: number;
+  /** 0379 — wrap 된 원본 playlist */
+  source_playlist_id?: string | null;
+  source_playlist_title?: string | null;
+  source_type?: DeployablePlaylistSourceType | null;
+  track_count_snapshot?: number;
+}
+
+// =============================================================================
+// 0379 — Available playlists for deployment (Pool)
+// =============================================================================
+
+export interface AvailablePlaylistForDeployment {
+  playlist_id: string;
+  playlist_title: string;
+  description: string | null;
+  category: string | null;
+  business_category: string | null;
+  is_business_only: boolean;
+  is_auto: boolean;
+  time_slot: string | null;
+  thumbnail_url: string | null;
+  created_at: string;
+  created_by_user_id: string | null;
+  source_type: 'manual' | 'curated' | 'auto' | 'business';
+  track_count: number;
+  deployable_count: number;
+  curator_name: string | null;
+}
+
+export interface AvailablePlaylistsForDeploymentParams {
+  search?: string | null;
+  sourceType?: 'manual' | 'curated' | 'auto' | 'business' | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AvailablePlaylistsForDeploymentResponse {
+  success: boolean;
+  data: AvailablePlaylistForDeployment[];
+  pagination: { total: number; limit: number; offset: number; has_more: boolean };
+  computed_at: string;
+}
+
+export interface CreatePolicyFromPlaylistInput {
+  playlistId: string;
+  franchiseId: string;
+  name?: string | null;
+  description?: string | null;
+  status?: 'draft' | 'active' | 'archived';
+  isDefault?: boolean;
+}
+
+export interface CreatePolicyFromPlaylistResult {
+  success: boolean;
+  policy_id: string;
+  slot_id: string;
+  source_type: 'manual' | 'curated' | 'auto' | 'business';
+  track_count: number;
 }
 
 export interface DeployablePolicyListParams {
@@ -417,4 +478,36 @@ export async function requestPolicyRetry(
     success: boolean; deployment_id: string; store_id: string;
     retried_count: number; previous_status: string;
   };
+}
+
+// =============================================================================
+// 0379 — Playlist pool → Deployable policy 등록
+// =============================================================================
+
+export async function listAvailablePlaylistsForDeployment(
+  params: AvailablePlaylistsForDeploymentParams = {},
+): Promise<AvailablePlaylistsForDeploymentResponse> {
+  const { data, error } = await supabase.rpc('admin_list_available_playlists_for_deployment', {
+    p_search:      params.search ?? null,
+    p_source_type: params.sourceType ?? null,
+    p_limit:       params.limit ?? 50,
+    p_offset:      params.offset ?? 0,
+  });
+  if (error) { console.error('[policyDeploymentApi] available playlists failed', error); throw error; }
+  return data as AvailablePlaylistsForDeploymentResponse;
+}
+
+export async function createFranchiseMusicPolicyFromPlaylist(
+  input: CreatePolicyFromPlaylistInput,
+): Promise<CreatePolicyFromPlaylistResult> {
+  const { data, error } = await supabase.rpc('admin_create_franchise_music_policy_from_playlist', {
+    p_playlist_id:  input.playlistId,
+    p_franchise_id: input.franchiseId,
+    p_name:         input.name ?? null,
+    p_description:  input.description ?? null,
+    p_status:       input.status ?? 'active',
+    p_is_default:   input.isDefault ?? false,
+  });
+  if (error) { console.error('[policyDeploymentApi] create-from-playlist failed', error); throw error; }
+  return data as CreatePolicyFromPlaylistResult;
 }
