@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
+// 빌드 시점 BUILD_ID — main.tsx 의 SW_RELOAD_KEY + src/sw.ts 의 __SW_BUILD_ID__ 가 공유.
+// 같은 빌드 안에서 한 번 평가되어 양쪽 모두 같은 값을 가짐.
+const BUILD_ID = Date.now().toString(36);
+
 export default defineConfig({
   plugins: [
     react(),
@@ -102,5 +106,10 @@ export default defineConfig({
   // console.warn/error 는 의도적 표시 가능성 있어 유지 (Sentry capture 와 함께 운영자 가시화).
   esbuild: {
     pure: process.env.NODE_ENV === 'production' ? ['console.log', 'console.debug', 'console.info'] : [],
+  },
+  // SW reload 식별자 — main.tsx (import.meta.env.VITE_BUILD_ID) 와 src/sw.ts (__SW_BUILD_ID__) 공유
+  define: {
+    'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID),
+    __SW_BUILD_ID__: JSON.stringify(BUILD_ID),
   },
 });

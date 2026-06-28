@@ -18,17 +18,28 @@ clientsClaim();
 
 precacheAndRoute(self.__WB_MANIFEST);
 
-// 오래된 캐시 정리 (workbox 가 자동 처리는 하지만 명시)
+// 빌드 시점 inject — main.tsx 의 SW_RELOAD_KEY 와 일치하는 BUILD_ID.
+// import.meta.env 는 SW 컨텍스트에서도 vite define 으로 inject 됨.
+declare const __SW_BUILD_ID__: string | undefined;
+
+// 오래된 캐시 정리 + 모든 window client 에 활성화 알림 (옛 chunk stuck 우회).
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k.startsWith('workbox-') && !k.includes(self.registration.scope))
-          .map((k) => caches.delete(k)),
-      ),
-    ),
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((k) => k.startsWith('workbox-') && !k.includes(self.registration.scope))
+        .map((k) => caches.delete(k)),
+    );
+    // clientsClaim 은 위 module-level 호출로 이미 처리됐지만, activate 사이클 보장 위해 한 번 더.
+    await self.clients.claim();
+    // 새 SW activate 직후 모든 열린 탭에 통지 — main.tsx 가 받아서 1회 reload (탭 내 옛 chunk 우회)
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const buildId = typeof __SW_BUILD_ID__ === 'string' ? __SW_BUILD_ID__ : Date.now().toString(36);
+    for (const c of windows) {
+      c.postMessage({ type: 'SW_ACTIVATED', buildId });
+    }
+  })());
 });
 
 interface PushPayload {
