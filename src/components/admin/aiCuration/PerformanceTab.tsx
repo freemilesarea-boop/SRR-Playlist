@@ -52,7 +52,7 @@ export default function PerformanceTab() {
             <button key={d} onClick={() => setDays(d)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${days === d ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'}`}>최근 {d}일</button>
           ))}
         </div>
-        <button onClick={() => void register()} disabled={busy} className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2.5 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/25 disabled:opacity-50">검토 후보 자동 등록</button>
+        <button onClick={() => void register()} disabled={busy} className="inline-flex items-center gap-1 rounded-lg bg-amber-500/25 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/25 disabled:opacity-50">검토 후보 자동 등록</button>
         <button onClick={() => void load()} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
       </div>
 
@@ -89,7 +89,7 @@ export default function PerformanceTab() {
                   <tr key={`${r.track_id}:${r.playlist_id}`} className="border-t border-line/10">
                     <td className="py-1 pr-2"><div className="max-w-[200px] truncate font-semibold">{r.title ?? '(제목없음)'}</div><div className="max-w-[200px] truncate text-ink-dim">{r.artist ?? ''} · {r.playlist_title ?? '-'}</div></td>
                     <td className="tabular-nums">{r.play_count}</td>
-                    <td className={`tabular-nums ${r.skip_rate >= 40 ? 'font-bold text-rose-600' : ''}`}>{r.skip_rate}%</td>
+                    <td className={`tabular-nums ${r.skip_rate >= 40 ? 'font-bold text-rose-300' : ''}`}>{r.skip_rate}%</td>
                     <td className="tabular-nums">{r.completion_rate}%</td>
                     <td className="tabular-nums">{r.like_count}</td>
                     <td className="tabular-nums">{r.error_count}</td>
@@ -120,7 +120,7 @@ export default function PerformanceTab() {
                     <td className="tabular-nums">{r.total_plays}</td>
                     <td className="tabular-nums">{r.total_skips}</td>
                     <td className="tabular-nums">{r.total_completes}</td>
-                    <td className={`tabular-nums ${r.avg_skip_rate >= 40 ? 'font-bold text-rose-600' : ''}`}>{r.avg_skip_rate}%</td>
+                    <td className={`tabular-nums ${r.avg_skip_rate >= 40 ? 'font-bold text-rose-300' : ''}`}>{r.avg_skip_rate}%</td>
                     <td className="tabular-nums">{r.avg_completion_rate}%</td>
                     <td className="tabular-nums">{r.review_needed_count}</td>
                   </tr>

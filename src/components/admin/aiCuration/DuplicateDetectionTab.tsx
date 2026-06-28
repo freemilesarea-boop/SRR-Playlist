@@ -201,9 +201,9 @@ export default function DuplicateDetectionTab() {
         </div>
         {fpSummary ? (
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
-            <div className="rounded bg-emerald-500/10 p-2"><div className="text-[10px] text-ink-dim">성공</div><div className="text-lg font-bold text-emerald-500">{fpSummary.total_success}</div></div>
-            <div className="rounded bg-rose-500/10 p-2"><div className="text-[10px] text-ink-dim">실패 (총)</div><div className="text-lg font-bold text-rose-500">{fpSummary.total_failed}</div></div>
-            <div className="rounded bg-amber-500/10 p-2"><div className="text-[10px] text-ink-dim">재시도 가능</div><div className="text-lg font-bold text-amber-500">{fpSummary.total_retryable}</div></div>
+            <div className="rounded bg-emerald-500/25 p-2"><div className="text-[10px] text-ink-dim">성공</div><div className="text-lg font-bold text-emerald-300">{fpSummary.total_success}</div></div>
+            <div className="rounded bg-rose-500/25 p-2"><div className="text-[10px] text-ink-dim">실패 (총)</div><div className="text-lg font-bold text-rose-300">{fpSummary.total_failed}</div></div>
+            <div className="rounded bg-amber-500/25 p-2"><div className="text-[10px] text-ink-dim">재시도 가능</div><div className="text-lg font-bold text-amber-300">{fpSummary.total_retryable}</div></div>
             <div className="rounded bg-gray-500/10 p-2"><div className="text-[10px] text-ink-dim">재시도 소진</div><div className="text-lg font-bold text-gray-500">{fpSummary.total_exhausted}</div></div>
             <div className="rounded bg-blue-500/10 p-2"><div className="text-[10px] text-ink-dim">미시도</div><div className="text-lg font-bold text-blue-500">{fpSummary.pending_never_attempted}</div></div>
           </div>
@@ -219,7 +219,7 @@ export default function DuplicateDetectionTab() {
                 .slice(0, 20)
                 .map(([sig, cnt]) => (
                   <li key={sig} className="flex items-start gap-2 text-[11px]">
-                    <span className="shrink-0 rounded bg-rose-500/15 px-1.5 font-bold text-rose-500">{cnt}</span>
+                    <span className="shrink-0 rounded bg-rose-500/25 px-1.5 font-bold text-rose-300">{cnt}</span>
                     <code className="break-all text-ink-mute">{sig}</code>
                   </li>
                 ))}
@@ -260,13 +260,13 @@ export default function DuplicateDetectionTab() {
                           <div className="text-[10px] text-ink-dim/70">{f.track_id.slice(0, 8)}…</div>
                         </td>
                         <td className="px-2 py-1.5 text-center">
-                          <span className={`rounded px-1.5 font-bold ${f.retry_count >= 3 ? 'bg-gray-500/20 text-gray-500' : 'bg-amber-500/15 text-amber-500'}`}>{f.retry_count}</span>
+                          <span className={`rounded px-1.5 font-bold ${f.retry_count >= 3 ? 'bg-gray-500/20 text-gray-500' : 'bg-amber-500/25 text-amber-300'}`}>{f.retry_count}</span>
                         </td>
                         <td className="px-2 py-1.5 text-ink-mute">{fmtBytes(f.download_size_bytes)}</td>
                         <td className="px-2 py-1.5 text-ink-mute">{f.download_content_type ?? '—'}</td>
                         <td className="px-2 py-1.5">
                           <details>
-                            <summary className="cursor-pointer text-rose-500">{(f.error ?? '').slice(0, 60)}{(f.error ?? '').length > 60 ? '…' : ''}</summary>
+                            <summary className="cursor-pointer text-rose-300">{(f.error ?? '').slice(0, 60)}{(f.error ?? '').length > 60 ? '…' : ''}</summary>
                             <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-[10px] text-ink-mute">{f.error}</pre>
                           </details>
                         </td>
@@ -356,7 +356,7 @@ export default function DuplicateDetectionTab() {
                           <td className="px-2 py-1.5">
                             {c.has_qc_report ? (
                               <>
-                                <div className={`font-bold ${c.qc_risk_level === 'CRITICAL' ? 'text-rose-500' : c.qc_risk_level === 'HIGH' ? 'text-amber-500' : 'text-ink-mute'}`}>{c.qc_risk_level ?? '—'}</div>
+                                <div className={`font-bold ${c.qc_risk_level === 'CRITICAL' ? 'text-rose-300' : c.qc_risk_level === 'HIGH' ? 'text-amber-300' : 'text-ink-mute'}`}>{c.qc_risk_level ?? '—'}</div>
                                 <div className="text-[10px] text-ink-dim">score {c.qc_score ?? '—'} · issues {c.qc_issues_count}</div>
                               </>
                             ) : <span className="text-ink-dim">없음</span>}
@@ -370,24 +370,24 @@ export default function DuplicateDetectionTab() {
                               </button>
                             ) : probe.playable ? (
                               <div>
-                                <span className="rounded bg-emerald-500/20 px-1.5 font-bold text-emerald-500">PLAYABLE</span>
+                                <span className="rounded bg-emerald-500/20 px-1.5 font-bold text-emerald-300">PLAYABLE</span>
                                 <div className="text-[10px] text-ink-dim">
                                   dur {probe.duration?.toFixed(1)}s
-                                  {durMismatch && <span className="ml-1 font-bold text-amber-500">≠ tracks.duration</span>}
+                                  {durMismatch && <span className="ml-1 font-bold text-amber-300">≠ tracks.duration</span>}
                                 </div>
                                 <div className="text-[10px] text-ink-dim/70">{probe.ms}ms</div>
                               </div>
                             ) : (
                               <div>
-                                <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-500">UNPLAYABLE</span>
-                                <div className="text-[10px] text-rose-400/80">{probe.error}</div>
+                                <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-300">UNPLAYABLE</span>
+                                <div className="text-[10px] text-rose-300/80">{probe.error}</div>
                               </div>
                             )}
                           </td>
                           <td className="px-2 py-1.5">
                             <div className="flex flex-col gap-1">
                               <button disabled={corrBusy} onClick={() => void markQcRisk(c.track_id)}
-                                className="rounded bg-rose-500/15 px-2 py-0.5 font-semibold text-rose-500 disabled:opacity-50">
+                                className="rounded bg-rose-500/25 px-2 py-0.5 font-semibold text-rose-300 disabled:opacity-50">
                                 QC 위험 큐로 마크
                               </button>
                               <button disabled={corrBusy} onClick={() => void resetFailure(c.track_id)}
@@ -475,7 +475,7 @@ export default function DuplicateDetectionTab() {
             <tbody>
               {rows.map((r) => {
                 const key = `${r.source_track_id}::${r.candidate_track_id}`;
-                const sevColor = r.similarity >= 0.95 ? 'text-rose-500' : r.similarity >= 0.90 ? 'text-amber-500' : 'text-emerald-500';
+                const sevColor = r.similarity >= 0.95 ? 'text-rose-300' : r.similarity >= 0.90 ? 'text-amber-300' : 'text-emerald-300';
                 return (
                   <Fragment key={key}>
                     <tr className="border-b border-line/10">
@@ -492,7 +492,7 @@ export default function DuplicateDetectionTab() {
                       </td>
                       <td className="px-2 py-2 text-ink-mute">{r.duration_delta != null ? `${r.duration_delta.toFixed(2)}s` : '—'}</td>
                       <td className="px-2 py-2">
-                        {r.hash_exact ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-bold text-rose-600">EXACT</span> : <span className="text-ink-dim">approx</span>}
+                        {r.hash_exact ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-bold text-rose-300">EXACT</span> : <span className="text-ink-dim">approx</span>}
                       </td>
                       <td className="px-2 py-2">
                         <button onClick={() => setOpenCompareKey(openCompareKey === key ? null : key)}

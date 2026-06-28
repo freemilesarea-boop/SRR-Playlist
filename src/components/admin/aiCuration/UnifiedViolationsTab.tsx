@@ -45,7 +45,7 @@ export default function UnifiedViolationsTab() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''}</span></span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.severity === 'high' ? 'bg-rose-500/15 text-rose-600' : r.severity === 'medium' ? 'bg-amber-500/15 text-amber-600' : 'bg-ink/10 text-ink-mute'}`}>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.severity === 'high' ? 'bg-rose-500/25 text-rose-300' : r.severity === 'medium' ? 'bg-amber-500/25 text-amber-300' : 'bg-ink/10 text-ink-mute'}`}>
                     {VIOLATION_LABELS[r.violation_type] ?? r.violation_type}
                   </span>
                   <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-dim">{r.source === 'skip' ? '스킵' : 'AI'}</span>

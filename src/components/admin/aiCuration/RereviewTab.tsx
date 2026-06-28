@@ -167,9 +167,9 @@ export default function RereviewTab() {
         <label className="flex items-center gap-1 text-ink-mute"><input type="checkbox" checked={autoResolve} onChange={(e) => setAutoResolve(e.target.checked)} className="h-3 w-3 accent-accent" /> 충돌 해소 시 자동 resolve</label>
         <span className="mx-1 h-3 w-px bg-line" />
         <button disabled={busy || selected.size === 0} onClick={() => void bulkApplyMeta()} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
-        <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">충돌 매장 태그 제거</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">충돌 매장 태그 제거</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
-        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">문제 없음</button>
       </div>
 
       {rows.length === 0 ? (
@@ -184,13 +184,13 @@ export default function RereviewTab() {
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <b className="truncate">{r.title ?? '(제목없음)'}</b>
                     <span className="text-ink-dim">{r.artist ?? ''} · {r.release_status}</span>
-                    {r.trust_score < 50 && <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">trust {r.trust_score}</span>}
+                    {r.trust_score < 50 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">trust {r.trust_score}</span>}
                     {r.needs_fix && <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">수정요청</span>}
                     {r.disposition && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-mute">{r.disposition}</span>}
                   </div>
-                  <p className="mt-1 text-[11px] font-medium text-amber-600">{r.problem_summary}</p>
+                  <p className="mt-1 text-[11px] font-medium text-amber-300">{r.problem_summary}</p>
                   <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                    {(r.open_flags ?? []).map((f) => <span key={f} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-600">{f}</span>)}
+                    {(r.open_flags ?? []).map((f) => <span key={f} className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">{f}</span>)}
                   </div>
                   {r.audio_url && <audio src={r.audio_url} controls preload="none" className="mt-2 h-8 w-full" />}
                 </div>
@@ -199,7 +199,7 @@ export default function RereviewTab() {
 
               <div className="mt-2 grid grid-cols-1 gap-1.5 text-[10px] sm:grid-cols-2">
                 <div><span className="text-ink-dim">등록 매장: </span>{(r.declared_stores ?? []).length ? (r.declared_stores ?? []).map((s) => <span key={s} className="mr-1 rounded bg-bg-soft px-1.5 py-0.5">{storeLabel(s)}</span>) : <span className="text-ink-dim">없음</span>}</div>
-                <div><span className="text-ink-dim">차단 매장: </span>{(r.blocked_stores ?? []).length ? (r.blocked_stores ?? []).map((s) => <span key={s} className={`mr-1 rounded px-1.5 py-0.5 ${(r.blocked_declared_stores ?? []).includes(s) ? 'bg-rose-500/15 font-semibold text-rose-600' : 'bg-bg-soft text-ink-mute'}`}>{storeLabel(s)}</span>) : <span className="text-ink-dim">없음</span>}</div>
+                <div><span className="text-ink-dim">차단 매장: </span>{(r.blocked_stores ?? []).length ? (r.blocked_stores ?? []).map((s) => <span key={s} className={`mr-1 rounded px-1.5 py-0.5 ${(r.blocked_declared_stores ?? []).includes(s) ? 'bg-rose-500/25 font-semibold text-rose-300' : 'bg-bg-soft text-ink-mute'}`}>{storeLabel(s)}</span>) : <span className="text-ink-dim">없음</span>}</div>
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
@@ -207,12 +207,12 @@ export default function RereviewTab() {
                 <button disabled={busy} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정/승인</button>
                 {(r.blocked_declared_stores ?? []).map((sk) => (
                   <span key={sk} className="inline-flex items-center gap-0.5">
-                    <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
-                    <button disabled={busy} onClick={() => void act([r.track_id], 'exclude_store', sk)} className="rounded bg-rose-500/15 px-2 py-1 font-semibold text-rose-600 disabled:opacity-40">{storeLabel(sk)} 제외</button>
+                    <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
+                    <button disabled={busy} onClick={() => void act([r.track_id], 'exclude_store', sk)} className="rounded bg-rose-500/25 px-2 py-1 font-semibold text-rose-300 disabled:opacity-40">{storeLabel(sk)} 제외</button>
                   </span>
                 ))}
                 <button disabled={busy} onClick={() => void act([r.track_id], 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
-                <button disabled={busy} onClick={() => void act([r.track_id], 'no_problem')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">문제 없음</button>
+                <button disabled={busy} onClick={() => void act([r.track_id], 'no_problem')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">문제 없음</button>
               </div>
 
               {results[r.track_id] && <RecomputeDiffPanel res={results[r.track_id]} onClose={() => setResults((p) => { const n = { ...p }; delete n[r.track_id]; return n; })} />}
@@ -247,7 +247,7 @@ export default function RereviewTab() {
                           <p className="mb-1 font-bold text-ink-mute">매장별 금지규칙</p>
                           <div className="flex flex-wrap gap-1">
                             {detail.guardrails.map((g) => (
-                              <span key={g.store_key} className={`rounded px-1.5 py-0.5 ${g.is_declared && g.severity === 'hard_block' ? 'bg-rose-500/15 font-semibold text-rose-600' : g.severity === 'hard_block' ? 'bg-amber-500/10 text-amber-600' : 'bg-bg-card text-ink-mute'}`} title={(g.rules ?? []).join(', ')}>{g.store_label}{g.is_declared ? '✓' : ''} · {g.severity}</span>
+                              <span key={g.store_key} className={`rounded px-1.5 py-0.5 ${g.is_declared && g.severity === 'hard_block' ? 'bg-rose-500/25 font-semibold text-rose-300' : g.severity === 'hard_block' ? 'bg-amber-500/25 text-amber-300' : 'bg-bg-card text-ink-mute'}`} title={(g.rules ?? []).join(', ')}>{g.store_label}{g.is_declared ? '✓' : ''} · {g.severity}</span>
                             ))}
                           </div>
                           <p className="mt-1 text-ink-dim">✓ = 등록자가 선언한 매장 · 빨강 = 선언 매장에서 hard_block(검수 필요)</p>
@@ -271,7 +271,7 @@ export default function RereviewTab() {
 }
 
 function RecomputeDiffPanel({ res, onClose }: { res: RecomputeResult; onClose: () => void }) {
-  const arrow = (d: number) => d > 0 ? <span className="text-emerald-600">▲ +{d}</span> : d < 0 ? <span className="text-rose-600">▼ {d}</span> : <span className="text-ink-dim">―</span>;
+  const arrow = (d: number) => d > 0 ? <span className="text-emerald-300">▲ +{d}</span> : d < 0 ? <span className="text-rose-300">▼ {d}</span> : <span className="text-ink-dim">―</span>;
   const changed = res.fit_diff.filter((d) => d.delta !== 0);
   return (
     <div className="mt-3 rounded-lg border border-accent/30 bg-accent/5 p-3 text-[10px]">
@@ -279,22 +279,22 @@ function RecomputeDiffPanel({ res, onClose }: { res: RecomputeResult; onClose: (
         <span className="text-xs font-bold text-accent">AI 메타 적용 후 재평가 결과</span>
         <button onClick={onClose} className="rounded bg-bg-card px-2 py-0.5 text-[10px] text-ink-mute hover:bg-bg-hover">닫기</button>
       </div>
-      {res.warning && <p className="mb-2 rounded bg-rose-500/10 px-2 py-1 font-semibold text-rose-600">⚠ {res.warning}</p>}
+      {res.warning && <p className="mb-2 rounded bg-rose-500/25 px-2 py-1 font-semibold text-rose-300">⚠ {res.warning}</p>}
       <div className="mb-2 flex flex-wrap gap-3">
-        <span>위험도: <b>{res.risk_before}</b> → <b className={res.risk_reduced ? 'text-emerald-600' : ''}>{res.risk_after}</b>{res.risk_reduced && ' ✓감소'}</span>
-        <span>불일치: <b>{res.mismatch_before}</b> → <b className={res.mismatch_reduced ? 'text-emerald-600' : ''}>{res.mismatch_after}</b>{res.mismatch_reduced && ' ✓감소'}</span>
+        <span>위험도: <b>{res.risk_before}</b> → <b className={res.risk_reduced ? 'text-emerald-300' : ''}>{res.risk_after}</b>{res.risk_reduced && ' ✓감소'}</span>
+        <span>불일치: <b>{res.mismatch_before}</b> → <b className={res.mismatch_reduced ? 'text-emerald-300' : ''}>{res.mismatch_after}</b>{res.mismatch_reduced && ' ✓감소'}</span>
       </div>
       {res.top_gains.length > 0 && (
         <div className="mb-2">
           <p className="mb-1 font-bold text-ink-mute">추천 상승 매장 TOP5</p>
           <div className="flex flex-wrap gap-1">
-            {res.top_gains.map((g) => <span key={g.store_key} className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600">{g.store_label} {g.before ?? 0}→{g.after ?? 0} (+{g.delta})</span>)}
+            {res.top_gains.map((g) => <span key={g.store_key} className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-emerald-300">{g.store_label} {g.before ?? 0}→{g.after ?? 0} (+{g.delta})</span>)}
           </div>
         </div>
       )}
       {res.unblocked_stores.length > 0 && <p className="mb-1">차단 해제: {res.unblocked_stores.map(storeLabel).join(', ')}</p>}
-      {res.newly_blocked_stores.length > 0 && <p className="mb-1 text-rose-600">신규 차단: {res.newly_blocked_stores.map(storeLabel).join(', ')}</p>}
-      {res.removed_conflicts.length > 0 && <p className="mb-1 text-emerald-600">충돌 해소: {res.removed_conflicts.map(storeLabel).join(', ')}</p>}
+      {res.newly_blocked_stores.length > 0 && <p className="mb-1 text-rose-300">신규 차단: {res.newly_blocked_stores.map(storeLabel).join(', ')}</p>}
+      {res.removed_conflicts.length > 0 && <p className="mb-1 text-emerald-300">충돌 해소: {res.removed_conflicts.map(storeLabel).join(', ')}</p>}
       {changed.length > 0 && (
         <details className="mt-1">
           <summary className="cursor-pointer text-ink-dim">매장별 fit 변화 ({changed.length})</summary>

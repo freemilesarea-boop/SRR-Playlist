@@ -40,10 +40,10 @@ const FEATURE_DISPLAY: { key: string; label: string; format?: (n: number) => str
 
 function decisionLabel(type: string): { label: string; tone: string } {
   switch (type) {
-    case 'approve': return { label: '통과', tone: 'bg-emerald-500/15 text-emerald-600' };
-    case 'remove': return { label: '탈락', tone: 'bg-rose-500/15 text-rose-600' };
-    case 'exclude_store': return { label: '매장 제외', tone: 'bg-amber-500/15 text-amber-700' };
-    case 'rereview': return { label: '재검수', tone: 'bg-sky-500/15 text-sky-600' };
+    case 'approve': return { label: '통과', tone: 'bg-emerald-500/25 text-emerald-300' };
+    case 'remove': return { label: '탈락', tone: 'bg-rose-500/25 text-rose-300' };
+    case 'exclude_store': return { label: '매장 제외', tone: 'bg-amber-500/25 text-amber-200' };
+    case 'rereview': return { label: '재검수', tone: 'bg-sky-500/25 text-sky-300' };
     default: return { label: type, tone: 'bg-ink/5 text-ink-mute' };
   }
 }
@@ -198,7 +198,7 @@ export default function AdminLearningTab() {
               <tbody>
                 {scores.map((s) => {
                   const meta = decisionLabel(s.decision_type);
-                  const color = s.similarity_pct >= 70 ? 'text-rose-500' : s.similarity_pct >= 40 ? 'text-amber-500' : 'text-emerald-500';
+                  const color = s.similarity_pct >= 70 ? 'text-rose-300' : s.similarity_pct >= 40 ? 'text-amber-300' : 'text-emerald-300';
                   return (
                     <tr key={`${s.reason_key}:${s.decision_type}:${s.store_type ?? ''}`} className="border-b border-line/10">
                       <td className={`py-1 pr-2 font-bold tabular-nums ${color}`}>{fmt(s.similarity_pct, 1)}%</td>
@@ -222,16 +222,16 @@ export default function AdminLearningTab() {
       {approved && removed.length > 0 && (
         <div className="rounded-xl bg-bg-card p-3">
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold">
-            <CheckCircle2 size={14} className="text-emerald-500" /> 통과 vs 탈락 핵심 차이
+            <CheckCircle2 size={14} className="text-emerald-300" /> 통과 vs 탈락 핵심 차이
           </h4>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px]">
               <thead className="text-[10px] uppercase text-ink-dim">
                 <tr className="border-b border-line/10">
                   <th className="py-1 pr-2">Feature</th>
-                  <th className="py-1 pr-2 text-emerald-500">통과 ({approved.sample_count}곡)</th>
+                  <th className="py-1 pr-2 text-emerald-300">통과 ({approved.sample_count}곡)</th>
                   {removed.slice(0, 3).map((r) => (
-                    <th key={r.reason_key} className="py-1 pr-2 text-rose-500">
+                    <th key={r.reason_key} className="py-1 pr-2 text-rose-300">
                       {r.reason_display} ({r.sample_count}곡)
                     </th>
                   ))}
@@ -243,12 +243,12 @@ export default function AdminLearningTab() {
                   return (
                     <tr key={feat.key} className="border-b border-line/10">
                       <td className="py-1 pr-2 font-semibold text-ink-mute">{feat.label}</td>
-                      <td className="py-1 pr-2 tabular-nums text-emerald-500">{aVal != null ? (feat.format ? feat.format(Number(aVal)) : fmt(aVal)) : '—'}</td>
+                      <td className="py-1 pr-2 tabular-nums text-emerald-300">{aVal != null ? (feat.format ? feat.format(Number(aVal)) : fmt(aVal)) : '—'}</td>
                       {removed.slice(0, 3).map((r) => {
                         const rVal = r.feature_means[feat.key];
                         const delta = aVal != null && rVal != null ? Number(rVal) - Number(aVal) : null;
                         const arrow = delta == null ? '' : delta > 0 ? ' ↑' : delta < 0 ? ' ↓' : '';
-                        const tone = delta == null || Math.abs(delta) < 0.05 ? 'text-ink-mute' : delta > 0 ? 'text-amber-500' : 'text-sky-500';
+                        const tone = delta == null || Math.abs(delta) < 0.05 ? 'text-ink-mute' : delta > 0 ? 'text-amber-300' : 'text-sky-300';
                         return (
                           <td key={r.reason_key} className={`py-1 pr-2 tabular-nums ${tone}`}>
                             {rVal != null ? (feat.format ? feat.format(Number(rVal)) : fmt(rVal)) : '—'}{arrow}
@@ -270,7 +270,7 @@ export default function AdminLearningTab() {
       {/* 모든 cluster 목록 */}
       <div className="rounded-xl bg-bg-card p-3">
         <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold">
-          <XCircle size={14} className="text-rose-500" /> Cluster 전체 ({clusters.length})
+          <XCircle size={14} className="text-rose-300" /> Cluster 전체 ({clusters.length})
         </h4>
         {loading ? (
           <p className="py-4 text-center text-xs text-ink-dim">불러오는 중…</p>
@@ -333,7 +333,7 @@ export default function AdminLearningTab() {
       <div className="rounded-xl bg-bg-card p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h4 className="flex items-center gap-1.5 text-xs font-bold">
-            <Zap size={14} className="text-amber-500" /> 자동 예측 결과 (Phase 3a)
+            <Zap size={14} className="text-amber-300" /> 자동 예측 결과 (Phase 3a)
           </h4>
           <button onClick={() => void runBackfill()} disabled={backfilling}
             className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">
@@ -355,7 +355,7 @@ export default function AdminLearningTab() {
               return (
                 <div key={key} className="rounded-lg bg-bg-soft p-2.5 text-[11px]">
                   <div className="mb-1 flex items-center gap-1.5">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${key === 'remove' ? 'bg-rose-500/15 text-rose-600' : 'bg-emerald-500/15 text-emerald-600'}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${key === 'remove' ? 'bg-rose-500/25 text-rose-300' : 'bg-emerald-500/25 text-emerald-300'}`}>
                       예측: {key === 'remove' ? '탈락' : '통과'}
                     </span>
                     <b>{a.total}건</b>
@@ -363,7 +363,7 @@ export default function AdminLearningTab() {
                   </div>
                   {precision != null && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-ink-mute">
-                      <span>정확도 <b className={precision >= 60 ? 'text-emerald-600' : precision >= 40 ? 'text-amber-600' : 'text-rose-600'}>{precision}%</b></span>
+                      <span>정확도 <b className={precision >= 60 ? 'text-emerald-300' : precision >= 40 ? 'text-amber-300' : 'text-rose-300'}>{precision}%</b></span>
                       <span>맞춤 {a.correct}건 (sim {a.avg_correct_sim ?? '—'}%)</span>
                       <span>틀림 {a.wrong}건 (sim {a.avg_wrong_sim ?? '—'}%)</span>
                     </div>
@@ -410,9 +410,9 @@ export default function AdminLearningTab() {
               </thead>
               <tbody>
                 {predictions.map((p) => {
-                  const simColor = p.similarity_pct >= 75 ? 'text-rose-500' : p.similarity_pct >= 65 ? 'text-amber-500' : 'text-emerald-600';
+                  const simColor = p.similarity_pct >= 75 ? 'text-rose-300' : p.similarity_pct >= 65 ? 'text-amber-300' : 'text-emerald-300';
                   const matchBadge = p.prediction_correct === true ? '✓ 맞춤' : p.prediction_correct === false ? '✗ 틀림' : '—';
-                  const matchColor = p.prediction_correct === true ? 'text-emerald-600' : p.prediction_correct === false ? 'text-rose-500' : 'text-ink-dim';
+                  const matchColor = p.prediction_correct === true ? 'text-emerald-300' : p.prediction_correct === false ? 'text-rose-300' : 'text-ink-dim';
                   return (
                     <tr key={`${p.track_id}:${p.predicted_decision}`} className="border-b border-line/10">
                       <td className={`py-1 pr-2 font-bold tabular-nums ${simColor}`}>{fmt(p.similarity_pct, 1)}%</td>

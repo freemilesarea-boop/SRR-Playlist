@@ -741,9 +741,9 @@ function WebhookRow({
   const isRefundOrCancel =
     row.pay_state != null && [8, 9, 32, 70, 71].includes(row.pay_state);
   const rowTone = isRefundOrCancel
-    ? 'bg-red-500/5 hover:bg-rose-500/20'
+    ? 'bg-rose-500/20 hover:bg-rose-500/25'
     : row.pay_state === 64 && row.membership_updated
-      ? 'bg-emerald-500/5'
+      ? 'bg-emerald-500/20'
       : '';
   const hasSecondaries = secondaries.length > 0;
   return (

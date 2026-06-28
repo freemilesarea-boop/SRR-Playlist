@@ -107,7 +107,7 @@ export default function AdminOperationLogs() {
           </button>
           <button
             onClick={onClearOld}
-            className="inline-flex items-center gap-1 rounded-md bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20"
+            className="inline-flex items-center gap-1 rounded-md bg-rose-500/25 px-2 py-1 text-[11px] font-semibold text-rose-200 hover:bg-rose-500/35"
           >
             <Trash2 size={11} /> 30일 이전 정리
           </button>

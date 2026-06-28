@@ -68,7 +68,7 @@ export default function GuardrailDashboardTab() {
                 {dash.by_store.slice(0, 12).map((s) => (
                   <li key={s.store_key} className="flex items-center justify-between gap-2">
                     <button onClick={() => setStoreFilter(storeFilter === s.store_key ? null : s.store_key)} className={`truncate text-left ${storeFilter === s.store_key ? 'font-bold text-accent' : 'text-ink-mute'}`}>{STORE_LABELS[s.store_key] ?? s.store_key}</button>
-                    <span className="shrink-0 tabular-nums text-rose-600">{s.hard_count}</span>
+                    <span className="shrink-0 tabular-nums text-rose-300">{s.hard_count}</span>
                   </li>
                 ))}
               </ul>
@@ -85,7 +85,7 @@ export default function GuardrailDashboardTab() {
                 {dash.uploaders.slice(0, 12).map((u) => (
                   <li key={u.user_id} className="flex items-center justify-between gap-2">
                     <span className="truncate text-ink-mute">{u.artist_name ?? u.user_id.slice(0, 8)}</span>
-                    <span className="shrink-0 tabular-nums">위반 {u.hard_tracks}/{u.total_tracks} · trust <b className={`${(u.metadata_trust_score ?? 100) < 60 ? 'text-rose-600' : (u.metadata_trust_score ?? 100) < 85 ? 'text-amber-600' : 'text-emerald-600'}`}>{u.metadata_trust_score ?? '-'}</b></span>
+                    <span className="shrink-0 tabular-nums">위반 {u.hard_tracks}/{u.total_tracks} · trust <b className={`${(u.metadata_trust_score ?? 100) < 60 ? 'text-rose-300' : (u.metadata_trust_score ?? 100) < 85 ? 'text-amber-300' : 'text-emerald-300'}`}>{u.metadata_trust_score ?? '-'}</b></span>
                   </li>
                 ))}
               </ul>
@@ -99,8 +99,8 @@ export default function GuardrailDashboardTab() {
           <h3 className="text-xs font-bold">위반 곡 {storeFilter ? `· ${STORE_LABELS[storeFilter] ?? storeFilter}` : '(hard_block 전체)'} ({tracks.length})</h3>
           {storeFilter && <button onClick={() => setStoreFilter(null)} className="rounded bg-ink/5 px-2 py-0.5 text-[10px]">필터 해제</button>}
           <div className="ml-auto flex gap-1.5">
-            {storeFilter && <button onClick={() => void run(() => bulkGuardrailOverride(selIds, storeFilter, '대시보드 일괄 override'), `${selIds.length}곡 ${storeFilter} override`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 disabled:opacity-50">선택 매장 override</button>}
-            <button onClick={() => void run(() => bulkGuardrailClear(selIds, '문제 없음 일괄'), `${selIds.length}곡 문제 없음`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 disabled:opacity-50">문제 없음(전체 override)</button>
+            {storeFilter && <button onClick={() => void run(() => bulkGuardrailOverride(selIds, storeFilter, '대시보드 일괄 override'), `${selIds.length}곡 ${storeFilter} override`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-rose-500/25 px-2.5 py-1.5 text-xs font-semibold text-rose-300 disabled:opacity-50">선택 매장 override</button>}
+            <button onClick={() => void run(() => bulkGuardrailClear(selIds, '문제 없음 일괄'), `${selIds.length}곡 문제 없음`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 disabled:opacity-50">문제 없음(전체 override)</button>
             <button onClick={() => void run(() => bulkApplyAiMetadata(selIds), `${selIds.length}곡 메타 재설정`)} disabled={busy || selIds.length === 0} className="rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent disabled:opacity-50">메타 재설정</button>
           </div>
         </div>
@@ -112,7 +112,7 @@ export default function GuardrailDashboardTab() {
               <li key={t.track_id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] hover:bg-ink/5">
                 <input type="checkbox" checked={!!sel[t.track_id]} onChange={() => setSel((s) => ({ ...s, [t.track_id]: !s[t.track_id] }))} />
                 <span className="min-w-0 flex-1 truncate"><b>{t.title ?? '(제목없음)'}</b> · <span className="text-ink-dim">{t.artist ?? ''}</span> · {t.main_genre ?? '-'}</span>
-                <span className="shrink-0 text-rose-600">차단 {t.hard_stores}</span>
+                <span className="shrink-0 text-rose-300">차단 {t.hard_stores}</span>
                 <span className="hidden shrink-0 truncate text-[10px] text-ink-dim sm:block" title={(t.blocked_stores ?? []).join(', ')}>{(t.blocked_stores ?? []).slice(0, 4).map((s) => STORE_LABELS[s] ?? s).join(',')}</span>
                 <button onClick={() => setMetaModal({ track_id: t.track_id, title: t.title })} className="shrink-0 rounded bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">메타 수정</button>
               </li>

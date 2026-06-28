@@ -414,7 +414,7 @@ export default function WeightTuningTab() {
           const segLabel = (!segStore && !segDp) ? '전체 (global)'
             : `${segStore ?? '*'}${segDp ? ' / ' + segDp : ''}`;
           return (
-          <div key={r.id} className="mb-2 rounded-xl bg-amber-500/5 p-3 ring-1 ring-amber-400/20">
+          <div key={r.id} className="mb-2 rounded-xl bg-amber-500/5 p-3 ring-1 ring-amber-400/50">
             <div className="mb-2 flex items-baseline justify-between gap-2">
               <span className="text-xs font-bold text-ink">
                 대기 · <span className="text-accent">{segLabel}</span>

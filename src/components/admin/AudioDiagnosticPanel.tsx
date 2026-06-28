@@ -114,7 +114,7 @@ export default function AudioDiagnosticPanel() {
         ) : <p className="text-ink-mute">확인 중…</p>}
         <button
           onClick={() => { void resetServiceWorkerAndCaches(); }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
         >
           캐시/SW 초기화 후 새로고침
         </button>

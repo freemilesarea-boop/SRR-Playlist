@@ -72,17 +72,17 @@ export default function EmbeddingReviewTab() {
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => {
-            const badge = r.embedding_status === 'done' ? 'bg-emerald-500/15 text-emerald-600'
-              : r.embedding_status === 'failed' ? 'bg-rose-500/15 text-rose-600'
+            const badge = r.embedding_status === 'done' ? 'bg-emerald-500/25 text-emerald-300'
+              : r.embedding_status === 'failed' ? 'bg-rose-500/25 text-rose-300'
               : 'bg-ink/10 text-ink-mute';
             return (
               <li key={r.track_id} className="rounded-xl bg-bg-card ring-1 ring-line/10">
                 <button onClick={() => void toggle(r.track_id)} className="flex w-full items-center justify-between gap-2 p-3 text-left">
                   <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''}</span></span>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    {r.disagreement_score != null && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.disagreement_score >= 50 ? 'bg-rose-500/15 text-rose-600' : 'bg-ink/5 text-ink-dim'}`}>불일치 {r.disagreement_score}</span>}
+                    {r.disagreement_score != null && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.disagreement_score >= 50 ? 'bg-rose-500/25 text-rose-300' : 'bg-ink/5 text-ink-dim'}`}>불일치 {r.disagreement_score}</span>}
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${badge}`}>{r.embedding_status}</span>
-                    {r.review_status && r.review_status !== 'pending' && <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-600">{r.review_status}</span>}
+                    {r.review_status && r.review_status !== 'pending' && <span className="rounded bg-sky-500/25 px-1.5 py-0.5 text-[10px] text-sky-300">{r.review_status}</span>}
                   </span>
                 </button>
 
@@ -95,7 +95,7 @@ export default function EmbeddingReviewTab() {
                     ) : (
                       <div className="space-y-3">
                         {cmp.suspected_issues.length > 0 && (
-                          <div className="rounded-lg bg-amber-500/10 p-2 text-[11px] text-amber-700 ring-1 ring-amber-400/20">
+                          <div className="rounded-lg bg-amber-500/25 p-2 text-[11px] text-amber-200 ring-1 ring-amber-400/50">
                             ⚠ {cmp.suspected_issues.map((i) => ISSUE_LABELS[i] ?? i).join(' · ')}
                             {cmp.suspected_issues.includes('gym_false_positive') && <p className="mt-0.5">휴리스틱은 헬스장으로 보지만, 임베딩은 라운지/카페 계열에 더 가깝습니다.</p>}
                           </div>
@@ -130,9 +130,9 @@ export default function EmbeddingReviewTab() {
                           <button onClick={() => void act(() => applyEmbeddingToAiMetadata(r.track_id), 'embedding 결과 반영(검토용, 라이브 미연동)', r.track_id)} disabled={busy}
                             className="rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25 disabled:opacity-50">AI 판정에 반영</button>
                           <button onClick={() => void act(() => markEmbeddingReviewed(r.track_id), '문제 없음 처리', r.track_id)} disabled={busy}
-                            className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50">문제 없음</button>
+                            className="rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50">문제 없음</button>
                           <button onClick={() => void act(() => markEmbeddingReanalysisNeeded(r.track_id), '재분석 필요로 표시(다음 export 포함)', r.track_id)} disabled={busy}
-                            className="rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/20 disabled:opacity-50">재분석 필요</button>
+                            className="rounded-lg bg-amber-500/25 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-50">재분석 필요</button>
                           {cmp.embedding_top5[0] && (
                             <button onClick={() => void act(() => addStoreSeedCandidate(r.track_id, cmp.embedding_top5[0].store_key), `${cmp.embedding_top5[0].store_key} seed 후보 등록`, r.track_id)} disabled={busy}
                               className="rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">seed 후보({STORE_LABELS[cmp.embedding_top5[0].store_key] ?? cmp.embedding_top5[0].store_key})</button>
