@@ -611,7 +611,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                         </button>
                         <button
                           onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: APPROVABLE_RS.includes(r.release_status ?? '') })}
-                          className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-line/10 hover:bg-indigo-500/25"
+                          className="inline-flex items-center gap-1 rounded-md bg-indigo-500/25 px-2 py-1 text-[11px] font-semibold text-indigo-200 ring-1 ring-indigo-400/40 hover:bg-indigo-500/35"
                           title="메타 수정 + (가능 시)승인"
                         >
                           메타/승인
@@ -728,7 +728,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                 notePlaceholder="예: 아티스트 요청으로 공개 중단 / 테스트 업로드 정리"
               />
               {!reasonValid && delReason.length > 0 && (
-                <span className="text-[10px] text-red-500">사유를 5자 이상 입력해주세요.</span>
+                <span className="text-[10px] text-rose-300">사유를 5자 이상 입력해주세요.</span>
               )}
             </div>
             {selectedDeletable > 0 && (
@@ -752,7 +752,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
               <button
                 onClick={() => void runProcess()}
                 disabled={delBusy || !reasonValid}
-                className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
               >
                 {delBusy ? '처리 중…' : `${selected.size}곡 처리`}
               </button>

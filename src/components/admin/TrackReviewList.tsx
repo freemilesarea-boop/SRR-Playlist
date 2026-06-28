@@ -578,12 +578,12 @@ export default function TrackReviewList() {
 
                   {/* 0161 — AI 큐레이션 판정 연결 */}
                   {r.ai_status && r.ai_status !== 'pending' && (
-                    <div className={`rounded-md p-2 text-[11px] ${(r.mismatch_score ?? 0) >= 0.5 ? 'bg-rose-500/10 ring-1 ring-rose-500/20' : 'bg-bg-hover/40'}`}>
+                    <div className={`rounded-md p-2 text-[11px] ${(r.mismatch_score ?? 0) >= 0.5 ? 'bg-rose-500/20 ring-1 ring-rose-500/50' : 'bg-bg-hover/40'}`}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-semibold">
                           AI: 에너지 {r.ai_energy_level ?? '-'} · 무드 {(r.ai_moods ?? []).join(',') || '-'}
                           {r.mismatch_score != null && (
-                            <span className={`ml-2 ${(r.mismatch_score) >= 0.5 ? 'text-rose-600' : 'text-ink-mute'}`}>
+                            <span className={`ml-2 ${(r.mismatch_score) >= 0.5 ? 'text-rose-300' : 'text-ink-mute'}`}>
                               불일치 {Math.round(r.mismatch_score * 100)}%
                             </span>
                           )}
@@ -599,7 +599,7 @@ export default function TrackReviewList() {
                         )}
                       </div>
                       {(r.mismatch_score ?? 0) >= 0.5 && (
-                        <p className="mt-1 font-semibold text-rose-600">⚠ 등록 메타데이터와 실제 음원 특성이 크게 다릅니다. 승인 전 확인하세요.</p>
+                        <p className="mt-1 font-semibold text-rose-300">⚠ 등록 메타데이터와 실제 음원 특성이 크게 다릅니다. 승인 전 확인하세요.</p>
                       )}
                       {r.ai_explanation && <p className="mt-1 text-ink-mute">{r.ai_explanation}</p>}
                     </div>
@@ -794,7 +794,7 @@ function BulkActionModal({
             <button
               onClick={() => onReject(reason)}
               disabled={busy || !reason.trim()}
-              className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+              className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
             >
               {busy ? '처리 중…' : `${count.toLocaleString()}곡 거절`}
             </button>
@@ -868,7 +868,7 @@ function ReviewActionModal({
   };
   const buttonColor: Record<ActionKind, string> = {
     approve: 'bg-emerald-500 hover:bg-emerald-600',
-    reject: 'bg-red-500 hover:bg-red-600',
+    reject: 'bg-rose-600 hover:bg-rose-700',
     changes: 'bg-amber-500 hover:bg-amber-600',
   };
 

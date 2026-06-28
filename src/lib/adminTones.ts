@@ -77,4 +77,57 @@ export const adminTones: Record<
   },
 };
 
+/**
+ * Light surface 변형 — admin 안에 light card (bg-white / bg-indigo-50 / bg-violet-50 등)
+ * 위에 status badge 가 올 때 사용. Tailwind dark: variant 와 같이 쓸 수 있도록 별도 export.
+ *
+ * 사용 예 (dual mode):
+ *   <span className={`${adminTonesLight.success.badge} dark:${adminTones.success.badge}`}>
+ */
+export const adminTonesLight: Record<
+  'success' | 'warning' | 'danger' | 'info' | 'neutral',
+  AdminToneSet
+> = {
+  success: {
+    badge:       'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200',
+    text:        'text-emerald-800',
+    textMute:    'text-emerald-700',
+    icon:        'text-emerald-700',
+    buttonSolid: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    buttonGhost: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200',
+  },
+  warning: {
+    badge:       'bg-amber-100 text-amber-800 ring-1 ring-amber-200',
+    text:        'text-amber-800',
+    textMute:    'text-amber-700',
+    icon:        'text-amber-700',
+    buttonSolid: 'bg-amber-600 text-white hover:bg-amber-700',
+    buttonGhost: 'bg-amber-100 text-amber-800 hover:bg-amber-200',
+  },
+  danger: {
+    badge:       'bg-rose-100 text-rose-800 ring-1 ring-rose-200',
+    text:        'text-rose-800',
+    textMute:    'text-rose-700',
+    icon:        'text-rose-700',
+    buttonSolid: 'bg-rose-600 text-white hover:bg-rose-700',
+    buttonGhost: 'bg-rose-100 text-rose-800 hover:bg-rose-200',
+  },
+  info: {
+    badge:       'bg-sky-100 text-sky-800 ring-1 ring-sky-200',
+    text:        'text-sky-800',
+    textMute:    'text-sky-700',
+    icon:        'text-sky-700',
+    buttonSolid: 'bg-sky-600 text-white hover:bg-sky-700',
+    buttonGhost: 'bg-sky-100 text-sky-800 hover:bg-sky-200',
+  },
+  neutral: {
+    badge:       'bg-gray-100 text-gray-800 ring-1 ring-gray-200',
+    text:        'text-gray-800',
+    textMute:    'text-gray-700',
+    icon:        'text-gray-700',
+    buttonSolid: 'bg-gray-700 text-white hover:bg-gray-800',
+    buttonGhost: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
+  },
+};
+
 export type AdminTone = keyof typeof adminTones;
