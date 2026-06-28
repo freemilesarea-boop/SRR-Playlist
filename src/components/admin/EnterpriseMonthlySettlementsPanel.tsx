@@ -329,29 +329,36 @@ function DetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+      onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-        <div className="mb-3 flex items-center justify-between">
+        className="flex w-full max-w-3xl flex-col max-h-[95vh] sm:max-h-[90vh]
+                   rounded-t-2xl sm:rounded-2xl bg-bg-card ring-1 ring-line/10">
+        {/* Sticky Header */}
+        <div className="shrink-0 flex items-center justify-between border-b border-line/10 px-4 py-3">
           <h3 className="text-sm font-bold flex items-center gap-1.5">
             <Wallet size={14} /> 월 정산 상세
+            {settlement && (
+              <span className="ml-2"><StatusBadge status={settlement.status} /></span>
+            )}
           </h3>
           <button onClick={onClose} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
         </div>
 
-        {loading && !settlement && <div className="h-40 animate-pulse rounded bg-bg-deep" />}
-        {error && (
-          <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
-            <AlertCircle size={12} className="inline mr-1" />{error}
-            <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
-          </div>
-        )}
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {loading && !settlement && <div className="h-40 animate-pulse rounded bg-bg-deep" />}
+          {error && (
+            <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+              <AlertCircle size={12} className="inline mr-1" />{error}
+              <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
+            </div>
+          )}
 
-        {settlement && (
-          <div className="space-y-3 text-xs">
-            {/* 요약 */}
-            <div className="rounded-lg bg-bg-deep p-3">
-              <div className="flex items-start justify-between gap-2">
+          {settlement && (
+            <div className="space-y-3 text-xs">
+              {/* 요약 */}
+              <div className="rounded-lg bg-bg-deep p-3">
                 <div>
                   <h4 className="text-sm font-bold">{settlement.enterprise_name}</h4>
                   <p className="text-[11px] text-ink-mute">
@@ -359,138 +366,152 @@ function DetailModal({
                     {settlement.brand_code && ` · ${settlement.brand_code}`}
                   </p>
                 </div>
-                <StatusBadge status={settlement.status} />
+                <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                  <KV k="정산월" v={formatSettlementMonth(settlement.settlement_month)} mono />
+                  <KV k="활성 매장" v={`${settlement.active_store_count.toLocaleString('ko-KR')}개`} />
+                  <KV k="단가" v={`${settlement.monthly_store_price.toLocaleString('ko-KR')}원`} />
+                  <KV k="수수료율" v={`${settlement.commission_rate}%`} />
+                  <KV k="매장당" v={`${settlement.per_store_commission.toLocaleString('ko-KR')}원`} />
+                  <KV k="총 정산금" v={`${settlement.total_commission.toLocaleString('ko-KR')}원`} highlight />
+                </dl>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-ink-dim">
+                  <KV k="생성" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
+                  {settlement.approved_at && <KV k="승인" v={new Date(settlement.approved_at).toLocaleString('ko-KR')} />}
+                  {settlement.paid_at && <KV k="지급" v={new Date(settlement.paid_at).toLocaleString('ko-KR')} />}
+                  {settlement.payment_reference && <KV k="지급 참조" v={settlement.payment_reference} mono />}
+                  {settlement.admin_note && <KV k="메모" v={settlement.admin_note} colSpan />}
+                </dl>
               </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                <KV k="정산월" v={formatSettlementMonth(settlement.settlement_month)} mono />
-                <KV k="활성 매장" v={`${settlement.active_store_count.toLocaleString('ko-KR')}개`} />
-                <KV k="단가" v={`${settlement.monthly_store_price.toLocaleString('ko-KR')}원`} />
-                <KV k="수수료율" v={`${settlement.commission_rate}%`} />
-                <KV k="매장당" v={`${settlement.per_store_commission.toLocaleString('ko-KR')}원`} />
-                <KV k="총 정산금" v={`${settlement.total_commission.toLocaleString('ko-KR')}원`} highlight />
-              </dl>
-              <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-ink-dim">
-                <KV k="생성" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
-                {settlement.approved_at && <KV k="승인" v={new Date(settlement.approved_at).toLocaleString('ko-KR')} />}
-                {settlement.paid_at && <KV k="지급" v={new Date(settlement.paid_at).toLocaleString('ko-KR')} />}
-                {settlement.payment_reference && <KV k="지급 참조" v={settlement.payment_reference} mono />}
-                {settlement.admin_note && <KV k="메모" v={settlement.admin_note} colSpan />}
-              </dl>
-            </div>
 
-            {/* items */}
-            <div className="rounded-lg bg-bg-deep p-3">
-              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2 flex items-center gap-1.5">
-                <FileText size={11} /> 매장별 정산 근거 ({items.length}개)
-              </p>
-              <ul className="divide-y divide-line/10">
-                {items.map((it) => (
-                  <li key={it.id} className="flex items-center gap-2 py-1.5 text-[11px]">
-                    <ItemBadge status={it.status} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{it.store_name ?? '(매장명 없음)'}</div>
-                      <div className="text-[10px] text-ink-dim truncate">
-                        {it.franchise_name}
-                        {it.region_name && ` · ${it.region_name}`}
-                        {it.reason && ` · ${it.reason}`}
+              {/* items */}
+              <div className="rounded-lg bg-bg-deep p-3">
+                <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2 flex items-center gap-1.5">
+                  <FileText size={11} /> 매장별 정산 근거 ({items.length}개)
+                </p>
+                <ul className="divide-y divide-line/10">
+                  {items.map((it) => (
+                    <li key={it.id} className="flex items-center gap-2 py-1.5 text-[11px]">
+                      <ItemBadge status={it.status} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate">{it.store_name ?? '(매장명 없음)'}</div>
+                        <div className="text-[10px] text-ink-dim truncate">
+                          {it.franchise_name}
+                          {it.region_name && ` · ${it.region_name}`}
+                          {it.reason && ` · ${it.reason}`}
+                        </div>
                       </div>
-                    </div>
-                    <span className="shrink-0 tabular-nums">
-                      {it.per_store_commission.toLocaleString('ko-KR')}원
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <span className="shrink-0 tabular-nums">
+                        {it.per_store_commission.toLocaleString('ko-KR')}원
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
+          )}
+        </div>
 
-            {/* 상태 변경 */}
-            <div className="rounded-lg bg-bg-deep p-3">
-              <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-2">상태 변경</p>
+        {/* Sticky Footer — status-aware action (always visible) */}
+        {settlement && (
+          <div className="shrink-0 border-t border-line/10 bg-bg-card/95 px-4 py-3
+                          [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">
+            {/* pending */}
+            {settlement.status === 'pending' && !paidMode && !cancelMode && (
+              <div className="flex gap-2">
+                <button onClick={() => void onApprove()} disabled={acting}
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
+                  <ThumbsUp size={12} /> 승인
+                </button>
+                <button onClick={() => setCancelMode(true)} disabled={acting}
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
+                  <Ban size={12} /> 취소
+                </button>
+              </div>
+            )}
 
-              {settlement.status === 'pending' && !paidMode && !cancelMode && (
+            {/* approved */}
+            {settlement.status === 'approved' && !paidMode && !cancelMode && (
+              <div className="flex gap-2">
+                <button onClick={() => setPaidMode(true)} disabled={acting}
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
+                  <BadgeCheck size={12} /> 지급완료 처리
+                </button>
+                <button onClick={() => setCancelMode(true)} disabled={acting}
+                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
+                  <Ban size={12} /> 취소
+                </button>
+              </div>
+            )}
+
+            {/* paid */}
+            {settlement.status === 'paid' && (
+              <p className="text-[11px] text-emerald-300 flex items-center gap-1.5">
+                <CheckCircle2 size={12} />
+                지급완료 — 회계 보존 정책에 따라 변경 불가 (immutable).
+              </p>
+            )}
+
+            {/* cancelled */}
+            {settlement.status === 'cancelled' && (
+              <p className="text-[11px] text-rose-300 flex items-center gap-1.5">
+                <XCircle size={12} />
+                취소됨 — 동일 월 새 정산을 다시 생성할 수 있습니다.
+              </p>
+            )}
+
+            {/* paid mode — input panel */}
+            {paidMode && (
+              <div className="space-y-2">
+                <input
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                  placeholder="지급 참조 (이체번호/세금계산서 번호 등) *필수"
+                  className="w-full rounded bg-bg px-2 py-2 text-xs font-mono"
+                  autoFocus
+                />
+                <textarea
+                  value={paidNote}
+                  onChange={(e) => setPaidNote(e.target.value)}
+                  placeholder="메모 (선택)"
+                  className="w-full rounded bg-bg px-2 py-1.5 text-xs min-h-[44px]"
+                />
                 <div className="flex gap-2">
-                  <button onClick={() => void onApprove()} disabled={acting}
-                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-emerald-500/20 px-3 py-2 font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
-                    <ThumbsUp size={12} /> 승인
+                  <button onClick={() => { setPaidMode(false); setPaymentRef(''); setPaidNote(''); }}
+                    className="flex-1 rounded-lg bg-bg-card px-3 py-2.5 text-xs font-bold hover:bg-bg-hover">
+                    뒤로
                   </button>
-                  <button onClick={() => setCancelMode(true)} disabled={acting}
-                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-rose-500/20 px-3 py-2 font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
-                    <Ban size={12} /> 취소
+                  <button onClick={() => void onMarkPaid()} disabled={acting || !paymentRef.trim()}
+                    className="flex-[2] rounded-lg bg-emerald-500/30 px-3 py-2.5 text-xs font-bold text-emerald-200 disabled:opacity-30">
+                    {acting ? <RefreshCw size={12} className="inline mr-1 animate-spin" /> : null}
+                    지급완료 확정
                   </button>
                 </div>
-              )}
+              </div>
+            )}
 
-              {settlement.status === 'approved' && !paidMode && !cancelMode && (
+            {/* cancel mode — input panel */}
+            {cancelMode && (
+              <div className="space-y-2">
+                <textarea
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="취소 사유 (필수)"
+                  className="w-full rounded bg-bg px-2 py-2 text-xs min-h-[60px]"
+                  autoFocus
+                />
                 <div className="flex gap-2">
-                  <button onClick={() => setPaidMode(true)} disabled={acting}
-                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-emerald-500/20 px-3 py-2 font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
-                    <BadgeCheck size={12} /> 지급완료 처리
+                  <button onClick={() => { setCancelMode(false); setCancelNote(''); }}
+                    className="flex-1 rounded-lg bg-bg-card px-3 py-2.5 text-xs font-bold hover:bg-bg-hover">
+                    뒤로
                   </button>
-                  <button onClick={() => setCancelMode(true)} disabled={acting}
-                    className="flex-1 inline-flex items-center justify-center gap-1 rounded bg-rose-500/20 px-3 py-2 font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
-                    <Ban size={12} /> 취소
+                  <button onClick={() => void onCancel()} disabled={acting || !cancelNote.trim()}
+                    className="flex-[2] rounded-lg bg-rose-500/30 px-3 py-2.5 text-xs font-bold text-rose-200 disabled:opacity-30">
+                    {acting ? <RefreshCw size={12} className="inline mr-1 animate-spin" /> : null}
+                    취소 확정
                   </button>
                 </div>
-              )}
-
-              {settlement.status === 'paid' && (
-                <p className="text-[11px] text-emerald-300">
-                  <CheckCircle2 size={11} className="inline mr-1" />
-                  지급완료 — 회계 보존 정책에 따라 변경 불가 (immutable).
-                </p>
-              )}
-
-              {settlement.status === 'cancelled' && (
-                <p className="text-[11px] text-rose-300">
-                  <XCircle size={11} className="inline mr-1" />
-                  취소됨 — 동일 월 새 정산을 다시 생성할 수 있습니다.
-                </p>
-              )}
-
-              {paidMode && (
-                <div className="space-y-2">
-                  <input
-                    value={paymentRef}
-                    onChange={(e) => setPaymentRef(e.target.value)}
-                    placeholder="지급 참조 (이체번호/세금계산서 번호 등)"
-                    className="w-full rounded bg-bg px-2 py-1.5 text-xs font-mono"
-                  />
-                  <textarea
-                    value={paidNote}
-                    onChange={(e) => setPaidNote(e.target.value)}
-                    placeholder="메모 (선택)"
-                    className="w-full rounded bg-bg px-2 py-1.5 text-xs min-h-[50px]"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={() => void onMarkPaid()} disabled={acting || !paymentRef.trim()}
-                      className="flex-1 rounded bg-emerald-500/30 px-3 py-2 font-bold text-emerald-200 disabled:opacity-30">
-                      지급완료 확정
-                    </button>
-                    <button onClick={() => { setPaidMode(false); setPaymentRef(''); setPaidNote(''); }}
-                      className="rounded bg-bg-card px-3 py-2 font-bold hover:bg-bg-hover">취소</button>
-                  </div>
-                </div>
-              )}
-
-              {cancelMode && (
-                <div className="space-y-2">
-                  <textarea
-                    value={cancelNote}
-                    onChange={(e) => setCancelNote(e.target.value)}
-                    placeholder="취소 사유 (필수)"
-                    className="w-full rounded bg-bg px-2 py-1.5 text-xs min-h-[60px]"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={() => void onCancel()} disabled={acting || !cancelNote.trim()}
-                      className="flex-1 rounded bg-rose-500/30 px-3 py-2 font-bold text-rose-200 disabled:opacity-30">
-                      취소 확정
-                    </button>
-                    <button onClick={() => { setCancelMode(false); setCancelNote(''); }}
-                      className="rounded bg-bg-card px-3 py-2 font-bold hover:bg-bg-hover">닫기</button>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
