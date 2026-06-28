@@ -927,7 +927,10 @@ function RuleModal({
     setErr(null);
     if (!name.trim()) { setErr('스케줄명을 입력해 주세요.'); return; }
     if (!enterpriseId) { setErr('본사 계정을 선택해 주세요.'); return; }
-    if (!policyId) { setErr('적용할 플레이리스트를 선택해 주세요.'); return; }
+    if (!policyId) {
+      setErr('자동 스케줄에 사용할 플레이리스트를 먼저 선택해 주세요. 플레이리스트가 없다면 먼저 플레이리스트를 만들어야 합니다.');
+      return;
+    }
     if (ruleType === 'scheduled' && !startsAt) { setErr('예약 실행은 시작 일시가 필요합니다.'); return; }
     if (ruleType === 'recurring' && !recurrenceRule.trim()) { setErr('반복 실행은 반복 규칙이 필요합니다.'); return; }
     if (ruleType === 'season' && !season) { setErr('시즌 자동화는 시즌을 선택해 주세요.'); return; }
@@ -1029,14 +1032,14 @@ function RuleModal({
           ) : deployablePolicies.length === 0 ? (
             <AdminAlert
               tone="warning"
-              title="적용할 플레이리스트가 없습니다."
-              description="프랜차이즈 관리에서 먼저 플레이리스트 배포 설정을 만들어 주세요."
+              title="아직 배포 가능한 플레이리스트가 없습니다."
+              description="자동 스케줄은 먼저 플레이리스트를 만든 뒤, 매장에 배포할 수 있는 상태로 설정해야 사용할 수 있습니다."
               action={
                 onRequestFranchisePolicyNav ? (
                   <AdminButton
                     tone="primary" size="sm"
                     onClick={onRequestFranchisePolicyNav}>
-                    프랜차이즈 관리로 이동
+                    플레이리스트 만들기
                   </AdminButton>
                 ) : (
                   <AdminButton tone="info" variant="subtle" size="sm" onClick={onReloadPolicies}>
@@ -1049,7 +1052,7 @@ function RuleModal({
             <>
               <select value={policyId} onChange={(e) => setPolicyId(e.target.value)}
                 className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-                <option value="">플레이리스트를 선택하세요</option>
+                <option value="">자동으로 배포할 플레이리스트를 선택하세요</option>
                 {deployablePolicies.map((p) => (
                   <option key={p.policy_id} value={p.policy_id}>
                     {p.policy_name} (v{p.latest_version_number}){p.franchise_name ? ` · ${p.franchise_name}` : ''}
