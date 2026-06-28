@@ -44,6 +44,11 @@ import {
   type PolicyTargetType,
 } from '@/lib/api/franchiseApi';
 import { fetchPlaylists } from '@/lib/api';
+import {
+  listAvailablePlaylistsForDeployment,
+  createFranchiseMusicPolicyFromPlaylist,
+  type AvailablePlaylistForDeployment,
+} from '@/lib/api/policyDeploymentApi';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
@@ -368,7 +373,7 @@ function FranchiseDetail({
               tab === t ? 'bg-accent text-black' : 'text-ink-mute hover:bg-bg-hover'
             }`}>
             {t === 'stores' && '매장'}
-            {t === 'policies' && '정책'}
+            {t === 'policies' && '배포 플레이리스트'}
             {t === 'schedule' && '스케줄'}
             {t === 'sync' && '동기화 상태'}
           </button>
@@ -519,11 +524,12 @@ function PoliciesTab({
   const [showBuilder, setShowBuilder] = useState(false);
   const [editPolicy, setEditPolicy] = useState<FranchiseMusicPolicy | null>(null);
   const [applyPolicy, setApplyPolicy] = useState<FranchiseMusicPolicy | null>(null);
+  const [showFromPlaylist, setShowFromPlaylist] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try { setPolicies(await listFranchisePolicies(franchiseId)); }
-    catch (e) { toast.error(`정책 로딩 실패: ${(e as Error).message}`); }
+    catch (e) { toast.error(`배포 플레이리스트 로딩 실패: ${(e as Error).message}`); }
     finally { setLoading(false); }
   }, [franchiseId]);
 
@@ -531,19 +537,25 @@ function PoliciesTab({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between rounded-xl bg-bg-card p-3 text-xs">
-        <span>본사에서 설정한 음악 정책이 연결된 매장에 자동 동기화됩니다.</span>
-        <button onClick={() => { setEditPolicy(null); setShowBuilder(true); }}
-          className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 font-bold text-black hover:bg-accent/90">
-          <Plus size={11} /> 새 정책
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bg-card p-3 text-xs">
+        <span>등록된 배포 플레이리스트가 연결된 매장에 자동 동기화되며, 자동 음악 스케줄의 선택 목록으로 노출됩니다.</span>
+        <div className="flex flex-wrap items-center gap-1">
+          <button onClick={() => setShowFromPlaylist(true)}
+            className="inline-flex items-center gap-1 rounded bg-violet-500/20 px-2 py-1 font-bold text-violet-200 hover:bg-violet-500/30">
+            <Music size={11} /> 기존 플레이리스트에서 등록
+          </button>
+          <button onClick={() => { setEditPolicy(null); setShowBuilder(true); }}
+            className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 font-bold text-black hover:bg-accent/90">
+            <Plus size={11} /> 시간대 슬롯으로 직접 만들기
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl bg-bg-card">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
-              <th className="px-3 py-2">정책명</th>
+              <th className="px-3 py-2">배포 플레이리스트명</th>
               <th className="px-3 py-2">상태</th>
               <th className="px-3 py-2">기본</th>
               <th className="px-3 py-2 text-right">유효기간</th>
@@ -555,7 +567,9 @@ function PoliciesTab({
               <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-dim">로딩 중…</td></tr>
             )}
             {!loading && policies.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-dim">정책이 없습니다.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-dim">
+                등록된 배포 플레이리스트가 없습니다. "기존 플레이리스트에서 등록" 버튼으로 시작하세요.
+              </td></tr>
             )}
             {policies.map((p) => (
               <tr key={p.id} className="border-b border-line/5">
@@ -605,6 +619,17 @@ function PoliciesTab({
           franchiseId={franchiseId} policy={applyPolicy}
           onClose={() => setApplyPolicy(null)}
           onApplied={() => { setApplyPolicy(null); onApplied(); }}
+        />
+      )}
+      {showFromPlaylist && (
+        <RegisterFromPlaylistModal
+          franchiseId={franchiseId}
+          onClose={() => setShowFromPlaylist(false)}
+          onRegistered={() => {
+            setShowFromPlaylist(false);
+            void load();
+            onPolicyCreatedReturn?.();  // 자동 음악 스케줄 등에서 deep-link 복귀 trigger
+          }}
         />
       )}
     </div>
@@ -1146,5 +1171,217 @@ function ModalShell({ title, onClose, wide = false, children }: {
         {children}
       </div>
     </div>
+  );
+}
+
+// =============================================================================
+// RegisterFromPlaylistModal (0379) — 기존 playlist 풀에서 배포 플레이리스트 등록
+// =============================================================================
+
+const SOURCE_TYPE_KO: Record<'manual' | 'curated' | 'auto' | 'business', string> = {
+  manual:   '수동',
+  curated:  '큐레이션',
+  auto:     'AI/자동',
+  business: '업종',
+};
+
+function RegisterFromPlaylistModal({
+  franchiseId, onClose, onRegistered,
+}: {
+  franchiseId: string;
+  onClose: () => void;
+  onRegistered: () => void;
+}) {
+  const [available, setAvailable] = useState<AvailablePlaylistForDeployment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'manual' | 'curated' | 'auto' | 'business' | ''>('');
+  const [debounced, setDebounced] = useState('');
+  const [selected, setSelected] = useState<AvailablePlaylistForDeployment | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState<'active' | 'draft'>('active');
+  const [isDefault, setIsDefault] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(search.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await listAvailablePlaylistsForDeployment({
+        search: debounced || null,
+        sourceType: sourceFilter || null,
+        limit: 100,
+      });
+      setAvailable(r.data);
+    } catch (e) {
+      setError((e as Error).message);
+      setAvailable([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [debounced, sourceFilter]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const onSubmit = async () => {
+    if (!selected) { toast.error('플레이리스트를 선택하세요.'); return; }
+    setBusy(true);
+    try {
+      const r = await createFranchiseMusicPolicyFromPlaylist({
+        playlistId: selected.playlist_id,
+        franchiseId,
+        name: name.trim() || null,
+        description: description.trim() || null,
+        status,
+        isDefault,
+      });
+      toast.success(`배포 플레이리스트 등록 완료 (source=${r.source_type}, ${r.track_count}곡)`);
+      onRegistered();
+    } catch (e) {
+      toast.error(`등록 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ModalShell title="기존 플레이리스트에서 배포 플레이리스트 등록" onClose={onClose} wide>
+      <p className="mb-3 text-[11px] text-ink-dim">
+        AI·큐레이션·업종·수동 플레이리스트 중 하나를 골라 매장 배포용으로 등록합니다.
+        등록 즉시 자동 음악 스케줄의 선택 목록에 노출됩니다 (00:00–23:59 단일 시간대 슬롯 자동 생성).
+      </p>
+
+      {/* search + filter */}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="플레이리스트명 / 설명 / 업종 검색"
+          className="flex-1 min-w-[200px] rounded-md bg-bg-deep px-2 py-1.5" />
+        <select value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value as typeof sourceFilter)}
+          className="rounded-md bg-bg-deep px-2 py-1.5">
+          <option value="">전체 source</option>
+          <option value="auto">AI/자동</option>
+          <option value="curated">큐레이션</option>
+          <option value="business">업종</option>
+          <option value="manual">수동</option>
+        </select>
+        <button onClick={() => void load()}
+          className="rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover">
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      {/* error */}
+      {error && (
+        <div className="mb-2 rounded bg-rose-500/20 px-3 py-2 text-[11px] text-rose-300">
+          {error}
+        </div>
+      )}
+
+      {/* list */}
+      <div className="max-h-72 overflow-y-auto rounded-lg bg-bg-deep/40 ring-1 ring-line/10">
+        {loading && available.length === 0 ? (
+          <div className="px-3 py-6 text-center text-[11px] text-ink-mute">불러오는 중…</div>
+        ) : available.length === 0 ? (
+          <div className="px-3 py-6 text-center text-[11px] text-ink-mute">
+            조건에 맞는 플레이리스트가 없습니다.
+          </div>
+        ) : (
+          <ul className="divide-y divide-line/5">
+            {available.map((p) => {
+              const sel = selected?.playlist_id === p.playlist_id;
+              return (
+                <li key={p.playlist_id}>
+                  <button type="button"
+                    onClick={() => {
+                      setSelected(p);
+                      if (!name.trim()) setName(p.playlist_title);
+                      if (!description.trim() && p.description) setDescription(p.description);
+                    }}
+                    className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-bg-hover ${
+                      sel ? 'bg-violet-500/15 ring-1 ring-violet-400/30' : ''
+                    }`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="rounded bg-bg-card px-1.5 py-0.5 text-[10px] font-bold text-ink-mute">
+                          [{SOURCE_TYPE_KO[p.source_type]}]
+                        </span>
+                        <span className="truncate font-semibold text-ink">{p.playlist_title}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-ink-mute">
+                        {p.is_auto
+                          ? <span>동적 매칭</span>
+                          : <span>{p.track_count}곡</span>}
+                        {p.business_category && <span>· {p.business_category}</span>}
+                        {p.curator_name && <span>· @{p.curator_name}</span>}
+                        {p.deployable_count > 0 && (
+                          <span className="text-amber-300">이미 {p.deployable_count}개 배포에 사용 중</span>
+                        )}
+                      </div>
+                      {p.description && (
+                        <p className="mt-0.5 line-clamp-1 text-[10px] text-ink-dim">{p.description}</p>
+                      )}
+                    </div>
+                    {sel && (
+                      <span className="shrink-0 rounded-full bg-violet-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        선택됨
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* details */}
+      {selected && (
+        <div className="mt-3 grid gap-2 md:grid-cols-2 text-xs">
+          <label className="block">
+            <span className="text-ink-dim">배포 플레이리스트명</span>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder={selected.playlist_title}
+              className="mt-0.5 w-full rounded-md bg-bg-deep px-2 py-1.5" />
+          </label>
+          <label className="block">
+            <span className="text-ink-dim">상태</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'draft')}
+              className="mt-0.5 w-full rounded-md bg-bg-deep px-2 py-1.5">
+              <option value="active">활성 (즉시 사용 가능)</option>
+              <option value="draft">초안</option>
+            </select>
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-ink-dim">설명</span>
+            <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
+              className="mt-0.5 w-full rounded-md bg-bg-deep px-2 py-1.5" />
+          </label>
+          <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-mute md:col-span-2">
+            <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+            본사 기본 배포 플레이리스트로 표시
+          </label>
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <button onClick={onClose}
+          className="rounded bg-bg-deep px-3 py-1.5 text-xs font-semibold hover:bg-bg-hover">
+          취소
+        </button>
+        <button onClick={() => void onSubmit()}
+          disabled={!selected || busy}
+          className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-bold text-black hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40">
+          <Plus size={11} /> 배포 플레이리스트 등록
+        </button>
+      </div>
+    </ModalShell>
   );
 }

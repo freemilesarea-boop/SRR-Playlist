@@ -1055,7 +1055,13 @@ function RuleModal({
                 <option value="">자동으로 배포할 플레이리스트를 선택하세요</option>
                 {deployablePolicies.map((p) => (
                   <option key={p.policy_id} value={p.policy_id}>
-                    {p.policy_name} (v{p.latest_version_number}){p.franchise_name ? ` · ${p.franchise_name}` : ''}
+                    {p.source_type ? `[${p.source_type}] ` : ''}{p.policy_name}
+                    {p.source_playlist_title && p.source_playlist_title !== p.policy_name
+                      ? ` ← ${p.source_playlist_title}` : ''}
+                    {' '}(v{p.latest_version_number})
+                    {typeof p.track_count_snapshot === 'number' && p.track_count_snapshot > 0
+                      ? ` · ${p.track_count_snapshot}곡` : ''}
+                    {p.franchise_name ? ` · ${p.franchise_name}` : ''}
                   </option>
                 ))}
               </select>
