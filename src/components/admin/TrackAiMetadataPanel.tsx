@@ -167,7 +167,7 @@ export default function TrackAiMetadataPanel() {
                   <button
                     onClick={() => handleApply(row)}
                     disabled={applyingId === row.id}
-                    className="shrink-0 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50"
+                    className="shrink-0 rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-emerald-500/25 disabled:opacity-50"
                     title="비어있는 필드에 예측값 적용"
                   >
                     <Check size={11} />

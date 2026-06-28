@@ -337,7 +337,7 @@ export default function ArtistSettlementDetail({
             {data.settlement.is_manual_carryover && (
               <section>
                 <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">수동 이월 정보</h5>
-                <div className="space-y-1 rounded-xl bg-amber-500/5 px-3 py-2.5 text-xs ring-1 ring-amber-500/30">
+                <div className="space-y-1 rounded-xl bg-amber-500/5 px-3 py-2.5 text-xs ring-1 ring-amber-500/50">
                   <Row
                     label="이월 금액"
                     value={fmtKrw(data.settlement.carried_over_amount)}
@@ -393,7 +393,7 @@ export default function ArtistSettlementDetail({
                         <td className="px-3 py-2 font-mono text-[10px]">{it.track_code}</td>
                         <td className="px-3 py-2">{it.track_title}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                        <td className="px-3 py-2 text-right tabular-nums text-rose-200 dark:text-red-300">
                           {excluded > 0 ? `-${excluded.toLocaleString()}` : '0'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{eligible.toLocaleString()}</td>
@@ -470,7 +470,7 @@ export default function ArtistSettlementDetail({
                           <td className="px-3 py-2 font-mono">
                             v{v.version}
                             {v.is_current && (
-                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300">
+                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300">
                                 현재
                               </span>
                             )}
@@ -630,11 +630,11 @@ function PayoutStatusBadge({
 }) {
   const meta: Record<typeof status, { tone: string; label: string }> = {
     ready: {
-      tone: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+      tone: 'bg-emerald-100 text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
       label: '정산 가능 (PII 완료)',
     },
     verified_partial: {
-      tone: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+      tone: 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
       label: 'PII 미완료',
     },
     pending: {
@@ -705,7 +705,7 @@ function ConfirmModal({
         className="w-full max-w-md space-y-3 rounded-2xl bg-bg-soft p-5 ring-1 ring-line/15"
       >
         <h4 className="flex items-center gap-2 text-sm font-bold">
-          <AlertTriangle size={14} className={tone === 'success' ? 'text-emerald-500' : 'text-amber-500'} />
+          <AlertTriangle size={14} className={tone === 'success' ? 'text-emerald-300' : 'text-amber-300'} />
           {title}
         </h4>
         <Alert tone={tone}>{warning}</Alert>
@@ -717,7 +717,7 @@ function ConfirmModal({
           placeholder={placeholder}
         />
         {showForcePiiToggle && (
-          <label className="flex items-start gap-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs ring-1 ring-red-500/30">
+          <label className="flex items-start gap-2 rounded-xl bg-rose-500/20 px-3 py-2 text-xs ring-1 ring-rose-500/50">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -725,7 +725,7 @@ function ConfirmModal({
               onChange={(e) => setForcePii(e.target.checked)}
             />
             <span className="text-ink">
-              <strong className="text-red-700 dark:text-red-300">PII 미완료 override</strong> — 본인 인증 / 정산 계좌 정보가
+              <strong className="text-rose-200 dark:text-red-300">PII 미완료 override</strong> — 본인 인증 / 정산 계좌 정보가
               완료되지 않은 정산을 강제로 지급완료 처리합니다. (audit 기록됨)
             </span>
           </label>

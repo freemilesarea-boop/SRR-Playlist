@@ -25,9 +25,9 @@ interface Props {
 }
 
 const STATUS_TONE: Record<FitStatus, string> = {
-  active:        'bg-emerald-500/15 text-emerald-500',
-  review_needed: 'bg-amber-500/15 text-amber-500',
-  excluded:      'bg-rose-500/15 text-rose-500',
+  active:        'bg-emerald-500/25 text-emerald-300',
+  review_needed: 'bg-amber-500/25 text-amber-300',
+  excluded:      'bg-rose-500/25 text-rose-300',
 };
 
 const fmtPct = (v: number | null | undefined) =>
@@ -125,7 +125,7 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                       <div className="font-semibold">{t.title}</div>
                       <div className="text-[10px] text-ink-dim">{t.artist ?? '—'}</div>
                       {t.admin_note && (
-                        <div className="mt-0.5 text-[10px] text-amber-500">📝 {t.admin_note}</div>
+                        <div className="mt-0.5 text-[10px] text-amber-300">📝 {t.admin_note}</div>
                       )}
                       <div className="mt-0.5">
                         <FeedbackBadges trackId={t.track_id} highlightStore={t.normalized_store_slug} />
@@ -138,7 +138,7 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{t.bpm ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
-                      <span className={t.af_energy != null && t.af_energy > 0.7 ? 'text-rose-500' : ''}>
+                      <span className={t.af_energy != null && t.af_energy > 0.7 ? 'text-rose-300' : ''}>
                         {fmtPct(t.af_energy)}
                       </span>
                     </td>
@@ -146,9 +146,9 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtPct(t.af_acousticness)}</td>
                     <td className="px-2 py-1.5 text-right">
                       <span className={`font-bold tabular-nums ${
-                        (t.fit_score ?? 0) >= 60 ? 'text-emerald-500'
-                        : (t.fit_score ?? 0) >= 40 ? 'text-amber-500'
-                        : 'text-rose-500'
+                        (t.fit_score ?? 0) >= 60 ? 'text-emerald-300'
+                        : (t.fit_score ?? 0) >= 40 ? 'text-amber-300'
+                        : 'text-rose-300'
                       }`}>
                         {t.fit_score ?? '—'}
                       </span>
@@ -189,20 +189,20 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                               <Edit size={10} />
                             </button>
                             <button onClick={() => setRemoving(t)} title="이 플레이리스트에서 제거"
-                              className="rounded bg-rose-500/15 p-1 text-rose-500 hover:bg-rose-500/25">
+                              className="rounded bg-rose-500/25 p-1 text-rose-300 hover:bg-rose-500/25">
                               <Trash2 size={10} />
                             </button>
                             <button onClick={() => setStatusEdit({ tr: t, next: 'review_needed' })} title="검토 필요"
-                              className="rounded bg-amber-500/15 p-1 text-amber-500 hover:bg-amber-500/25">
+                              className="rounded bg-amber-500/25 p-1 text-amber-300 hover:bg-amber-500/25">
                               <AlertTriangle size={10} />
                             </button>
                             <button onClick={() => setStatusEdit({ tr: t, next: 'excluded' })} title="제외 처리"
-                              className="rounded bg-rose-500/15 p-1 text-rose-500 hover:bg-rose-500/25">
+                              className="rounded bg-rose-500/25 p-1 text-rose-300 hover:bg-rose-500/25">
                               <Ban size={10} />
                             </button>
                             {st !== 'active' && (
                               <button onClick={() => setStatusEdit({ tr: t, next: 'active' })} title="활성화"
-                                className="rounded bg-emerald-500/15 p-1 text-emerald-500 hover:bg-emerald-500/25">
+                                className="rounded bg-emerald-500/25 p-1 text-emerald-300 hover:bg-emerald-500/25">
                                 <CheckCircle2 size={10} />
                               </button>
                             )}
@@ -214,7 +214,7 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                         )}
                         {removed && (
                           <button onClick={() => void doRestore(t)} title="복원"
-                            className="rounded bg-emerald-500/15 p-1 text-emerald-500 hover:bg-emerald-500/25">
+                            className="rounded bg-emerald-500/25 p-1 text-emerald-300 hover:bg-emerald-500/25">
                             <RotateCcw size={10} />
                           </button>
                         )}
@@ -443,10 +443,10 @@ function RemoveConfirmModal({
     <div ref={removeDialogRef} role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl bg-bg-deep p-4">
         <h3 className="text-sm font-bold flex items-center gap-1">
-          <Trash2 size={14} className="text-rose-500" /> 이 플레이리스트에서 제거
+          <Trash2 size={14} className="text-rose-300" /> 이 플레이리스트에서 제거
         </h3>
         <p className="mt-2 text-xs text-ink-dim">{track.title} · {track.artist}</p>
-        <p className="mt-2 text-[11px] text-amber-500">
+        <p className="mt-2 text-[11px] text-amber-300">
           ⚠️ playlist_tracks 만 soft-delete. 원본 tracks 는 보존됩니다.
         </p>
         <label className="mt-3 block">

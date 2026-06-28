@@ -106,7 +106,7 @@ export default function RejectReasonSelector({
             className="input text-[12px]"
           />
           {minNoteLength > 0 && !noteOk && note.length > 0 && (
-            <span className="block text-[11px] text-rose-600 dark:text-rose-300">
+            <span className="block text-[11px] text-rose-300 dark:text-rose-300">
               {minNoteLength - note.trim().length}자 더 필요해요
             </span>
           )}

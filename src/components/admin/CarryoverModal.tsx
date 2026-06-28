@@ -92,7 +92,7 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
       >
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-bold">
-            <ArrowRightCircle size={16} className="text-amber-500" />
+            <ArrowRightCircle size={16} className="text-amber-300" />
             정산 이월 신청
           </h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-ink/5">
@@ -111,7 +111,7 @@ export default function CarryoverModal({ row, onClose, onApplied }: Props) {
         )}
 
         {isHeld && row.held_reason && (
-          <div className="rounded-xl bg-amber-500/5 px-3 py-2 text-xs ring-1 ring-amber-500/30">
+          <div className="rounded-xl bg-amber-500/5 px-3 py-2 text-xs ring-1 ring-amber-500/50">
             <p className="font-semibold text-ink">현재 보류 사유</p>
             <p className="mt-0.5 font-mono text-ink-mute">{row.held_reason}</p>
             <p className="mt-1 text-[10px] text-ink-dim">

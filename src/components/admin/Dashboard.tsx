@@ -342,9 +342,9 @@ export default function Dashboard() {
 
 const TONE: Record<string, string> = {
   violet: 'from-violet-500/15 to-bg-card ring-violet-400/20 text-violet-300',
-  sky: 'from-sky-500/15 to-bg-card ring-sky-400/20 text-sky-300',
-  emerald: 'from-emerald-500/15 to-bg-card ring-emerald-400/20 text-emerald-300',
-  rose: 'from-rose-500/15 to-bg-card ring-rose-400/20 text-rose-300',
+  sky: 'from-sky-500/15 to-bg-card ring-sky-400/50 text-sky-300',
+  emerald: 'from-emerald-500/15 to-bg-card ring-emerald-400/50 text-emerald-300',
+  rose: 'from-rose-500/15 to-bg-card ring-rose-400/50 text-rose-300',
   yellow: 'from-yellow-500/15 to-bg-card ring-yellow-400/20 text-yellow-300',
 };
 

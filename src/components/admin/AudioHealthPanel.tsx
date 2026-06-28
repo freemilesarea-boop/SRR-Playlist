@@ -41,12 +41,12 @@ function fmtDate(s: string | null | undefined): string {
 }
 
 const HEALTH_TONE: Record<string, string> = {
-  ok: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-emerald-400/30',
+  ok: 'bg-emerald-500/25 text-emerald-200 dark:text-emerald-300 ring-emerald-400/50',
   unknown: 'bg-ink/10 text-ink-mute ring-line/10',
-  unreachable: 'bg-red-500/15 text-red-700 dark:text-red-300 ring-red-400/30',
-  wrong_mime: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-400/30',
-  empty: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-400/30',
-  error: 'bg-red-500/15 text-red-700 dark:text-red-300 ring-red-400/30',
+  unreachable: 'bg-rose-500/25 text-rose-200 dark:text-red-300 ring-rose-400/50',
+  wrong_mime: 'bg-amber-500/25 text-amber-200 dark:text-amber-300 ring-amber-400/50',
+  empty: 'bg-amber-500/25 text-amber-200 dark:text-amber-300 ring-amber-400/50',
+  error: 'bg-rose-500/25 text-rose-200 dark:text-red-300 ring-rose-400/50',
 };
 const HEALTH_LABEL: Record<string, string> = {
   ok: '정상', unknown: '미검사',
@@ -150,7 +150,7 @@ export default function AudioHealthPanel() {
             type="button"
             onClick={onRunScheduledReleases}
             disabled={releasesBusy}
-            className="inline-flex items-center gap-1 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-900 ring-1 ring-sky-400/30 hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25"
+            className="inline-flex items-center gap-1 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-200 ring-1 ring-sky-400/50 hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-500/25 dark:text-sky-200 dark:hover:bg-sky-500/25"
           >
             <PlayCircle size={12} /> {releasesBusy ? '처리 중…' : '예약 발매 처리'}
           </button>
@@ -225,7 +225,7 @@ export default function AudioHealthPanel() {
                       {it.audio_content_type ?? '—'}
                       <span className="ml-1 text-ink-dim">{fmtBytes(it.audio_content_length)}</span>
                     </td>
-                    <td className="px-3 py-2 text-[11px] text-red-700 dark:text-red-300">
+                    <td className="px-3 py-2 text-[11px] text-rose-200 dark:text-red-300">
                       {it.audio_health_error ?? '—'}
                     </td>
                     <td className="px-3 py-2 text-right text-[10px] text-ink-dim">

@@ -87,21 +87,21 @@ export default function BehaviorInsightTab() {
           final_fit_score = fit_score + boost (0~100 clamp). <b>fit_score 는 절대 변경 안 됨</b>.
         </p>
         {lastResult && (
-          <p className="mt-1 text-[11px] text-emerald-500">
+          <p className="mt-1 text-[11px] text-emerald-300">
             마지막 재계산: {lastResult.rows} 행 · {(lastResult.ms / 1000).toFixed(1)}s
           </p>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="rounded bg-emerald-500/10 p-3">
+        <div className="rounded bg-emerald-500/20 p-3">
           <div className="text-[10px] uppercase text-ink-dim">승격 후보</div>
-          <div className="text-2xl font-bold text-emerald-500">{promotions.length}</div>
+          <div className="text-2xl font-bold text-emerald-300">{promotions.length}</div>
           <div className="text-[10px] text-ink-dim">score ≥ 70 · conf ≥ 0.30</div>
         </div>
-        <div className="rounded bg-rose-500/10 p-3">
+        <div className="rounded bg-rose-500/20 p-3">
           <div className="text-[10px] uppercase text-ink-dim">강등 후보</div>
-          <div className="text-2xl font-bold text-rose-500">{demotions.length}</div>
+          <div className="text-2xl font-bold text-rose-300">{demotions.length}</div>
           <div className="text-[10px] text-ink-dim">score ≤ 30 · conf ≥ 0.30</div>
         </div>
         <div className="rounded bg-blue-500/10 p-3">
@@ -112,9 +112,9 @@ export default function BehaviorInsightTab() {
         <div className="rounded bg-gray-500/10 p-3">
           <div className="text-[10px] uppercase text-ink-dim">boost 분포</div>
           <div className="text-[11px] mt-1">
-            <span className="text-emerald-500">+{stats.positive}</span> ·{' '}
+            <span className="text-emerald-300">+{stats.positive}</span> ·{' '}
             <span className="text-gray-400">={stats.zero}</span> ·{' '}
-            <span className="text-rose-500">−{stats.negative}</span>
+            <span className="text-rose-300">−{stats.negative}</span>
           </div>
           <div className="text-[10px] text-ink-dim">{comparison.length} 트랙</div>
         </div>
@@ -161,7 +161,7 @@ export default function BehaviorInsightTab() {
                       {(r.confidence * 100).toFixed(0)}%
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
-                      <span className={r.behavior_score >= 70 ? 'font-bold text-emerald-500' : r.behavior_score <= 30 ? 'font-bold text-rose-500' : ''}>
+                      <span className={r.behavior_score >= 70 ? 'font-bold text-emerald-300' : r.behavior_score <= 30 ? 'font-bold text-rose-300' : ''}>
                         {r.behavior_score.toFixed(1)}
                       </span>
                     </td>
@@ -169,7 +169,7 @@ export default function BehaviorInsightTab() {
                       {r.avg_fit_score > 0 ? r.avg_fit_score.toFixed(1) : '—'}
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
-                      <span className={r.avg_boost > 0 ? 'text-emerald-500' : r.avg_boost < 0 ? 'text-rose-500' : 'text-ink-dim'}>
+                      <span className={r.avg_boost > 0 ? 'text-emerald-300' : r.avg_boost < 0 ? 'text-rose-300' : 'text-ink-dim'}>
                         {r.avg_boost > 0 ? '+' : ''}{r.avg_boost.toFixed(2)}
                       </span>
                     </td>
@@ -179,10 +179,10 @@ export default function BehaviorInsightTab() {
                     <td className="px-2 py-1.5">
                       <div className="flex flex-wrap gap-1">
                         {r.is_promotion_candidate && (
-                          <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">승격</span>
+                          <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">승격</span>
                         )}
                         {r.is_demotion_candidate && (
-                          <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-500">강등</span>
+                          <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">강등</span>
                         )}
                       </div>
                     </td>
@@ -222,7 +222,7 @@ function CandidatePanel({
   title: string; icon: React.ReactNode; color: 'emerald' | 'rose';
   rows: PromotionDemotionCandidate[]; onEdit: (id: string) => void;
 }) {
-  const colorClass = color === 'emerald' ? 'text-emerald-500' : 'text-rose-500';
+  const colorClass = color === 'emerald' ? 'text-emerald-300' : 'text-rose-300';
   return (
     <div className="rounded-xl bg-bg-card p-3">
       <h4 className={`mb-2 flex items-center gap-1 text-xs font-bold ${colorClass}`}>

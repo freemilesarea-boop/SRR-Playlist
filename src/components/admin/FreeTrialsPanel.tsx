@@ -126,7 +126,7 @@ export default function FreeTrialsPanel() {
                   <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
                   <td className="px-3 py-2">
                     {r.converted
-                      ? <span className="inline-flex items-center gap-1 text-emerald-500"><CheckCircle2 size={12} /> 결제</span>
+                      ? <span className="inline-flex items-center gap-1 text-emerald-300"><CheckCircle2 size={12} /> 결제</span>
                       : <span className="text-ink-dim">—</span>}
                   </td>
                   <td className="px-3 py-2">
@@ -141,7 +141,7 @@ export default function FreeTrialsPanel() {
                       <button
                         onClick={() => void onEnd(r)}
                         disabled={busyId === r.id || !r.user_id || r.status !== 'active'}
-                        className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-500 hover:bg-rose-500/25 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-500/25 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/25 disabled:opacity-50"
                       >
                         <XCircle size={11} /> 종료
                       </button>
@@ -169,7 +169,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 function StatusBadge({ status }: { status: 'active' | 'expired' | 'revoked' }) {
-  if (status === 'active') return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">체험중</span>;
-  if (status === 'revoked') return <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-500">강제종료</span>;
+  if (status === 'active') return <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">체험중</span>;
+  if (status === 'revoked') return <span className="rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-rose-300">강제종료</span>;
   return <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink-mute">만료</span>;
 }

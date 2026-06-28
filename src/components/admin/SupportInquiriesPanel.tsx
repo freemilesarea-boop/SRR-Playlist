@@ -23,13 +23,13 @@ const STATUS_LABEL: Record<InquiryStatus, string> = {
   open: '신규', in_progress: '처리중', resolved: '답변완료', closed: '종료',
 };
 const STATUS_TONE: Record<InquiryStatus, string> = {
-  open: 'bg-amber-500/15 text-amber-500',
-  in_progress: 'bg-sky-500/15 text-sky-500',
-  resolved: 'bg-emerald-500/15 text-emerald-500',
+  open: 'bg-amber-500/25 text-amber-300',
+  in_progress: 'bg-sky-500/25 text-sky-300',
+  resolved: 'bg-emerald-500/25 text-emerald-300',
   closed: 'bg-ink/15 text-ink-mute',
 };
 const PRIORITY_TONE: Record<InquiryPriority, string> = {
-  urgent: 'bg-rose-500/20 text-rose-500 font-bold',
+  urgent: 'bg-rose-500/20 text-rose-300 font-bold',
   high: 'bg-orange-500/20 text-orange-500',
   normal: 'bg-ink/10 text-ink-mute',
   low: 'bg-ink/5 text-ink-dim',
@@ -110,7 +110,7 @@ export default function SupportInquiriesPanel() {
           </button>
         </div>
         <p className="mt-1 text-[11px] text-ink-dim">
-          사업자/아티스트/사용자 문의 통합 관리. <b className="text-rose-500">긴급</b> 우선 노출.
+          사업자/아티스트/사용자 문의 통합 관리. <b className="text-rose-300">긴급</b> 우선 노출.
           답변은 admin_note 작성 후 상태 변경.
         </p>
       </div>
@@ -123,8 +123,8 @@ export default function SupportInquiriesPanel() {
           </summary>
 
           {/* 🔑 가장 중요 — 어디서 봐야 하는지 */}
-          <div className="mt-3 rounded-lg bg-rose-500/10 p-3 ring-1 ring-rose-500/30">
-            <p className="mb-2 text-[11px] font-bold text-rose-500">
+          <div className="mt-3 rounded-lg bg-rose-500/20 p-3 ring-1 ring-rose-500/50">
+            <p className="mb-2 text-[11px] font-bold text-rose-300">
               ⚡ 카톡 채널 메시지는 운영자 "일반 카카오톡"에 안 옵니다!
             </p>
             <p className="mb-2 text-[10px] text-ink">
@@ -134,7 +134,7 @@ export default function SupportInquiriesPanel() {
               <li>
                 ① <b>카카오톡 채널 관리자 웹</b>:{' '}
                 <a href="https://center-pf.kakao.com" target="_blank" rel="noreferrer"
-                  className="text-sky-500 hover:underline">center-pf.kakao.com</a>
+                  className="text-sky-300 hover:underline">center-pf.kakao.com</a>
                 {' '}→ @듣다 → 상담 → 1:1 채팅
               </li>
               <li>
@@ -146,7 +146,7 @@ export default function SupportInquiriesPanel() {
           <p className="mt-3 mb-1 text-[11px] font-bold">채널 설정 체크리스트</p>
           <ul className="space-y-1 text-[11px] text-ink-mute">
             <li>
-              □ <b>카카오 채널 공개 ON</b> — <a href={kakaoChannelHomeUrl()} target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">@듣다 채널</a> 관리자 → 채널 검색 노출 "공개"
+              □ <b>카카오 채널 공개 ON</b> — <a href={kakaoChannelHomeUrl()} target="_blank" rel="noreferrer" className="text-sky-300 hover:underline">@듣다 채널</a> 관리자 → 채널 검색 노출 "공개"
             </li>
             <li>
               □ <b>1:1 채팅 사용 ON</b> — 채널 관리자 → 1:1 채팅 → "사용함"
@@ -184,10 +184,10 @@ export default function SupportInquiriesPanel() {
 
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-          <Stat label="open" v={summary.open} tone="text-amber-500" />
-          <Stat label="in_progress" v={summary.in_progress} tone="text-sky-500" />
-          <Stat label="urgent open" v={summary.urgent_open} tone="text-rose-500 font-bold" />
-          <Stat label="resolved" v={summary.resolved} tone="text-emerald-500" />
+          <Stat label="open" v={summary.open} tone="text-amber-300" />
+          <Stat label="in_progress" v={summary.in_progress} tone="text-sky-300" />
+          <Stat label="urgent open" v={summary.urgent_open} tone="text-rose-300 font-bold" />
+          <Stat label="resolved" v={summary.resolved} tone="text-emerald-300" />
           <Stat label="closed" v={summary.closed} />
           <Stat label="total (30d)" v={summary.total} />
         </div>
@@ -405,7 +405,7 @@ function InquiryDetailView({
             {detail.attachments.map((a) => (
               <li key={a.id}>
                 <a href={a.file_url} target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sky-400 hover:underline">
+                  className="inline-flex items-center gap-1 text-sky-300 hover:underline">
                   <FileText size={10} /> {a.file_name ?? a.file_url}
                   <ExternalLink size={9} />
                 </a>
@@ -417,7 +417,7 @@ function InquiryDetailView({
 
       {inq.current_page_url && (
         <p className="text-[10px] text-ink-dim">
-          페이지: <a href={inq.current_page_url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">{inq.current_page_url}</a>
+          페이지: <a href={inq.current_page_url} target="_blank" rel="noreferrer" className="text-sky-300 hover:underline">{inq.current_page_url}</a>
         </p>
       )}
 
@@ -496,9 +496,9 @@ function InquiryDetailView({
             {events.map((e) => (
               <li key={e.id} className="flex items-start gap-2 rounded bg-bg-card p-1.5">
                 <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${
-                  e.event_type === 'reply_sent' ? 'bg-emerald-500/15 text-emerald-500'
-                  : e.event_type === 'reply_failed' || e.event_type.includes('failed') ? 'bg-rose-500/15 text-rose-500'
-                  : e.event_type === 'created' ? 'bg-sky-500/15 text-sky-500'
+                  e.event_type === 'reply_sent' ? 'bg-emerald-500/25 text-emerald-300'
+                  : e.event_type === 'reply_failed' || e.event_type.includes('failed') ? 'bg-rose-500/25 text-rose-300'
+                  : e.event_type === 'created' ? 'bg-sky-500/25 text-sky-300'
                   : 'bg-ink/10 text-ink-mute'
                 }`}>
                   {e.event_type}{e.channel ? `·${e.channel}` : ''}

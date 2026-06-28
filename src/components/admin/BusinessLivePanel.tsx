@@ -17,13 +17,13 @@ const WINDOW_OPTIONS = [
 ];
 
 const EVENT_TONE: Record<string, string> = {
-  play_start: 'bg-emerald-500/15 text-emerald-500',
-  play_complete: 'bg-emerald-500/25 text-emerald-500',
-  play_25: 'bg-sky-500/15 text-sky-500',
-  play_50: 'bg-sky-500/15 text-sky-500',
-  play_75: 'bg-sky-500/20 text-sky-500',
-  skip: 'bg-amber-500/15 text-amber-500',
-  player_error: 'bg-rose-500/20 text-rose-500',
+  play_start: 'bg-emerald-500/25 text-emerald-300',
+  play_complete: 'bg-emerald-500/25 text-emerald-300',
+  play_25: 'bg-sky-500/25 text-sky-300',
+  play_50: 'bg-sky-500/25 text-sky-300',
+  play_75: 'bg-sky-500/20 text-sky-300',
+  skip: 'bg-amber-500/25 text-amber-300',
+  player_error: 'bg-rose-500/20 text-rose-300',
   muted: 'bg-ink/15 text-ink-mute',
   volume_low: 'bg-ink/10 text-ink-mute',
   like: 'bg-pink-500/15 text-pink-500',
@@ -82,7 +82,7 @@ export default function BusinessLivePanel() {
       <div className="rounded-xl bg-bg-card p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-1 text-sm font-bold">
-            <Activity size={14} className="text-emerald-500" /> 매장 실시간 진단 (X6.0.1)
+            <Activity size={14} className="text-emerald-300" /> 매장 실시간 진단 (X6.0.1)
           </h2>
           <div className="flex items-center gap-2 text-xs">
             <label className="flex items-center gap-1">
@@ -143,8 +143,8 @@ export default function BusinessLivePanel() {
                       <div className="shrink-0 text-right">
                         <div className="font-bold tabular-nums">{b.recent_events}</div>
                         <div className="flex gap-1 text-[10px] text-ink-dim">
-                          {b.skips > 0 && <span className="text-amber-500">스킵{b.skips}</span>}
-                          {b.errors > 0 && <span className="text-rose-500">err{b.errors}</span>}
+                          {b.skips > 0 && <span className="text-amber-300">스킵{b.skips}</span>}
+                          {b.errors > 0 && <span className="text-rose-300">err{b.errors}</span>}
                         </div>
                       </div>
                       <ChevronRight size={10} className="shrink-0 text-ink-dim" />
@@ -194,8 +194,8 @@ export default function BusinessLivePanel() {
 
               {/* 에러 (있을 때만) */}
               {detail.errors.length > 0 && (
-                <div className="rounded-xl bg-rose-500/5 p-3 ring-1 ring-rose-500/30">
-                  <h4 className="mb-2 flex items-center gap-1 text-xs font-bold text-rose-500">
+                <div className="rounded-xl bg-rose-500/5 p-3 ring-1 ring-rose-500/50">
+                  <h4 className="mb-2 flex items-center gap-1 text-xs font-bold text-rose-300">
                     <AlertOctagon size={11} /> player_error ({detail.errors.length})
                   </h4>
                   <ul className="space-y-1 text-[11px]">
@@ -233,7 +233,7 @@ export default function BusinessLivePanel() {
                             <div className="truncate text-ink-dim">{t.artist ?? ''}</div>
                           </td>
                           <td className="px-1 py-1 text-right tabular-nums">{t.plays}</td>
-                          <td className={`px-1 py-1 text-right tabular-nums ${(t.skip_rate ?? 0) >= 50 ? 'text-rose-500 font-bold' : (t.skip_rate ?? 0) >= 25 ? 'text-amber-500' : ''}`}>
+                          <td className={`px-1 py-1 text-right tabular-nums ${(t.skip_rate ?? 0) >= 50 ? 'text-rose-300 font-bold' : (t.skip_rate ?? 0) >= 25 ? 'text-amber-300' : ''}`}>
                             {t.skip_rate != null ? `${t.skip_rate}%` : '—'}
                           </td>
                         </tr>

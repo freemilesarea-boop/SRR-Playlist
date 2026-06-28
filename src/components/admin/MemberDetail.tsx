@@ -827,7 +827,7 @@ function DangerButton({
       className={`group flex flex-col items-start gap-1 rounded-xl bg-bg-card p-3 text-left ring-1 transition disabled:opacity-40 disabled:pointer-events-none ${
         tone === 'ok'
           ? 'ring-green-500/30 hover:bg-green-500/10 hover:ring-green-500/50'
-          : 'ring-red-500/30 hover:bg-red-500/10 hover:ring-red-500/50'
+          : 'ring-rose-500/50 hover:bg-rose-500/20 hover:ring-red-500/50'
       }`}
     >
       <span
@@ -839,7 +839,7 @@ function DangerButton({
       </span>
       <span className="text-[11px] leading-relaxed text-ink-mute">{description}</span>
       {disabled && disabledReason && (
-        <span className="mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">
+        <span className="mt-0.5 text-[10px] font-semibold text-amber-300 dark:text-amber-300">
           {disabledReason}
         </span>
       )}
@@ -880,7 +880,7 @@ function DangerConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-500/25 text-red-300">
             <AlertTriangle size={18} />
           </div>
           <div className="flex-1">

@@ -1023,7 +1023,7 @@ function SlotsEditor({
               if (!confirm('슬롯 삭제?')) return;
               try { await adminDeleteSlot(s.id); toast.success('삭제'); onChanged(); }
               catch (e) { toast.error((e as Error).message); }
-            }} className="text-rose-400 hover:underline">삭제</button>
+            }} className="text-rose-300 hover:underline">삭제</button>
           </div>
         ))}
       </div>
@@ -1106,19 +1106,19 @@ function KpiCard({ label, value, icon, tone = 'text-ink' }: { label: string; val
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const cls = status === 'active' ? 'bg-emerald-500/15 text-emerald-300'
-    : status === 'inactive' ? 'bg-amber-500/15 text-amber-300'
+  const cls = status === 'active' ? 'bg-emerald-500/25 text-emerald-300'
+    : status === 'inactive' ? 'bg-amber-500/25 text-amber-300'
     : status === 'archived' ? 'bg-ink/15 text-ink-mute'
-    : status === 'suspended' ? 'bg-rose-500/15 text-rose-300'
-    : status === 'draft' ? 'bg-sky-500/15 text-sky-300'
+    : status === 'suspended' ? 'bg-rose-500/25 text-rose-300'
+    : status === 'draft' ? 'bg-sky-500/25 text-sky-300'
     : 'bg-ink/15 text-ink-mute';
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>{status}</span>;
 }
 
 function PlayerStatusBadge({ status, isOffline }: { status: string; isOffline: boolean }) {
-  if (isOffline) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300"><WifiOff size={10} /> 오프라인</span>;
-  const cls = status === 'playing' ? 'bg-emerald-500/15 text-emerald-300'
-    : status === 'paused' ? 'bg-amber-500/15 text-amber-300'
+  if (isOffline) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-rose-300"><WifiOff size={10} /> 오프라인</span>;
+  const cls = status === 'playing' ? 'bg-emerald-500/25 text-emerald-300'
+    : status === 'paused' ? 'bg-amber-500/25 text-amber-300'
     : 'bg-ink/15 text-ink-mute';
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>{status}</span>;
 }

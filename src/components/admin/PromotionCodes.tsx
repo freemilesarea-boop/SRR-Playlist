@@ -149,9 +149,9 @@ export default function PromotionCodes() {
                     </td>
                     <td className="px-3 py-2.5">
                       {deleted ? (
-                        <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-300">삭제됨</span>
+                        <span className="rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-red-300">삭제됨</span>
                       ) : r.is_active ? (
-                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">활성</span>
+                        <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">활성</span>
                       ) : (
                         <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-semibold text-ink-dim">비활성</span>
                       )}
@@ -173,7 +173,7 @@ export default function PromotionCodes() {
                             <button onClick={() => void toggle(r)} className="rounded p-1.5 hover:bg-ink/5" title={r.is_active ? '비활성화' : '활성화'}>
                               <Power size={14} className={r.is_active ? 'text-emerald-300' : 'text-ink-dim'} />
                             </button>
-                            <button onClick={() => void remove(r)} className="rounded p-1.5 hover:bg-red-500/10" title="삭제">
+                            <button onClick={() => void remove(r)} className="rounded p-1.5 hover:bg-rose-500/20" title="삭제">
                               <Trash2 size={14} className="text-red-300" />
                             </button>
                           </>

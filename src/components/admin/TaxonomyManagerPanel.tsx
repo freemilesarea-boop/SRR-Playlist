@@ -223,9 +223,9 @@ export default function TaxonomyManagerPanel() {
                   <td className="px-3 py-2 text-[11px] text-ink-mute">{item.description ?? '—'}</td>
                   <td className="px-3 py-2 text-center">
                     {item.is_active ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">활성</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-300">활성</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">숨김</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/25 px-2 py-0.5 text-[10px] font-bold text-amber-300">숨김</span>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -234,10 +234,10 @@ export default function TaxonomyManagerPanel() {
                         <Pencil size={14} />
                       </IconButton>
                       <IconButton title={item.is_active ? '비활성화' : '활성화'} onClick={() => void onToggle(item)}>
-                        {item.is_active ? <ToggleRight size={16} className="text-emerald-400" /> : <ToggleLeft size={16} className="text-amber-400" />}
+                        {item.is_active ? <ToggleRight size={16} className="text-emerald-300" /> : <ToggleLeft size={16} className="text-amber-300" />}
                       </IconButton>
                       <IconButton title="삭제" onClick={() => void onDelete(item)}>
-                        <Trash2 size={14} className="text-rose-400" />
+                        <Trash2 size={14} className="text-rose-300" />
                       </IconButton>
                     </div>
                   </td>
@@ -259,8 +259,8 @@ export default function TaxonomyManagerPanel() {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warn' }) {
   const toneClass =
-    tone === 'success' ? 'text-emerald-400'
-    : tone === 'warn' ? 'text-amber-400'
+    tone === 'success' ? 'text-emerald-300'
+    : tone === 'warn' ? 'text-amber-300'
     : 'text-ink';
   return (
     <div className="flex items-baseline gap-1.5 rounded-full bg-bg-soft px-3 py-1 ring-1 ring-line/10">

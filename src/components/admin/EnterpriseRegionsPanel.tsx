@@ -200,7 +200,7 @@ export default function EnterpriseRegionsPanel() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> {error}
           <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -332,9 +332,9 @@ export default function EnterpriseRegionsPanel() {
 
 function StatusBadge({ status }: { status: EnterpriseRegionStatus }) {
   const map: Record<EnterpriseRegionStatus, { ko: string; cls: string }> = {
-    active:    { ko: '정상',    cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' },
+    active:    { ko: '정상',    cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' },
     inactive:  { ko: '비활성',  cls: 'bg-ink/15 text-ink-mute ring-line/20' },
-    suspended: { ko: '정지',    cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30' },
+    suspended: { ko: '정지',    cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50' },
   };
   const v = map[status];
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${v.cls}`}>{v.ko}</span>;
@@ -539,7 +539,7 @@ function DeleteConfirmModal({
       <div onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <div className="flex items-start gap-3">
-          <div className="rounded-full bg-rose-500/15 p-2"><Trash2 size={18} className="text-rose-300" /></div>
+          <div className="rounded-full bg-rose-500/25 p-2"><Trash2 size={18} className="text-rose-300" /></div>
           <div className="flex-1">
             <h3 className="text-sm font-bold">지역 삭제</h3>
             <p className="mt-1 text-xs text-ink-mute">

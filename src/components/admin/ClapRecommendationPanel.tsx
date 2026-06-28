@@ -245,7 +245,7 @@ export default function ClapRecommendationPanel() {
 
             {/* 자동 첨부 설정 */}
             <div className="mt-3 flex items-center gap-3 rounded-lg bg-bg-soft p-3 ring-1 ring-line/10">
-              <Zap size={14} className={selected.auto_attach_enabled ? 'text-emerald-400' : 'text-ink-dim'} />
+              <Zap size={14} className={selected.auto_attach_enabled ? 'text-emerald-300' : 'text-ink-dim'} />
               <div className="flex-1">
                 <div className="text-xs font-semibold">
                   자동 첨부 {selected.auto_attach_enabled ? 'ON' : 'OFF'}
@@ -293,7 +293,7 @@ export default function ClapRecommendationPanel() {
                     onClick={handleToggleAutoAttach}
                     className={`h-8 rounded-lg px-3 text-[11px] font-semibold ring-1 ${
                       selected.auto_attach_enabled
-                        ? 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30 hover:bg-emerald-500/25'
+                        ? 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50 hover:bg-emerald-500/25'
                         : 'bg-bg-card text-ink-mute ring-line/20 hover:bg-bg-hover'
                     }`}
                   >
@@ -378,7 +378,7 @@ export default function ClapRecommendationPanel() {
                       <button
                         onClick={() => handleDecide(r, false)}
                         disabled={decidingId === r.id}
-                        className="rounded-lg bg-bg-card px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/20 hover:bg-bg-hover hover:text-rose-400 disabled:opacity-50"
+                        className="rounded-lg bg-bg-card px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/20 hover:bg-bg-hover hover:text-rose-300 disabled:opacity-50"
                         title="반려"
                       >
                         <X size={12} />
@@ -386,7 +386,7 @@ export default function ClapRecommendationPanel() {
                       <button
                         onClick={() => handleDecide(r, true)}
                         disabled={decidingId === r.id}
-                        className="rounded-lg bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50"
+                        className="rounded-lg bg-emerald-500/25 px-2 py-1 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-emerald-500/25 disabled:opacity-50"
                         title="승인 — 플레이리스트에 추가"
                       >
                         <Check size={12} />
@@ -403,7 +403,7 @@ export default function ClapRecommendationPanel() {
       {/* 자동 첨부 이력 — 시스템이 admin 없이 자동으로 추가한 곡들 */}
       <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <div className="mb-3 flex items-center gap-2">
-          <Zap size={14} className="text-emerald-400" />
+          <Zap size={14} className="text-emerald-300" />
           <h4 className="text-sm font-bold tracking-tight">
             자동 첨부 이력
             <span className="ml-2 text-xs text-ink-mute">
@@ -451,7 +451,7 @@ export default function ClapRecommendationPanel() {
                   <button
                     onClick={() => handleRollback(row)}
                     disabled={rollingBackId === row.recommendation_id}
-                    className="shrink-0 rounded-lg bg-bg-card px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/20 hover:bg-rose-500/15 hover:text-rose-400 disabled:opacity-50"
+                    className="shrink-0 rounded-lg bg-bg-card px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/20 hover:bg-rose-500/25 hover:text-rose-300 disabled:opacity-50"
                     title="롤백 — 플레이리스트에서 제거하고 반려로 표시"
                   >
                     <RotateCcw size={11} />
@@ -480,7 +480,7 @@ function Pill({ children, tone }: { children: React.ReactNode; tone?: 'warn' }) 
     <span
       className={
         tone === 'warn'
-          ? 'rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-400'
+          ? 'rounded bg-amber-500/25 px-1.5 py-0.5 font-semibold text-amber-300'
           : 'rounded bg-bg-card px-1.5 py-0.5'
       }
     >

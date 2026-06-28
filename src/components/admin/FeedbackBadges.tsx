@@ -13,10 +13,10 @@ const ACTION_META: Record<FeedbackAction, {
   Icon: typeof Ban;
   priority: number;
 }> = {
-  admin_removed:       { label: '제거', tone: 'bg-rose-500/15 text-rose-500', Icon: Trash2, priority: 0 },
-  admin_excluded:      { label: '제외', tone: 'bg-rose-500/20 text-rose-500', Icon: Ban, priority: 1 },
-  admin_review_needed: { label: '검토', tone: 'bg-amber-500/15 text-amber-500', Icon: AlertTriangle, priority: 2 },
-  admin_approved:      { label: '승인', tone: 'bg-emerald-500/15 text-emerald-500', Icon: CheckCircle2, priority: 3 },
+  admin_removed:       { label: '제거', tone: 'bg-rose-500/25 text-rose-300', Icon: Trash2, priority: 0 },
+  admin_excluded:      { label: '제외', tone: 'bg-rose-500/20 text-rose-300', Icon: Ban, priority: 1 },
+  admin_review_needed: { label: '검토', tone: 'bg-amber-500/25 text-amber-300', Icon: AlertTriangle, priority: 2 },
+  admin_approved:      { label: '승인', tone: 'bg-emerald-500/25 text-emerald-300', Icon: CheckCircle2, priority: 3 },
   metadata_corrected:  { label: '메타 수정', tone: 'bg-indigo-500/15 text-indigo-400', Icon: FileEdit, priority: 4 },
 };
 
@@ -73,7 +73,7 @@ export default function FeedbackBadges({
     return () => { cancelled = true; };
   }, [trackId]);
 
-  if (error) return <span className="text-[10px] text-rose-500">feedback 로딩 실패</span>;
+  if (error) return <span className="text-[10px] text-rose-300">feedback 로딩 실패</span>;
   if (rows == null) return null;
   if (rows.length === 0) {
     return hideIfEmpty ? null : (

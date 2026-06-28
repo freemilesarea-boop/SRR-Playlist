@@ -173,7 +173,7 @@ export default function SalesAgentsList() {
                   </td>
                   <td className="px-3 py-2.5">
                     {r.is_active ? (
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                         활성
                       </span>
                     ) : (
@@ -509,7 +509,7 @@ function SalesAgentDetailModal({
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     data.agent.is_active
-                      ? 'bg-emerald-500/15 text-emerald-300'
+                      ? 'bg-emerald-500/25 text-emerald-300'
                       : 'bg-ink/10 text-ink-dim'
                   }`}
                 >

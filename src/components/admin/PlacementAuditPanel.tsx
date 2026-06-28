@@ -102,7 +102,7 @@ export default function PlacementAuditPanel() {
         </h2>
         <p className="text-xs text-ink-mute">
           호텔/와인바/카페 라운지 등 매장 카테고리에 부적합 의심 장르 (rock/metal/punk 등) 가 배치된 트랙을 검출.
-          <span className="ml-1 font-semibold text-amber-400">자동 차단 정책 보류 — taxonomy-v1 precision &gt; 90% 검증 후 재검토.</span>
+          <span className="ml-1 font-semibold text-amber-300">자동 차단 정책 보류 — taxonomy-v1 precision &gt; 90% 검증 후 재검토.</span>
         </p>
       </header>
 
@@ -169,7 +169,7 @@ export default function PlacementAuditPanel() {
               <tr><td colSpan={8} className="px-3 py-10 text-center text-ink-dim">
                 {filter === 'pending' ? (
                   <>
-                    <AlertTriangle size={14} className="inline mr-1 text-emerald-400" /> 대기 중 의심 플래그가 없습니다.
+                    <AlertTriangle size={14} className="inline mr-1 text-emerald-300" /> 대기 중 의심 플래그가 없습니다.
                     <p className="mt-1 text-[10px]">스캔 적재 버튼으로 새 플래그를 만드세요.</p>
                   </>
                 ) : '해당 상태의 항목이 없습니다.'}
@@ -214,9 +214,9 @@ export default function PlacementAuditPanel() {
                   ) : (
                     <span className={
                       'rounded-full px-2 py-0.5 text-[10px] font-bold ' +
-                      (r.decision === 'approve' ? 'bg-emerald-500/15 text-emerald-400'
+                      (r.decision === 'approve' ? 'bg-emerald-500/25 text-emerald-300'
                        : r.decision === 'keep' ? 'bg-slate-500/15 text-slate-300'
-                       : 'bg-rose-500/15 text-rose-400')
+                       : 'bg-rose-500/25 text-rose-300')
                     }>
                       {r.decision === 'approve' ? '승인됨' : r.decision === 'keep' ? '유지됨' : '삭제됨'}
                     </span>
@@ -252,8 +252,8 @@ function DecideBtn({ label, icon, tone, disabled, onClick, title }: {
   disabled: boolean; onClick: () => void; title: string;
 }) {
   const toneClass =
-    tone === 'emerald' ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/30 hover:bg-emerald-500/20'
-    : tone === 'rose' ? 'bg-rose-500/10 text-rose-300 ring-rose-500/30 hover:bg-rose-500/20'
+    tone === 'emerald' ? 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/50 hover:bg-emerald-500/20'
+    : tone === 'rose' ? 'bg-rose-500/20 text-rose-300 ring-rose-500/50 hover:bg-rose-500/20'
     : 'bg-bg-soft text-ink-mute ring-line/10 hover:text-ink';
   return (
     <button onClick={onClick} disabled={disabled} title={title}
@@ -264,7 +264,7 @@ function DecideBtn({ label, icon, tone, disabled, onClick, title }: {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warn' }) {
-  const toneClass = tone === 'success' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink';
+  const toneClass = tone === 'success' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : 'text-ink';
   return (
     <div className="flex items-baseline gap-1.5 rounded-full bg-bg-soft px-3 py-1 ring-1 ring-line/10">
       <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">{label}</span>
@@ -293,8 +293,8 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
   const audio_total = data.scores.daypart + data.scores.bpm + data.scores.energy
                     + data.scores.vocal + data.scores.quality + data.scores.freshness;
   function toneOf(v: number): string {
-    if (v > 0) return 'text-emerald-400';
-    if (v < 0) return 'text-rose-400';
+    if (v > 0) return 'text-emerald-300';
+    if (v < 0) return 'text-rose-300';
     return 'text-ink-dim';
   }
 
@@ -308,9 +308,9 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
     { key: 'allow', label: 'allow rule', match: gate.allow_rule_matched },
   ] : [];
   const decisionLabel: Record<string, { text: string; tone: string }> = {
-    auto_place: { text: '✓ 자동 배치', tone: 'bg-emerald-500/15 text-emerald-400' },
-    skip_gate_failed: { text: '⚠️ 최소 게이트 실패', tone: 'bg-amber-500/15 text-amber-400' },
-    skip_blocked: { text: '🚫 Block 룰 매치', tone: 'bg-rose-500/15 text-rose-400' },
+    auto_place: { text: '✓ 자동 배치', tone: 'bg-emerald-500/25 text-emerald-300' },
+    skip_gate_failed: { text: '⚠️ 최소 게이트 실패', tone: 'bg-amber-500/25 text-amber-300' },
+    skip_blocked: { text: '🚫 Block 룰 매치', tone: 'bg-rose-500/25 text-rose-300' },
     skip_below_threshold: { text: '✕ Threshold 미달', tone: 'bg-slate-500/15 text-slate-300' },
   };
 
@@ -367,7 +367,7 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
                 </p>
               )}
               {!data.ai_boost_breakdown.normalized_store_key && data.playlist.business_category && (
-                <p className="text-amber-400">
+                <p className="text-amber-300">
                   ⚠️ business_category "{data.playlist.business_category}" alias 미매핑 — store_ai 비활성
                 </p>
               )}
@@ -375,9 +375,9 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
           )}
         </div>
 
-        <div className={`mt-3 rounded-xl p-3 text-center ${data.would_place ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
+        <div className={`mt-3 rounded-xl p-3 text-center ${data.would_place ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}>
           <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">최종 점수 (threshold {data.threshold})</p>
-          <p className={`mt-1 text-2xl font-bold ${data.would_place ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <p className={`mt-1 text-2xl font-bold ${data.would_place ? 'text-emerald-300' : 'text-rose-300'}`}>
             {Number(data.final_score).toFixed(1)} {data.would_place ? '✓ 배치' : '✕ 거부'}
           </p>
         </div>
@@ -395,12 +395,12 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
               {gateSignals.map((s) => (
                 <span key={s.key}
                   className={'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono ' +
-                    (s.match ? 'bg-emerald-500/15 text-emerald-300' : 'bg-bg-card text-ink-dim')}>
+                    (s.match ? 'bg-emerald-500/25 text-emerald-300' : 'bg-bg-card text-ink-dim')}>
                   {s.match ? '✓' : '·'} {s.label}
                 </span>
               ))}
               {gate.block_rule_matched && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-mono text-rose-300">
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-mono text-rose-300">
                   ⚠️ block matched
                 </span>
               )}
@@ -415,14 +415,14 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
         {(data.block_reasons || data.allow_exceptions) && (
           <div className="mt-3 space-y-2">
             {data.block_reasons && data.block_reasons.length > 0 && (
-              <div className="rounded-lg bg-rose-500/5 p-2 ring-1 ring-rose-500/20">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-rose-400">Block 패턴 매치 (정보용)</p>
+              <div className="rounded-lg bg-rose-500/5 p-2 ring-1 ring-rose-500/50">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-rose-300">Block 패턴 매치 (정보용)</p>
                 <ul className="mt-1 space-y-0.5 text-[11px] text-rose-300">{data.block_reasons.map((r, i) => <li key={i}>· {r}</li>)}</ul>
               </div>
             )}
             {data.allow_exceptions && data.allow_exceptions.length > 0 && (
-              <div className="rounded-lg bg-emerald-500/5 p-2 ring-1 ring-emerald-500/20">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-400">Allow 예외</p>
+              <div className="rounded-lg bg-emerald-500/5 p-2 ring-1 ring-emerald-500/50">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-300">Allow 예외</p>
                 <ul className="mt-1 space-y-0.5 text-[11px] text-emerald-300">{data.allow_exceptions.map((r, i) => <li key={i}>· {r}</li>)}</ul>
               </div>
             )}

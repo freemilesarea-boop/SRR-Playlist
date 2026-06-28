@@ -180,7 +180,7 @@ export default function StreamingAnalytics() {
           <span className="text-[10px] text-ink-dim">milestone_30s · eligible_for_payout 기준</span>
         </div>
         {eligError && (
-          <div className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+          <div className="rounded-lg bg-rose-500/25 px-3 py-2 text-xs text-rose-200 dark:text-red-300">
             {eligError}
           </div>
         )}
@@ -233,8 +233,8 @@ export default function StreamingAnalytics() {
                       <tr key={d.day} className="border-b border-line/10 last:border-b-0">
                         <td className="px-3 py-2 font-mono text-[11px]">{d.day}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">{elig.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-200 dark:text-emerald-300">{elig.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-rose-200 dark:text-red-300">
                           {excl > 0 ? `-${excl.toLocaleString()}` : '0'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{Number(d.unique_listeners).toLocaleString()}</td>
@@ -346,8 +346,8 @@ export default function StreamingAnalytics() {
                         <td className="px-3 py-2 font-medium">{t.title}</td>
                         <td className="px-3 py-2 text-ink-mute">{t.artist ?? '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">{elig.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-red-700 dark:text-red-300">
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-200 dark:text-emerald-300">{elig.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-rose-200 dark:text-red-300">
                           {excl > 0 ? `-${excl.toLocaleString()}` : '0'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{ratio.toFixed(1)}%</td>
@@ -443,8 +443,8 @@ function Summary({
   tone?: 'success' | 'warn';
 }) {
   const valueClass =
-    tone === 'success' ? 'text-emerald-700 dark:text-emerald-300'
-    : tone === 'warn'  ? 'text-amber-700 dark:text-amber-300'
+    tone === 'success' ? 'text-emerald-200 dark:text-emerald-300'
+    : tone === 'warn'  ? 'text-amber-200 dark:text-amber-300'
     : '';
   return (
     <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
@@ -543,7 +543,7 @@ function MonthlySettlementSummary() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">{error}</div>
+        <div className="rounded-lg bg-rose-500/25 px-3 py-2 text-xs text-rose-200 dark:text-red-300">{error}</div>
       )}
 
       {loading ? (
@@ -584,9 +584,9 @@ function ReasonCard({
   tone: 'info' | 'warn' | 'error';
 }) {
   const toneClass =
-    tone === 'error' ? 'bg-red-500/15 text-red-700 ring-red-400/30 dark:text-red-300'
-    : tone === 'warn'  ? 'bg-amber-500/15 text-amber-700 ring-amber-400/30 dark:text-amber-300'
-    : 'bg-sky-500/15 text-sky-700 ring-sky-400/30 dark:text-sky-300';
+    tone === 'error' ? 'bg-rose-500/25 text-rose-200 ring-rose-400/50 dark:text-red-300'
+    : tone === 'warn'  ? 'bg-amber-500/25 text-amber-200 ring-amber-400/50 dark:text-amber-300'
+    : 'bg-sky-500/25 text-sky-200 ring-sky-400/50 dark:text-sky-300';
   return (
     <div className={`rounded-xl p-2.5 ring-1 ${toneClass}`}>
       <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">{label}</p>

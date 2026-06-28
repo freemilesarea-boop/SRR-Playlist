@@ -38,9 +38,9 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 
 const STATUS_TONE: Record<IntakeStatus, { label: string; tone: string }> = {
   pending: { label: '확인 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
-  approved: { label: '승인됨', tone: 'bg-emerald-500/15 text-emerald-300' },
-  rejected: { label: '반려됨', tone: 'bg-red-500/15 text-red-300' },
-  needs_revision: { label: '보완 요청', tone: 'bg-amber-500/15 text-amber-300' },
+  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
+  rejected: { label: '반려됨', tone: 'bg-rose-500/25 text-red-300' },
+  needs_revision: { label: '보완 요청', tone: 'bg-amber-500/25 text-amber-300' },
   withdrawn: { label: '철회됨', tone: 'bg-ink/5 text-ink-mute' },
 };
 
@@ -262,7 +262,7 @@ export default function PayoutIntakeAdminPanel() {
                         <button
                           onClick={() => void approve(r)}
                           disabled={busyId === r.submission_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/25 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
                         >
                           <CheckCircle2 size={11} /> 승인
                         </button>
@@ -271,7 +271,7 @@ export default function PayoutIntakeAdminPanel() {
                         <button
                           onClick={() => void reject(r, 'needs_revision')}
                           disabled={busyId === r.submission_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-amber-500/25 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
                         >
                           <AlertTriangle size={11} /> 보완
                         </button>
@@ -280,7 +280,7 @@ export default function PayoutIntakeAdminPanel() {
                         <button
                           onClick={() => void reject(r, 'rejected')}
                           disabled={busyId === r.submission_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-rose-500/25 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
                         >
                           <XCircle size={11} /> 반려
                         </button>

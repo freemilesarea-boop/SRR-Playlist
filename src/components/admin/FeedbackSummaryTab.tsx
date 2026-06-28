@@ -17,10 +17,10 @@ const ACTION_LABEL: Record<FeedbackAction, string> = {
 };
 
 const ACTION_TONE: Record<FeedbackAction, string> = {
-  admin_removed:       'bg-rose-500/15 text-rose-500',
-  admin_excluded:      'bg-rose-500/20 text-rose-500',
-  admin_review_needed: 'bg-amber-500/15 text-amber-500',
-  admin_approved:      'bg-emerald-500/15 text-emerald-500',
+  admin_removed:       'bg-rose-500/25 text-rose-300',
+  admin_excluded:      'bg-rose-500/20 text-rose-300',
+  admin_review_needed: 'bg-amber-500/25 text-amber-300',
+  admin_approved:      'bg-emerald-500/25 text-emerald-300',
   metadata_corrected:  'bg-indigo-500/15 text-indigo-400',
 };
 
@@ -68,7 +68,7 @@ export default function FeedbackSummaryTab() {
 
   if (error && !summary) {
     return (
-      <div className="rounded-xl bg-rose-500/10 p-4 text-sm text-rose-500">
+      <div className="rounded-xl bg-rose-500/20 p-4 text-sm text-rose-300">
         로딩 실패: {error}
         <button onClick={() => void load()} className="ml-2 underline">재시도</button>
       </div>
@@ -182,16 +182,16 @@ export default function FeedbackSummaryTab() {
                       <tr key={g.main_genre} className="border-b border-line/10">
                         <td className="px-2 py-1.5 font-semibold">{g.main_genre}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">
-                          <span className={g.removed > 0 ? 'text-rose-500' : 'text-ink-dim'}>{g.removed}</span>
+                          <span className={g.removed > 0 ? 'text-rose-300' : 'text-ink-dim'}>{g.removed}</span>
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums">
-                          <span className={g.excluded > 0 ? 'text-rose-500' : 'text-ink-dim'}>{g.excluded}</span>
+                          <span className={g.excluded > 0 ? 'text-rose-300' : 'text-ink-dim'}>{g.excluded}</span>
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums">
-                          <span className={g.review_needed > 0 ? 'text-amber-500' : 'text-ink-dim'}>{g.review_needed}</span>
+                          <span className={g.review_needed > 0 ? 'text-amber-300' : 'text-ink-dim'}>{g.review_needed}</span>
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums">
-                          <span className={g.approved > 0 ? 'text-emerald-500' : 'text-ink-dim'}>{g.approved}</span>
+                          <span className={g.approved > 0 ? 'text-emerald-300' : 'text-ink-dim'}>{g.approved}</span>
                         </td>
                         <td className="px-2 py-1.5 text-right font-bold tabular-nums">{g.total}</td>
                       </tr>

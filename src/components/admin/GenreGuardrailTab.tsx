@@ -16,9 +16,9 @@ import {
 import { toast } from '@/store/toastStore';
 
 const RULE_LABELS: Record<GenreGuardrailRuleType, { label: string; tone: string; icon: typeof Shield }> = {
-  hard_block:   { label: 'HARD BLOCK',   tone: 'bg-rose-500/20 text-rose-500',       icon: Ban },
-  soft_penalty: { label: 'SOFT PENALTY', tone: 'bg-amber-500/20 text-amber-500',     icon: AlertTriangle },
-  bonus:        { label: 'BONUS',        tone: 'bg-emerald-500/20 text-emerald-500', icon: Sparkles },
+  hard_block:   { label: 'HARD BLOCK',   tone: 'bg-rose-500/20 text-rose-300',       icon: Ban },
+  soft_penalty: { label: 'SOFT PENALTY', tone: 'bg-amber-500/20 text-amber-300',     icon: AlertTriangle },
+  bonus:        { label: 'BONUS',        tone: 'bg-emerald-500/20 text-emerald-300', icon: Sparkles },
 };
 
 const RULE_DEFAULT_DELTA: Record<GenreGuardrailRuleType, number> = {
@@ -262,10 +262,10 @@ export default function GenreGuardrailTab() {
                         <button onClick={() => void toggle(r)}
                           title={r.is_active ? '비활성화' : '활성화'}
                           className="rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover">
-                          <Power size={10} className={r.is_active ? 'text-emerald-500' : 'text-ink-dim'} />
+                          <Power size={10} className={r.is_active ? 'text-emerald-300' : 'text-ink-dim'} />
                         </button>
                         <button onClick={() => void remove(r)}
-                          className="rounded bg-rose-500/15 px-2 py-1 text-rose-500 hover:bg-rose-500/25">
+                          className="rounded bg-rose-500/25 px-2 py-1 text-rose-300 hover:bg-rose-500/25">
                           <Trash2 size={10} />
                         </button>
                       </div>

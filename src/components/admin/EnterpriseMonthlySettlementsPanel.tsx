@@ -167,7 +167,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
       </div>
 
       {error && (
-        <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} className="inline mr-1" />{error}
           <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -349,7 +349,7 @@ function DetailModal({
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {loading && !settlement && <div className="h-40 animate-pulse rounded bg-bg-deep" />}
           {error && (
-            <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+            <div className="rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
               <AlertCircle size={12} className="inline mr-1" />{error}
               <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
             </div>
@@ -525,10 +525,10 @@ function DetailModal({
 
 function StatusBadge({ status }: { status: EnterpriseMonthlySettlementStatus }) {
   const map = {
-    pending:   { tone: 'bg-amber-500/15 text-amber-300',     icon: <ClockIcon size={10} /> },
-    approved:  { tone: 'bg-sky-500/15 text-sky-300',         icon: <ThumbsUp size={10} /> },
-    paid:      { tone: 'bg-emerald-500/15 text-emerald-300', icon: <CheckCircle2 size={10} /> },
-    cancelled: { tone: 'bg-rose-500/15 text-rose-300',       icon: <XCircle size={10} /> },
+    pending:   { tone: 'bg-amber-500/25 text-amber-300',     icon: <ClockIcon size={10} /> },
+    approved:  { tone: 'bg-sky-500/25 text-sky-300',         icon: <ThumbsUp size={10} /> },
+    paid:      { tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={10} /> },
+    cancelled: { tone: 'bg-rose-500/25 text-rose-300',       icon: <XCircle size={10} /> },
   } as const;
   const v = map[status];
   return (
@@ -540,7 +540,7 @@ function StatusBadge({ status }: { status: EnterpriseMonthlySettlementStatus }) 
 
 function ItemBadge({ status }: { status: 'included' | 'excluded' }) {
   return status === 'included'
-    ? <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+    ? <span className="inline-flex items-center gap-1 rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
         <CheckCircle2 size={9} /> 포함
       </span>
     : <span className="inline-flex items-center gap-1 rounded bg-ink/10 px-1.5 py-0.5 text-[10px] font-bold text-ink-mute">

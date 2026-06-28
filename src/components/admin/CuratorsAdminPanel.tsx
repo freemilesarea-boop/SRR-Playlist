@@ -26,9 +26,9 @@ const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
 ];
 
 const STATUS_TONE: Record<CuratorStatus, string> = {
-  active: 'bg-emerald-500/15 text-emerald-500 ring-emerald-500/20',
-  inactive: 'bg-amber-500/15 text-amber-500 ring-amber-500/20',
-  deleted: 'bg-rose-500/15 text-rose-500 ring-rose-500/20',
+  active: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50',
+  inactive: 'bg-amber-500/25 text-amber-300 ring-amber-500/50',
+  deleted: 'bg-rose-500/25 text-rose-300 ring-rose-500/50',
 };
 
 const STATUS_LABEL: Record<CuratorStatus, string> = {
@@ -242,14 +242,14 @@ export default function CuratorsAdminPanel() {
                       {(r.is_verified || r.is_featured) && (
                         <div className="mt-0.5 flex gap-1 text-[10px]">
                           {r.is_verified && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-blue-500">verified</span>}
-                          {r.is_featured && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-500">featured</span>}
+                          {r.is_featured && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">featured</span>}
                         </div>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-ink-mute">@{r.handle}</td>
                     <td className="px-3 py-2 text-ink-mute">{r.user_email ?? r.contact_email ?? '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      <span className="text-emerald-500">{r.active_playlist_count}</span>
+                      <span className="text-emerald-300">{r.active_playlist_count}</span>
                       <span className="text-ink-dim"> / {r.playlist_count}</span>
                     </td>
                     <td className="px-3 py-2 text-ink-mute">{fmt(r.created_at)}</td>
@@ -273,7 +273,7 @@ export default function CuratorsAdminPanel() {
                               disabled={busyId === r.curator_id}
                               onClick={() => openDeactivate(r)}
                               title="비활성화"
-                              className="rounded p-1.5 text-amber-500 hover:bg-amber-500/10 disabled:opacity-50"
+                              className="rounded p-1.5 text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
                             >
                               <UserX size={12} />
                             </button>
@@ -281,7 +281,7 @@ export default function CuratorsAdminPanel() {
                               disabled={busyId === r.curator_id}
                               onClick={() => openDelete(r)}
                               title="삭제"
-                              className="rounded p-1.5 text-rose-500 hover:bg-rose-500/10 disabled:opacity-50"
+                              className="rounded p-1.5 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -293,7 +293,7 @@ export default function CuratorsAdminPanel() {
                               disabled={busyId === r.curator_id}
                               onClick={() => void doRestore(r)}
                               title="복구"
-                              className="rounded p-1.5 text-emerald-500 hover:bg-emerald-500/10 disabled:opacity-50"
+                              className="rounded p-1.5 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
                             >
                               <RotateCcw size={12} />
                             </button>
@@ -301,7 +301,7 @@ export default function CuratorsAdminPanel() {
                               disabled={busyId === r.curator_id}
                               onClick={() => openDelete(r)}
                               title="삭제"
-                              className="rounded p-1.5 text-rose-500 hover:bg-rose-500/10 disabled:opacity-50"
+                              className="rounded p-1.5 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -312,7 +312,7 @@ export default function CuratorsAdminPanel() {
                             disabled={busyId === r.curator_id}
                             onClick={() => void doRestore(r)}
                             title="복구"
-                            className="rounded p-1.5 text-emerald-500 hover:bg-emerald-500/10 disabled:opacity-50"
+                            className="rounded p-1.5 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
                           >
                             <RotateCcw size={12} />
                           </button>
@@ -383,7 +383,7 @@ export default function CuratorsAdminPanel() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
-              <div className={confirmMode === 'delete' ? 'text-rose-500' : 'text-amber-500'}>
+              <div className={confirmMode === 'delete' ? 'text-rose-300' : 'text-amber-300'}>
                 {confirmMode === 'delete' ? <Trash2 size={20} /> : <UserX size={20} />}
               </div>
               <div className="flex-1">
@@ -400,7 +400,7 @@ export default function CuratorsAdminPanel() {
               <>
                 <div className="mt-4 space-y-2 rounded-lg bg-bg-soft p-3 text-xs">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert size={14} className="text-amber-500" />
+                    <ShieldAlert size={14} className="text-amber-300" />
                     <span className="font-semibold">관련 데이터</span>
                   </div>
                   <ul className="space-y-1 pl-5 text-[11px] text-ink-mute">
@@ -453,11 +453,11 @@ export default function CuratorsAdminPanel() {
 
             {confirmStep === 2 && (
               <>
-                <div className="mt-4 rounded-lg bg-rose-500/10 p-3 text-xs ring-1 ring-rose-500/20">
+                <div className="mt-4 rounded-lg bg-rose-500/20 p-3 text-xs ring-1 ring-rose-500/50">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle size={14} className="mt-0.5 text-rose-500" />
+                    <AlertTriangle size={14} className="mt-0.5 text-rose-300" />
                     <div className="space-y-1">
-                      <p className="font-bold text-rose-500">최종 확인</p>
+                      <p className="font-bold text-rose-300">최종 확인</p>
                       {confirmMode === 'delete' ? (
                         <p className="text-ink-mute">
                           이 큐레이터를 <b>삭제 처리</b>합니다. 계정과 데이터는 <b>hard delete 되지 않으며</b>,

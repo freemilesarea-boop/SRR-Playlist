@@ -201,7 +201,7 @@ export default function EnterpriseAccountsPanel() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> {error}
           <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -349,9 +349,9 @@ export default function EnterpriseAccountsPanel() {
 
 function StatusBadge({ status }: { status: EnterpriseAccountStatus }) {
   const map: Record<EnterpriseAccountStatus, { ko: string; cls: string }> = {
-    active:    { ko: '정상',    cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' },
-    invited:   { ko: '초대중',  cls: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
-    suspended: { ko: '정지',    cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30' },
+    active:    { ko: '정상',    cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' },
+    invited:   { ko: '초대중',  cls: 'bg-sky-500/25 text-sky-300 ring-sky-500/50' },
+    suspended: { ko: '정지',    cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50' },
     inactive:  { ko: '비활성',  cls: 'bg-ink/15 text-ink-mute ring-line/20' },
   };
   const v = map[status];
@@ -362,7 +362,7 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
   const map: Record<EnterpriseAccountRole, { ko: string; cls: string }> = {
     owner:              { ko: '본사 최고관리자',  cls: 'bg-purple-500/15 text-purple-300' },
     admin:              { ko: '본사 관리자',      cls: 'bg-indigo-500/15 text-indigo-300' },
-    enterprise_manager: { ko: '본사 담당자',      cls: 'bg-sky-500/15 text-sky-300' },
+    enterprise_manager: { ko: '본사 담당자',      cls: 'bg-sky-500/25 text-sky-300' },
     viewer:             { ko: '조회 전용',        cls: 'bg-ink/15 text-ink-mute' },
   };
   const v = map[role];
@@ -678,7 +678,7 @@ function InviteCodesModal({
         {loading && <div className="space-y-2"><div className="h-10 animate-pulse rounded bg-bg-deep" /><div className="h-10 animate-pulse rounded bg-bg-deep" /></div>}
 
         {error && (
-          <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+          <div className="rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
             <AlertCircle size={12} className="inline mr-1" />{error}
             <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 ml-2 font-bold">재시도</button>
           </div>
@@ -814,7 +814,7 @@ function CodeRowWithAction({
           type="button"
           onClick={onRotate}
           disabled={rotating}
-          className="rounded bg-amber-500/15 p-1.5 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+          className="rounded bg-amber-500/25 p-1.5 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
           title="재발급"
         >
           <RotateCw size={11} className={rotating ? 'animate-spin' : ''} />
@@ -833,7 +833,7 @@ function DeleteConfirmModal({
       <div onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <div className="flex items-start gap-3">
-          <div className="rounded-full bg-rose-500/15 p-2"><Trash2 size={18} className="text-rose-300" /></div>
+          <div className="rounded-full bg-rose-500/25 p-2"><Trash2 size={18} className="text-rose-300" /></div>
           <div className="flex-1">
             <h3 className="text-sm font-bold">본사 계정 삭제</h3>
             <p className="mt-1 text-xs text-ink-mute">
@@ -964,7 +964,7 @@ function SettlementReviewModal({
 
         {loading && <div className="h-40 animate-pulse rounded bg-bg-deep" />}
         {error && (
-          <div className="rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+          <div className="rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
             <AlertCircle size={12} className="inline mr-1" />{error}
             <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
           </div>
@@ -1109,9 +1109,9 @@ function KV({ k, v, colSpan, mono }: { k: string; v: string | null | undefined; 
 function SettlementStatusInline({ status }: { status: 'unregistered' | 'reviewing' | 'approved' | 'rejected' }) {
   const map = {
     unregistered: 'bg-ink/10 text-ink-mute',
-    reviewing:    'bg-amber-500/15 text-amber-300',
-    approved:     'bg-emerald-500/15 text-emerald-300',
-    rejected:     'bg-rose-500/15 text-rose-300',
+    reviewing:    'bg-amber-500/25 text-amber-300',
+    approved:     'bg-emerald-500/25 text-emerald-300',
+    rejected:     'bg-rose-500/25 text-rose-300',
   } as const;
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${map[status]}`}>

@@ -19,8 +19,8 @@ interface ArtistRow {
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   pending: { label: '심사 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
-  approved: { label: '승인됨', tone: 'bg-emerald-500/15 text-emerald-300' },
-  rejected: { label: '거절됨', tone: 'bg-red-500/15 text-red-300' },
+  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
+  rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
 };
 
 export default function ArtistApprovalList() {
@@ -179,7 +179,7 @@ export default function ArtistApprovalList() {
                         <button
                           onClick={() => approve(r.user_id)}
                           disabled={busyId === r.user_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/25 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
                         >
                           <Check size={11} /> 승인
                         </button>
@@ -188,7 +188,7 @@ export default function ArtistApprovalList() {
                         <button
                           onClick={() => reject(r.user_id)}
                           disabled={busyId === r.user_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-rose-500/25 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
                         >
                           <X size={11} /> 거절
                         </button>

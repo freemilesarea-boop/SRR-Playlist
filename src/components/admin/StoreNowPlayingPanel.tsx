@@ -186,7 +186,7 @@ export default function StoreNowPlayingPanel() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> {error}
           <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -388,12 +388,12 @@ function AlbumArt({ url, size }: { url: string | null; size: number }) {
 }
 
 function PlayerBadge({ status, online }: { status: NowPlayingPlayerStatus; online: boolean }) {
-  if (!online) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300"><WifiOff size={10} /> 오프라인</span>;
+  if (!online) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-rose-300"><WifiOff size={10} /> 오프라인</span>;
   const map: Record<NowPlayingPlayerStatus, { ko: string; cls: string; icon: React.ReactNode }> = {
-    playing: { ko: '재생 중', cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30', icon: <Play size={10} /> },
-    paused:  { ko: '일시정지', cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30', icon: <Pause size={10} /> },
+    playing: { ko: '재생 중', cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50', icon: <Play size={10} /> },
+    paused:  { ko: '일시정지', cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50', icon: <Pause size={10} /> },
     stopped: { ko: '정지', cls: 'bg-ink/15 text-ink-mute ring-line/20', icon: <Square size={10} /> },
-    offline: { ko: '오프라인', cls: 'bg-rose-500/15 text-rose-300 ring-rose-500/30', icon: <WifiOff size={10} /> },
+    offline: { ko: '오프라인', cls: 'bg-rose-500/25 text-rose-300 ring-rose-500/50', icon: <WifiOff size={10} /> },
     unknown: { ko: '대기', cls: 'bg-ink/15 text-ink-mute ring-line/20', icon: <Wifi size={10} /> },
   };
   const v = map[status];

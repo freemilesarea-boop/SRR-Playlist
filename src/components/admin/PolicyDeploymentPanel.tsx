@@ -326,7 +326,7 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> {error}
           <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -715,7 +715,7 @@ function DetailDrawer({
         </div>
 
         {error && (
-          <div className="mt-3 flex items-center gap-2 rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+          <div className="mt-3 flex items-center gap-2 rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
             <AlertCircle size={12} /> {error}
           </div>
         )}
@@ -1084,7 +1084,7 @@ function CreateDeploymentModal({
         </div>
 
         {err && (
-          <div className="mt-3 flex items-center gap-2 rounded bg-rose-500/15 px-3 py-2 text-[11px] text-rose-300">
+          <div className="mt-3 flex items-center gap-2 rounded bg-rose-500/25 px-3 py-2 text-[11px] text-rose-300">
             <AlertCircle size={12} /> {err}
           </div>
         )}

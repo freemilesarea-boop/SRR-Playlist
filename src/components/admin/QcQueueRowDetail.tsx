@@ -15,9 +15,9 @@ import FeedbackBadges from '@/components/admin/FeedbackBadges';
 import type { TrackRow } from '@/types/db';
 
 const STATUS_TONE: Record<string, string> = {
-  active:        'bg-emerald-500/15 text-emerald-500',
-  review_needed: 'bg-amber-500/15 text-amber-500',
-  excluded:      'bg-rose-500/15 text-rose-500',
+  active:        'bg-emerald-500/25 text-emerald-300',
+  review_needed: 'bg-amber-500/25 text-amber-300',
+  excluded:      'bg-rose-500/25 text-rose-300',
 };
 
 const fmtPct = (v: number | null | undefined) =>
@@ -141,8 +141,8 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
             <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
               <span className="rounded bg-bg-card px-1.5 py-0.5">{t.main_genre ?? '—'}</span>
               <span className="rounded bg-bg-card px-1.5 py-0.5">{t.mood ?? '—'}</span>
-              {t.instrumental && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-500">instrumental</span>}
-              {t.explicit_content && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-500">explicit</span>}
+              {t.instrumental && <span className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-emerald-300">instrumental</span>}
+              {t.explicit_content && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">explicit</span>}
             </div>
             <div className="mt-1">
               <FeedbackBadges trackId={trackId} hideIfEmpty />
@@ -220,9 +220,9 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
                       ) : (
                         <>
                           <span className={`font-bold tabular-nums ${
-                            (p.fit_score ?? 0) >= 60 ? 'text-emerald-500'
-                            : (p.fit_score ?? 0) >= 40 ? 'text-amber-500'
-                            : 'text-rose-500'
+                            (p.fit_score ?? 0) >= 60 ? 'text-emerald-300'
+                            : (p.fit_score ?? 0) >= 40 ? 'text-amber-300'
+                            : 'text-rose-300'
                           }`}>{p.fit_score ?? '—'}</span>
                           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${STATUS_TONE[st]}`}>
                             {st}
@@ -235,23 +235,23 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       <button onClick={() => void removeFromPlaylist(p.playlist_id, p.playlist_name ?? '?')}
                         disabled={busy}
-                        className="inline-flex items-center gap-1 rounded bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-500 disabled:opacity-50">
+                        className="inline-flex items-center gap-1 rounded bg-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-rose-300 disabled:opacity-50">
                         <Trash2 size={9} /> 제거
                       </button>
                       <button onClick={() => void changeStatus(p.playlist_id, p.playlist_name ?? '?', 'excluded')}
                         disabled={busy}
-                        className="inline-flex items-center gap-1 rounded bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-500 disabled:opacity-50">
+                        className="inline-flex items-center gap-1 rounded bg-rose-500/25 px-2 py-0.5 text-[10px] font-semibold text-rose-300 disabled:opacity-50">
                         <Ban size={9} /> excluded
                       </button>
                       <button onClick={() => void changeStatus(p.playlist_id, p.playlist_name ?? '?', 'review_needed')}
                         disabled={busy}
-                        className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-500 disabled:opacity-50">
+                        className="inline-flex items-center gap-1 rounded bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-300 disabled:opacity-50">
                         <AlertTriangle size={9} /> review
                       </button>
                       {st !== 'active' && (
                         <button onClick={() => void changeStatus(p.playlist_id, p.playlist_name ?? '?', 'active')}
                           disabled={busy}
-                          className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500 disabled:opacity-50">
+                          className="inline-flex items-center gap-1 rounded bg-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 disabled:opacity-50">
                           <CheckCircle2 size={9} /> active
                         </button>
                       )}

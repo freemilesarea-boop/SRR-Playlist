@@ -89,7 +89,7 @@ export default function BehaviorTab() {
           ⚠️ 이 점수는 fit_score 에 직접 반영되지 않습니다 — foundation only.
         </p>
         {lastResult && (
-          <p className="mt-1 text-[11px] text-emerald-500">
+          <p className="mt-1 text-[11px] text-emerald-300">
             마지막 재계산: {lastResult.tracks} 트랙 · {(lastResult.ms / 1000).toFixed(1)}s
           </p>
         )}
@@ -126,19 +126,19 @@ export default function BehaviorTab() {
                   <td className="px-2 py-1.5 text-right tabular-nums">{o.play_count}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-ink-mute">{o.unique_listener_count}</td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={o.completion_rate < 0.3 ? 'text-rose-500 font-bold' : ''}>
+                    <span className={o.completion_rate < 0.3 ? 'text-rose-300 font-bold' : ''}>
                       {(o.completion_rate * 100).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={o.skip_rate > 0.6 ? 'text-rose-500 font-bold' : ''}>
+                    <span className={o.skip_rate > 0.6 ? 'text-rose-300 font-bold' : ''}>
                       {(o.skip_rate * 100).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-right text-ink-mute">{(o.replay_rate * 100).toFixed(0)}%</td>
                   <td className="px-2 py-1.5 text-right text-ink-mute">{(o.like_rate * 100).toFixed(0)}%</td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={`font-bold ${o.behavior_score < 30 ? 'text-rose-500' : o.behavior_score < 60 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                    <span className={`font-bold ${o.behavior_score < 30 ? 'text-rose-300' : o.behavior_score < 60 ? 'text-amber-300' : 'text-emerald-300'}`}>
                       {o.behavior_score.toFixed(1)}
                     </span>
                     <div className="text-[10px] text-ink-dim/70">conf {(o.confidence * 100).toFixed(0)}%</div>
@@ -146,7 +146,7 @@ export default function BehaviorTab() {
                   <td className="px-2 py-1.5">
                     <div className="flex flex-wrap gap-1">
                       {o.risk_signals.map((s) => (
-                        <span key={s} className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-500">
+                        <span key={s} className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
                           {RISK_LABEL[s] ?? s}
                         </span>
                       ))}

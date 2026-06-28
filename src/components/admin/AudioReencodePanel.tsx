@@ -176,7 +176,7 @@ export default function AudioReencodePanel() {
                       {c.artist ?? '—'} · {c.release_status} · {c.audio_url.split('/').pop()}
                     </p>
                     {st.kind === 'error' && (
-                      <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold text-red-500" title={st.message}>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold text-rose-300" title={st.message}>
                         ⚠ {st.message}
                       </p>
                     )}
@@ -185,7 +185,7 @@ export default function AudioReencodePanel() {
                     {(st.kind === 'idle' || st.kind === 'error') && (
                       <div className="flex flex-wrap items-center justify-end gap-1">
                         {st.kind === 'error' && (
-                          <span className="inline-flex items-center gap-1 font-semibold text-red-500" title={st.message}>
+                          <span className="inline-flex items-center gap-1 font-semibold text-rose-300" title={st.message}>
                             <AlertTriangle size={13} /> 실패
                           </span>
                         )}
@@ -213,7 +213,7 @@ export default function AudioReencodePanel() {
                         <button
                           onClick={() => void excludeTrack(c)}
                           disabled={running}
-                          className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 font-semibold text-red-700 ring-1 ring-red-300/30 hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/15 dark:text-red-300"
+                          className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 font-semibold text-rose-200 ring-1 ring-rose-300/50 hover:bg-red-200 disabled:opacity-50 dark:bg-rose-500/25 dark:text-red-300"
                         >
                           <Ban size={12} /> 제외
                         </button>
@@ -229,7 +229,7 @@ export default function AudioReencodePanel() {
                       </span>
                     )}
                     {st.kind === 'done' && (
-                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-500">
+                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-300">
                         <CheckCircle2 size={13} /> 완료
                       </span>
                     )}

@@ -22,9 +22,9 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
 const SEV_TONE: Record<string, string> = {
-  info: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-sky-400/30',
-  warning: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-400/30',
-  error: 'bg-red-500/15 text-red-700 dark:text-red-300 ring-red-400/30',
+  info: 'bg-sky-500/25 text-sky-200 dark:text-sky-300 ring-sky-400/50',
+  warning: 'bg-amber-500/25 text-amber-200 dark:text-amber-300 ring-amber-400/50',
+  error: 'bg-rose-500/25 text-rose-200 dark:text-red-300 ring-rose-400/50',
 };
 
 function SevIcon({ sev }: { sev: AdminNotification['severity'] }) {
@@ -143,7 +143,7 @@ export default function AdminNotificationsBell() {
         >
           <div className="flex items-center justify-between border-b border-line/10 px-3 py-2">
             <p className="text-xs font-bold">
-              운영 알림 {unread > 0 && <span className="ml-1 text-red-600 dark:text-red-300">· 미확인 {unread}</span>}
+              운영 알림 {unread > 0 && <span className="ml-1 text-rose-300 dark:text-red-300">· 미확인 {unread}</span>}
             </p>
             <div className="flex gap-1">
               {unread > 0 && (

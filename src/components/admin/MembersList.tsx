@@ -221,7 +221,7 @@ export default function MembersList() {
                         : (m.account_type === 'artist' ? '🎤 아티스트' : '👤 일반')}
                     </span>
                     {m.account_type === 'artist' && m.plan_type === 'student_artist' && (
-                      <span className="ml-1 inline-flex rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                      <span className="ml-1 inline-flex rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
                         PRO
                       </span>
                     )}
@@ -231,7 +231,7 @@ export default function MembersList() {
                       </span>
                     )}
                     {m.account_type === 'artist' && !m.plan_type && (
-                      <span className="ml-1 inline-flex rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                      <span className="ml-1 inline-flex rounded-full bg-amber-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
                         legacy
                       </span>
                     )}
@@ -241,7 +241,7 @@ export default function MembersList() {
                       </span>
                     )}
                     {m.withdrawn_at && (
-                      <span className="ml-1 inline-flex rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-red-200">
+                      <span className="ml-1 inline-flex rounded-full bg-rose-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-red-200">
                         탈퇴
                       </span>
                     )}
@@ -285,10 +285,10 @@ export default function MembersList() {
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1 text-[10px]">
                       {m.identity_verified && (
-                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">본인 ✓</span>
+                        <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-emerald-300">본인 ✓</span>
                       )}
                       {m.business_verified && (
-                        <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-sky-300">사업자 ✓</span>
+                        <span className="rounded-full bg-sky-500/25 px-1.5 py-0.5 text-sky-300">사업자 ✓</span>
                       )}
                       {!m.identity_verified && !m.business_verified && (
                         <span className="text-ink-dim">—</span>

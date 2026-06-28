@@ -27,9 +27,9 @@ const STATUS_LABEL: Record<MetadataViolation['status'], string> = {
   ignored: '무시',
 };
 const STATUS_STYLE: Record<MetadataViolation['status'], string> = {
-  pending: 'bg-amber-500/15 text-amber-600',
-  reviewed: 'bg-sky-500/15 text-sky-600',
-  resolved: 'bg-emerald-500/15 text-emerald-600',
+  pending: 'bg-amber-500/25 text-amber-300',
+  reviewed: 'bg-sky-500/25 text-sky-300',
+  resolved: 'bg-emerald-500/25 text-emerald-300',
   ignored: 'bg-ink/10 text-ink-mute',
 };
 
@@ -145,7 +145,7 @@ export default function MetadataViolationsList() {
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="flex items-center gap-2 text-lg font-bold">
-            <AlertTriangle size={18} className="text-amber-500" />
+            <AlertTriangle size={18} className="text-amber-300" />
             메타데이터 위반 의심
           </h2>
           <p className="text-xs text-ink-mute">
@@ -180,7 +180,7 @@ export default function MetadataViolationsList() {
               {stats.top_skipped_tracks.slice(0, 10).map((t) => (
                 <li key={t.track_id} className="flex justify-between gap-2">
                   <span className="truncate">{t.title ?? '(제목없음)'} · <span className="text-ink-dim">{t.artist ?? ''}</span></span>
-                  <span className="shrink-0 font-mono text-amber-600">{t.skips}</span>
+                  <span className="shrink-0 font-mono text-amber-300">{t.skips}</span>
                 </li>
               ))}
               {stats.top_skipped_tracks.length === 0 && <li className="text-ink-dim">데이터 없음</li>}
@@ -192,7 +192,7 @@ export default function MetadataViolationsList() {
               {stats.top_skipped_playlists.slice(0, 10).map((p) => (
                 <li key={p.playlist_id} className="flex justify-between gap-2">
                   <span className="truncate">{p.title ?? '(제목없음)'} <span className="text-ink-dim">· {p.category ?? ''}</span></span>
-                  <span className="shrink-0 font-mono text-amber-600">{p.skips}</span>
+                  <span className="shrink-0 font-mono text-amber-300">{p.skips}</span>
                 </li>
               ))}
               {stats.top_skipped_playlists.length === 0 && <li className="text-ink-dim">데이터 없음</li>}
@@ -246,13 +246,13 @@ export default function MetadataViolationsList() {
                     </p>
                   </div>
                   <div className="shrink-0 text-right text-xs">
-                    <div className="font-mono text-amber-600">
+                    <div className="font-mono text-amber-300">
                       이 플리 스킵 {row.playlist_skip_count} · 전체 {row.total_skip_count}
                     </div>
                     <div className="text-ink-dim">
                       평균 청취 {row.avg_played_before_skip ?? '-'}초 · 최근 {fmtTime(row.last_detected_at)}
                     </div>
-                    <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${songWide ? 'bg-rose-500/15 text-rose-600' : 'bg-indigo-500/15 text-indigo-600'}`}>
+                    <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${songWide ? 'bg-rose-500/25 text-rose-300' : 'bg-indigo-500/15 text-indigo-600'}`}>
                       {songWide ? '곡 자체 문제 의심 (전반적 스킵)' : '메타 불일치 의심 (이 플리 한정)'}
                     </div>
                   </div>
@@ -273,19 +273,19 @@ export default function MetadataViolationsList() {
                   </button>
                   <button
                     onClick={() => void exclude(row)}
-                    className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-500/20"
+                    className="inline-flex items-center gap-1 rounded-lg bg-rose-500/20 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
                   >
                     <Ban size={12} /> 플리에서 제외
                   </button>
                   <button
                     onClick={() => void setStatus(row, 'resolved')}
-                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-500/20"
+                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20"
                   >
                     <Check size={12} /> 이상 없음(해결)
                   </button>
                   <button
                     onClick={() => void setStatus(row, 'reviewed')}
-                    className="inline-flex items-center gap-1 rounded-lg bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-600 hover:bg-sky-500/20"
+                    className="inline-flex items-center gap-1 rounded-lg bg-sky-500/20 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
                   >
                     검수 표시
                   </button>

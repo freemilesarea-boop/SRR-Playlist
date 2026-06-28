@@ -76,7 +76,7 @@ export default function SiteSettingsPanel() {
   }
 
   if (loading) return <p className="py-8 text-center text-xs text-ink-mute">불러오는 중…</p>;
-  if (!s) return <p className="py-8 text-center text-xs text-rose-400">설정을 불러올 수 없습니다.</p>;
+  if (!s) return <p className="py-8 text-center text-xs text-rose-300">설정을 불러올 수 없습니다.</p>;
 
   return (
     <section className="space-y-4">
@@ -84,9 +84,9 @@ export default function SiteSettingsPanel() {
       <div className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
         <div className="mb-3 flex items-center gap-2">
           {s.distribution_enabled ? (
-            <ShieldCheck size={14} className="text-emerald-400" />
+            <ShieldCheck size={14} className="text-emerald-300" />
           ) : (
-            <ShieldOff size={14} className="text-rose-400" />
+            <ShieldOff size={14} className="text-rose-300" />
           )}
           <h3 className="text-sm font-bold tracking-tight">신규 음원 유통 접수</h3>
           <span className="ml-auto text-[10px] text-ink-dim">
@@ -163,9 +163,9 @@ export default function SiteSettingsPanel() {
       </div>
 
       {/* 위험 영역: 전체 트랙 일괄 삭제 (스트리밍 카운트 보존) */}
-      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/50">
         <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-rose-400" />
+          <AlertTriangle size={14} className="text-rose-300" />
           <h3 className="text-sm font-bold tracking-tight text-rose-300">위험 영역 — 전체 트랙 초기화</h3>
         </div>
         <p className="text-[11px] leading-relaxed text-ink-mute">
@@ -186,7 +186,7 @@ export default function SiteSettingsPanel() {
           <button
             onClick={handlePurgeAll}
             disabled={purging || confirmText !== 'DELETE_ALL_TRACKS'}
-            className="h-9 rounded-lg bg-rose-500/20 px-4 text-xs font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-40"
+            className="h-9 rounded-lg bg-rose-500/20 px-4 text-xs font-bold text-rose-300 ring-1 ring-rose-500/50 hover:bg-rose-500/30 disabled:opacity-40"
           >
             {purging ? '실행 중…' : '전체 트랙 삭제'}
           </button>
@@ -198,9 +198,9 @@ export default function SiteSettingsPanel() {
             <ul className="mt-1 space-y-0.5 text-ink-mute">
               <li>· 아티스트 스냅샷: <b className="text-ink">{lastPurge.snapshot_artists}</b> 명</li>
               <li>· 대상 트랙: <b className="text-ink">{lastPurge.total_tracks}</b> 개</li>
-              <li>· 완전 삭제 (정산 없음): <b className="text-emerald-400">{lastPurge.hard_deleted}</b></li>
-              <li>· 보존 삭제 (정산 보호): <b className="text-amber-400">{lastPurge.soft_deleted}</b></li>
-              <li>· 실패: <b className="text-rose-400">{lastPurge.failed}</b></li>
+              <li>· 완전 삭제 (정산 없음): <b className="text-emerald-300">{lastPurge.hard_deleted}</b></li>
+              <li>· 보존 삭제 (정산 보호): <b className="text-amber-300">{lastPurge.soft_deleted}</b></li>
+              <li>· 실패: <b className="text-rose-300">{lastPurge.failed}</b></li>
             </ul>
           </div>
         )}
