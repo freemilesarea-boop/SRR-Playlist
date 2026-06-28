@@ -116,10 +116,10 @@ export default function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolea
                         className="shrink-0" />
                       <span className="font-bold">{r.title ?? '(제목없음)'}</span>
                       <span className="text-sm text-ink-mute">· {r.artist ?? ''}</span>
-                      {r.feature_status === 'failed' && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">분석 실패</span>}
-                      {r.ai_status === 'reviewed' && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600">검수됨</span>}
+                      {r.feature_status === 'failed' && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">분석 실패</span>}
+                      {r.ai_status === 'reviewed' && <span className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">검수됨</span>}
                       {r.analyzer && (
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${r.analyzer.startsWith('webaudio') || r.analyzer.startsWith('essentia') ? 'bg-sky-500/15 text-sky-600' : 'bg-ink/5 text-ink-dim'}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${r.analyzer.startsWith('webaudio') || r.analyzer.startsWith('essentia') ? 'bg-sky-500/25 text-sky-300' : 'bg-ink/5 text-ink-dim'}`}>
                           {r.analyzer}{r.analysis_version ? ` · ${r.analysis_version}` : ''}
                         </span>
                       )}
@@ -132,7 +132,7 @@ export default function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolea
                     </p>
                   </div>
                   {r.mismatch_score != null && (
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${r.mismatch_score >= 0.5 ? 'bg-rose-500/15 text-rose-600' : r.mismatch_score >= 0.3 ? 'bg-amber-500/15 text-amber-600' : 'bg-emerald-500/15 text-emerald-600'}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${r.mismatch_score >= 0.5 ? 'bg-rose-500/25 text-rose-300' : r.mismatch_score >= 0.3 ? 'bg-amber-500/25 text-amber-300' : 'bg-emerald-500/25 text-emerald-300'}`}>
                       불일치 {Math.round(r.mismatch_score * 100)}%
                     </span>
                   )}
@@ -177,7 +177,7 @@ export default function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolea
                 )}
 
                 {r.explanation && <p className="mt-2 rounded-lg bg-bg-soft/40 px-2.5 py-1.5 text-[11px] text-ink-mute">{r.explanation}</p>}
-                {r.error_message && <p className="mt-1 text-[11px] text-rose-600">오류: {r.error_message}</p>}
+                {r.error_message && <p className="mt-1 text-[11px] text-rose-300">오류: {r.error_message}</p>}
 
                 <GuardrailBadges trackId={r.track_id} ready={r.feature_status === 'done'} />
 

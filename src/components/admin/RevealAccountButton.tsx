@@ -104,14 +104,14 @@ export default function RevealAccountButton({
     return (
       <div className="inline-flex items-center gap-2">
         <code
-          className={`rounded bg-red-100 px-2 py-0.5 text-rose-200 ring-1 ring-red-400 dark:bg-rose-500/25 dark:text-red-100 ${className}`}
+          className={`rounded bg-red-100 px-2 py-0.5 text-red-900 ring-1 ring-red-400 dark:bg-rose-500/25 dark:text-red-300 ${className}`}
           title="원본 — 30초 후 자동 마스킹"
         >
           {revealed}
         </code>
         <button
           onClick={hideNow}
-          className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-600"
+          className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-rose-700"
           title="다시 마스킹"
         >
           <EyeOff size={10} /> 숨기기 ({seconds}s)
@@ -197,7 +197,7 @@ function ConfirmModal({
           <button
             onClick={() => onConfirm(reason)}
             disabled={busy}
-            className="rounded-lg bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-60"
+            className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
           >
             {busy ? '조회 중…' : '원본 조회 (30초)'}
           </button>

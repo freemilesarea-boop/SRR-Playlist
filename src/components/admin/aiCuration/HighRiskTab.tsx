@@ -50,16 +50,16 @@ export default function HighRiskTab() {
             <li key={r.track_id} className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-semibold">{r.title ?? '(제목없음)'} <span className="text-xs text-ink-mute">· {r.artist ?? ''} · {r.release_status}</span></span>
-                <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-600">위험도 {r.risk_score}</span>
+                <span className="shrink-0 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-rose-300">위험도 {r.risk_score}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                {r.low_trust && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-600">trust {r.trust_score}</span>}
-                {r.guardrail_hard && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-600">차단 {r.hard_stores}매장</span>}
-                {r.ai_mismatch_high && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700">AI 불일치 {Math.round((r.mismatch_score ?? 0) * 100)}%</span>}
-                {r.embedding_disagree_high && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700">임베딩 불일치</span>}
+                {r.low_trust && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">trust {r.trust_score}</span>}
+                {r.guardrail_hard && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">차단 {r.hard_stores}매장</span>}
+                {r.ai_mismatch_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-200">AI 불일치 {Math.round((r.mismatch_score ?? 0) * 100)}%</span>}
+                {r.embedding_disagree_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-200">임베딩 불일치</span>}
                 {r.lufs_boundary && (
                   <span title="오디오 품질 게이트(0210) 결과 reject — TP>+0.3 또는 clipping 또는 분석 실패"
-                    className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-600">품질 REJECT</span>
+                    className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">품질 REJECT</span>
                 )}
                 <span className="rounded bg-ink/5 px-1.5 py-0.5 text-ink-dim">{r.owner_name ?? ''} ({r.trust_tier})</span>
               </div>
@@ -68,7 +68,7 @@ export default function HighRiskTab() {
                   className="rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent disabled:opacity-50">AI 메타 적용</button>
                 {r.guardrail_hard && (
                   <button onClick={() => void act(r.track_id, () => bulkGuardrailClear([r.track_id], '고위험 검수 - 문제없음'), '문제 없음(차단 해제)')} disabled={busyId === r.track_id}
-                    className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 disabled:opacity-50">문제 없음</button>
+                    className="rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 disabled:opacity-50">문제 없음</button>
                 )}
                 <button onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} disabled={busyId === r.track_id}
                   className="rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">메타 수정/승인</button>

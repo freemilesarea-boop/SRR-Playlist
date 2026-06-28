@@ -54,7 +54,7 @@ export const FLOW_ISSUE_LABELS: Record<string, string> = {
   drop_shock: '에너지 급락', mood_collision: '무드 충돌', repetitive_similarity: '과도한 유사(단조)', missing_features: '분석 결측',
 };
 export const flowColor = (s: number | null) =>
-  s == null ? 'text-ink-dim' : s >= 80 ? 'text-emerald-600' : s >= 65 ? 'text-amber-600' : 'text-rose-600';
+  s == null ? 'text-ink-dim' : s >= 80 ? 'text-emerald-300' : s >= 65 ? 'text-amber-300' : 'text-rose-300';
 
 export function Metric({ label, v }: { label: string; v: number }) {
   return <span className="rounded bg-ink/5 px-1.5 py-0.5">{label} <b className="tabular-nums">{typeof v === 'number' && v <= 1 ? v.toFixed(2) : v}</b></span>;
@@ -95,14 +95,14 @@ export function GuardrailBadges({ trackId, ready }: { trackId: string; ready: bo
           {busy ? '조회 중…' : '🛡 매장 금지규칙 검사'}
         </button>
       ) : (rows && rows.length === 0) ? (
-        <p className="text-[10px] text-emerald-600">금지규칙 위반 없음 (모든 매장 통과)</p>
+        <p className="text-[10px] text-emerald-300">금지규칙 위반 없음 (모든 매장 통과)</p>
       ) : (
         <div className="space-y-1">
           {blocked.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-[10px] font-bold text-rose-600">차단:</span>
+              <span className="text-[10px] font-bold text-rose-300">차단:</span>
               {blocked.map((b) => (
-                <span key={b.store_key} className="inline-flex items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600"
+                <span key={b.store_key} className="inline-flex items-center gap-1 rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-200 ring-1 ring-rose-400/50"
                   title={b.gr.violations.map((v) => v.reason).join(', ')}>
                   {STORE_LABELS[b.store_key] ?? b.store_key}
                   <button onClick={() => void override(b.store_key)} className="ml-0.5 rounded bg-rose-500/20 px-1 text-[9px] hover:bg-rose-500/30">override</button>
@@ -110,7 +110,7 @@ export function GuardrailBadges({ trackId, ready }: { trackId: string; ready: bo
               ))}
             </div>
           )}
-          {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-600">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
+          {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-300">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] text-amber-200 ring-1 ring-amber-400/50">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
           {warn.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-yellow-600">주의:</span>{warn.map((w) => <span key={w.store_key} className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] text-yellow-700">{STORE_LABELS[w.store_key] ?? w.store_key}</span>)}</div>}
         </div>
       )}

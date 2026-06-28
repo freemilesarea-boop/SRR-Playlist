@@ -647,7 +647,7 @@ export default function MemberDetail({
             </ListSection>
 
             {/* 위험 작업 — 0095 */}
-            <section className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4">
+            <section className="rounded-2xl border border-rose-500/40 bg-rose-500/25 p-4">
               <h4 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-red-300">
                 <AlertTriangle size={14} /> 위험 작업 (Danger Zone)
               </h4>

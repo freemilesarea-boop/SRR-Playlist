@@ -119,9 +119,9 @@ export default function FitTab() {
             {suggestions.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
                 <span className="min-w-0 truncate">{s.title ?? '(제목없음)'} · <span className="text-ink-dim">{s.artist ?? ''}</span></span>
-                <span className="shrink-0 font-bold tabular-nums text-emerald-600">{s.fit_score}</span>
+                <span className="shrink-0 font-bold tabular-nums text-emerald-300">{s.fit_score}</span>
                 <span className="flex shrink-0 gap-1">
-                  <button onClick={() => void decide(s.id, true)} className="rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-500/25">승인</button>
+                  <button onClick={() => void decide(s.id, true)} className="rounded bg-emerald-500/25 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/25">승인</button>
                   <button onClick={() => void decide(s.id, false)} className="rounded bg-ink/5 px-2 py-1 text-[10px] font-semibold text-ink-mute hover:bg-ink/10">제외</button>
                 </span>
               </li>
@@ -143,7 +143,7 @@ export default function FitTab() {
                     {r.title ?? '(제목없음)'} · <span className="text-ink-dim">{r.artist ?? ''}</span>
                   </span>
                   <span className="shrink-0 text-[10px] text-ink-dim">{r.reason}</span>
-                  <span className="shrink-0 font-bold tabular-nums text-emerald-600">{r.fit_score}</span>
+                  <span className="shrink-0 font-bold tabular-nums text-emerald-300">{r.fit_score}</span>
                 </div>
                 {(manual != null || aiBoost > 0) && (
                   <div className="flex flex-wrap items-center gap-1.5 pl-1 text-[10px] text-ink-dim">

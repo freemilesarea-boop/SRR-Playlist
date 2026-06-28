@@ -43,7 +43,7 @@ export default function BusinessReactionTab() {
   const STORES: [string, string][] = [['all', '전체'], ['cafe_independent', '카페'], ['gym', '헬스장'], ['hospital', '병원'], ['cafe', '카페그룹']];
   const STATUSES: [string, string][] = [['active', '제외중'], ['restored', '복구됨'], ['ignored', '무시'], ['all', '전체']];
   const DAYS: [number, string][] = [[0, '전체기간'], [7, '최근 7일'], [30, '최근 30일']];
-  const stColor = (s: string) => s === 'active' ? 'text-rose-600' : s === 'restored' ? 'text-emerald-600' : 'text-ink-mute';
+  const stColor = (s: string) => s === 'active' ? 'text-rose-300' : s === 'restored' ? 'text-emerald-300' : 'text-ink-mute';
 
   return (
     <div className="space-y-4">
@@ -85,16 +85,16 @@ export default function BusinessReactionTab() {
               <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
                 {r.status === 'active' ? (
                   <>
-                    <button disabled={busyId === r.id} onClick={() => void act(r.id, () => restoreBusinessExclusion(r.id), '복구됨')} className="rounded bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600 disabled:opacity-40">복구</button>
+                    <button disabled={busyId === r.id} onClick={() => void act(r.id, () => restoreBusinessExclusion(r.id), '복구됨')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">복구</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, () => ignoreBusinessExclusion(r.id), '무시 처리')} className="rounded bg-ink/5 px-2 py-1 font-semibold text-ink-mute disabled:opacity-40">무시</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, async () => { await applyAiMetadataAndRecompute(r.track_id, { autoResolve: false }); }, 'AI 메타 재적용 완료')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 재적용</button>
                     <button disabled={busyId === r.id} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정</button>
                     {!r.store_group_key && r.playlist_store_key.startsWith('cafe') && (
-                      <button disabled={busyId === r.id} onClick={() => void act(r.id, () => excludeTrackGroup(r.track_id, 'cafe'), '카페 그룹 전체 제외')} className="rounded bg-amber-500/15 px-2 py-1 font-semibold text-amber-600 disabled:opacity-40">카페그룹 전체 제외</button>
+                      <button disabled={busyId === r.id} onClick={() => void act(r.id, () => excludeTrackGroup(r.track_id, 'cafe'), '카페 그룹 전체 제외')} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">카페그룹 전체 제외</button>
                     )}
                   </>
                 ) : (
-                  <button disabled={busyId === r.id} onClick={() => void act(r.id, () => reactivateBusinessExclusion(r.id), '제외 유지')} className="rounded bg-rose-500/15 px-2 py-1 font-semibold text-rose-600 disabled:opacity-40">제외 유지</button>
+                  <button disabled={busyId === r.id} onClick={() => void act(r.id, () => reactivateBusinessExclusion(r.id), '제외 유지')} className="rounded bg-rose-500/25 px-2 py-1 font-semibold text-rose-300 disabled:opacity-40">제외 유지</button>
                 )}
               </div>
             </li>

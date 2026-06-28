@@ -704,7 +704,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
             className="w-full max-w-md space-y-3 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
           >
             <h3 className="flex items-center gap-2 text-base font-bold">
-              <AlertTriangle size={18} className="text-red-400" /> 음원 선택 처리
+              <AlertTriangle size={18} className="text-rose-300" /> 음원 선택 처리
             </h3>
             <Alert tone="error">
               <p>선택한 <b>{selected.size}곡</b>을 처리합니다.</p>

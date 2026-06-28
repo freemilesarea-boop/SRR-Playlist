@@ -69,12 +69,12 @@ export default function FlowTab() {
                   <p className="truncate text-xs font-bold">{p.title ?? '(제목없음)'}</p>
                   <p className="text-[10px] text-ink-dim">{p.n_tracks}곡 · 전환 {p.n_transitions} · 평균 {p.avg_transition ?? '—'} · 감정연속성 {p.emotional_continuity ?? '—'}</p>
                   <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                    {p.rough_transitions > 0 && <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-600">거친 전환 {p.rough_transitions}</span>}
-                    {p.repetitive_count > 0 && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-600">단조 {p.repetitive_count}</span>}
+                    {p.rough_transitions > 0 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">거친 전환 {p.rough_transitions}</span>}
+                    {p.repetitive_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">단조 {p.repetitive_count}</span>}
                     {p.drop_shock_count > 0 && <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-orange-600">급락 {p.drop_shock_count}</span>}
                     {p.mood_collision_count > 0 && <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-600">무드충돌 {p.mood_collision_count}</span>}
-                    {p.fatigue_index > 0 && <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-600">피로 -{p.fatigue_index}</span>}
-                    {p.monotony_index > 0 && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-600">단조 -{p.monotony_index}</span>}
+                    {p.fatigue_index > 0 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">피로 -{p.fatigue_index}</span>}
+                    {p.monotony_index > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">단조 -{p.monotony_index}</span>}
                   </div>
                 </div>
                 <span className="flex shrink-0 flex-col gap-1">
@@ -94,7 +94,7 @@ export default function FlowTab() {
                           <span className={`w-7 text-center font-bold ${flowColor(t.transition_score)}`}>{t.transition_score}</span>
                           <span className="min-w-0 flex-1 truncate text-ink-mute">{t.from_title ?? '?'} <span className="text-ink-dim">→</span> {t.to_title ?? '?'}</span>
                           <span className="text-ink-dim">ΔBPM {t.bpm_jump} · ΔE {t.energy_jump} · ΔB {t.brightness_jump}{t.energy_drop != null && t.energy_drop > 0.3 ? ` · 급락 ${t.energy_drop}` : ''}</span>
-                          {t.issues.map((iss) => <span key={iss} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-600">{FLOW_ISSUE_LABELS[iss] ?? iss}</span>)}
+                          {t.issues.map((iss) => <span key={iss} className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">{FLOW_ISSUE_LABELS[iss] ?? iss}</span>)}
                         </li>
                       ))}
                     </ul>

@@ -136,7 +136,7 @@ export default function AudioReencodePanel() {
         {running && (
           <button
             onClick={() => { stopRef.current = true; }}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-3 py-2 text-sm font-bold text-white hover:bg-red-600"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-700"
           >
             <Square size={14} /> 중지
           </button>
@@ -213,7 +213,7 @@ export default function AudioReencodePanel() {
                         <button
                           onClick={() => void excludeTrack(c)}
                           disabled={running}
-                          className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 font-semibold text-rose-200 ring-1 ring-rose-300/50 hover:bg-red-200 disabled:opacity-50 dark:bg-rose-500/25 dark:text-red-300"
+                          className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 font-semibold text-red-900 ring-1 ring-rose-300/50 hover:bg-red-200 disabled:opacity-50 dark:bg-rose-500/25 dark:text-red-300"
                         >
                           <Ban size={12} /> 제외
                         </button>

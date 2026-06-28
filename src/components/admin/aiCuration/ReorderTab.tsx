@@ -65,7 +65,7 @@ export default function ReorderTab() {
           className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-black disabled:opacity-50">{running ? '생성 중…' : '전체 제안 생성'}</button>
         <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-2 text-xs font-semibold hover:bg-bg-hover"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침</button>
       </div>
-      <p className="text-[11px] text-ink-dim">Flow Score 기준으로 BPM/에너지 곡선·보컬 충돌·단조로움·전환 피로를 최소화하는 <b>추천 순서안</b>을 생성합니다. <b className="text-rose-600">자동 적용 없음</b> — 관리자가 "승인 적용"을 눌러야 순서가 반영됩니다 (곡 추가/삭제 없음).</p>
+      <p className="text-[11px] text-ink-dim">Flow Score 기준으로 BPM/에너지 곡선·보컬 충돌·단조로움·전환 피로를 최소화하는 <b>추천 순서안</b>을 생성합니다. <b className="text-rose-300">자동 적용 없음</b> — 관리자가 "승인 적용"을 눌러야 순서가 반영됩니다 (곡 추가/삭제 없음).</p>
 
       {proposals.length === 0 ? (
         <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '대기 중인 제안이 없어요. "전체 제안 생성"을 실행하세요.'}</p>
@@ -80,14 +80,14 @@ export default function ReorderTab() {
                   <span className={`text-xl font-extrabold ${flowColor(p.proposed_score)}`}>{p.proposed_score ?? '—'}</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold">{p.title ?? '(제목없음)'} <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">+{p.improvement ?? 0}</span></p>
+                  <p className="truncate text-xs font-bold">{p.title ?? '(제목없음)'} <span className="ml-1 rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">+{p.improvement ?? 0}</span></p>
                   <p className="mt-0.5 text-[10px] text-ink-dim">
                     {p.n_tracks}곡 · 거친전환 {mDelta(p.metrics_before?.rough_transitions, p.metrics_after?.rough_transitions)} · 단조 {mDelta(p.metrics_before?.repetitive_count, p.metrics_after?.repetitive_count)} · 감정연속성 {mDelta(p.metrics_before?.emotional_continuity, p.metrics_after?.emotional_continuity)}
                   </p>
                 </div>
                 <span className="flex shrink-0 flex-col gap-1">
                   <button onClick={() => void openDetail(p.playlist_id)} className="rounded bg-bg-soft px-2 py-1 text-[10px] font-semibold text-ink-mute hover:bg-bg-hover">{expanded === p.playlist_id ? '접기' : '순서 비교'}</button>
-                  <button disabled={busyId === p.id} onClick={() => void approve(p.id, p.title)} className="rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-600 disabled:opacity-40">승인 적용</button>
+                  <button disabled={busyId === p.id} onClick={() => void approve(p.id, p.title)} className="rounded bg-emerald-500/25 px-2 py-1 text-[10px] font-semibold text-emerald-300 disabled:opacity-40">승인 적용</button>
                   <button disabled={busyId === p.id} onClick={() => void reject(p.id)} className="rounded bg-ink/5 px-2 py-1 text-[10px] font-semibold text-ink-mute disabled:opacity-40">거절</button>
                 </span>
               </div>

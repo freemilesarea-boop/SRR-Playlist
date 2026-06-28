@@ -312,11 +312,11 @@ export default function EmbeddingTab() {
         </div>
         {result && (
           <div className="mt-2 rounded-lg bg-bg-soft/40 p-2 text-[11px]">
-            <p className={result.skipped > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+            <p className={result.skipped > 0 ? 'text-amber-300' : 'text-emerald-300'}>
               {result.dry_run ? '검증' : '임포트'}: 성공 <b>{result.imported}</b> · 건너뜀 <b>{result.skipped}</b>
             </p>
             {result.errors.length > 0 && (
-              <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-[10px] text-rose-600">
+              <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-[10px] text-rose-300">
                 {result.errors.slice(0, 50).map((er, i) => <li key={i}>· {er.track_id}: {er.reason}</li>)}
               </ul>
             )}
@@ -342,7 +342,7 @@ export default function EmbeddingTab() {
           className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50">
           매장 아키타입 생성/갱신
         </button>
-        {status && status.track_embeddings === 0 && <p className="mt-1 text-[10px] text-amber-600">곡 임베딩이 아직 0건입니다 — 먼저 ②③ 임포트를 완료하세요.</p>}
+        {status && status.track_embeddings === 0 && <p className="mt-1 text-[10px] text-amber-300">곡 임베딩이 아직 0건입니다 — 먼저 ②③ 임포트를 완료하세요.</p>}
       </div>
     </div>
   );
