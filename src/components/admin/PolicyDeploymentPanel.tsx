@@ -365,8 +365,8 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
 
   return (
     <AdminSection
-      title={<span className="flex items-center gap-2"><ShieldCheck size={16} /> 정책 배포 관제 센터</span>}
-      description="시스템 전체 정책 적용률, 배포 로그, 실패 매장 현황을 한 화면에서 관리합니다."
+      title={<span className="flex items-center gap-2"><ShieldCheck size={16} /> 음악 배포 현황</span>}
+      description="전체 매장의 음악 배포 적용률, 배포 로그, 실패 매장을 한 화면에서 관리합니다."
       badge={<AdminBadge tone="primary" variant="subtle">Priority 2-5/6/7</AdminBadge>}
       action={
         <div className="flex flex-wrap items-center gap-2">
@@ -383,9 +383,9 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
             leftIcon={<Plus size={12} />}
             onClick={() => setShowCreate(true)}
             disabled={hasDeployablePolicy === false}
-            title={hasDeployablePolicy === false ? '먼저 프랜차이즈 관리에서 음악 정책을 생성하세요' : undefined}
+            title={hasDeployablePolicy === false ? '먼저 프랜차이즈 관리에서 매장 음악 플레이리스트를 등록해 주세요' : undefined}
           >
-            신규 배포
+            신규 음악 배포
           </AdminButton>
           {hasDeployablePolicy === false && onRequestFranchisePolicyNav && (
             <AdminButton
@@ -393,7 +393,7 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
               rightIcon={<ArrowRight size={12} />}
               onClick={onRequestFranchisePolicyNav}
             >
-              정책 만들기
+              프랜차이즈 관리에서 플레이리스트 등록
             </AdminButton>
           )}
         </div>
@@ -472,7 +472,7 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
       {/* Tab nav */}
       <div className="flex items-center gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
         <TabBtn active={activeTab === 'logs'}   onClick={() => setActiveTab('logs')}>
-          <History size={12} /> 정책 적용 로그
+          <History size={12} /> 음악 배포 로그
           <span className="text-[10px] text-ink-mute tabular-nums">{total.toLocaleString()}</span>
         </TabBtn>
         <TabBtn active={activeTab === 'failed'} onClick={() => setActiveTab('failed')}>
@@ -1260,7 +1260,7 @@ function CreateDeploymentModal({
 
   const onSubmit = async () => {
     setErr(null);
-    if (!selected) { setErr('배포할 정책을 선택하세요.'); return; }
+    if (!selected) { setErr('적용할 플레이리스트를 선택해 주세요.'); return; }
     setBusy(true);
     try {
       const r = await createPolicyDeployment({
@@ -1282,25 +1282,25 @@ function CreateDeploymentModal({
       open
       onClose={onClose}
       size="lg"
-      title={<span className="flex items-center gap-2"><Plus size={14} /> 정책 배포 생성</span>}
+      title={<span className="flex items-center gap-2"><Plus size={14} /> 음악 배포 생성</span>}
       footer={
         <>
           <AdminButton tone="neutral" variant="subtle" size="sm" onClick={onClose}>취소</AdminButton>
           <AdminButton tone="primary" size="sm" loading={busy} disabled={!selected || busy}
             leftIcon={<Plus size={11} />} onClick={() => void onSubmit()}>
-            배포 생성
+            음악 배포 생성
           </AdminButton>
         </>
       }
     >
       <div className="space-y-3">
         <p className="text-[11px] text-ink-dim">
-          정책을 선택하면 해당 franchise 의 active 매장이 자동으로 snapshot 됩니다.
-          정책 적용 자체는 별도로 apply_franchise_policy 호출이 필요합니다.
+          플레이리스트를 선택하면 해당 본사의 활성 매장이 자동으로 대상에 포함됩니다.
+          실제 매장 재생 적용은 매장 플레이어 동기화 시점에 반영됩니다.
         </p>
 
         <div className="text-xs" ref={dropdownRef}>
-          <div className="mb-1 text-ink-dim">배포할 정책 *</div>
+          <div className="mb-1 text-ink-dim">적용할 플레이리스트 *</div>
           <div className="relative">
             <button type="button" onClick={() => setDropdownOpen((v) => !v)}
               className="flex w-full items-center justify-between rounded-md bg-bg-deep px-3 py-2 text-left hover:bg-bg-hover">
@@ -1310,7 +1310,7 @@ function CreateDeploymentModal({
                   {selected.franchise_name && <span className="text-ink-dim"> · {selected.franchise_name}</span>}
                 </span>
               ) : (
-                <span className="text-ink-mute">배포할 정책을 선택하세요</span>
+                <span className="text-ink-mute">플레이리스트를 선택하세요</span>
               )}
               <ChevronDown size={12} className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -1322,7 +1322,7 @@ function CreateDeploymentModal({
                     <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-dim" />
                     <input type="text" autoFocus value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="정책명 / 설명 / 프랜차이즈 검색"
+                      placeholder="플레이리스트명 / 설명 / 본사 검색"
                       className="w-full rounded-md bg-bg-deep pl-7 pr-2 py-1.5 text-xs" />
                   </div>
                 </div>
@@ -1338,7 +1338,9 @@ function CreateDeploymentModal({
                   ) : policies.length === 0 ? (
                     <div className="px-3 py-6 text-center text-[11px] text-ink-mute">
                       <Inbox size={16} className="mx-auto mb-1 opacity-50" />
-                      {debouncedSearch ? '검색 결과가 없습니다.' : '배포 가능한 정책이 없습니다.'}
+                      {debouncedSearch
+                        ? '검색 결과가 없습니다.'
+                        : '적용할 플레이리스트가 없습니다. 먼저 프랜차이즈 관리에서 매장 음악 플레이리스트를 등록해 주세요.'}
                     </div>
                   ) : (
                     <ul>
@@ -1416,7 +1418,7 @@ function CreateDeploymentModal({
           <p className="mt-1 text-[10px] text-ink-dim">
             {userEditedNameRef.current
               ? '사용자가 수정 — 정책을 바꿔도 덮어쓰지 않습니다.'
-              : '정책을 선택하면 "정책명 v버전 배포 - 시각" 으로 자동 생성됩니다.'}
+              : '플레이리스트를 선택하면 "플레이리스트명 v버전 배포 - 시각" 으로 자동 생성됩니다.'}
           </p>
         </label>
 
