@@ -27,6 +27,20 @@ import {
   type EnterpriseMonthlySettlementItem,
 } from '@/lib/api/enterpriseMonthlySettlementApi';
 import { toast } from '@/store/toastStore';
+import {
+  AdminSection, AdminCard, AdminBadge, AdminAlert, AdminEmpty,
+  AdminSkeleton, AdminButton,
+  type AdminToneName,
+} from '@/components/admin/ui';
+import { adminTypography } from '@/lib/adminTypography';
+
+// 정산 status → DS tone 매핑
+const STATUS_TONE: Record<EnterpriseMonthlySettlementStatus, AdminToneName> = {
+  pending:   'warning',
+  approved:  'info',
+  paid:      'success',
+  cancelled: 'danger',
+};
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: EnterpriseMonthlySettlementStatus; label: string }> = [
   { value: 'pending',   label: SETTLEMENT_STATUS_LABEL.pending },
@@ -97,23 +111,22 @@ export default function EnterpriseMonthlySettlementsPanel() {
   const hasNext = offset + PAGE_SIZE < total;
 
   return (
-    <div className="space-y-3">
-      {/* 헤더 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-extrabold flex items-center gap-1.5">
-          <Wallet size={14} /> 본사 월 정산
-        </h2>
-        <span className="text-[10px] text-ink-dim">총 {total.toLocaleString('ko-KR')}건</span>
-        <button onClick={() => void load()} disabled={loading}
-          className="ml-auto inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-50">
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
-        </button>
-      </div>
-
+    <AdminSection
+      title={<><Wallet size={14} /> 본사 월 정산</>}
+      badge={<span className={adminTypography.hint}>총 {total.toLocaleString('ko-KR')}건</span>}
+      action={
+        <AdminButton
+          tone="neutral" variant="subtle" size="sm"
+          leftIcon={<RefreshCw size={11} className={loading ? 'animate-spin' : ''} />}
+          onClick={() => void load()} disabled={loading}
+        >
+          새로고침
+        </AdminButton>
+      }
+    >
       {/* 생성 + 필터 */}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
-          <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-1.5">이번 달 정산 생성</p>
+        <AdminCard title="이번 달 정산 생성" subtitle="정산 설정 + active 매장이 있는 본사만 생성됩니다.">
           <div className="flex items-center gap-2">
             <input
               type="month" value={generateMonth}
@@ -121,22 +134,17 @@ export default function EnterpriseMonthlySettlementsPanel() {
               disabled={generating}
               className="rounded bg-bg-deep px-2 py-1.5 text-xs tabular-nums"
             />
-            <button
-              type="button"
+            <AdminButton
+              tone="success" variant="solid" size="sm" className="ml-auto"
+              leftIcon={generating ? <RefreshCw size={11} className="animate-spin" /> : <Play size={11} />}
               onClick={() => void onGenerate()}
               disabled={generating || !generateMonth}
-              className="ml-auto inline-flex items-center gap-1 rounded bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30"
             >
-              {generating ? <RefreshCw size={11} className="animate-spin" /> : <Play size={11} />}
               {generating ? '생성 중…' : '정산 생성'}
-            </button>
+            </AdminButton>
           </div>
-          <p className="mt-1.5 text-[10px] text-ink-dim">
-            정산 설정 + active 매장이 있는 본사만 생성됩니다.
-          </p>
-        </div>
-        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
-          <p className="text-[10px] uppercase tracking-wider text-ink-dim mb-1.5">필터</p>
+        </AdminCard>
+        <AdminCard title="필터">
           <div className="flex items-center gap-2">
             <input
               type="month" value={monthFilter}
@@ -155,35 +163,38 @@ export default function EnterpriseMonthlySettlementsPanel() {
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
-            <button
-              type="button"
+            <AdminButton
+              tone="neutral" variant="subtle" size="sm" className="ml-auto"
               onClick={() => { setMonthFilter(''); setStatusFilter(''); setOffset(0); }}
-              className="ml-auto rounded bg-bg-deep px-2 py-1 text-[11px] hover:bg-bg-hover"
             >
               초기화
-            </button>
+            </AdminButton>
           </div>
-        </div>
+        </AdminCard>
       </div>
 
       {error && (
-        <div className="rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
-          <AlertCircle size={12} className="inline mr-1" />{error}
-          <button onClick={() => void load()} className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
-        </div>
+        <AdminAlert
+          tone="danger"
+          title="목록 불러오기 실패"
+          description={error}
+          action={
+            <AdminButton tone="danger" variant="subtle" size="sm" onClick={() => void load()}>
+              재시도
+            </AdminButton>
+          }
+        />
       )}
 
       {/* 목록 */}
       {loading && rows.length === 0 ? (
-        <div className="space-y-2">
-          <div className="h-12 animate-pulse rounded bg-bg-card" />
-          <div className="h-12 animate-pulse rounded bg-bg-card" />
-          <div className="h-12 animate-pulse rounded bg-bg-card" />
-        </div>
+        <AdminSkeleton variant="table" rows={4} />
       ) : rows.length === 0 ? (
-        <div className="rounded-xl bg-bg-card p-6 text-center text-xs text-ink-mute ring-1 ring-line/10">
-          조건에 맞는 정산 내역이 없습니다.
-        </div>
+        <AdminEmpty
+          icon={<Wallet size={20} />}
+          title="조건에 맞는 정산 내역이 없습니다"
+          description="월/상태 필터를 조정하거나 위 '정산 생성' 버튼으로 신규 생성하세요."
+        />
       ) : (
         <div className="overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
           <table className="w-full min-w-[920px] text-xs">
@@ -235,12 +246,14 @@ export default function EnterpriseMonthlySettlementsPanel() {
             {offset + 1} – {Math.min(offset + PAGE_SIZE, total)} / {total.toLocaleString('ko-KR')}
           </span>
           <div className="flex gap-2">
-            <button disabled={!hasPrev}
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-              className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">이전</button>
-            <button disabled={!hasNext}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-              className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">다음</button>
+            <AdminButton tone="neutral" variant="subtle" size="sm" disabled={!hasPrev}
+              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+              이전
+            </AdminButton>
+            <AdminButton tone="neutral" variant="subtle" size="sm" disabled={!hasNext}
+              onClick={() => setOffset(offset + PAGE_SIZE)}>
+              다음
+            </AdminButton>
           </div>
         </div>
       )}
@@ -252,7 +265,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
           onChanged={() => void load()}
         />
       )}
-    </div>
+    </AdminSection>
   );
 }
 
@@ -418,28 +431,32 @@ function DetailModal({
             {/* pending */}
             {settlement.status === 'pending' && !paidMode && !cancelMode && (
               <div className="flex gap-2">
-                <button onClick={() => void onApprove()} disabled={acting}
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
-                  <ThumbsUp size={12} /> 승인
-                </button>
-                <button onClick={() => setCancelMode(true)} disabled={acting}
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
-                  <Ban size={12} /> 취소
-                </button>
+                <AdminButton tone="success" variant="subtle" size="lg" fullWidth
+                  leftIcon={<ThumbsUp size={12} />}
+                  onClick={() => void onApprove()} disabled={acting}>
+                  승인
+                </AdminButton>
+                <AdminButton tone="danger" variant="subtle" size="lg" fullWidth
+                  leftIcon={<Ban size={12} />}
+                  onClick={() => setCancelMode(true)} disabled={acting}>
+                  취소
+                </AdminButton>
               </div>
             )}
 
             {/* approved */}
             {settlement.status === 'approved' && !paidMode && !cancelMode && (
               <div className="flex gap-2">
-                <button onClick={() => setPaidMode(true)} disabled={acting}
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-30">
-                  <BadgeCheck size={12} /> 지급완료 처리
-                </button>
-                <button onClick={() => setCancelMode(true)} disabled={acting}
-                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30">
-                  <Ban size={12} /> 취소
-                </button>
+                <AdminButton tone="success" variant="subtle" size="lg" fullWidth
+                  leftIcon={<BadgeCheck size={12} />}
+                  onClick={() => setPaidMode(true)} disabled={acting}>
+                  지급완료 처리
+                </AdminButton>
+                <AdminButton tone="danger" variant="subtle" size="lg" fullWidth
+                  leftIcon={<Ban size={12} />}
+                  onClick={() => setCancelMode(true)} disabled={acting}>
+                  취소
+                </AdminButton>
               </div>
             )}
 
@@ -476,15 +493,16 @@ function DetailModal({
                   className="w-full rounded bg-bg px-2 py-1.5 text-xs min-h-[44px]"
                 />
                 <div className="flex gap-2">
-                  <button onClick={() => { setPaidMode(false); setPaymentRef(''); setPaidNote(''); }}
-                    className="flex-1 rounded-lg bg-bg-card px-3 py-2.5 text-xs font-bold hover:bg-bg-hover">
+                  <AdminButton tone="neutral" variant="subtle" size="lg" className="flex-1"
+                    onClick={() => { setPaidMode(false); setPaymentRef(''); setPaidNote(''); }}>
                     뒤로
-                  </button>
-                  <button onClick={() => void onMarkPaid()} disabled={acting || !paymentRef.trim()}
-                    className="flex-[2] rounded-lg bg-emerald-500/30 px-3 py-2.5 text-xs font-bold text-emerald-200 disabled:opacity-30">
-                    {acting ? <RefreshCw size={12} className="inline mr-1 animate-spin" /> : null}
+                  </AdminButton>
+                  <AdminButton tone="success" variant="solid" size="lg" className="flex-[2]"
+                    loading={acting}
+                    onClick={() => void onMarkPaid()}
+                    disabled={acting || !paymentRef.trim()}>
                     지급완료 확정
-                  </button>
+                  </AdminButton>
                 </div>
               </div>
             )}
@@ -500,15 +518,16 @@ function DetailModal({
                   autoFocus
                 />
                 <div className="flex gap-2">
-                  <button onClick={() => { setCancelMode(false); setCancelNote(''); }}
-                    className="flex-1 rounded-lg bg-bg-card px-3 py-2.5 text-xs font-bold hover:bg-bg-hover">
+                  <AdminButton tone="neutral" variant="subtle" size="lg" className="flex-1"
+                    onClick={() => { setCancelMode(false); setCancelNote(''); }}>
                     뒤로
-                  </button>
-                  <button onClick={() => void onCancel()} disabled={acting || !cancelNote.trim()}
-                    className="flex-[2] rounded-lg bg-rose-500/30 px-3 py-2.5 text-xs font-bold text-rose-200 disabled:opacity-30">
-                    {acting ? <RefreshCw size={12} className="inline mr-1 animate-spin" /> : null}
+                  </AdminButton>
+                  <AdminButton tone="danger" variant="solid" size="lg" className="flex-[2]"
+                    loading={acting}
+                    onClick={() => void onCancel()}
+                    disabled={acting || !cancelNote.trim()}>
                     취소 확정
-                  </button>
+                  </AdminButton>
                 </div>
               </div>
             )}
@@ -524,28 +543,23 @@ function DetailModal({
 // =============================================================================
 
 function StatusBadge({ status }: { status: EnterpriseMonthlySettlementStatus }) {
-  const map = {
-    pending:   { tone: 'bg-amber-500/25 text-amber-300',     icon: <ClockIcon size={10} /> },
-    approved:  { tone: 'bg-sky-500/25 text-sky-300',         icon: <ThumbsUp size={10} /> },
-    paid:      { tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={10} /> },
-    cancelled: { tone: 'bg-rose-500/25 text-rose-300',       icon: <XCircle size={10} /> },
+  const ICON = {
+    pending:   <ClockIcon size={10} />,
+    approved:  <ThumbsUp size={10} />,
+    paid:      <CheckCircle2 size={10} />,
+    cancelled: <XCircle size={10} />,
   } as const;
-  const v = map[status];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${v.tone}`}>
-      {v.icon} {SETTLEMENT_STATUS_LABEL[status]}
-    </span>
+    <AdminBadge tone={STATUS_TONE[status]} icon={ICON[status]}>
+      {SETTLEMENT_STATUS_LABEL[status]}
+    </AdminBadge>
   );
 }
 
 function ItemBadge({ status }: { status: 'included' | 'excluded' }) {
   return status === 'included'
-    ? <span className="inline-flex items-center gap-1 rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-        <CheckCircle2 size={9} /> 포함
-      </span>
-    : <span className="inline-flex items-center gap-1 rounded bg-ink/10 px-1.5 py-0.5 text-[10px] font-bold text-ink-mute">
-        <AlertTriangle size={9} /> 제외
-      </span>;
+    ? <AdminBadge tone="success" icon={<CheckCircle2 size={9} />}>포함</AdminBadge>
+    : <AdminBadge tone="neutral" icon={<AlertTriangle size={9} />}>제외</AdminBadge>;
 }
 
 function KV({ k, v, colSpan, mono, highlight }: {
