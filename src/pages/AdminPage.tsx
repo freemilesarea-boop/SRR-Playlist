@@ -296,9 +296,9 @@ export default function AdminPage() {
     }
   }, [tab]);
 
-  const requestFranchisePolicyNav = useCallback(() => {
+  const requestFranchisePolicyNav = useCallback((returnTo: Tab = 'policy-deployment') => {
     setPendingFranchiseDeepLink('policies');
-    setPendingFranchiseReturnTo('policy-deployment');
+    setPendingFranchiseReturnTo(returnTo);
     setTab('franchise');
     setGroup(groupOf('franchise'));
   }, []);
@@ -420,7 +420,11 @@ export default function AdminPage() {
               onRequestFranchisePolicyNav={requestFranchisePolicyNav}
             />
           )}
-          {tab === 'policy-automation' && <PolicyAutomationPanel />}
+          {tab === 'policy-automation' && (
+            <PolicyAutomationPanel
+              onRequestFranchisePolicyNav={() => requestFranchisePolicyNav('policy-automation')}
+            />
+          )}
           {tab === 'franchise' && (
             <FranchiseManagementPanel
               initialDetailTab={pendingFranchiseDeepLink ?? undefined}

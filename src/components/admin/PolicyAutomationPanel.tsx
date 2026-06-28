@@ -88,7 +88,16 @@ const EVENT_META: Record<AutomationEventType, { ko: string; icon: React.ReactNod
 
 type CenterTab = 'rules' | 'runs';
 
-export default function PolicyAutomationPanel() {
+export interface PolicyAutomationPanelProps {
+  /**
+   * 자동 스케줄 생성 모달에서 "적용할 플레이리스트" 가 0개일 때,
+   * "프랜차이즈 관리에서 플레이리스트 등록" 버튼을 눌렀을 때의 콜백.
+   * PolicyDeploymentPanel 와 동일 시그니처 — AdminPage 에서 동일 핸들러를 공유.
+   */
+  onRequestFranchisePolicyNav?: () => void;
+}
+
+export default function PolicyAutomationPanel({ onRequestFranchisePolicyNav }: PolicyAutomationPanelProps = {}) {
   const [activeTab, setActiveTab] = useState<CenterTab>('rules');
 
   const [kpi, setKpi] = useState<PolicyAutomationKpi | null>(null);
@@ -121,6 +130,8 @@ export default function PolicyAutomationPanel() {
   const [enterprises, setEnterprises] = useState<EnterpriseAccount[]>([]);
   const [regions, setRegions] = useState<EnterpriseRegion[]>([]);
   const [deployablePolicies, setDeployablePolicies] = useState<DeployablePolicy[]>([]);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policiesError, setPoliciesError] = useState<string | null>(null);
 
   // modals
   const [showCreate, setShowCreate] = useState(false);
@@ -180,15 +191,36 @@ export default function PolicyAutomationPanel() {
   useEffect(() => { void loadRules(); }, [loadRules]);
   useEffect(() => { void loadRuns(); }, [loadRuns]);
 
-  // filter sources (1회)
+  // 플레이리스트 dropdown 공급용 — loading/error 상태를 명시적으로 추적해
+  // 진짜 0건과 RPC 실패를 구분 (이전에는 둘 다 빈 배열 → "없습니다" 로 잘못 표시)
+  const loadDeployablePolicies = useCallback(async () => {
+    setPoliciesLoading(true);
+    setPoliciesError(null);
+    try {
+      const r = await listDeployablePolicies({ limit: 200 });
+      setDeployablePolicies(r.data);
+    } catch (e) {
+      console.warn('[PolicyAutomation] policies load failed', e);
+      setPoliciesError((e as Error).message);
+      setDeployablePolicies([]);
+    } finally {
+      setPoliciesLoading(false);
+    }
+  }, []);
+
+  // filter sources (1회 + 모달 열릴 때 재조회)
   useEffect(() => {
     void adminListEnterpriseAccounts({ limit: 200 }).then((r) => setEnterprises(r.data))
       .catch((e) => console.warn('[PolicyAutomation] enterprises load failed', e));
     void listEnterpriseRegions({ limit: 200 }).then((r) => setRegions(r.data))
       .catch((e) => console.warn('[PolicyAutomation] regions load failed', e));
-    void listDeployablePolicies({ limit: 200 }).then((r) => setDeployablePolicies(r.data))
-      .catch((e) => console.warn('[PolicyAutomation] policies load failed', e));
-  }, []);
+    void loadDeployablePolicies();
+  }, [loadDeployablePolicies]);
+
+  // 모달 열릴 때마다 플레이리스트 목록 재조회 — 다른 탭/시간대에 새 정책이 생겼을 수 있음
+  useEffect(() => {
+    if (showCreate || editing) void loadDeployablePolicies();
+  }, [showCreate, editing, loadDeployablePolicies]);
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
@@ -395,6 +427,10 @@ export default function PolicyAutomationPanel() {
           enterprises={enterprises}
           regions={regions}
           deployablePolicies={deployablePolicies}
+          policiesLoading={policiesLoading}
+          policiesError={policiesError}
+          onReloadPolicies={() => void loadDeployablePolicies()}
+          onRequestFranchisePolicyNav={onRequestFranchisePolicyNav}
           onClose={() => { setShowCreate(false); setEditing(null); }}
           onSaved={async (msg) => {
             setShowCreate(false); setEditing(null);
@@ -855,11 +891,19 @@ interface RuleModalProps {
   enterprises: EnterpriseAccount[];
   regions: EnterpriseRegion[];
   deployablePolicies: DeployablePolicy[];
+  policiesLoading: boolean;
+  policiesError: string | null;
+  onReloadPolicies: () => void;
+  onRequestFranchisePolicyNav?: () => void;
   onClose: () => void;
   onSaved: (msg: string) => void | Promise<void>;
 }
 
-function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClose, onSaved }: RuleModalProps) {
+function RuleModal({
+  mode, rule, enterprises, regions, deployablePolicies,
+  policiesLoading, policiesError, onReloadPolicies, onRequestFranchisePolicyNav,
+  onClose, onSaved,
+}: RuleModalProps) {
   const isEdit = mode === 'edit';
   const [name, setName] = useState(rule?.name ?? '');
   const [description, setDescription] = useState(rule?.description ?? '');
@@ -973,11 +1017,33 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
           </select>
         </Field>
         <Field label="적용할 플레이리스트 *">
-          {deployablePolicies.length === 0 ? (
+          {policiesLoading ? (
+            <AdminSkeleton variant="block" rows={2} />
+          ) : policiesError ? (
+            <AdminAlert
+              tone="danger"
+              title="플레이리스트 목록을 불러올 수 없습니다."
+              description={policiesError}
+              action={<AdminButton tone="danger" variant="subtle" size="sm" onClick={onReloadPolicies}>다시 시도</AdminButton>}
+            />
+          ) : deployablePolicies.length === 0 ? (
             <AdminAlert
               tone="warning"
               title="적용할 플레이리스트가 없습니다."
-              description="먼저 프랜차이즈 관리에서 매장 음악 플레이리스트를 등록해 주세요."
+              description="프랜차이즈 관리에서 먼저 플레이리스트 배포 설정을 만들어 주세요."
+              action={
+                onRequestFranchisePolicyNav ? (
+                  <AdminButton
+                    tone="primary" size="sm"
+                    onClick={onRequestFranchisePolicyNav}>
+                    프랜차이즈 관리로 이동
+                  </AdminButton>
+                ) : (
+                  <AdminButton tone="info" variant="subtle" size="sm" onClick={onReloadPolicies}>
+                    새로고침
+                  </AdminButton>
+                )
+              }
             />
           ) : (
             <>
@@ -990,7 +1056,9 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
                   </option>
                 ))}
               </select>
-              <p className="mt-0.5 text-[10px] text-ink-dim">매장에 자동으로 배포할 음악 구성을 선택하세요.</p>
+              <p className="mt-0.5 text-[10px] text-ink-dim">
+                매장에 자동으로 배포할 음악 구성을 선택하세요. ({deployablePolicies.length}개)
+              </p>
             </>
           )}
         </Field>
