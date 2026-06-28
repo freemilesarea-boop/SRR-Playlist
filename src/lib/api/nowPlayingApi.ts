@@ -59,6 +59,12 @@ export interface NowPlayingKpi {
   stopped: number;
   offline: number;
   recent_track_changes_5m: number;
+  /** 0376 — playback_error 가 있는 매장 수 */
+  error_count?: number;
+  /** 0376 — 최근 1분 트랙 변경 수 */
+  recent_track_changes_1m?: number;
+  /** 0376 — 최근 1분 heartbeat 업데이트 수 */
+  recent_updates_1m?: number;
   computed_at: string;
 }
 
