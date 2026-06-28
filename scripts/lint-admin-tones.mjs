@@ -76,6 +76,19 @@ function isWhitelistedLine(line) {
   if (/\bdisabled:opacity-/.test(line)) return true;
   // 주석 라인
   if (/^\s*(\/\/|\*)/.test(line)) return true;
+
+  // === opacity-{40,50,60} 의도된 muted 패턴 (4차 batch에서 추가) ===
+  // 1) ternary 조건부 dimming — `${cond ? 'A' : 'opacity-XX...'}` 또는 ` ? 'opacity-XX' : 'B'`
+  //    (row/section muted state — withdrawn/removed/deleted/inactive/disabled)
+  if (/\?[^?]*opacity-(40|50|60)\b/.test(line)) return true;
+  // 2) readonly input dim — `<input readOnly className="...opacity-XX" />`
+  if (/\breadOnly\b[^>]*opacity-(40|50|60)/.test(line)) return true;
+  // 3) cursor-not-allowed 동반 dim — disabled-like 표현
+  if (/\bcursor-not-allowed\b[^"]*opacity-(40|50|60)/.test(line)) return true;
+  // 4) 아이콘 전용 dim — `<Icon size={N} className="...opacity-XX" />`
+  //    visual hierarchy (loading spinner / empty state icon / decorative icon)
+  if (/\bsize=\{[^}]*\}[^>]*\bclassName=("|`|\{`)[^"`]*opacity-(40|50|60)/.test(line)) return true;
+
   return false;
 }
 
