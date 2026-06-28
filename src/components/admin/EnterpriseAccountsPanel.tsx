@@ -246,8 +246,8 @@ export default function EnterpriseAccountsPanel() {
                     <td className="px-3 py-2 text-ink-mute">{r.manager_phone ?? '—'}</td>
                     <td className="px-3 py-2"><RoleBadge role={r.role} /></td>
                     <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums text-ink-mute">
-                      {r.last_login_at ? new Date(r.last_login_at).toLocaleDateString('ko-KR') : '—'}
+                    <td className="px-3 py-2 text-right text-[11px]">
+                      <LastLoginCell iso={r.last_login_at} />
                     </td>
                     <td className="px-3 py-2 text-right">
                       <RowActions
@@ -280,11 +280,10 @@ export default function EnterpriseAccountsPanel() {
                   <div className="flex items-center gap-1"><Mail size={10} /> {r.manager_email}</div>
                   {r.manager_phone && <div className="flex items-center gap-1"><Phone size={10} /> {r.manager_phone}</div>}
                   <div className="flex items-center gap-1"><RoleBadge role={r.role} /></div>
-                  {r.last_login_at && (
-                    <div className="text-[10px] text-ink-dim">
-                      최근 로그인: {new Date(r.last_login_at).toLocaleDateString('ko-KR')}
-                    </div>
-                  )}
+                  <div className="text-[10px]">
+                    <span className="text-ink-dim">최근 로그인: </span>
+                    <LastLoginCell iso={r.last_login_at} layout="mobile" />
+                  </div>
                 </div>
                 {r.brand_code && (
                   <div className="mt-1 text-[10px] text-ink-dim font-mono">{r.brand_code}</div>
@@ -368,6 +367,60 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
   const v = map[role];
   return <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${v.cls}`}>{v.ko}</span>;
 }
+
+// =============================================================================
+// last_login 표시 — yyyy.MM.dd HH:mm + 최근 7일 강조
+// =============================================================================
+
+function formatLoginDateTime(iso: string | null): string {
+  if (!iso) return '로그인 전';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '로그인 전';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}.${mm}.${dd} ${hh}:${mi}`;
+}
+
+function isRecentLogin(iso: string | null, days = 7): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function LastLoginCell({ iso, layout = 'desktop' }: {
+  iso: string | null;
+  layout?: 'desktop' | 'mobile';
+}) {
+  const recent = isRecentLogin(iso);
+  const text = formatLoginDateTime(iso);
+  if (layout === 'mobile') {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className={iso ? 'text-ink-mute' : 'text-ink-dim italic'}>{text}</span>
+        {recent && (
+          <span className="inline-flex items-center rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 ring-1 ring-emerald-400/50">
+            7일 내
+          </span>
+        )}
+      </span>
+    );
+  }
+  return (
+    <div className="inline-flex items-center justify-end gap-1.5">
+      <span className={iso ? 'text-ink-mute tabular-nums' : 'text-ink-dim italic'}>{text}</span>
+      {recent && (
+        <span className="inline-flex items-center rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 ring-1 ring-emerald-400/50">
+          7일 내
+        </span>
+      )}
+    </div>
+  );
+}
+
 
 function RowActions({
   row, busy, onEdit, onInvite, onSettlement, onSetStatus, onDelete,
