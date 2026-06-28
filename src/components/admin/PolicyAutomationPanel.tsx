@@ -1,9 +1,11 @@
 /**
- * PolicyAutomationPanel — Enterprise Priority 3 (Policy Automation Engine V1).
+ * PolicyAutomationPanel — Enterprise Priority 3 (자동 음악 스케줄 / Automation Engine V1).
  *
- * 예약/반복/시즌/이벤트 정책 자동화 룰 관리 + 실행 로그 + dry_run + 즉시 실행.
- * 기존 정책 배포 시스템 (enterprise_policy_deployments / admin_create_policy_deployment)
- * 재사용. V1: 외부 API/cron parser/자동 트리거 없음 (event 는 manual run only).
+ * 예약/반복/시즌/이벤트 자동 음악 배포 스케줄 관리 + 배포 실행 로그 + 미리보기 + 즉시 배포.
+ * 기존 음악 배포 시스템 (enterprise_policy_deployments / admin_create_policy_deployment)
+ * 재사용. V1: 외부 API/cron parser/자동 트리거 없음 (이벤트는 수동 배포만).
+ *
+ * NOTE: DB/API/RPC 의 'policy' 용어는 그대로 유지. 사용자 노출 문구만 친근화.
  *
  * SQL: supabase/migrations/0378_policy_automation_engine_v1.sql
  */
@@ -42,7 +44,7 @@ const PAGE_SIZE = 50;
 const RULE_STATUS_META: Record<AutomationRuleStatus, { ko: string; tone: AdminToneName }> = {
   active:   { ko: '활성',     tone: 'success' },
   paused:   { ko: '일시정지', tone: 'warning' },
-  expired:  { ko: '만료',     tone: 'neutral' },
+  expired:  { ko: '종료됨',   tone: 'neutral' },
   disabled: { ko: '비활성',   tone: 'danger'  },
 };
 
@@ -54,11 +56,11 @@ const RUN_STATUS_META: Record<AutomationRunStatus, { ko: string; tone: AdminTone
   skipped:   { ko: '제외',     tone: 'neutral' },
 };
 
-const RULE_TYPE_META: Record<AutomationRuleType, { ko: string; icon: React.ReactNode; tone: AdminToneName }> = {
-  scheduled: { ko: '예약',  icon: <Calendar size={11} />, tone: 'info'    },
-  recurring: { ko: '반복',  icon: <Repeat   size={11} />, tone: 'primary' },
-  season:    { ko: '시즌',  icon: <Sun      size={11} />, tone: 'warning' },
-  event:     { ko: '이벤트', icon: <Zap      size={11} />, tone: 'success' },
+const RULE_TYPE_META: Record<AutomationRuleType, { ko: string; icon: React.ReactNode; tone: AdminToneName; hint: string }> = {
+  scheduled: { ko: '예약 실행',   icon: <Calendar size={11} />, tone: 'info',    hint: '특정 날짜와 시간에 한 번 실행' },
+  recurring: { ko: '반복 실행',   icon: <Repeat   size={11} />, tone: 'primary', hint: '매일/매주/매월 반복 실행' },
+  season:    { ko: '시즌 자동화', icon: <Sun      size={11} />, tone: 'warning', hint: '봄/여름/가을/겨울/크리스마스 시즌' },
+  event:     { ko: '이벤트 조건', icon: <Zap      size={11} />, tone: 'success', hint: '비/눈/공휴일/오픈/마감 같은 조건 (수동 실행)' },
 };
 
 const SCOPE_META: Record<AutomationScopeType, { ko: string }> = {
@@ -209,7 +211,7 @@ export default function PolicyAutomationPanel() {
     setActionBusy(`status:${rule.id}`);
     try {
       await setPolicyAutomationStatus(rule.id, next);
-      setToast({ tone: 'success', title: '상태 변경됨', body: `${rule.name} → ${RULE_STATUS_META[next].ko}` });
+      setToast({ tone: 'success', title: '스케줄 상태가 변경되었습니다.', body: `${rule.name} → ${RULE_STATUS_META[next].ko}` });
       await Promise.all([loadKpi(), loadRules(true)]);
     } catch (e) {
       setToast({ tone: 'danger', title: '상태 변경 실패', body: (e as Error).message });
@@ -217,11 +219,11 @@ export default function PolicyAutomationPanel() {
   }, [loadKpi, loadRules]);
 
   const onDelete = useCallback(async (rule: PolicyAutomationRule) => {
-    if (!window.confirm(`"${rule.name}" 룰을 삭제하시겠습니까? (soft delete)`)) return;
+    if (!window.confirm(`"${rule.name}" 자동 스케줄을 삭제하시겠습니까? (복구 가능)`)) return;
     setActionBusy(`del:${rule.id}`);
     try {
       await softDeletePolicyAutomationRule(rule.id);
-      setToast({ tone: 'warning', title: '룰 삭제됨', body: rule.name });
+      setToast({ tone: 'warning', title: '자동 스케줄이 삭제되었습니다.', body: rule.name });
       await Promise.all([loadKpi(), loadRules(true)]);
     } catch (e) {
       setToast({ tone: 'danger', title: '삭제 실패', body: (e as Error).message });
@@ -229,18 +231,18 @@ export default function PolicyAutomationPanel() {
   }, [loadKpi, loadRules]);
 
   const onRunNow = useCallback(async (rule: PolicyAutomationRule) => {
-    if (!window.confirm(`"${rule.name}" 룰을 지금 실행하시겠습니까? 실제 정책 배포가 생성됩니다.`)) return;
+    if (!window.confirm(`"${rule.name}" 을(를) 지금 매장에 배포하시겠습니까? 실제 음악 배포가 생성됩니다.`)) return;
     setActionBusy(`run:${rule.id}`);
     try {
       const r = await runPolicyAutomationRuleNow(rule.id, false);
       setToast({
         tone: r.status === 'completed' ? 'success' : r.status === 'skipped' ? 'warning' : 'info',
-        title: '즉시 실행 완료',
-        body: `${rule.name} — ${r.status} (대상 ${r.target_count ?? 0})${r.deployment_id ? ` · deployment ${r.deployment_id.slice(0, 8)}…` : ''}`,
+        title: '음악 배포가 요청되었습니다.',
+        body: `${rule.name} — 대상 ${r.target_count ?? 0}개 매장${r.deployment_id ? ` · 배포 ID ${r.deployment_id.slice(0, 8)}…` : ''}`,
       });
       await Promise.all([loadKpi(), loadRules(true), loadRuns(true)]);
     } catch (e) {
-      setToast({ tone: 'danger', title: '즉시 실행 실패', body: (e as Error).message });
+      setToast({ tone: 'danger', title: '음악 배포 실패', body: (e as Error).message });
     } finally { setActionBusy(null); }
   }, [loadKpi, loadRules, loadRuns]);
 
@@ -258,18 +260,18 @@ export default function PolicyAutomationPanel() {
   }, []);
 
   const onEvaluateBatch = useCallback(async (dryRun: boolean) => {
-    if (!dryRun && !window.confirm('현재 시점에 due 한 모든 룰을 실제 실행하시겠습니까?')) return;
+    if (!dryRun && !window.confirm('현재 예정된 모든 음악 스케줄을 매장에 일괄 배포하시겠습니까?')) return;
     setActionBusy('evaluate');
     try {
       const r: PolicyAutomationEvaluateResult = await evaluatePolicyAutomationRules(dryRun);
       setToast({
         tone: r.failed > 0 ? 'danger' : 'success',
-        title: dryRun ? 'Dry-run 완료' : '일괄 실행 완료',
-        body: `processed=${r.processed} executed=${r.executed} skipped=${r.skipped} failed=${r.failed}`,
+        title: dryRun ? '배포 미리보기가 완료되었습니다.' : '일괄 배포가 완료되었습니다.',
+        body: `검토 ${r.processed} · 배포 ${r.executed} · 제외 ${r.skipped} · 실패 ${r.failed}`,
       });
       if (!dryRun) await Promise.all([loadKpi(), loadRules(true), loadRuns(true)]);
     } catch (e) {
-      setToast({ tone: 'danger', title: '평가 실패', body: (e as Error).message });
+      setToast({ tone: 'danger', title: '스케줄 평가 실패', body: (e as Error).message });
     } finally { setActionBusy(null); }
   }, [loadKpi, loadRules, loadRuns]);
 
@@ -283,12 +285,12 @@ export default function PolicyAutomationPanel() {
       ? new Date(kpi.next_run_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
       : '—';
     return [
-      { label: '전체 룰',     value: kpi.total_rules,    tone: 'neutral' as AdminToneName, icon: <ListChecks size={14} /> },
-      { label: '활성 룰',     value: kpi.active_rules,   tone: 'success' as AdminToneName, icon: <Play size={14} /> },
-      { label: '24시간 예정', value: kpi.upcoming_24h,   tone: 'info'    as AdminToneName, icon: <Clock size={14} /> },
-      { label: '최근 7일 실행', value: kpi.recent_7d_runs, tone: 'primary' as AdminToneName, icon: <Activity size={14} /> },
-      { label: '7일 실패',    value: kpi.failed_runs_7d, tone: 'danger'  as AdminToneName, icon: <AlertCircle size={14} /> },
-      { label: '다음 실행',   value: nextRun,            tone: 'warning' as AdminToneName, icon: <Calendar size={14} /> },
+      { label: '전체 스케줄',    value: kpi.total_rules,    tone: 'neutral' as AdminToneName, icon: <ListChecks size={14} /> },
+      { label: '활성 스케줄',    value: kpi.active_rules,   tone: 'success' as AdminToneName, icon: <Play size={14} /> },
+      { label: '24시간 내 예정', value: kpi.upcoming_24h,   tone: 'info'    as AdminToneName, icon: <Clock size={14} /> },
+      { label: '최근 7일 배포',  value: kpi.recent_7d_runs, tone: 'primary' as AdminToneName, icon: <Activity size={14} /> },
+      { label: '7일 실패',       value: kpi.failed_runs_7d, tone: 'danger'  as AdminToneName, icon: <AlertCircle size={14} /> },
+      { label: '다음 배포 시각', value: nextRun,            tone: 'warning' as AdminToneName, icon: <Calendar size={14} /> },
     ];
   }, [kpi]);
 
@@ -298,8 +300,8 @@ export default function PolicyAutomationPanel() {
 
   return (
     <AdminSection
-      title={<span className="flex items-center gap-2"><Repeat size={16} /> 정책 자동화 엔진</span>}
-      description="예약 / 반복 / 시즌 / 이벤트 정책을 자동으로 배포합니다. V1: cron parser/외부 API 미사용, 이벤트는 수동 실행."
+      title={<span className="flex items-center gap-2"><Repeat size={16} /> 자동 음악 스케줄</span>}
+      description="예약 / 반복 / 시즌 / 이벤트 조건에 따라 매장 음악을 자동으로 배포합니다."
       badge={<AdminBadge tone="primary" variant="subtle">Priority 3 · V1</AdminBadge>}
       action={
         <div className="flex flex-wrap items-center gap-2">
@@ -312,16 +314,16 @@ export default function PolicyAutomationPanel() {
             leftIcon={<Eye size={12} />}
             loading={actionBusy === 'evaluate'}
             onClick={() => void onEvaluateBatch(true)}>
-            전체 Dry-run
+            전체 미리보기
           </AdminButton>
           <AdminButton tone="warning" variant="solid" size="sm"
             leftIcon={<Zap size={12} />}
             loading={actionBusy === 'evaluate'}
             onClick={() => void onEvaluateBatch(false)}>
-            due 룰 일괄 실행
+            예정된 음악 일괄 배포
           </AdminButton>
           <AdminButton tone="primary" size="sm" leftIcon={<Plus size={12} />} onClick={() => setShowCreate(true)}>
-            룰 생성
+            자동 스케줄 생성
           </AdminButton>
         </div>
       }
@@ -341,11 +343,11 @@ export default function PolicyAutomationPanel() {
 
       <div className="flex items-center gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
         <TabBtn active={activeTab === 'rules'} onClick={() => setActiveTab('rules')}>
-          <ListChecks size={12} /> 룰 목록
+          <ListChecks size={12} /> 자동 스케줄 목록
           <span className="text-[10px] text-ink-mute tabular-nums">{rulesTotal.toLocaleString()}</span>
         </TabBtn>
         <TabBtn active={activeTab === 'runs'} onClick={() => setActiveTab('runs')}>
-          <History size={12} /> 실행 로그
+          <History size={12} /> 배포 실행 로그
           <span className="text-[10px] text-ink-mute tabular-nums">{runsTotal.toLocaleString()}</span>
         </TabBtn>
       </div>
@@ -486,7 +488,7 @@ function RulesView(props: RulesViewProps) {
     <div className="space-y-3">
       <AdminSearch
         value={props.search} onChange={props.setSearch}
-        placeholder="룰명 / 설명 / 정책명 / 본사 검색"
+        placeholder="스케줄명 / 설명 / 플레이리스트 / 본사 검색"
         filters={
           <>
             <select value={props.typeFilter}
@@ -540,8 +542,8 @@ function RulesView(props: RulesViewProps) {
       ) : !loading && rules.length === 0 && !error ? (
         <AdminEmpty
           icon={<Repeat size={28} />}
-          title="자동화 룰이 없습니다."
-          description="필터를 조정하거나 룰을 생성하세요."
+          title="등록된 자동 스케줄이 없습니다."
+          description="필터를 조정하거나 새 자동 스케줄을 생성하세요."
         />
       ) : (
         <>
@@ -549,12 +551,12 @@ function RulesView(props: RulesViewProps) {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-line/10 text-[10px] uppercase tracking-wider text-ink-dim">
-                  <th className="px-3 py-2">룰명</th>
+                  <th className="px-3 py-2">스케줄명</th>
                   <th className="px-3 py-2">유형</th>
-                  <th className="px-3 py-2">정책</th>
+                  <th className="px-3 py-2">적용할 플레이리스트</th>
                   <th className="px-3 py-2">범위</th>
-                  <th className="px-3 py-2 text-right">다음 실행</th>
-                  <th className="px-3 py-2 text-right">마지막 실행</th>
+                  <th className="px-3 py-2 text-right">다음 배포</th>
+                  <th className="px-3 py-2 text-right">마지막 배포</th>
                   <th className="px-3 py-2">상태</th>
                   <th className="px-3 py-2">액션</th>
                 </tr>
@@ -618,11 +620,11 @@ function RuleRow({ rule, onEdit, onPreview, onRunNow, onStatusToggle, onDelete, 
       <td className="px-3 py-2">{ruleStatusChip(rule.status)}</td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center gap-1">
-          <AdminTooltip label="미리보기 (dry-run)">
+          <AdminTooltip label="배포 미리보기">
             <AdminButton tone="info" variant="ghost" size="sm" leftIcon={<Eye size={11} />}
               onClick={() => onPreview(rule)}>—</AdminButton>
           </AdminTooltip>
-          <AdminTooltip label="지금 실행">
+          <AdminTooltip label="지금 음악 배포">
             <AdminButton tone="warning" variant="ghost" size="sm" leftIcon={<Zap size={11} />}
               loading={actionBusy === `run:${rule.id}`}
               onClick={() => onRunNow(rule)}>—</AdminButton>
@@ -674,15 +676,15 @@ function RuleCard({ rule, onEdit, onPreview, onRunNow, onStatusToggle, onDelete,
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-ink-mute">
-        <div><span className="text-ink-dim">정책:</span> {rule.policy_name ?? '—'}</div>
+        <div><span className="text-ink-dim">플레이리스트:</span> {rule.policy_name ?? '—'}</div>
         <div><span className="text-ink-dim">범위:</span> {scopeLabel(rule)}</div>
-        <div><span className="text-ink-dim">다음:</span> {fmtDate(rule.next_run_at)}</div>
-        <div><span className="text-ink-dim">마지막:</span> {fmtDate(rule.last_run_at ?? rule.last_triggered_at)}</div>
+        <div><span className="text-ink-dim">다음 배포:</span> {fmtDate(rule.next_run_at)}</div>
+        <div><span className="text-ink-dim">마지막 배포:</span> {fmtDate(rule.last_run_at ?? rule.last_triggered_at)}</div>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
-        <AdminButton tone="info" variant="ghost" size="sm" leftIcon={<Eye size={11} />} onClick={() => onPreview(rule)}>Preview</AdminButton>
+        <AdminButton tone="info" variant="ghost" size="sm" leftIcon={<Eye size={11} />} onClick={() => onPreview(rule)}>미리보기</AdminButton>
         <AdminButton tone="warning" variant="subtle" size="sm" leftIcon={<Zap size={11} />}
-          loading={actionBusy === `run:${rule.id}`} onClick={() => onRunNow(rule)}>지금</AdminButton>
+          loading={actionBusy === `run:${rule.id}`} onClick={() => onRunNow(rule)}>지금 배포</AdminButton>
         {rule.status === 'active' ? (
           <AdminButton tone="neutral" variant="ghost" size="sm" leftIcon={<Pause size={11} />}
             loading={actionBusy === `status:${rule.id}`} onClick={() => onStatusToggle(rule, 'paused')}>일시정지</AdminButton>
@@ -725,7 +727,7 @@ function RunsView({
           <>
             <select value={ruleFilter} onChange={(e) => setRuleFilter(e.target.value)}
               className="rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-              <option value="">전체 룰</option>
+              <option value="">전체 스케줄</option>
               {rules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as AutomationRunStatus | '')}
@@ -748,20 +750,20 @@ function RunsView({
       {loading && runs.length === 0 ? (
         <AdminSkeleton variant="table" rows={6} />
       ) : !loading && runs.length === 0 && !error ? (
-        <AdminEmpty icon={<History size={28} />} title="실행 로그가 없습니다." />
+        <AdminEmpty icon={<History size={28} />} title="배포 실행 로그가 없습니다." />
       ) : (
         <>
           <div className="hidden md:block overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10 shadow-sm shadow-black/20">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-line/10 text-[10px] uppercase tracking-wider text-ink-dim">
-                  <th className="px-3 py-2">실행 시간</th>
-                  <th className="px-3 py-2">룰명</th>
+                  <th className="px-3 py-2">배포 시각</th>
+                  <th className="px-3 py-2">스케줄명</th>
                   <th className="px-3 py-2">상태</th>
-                  <th className="px-3 py-2 text-right">대상</th>
+                  <th className="px-3 py-2 text-right">대상 매장</th>
                   <th className="px-3 py-2 text-right">성공</th>
                   <th className="px-3 py-2 text-right">실패</th>
-                  <th className="px-3 py-2">배포</th>
+                  <th className="px-3 py-2">생성된 배포</th>
                   <th className="px-3 py-2">오류</th>
                 </tr>
               </thead>
@@ -771,7 +773,7 @@ function RunsView({
                     <td className="px-3 py-2 text-[11px] tabular-nums text-ink-mute">{fmtDate(r.started_at)}</td>
                     <td className="px-3 py-2">
                       <div className="text-ink">{r.rule_name ?? '—'}</div>
-                      <div className="text-[10px] text-ink-mute">{r.rule_type ? RULE_TYPE_META[r.rule_type].ko : ''}{r.dry_run && ' · dry-run'}</div>
+                      <div className="text-[10px] text-ink-mute">{r.rule_type ? RULE_TYPE_META[r.rule_type].ko : ''}{r.dry_run && ' · 미리보기'}</div>
                     </td>
                     <td className="px-3 py-2">{runStatusChip(r.status)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.target_store_count.toLocaleString()}</td>
@@ -800,12 +802,12 @@ function RunsView({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-ink">{r.rule_name ?? '—'}</div>
-                    <div className="text-[10px] text-ink-mute">{fmtDate(r.started_at)}{r.dry_run && ' · dry-run'}</div>
+                    <div className="text-[10px] text-ink-mute">{fmtDate(r.started_at)}{r.dry_run && ' · 미리보기'}</div>
                   </div>
                   {runStatusChip(r.status)}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[11px]">
-                  <div><div className="font-bold tabular-nums">{r.target_store_count}</div><div className="text-[10px] text-ink-dim">대상</div></div>
+                  <div><div className="font-bold tabular-nums">{r.target_store_count}</div><div className="text-[10px] text-ink-dim">대상 매장</div></div>
                   <div><div className="font-bold tabular-nums text-emerald-300">{r.success_count}</div><div className="text-[10px] text-ink-dim">성공</div></div>
                   <div><div className="font-bold tabular-nums text-red-300">{r.failed_count}</div><div className="text-[10px] text-ink-dim">실패</div></div>
                 </div>
@@ -879,18 +881,18 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
 
   const onSubmit = async () => {
     setErr(null);
-    if (!name.trim()) { setErr('이름은 필수입니다.'); return; }
-    if (!enterpriseId) { setErr('본사 계정을 선택하세요.'); return; }
-    if (!policyId) { setErr('정책을 선택하세요.'); return; }
-    if (ruleType === 'scheduled' && !startsAt) { setErr('예약 룰은 시작일이 필수입니다.'); return; }
-    if (ruleType === 'recurring' && !recurrenceRule.trim()) { setErr('반복 룰은 반복 규칙이 필수입니다.'); return; }
-    if (ruleType === 'season' && !season) { setErr('시즌 룰은 시즌이 필수입니다.'); return; }
-    if (ruleType === 'event' && !eventType) { setErr('이벤트 룰은 이벤트 유형이 필수입니다.'); return; }
-    if (scopeType === 'region' && !regionId) { setErr('지역 범위는 지역 선택이 필수입니다.'); return; }
+    if (!name.trim()) { setErr('스케줄명을 입력해 주세요.'); return; }
+    if (!enterpriseId) { setErr('본사 계정을 선택해 주세요.'); return; }
+    if (!policyId) { setErr('적용할 플레이리스트를 선택해 주세요.'); return; }
+    if (ruleType === 'scheduled' && !startsAt) { setErr('예약 실행은 시작 일시가 필요합니다.'); return; }
+    if (ruleType === 'recurring' && !recurrenceRule.trim()) { setErr('반복 실행은 반복 규칙이 필요합니다.'); return; }
+    if (ruleType === 'season' && !season) { setErr('시즌 자동화는 시즌을 선택해 주세요.'); return; }
+    if (ruleType === 'event' && !eventType) { setErr('이벤트 조건은 이벤트 유형을 선택해 주세요.'); return; }
+    if (scopeType === 'region' && !regionId) { setErr('지역 범위는 지역을 선택해 주세요.'); return; }
     const storeIds = scopeType === 'store'
       ? storeIdsCsv.split(',').map((s) => s.trim()).filter(Boolean)
       : null;
-    if (scopeType === 'store' && (!storeIds || storeIds.length === 0)) { setErr('매장 범위는 매장 ID가 1개 이상 필요합니다.'); return; }
+    if (scopeType === 'store' && (!storeIds || storeIds.length === 0)) { setErr('매장 범위는 매장 ID를 1개 이상 입력해 주세요.'); return; }
 
     setBusy(true);
     try {
@@ -910,7 +912,7 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
           clearScopeStores: scopeType !== 'store',
           policyId,
         });
-        await onSaved(`수정됨: ${name}`);
+        await onSaved(`자동 음악 스케줄이 수정되었습니다: ${name}`);
       } else {
         await createPolicyAutomationRule({
           enterpriseAccountId: enterpriseId, policyId, name, ruleType, scopeType,
@@ -924,7 +926,7 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
           eventType: (eventType || null) as AutomationEventType | null,
           season:    (season || null) as AutomationSeason | null,
         });
-        await onSaved(`생성됨: ${name}`);
+        await onSaved(`자동 음악 스케줄이 생성되었습니다: ${name}`);
       }
     } catch (e) {
       setErr((e as Error).message);
@@ -934,19 +936,20 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
   return (
     <AdminModal
       open onClose={onClose} size="xl"
-      title={<span className="flex items-center gap-2">{isEdit ? <Edit3 size={14} /> : <Plus size={14} />} {isEdit ? '룰 수정' : '룰 생성'}</span>}
+      title={<span className="flex items-center gap-2">{isEdit ? <Edit3 size={14} /> : <Plus size={14} />} {isEdit ? '자동 스케줄 수정' : '자동 스케줄 생성'}</span>}
       footer={
         <>
           <AdminButton tone="neutral" variant="subtle" size="sm" onClick={onClose}>취소</AdminButton>
           <AdminButton tone="primary" size="sm" loading={busy} onClick={() => void onSubmit()}>
-            {isEdit ? '저장' : '생성'}
+            {isEdit ? '저장' : '스케줄 생성'}
           </AdminButton>
         </>
       }
     >
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="룰명 *">
+        <Field label="스케줄명 *">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="예) 크리스마스 음악 자동 적용 · 금요일 저녁 POP · 비오는 날 재즈"
             className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs" />
         </Field>
         <Field label="유형 *">
@@ -957,27 +960,39 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
               <option key={t} value={t}>{RULE_TYPE_META[t].ko}</option>
             ))}
           </select>
-          {isEdit && <p className="mt-0.5 text-[10px] text-ink-dim">V1: 유형 변경 불가</p>}
+          <p className="mt-0.5 text-[10px] text-ink-dim">{RULE_TYPE_META[ruleType].hint}</p>
+          {isEdit && <p className="mt-0.5 text-[10px] text-ink-dim">생성 후 유형은 변경할 수 없습니다.</p>}
         </Field>
 
         <Field label="본사 계정 *">
           <select value={enterpriseId} onChange={(e) => setEnterpriseId(e.target.value)}
             disabled={isEdit}
             className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs disabled:opacity-50">
-            <option value="">선택…</option>
+            <option value="">본사 계정을 선택하세요</option>
             {enterprises.map((e) => <option key={e.id} value={e.id}>{e.enterprise_name}</option>)}
           </select>
         </Field>
-        <Field label="정책 *">
-          <select value={policyId} onChange={(e) => setPolicyId(e.target.value)}
-            className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-            <option value="">선택…</option>
-            {deployablePolicies.map((p) => (
-              <option key={p.policy_id} value={p.policy_id}>
-                {p.policy_name} (v{p.latest_version_number}){p.franchise_name ? ` · ${p.franchise_name}` : ''}
-              </option>
-            ))}
-          </select>
+        <Field label="적용할 플레이리스트 *">
+          {deployablePolicies.length === 0 ? (
+            <AdminAlert
+              tone="warning"
+              title="적용할 플레이리스트가 없습니다."
+              description="먼저 프랜차이즈 관리에서 매장 음악 플레이리스트를 등록해 주세요."
+            />
+          ) : (
+            <>
+              <select value={policyId} onChange={(e) => setPolicyId(e.target.value)}
+                className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
+                <option value="">플레이리스트를 선택하세요</option>
+                {deployablePolicies.map((p) => (
+                  <option key={p.policy_id} value={p.policy_id}>
+                    {p.policy_name} (v{p.latest_version_number}){p.franchise_name ? ` · ${p.franchise_name}` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-0.5 text-[10px] text-ink-dim">매장에 자동으로 배포할 음악 구성을 선택하세요.</p>
+            </>
+          )}
         </Field>
 
         <Field label="범위 *">
@@ -988,21 +1003,24 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
             ))}
           </select>
         </Field>
-        <Field label="우선순위 (1~999)">
+        <Field label="우선순위">
           <input type="number" min={1} max={999} value={priority}
             onChange={(e) => setPriority(parseInt(e.target.value || '100', 10))}
             className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs" />
+          <p className="mt-0.5 text-[10px] text-ink-dim">
+            숫자가 낮을수록 먼저 적용 · 예) 50 긴급 / 100 기본 / 200 낮음
+          </p>
         </Field>
 
         {scopeType === 'region' && (
           <Field label="지역 *" full>
             <select value={regionId} onChange={(e) => setRegionId(e.target.value)}
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-              <option value="">선택…</option>
+              <option value="">지역을 선택하세요</option>
               {regions.map((r) => <option key={r.id} value={r.id}>{r.region_name} ({r.region_code})</option>)}
             </select>
             <p className="mt-0.5 text-[10px] text-ink-dim">
-              지역 매장은 store_policy_sync_status 의 enterprise_region_id 기준으로 자동 해석됩니다 (heartbeat 보고 매장만 포함).
+              선택한 지역에 등록된 매장 중 최근 접속 이력이 있는 매장에만 자동 배포됩니다.
             </p>
           </Field>
         )}
@@ -1010,20 +1028,20 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
         {scopeType === 'store' && (
           <Field label="매장 ID 목록 (쉼표 구분) *" full>
             <textarea rows={2} value={storeIdsCsv} onChange={(e) => setStoreIdsCsv(e.target.value)}
-              placeholder="uuid1, uuid2, uuid3"
+              placeholder="매장 ID를 쉼표로 구분해 입력하세요"
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 font-mono text-[11px]" />
-            <p className="mt-0.5 text-[10px] text-ink-dim">정책 소속 franchise 의 active 매장과 교집합만 실제 대상이 됩니다.</p>
+            <p className="mt-0.5 text-[10px] text-ink-dim">본사의 활성 매장과 일치하는 매장에만 실제 배포됩니다.</p>
           </Field>
         )}
 
         {ruleType === 'scheduled' && (
-          <Field label="시작일 *" >
+          <Field label="시작 일시 *" >
             <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)}
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs" />
           </Field>
         )}
         {(ruleType === 'season' || ruleType === 'scheduled') && (
-          <Field label="종료일">
+          <Field label="종료 일시">
             <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)}
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs" />
           </Field>
@@ -1032,11 +1050,14 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
         {ruleType === 'recurring' && (
           <Field label="반복 규칙 *" full>
             <input type="text" value={recurrenceRule} onChange={(e) => setRecurrenceRule(e.target.value)}
-              placeholder="daily:18:00 / weekly:FRI:18:00 / monthly:01:09:00"
+              placeholder="예: daily:18:00 / weekly:FRI:18:00 / monthly:01:09:00"
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 font-mono text-[11px]" />
-            <p className="mt-0.5 text-[10px] text-ink-dim">
-              V1 지원: <code>daily:HH:mm</code>, <code>weekly:DOW:HH:mm</code> (DOW=SUN..SAT), <code>monthly:DD:HH:mm</code>. 타임존 Asia/Seoul.
-            </p>
+            <div className="mt-1 space-y-0.5 text-[10px] text-ink-dim">
+              <div>· 매일 오후 6시 → <code>daily:18:00</code></div>
+              <div>· 매주 금요일 오후 6시 → <code>weekly:FRI:18:00</code></div>
+              <div>· 매월 1일 오전 9시 → <code>monthly:01:09:00</code></div>
+              <div className="mt-1 text-ink-dim/80">요일 코드: SUN / MON / TUE / WED / THU / FRI / SAT · 타임존 Asia/Seoul</div>
+            </div>
           </Field>
         )}
 
@@ -1044,12 +1065,12 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
           <Field label="시즌 *">
             <select value={season} onChange={(e) => setSeason(e.target.value as AutomationSeason)}
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-              <option value="">선택…</option>
+              <option value="">시즌을 선택하세요</option>
               {(Object.keys(SEASON_META) as AutomationSeason[]).map((s) => (
                 <option key={s} value={s}>{SEASON_META[s].ko}</option>
               ))}
             </select>
-            <p className="mt-0.5 text-[10px] text-ink-dim">starts_at/ends_at 미설정 시 기본 범위 사용.</p>
+            <p className="mt-0.5 text-[10px] text-ink-dim">시작/종료 일시를 비워두면 시즌별 기본 기간이 사용됩니다.</p>
           </Field>
         )}
 
@@ -1057,12 +1078,12 @@ function RuleModal({ mode, rule, enterprises, regions, deployablePolicies, onClo
           <Field label="이벤트 유형 *">
             <select value={eventType} onChange={(e) => setEventType(e.target.value as AutomationEventType)}
               className="w-full rounded-md bg-bg-deep px-2 py-1.5 text-xs">
-              <option value="">선택…</option>
+              <option value="">이벤트 유형을 선택하세요</option>
               {(Object.keys(EVENT_META) as AutomationEventType[]).map((t) => (
                 <option key={t} value={t}>{EVENT_META[t].ko}</option>
               ))}
             </select>
-            <p className="mt-0.5 text-[10px] text-ink-dim">V1: 이벤트는 자동 트리거 없음 — 수동 "지금 실행" 만 가능.</p>
+            <p className="mt-0.5 text-[10px] text-ink-dim">이벤트 조건은 자동 트리거 없이 "지금 음악 배포" 버튼으로만 실행됩니다.</p>
           </Field>
         )}
 
@@ -1113,37 +1134,37 @@ function PreviewModal({ rule, busy, error, result, onClose }: {
   return (
     <AdminModal
       open onClose={onClose} size="lg"
-      title={<span className="flex items-center gap-2"><Eye size={14} /> Dry-run 미리보기 — {rule.name}</span>}
+      title={<span className="flex items-center gap-2"><Eye size={14} /> 배포 미리보기 — {rule.name}</span>}
       headerExtra={ruleTypeChip(rule.rule_type)}
       footer={<AdminButton tone="neutral" variant="subtle" size="sm" onClick={onClose}>닫기</AdminButton>}
     >
       {busy ? (
         <AdminSkeleton variant="block" rows={5} />
       ) : error ? (
-        <AdminAlert tone="danger" title="Preview 실패" description={error} />
+        <AdminAlert tone="danger" title="미리보기 실패" description={error} />
       ) : result ? (
         <div className="space-y-3">
           <div className="grid gap-2 md:grid-cols-3">
             <SummaryStat label="대상 매장 수" value={result.target_count ?? 0} />
-            <SummaryStat label="배포 생성 예정" value={result.would_create_deployment ? '예' : '아니오'} />
-            <SummaryStat label="dry_run" value="true" />
+            <SummaryStat label="음악 배포 생성 예정" value={result.would_create_deployment ? '예' : '아니오'} />
+            <SummaryStat label="모드" value="미리보기" />
           </div>
           {(result.target_count ?? 0) === 0 ? (
             <AdminAlert
               tone="warning"
-              title="대상 매장 없음"
-              description="scope 해석 결과 대상이 없습니다. region 범위라면 해당 region 에 heartbeat 보고한 매장이 없습니다. store 범위라면 매장 ID 가 franchise active 매장과 교집합이 비었을 수 있습니다."
+              title="배포할 매장이 없습니다."
+              description="범위 설정을 확인해 주세요. 지역 범위라면 해당 지역에 최근 접속한 매장이 없을 수 있고, 매장 범위라면 입력한 매장 ID가 본사의 활성 매장과 일치하지 않을 수 있습니다."
             />
           ) : (
             <AdminAlert
               tone="info"
-              title="실행 시 배포 1건이 생성됩니다."
-              description={`대상 ${result.target_count}개 매장. 실제 실행 시 admin_create_policy_deployment 호출 → enterprise_policy_deployments + targets 생성 + enterprise_policy_automation_runs 기록.`}
+              title={`실행 시 ${result.target_count}개 매장에 음악 배포 1건이 생성됩니다.`}
+              description="미리보기에서는 실제 배포가 만들어지지 않습니다. 실행하려면 목록에서 '지금 음악 배포' 버튼을 사용하세요."
             />
           )}
           {result.sample_store_ids && result.sample_store_ids.length > 0 && (
             <div className="rounded-lg bg-bg-deep/40 p-3 ring-1 ring-line/10">
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-ink-mute">샘플 매장 ID (최대 5)</div>
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-ink-mute">샘플 매장 ID (최대 5개)</div>
               <div className="space-y-1 font-mono text-[11px] text-ink">
                 {result.sample_store_ids.map((id) => <div key={id}>{id}</div>)}
               </div>
