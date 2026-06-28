@@ -298,3 +298,123 @@ export async function retryPolicyDeploymentTargets(
   if (error) { console.error('[policyDeploymentApi] retry failed', error); throw error; }
   return data as { success: boolean; deployment_id: string; retried_count: number };
 }
+
+// =============================================================================
+// Center V2 (0377) — overview / failed_stores / single retry
+// =============================================================================
+
+export interface PolicyDeploymentOverview {
+  total_target_stores: number;
+  success_stores: number;
+  pending_stores: number;
+  failed_stores: number;
+  skipped_stores: number;
+  /** 0 ~ 100 (소수점 2자리) — success / (target - skipped) */
+  success_rate: number;
+  total_deployments: number;
+  recent_24h_deployments: number;
+  last_deployment_at: string | null;
+  last_deployment_name: string | null;
+  running_deployments: number;
+  partial_failed_deployments: number;
+  failed_deployments: number;
+  computed_at: string;
+}
+
+export type PolicyFailureCategory =
+  | 'policy_version_mismatch'
+  | 'heartbeat_missing'
+  | 'device_offline'
+  | 'playback_error'
+  | 'app_version_old'
+  | 'unknown';
+
+export interface FailedDeploymentStore {
+  target_id: string;
+  deployment_id: string;
+  deployment_name: string;
+  deployment_started_at: string | null;
+  store_id: string;
+  store_name: string;
+  enterprise_account_id: string | null;
+  enterprise_name: string | null;
+  enterprise_region_id: string | null;
+  region_name: string | null;
+  region_code: string | null;
+  expected_policy_id: string;
+  expected_policy_name: string | null;
+  expected_version_number: number | null;
+  applied_policy_id: string | null;
+  applied_policy_name: string | null;
+  applied_version_number: number | null;
+  current_active_policy_id: string | null;
+  current_active_version_number: number | null;
+  current_player_status: string | null;
+  last_attempt_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  failure_category: PolicyFailureCategory;
+  retry_count: number;
+  last_seen_at: string | null;
+  last_synced_at: string | null;
+  app_version: string | null;
+  playback_error: string | null;
+}
+
+export interface FailedDeploymentStoresParams {
+  search?: string | null;
+  franchiseId?: string | null;
+  enterpriseRegionId?: string | null;
+  failureCategory?: PolicyFailureCategory | null;
+  deploymentId?: string | null;
+  from?: string | null;
+  to?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface FailedDeploymentStoresResponse {
+  success: boolean;
+  data: FailedDeploymentStore[];
+  pagination: { total: number; limit: number; offset: number; has_more: boolean };
+  computed_at: string;
+}
+
+export async function getPolicyDeploymentOverview(): Promise<PolicyDeploymentOverview> {
+  const { data, error } = await supabase.rpc('admin_policy_deployment_overview');
+  if (error) { console.error('[policyDeploymentApi] overview failed', error); throw error; }
+  return data as PolicyDeploymentOverview;
+}
+
+export async function listFailedDeploymentStores(
+  params: FailedDeploymentStoresParams = {},
+): Promise<FailedDeploymentStoresResponse> {
+  const { data, error } = await supabase.rpc('admin_policy_deployment_failed_stores', {
+    p_search:               params.search ?? null,
+    p_franchise_id:         params.franchiseId ?? null,
+    p_enterprise_region_id: params.enterpriseRegionId ?? null,
+    p_failure_category:     params.failureCategory ?? null,
+    p_deployment_id:        params.deploymentId ?? null,
+    p_from:                 params.from ?? null,
+    p_to:                   params.to ?? null,
+    p_limit:                params.limit ?? 100,
+    p_offset:               params.offset ?? 0,
+  });
+  if (error) { console.error('[policyDeploymentApi] failed_stores failed', error); throw error; }
+  return data as FailedDeploymentStoresResponse;
+}
+
+export async function requestPolicyRetry(
+  deploymentId: string,
+  storeId: string,
+): Promise<{ success: boolean; deployment_id: string; store_id: string; retried_count: number; previous_status: string }> {
+  const { data, error } = await supabase.rpc('admin_request_policy_retry', {
+    p_deployment_id: deploymentId,
+    p_store_id:      storeId,
+  });
+  if (error) { console.error('[policyDeploymentApi] single-retry failed', error); throw error; }
+  return data as {
+    success: boolean; deployment_id: string; store_id: string;
+    retried_count: number; previous_status: string;
+  };
+}
