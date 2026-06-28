@@ -40,8 +40,8 @@ const SEVERITY_LABEL: Record<QcSeverity, string> = {
 };
 const SEVERITY_COLOR: Record<QcSeverity, string> = {
   CRITICAL: 'bg-rose-600 text-white',
-  HIGH: 'bg-rose-500/20 text-rose-500',
-  MEDIUM: 'bg-amber-500/20 text-amber-500',
+  HIGH: 'bg-rose-500/20 text-rose-300',
+  MEDIUM: 'bg-amber-500/20 text-amber-300',
   LOW: 'bg-gray-500/20 text-gray-400',
 };
 const ISSUE_LABEL: Record<string, string> = {
@@ -320,7 +320,7 @@ function QcQueueInner() {
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px]">
         <span className="inline-flex items-center gap-1 text-ink-mute"><Filter size={11} /> 빠른 필터:</span>
         <button onClick={() => applyPreset('high')}
-          className={`rounded-full px-2.5 py-1 font-bold ${severityFilter === 'HIGH' && issueFilter === '' ? 'bg-rose-500/30 text-rose-400' : 'bg-rose-500/15 text-rose-500 hover:bg-rose-500/25'}`}>
+          className={`rounded-full px-2.5 py-1 font-bold ${severityFilter === 'HIGH' && issueFilter === '' ? 'bg-rose-500/30 text-rose-300' : 'bg-rose-500/25 text-rose-300 hover:bg-rose-500/25'}`}>
           심각도 높음만
         </button>
         <button onClick={() => applyPreset('fingerprint')}
@@ -328,7 +328,7 @@ function QcQueueInner() {
           Fingerprint 실패만
         </button>
         <button onClick={() => applyPreset('meta')}
-          className={`rounded-full px-2.5 py-1 font-bold ${issueFilter === 'meta_conflict_genre' ? 'bg-amber-500/30 text-amber-400' : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'}`}>
+          className={`rounded-full px-2.5 py-1 font-bold ${issueFilter === 'meta_conflict_genre' ? 'bg-amber-500/30 text-amber-300' : 'bg-amber-500/25 text-amber-300 hover:bg-amber-500/25'}`}>
           Metadata 충돌만
         </button>
         <button onClick={() => applyPreset('reset')}
@@ -378,11 +378,11 @@ function QcQueueInner() {
             <Sparkles size={11} /> Bulk Actions
           </button>
           <button onClick={() => void bulkReview()} disabled={busy}
-            className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 font-bold text-amber-500 disabled:opacity-50">
+            className="inline-flex items-center gap-1 rounded bg-amber-500/25 px-2 py-1 font-bold text-amber-300 disabled:opacity-50">
             <Play size={11} /> 검토 시작 ({selected.size})
           </button>
           <button onClick={() => void bulkResolve('resolved')} disabled={busy}
-            className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 font-bold text-emerald-500 disabled:opacity-50">
+            className="inline-flex items-center gap-1 rounded bg-emerald-500/25 px-2 py-1 font-bold text-emerald-300 disabled:opacity-50">
             <Check size={11} /> 해결 ({selected.size})
           </button>
           <button onClick={() => void bulkResolve('dismissed')} disabled={busy}
@@ -452,9 +452,9 @@ function QcQueueInner() {
                   </td>
                   <td className="px-2 py-1.5">
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                      r.status === 'open' ? 'bg-rose-500/20 text-rose-500' :
-                      r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-500' :
-                      r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-500' :
+                      r.status === 'open' ? 'bg-rose-500/20 text-rose-300' :
+                      r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-300' :
+                      r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' :
                       'bg-gray-500/20 text-gray-400'
                     }`}>{r.status}</span>
                     {r.assigned_to_name && (
@@ -476,14 +476,14 @@ function QcQueueInner() {
                       )}
                       {r.status === 'open' && (
                         <button onClick={() => void assign(r.id)} disabled={busy}
-                          className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-500 disabled:opacity-50">
+                          className="inline-flex items-center gap-1 rounded bg-amber-500/25 px-2 py-0.5 font-semibold text-amber-300 disabled:opacity-50">
                           <Play size={10} /> 검토 시작
                         </button>
                       )}
                       {(r.status === 'open' || r.status === 'reviewing') && (
                         <>
                           <button onClick={() => void resolve(r.id)} disabled={busy}
-                            className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-500 disabled:opacity-50">
+                            className="inline-flex items-center gap-1 rounded bg-emerald-500/25 px-2 py-0.5 font-semibold text-emerald-300 disabled:opacity-50">
                             <Check size={10} /> 해결
                           </button>
                           <button onClick={() => void dismiss(r.id)} disabled={busy}
@@ -598,8 +598,8 @@ function FingerprintDetailModal({
                 <span>size_bytes</span><span className="font-mono">{fp?.download_size_bytes ?? '—'}</span>
               </div>
             </div>
-            <div className="rounded bg-rose-500/10 p-2">
-              <div className="font-bold text-rose-500">실패 사유</div>
+            <div className="rounded bg-rose-500/20 p-2">
+              <div className="font-bold text-rose-300">실패 사유</div>
               <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-rose-300">
 {fp?.fingerprint_error ?? '(no error message)'}
               </pre>
@@ -674,7 +674,7 @@ function QcAuditModal({ row, onClose }: { row: QcQueueRowFull; onClose: () => vo
                     <span> · {l.before_status ?? '∅'} → <b className="text-ink">{l.after_status ?? '∅'}</b></span>
                   )}
                 </div>
-                {l.note && <div className="mt-1 text-[10px] text-amber-400">📝 {l.note}</div>}
+                {l.note && <div className="mt-1 text-[10px] text-amber-300">📝 {l.note}</div>}
               </div>
             ))}
           </div>
@@ -689,8 +689,8 @@ function QcAuditModal({ row, onClose }: { row: QcQueueRowFull; onClose: () => vo
 
 function Stat({ label, v, color }: { label: string; v: number; color: string }) {
   const colorMap: Record<string, string> = {
-    rose: 'text-rose-500', amber: 'text-amber-500',
-    emerald: 'text-emerald-500', gray: 'text-gray-400',
+    rose: 'text-rose-300', amber: 'text-amber-300',
+    emerald: 'text-emerald-300', gray: 'text-gray-400',
   };
   return (
     <div className="rounded bg-bg-deep p-2">
@@ -776,9 +776,9 @@ function QcRulesInner() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold">QC 룰 관리 ({rules.length})</h3>
           <div className="flex gap-2 text-xs">
-            <span className="rounded bg-emerald-500/10 px-2 py-1 text-emerald-500">활성 {totalActive}</span>
+            <span className="rounded bg-emerald-500/20 px-2 py-1 text-emerald-300">활성 {totalActive}</span>
             <span className="rounded bg-gray-500/10 px-2 py-1 text-gray-400">비활성 {rules.length - totalActive}</span>
-            <span className="rounded bg-rose-500/10 px-2 py-1 text-rose-500">현재 open {totalOpenAll}</span>
+            <span className="rounded bg-rose-500/20 px-2 py-1 text-rose-300">현재 open {totalOpenAll}</span>
             <button onClick={() => { setShowAudit((v) => !v); if (!showAudit) void loadAudit(); }}
               className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover">
               {showAudit ? '이력 숨김' : '변경 이력'}
@@ -809,8 +809,8 @@ function QcRulesInner() {
                 <details>
                   <summary className="cursor-pointer text-[10px] text-ink-dim">before/after</summary>
                   <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
-                    <pre className="rounded bg-bg-soft/40 p-1 text-rose-400">{JSON.stringify(a.before_json, null, 2)}</pre>
-                    <pre className="rounded bg-bg-soft/40 p-1 text-emerald-400">{JSON.stringify(a.after_json, null, 2)}</pre>
+                    <pre className="rounded bg-bg-soft/40 p-1 text-rose-300">{JSON.stringify(a.before_json, null, 2)}</pre>
+                    <pre className="rounded bg-bg-soft/40 p-1 text-emerald-300">{JSON.stringify(a.after_json, null, 2)}</pre>
                   </div>
                 </details>
               </li>
@@ -839,7 +839,7 @@ function QcRulesInner() {
                 <tr key={rule.id} className="border-b border-line/10">
                   <td className="px-2 py-2 w-12">
                     <button onClick={() => void toggleActive(rule)} disabled={busy}
-                      className={`rounded px-2 py-1 text-[10px] font-bold ${rule.is_active ? 'bg-emerald-500/20 text-emerald-500' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
+                      className={`rounded px-2 py-1 text-[10px] font-bold ${rule.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
                       {rule.is_active ? 'ON' : 'OFF'}
                     </button>
                   </td>
@@ -876,7 +876,7 @@ function QcRulesInner() {
                     )}
                   </td>
                   <td className="px-2 py-2 text-right">
-                    <span className={`font-bold ${rule.open_count > 0 ? 'text-rose-500' : 'text-ink-dim'}`}>
+                    <span className={`font-bold ${rule.open_count > 0 ? 'text-rose-300' : 'text-ink-dim'}`}>
                       {rule.open_count}
                     </span>
                   </td>

@@ -320,7 +320,7 @@ function ExcludeTab({
             {detail.exclusions.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-2 rounded bg-bg-deep px-2 py-1.5 text-xs">
                 <div className="min-w-0">
-                  <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-500">{e.store_type_slug}</span>
+                  <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-300">{e.store_type_slug}</span>
                   {e.store_type_name_ko && <span className="ml-1 text-ink-mute">({e.store_type_name_ko})</span>}
                   {e.reason && <span className="ml-2 text-ink-dim">— {e.reason}</span>}
                   <div className="text-[10px] text-ink-dim/70">{new Date(e.created_at).toLocaleString()} · {e.created_by_name ?? 'unknown'}</div>
@@ -347,7 +347,7 @@ function ExcludeTab({
             placeholder="금지 사유 (예: Rock 트랙 와인바 부적합)"
             className="w-full rounded bg-bg-deep px-2 py-1.5 text-sm" />
           <button onClick={() => void add()} disabled={busy || !selectedSlug}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-500 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/25 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-50">
             <Ban size={13} /> 금지 추가
           </button>
         </div>
@@ -389,13 +389,13 @@ function PlacementsTab({ detail }: { detail: TrackPlacementDetail }) {
               <td className="px-2 py-1.5 font-bold">{p.fit_score ?? '—'}</td>
               <td className="px-2 py-1.5">
                 <span className={`rounded px-1.5 text-[10px] font-bold ${
-                  p.fit_status === 'excluded' ? 'bg-rose-500/20 text-rose-500'
-                    : p.fit_status === 'active' ? 'bg-emerald-500/20 text-emerald-500'
+                  p.fit_status === 'excluded' ? 'bg-rose-500/20 text-rose-300'
+                    : p.fit_status === 'active' ? 'bg-emerald-500/20 text-emerald-300'
                     : 'bg-ink/10 text-ink-mute'}`}>{p.fit_status ?? '—'}</span>
               </td>
               <td className="px-2 py-1.5 text-[10px] text-ink-mute">m{p.manual_score ?? 0}/+{p.ai_boost_total ?? 0}</td>
-              <td className="px-2 py-1.5">{p.in_playlist ? <span className="text-emerald-500">✓</span> : '—'}</td>
-              <td className="px-2 py-1.5">{p.is_excluded_by_admin ? <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-500">금지</span> : '—'}</td>
+              <td className="px-2 py-1.5">{p.in_playlist ? <span className="text-emerald-300">✓</span> : '—'}</td>
+              <td className="px-2 py-1.5">{p.is_excluded_by_admin ? <span className="rounded bg-rose-500/20 px-1.5 font-bold text-rose-300">금지</span> : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -454,13 +454,13 @@ function PreviewTab({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded bg-rose-500/10 p-2">
+        <div className="rounded bg-rose-500/20 p-2">
           <div className="text-[10px] text-ink-dim">제거 대상</div>
-          <div className="text-2xl font-bold text-rose-500">{preview.remove_count}</div>
+          <div className="text-2xl font-bold text-rose-300">{preview.remove_count}</div>
         </div>
-        <div className="rounded bg-emerald-500/10 p-2">
+        <div className="rounded bg-emerald-500/20 p-2">
           <div className="text-[10px] text-ink-dim">유지</div>
-          <div className="text-2xl font-bold text-emerald-500">{preview.keep_count}</div>
+          <div className="text-2xl font-bold text-emerald-300">{preview.keep_count}</div>
         </div>
         <div className="rounded bg-blue-500/10 p-2">
           <div className="text-[10px] text-ink-dim">신규 후보</div>
@@ -470,7 +470,7 @@ function PreviewTab({
 
       {preview.to_remove.length > 0 && (
         <div className="rounded-xl bg-bg-card p-3">
-          <h4 className="mb-2 text-xs font-bold text-rose-500">제거될 playlist_tracks</h4>
+          <h4 className="mb-2 text-xs font-bold text-rose-300">제거될 playlist_tracks</h4>
           <ul className="space-y-1 text-xs">
             {preview.to_remove.map((r) => (
               <li key={r.playlist_id} className="flex items-center justify-between gap-2 rounded bg-bg-deep px-2 py-1">
@@ -484,7 +484,7 @@ function PreviewTab({
 
       {preview.to_keep.length > 0 && (
         <div className="rounded-xl bg-bg-card p-3">
-          <h4 className="mb-2 text-xs font-bold text-emerald-500">유지될 playlist_tracks</h4>
+          <h4 className="mb-2 text-xs font-bold text-emerald-300">유지될 playlist_tracks</h4>
           <ul className="space-y-1 text-xs">
             {preview.to_keep.map((r) => (
               <li key={r.playlist_id} className="flex items-center justify-between gap-2 rounded bg-bg-deep px-2 py-1">
@@ -522,7 +522,7 @@ function PreviewTab({
           <Calculator size={13} /> fit_score 재계산
         </button>
         <button onClick={() => void removeMisplaced()} disabled={busy || preview.remove_count === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-500 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/25 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-50">
           <Trash2 size={13} /> 잘못된 배치 제거 ({preview.remove_count})
         </button>
       </div>
@@ -567,8 +567,8 @@ function AuditTab({ trackId }: { trackId: string }) {
               <details className="mt-1">
                 <summary className="cursor-pointer text-[11px] text-ink-dim">before/after</summary>
                 <div className="mt-1 grid grid-cols-2 gap-2 text-[10px]">
-                  <pre className="rounded bg-bg-deep p-2 text-rose-400">{JSON.stringify(a.before_json, null, 2)}</pre>
-                  <pre className="rounded bg-bg-deep p-2 text-emerald-400">{JSON.stringify(a.after_json, null, 2)}</pre>
+                  <pre className="rounded bg-bg-deep p-2 text-rose-300">{JSON.stringify(a.before_json, null, 2)}</pre>
+                  <pre className="rounded bg-bg-deep p-2 text-emerald-300">{JSON.stringify(a.after_json, null, 2)}</pre>
                 </div>
               </details>
             )}

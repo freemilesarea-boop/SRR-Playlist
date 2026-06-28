@@ -112,7 +112,7 @@ export default function UploadAuditPanel() {
 
       {/* 파일 누락 곡 — 가장 위험 (DB엔 있으나 storage 없음) */}
       {audit && audit.missing_audio.length > 0 && (
-        <Section title="파일 누락 곡 (DB 참조 O / storage X)" icon={<FileWarning size={15} className="text-rose-500" />}>
+        <Section title="파일 누락 곡 (DB 참조 O / storage X)" icon={<FileWarning size={15} className="text-rose-300" />}>
           <ul className="space-y-1 text-xs">
             {audit.missing_audio.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-rose-500/5 px-2.5 py-1.5">
@@ -128,7 +128,7 @@ export default function UploadAuditPanel() {
 
       {/* 변환 실패 */}
       {audit && audit.conversion_failed.length > 0 && (
-        <Section title="MP3 변환 실패 곡" icon={<AlertTriangle size={15} className="text-rose-500" />}>
+        <Section title="MP3 변환 실패 곡" icon={<AlertTriangle size={15} className="text-rose-300" />}>
           <p className="mb-2 text-[11px] text-ink-dim">
             "오디오 변환(iOS)" 탭에서 재변환하거나 MP3 를 수동 업로드하세요. 변환 전에는 발매되지 않습니다.
           </p>
@@ -161,7 +161,7 @@ export default function UploadAuditPanel() {
       {audit && audit.orphan_audio.length > 0 && (
         <Section
           title={`Orphan 음원 파일 (${audit.orphan_audio_count})`}
-          icon={<Trash2 size={15} className="text-amber-500" />}
+          icon={<Trash2 size={15} className="text-amber-300" />}
         >
           <div className="mb-2 flex flex-wrap gap-2">
             <button onClick={selectAllOrphanAudio} className="rounded-lg bg-bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">
@@ -170,7 +170,7 @@ export default function UploadAuditPanel() {
             <button
               onClick={() => void deleteSelected('audio', audit.orphan_audio.map((o) => o.name))}
               disabled={deleting}
-              className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-500/20 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-rose-500/20 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
             >
               <Trash2 size={12} /> 선택 삭제
             </button>
@@ -193,12 +193,12 @@ export default function UploadAuditPanel() {
 
       {/* Orphan 커버 */}
       {audit && audit.orphan_cover.length > 0 && (
-        <Section title={`Orphan 커버 파일 (${audit.orphan_cover_count})`} icon={<Trash2 size={15} className="text-amber-500" />}>
+        <Section title={`Orphan 커버 파일 (${audit.orphan_cover_count})`} icon={<Trash2 size={15} className="text-amber-300" />}>
           <div className="mb-2 flex flex-wrap gap-2">
             <button
               onClick={() => void deleteSelected('covers', audit.orphan_cover.map((o) => o.name))}
               disabled={deleting}
-              className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-500/20 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-rose-500/20 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
             >
               <Trash2 size={12} /> 선택 삭제
             </button>
@@ -220,7 +220,7 @@ export default function UploadAuditPanel() {
         audit.missing_audio.length === 0 &&
         audit.conversion_failed.length === 0 &&
         audit.stale_pending.length === 0 && (
-          <p className="rounded-xl bg-emerald-500/10 px-4 py-8 text-center text-sm text-emerald-600">
+          <p className="rounded-xl bg-emerald-500/20 px-4 py-8 text-center text-sm text-emerald-300">
             점검 결과 이상 없음 — orphan/누락/변환실패/오래된 대기 곡이 없습니다.
           </p>
         )}
@@ -230,7 +230,7 @@ export default function UploadAuditPanel() {
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'amber' | 'rose' | 'indigo' }) {
   const color =
-    value === 0 ? 'text-ink' : tone === 'rose' ? 'text-rose-600' : tone === 'amber' ? 'text-amber-600' : 'text-indigo-600';
+    value === 0 ? 'text-ink' : tone === 'rose' ? 'text-rose-300' : tone === 'amber' ? 'text-amber-300' : 'text-indigo-600';
   return (
     <div className="rounded-xl bg-bg-card p-3">
       <div className={`text-2xl font-extrabold tabular-nums ${color}`}>{value}</div>

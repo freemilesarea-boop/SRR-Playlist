@@ -75,9 +75,9 @@ export default function AdminUsersList() {
               className="rounded bg-bg-soft px-2 py-1 text-[11px] ring-1 ring-line/10">
               {ROLES.map((x) => <option key={x} value={x}>{ADMIN_ROLE_LABELS[x]}</option>)}
             </select>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.is_active ? 'bg-emerald-500/15 text-emerald-600' : 'bg-ink/10 text-ink-mute'}`}>{r.is_active ? '활성' : '비활성'}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.is_active ? 'bg-emerald-500/25 text-emerald-300' : 'bg-ink/10 text-ink-mute'}`}>{r.is_active ? '활성' : '비활성'}</span>
             <span className="text-[10px] text-ink-dim">최근활동 {r.last_action_at ? new Date(r.last_action_at).toLocaleDateString('ko-KR') : '—'}</span>
-            <button disabled={busy} onClick={() => void toggleActive(r)} className={`rounded px-2 py-1 text-[10px] font-semibold ${r.is_active ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-600'} disabled:opacity-50`}>{r.is_active ? '비활성화' : '활성화'}</button>
+            <button disabled={busy} onClick={() => void toggleActive(r)} className={`rounded px-2 py-1 text-[10px] font-semibold ${r.is_active ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'} disabled:opacity-50`}>{r.is_active ? '비활성화' : '활성화'}</button>
           </li>
         ))}
         {rows.length === 0 && <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-ink-dim">{loading ? '불러오는 중…' : '관리자가 없어요.'}</p>}

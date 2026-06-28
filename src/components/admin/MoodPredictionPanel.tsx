@@ -147,9 +147,9 @@ function MoodRow({ row, applying, onApply }: {
   const conf = row.mood_confidence != null ? Number(row.mood_confidence) : null;
   const confTone =
     conf == null ? 'text-ink-dim'
-    : conf >= 0.5 ? 'text-emerald-400'
-    : conf >= 0.3 ? 'text-amber-400'
-    : 'text-rose-400';
+    : conf >= 0.5 ? 'text-emerald-300'
+    : conf >= 0.3 ? 'text-amber-300'
+    : 'text-rose-300';
   const top1 = row.predicted_mood_labels?.[0] ?? row.predicted_mood_slugs?.[0] ?? null;
   const isMatch = !!row.current_mood && !!top1 && row.current_mood === top1;
   const isApplied = !!row.applied_at;
@@ -178,20 +178,20 @@ function MoodRow({ row, applying, onApply }: {
             <span className="rounded bg-bg-card px-1.5 py-0.5 font-mono text-[10px]">{row.current_mood ?? '(빈 값)'}</span>
             <ArrowRight size={11} className="text-ink-dim" />
             <span className="text-ink-mute">AI</span>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isMatch ? 'bg-emerald-500/15 text-emerald-400' : 'bg-violet-500/15 text-violet-300'}`}>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isMatch ? 'bg-emerald-500/25 text-emerald-300' : 'bg-violet-500/15 text-violet-300'}`}>
               {top1 ?? '—'}
             </span>
             <span className={`font-mono text-[10px] ${confTone}`}>
               {conf != null ? `${(conf * 100).toFixed(1)}%` : '—'}
             </span>
-            {isMatch && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">일치</span>}
-            {isApplied && <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-300">적용됨</span>}
+            {isMatch && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">일치</span>}
+            {isApplied && <span className="rounded bg-sky-500/25 px-1.5 py-0.5 text-[10px] text-sky-300">적용됨</span>}
           </div>
         </div>
 
         <button onClick={() => void onApply(row)}
           disabled={applying || !top1 || isMatch}
-          className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-40"
+          className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-emerald-500/25 disabled:opacity-40"
           title={isMatch ? '이미 일치' : 'tracks.mood + mood_tags 갱신'}>
           <Check size={11} />
           {applying ? '적용 중…' : isApplied ? '재적용' : '적용'}
@@ -216,7 +216,7 @@ function MoodRow({ row, applying, onApply }: {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warn' }) {
-  const toneClass = tone === 'success' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink';
+  const toneClass = tone === 'success' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : 'text-ink';
   return (
     <div className="flex items-baseline gap-1.5 rounded-full bg-bg-soft px-3 py-1 ring-1 ring-line/10">
       <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">{label}</span>

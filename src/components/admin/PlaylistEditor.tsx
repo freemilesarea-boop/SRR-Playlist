@@ -412,7 +412,7 @@ function SortableTrack({ track, onRemove }: { track: TrackRow; onRemove: () => v
       </div>
       <button
         onClick={onRemove}
-        className="rounded-md px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+        className="rounded-md px-2 py-1 text-xs text-red-300 hover:bg-rose-500/20"
         aria-label="제거"
       >
         제거

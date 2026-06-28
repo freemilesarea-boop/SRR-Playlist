@@ -134,12 +134,12 @@ export default function QcReviewQueuePanel() {
                           <span className="rounded bg-bg-soft px-1.5 py-0.5">{r.true_peak_db.toFixed(1)} dBTP</span>
                         )}
                         {r.clipping_count != null && r.clipping_count > 0 && (
-                          <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300">
+                          <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">
                             <AlertTriangle size={9} className="inline" /> 클리핑 {r.clipping_count}
                           </span>
                         )}
                         {r.issues_count > 0 && (
-                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">
+                          <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">
                             문제 {r.issues_count}
                           </span>
                         )}
@@ -179,7 +179,7 @@ export default function QcReviewQueuePanel() {
 }
 
 function Mini({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'bad' }) {
-  const cls = tone === 'good' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'bad' ? 'text-rose-400' : 'text-ink';
+  const cls = tone === 'good' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : tone === 'bad' ? 'text-rose-300' : 'text-ink';
   return (
     <div className="rounded-lg bg-bg-soft px-3 py-2 ring-1 ring-line/10">
       <div className="text-[9px] font-bold uppercase tracking-wider text-ink-dim">{label}</div>
@@ -193,10 +193,10 @@ function Pill({ tone, label, count }: {
   label: string;
   count: number;
 }) {
-  const cls = tone === 'critical' ? 'bg-rose-500/15 text-rose-300 ring-rose-500/30' :
-              tone === 'high' ? 'bg-amber-500/15 text-amber-300 ring-amber-500/30' :
-              tone === 'medium' ? 'bg-sky-500/15 text-sky-300 ring-sky-500/30' :
-              tone === 'low' ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' :
+  const cls = tone === 'critical' ? 'bg-rose-500/25 text-rose-300 ring-rose-500/50' :
+              tone === 'high' ? 'bg-amber-500/25 text-amber-300 ring-amber-500/50' :
+              tone === 'medium' ? 'bg-sky-500/25 text-sky-300 ring-sky-500/50' :
+              tone === 'low' ? 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' :
               'bg-bg-soft text-ink-mute ring-line/10';
   return (
     <div className={`rounded-lg px-3 py-2 ring-1 ${cls}`}>

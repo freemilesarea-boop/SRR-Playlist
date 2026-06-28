@@ -99,11 +99,11 @@ export default function MetaApproveModal({
             <TrackMetaSelectors value={meta} onChange={setMeta} disabled={busy} />
 
             {result && (blocked.length > 0 || sensitive) && (
-              <div className="mt-3 space-y-1.5 rounded-xl bg-rose-500/10 p-3 ring-1 ring-rose-500/20">
-                {blocked.map((b, i) => <p key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600"><AlertTriangle size={12} /> {b}</p>)}
-                {result.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-600">{w}</p>)}
+              <div className="mt-3 space-y-1.5 rounded-xl bg-rose-500/20 p-3 ring-1 ring-rose-500/50">
+                {blocked.map((b, i) => <p key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-300"><AlertTriangle size={12} /> {b}</p>)}
+                {result.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-300">{w}</p>)}
                 {blocked.length > 0 && canApprove && (
-                  <button disabled={busy} onClick={() => void saveAndApprove(true)} className="mt-1 rounded-lg bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-600 disabled:opacity-50">경고 무시하고 강제 승인</button>
+                  <button disabled={busy} onClick={() => void saveAndApprove(true)} className="mt-1 rounded-lg bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-300 disabled:opacity-50">경고 무시하고 강제 승인</button>
                 )}
               </div>
             )}

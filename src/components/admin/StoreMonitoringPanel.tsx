@@ -198,7 +198,7 @@ export default function StoreMonitoringPanel() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> {error}
           <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
         </div>
@@ -350,12 +350,12 @@ function StatusBadge({ row }: { row: StoreMonitoringRow }) {
   // 우선순위: playback_error > offline > idle_24h > policy_outdated > idle_1h > device_missing > online
   const v = (() => {
     if (row.has_playback_error) return { ko: '재생 오류', cls: 'bg-purple-500/15 text-purple-300 ring-purple-500/30' };
-    if (row.is_offline_24h) return { ko: '오프라인', cls: 'bg-rose-500/15 text-rose-300 ring-rose-500/30' };
+    if (row.is_offline_24h) return { ko: '오프라인', cls: 'bg-rose-500/25 text-rose-300 ring-rose-500/50' };
     if (row.is_idle_1h_to_24h) return { ko: '24h 미접속', cls: 'bg-orange-500/15 text-orange-300 ring-orange-500/30' };
-    if (row.has_policy_outdated) return { ko: '정책 미동기화', cls: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' };
-    if (row.is_idle_5m_to_1h) return { ko: '1h 미접속', cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30' };
+    if (row.has_policy_outdated) return { ko: '정책 미동기화', cls: 'bg-sky-500/25 text-sky-300 ring-sky-500/50' };
+    if (row.is_idle_5m_to_1h) return { ko: '1h 미접속', cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50' };
     if (row.has_device_missing) return { ko: '기기 미연결', cls: 'bg-ink/15 text-ink-mute ring-line/20' };
-    if (row.is_online) return { ko: '정상', cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' };
+    if (row.is_online) return { ko: '정상', cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' };
     return { ko: '대기', cls: 'bg-ink/15 text-ink-mute ring-line/20' };
   })();
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${v.cls}`}>{v.ko}</span>;

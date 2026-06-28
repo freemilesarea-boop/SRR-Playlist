@@ -175,14 +175,14 @@ function PlacedList({ playlistId, onChanged }: { playlistId: string; onChanged: 
         <li key={t.track_id} className="flex items-center gap-2 text-[11px]">
           <span className="w-10 shrink-0 text-right font-mono text-ink-dim">{t.match_score ?? '—'}</span>
           <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold ${
-            t.placed_by === 'auto' ? 'bg-accent/15 text-accent' : t.placed_by === 'admin' ? 'bg-sky-500/15 text-sky-300' : 'bg-ink/10 text-ink-dim'
+            t.placed_by === 'auto' ? 'bg-accent/15 text-accent' : t.placed_by === 'admin' ? 'bg-sky-500/25 text-sky-300' : 'bg-ink/10 text-ink-dim'
           }`}>{t.placed_by}</span>
           <span className="min-w-0 flex-1 truncate">
             <span className="font-semibold text-ink">{t.title}</span>
             <span className="text-ink-mute"> · {t.artist ?? '—'}</span>
             {t.placement_reason && <span className="text-ink-dim"> · {t.placement_reason}</span>}
           </span>
-          <button onClick={() => void remove(t.track_id)} className="shrink-0 rounded p-1 text-ink-dim hover:bg-red-500/10 hover:text-red-400" title="제거">
+          <button onClick={() => void remove(t.track_id)} className="shrink-0 rounded p-1 text-ink-dim hover:bg-rose-500/20 hover:text-rose-300" title="제거">
             <X size={12} />
           </button>
         </li>

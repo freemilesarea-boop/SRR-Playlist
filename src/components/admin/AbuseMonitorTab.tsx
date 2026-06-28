@@ -43,7 +43,7 @@ export default function AbuseMonitorTab() {
       <div className="rounded-xl bg-bg-card p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-1 text-sm font-bold">
-            <ShieldAlert size={14} className="text-rose-500" /> 어뷰징 모니터 (X6.0)
+            <ShieldAlert size={14} className="text-rose-300" /> 어뷰징 모니터 (X6.0)
           </h3>
           <button onClick={() => void load()} disabled={loading}
             className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-50">
@@ -51,7 +51,7 @@ export default function AbuseMonitorTab() {
           </button>
         </div>
         <p className="mt-1 text-[11px] text-ink-dim">
-          KST 기준 하루 동일 user × track 최대 <b>3회</b> 유효. 초과분은 <b className="text-rose-500">daily_user_track_cap</b> 으로 표시되며 차트/정산/추천 집계에서 제외됨.
+          KST 기준 하루 동일 user × track 최대 <b>3회</b> 유효. 초과분은 <b className="text-rose-300">daily_user_track_cap</b> 으로 표시되며 차트/정산/추천 집계에서 제외됨.
           원본 row 는 보존됨 (삭제 안 함).
         </p>
       </div>
@@ -75,17 +75,17 @@ export default function AbuseMonitorTab() {
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="raw" v={summary.total_raw_streams} />
-          <Stat label="effective" v={summary.total_effective_streams} tone="text-emerald-500" />
-          <Stat label="excluded by cap" v={summary.total_excluded_by_cap} tone="text-rose-500" />
+          <Stat label="effective" v={summary.total_effective_streams} tone="text-emerald-300" />
+          <Stat label="excluded by cap" v={summary.total_excluded_by_cap} tone="text-rose-300" />
           <Stat label="유저 (cap hit)" v={summary.distinct_users_affected} />
           <Stat label="곡 (cap hit)" v={summary.distinct_tracks_affected} />
-          <Stat label="user×track×day cap" v={summary.distinct_user_track_day_caps} tone="text-amber-500" />
+          <Stat label="user×track×day cap" v={summary.distinct_user_track_day_caps} tone="text-amber-300" />
         </div>
       )}
 
       <div className="rounded-xl bg-bg-card p-3">
         <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
-          <AlertOctagon size={11} className="text-rose-500" /> 어뷰징 후보
+          <AlertOctagon size={11} className="text-rose-300" /> 어뷰징 후보
           <span className="text-ink-dim font-normal">({rows.length}건)</span>
         </h4>
         {rows.length === 0 ? (
@@ -126,13 +126,13 @@ export default function AbuseMonitorTab() {
                       </div>
                     </td>
                     <td className="px-1.5 py-1 text-right tabular-nums">{r.raw_plays}</td>
-                    <td className="px-1.5 py-1 text-right tabular-nums text-emerald-500">
+                    <td className="px-1.5 py-1 text-right tabular-nums text-emerald-300">
                       {r.effective_plays}
                     </td>
-                    <td className="px-1.5 py-1 text-right tabular-nums text-rose-500 font-bold">
+                    <td className="px-1.5 py-1 text-right tabular-nums text-rose-300 font-bold">
                       {r.excluded_plays}
                     </td>
-                    <td className="px-1.5 py-1 font-mono text-rose-500/80">
+                    <td className="px-1.5 py-1 font-mono text-rose-300/80">
                       {r.excluded_reason ?? '—'}
                     </td>
                     <td className="px-1.5 py-1 text-ink-dim">

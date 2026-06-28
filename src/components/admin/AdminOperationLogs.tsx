@@ -15,9 +15,9 @@ import Alert from '@/components/Alert';
 
 const LEVEL_META: Record<LogLevel, { label: string; tone: string; icon: React.ReactNode }> = {
   info: { label: 'info', tone: 'bg-ink/10 text-ink-mute', icon: <Info size={11} /> },
-  success: { label: 'success', tone: 'bg-emerald-500/15 text-emerald-300', icon: <CheckCircle2 size={11} /> },
+  success: { label: 'success', tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={11} /> },
   warning: { label: 'warning', tone: 'bg-yellow-500/15 text-yellow-200', icon: <AlertTriangle size={11} /> },
-  error: { label: 'error', tone: 'bg-red-500/15 text-red-300', icon: <AlertCircle size={11} /> },
+  error: { label: 'error', tone: 'bg-rose-500/25 text-red-300', icon: <AlertCircle size={11} /> },
 };
 
 const CATEGORIES: Array<LogCategory | 'all'> = ['all', 'payment', 'webhook', 'analytics', 'member', 'system', 'rpc'];
@@ -107,7 +107,7 @@ export default function AdminOperationLogs() {
           </button>
           <button
             onClick={onClearOld}
-            className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20"
+            className="inline-flex items-center gap-1 rounded-md bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20"
           >
             <Trash2 size={11} /> 30일 이전 정리
           </button>
@@ -220,7 +220,7 @@ export default function AdminOperationLogs() {
                   </div>
                   <p className="mt-1 text-sm text-ink">{r.message}</p>
                   {r.error_message && (
-                    <p className="mt-1 rounded bg-red-100 px-2 py-1 font-mono text-[11px] text-red-800 dark:bg-red-500/10 dark:text-red-300">
+                    <p className="mt-1 rounded bg-red-100 px-2 py-1 font-mono text-[11px] text-rose-200 dark:bg-rose-500/20 dark:text-red-300">
                       {r.error_code && <span className="font-bold">[{r.error_code}]</span>}{' '}
                       {r.error_message}
                     </p>

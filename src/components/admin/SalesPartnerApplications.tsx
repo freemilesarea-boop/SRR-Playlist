@@ -13,10 +13,10 @@ const STATUS_LABEL: Record<SalesPartnerStatus, string> = {
 };
 const STATUS_TONE: Record<SalesPartnerStatus, string> = {
   submitted: 'bg-violet-500/15 text-violet-600',
-  reviewing: 'bg-amber-500/15 text-amber-600',
-  contacted: 'bg-sky-500/15 text-sky-600',
-  approved: 'bg-emerald-500/15 text-emerald-600',
-  rejected: 'bg-rose-500/15 text-rose-600',
+  reviewing: 'bg-amber-500/25 text-amber-300',
+  contacted: 'bg-sky-500/25 text-sky-300',
+  approved: 'bg-emerald-500/25 text-emerald-300',
+  rejected: 'bg-rose-500/25 text-rose-300',
 };
 
 export default function SalesPartnerApplications() {

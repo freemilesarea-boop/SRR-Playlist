@@ -29,13 +29,13 @@ const VOCAL_LABEL: Record<VocalPolicy, string> = {
 };
 const VOCAL_COLOR: Record<VocalPolicy, string> = {
   vocal: 'bg-indigo-500/20 text-indigo-400',
-  instrumental: 'bg-emerald-500/20 text-emerald-500',
+  instrumental: 'bg-emerald-500/20 text-emerald-300',
   vocal_rap: 'bg-fuchsia-500/20 text-fuchsia-400',
 };
 const SEVERITY_COLOR: Record<string, string> = {
   CRITICAL: 'bg-rose-600 text-white',
-  HIGH: 'bg-rose-500/20 text-rose-500',
-  MEDIUM: 'bg-amber-500/20 text-amber-500',
+  HIGH: 'bg-rose-500/20 text-rose-300',
+  MEDIUM: 'bg-amber-500/20 text-amber-300',
   LOW: 'bg-gray-500/20 text-gray-400',
 };
 
@@ -175,7 +175,7 @@ function RulesInner() {
 
       {backfill && (
         <div className="rounded-xl bg-bg-card p-3 text-xs">
-          <h4 className="mb-1 font-bold">재검사 리포트 {backfill.dry_run && <span className="text-amber-500">(dry-run)</span>}</h4>
+          <h4 className="mb-1 font-bold">재검사 리포트 {backfill.dry_run && <span className="text-amber-300">(dry-run)</span>}</h4>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <Stat label="검사" v={backfill.checked_count} />
             <Stat label="정상" v={backfill.matched_count} />
@@ -190,7 +190,7 @@ function RulesInner() {
           </div>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {Object.entries(backfill.by_issue_type).map(([k, v]) => (
-              <span key={k} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-400">{k}: {v}</span>
+              <span key={k} className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300">{k}: {v}</span>
             ))}
           </div>
         </div>
@@ -231,7 +231,7 @@ function RulesInner() {
                 </h4>
                 <div className="flex items-center gap-1 text-[10px]">
                   {list[0]?.enforcement && (
-                    <span className={`rounded px-1.5 py-0.5 font-bold ${list[0].enforcement === 'hard' ? 'bg-rose-500/20 text-rose-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                    <span className={`rounded px-1.5 py-0.5 font-bold ${list[0].enforcement === 'hard' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}`}>
                       {list[0].enforcement === 'hard' ? 'HARD BLOCK' : 'SOFT'}
                     </span>
                   )}
@@ -260,7 +260,7 @@ function RulesInner() {
                       </div>
                     </div>
                     <button onClick={() => void toggle(rule)} disabled={busy}
-                      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold ${rule.is_allowed ? 'bg-emerald-500/20 text-emerald-500' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
+                      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold ${rule.is_allowed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
                       {rule.is_allowed ? 'ON' : 'OFF'}
                     </button>
                   </div>
@@ -374,9 +374,9 @@ function ViolationsInner() {
                   <td className="px-2 py-1.5 max-w-xs text-[11px] text-ink-mute">{r.reason}</td>
                   <td className="px-2 py-1.5">
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                      r.status === 'open' ? 'bg-rose-500/20 text-rose-500' :
-                      r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-500' :
-                      r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-500' :
+                      r.status === 'open' ? 'bg-rose-500/20 text-rose-300' :
+                      r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-300' :
+                      r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' :
                       'bg-gray-500/20 text-gray-400'
                     }`}>{r.status}</span>
                   </td>
@@ -406,7 +406,7 @@ function ViolationsInner() {
 
 function Stat({ label, v, color }: { label: string; v: number; color?: string }) {
   const colorMap: Record<string, string> = {
-    rose: 'text-rose-500', amber: 'text-amber-500', emerald: 'text-emerald-500',
+    rose: 'text-rose-300', amber: 'text-amber-300', emerald: 'text-emerald-300',
   };
   return (
     <div className="rounded bg-bg-deep p-2">

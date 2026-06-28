@@ -116,7 +116,7 @@ export default function OnboardingChecklist({ tracks, playlists }: Props) {
         {items.map((item) => (
           <li key={item.key} className="flex items-start gap-3 px-4 py-3">
             {item.done ? (
-              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-400" />
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" />
             ) : (
               <Circle size={16} className="mt-0.5 shrink-0 text-ink-dim" />
             )}

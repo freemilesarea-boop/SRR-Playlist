@@ -178,7 +178,7 @@ export default function ContentManagement() {
                 </button>
                 <button
                   onClick={() => deletePlaylist(p.id)}
-                  className="rounded-md px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                  className="rounded-md px-3 py-1.5 text-xs text-red-300 hover:bg-rose-500/20"
                 >
                   삭제
                 </button>
@@ -432,14 +432,14 @@ function AdminTrackList({
           <button
             onClick={handleBulkApplyAi}
             disabled={bulkApplying}
-            className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50"
+            className="rounded-full bg-emerald-500/25 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-emerald-500/25 disabled:opacity-50"
             title="confidence ≥ 0.6 인 AI 예측을 빈 필드에 일괄 적용"
           >
             {bulkApplying ? '적용 중…' : 'AI 메타 일괄 적용'}
           </button>
           <button
             onClick={loadMismatches}
-            className="rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/25"
+            className="rounded-full bg-rose-500/25 px-3 py-1.5 text-xs font-semibold text-rose-300 ring-1 ring-rose-500/50 hover:bg-rose-500/25"
             title="메타데이터와 AI 분석이 심하게 충돌하는 트랙 자동 정리"
           >
             심한 불일치 검사
@@ -453,7 +453,7 @@ function AdminTrackList({
       )}
 
       {showMismatch && (
-        <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+        <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/50">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-rose-300">
               심한 불일치 트랙 — 등록 메타 vs AI 분석 결과 모순
@@ -464,7 +464,7 @@ function AdminTrackList({
                 <button
                   onClick={handleAutoClean}
                   disabled={cleaning}
-                  className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-50"
+                  className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/50 hover:bg-rose-500/30 disabled:opacity-50"
                 >
                   {cleaning ? '삭제 중…' : `${mismatches?.length} 자동 삭제`}
                 </button>
@@ -486,7 +486,7 @@ function AdminTrackList({
                   <span className="truncate text-ink-mute">{m.artist ?? '—'}</span>
                   <span className="rounded bg-bg-soft px-1.5 py-0.5 text-ink-mute">{m.declared_genre ?? '—'} / {m.declared_mood ?? '—'}</span>
                   <span className="rounded bg-accent/15 px-1.5 py-0.5 text-accent">E{m.ai_energy ?? '—'} · {m.ai_bpm ?? '—'}BPM</span>
-                  <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300">{m.reasons}</span>
+                  <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">{m.reasons}</span>
                   {m.ai_confidence != null && (
                     <span className="text-[9px] text-ink-dim">{Number(m.ai_confidence).toFixed(2)}</span>
                   )}
@@ -512,9 +512,9 @@ function AdminTrackList({
                     <p className="text-xs font-bold">{FIELD_LABELS[s.field_name] ?? s.field_name}</p>
                     {s.accuracy_pct != null && (
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        s.accuracy_pct >= 70 ? 'bg-emerald-500/15 text-emerald-400'
-                          : s.accuracy_pct >= 40 ? 'bg-amber-500/15 text-amber-400'
-                          : 'bg-rose-500/15 text-rose-400'
+                        s.accuracy_pct >= 70 ? 'bg-emerald-500/25 text-emerald-300'
+                          : s.accuracy_pct >= 40 ? 'bg-amber-500/25 text-amber-300'
+                          : 'bg-rose-500/25 text-rose-300'
                       }`}>
                         정확도 {s.accuracy_pct}%
                       </span>
@@ -554,7 +554,7 @@ function AdminTrackList({
             <button
               onClick={handleBulkDelete}
               disabled={bulkProgress != null}
-              className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/30 disabled:opacity-50"
+              className="rounded-full bg-rose-500/20 px-3 py-1 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/50 hover:bg-rose-500/30 disabled:opacity-50"
             >
               일괄 삭제
             </button>
@@ -918,12 +918,12 @@ function AdminTrackRow({
               ai={ai?.ai_predicted_tempo_feel ? (TEMPO_OPTIONS.find((t) => t.v === ai.ai_predicted_tempo_feel)?.l ?? ai.ai_predicted_tempo_feel) : null}
             />
             {ai?.ai_applied_at && (
-              <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-bold text-emerald-400">AI 적용됨</span>
+              <span className="rounded bg-emerald-500/25 px-1 text-[9px] font-bold text-emerald-300">AI 적용됨</span>
             )}
           </p>
         </div>
 
-        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${playable ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'}`}>
+        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${playable ? 'bg-emerald-500/25 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'}`}>
           {playable ? '재생가능' : '음원 없음'}
         </span>
 
@@ -936,7 +936,7 @@ function AdminTrackRow({
         </button>
         <button
           onClick={() => onDelete(track.id, track.title)}
-          className="rounded-md px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+          className="rounded-md px-2.5 py-1.5 text-xs text-red-300 hover:bg-rose-500/20"
           title="완전 삭제 (DB + 스토리지)"
         >
           <Trash2 size={12} className="inline" /> 삭제
@@ -948,7 +948,7 @@ function AdminTrackRow({
           {loadingDetail ? (
             <p className="py-4 text-center text-xs text-ink-mute">메타데이터 불러오는 중…</p>
           ) : !detail ? (
-            <p className="py-4 text-center text-xs text-rose-400">불러오기 실패</p>
+            <p className="py-4 text-center text-xs text-rose-300">불러오기 실패</p>
           ) : (
             <div className="space-y-3">
               {/* 발매/소스 상태 */}
@@ -1140,7 +1140,7 @@ function ComparePair({
       <span className="text-[9px] font-bold text-ink-dim">{label}</span>
       <span className="font-semibold text-ink">{current ?? '—'}</span>
       <span className="text-ink-dim">/</span>
-      <span className={ai == null ? 'text-ink-dim' : (same ? 'text-emerald-400' : 'text-accent')}>
+      <span className={ai == null ? 'text-ink-dim' : (same ? 'text-emerald-300' : 'text-accent')}>
         AI {ai ?? '—'}
       </span>
       {confidence != null && ai != null && (
@@ -1152,8 +1152,8 @@ function ComparePair({
 
 function Pill({ children, tone }: { children: React.ReactNode; tone?: 'info' | 'good' | 'warn' }) {
   const cls =
-    tone === 'good' ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/20' :
-    tone === 'warn' ? 'bg-amber-500/15 text-amber-300 ring-amber-500/20' :
+    tone === 'good' ? 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' :
+    tone === 'warn' ? 'bg-amber-500/25 text-amber-300 ring-amber-500/50' :
     tone === 'info' ? 'bg-accent/15 text-accent ring-accent/20' :
     'bg-bg-soft text-ink-mute ring-line/10';
   return <span className={`rounded-full px-2 py-0.5 ring-1 ${cls}`}>{children}</span>;
@@ -1181,7 +1181,7 @@ function Compare({
       <div className="mt-1 flex items-center gap-1.5 text-xs">
         <span className="text-ink-mute">현재 <span className="font-semibold text-ink">{current ?? '—'}</span></span>
         <span className="text-ink-dim">→</span>
-        <span className={`font-semibold ${hasPrediction ? (same ? 'text-emerald-400' : 'text-accent') : 'text-ink-dim'}`}>
+        <span className={`font-semibold ${hasPrediction ? (same ? 'text-emerald-300' : 'text-accent') : 'text-ink-dim'}`}>
           AI <span>{predicted ?? '—'}</span>
         </span>
         {hasPrediction && !same && (

@@ -223,9 +223,9 @@ function Kpi({
   const toneClass: Record<typeof tone, string> = {
     ink: 'text-ink',
     yellow: 'text-yellow-700 dark:text-yellow-300',
-    sky: 'text-sky-700 dark:text-sky-300',
-    emerald: 'text-emerald-700 dark:text-emerald-300',
-    red: 'text-red-700 dark:text-red-300',
+    sky: 'text-sky-200 dark:text-sky-300',
+    emerald: 'text-emerald-200 dark:text-emerald-300',
+    red: 'text-rose-200 dark:text-red-300',
   };
   const formatted = decimal ? value.toFixed(1) : value.toLocaleString();
   return (

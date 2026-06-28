@@ -56,8 +56,8 @@ export default function UploadIntegrityPanel() {
               {logs.map((l) => (
                 <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-bg-card px-3 py-2 text-[10px]">
                   <span className="min-w-0 flex-1 truncate"><b>{l.original_filename ?? '?'}</b> · {l.artist_email ?? ''}</span>
-                  {l.upload_status !== 'success' && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-600">{l.upload_status}</span>}
-                  {l.same_sha_count > 1 && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-600">SHA중복 {l.same_sha_count}</span>}
+                  {l.upload_status !== 'success' && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 font-semibold text-rose-300">{l.upload_status}</span>}
+                  {l.same_sha_count > 1 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 font-semibold text-rose-300">SHA중복 {l.same_sha_count}</span>}
                   {l.transcoded && <span className="rounded bg-bg-soft px-1.5 py-0.5 text-ink-mute">변환</span>}
                   <span className="font-mono text-ink-dim" title={l.final_audio_sha256 ?? ''}>{(l.final_audio_sha256 ?? '—').slice(0, 10)}</span>
                   <span className="text-ink-dim">{dt(l.created_at)}</span>
@@ -69,11 +69,11 @@ export default function UploadIntegrityPanel() {
       )}
 
       {view === 'duplicate' && (
-        dups.length === 0 ? <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-emerald-600">{loading ? '불러오는 중…' : '동일 콘텐츠 중복 없음 👍'}</p> : (
+        dups.length === 0 ? <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-emerald-300">{loading ? '불러오는 중…' : '동일 콘텐츠 중복 없음 👍'}</p> : (
           <ul className="space-y-2">
             {dups.map((g) => (
-              <li key={g.sha} className="rounded-lg bg-rose-500/5 p-3 text-[10px] ring-1 ring-rose-500/20">
-                <p className="flex items-center gap-1.5 font-semibold text-rose-600"><AlertTriangle size={12} /> 동일 콘텐츠 {g.n}곡 · {g.artist_email ?? g.user_id} · <span className="font-mono">{g.sha.slice(0, 14)}</span></p>
+              <li key={g.sha} className="rounded-lg bg-rose-500/5 p-3 text-[10px] ring-1 ring-rose-500/50">
+                <p className="flex items-center gap-1.5 font-semibold text-rose-300"><AlertTriangle size={12} /> 동일 콘텐츠 {g.n}곡 · {g.artist_email ?? g.user_id} · <span className="font-mono">{g.sha.slice(0, 14)}</span></p>
                 <ul className="mt-1 space-y-0.5 text-ink-mute">
                   {g.items.map((it, i) => <li key={i}>· {it.filename ?? '?'} <span className="text-ink-dim">({it.track_id?.slice(0, 8)} · {dt(it.at)})</span></li>)}
                 </ul>
@@ -85,12 +85,12 @@ export default function UploadIntegrityPanel() {
 
       {view === 'legacy' && (
         <>
-          <p className="text-[11px] text-amber-600">⚠ 휴리스틱 후보입니다. 동일 길이·콘텐츠 크기 + 다른 파일명이면 변환 race 오염 가능성. 실제 바이트 비교 후 판단하세요(자동 수정 안 함).</p>
-          {legacy.length === 0 ? <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-emerald-600">{loading ? '불러오는 중…' : '의심 후보 없음 👍'}</p> : (
+          <p className="text-[11px] text-amber-300">⚠ 휴리스틱 후보입니다. 동일 길이·콘텐츠 크기 + 다른 파일명이면 변환 race 오염 가능성. 실제 바이트 비교 후 판단하세요(자동 수정 안 함).</p>
+          {legacy.length === 0 ? <p className="rounded-xl bg-bg-card px-4 py-8 text-center text-sm text-emerald-300">{loading ? '불러오는 중…' : '의심 후보 없음 👍'}</p> : (
             <ul className="space-y-2">
               {legacy.map((g, gi) => (
-                <li key={gi} className="rounded-lg bg-amber-500/5 p-3 text-[10px] ring-1 ring-amber-500/20">
-                  <p className="font-semibold text-amber-700">의심 {g.n}곡 · {g.duration}s · {g.audio_content_length}B</p>
+                <li key={gi} className="rounded-lg bg-amber-500/5 p-3 text-[10px] ring-1 ring-amber-500/50">
+                  <p className="font-semibold text-amber-200">의심 {g.n}곡 · {g.duration}s · {g.audio_content_length}B</p>
                   <ul className="mt-1 space-y-0.5 text-ink-mute">
                     {g.tracks.map((t) => <li key={t.track_id}>· {t.title ?? '?'} <span className="text-ink-dim">({t.filename ?? ''} · {dt(t.created_at)})</span></li>)}
                   </ul>

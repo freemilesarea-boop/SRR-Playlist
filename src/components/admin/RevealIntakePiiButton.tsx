@@ -103,7 +103,7 @@ export default function RevealIntakePiiButton({
     return (
       <div className="inline-flex items-center gap-2">
         <code
-          className={`rounded bg-red-100 px-2 py-0.5 text-red-900 ring-1 ring-red-400 dark:bg-red-500/15 dark:text-red-100 ${className}`}
+          className={`rounded bg-red-100 px-2 py-0.5 text-rose-200 ring-1 ring-red-400 dark:bg-rose-500/25 dark:text-red-100 ${className}`}
           title="원본 — 카운트다운 후 자동 마스킹"
         >
           {revealed}
@@ -173,7 +173,7 @@ function ConfirmModal({
       >
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-bold">
-            <AlertTriangle size={16} className="text-red-500" />
+            <AlertTriangle size={16} className="text-rose-300" />
             {meta.title}
           </h3>
           <button onClick={onCancel} className="rounded-full p-1.5 hover:bg-ink/5">

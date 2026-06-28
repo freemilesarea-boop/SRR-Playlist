@@ -223,7 +223,7 @@ function BulkExcludeTab({ trackIds, busy, setBusy, onDone }: { trackIds: string[
         <h3 className="mb-2 text-sm font-bold">금지 장소 다중 선택</h3>
         <div className="grid grid-cols-3 gap-1.5 md:grid-cols-4">
           {storeTypes.map((s) => (
-            <label key={s.slug} className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${selectedSlugs.has(s.slug) ? 'bg-rose-500/15 text-rose-500' : 'bg-bg-deep hover:bg-bg-hover'}`}>
+            <label key={s.slug} className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${selectedSlugs.has(s.slug) ? 'bg-rose-500/25 text-rose-300' : 'bg-bg-deep hover:bg-bg-hover'}`}>
               <input type="checkbox" checked={selectedSlugs.has(s.slug)} onChange={() => toggleSlug(s.slug)} />
               <span>{s.name_ko}</span>
               <span className="text-[10px] text-ink-dim">({s.slug})</span>
@@ -240,7 +240,7 @@ function BulkExcludeTab({ trackIds, busy, setBusy, onDone }: { trackIds: string[
           <RefreshCw size={13} /> Preview
         </button>
         <button onClick={() => void apply()} disabled={busy || !preview}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-500 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/25 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-50">
           <Ban size={13} /> Confirm Add
         </button>
       </div>
@@ -357,7 +357,7 @@ function BulkPlacementTab({ trackIds, busy, setBusy, onDone }: { trackIds: strin
                   {preview.per_track.slice(0, 100).map((t) => (
                     <li key={t.track_id} className="flex items-center justify-between gap-2 rounded bg-bg-deep px-2 py-1">
                       <span className="truncate">{t.title ?? '(제목없음)'}</span>
-                      <span className="shrink-0 text-ink-dim">제거 <b className="text-rose-500">{t.remove_count}</b> · 유지 <b className="text-emerald-500">{t.keep_count}</b></span>
+                      <span className="shrink-0 text-ink-dim">제거 <b className="text-rose-300">{t.remove_count}</b> · 유지 <b className="text-emerald-300">{t.keep_count}</b></span>
                     </li>
                   ))}
                 </ul>
@@ -367,7 +367,7 @@ function BulkPlacementTab({ trackIds, busy, setBusy, onDone }: { trackIds: strin
           <input type="text" value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="제거 사유 (audit)" className="w-full rounded bg-bg-card px-2 py-1.5 text-xs" />
           <button onClick={() => void apply()} disabled={busy || preview.total_remove === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-500 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/25 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-50">
             <Trash2 size={13} /> Confirm Remove ({preview.total_remove})
           </button>
         </>
@@ -402,7 +402,7 @@ function BulkAuditTab() {
           {entries.map((a) => (
             <li key={a.id} className="rounded bg-bg-card p-2.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className={`rounded px-1.5 py-0.5 font-bold ${a.status === 'preview' ? 'bg-amber-500/15 text-amber-500' : a.status === 'completed' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-rose-500/15 text-rose-500'}`}>
+                <span className={`rounded px-1.5 py-0.5 font-bold ${a.status === 'preview' ? 'bg-amber-500/25 text-amber-300' : a.status === 'completed' ? 'bg-emerald-500/25 text-emerald-300' : 'bg-rose-500/25 text-rose-300'}`}>
                   {a.operation_type}
                 </span>
                 <span className="text-[10px] text-ink-dim">{new Date(a.created_at).toLocaleString()} · {a.admin_name ?? 'unknown'} · {a.track_count} 트랙</span>
@@ -411,7 +411,7 @@ function BulkAuditTab() {
                 <summary className="cursor-pointer text-[11px] text-ink-mute">params/result</summary>
                 <div className="mt-1 grid grid-cols-2 gap-2 text-[10px]">
                   <pre className="rounded bg-bg-deep p-2 text-ink-mute">{JSON.stringify(a.params_json, null, 2)}</pre>
-                  <pre className="rounded bg-bg-deep p-2 text-emerald-400">{JSON.stringify(a.after_json, null, 2)}</pre>
+                  <pre className="rounded bg-bg-deep p-2 text-emerald-300">{JSON.stringify(a.after_json, null, 2)}</pre>
                 </div>
               </details>
             </li>
@@ -424,8 +424,8 @@ function BulkAuditTab() {
 
 function Stat({ label, v, color = 'blue' }: { label: string; v: number; color?: string }) {
   const colorMap: Record<string, string> = {
-    blue: 'text-blue-500', emerald: 'text-emerald-500',
-    amber: 'text-amber-500', rose: 'text-rose-500', gray: 'text-gray-500',
+    blue: 'text-blue-500', emerald: 'text-emerald-300',
+    amber: 'text-amber-300', rose: 'text-rose-300', gray: 'text-gray-500',
   };
   return (
     <div className="rounded bg-bg-deep p-2">

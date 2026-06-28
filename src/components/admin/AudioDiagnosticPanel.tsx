@@ -106,10 +106,10 @@ export default function AudioDiagnosticPanel() {
         <p className="font-bold text-ink">Service Worker / 캐시 상태</p>
         {sw ? (
           <div className="space-y-0.5 font-mono text-ink-mute">
-            <p>controller(제어중): <b className={sw.controlled ? 'text-amber-500' : 'text-emerald-500'}>{String(sw.controlled)}</b> · 등록 {sw.registrations}개</p>
+            <p>controller(제어중): <b className={sw.controlled ? 'text-amber-300' : 'text-emerald-300'}>{String(sw.controlled)}</b> · 등록 {sw.registrations}개</p>
             <p className="break-all">activeSW: {sw.controllerScriptURL ?? '(없음)'}</p>
             <p className="break-all">cacheKeys: {sw.cacheKeys.length ? sw.cacheKeys.join(', ') : '(없음)'}</p>
-            {sw.hasAudioCache && <p className="font-bold text-red-500">⚠ 오디오 관련 캐시 존재 — 초기화 권장(오디오 Range 가로채기 원인)</p>}
+            {sw.hasAudioCache && <p className="font-bold text-rose-300">⚠ 오디오 관련 캐시 존재 — 초기화 권장(오디오 Range 가로채기 원인)</p>}
           </div>
         ) : <p className="text-ink-mute">확인 중…</p>}
         <button
@@ -156,7 +156,7 @@ export default function AudioDiagnosticPanel() {
                       )}
                       {p === 'running' && <span className="font-semibold text-accent">검사 중…</span>}
                       {p && p !== 'running' && (
-                        <span className={`inline-flex items-center gap-1 font-bold ${p.playable ? 'text-emerald-500' : 'text-red-500'}`}>
+                        <span className={`inline-flex items-center gap-1 font-bold ${p.playable ? 'text-emerald-300' : 'text-rose-300'}`}>
                           {p.playable ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
                           {p.playable ? '재생 가능' : '재생 불가'}
                         </span>
@@ -166,12 +166,12 @@ export default function AudioDiagnosticPanel() {
                   {p && p !== 'running' && (
                     <div className="rounded-lg bg-bg-soft/50 p-2 text-[11px] text-ink-mute ring-1 ring-line/10">
                       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono sm:grid-cols-3">
-                        <span>canPlayType: <b className={p.canPlay === '' ? 'text-red-500' : 'text-ink'}>{p.canPlay || '(빈값)'}</b></span>
-                        <span>duration: <b className={p.durationSec ? 'text-ink' : 'text-red-500'}>{p.durationSec ? `${p.durationSec.toFixed(1)}s` : (p.metaResult)}</b></span>
+                        <span>canPlayType: <b className={p.canPlay === '' ? 'text-rose-300' : 'text-ink'}>{p.canPlay || '(빈값)'}</b></span>
+                        <span>duration: <b className={p.durationSec ? 'text-ink' : 'text-rose-300'}>{p.durationSec ? `${p.durationSec.toFixed(1)}s` : (p.metaResult)}</b></span>
                         <span>err: {mediaErrName(p.errorCode)}</span>
                         <span>HEAD: {p.headStatus ?? 'N/A'}</span>
                         <span>GET: {p.getStatus ?? 'N/A'}</span>
-                        <span>Range: <b className={p.rangeStatus === 206 ? 'text-emerald-500' : 'text-red-500'}>{p.rangeStatus ?? 'N/A'}</b></span>
+                        <span>Range: <b className={p.rangeStatus === 206 ? 'text-emerald-300' : 'text-rose-300'}>{p.rangeStatus ?? 'N/A'}</b></span>
                         <span>type: {p.contentType ?? 'N/A'}</span>
                         <span>len: {p.contentLength ?? 'N/A'}</span>
                         <span>accept-ranges: {p.acceptRanges ?? 'N/A'}</span>
@@ -179,9 +179,9 @@ export default function AudioDiagnosticPanel() {
                         <span>resp.type: {p.responseType ?? 'N/A'}</span>
                         <span>redirected: {p.redirected == null ? 'N/A' : String(p.redirected)}</span>
                       </div>
-                      {p.fetchError && <p className="mt-1 text-[11px] font-semibold text-red-500">fetch 오류: {p.fetchError}</p>}
+                      {p.fetchError && <p className="mt-1 text-[11px] font-semibold text-rose-300">fetch 오류: {p.fetchError}</p>}
                       {p.notes.length > 0 && (
-                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-amber-600 dark:text-amber-400">
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-amber-300 dark:text-amber-300">
                           {p.notes.map((n, i) => <li key={i}>{n}</li>)}
                         </ul>
                       )}
@@ -199,12 +199,12 @@ export default function AudioDiagnosticPanel() {
                           return (
                             <div className="mt-1 rounded bg-bg-deep/40 p-1.5 font-mono text-[10px] leading-relaxed">
                               <p className="font-bold text-ink">
-                                결과: <span className={tl.outcome === 'still-playing' || tl.outcome === 'ended' ? 'text-emerald-500' : 'text-red-500'}>{tl.outcome}</span>
+                                결과: <span className={tl.outcome === 'still-playing' || tl.outcome === 'ended' ? 'text-emerald-300' : 'text-rose-300'}>{tl.outcome}</span>
                                 {tl.errorCode != null && ` · err=${mediaErrName(tl.errorCode)}`}
                               </p>
                               <div className="mt-0.5 max-h-32 overflow-y-auto">
                                 {tl.timeline.map((e, i) => (
-                                  <div key={i} className={e.event === 'error' ? 'text-red-500' : e.event.startsWith('play-rejected') ? 'text-amber-500' : 'text-ink-mute'}>
+                                  <div key={i} className={e.event === 'error' ? 'text-rose-300' : e.event.startsWith('play-rejected') ? 'text-amber-300' : 'text-ink-mute'}>
                                     {e.t}ms · {e.event} · cur={e.currentTime}s · rs={e.readyState} · ns={e.networkState}{e.errorCode != null ? ` · errc=${e.errorCode}` : ''}
                                   </div>
                                 ))}

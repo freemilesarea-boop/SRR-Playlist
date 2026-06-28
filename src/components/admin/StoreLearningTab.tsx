@@ -130,7 +130,7 @@ export default function StoreLearningTab() {
           playlist.business_category 는 normalize_store_label() 로 taxonomy slug 변환. <b>fit_score 미반영 — 인사이트만 제공</b>.
         </p>
         {lastResult && (
-          <p className="mt-1 text-[11px] text-emerald-500">
+          <p className="mt-1 text-[11px] text-emerald-300">
             마지막 재계산: {lastResult.rows} 행 · {(lastResult.ms / 1000).toFixed(1)}s
           </p>
         )}
@@ -155,8 +155,8 @@ export default function StoreLearningTab() {
                   <div className="text-[10px]">avg score <b>{info.avg_score}</b></div>
                   {(info.promotion_candidates > 0 || info.demotion_candidates > 0) && (
                     <div className="mt-1 flex gap-1 text-[10px]">
-                      {info.promotion_candidates > 0 && <span className="rounded bg-emerald-500/20 px-1 text-emerald-500">↑{info.promotion_candidates}</span>}
-                      {info.demotion_candidates > 0 && <span className="rounded bg-rose-500/20 px-1 text-rose-500">↓{info.demotion_candidates}</span>}
+                      {info.promotion_candidates > 0 && <span className="rounded bg-emerald-500/20 px-1 text-emerald-300">↑{info.promotion_candidates}</span>}
+                      {info.demotion_candidates > 0 && <span className="rounded bg-rose-500/20 px-1 text-rose-300">↓{info.demotion_candidates}</span>}
                     </div>
                   )}
                 </button>
@@ -229,30 +229,30 @@ export default function StoreLearningTab() {
                   <td className="px-2 py-1.5 text-right tabular-nums">{r.play_count}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-ink-mute">{(r.confidence * 100).toFixed(0)}%</td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={r.completion_rate < 0.3 && r.play_count >= 5 ? 'text-rose-500 font-bold' : ''}>
+                    <span className={r.completion_rate < 0.3 && r.play_count >= 5 ? 'text-rose-300 font-bold' : ''}>
                       {(r.completion_rate * 100).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={r.skip_rate >= 0.6 && r.play_count >= 5 ? 'text-rose-500 font-bold' : ''}>
+                    <span className={r.skip_rate >= 0.6 && r.play_count >= 5 ? 'text-rose-300 font-bold' : ''}>
                       {(r.skip_rate * 100).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-right text-ink-mute">{(r.replay_rate * 100).toFixed(0)}%</td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={r.like_rate > 0 ? 'text-emerald-500' : 'text-ink-mute'}>
+                    <span className={r.like_rate > 0 ? 'text-emerald-300' : 'text-ink-mute'}>
                       {(r.like_rate * 100).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <span className={`font-bold ${r.store_behavior_score >= 70 ? 'text-emerald-500' : r.store_behavior_score <= 30 ? 'text-rose-500' : ''}`}>
+                    <span className={`font-bold ${r.store_behavior_score >= 70 ? 'text-emerald-300' : r.store_behavior_score <= 30 ? 'text-rose-300' : ''}`}>
                       {r.store_behavior_score.toFixed(1)}
                     </span>
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex flex-wrap gap-1">
-                      {r.is_promotion_candidate && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">승격</span>}
-                      {r.is_demotion_candidate && <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-500">강등</span>}
+                      {r.is_promotion_candidate && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">승격</span>}
+                      {r.is_demotion_candidate && <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">강등</span>}
                     </div>
                   </td>
                   <td className="px-2 py-1.5">
@@ -328,7 +328,7 @@ function ReactionDashboardPanel({
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <AlertCircle size={12} /> 로딩 실패: {error}
         </div>
       )}
@@ -352,7 +352,7 @@ function ReactionDashboardPanel({
           {/* B. Top Liked */}
           <TopTracksTable
             title="좋아요 TOP 20"
-            icon={<ThumbsUp size={12} className="text-emerald-400" />}
+            icon={<ThumbsUp size={12} className="text-emerald-300" />}
             rows={dashboard.topLiked}
             mode="like"
           />
@@ -360,7 +360,7 @@ function ReactionDashboardPanel({
           {/* C. Top Disliked */}
           <TopTracksTable
             title="별로 TOP 20"
-            icon={<ThumbsDown size={12} className="text-amber-400" />}
+            icon={<ThumbsDown size={12} className="text-amber-300" />}
             rows={dashboard.topDisliked}
             mode="dislike"
           />
@@ -400,8 +400,8 @@ function DashboardSkeleton() {
 function OverviewKpis({ d }: { d: StoreLearningDashboard }) {
   const ov = d.overview;
   const cards: { label: string; value: string; tone?: string; icon?: React.ReactNode }[] = [
-    { label: '총 좋아요', value: String(ov.total_likes ?? 0), tone: 'text-emerald-400', icon: <ThumbsUp size={11} /> },
-    { label: '총 별로', value: String(ov.total_dislikes ?? 0), tone: 'text-amber-400', icon: <ThumbsDown size={11} /> },
+    { label: '총 좋아요', value: String(ov.total_likes ?? 0), tone: 'text-emerald-300', icon: <ThumbsUp size={11} /> },
+    { label: '총 별로', value: String(ov.total_dislikes ?? 0), tone: 'text-amber-300', icon: <ThumbsDown size={11} /> },
     { label: `최근 ${d.window_days}일 반응`, value: `${(ov.recent_likes ?? 0) + (ov.recent_dislikes ?? 0)}`, icon: <TrendingUp size={11} /> },
     { label: '참여 매장 수', value: String(ov.unique_stores ?? 0), icon: <Store size={11} /> },
     { label: '좋아요 비율', value: ov.like_ratio != null ? `${ov.like_ratio}%` : '—', tone: 'text-accent' },
@@ -425,9 +425,9 @@ function OverviewKpis({ d }: { d: StoreLearningDashboard }) {
 function ReadinessPanel({ d }: { d: StoreLearningDashboard }) {
   const r = d.readiness;
   const tone =
-    r.status === 'READY' ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/40' :
-    r.status === 'MEDIUM' ? 'bg-amber-500/15 text-amber-300 ring-amber-500/40' :
-    'bg-rose-500/15 text-rose-300 ring-rose-500/40';
+    r.status === 'READY' ? 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/40' :
+    r.status === 'MEDIUM' ? 'bg-amber-500/25 text-amber-300 ring-amber-500/40' :
+    'bg-rose-500/25 text-rose-300 ring-rose-500/40';
   const labelKo =
     r.status === 'READY' ? '알고리즘 연동 준비 완료' :
     r.status === 'MEDIUM' ? '데이터 수집 중 (중간 단계)' :
@@ -488,8 +488,8 @@ function TopTracksTable({
                 <td className="px-2 py-1.5 font-semibold">{r.title ?? '(제목없음)'}</td>
                 <td className="px-2 py-1.5 text-ink-mute">{r.artist ?? '—'}</td>
                 <td className="px-2 py-1.5 text-ink-mute">{r.genre ?? '—'}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-400">{r.like_count}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-amber-400">{r.dislike_count}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-300">{r.like_count}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-amber-300">{r.dislike_count}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">
                   {mode === 'like'
                     ? (r.like_ratio != null ? `${r.like_ratio}%` : '—')
@@ -592,8 +592,8 @@ function StoreTypeTable({ rows }: { rows: StoreLearningDashboard['storeTypes'] }
             {rows.map((r) => (
               <tr key={r.store_type} className="border-t border-line/5">
                 <td className="px-2 py-1.5 font-semibold">{r.store_type}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-400">{r.likes}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-amber-400">{r.dislikes}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-300">{r.likes}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-amber-300">{r.dislikes}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">
                   {r.like_ratio != null ? `${r.like_ratio}%` : '—'}
                 </td>
@@ -632,8 +632,8 @@ function GenreTable({ rows }: { rows: StoreLearningDashboard['genres'] }) {
             {rows.map((r) => (
               <tr key={r.genre} className="border-t border-line/5">
                 <td className="px-2 py-1.5 font-semibold">{r.genre}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-400">{r.likes}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-amber-400">{r.dislikes}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-300">{r.likes}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-amber-300">{r.dislikes}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">
                   {r.like_ratio != null ? `${r.like_ratio}%` : '—'}
                 </td>

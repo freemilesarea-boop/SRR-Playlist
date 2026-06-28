@@ -164,7 +164,7 @@ export default function EventQualityTab() {
                     .slice(0, 12)
                     .map(([k, v]) => (
                       <li key={k} className="flex justify-between rounded bg-bg-deep px-2 py-1">
-                        <span className={k === '(null)' ? 'text-rose-400' : ''}>{k}</span>
+                        <span className={k === '(null)' ? 'text-rose-300' : ''}>{k}</span>
                         <span className="font-bold tabular-nums">{v}</span>
                       </li>
                     ))}
@@ -173,7 +173,7 @@ export default function EventQualityTab() {
                 <p className="text-xs text-ink-dim">데이터 없음.</p>
               )}
               {summary.null_store_slug_pct != null && summary.null_store_slug_pct > 0 && (
-                <p className="mt-2 text-[11px] text-amber-500">
+                <p className="mt-2 text-[11px] text-amber-300">
                   ⚠️ store_type_slug null: {summary.null_store_slug_pct}%
                 </p>
               )}
@@ -184,25 +184,25 @@ export default function EventQualityTab() {
               <ul className="space-y-1.5 text-xs">
                 <li className="flex justify-between rounded bg-bg-deep px-2 py-1">
                   <span>muted 재생</span>
-                  <span className={summary.muted_events > 0 ? 'font-bold text-amber-500' : 'text-ink-mute'}>
+                  <span className={summary.muted_events > 0 ? 'font-bold text-amber-300' : 'text-ink-mute'}>
                     {summary.muted_events}
                   </span>
                 </li>
                 <li className="flex justify-between rounded bg-bg-deep px-2 py-1">
                   <span>volume_low 재생</span>
-                  <span className={summary.volume_low_events > 0 ? 'font-bold text-amber-500' : 'text-ink-mute'}>
+                  <span className={summary.volume_low_events > 0 ? 'font-bold text-amber-300' : 'text-ink-mute'}>
                     {summary.volume_low_events}
                   </span>
                 </li>
                 <li className="flex justify-between rounded bg-bg-deep px-2 py-1">
                   <span>track_duration_seconds null</span>
-                  <span className={(summary.null_duration_pct ?? 0) > 10 ? 'font-bold text-rose-500' : 'text-ink-mute'}>
+                  <span className={(summary.null_duration_pct ?? 0) > 10 ? 'font-bold text-rose-300' : 'text-ink-mute'}>
                     {summary.null_duration_pct ?? 0}%
                   </span>
                 </li>
                 <li className="flex justify-between rounded bg-bg-deep px-2 py-1">
                   <span>store_type_slug null</span>
-                  <span className={(summary.null_store_slug_pct ?? 0) > 10 ? 'font-bold text-rose-500' : 'text-ink-mute'}>
+                  <span className={(summary.null_store_slug_pct ?? 0) > 10 ? 'font-bold text-rose-300' : 'text-ink-mute'}>
                     {summary.null_store_slug_pct ?? 0}%
                   </span>
                 </li>
@@ -214,7 +214,7 @@ export default function EventQualityTab() {
 
       <div className="rounded-xl bg-bg-card p-3">
         <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
-          <AlertTriangle size={12} className="text-amber-500" />
+          <AlertTriangle size={12} className="text-amber-300" />
           이벤트 품질 이슈 ({issues.length})
         </h4>
         {issues.length === 0 ? (
@@ -225,7 +225,7 @@ export default function EventQualityTab() {
               {Object.entries(issuesByType)
                 .sort((a, b) => b[1] - a[1])
                 .map(([k, v]) => (
-                  <span key={k} className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">
+                  <span key={k} className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">
                     {ISSUE_LABEL[k] ?? k}: {v}
                   </span>
                 ))}
@@ -247,7 +247,7 @@ export default function EventQualityTab() {
                   {issues.map((i) => (
                     <tr key={i.event_id} className="border-b border-line/10">
                       <td className="px-2 py-1">
-                        <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-500">
+                        <span className="rounded bg-amber-500/25 px-1.5 font-bold text-amber-300">
                           {ISSUE_LABEL[i.issue_type] ?? i.issue_type}
                         </span>
                       </td>
@@ -274,7 +274,7 @@ export default function EventQualityTab() {
       {/* X4.3.1 — player_error 상세 리스트 */}
       <div className="rounded-xl bg-bg-card p-3">
         <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
-          <AlertTriangle size={12} className="text-rose-500" />
+          <AlertTriangle size={12} className="text-rose-300" />
           player_error 최근 목록 ({errors.length})
         </h4>
         {errors.length === 0 ? (
@@ -305,7 +305,7 @@ export default function EventQualityTab() {
                       {e.device_type ?? '—'} · {e.browser ?? '—'} · {e.os ?? '—'}
                     </td>
                     <td className="px-2 py-1">
-                      <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-500">
+                      <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
                         {(e.evidence_json as { code_name?: string })?.code_name ?? '?'}
                       </span>
                     </td>
@@ -349,7 +349,7 @@ export default function EventQualityTab() {
               </div>
               <div className="rounded bg-bg-deep p-2">
                 <div className="text-[10px] text-ink-dim">both</div>
-                <div className="text-xl font-bold text-emerald-500">{dualSummary.both_rows}</div>
+                <div className="text-xl font-bold text-emerald-300">{dualSummary.both_rows}</div>
               </div>
               <div className="rounded bg-bg-deep p-2">
                 <div className="text-[10px] text-ink-dim">avg |score Δ|</div>
@@ -357,10 +357,10 @@ export default function EventQualityTab() {
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-              {dualSummary.drift_high_count > 0 && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-bold text-rose-500">score Δ≥10: {dualSummary.drift_high_count}</span>}
-              {dualSummary.completion_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">완료 Δ≥0.2: {dualSummary.completion_drift_count}</span>}
-              {dualSummary.skip_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">skip Δ≥0.2: {dualSummary.skip_drift_count}</span>}
-              {dualSummary.play_count_drift_count > 0 && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-amber-500">plays Δ≥30%: {dualSummary.play_count_drift_count}</span>}
+              {dualSummary.drift_high_count > 0 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 font-bold text-rose-300">score Δ≥10: {dualSummary.drift_high_count}</span>}
+              {dualSummary.completion_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">완료 Δ≥0.2: {dualSummary.completion_drift_count}</span>}
+              {dualSummary.skip_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">skip Δ≥0.2: {dualSummary.skip_drift_count}</span>}
+              {dualSummary.play_count_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">plays Δ≥30%: {dualSummary.play_count_drift_count}</span>}
               {dualSummary.v2_missing_count > 0 && <span className="rounded bg-gray-500/15 px-1.5 py-0.5 font-bold text-gray-400">v2 missing: {dualSummary.v2_missing_count}</span>}
               {dualSummary.v1_missing_count > 0 && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 font-bold text-blue-500">v1 missing: {dualSummary.v1_missing_count}</span>}
             </div>
@@ -405,14 +405,14 @@ export default function EventQualityTab() {
                     <td className="px-2 py-1 text-right tabular-nums text-ink-mute">{r.v1_behavior_score.toFixed(1)}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{r.v2_behavior_score.toFixed(1)}</td>
                     <td className="px-2 py-1 text-right tabular-nums">
-                      <span className={Math.abs(r.score_delta) >= 10 ? 'font-bold text-rose-500' : ''}>
+                      <span className={Math.abs(r.score_delta) >= 10 ? 'font-bold text-rose-300' : ''}>
                         {r.score_delta > 0 ? '+' : ''}{r.score_delta.toFixed(1)}
                       </span>
                     </td>
                     <td className="px-2 py-1">
                       <div className="flex flex-wrap gap-1">
                         {r.issue_flags.map((f) => (
-                          <span key={f} className={`rounded px-1 text-[10px] font-bold ${f.includes('missing') ? 'bg-gray-500/20 text-gray-400' : 'bg-amber-500/15 text-amber-500'}`}>
+                          <span key={f} className={`rounded px-1 text-[10px] font-bold ${f.includes('missing') ? 'bg-gray-500/20 text-gray-400' : 'bg-amber-500/25 text-amber-300'}`}>
                             {f}
                           </span>
                         ))}

@@ -145,8 +145,8 @@ function Kpi({ label, value, icon, tone = 'text-ink' }: { label: string; value: 
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const cls = status === 'active' ? 'bg-emerald-500/15 text-emerald-300'
-    : status === 'inactive' ? 'bg-amber-500/15 text-amber-300'
+  const cls = status === 'active' ? 'bg-emerald-500/25 text-emerald-300'
+    : status === 'inactive' ? 'bg-amber-500/25 text-amber-300'
     : 'bg-ink/15 text-ink-mute';
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>{status}</span>;
 }

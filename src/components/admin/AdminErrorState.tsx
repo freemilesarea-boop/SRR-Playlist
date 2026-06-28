@@ -45,14 +45,14 @@ function MigrationMissing({
   }
 
   return (
-    <div className="space-y-4 rounded-2xl bg-amber-100 p-6 ring-1 ring-amber-400/40 dark:bg-amber-500/10 dark:ring-amber-400/30">
+    <div className="space-y-4 rounded-2xl bg-amber-100 p-6 ring-1 ring-amber-400/40 dark:bg-amber-500/20 dark:ring-amber-400/50">
       <div className="flex items-start gap-3">
-        <Database size={20} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300" />
+        <Database size={20} className="mt-0.5 shrink-0 text-amber-200 dark:text-amber-300" />
         <div>
-          <h3 className="text-base font-bold text-amber-900 dark:text-amber-100">
+          <h3 className="text-base font-bold text-amber-200 dark:text-amber-100">
             분석 DB 객체가 아직 적용되지 않았어요
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-amber-900/80 dark:text-ink-mute">
+          <p className="mt-1 text-xs leading-relaxed text-amber-200/80 dark:text-ink-mute">
             <code className="rounded bg-bg-soft px-1 py-0.5 font-mono text-[11px]">
               0002_analytics.sql
             </code>{' '}
@@ -76,24 +76,24 @@ function MigrationMissing({
         <div
           className={`rounded-xl p-3 ring-1 ${
             result.ok
-              ? 'bg-emerald-100 ring-emerald-400/40 dark:bg-emerald-500/10 dark:ring-emerald-500/30'
-              : 'bg-red-100 ring-red-400/40 dark:bg-red-500/10 dark:ring-red-500/30'
+              ? 'bg-emerald-100 ring-emerald-400/40 dark:bg-emerald-500/20 dark:ring-emerald-500/50'
+              : 'bg-red-100 ring-red-400/40 dark:bg-rose-500/20 dark:ring-rose-500/50'
           }`}
         >
           {result.ok ? (
             <div className="space-y-1 text-xs">
-              <p className="flex items-center gap-1 font-bold text-emerald-900 dark:text-emerald-200">
+              <p className="flex items-center gap-1 font-bold text-emerald-200 dark:text-emerald-200">
                 <CheckCircle2 size={14} /> 분석 DB 적용 완료
               </p>
-              <p className="text-emerald-900/80 dark:text-emerald-100/85">{result.message}</p>
+              <p className="text-emerald-200/80 dark:text-emerald-100/85">{result.message}</p>
               {(result.created_tables?.length ?? 0) > 0 && (
-                <p className="text-emerald-900/70 dark:text-ink-mute">
+                <p className="text-emerald-200/70 dark:text-ink-mute">
                   생성 테이블:{' '}
                   <code className="font-mono">{result.created_tables!.join(', ')}</code>
                 </p>
               )}
               {(result.created_functions?.length ?? 0) > 0 && (
-                <p className="text-emerald-900/70 dark:text-ink-mute">
+                <p className="text-emerald-200/70 dark:text-ink-mute">
                   생성 RPC:{' '}
                   <code className="font-mono">{result.created_functions!.join(', ')}</code>
                 </p>
@@ -101,15 +101,15 @@ function MigrationMissing({
             </div>
           ) : (
             <div className="space-y-1 text-xs">
-              <p className="font-bold text-red-900 dark:text-red-200">자동 적용 실패</p>
-              <p className="font-mono text-red-800 dark:text-red-300">{result.error}</p>
+              <p className="font-bold text-rose-200 dark:text-red-200">자동 적용 실패</p>
+              <p className="font-mono text-rose-200 dark:text-red-300">{result.error}</p>
               {result.details && (
-                <pre className="overflow-x-auto rounded bg-bg-deep/60 p-2 text-[10px] text-red-800/85 dark:text-red-300/85">
+                <pre className="overflow-x-auto rounded bg-bg-deep/60 p-2 text-[10px] text-rose-200/85 dark:text-red-300/85">
                   {result.details}
                 </pre>
               )}
               {result.hint && (
-                <p className="rounded bg-amber-200/70 p-2 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+                <p className="rounded bg-amber-200/70 p-2 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200">
                   💡 {result.hint}
                 </p>
               )}
@@ -166,12 +166,12 @@ function MigrationMissing({
 
 function PermissionError({ message }: { message: string }) {
   return (
-    <div className="space-y-2 rounded-2xl bg-red-100 p-6 ring-1 ring-red-400/40 dark:bg-red-500/10 dark:ring-red-400/30">
+    <div className="space-y-2 rounded-2xl bg-red-100 p-6 ring-1 ring-red-400/40 dark:bg-rose-500/20 dark:ring-rose-400/50">
       <div className="flex items-start gap-3">
-        <ShieldOff size={20} className="mt-0.5 shrink-0 text-red-700 dark:text-red-300" />
+        <ShieldOff size={20} className="mt-0.5 shrink-0 text-rose-200 dark:text-red-300" />
         <div>
-          <h3 className="text-base font-bold text-red-900 dark:text-red-200">권한이 없어요</h3>
-          <p className="mt-1 text-xs leading-relaxed text-red-900/80 dark:text-ink-mute">
+          <h3 className="text-base font-bold text-rose-200 dark:text-red-200">권한이 없어요</h3>
+          <p className="mt-1 text-xs leading-relaxed text-rose-200/80 dark:text-ink-mute">
             현재 계정에 admin 권한이 없어요. SQL Editor 에서 본인 user 의 role 을 admin 으로
             변경해주세요 — README.md "관리자 계정 설정" 섹션.
           </p>

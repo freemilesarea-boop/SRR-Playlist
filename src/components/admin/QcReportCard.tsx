@@ -44,7 +44,7 @@ export default function QcReportCard({ trackId }: { trackId: string }) {
 
   if (analysisFailed) {
     return (
-      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/20">
+      <div className="rounded-2xl bg-rose-500/5 p-4 ring-1 ring-rose-500/50">
         <div className="flex items-center gap-2 text-xs text-rose-300">
           <AlertTriangle size={14} />
           <span>
@@ -122,7 +122,7 @@ export default function QcReportCard({ trackId }: { trackId: string }) {
       {report.issues_json && report.issues_json.length > 0 && (
         <div className="rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
           <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
-            <AlertTriangle size={11} className="text-amber-400" />
+            <AlertTriangle size={11} className="text-amber-300" />
             발견된 문제 {report.issues_json.length}개
           </div>
           <ul className="space-y-1">
@@ -151,7 +151,7 @@ function Metric({
   warn?: boolean;
 }) {
   return (
-    <div className={`rounded-lg bg-bg-soft px-3 py-2 ring-1 ${warn ? 'ring-rose-500/30' : 'ring-line/10'}`}>
+    <div className={`rounded-lg bg-bg-soft px-3 py-2 ring-1 ${warn ? 'ring-rose-500/50' : 'ring-line/10'}`}>
       <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-ink-dim">
         {icon}
         {label}

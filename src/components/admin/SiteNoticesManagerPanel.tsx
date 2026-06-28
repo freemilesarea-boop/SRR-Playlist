@@ -158,13 +158,13 @@ export default function SiteNoticesManagerPanel() {
           <ul className="space-y-2">
             {list.map((n) => (
               <li key={n.id} className={`rounded-xl bg-bg-soft p-3 ring-1 ${
-                n.is_active ? 'ring-emerald-500/20' : 'ring-line/10 opacity-70'
+                n.is_active ? 'ring-emerald-500/50' : 'ring-line/10 opacity-70'
               }`}>
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 text-sm font-semibold">
                       {n.is_active ? (
-                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">ON</span>
+                        <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">ON</span>
                       ) : (
                         <span className="rounded-full bg-bg-card px-1.5 py-0.5 text-[10px] font-bold text-ink-dim">OFF</span>
                       )}
@@ -175,7 +175,7 @@ export default function SiteNoticesManagerPanel() {
                       <span className="rounded bg-bg-card px-1.5 py-0.5">{AUDIENCE_LABELS[n.audience]}</span>
                       <span className="rounded bg-bg-card px-1.5 py-0.5">{LOCATION_LABELS[n.display_location]}</span>
                       <span className="rounded bg-bg-card px-1.5 py-0.5">우선순위 {n.priority}</span>
-                      {!n.dismissible && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300">닫기불가</span>}
+                      {!n.dismissible && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">닫기불가</span>}
                       {n.starts_at && <span>시작 {new Date(n.starts_at).toLocaleString()}</span>}
                       {n.ends_at && <span>종료 {new Date(n.ends_at).toLocaleString()}</span>}
                     </p>
@@ -196,7 +196,7 @@ export default function SiteNoticesManagerPanel() {
                     </button>
                     <button
                       onClick={() => remove(n)}
-                      className="rounded-md px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10"
+                      className="rounded-md px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/20"
                     >
                       <Trash2 size={12} />
                     </button>

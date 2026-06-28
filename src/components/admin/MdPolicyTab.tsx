@@ -32,9 +32,9 @@ const STATUS_LABEL: Record<Exclude<StatusFilter, ''>, string> = {
 };
 
 const STATUS_TONE: Record<Exclude<StatusFilter, ''>, string> = {
-  review_needed: 'bg-amber-500/15 text-amber-500',
-  excluded: 'bg-rose-500/15 text-rose-500',
-  active: 'bg-emerald-500/15 text-emerald-500',
+  review_needed: 'bg-amber-500/25 text-amber-300',
+  excluded: 'bg-rose-500/25 text-rose-300',
+  active: 'bg-emerald-500/25 text-emerald-300',
   no_fit: 'bg-ink/5 text-ink-dim',
 };
 
@@ -173,15 +173,15 @@ export default function MdPolicyTab() {
               <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
             </button>
             <button onClick={() => void reDryRun()} disabled={busy}
-              className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-1 font-bold text-amber-500 hover:bg-amber-500/25 disabled:opacity-50">
+              className="inline-flex items-center gap-1 rounded bg-amber-500/25 px-2 py-1 font-bold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50">
               <FlaskConical size={11} /> dry_run 재검사
             </button>
           </div>
         </div>
         <p className="mt-1 text-[11px] text-ink-dim">
           MD 시드 정책(195 규칙 × 20 매장) 기반 매장별 허용 장르/보컬 검증.
-          <b className="ml-1 text-amber-500">review_needed</b> 마킹 시 사업자 재생 큐에서 자동 숨김 (0274).
-          <b className="ml-1 text-rose-500">excluded</b> 보호 유지. <b>승인</b> = active 복구, <b>제거</b> = 플리에서 soft delete.
+          <b className="ml-1 text-amber-300">review_needed</b> 마킹 시 사업자 재생 큐에서 자동 숨김 (0274).
+          <b className="ml-1 text-rose-300">excluded</b> 보호 유지. <b>승인</b> = active 복구, <b>제거</b> = 플리에서 soft delete.
         </p>
       </div>
 
@@ -195,18 +195,18 @@ export default function MdPolicyTab() {
       )}
 
       {lastDryRun && (
-        <div className="rounded-xl bg-bg-card p-3 text-xs ring-1 ring-amber-500/20">
+        <div className="rounded-xl bg-bg-card p-3 text-xs ring-1 ring-amber-500/50">
           <div className="mb-2 flex items-center gap-2 font-bold">
-            <FlaskConical size={12} className="text-amber-500" />
+            <FlaskConical size={12} className="text-amber-300" />
             마지막 {lastDryRun.dry_run ? 'dry_run' : '적용'} 결과
           </div>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             <KV label="scanned" v={lastDryRun.total_playlist_tracks_scanned} />
             <KV label="with_policy" v={lastDryRun.with_policy_defined} />
-            <KV label="violations" v={lastDryRun.violations} tone="text-rose-500" />
+            <KV label="violations" v={lastDryRun.violations} tone="text-rose-300" />
             <KV label="admin_protected" v={lastDryRun.admin_overrides_protected} />
-            <KV label="excluded_protected" v={lastDryRun.excluded_protected} tone="text-rose-500" />
-            <KV label="marked" v={lastDryRun.marked_review_needed} tone="text-amber-500" />
+            <KV label="excluded_protected" v={lastDryRun.excluded_protected} tone="text-rose-300" />
+            <KV label="marked" v={lastDryRun.marked_review_needed} tone="text-amber-300" />
           </div>
           <p className="mt-1 text-[10px] text-ink-dim">{lastDryRun.note}</p>
         </div>
@@ -259,11 +259,11 @@ export default function MdPolicyTab() {
                     {!storeFilter && <span className="font-mono text-ink-dim">{r.store_type}</span>}
                     <span className="font-bold">{r.genre}</span>
                     {r.vocal_policy === 'vocal'
-                      ? <Mic size={10} className="text-sky-400" />
+                      ? <Mic size={10} className="text-sky-300" />
                       : <MicOff size={10} className="text-violet-400" />}
                   </span>
                   {r.priority === 10 && (
-                    <span className="rounded bg-rose-500/15 px-1 py-0.5 text-[9px] font-bold text-rose-500">strict</span>
+                    <span className="rounded bg-rose-500/25 px-1 py-0.5 text-[9px] font-bold text-rose-300">strict</span>
                   )}
                 </li>
               ))}
@@ -273,7 +273,7 @@ export default function MdPolicyTab() {
 
         <div className="rounded-xl bg-bg-card p-3">
           <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
-            <AlertTriangle size={11} className="text-amber-500" /> 위반 곡
+            <AlertTriangle size={11} className="text-amber-300" /> 위반 곡
             <span className="text-ink-dim font-normal">({filteredViolations.length}/{violations.length})</span>
           </h4>
           {filteredViolations.length === 0 ? (
@@ -324,7 +324,7 @@ export default function MdPolicyTab() {
                             <span className="font-mono">{v.main_genre ?? '—'}</span>
                             {v.instrumental
                               ? <MicOff size={9} className="text-violet-400" />
-                              : <Mic size={9} className="text-sky-400" />}
+                              : <Mic size={9} className="text-sky-300" />}
                           </span>
                         </td>
                         <td className="px-1.5 py-1 font-mono">{v.store_slug ?? '—'}</td>
@@ -335,20 +335,20 @@ export default function MdPolicyTab() {
                         </td>
                         <td className="px-1.5 py-1 text-right tabular-nums">
                           {v.fit_score != null ? v.fit_score : '—'}
-                          {v.fit_source === 'admin' && <Lock size={9} className="ml-0.5 inline text-amber-500" />}
+                          {v.fit_source === 'admin' && <Lock size={9} className="ml-0.5 inline text-amber-300" />}
                         </td>
                         <td className="px-1.5 py-1 text-right">
                           <div className="inline-flex gap-1">
                             <button onClick={() => void approveActive(v)}
                               disabled={acting || isExcluded || st === 'active'}
                               title={isExcluded ? 'excluded 보호 — 변경 불가' : 'active 로 복구 (재생 노출)'}
-                              className="inline-flex items-center gap-0.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500 hover:bg-emerald-500/25 disabled:opacity-30">
+                              className="inline-flex items-center gap-0.5 rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-30">
                               <CheckCircle2 size={10} /> 승인
                             </button>
                             <button onClick={() => void removeFromPlaylist(v)}
                               disabled={acting}
                               title="플레이리스트에서 제거 (soft delete)"
-                              className="inline-flex items-center gap-0.5 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-500/25 disabled:opacity-30">
+                              className="inline-flex items-center gap-0.5 rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/25 disabled:opacity-30">
                               <Trash2 size={10} /> 제거
                             </button>
                           </div>
@@ -364,11 +364,11 @@ export default function MdPolicyTab() {
       </div>
 
       <details className="rounded-xl bg-bg-card p-3 text-xs">
-        <summary className="cursor-pointer font-bold text-rose-500">
+        <summary className="cursor-pointer font-bold text-rose-300">
           위험: 실제 적용 (p_dry_run=false)
         </summary>
         <div className="mt-2 space-y-2">
-          <p className="rounded bg-rose-500/10 p-2 text-[11px] text-rose-500">
+          <p className="rounded bg-rose-500/20 p-2 text-[11px] text-rose-300">
             <b>주의:</b> p_dry_run=false 는 이미 실행되었습니다. 다시 실행하면 중복 마킹/예상치 못한 상태 변경이 발생할 수 있습니다.
             excluded 13건과 admin 오버라이드는 보호되지만, 신규 위반 곡이 review_needed 로 추가 마킹됩니다.
             <br />
@@ -376,7 +376,7 @@ export default function MdPolicyTab() {
           </p>
           {!showApplyConfirm ? (
             <button onClick={() => setShowApplyConfirm(true)}
-              className="rounded bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-500 hover:bg-rose-500/30">
+              className="rounded bg-rose-500/20 px-3 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-500/30">
               실제 적용 단계 열기
             </button>
           ) : (
