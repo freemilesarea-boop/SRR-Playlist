@@ -1,18 +1,23 @@
 /**
- * StoreMonitoringPanel — Enterprise Phase 1-3.
+ * StoreMonitoringPanel — Enterprise Phase 1-3 v2 (Central Monitoring NOC).
  *
  * 매장 운영 관제 UI (super admin only).
- * - KPI 8개 카드 (전체/정상/경고/오프라인/정책미동기화/재생오류/음량오류/업데이트 필요)
- * - 검색 + 본사/지역/상태 필터 + 페이지네이션
+ * - 상태 우선순위 single representative (Playback Error > Device > Policy > Update > Offline > 24h > 1h > Normal)
+ * - KPI 6: 전체/정상/경고/오류/오프라인/정책 미동기화
+ * - 컬럼: 매장/지역/기업/상태/heartbeat/정책/version/device/오류/접속/액션
+ * - 필터: 기업/지역/상태/버전(client)/검색
+ * - 행 클릭 → AdminModal (정보/Heartbeat/오류/정책/Device)
  * - 15s 자동 새로고침
- * - Desktop table + Mobile cards
- * - 상태 badge (계산식 기반, 우선순위 적용)
- * - 액션: 지역 매핑, 강제 재동기화
+ * - DS primitives 적용
+ *
+ * 무변경: heartbeat 저장 / 정책 적용 / store player / DB 계산식
+ * SQL: 0353/0354/0355 (Phase 1-3 v1) — 모든 view/RPC 그대로
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  RefreshCw, Search, AlertCircle, Activity, Wifi, WifiOff,
-  Battery, Volume2, Music, Building2, MapPin, RotateCcw, Link as LinkIcon, X,
+  RefreshCw, Activity, AlertTriangle, Wifi, WifiOff, Music,
+  MapPin, RotateCcw, Link as LinkIcon, Battery, Volume2, Clock,
+  Smartphone, ShieldAlert, Cpu, AlertCircle,
 } from 'lucide-react';
 import {
   adminStoreMonitoringKpi,
@@ -28,21 +33,83 @@ import {
   listEnterpriseRegions, type EnterpriseRegion,
 } from '@/lib/api/enterpriseRegionsApi';
 import { toast } from '@/store/toastStore';
+import {
+  AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge,
+  AdminButton, AdminEmpty, AdminSkeleton, AdminAlert, AdminModal,
+  AdminTooltip,
+  type AdminToneName,
+} from '@/components/admin/ui';
+import { adminTypography } from '@/lib/adminTypography';
 
 const PAGE_SIZE = 25;
 const AUTO_REFRESH_MS = 15_000;
 
 const STATUS_FILTERS: ReadonlyArray<{ value: StoreMonitoringStatusFilter; label: string }> = [
-  { value: 'online', label: '정상' },
-  { value: 'idle_1h', label: '1시간 미접속' },
-  { value: 'idle_24h', label: '24시간 미접속' },
-  { value: 'offline', label: '오프라인 (24h+)' },
+  { value: 'online',          label: '정상' },
+  { value: 'idle_1h',         label: '1시간 미접속' },
+  { value: 'idle_24h',        label: '24시간 미접속' },
+  { value: 'offline',         label: '오프라인 (24h+)' },
   { value: 'policy_outdated', label: '정책 미동기화' },
-  { value: 'playback_error', label: '재생 오류' },
-  { value: 'volume_error', label: '음량 오류' },
-  { value: 'device_missing', label: '기기 미연결' },
+  { value: 'playback_error',  label: '재생 오류' },
+  { value: 'volume_error',    label: '음량 오류' },
+  { value: 'device_missing',  label: '기기 미연결' },
   { value: 'update_required', label: '업데이트 필요' },
 ];
+
+// === 대표 상태 계산 (single representative, 우선순위 순) ===
+type RepresentativeStatus =
+  | 'playback_error' | 'device_missing' | 'policy_outdated' | 'update_required'
+  | 'offline_24h'    | 'idle_24h'       | 'idle_1h'         | 'normal'
+  | 'unknown';
+
+function representativeStatus(r: StoreMonitoringRow): RepresentativeStatus {
+  if (r.has_playback_error) return 'playback_error';
+  if (r.has_device_missing) return 'device_missing';
+  if (r.has_policy_outdated) return 'policy_outdated';
+  if (r.has_update_required) return 'update_required';
+  if (r.is_offline_24h)      return 'offline_24h';
+  if (r.is_idle_1h_to_24h)   return 'idle_24h';
+  if (r.is_idle_5m_to_1h)    return 'idle_1h';
+  if (r.is_online)           return 'normal';
+  return 'unknown';
+}
+
+const STATUS_META: Record<RepresentativeStatus, { tone: AdminToneName; label: string; icon: React.ReactNode }> = {
+  playback_error:  { tone: 'danger',  label: '재생 오류',    icon: <AlertTriangle size={10} /> },
+  device_missing:  { tone: 'neutral', label: '기기 미연결',  icon: <Smartphone size={10} /> },
+  policy_outdated: { tone: 'info',    label: '정책 미동기화', icon: <ShieldAlert size={10} /> },
+  update_required: { tone: 'primary', label: '업데이트 필요', icon: <RotateCcw size={10} /> },
+  offline_24h:     { tone: 'danger',  label: 'OFFLINE',     icon: <WifiOff size={10} /> },
+  idle_24h:        { tone: 'warning', label: '24h 미접속',   icon: <Clock size={10} /> },
+  idle_1h:         { tone: 'warning', label: '1h 미접속',    icon: <Clock size={10} /> },
+  normal:          { tone: 'success', label: '정상',         icon: <Wifi size={10} /> },
+  unknown:         { tone: 'neutral', label: 'UNKNOWN',      icon: <AlertCircle size={10} /> },
+};
+
+function StatusBadge({ row }: { row: StoreMonitoringRow }) {
+  const s = representativeStatus(row);
+  const m = STATUS_META[s];
+  return <AdminBadge tone={m.tone} icon={m.icon}>{m.label}</AdminBadge>;
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso).getTime();
+  if (Number.isNaN(d)) return '—';
+  const ms = Date.now() - d;
+  const m = Math.floor(ms / 60000);
+  if (m < 1)    return '방금';
+  if (m < 60)   return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24)   return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
+
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('ko-KR');
+}
+
 
 export default function StoreMonitoringPanel() {
   const [rows, setRows] = useState<StoreMonitoringRow[]>([]);
@@ -56,9 +123,11 @@ export default function StoreMonitoringPanel() {
   const [statusFilter, setStatusFilter] = useState<StoreMonitoringStatusFilter | ''>('');
   const [franchiseFilter, setFranchiseFilter] = useState('');
   const [regionFilter, setRegionFilter] = useState('');
+  const [versionFilter, setVersionFilter] = useState(''); // client-side
   const [offset, setOffset] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [assignTarget, setAssignTarget] = useState<StoreMonitoringRow | null>(null);
+  const [detailTarget, setDetailTarget] = useState<StoreMonitoringRow | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -86,196 +155,215 @@ export default function StoreMonitoringPanel() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Auto refresh — 15s
+  // Auto refresh — 15s (silent)
   useEffect(() => {
-    const id = window.setInterval(() => void load(true), AUTO_REFRESH_MS);
-    return () => window.clearInterval(id);
+    const t = setInterval(() => void load(true), AUTO_REFRESH_MS);
+    return () => clearInterval(t);
   }, [load]);
 
-  // Load filters data (franchises + regions)
+  // 옵션 로드 (한 번)
   useEffect(() => {
-    void adminListFranchises().then(setFranchises).catch((e) => console.warn('[StoreMonitoring] franchises load failed', e));
-    void listEnterpriseRegions({ limit: 200 }).then((r) => setRegions(r.data)).catch((e) => console.warn('[StoreMonitoring] regions load failed', e));
+    let alive = true;
+    Promise.all([
+      adminListFranchises().catch(() => [] as FranchiseListRow[]),
+      listEnterpriseRegions({ limit: 200, offset: 0 }).catch(() => ({ data: [] as EnterpriseRegion[] })),
+    ]).then(([f, r]) => {
+      if (!alive) return;
+      setFranchises(Array.isArray(f) ? f : []);
+      setRegions('data' in r ? r.data : []);
+    });
+    return () => { alive = false; };
   }, []);
 
-  const handleForceResync = async (storeId: string) => {
-    setBusyId(storeId);
+  const handleForceResync = async (r: StoreMonitoringRow) => {
+    setBusyId(r.id);
     try {
-      await adminForceStoreResync(storeId);
-      toast.success('다음 폴링에서 강제 재동기화됩니다');
+      await adminForceStoreResync(r.store_id);
+      toast.success('강제 재동기화 신호 전송');
       await load();
     } catch (e) { toast.error(`재동기화 실패: ${(e as Error).message}`); }
     finally { setBusyId(null); }
   };
 
-  const handleAssignRegion = async (storeId: string, regionId: string | null) => {
-    setBusyId(storeId);
-    try {
-      await adminAssignStoreToEnterpriseRegion(storeId, regionId);
-      toast.success(regionId ? '지역에 매핑되었습니다' : '지역 매핑이 해제되었습니다');
-      setAssignTarget(null);
-      await load();
-    } catch (e) { toast.error(`매핑 실패: ${(e as Error).message}`); }
-    finally { setBusyId(null); }
-  };
+  // client-side version 필터
+  const filteredRows = useMemo(() => {
+    if (!versionFilter.trim()) return rows;
+    const v = versionFilter.trim().toLowerCase();
+    return rows.filter((r) =>
+      (r.app_version ?? '').toLowerCase().includes(v)
+      || (r.last_player_version ?? '').toLowerCase().includes(v),
+    );
+  }, [rows, versionFilter]);
 
+  // KPI 6: 전체/정상/경고/오류/오프라인/정책 미동기화
   const kpiCards = useMemo(() => {
     if (!kpi) return null;
+    const warn = (kpi.idle_1h ?? 0) + (kpi.idle_24h ?? 0);
+    const err  = (kpi.playback_errors ?? 0) + (kpi.volume_errors ?? 0) + (kpi.device_missing ?? 0);
     return [
-      { label: '전체 매장', value: kpi.total, tone: 'text-ink', icon: <Activity size={12} /> },
-      { label: '정상', value: kpi.online, tone: 'text-emerald-300', icon: <Wifi size={12} /> },
-      { label: '경고 (1h)', value: kpi.idle_1h + kpi.idle_24h, tone: 'text-amber-300', icon: <Wifi size={12} /> },
-      { label: '오프라인 (24h+)', value: kpi.offline, tone: 'text-rose-300', icon: <WifiOff size={12} /> },
-      { label: '정책 미동기화', value: kpi.policy_outdated, tone: 'text-sky-300', icon: <RotateCcw size={12} /> },
-      { label: '재생 오류', value: kpi.playback_errors, tone: 'text-purple-300', icon: <AlertCircle size={12} /> },
-      { label: '음량 오류', value: kpi.volume_errors, tone: 'text-amber-300', icon: <Volume2 size={12} /> },
-      { label: '업데이트 필요', value: kpi.update_required, tone: 'text-fuchsia-300', icon: <RefreshCw size={12} /> },
+      { label: '전체',         value: kpi.total,           icon: <Activity size={14} />,     tone: 'neutral' as AdminToneName },
+      { label: '정상',         value: kpi.online,          icon: <Wifi size={14} />,         tone: 'success' as AdminToneName },
+      { label: '경고',         value: warn,                icon: <Clock size={14} />,        tone: warn > 0 ? 'warning' as AdminToneName : 'neutral' as AdminToneName },
+      { label: '오류',         value: err,                 icon: <AlertTriangle size={14} />, tone: err > 0 ? 'danger' as AdminToneName : 'neutral' as AdminToneName },
+      { label: '오프라인',     value: kpi.offline,         icon: <WifiOff size={14} />,      tone: kpi.offline > 0 ? 'danger' as AdminToneName : 'neutral' as AdminToneName },
+      { label: '정책 미동기화', value: kpi.policy_outdated, icon: <ShieldAlert size={14} />,  tone: kpi.policy_outdated > 0 ? 'info' as AdminToneName : 'neutral' as AdminToneName },
     ];
   }, [kpi]);
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl bg-bg-card p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold flex items-center gap-1.5">
-            <Activity size={14} /> 매장 상태 모니터링
-            <span className="text-[10px] font-normal text-ink-dim">(Enterprise Phase 1-3)</span>
-          </h3>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-[10px] text-ink-dim">15초마다 자동 새로고침</span>
-            <button onClick={() => void load()} disabled={loading}
-              className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover disabled:opacity-50">
-              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 새로고침
-            </button>
-          </div>
-        </div>
-        <p className="mt-1 text-[11px] text-ink-dim">
-          매장 플레이어가 60초마다 heartbeat 를 전송합니다. 5분 이내 정상, 5분~1시간 경고, 24시간+ 오프라인.
-        </p>
-      </div>
-
-      {/* KPI */}
-      {kpiCards && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
+    <AdminSection
+      title={<><Activity size={14} /> 매장 상태 (Central Monitoring)</>}
+      badge={<span className={adminTypography.hint}>(Phase 1-3 v2 · 15s 자동 새로고침)</span>}
+      description="매장별 heartbeat / 정책 / 기기 / 버전 / 오류 통합 관제. 행 클릭 시 상세 모달."
+      action={
+        <AdminButton tone="neutral" variant="subtle" size="sm"
+          leftIcon={<RefreshCw size={11} className={loading ? 'animate-spin' : ''} />}
+          onClick={() => void load()} disabled={loading}>
+          새로고침
+        </AdminButton>
+      }
+    >
+      {kpiCards ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
           {kpiCards.map((c) => (
-            <div key={c.label} className="rounded-lg bg-bg-card p-3 ring-1 ring-line/10">
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-dim">
-                {c.icon}{c.label}
-              </div>
-              <div className={`mt-1 text-lg font-extrabold tabular-nums ${c.tone}`}>{c.value}</div>
-            </div>
+            <AdminStatCard key={c.label} tone={c.tone} icon={c.icon} label={c.label}
+              value={c.value.toLocaleString('ko-KR')} />
           ))}
         </div>
-      )}
+      ) : <AdminSkeleton variant="kpi" />}
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-card p-3 text-xs">
-        <div className="relative">
-          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-dim" />
-          <input type="text" placeholder="매장명/본사/지역 검색"
-            value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }}
-            className="rounded bg-bg-deep pl-7 pr-2 py-1 w-56" />
-        </div>
-        <select value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value as StoreMonitoringStatusFilter | ''); setOffset(0); }}
-          className="rounded bg-bg-deep px-2 py-1">
-          <option value="">전체 상태</option>
-          {STATUS_FILTERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select value={franchiseFilter}
-          onChange={(e) => { setFranchiseFilter(e.target.value); setOffset(0); }}
-          className="rounded bg-bg-deep px-2 py-1">
-          <option value="">전체 본사</option>
-          {franchises.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
-        <select value={regionFilter}
-          onChange={(e) => { setRegionFilter(e.target.value); setOffset(0); }}
-          className="rounded bg-bg-deep px-2 py-1">
-          <option value="">전체 지역</option>
-          {regions.map((r) => <option key={r.id} value={r.id}>{r.region_name} ({r.region_code})</option>)}
-        </select>
-        <span className="ml-auto text-ink-dim">{total}개 (페이지 {Math.floor(offset / PAGE_SIZE) + 1})</span>
-      </div>
+      <AdminSearch
+        value={search}
+        onChange={(v) => { setSearch(v); setOffset(0); }}
+        placeholder="매장명/프랜차이즈/지역 검색"
+        filters={
+          <>
+            <select value={franchiseFilter}
+              onChange={(e) => { setFranchiseFilter(e.target.value); setOffset(0); }}
+              className="rounded bg-bg-deep px-2 py-1.5 text-xs"
+              aria-label="기업 필터"
+            >
+              <option value="">전체 기업</option>
+              {franchises.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+            <select value={regionFilter}
+              onChange={(e) => { setRegionFilter(e.target.value); setOffset(0); }}
+              className="rounded bg-bg-deep px-2 py-1.5 text-xs"
+              aria-label="지역 필터"
+            >
+              <option value="">전체 지역</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>{r.region_name}</option>
+              ))}
+            </select>
+            <select value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value as StoreMonitoringStatusFilter | ''); setOffset(0); }}
+              className="rounded bg-bg-deep px-2 py-1.5 text-xs"
+              aria-label="상태 필터"
+            >
+              <option value="">전체 상태</option>
+              {STATUS_FILTERS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+            <input type="text" value={versionFilter}
+              onChange={(e) => setVersionFilter(e.target.value)}
+              placeholder="버전 (예: 0.1)"
+              className="w-28 rounded bg-bg-deep px-2 py-1.5 text-xs font-mono"
+              aria-label="버전 필터"
+            />
+          </>
+        }
+        trailing={
+          (search || statusFilter || franchiseFilter || regionFilter || versionFilter) ? (
+            <AdminButton tone="neutral" variant="subtle" size="sm"
+              onClick={() => {
+                setSearch(''); setStatusFilter(''); setFranchiseFilter('');
+                setRegionFilter(''); setVersionFilter(''); setOffset(0);
+              }}>
+              초기화
+            </AdminButton>
+          ) : null
+        }
+      />
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
-          <AlertCircle size={12} /> {error}
-          <button onClick={() => void load()} className="ml-auto rounded bg-rose-500/30 px-2 py-0.5 font-bold">재시도</button>
-        </div>
+        <AdminAlert tone="danger" title="모니터링 로드 실패" description={error}
+          action={<AdminButton tone="danger" variant="subtle" size="sm" onClick={() => void load()}>재시도</AdminButton>} />
       )}
 
-      {/* Table / Cards */}
       {loading && rows.length === 0 ? (
-        <SkeletonRows />
-      ) : !loading && rows.length === 0 && !error ? (
-        <EmptyState />
+        <AdminSkeleton variant="table" rows={6} />
+      ) : filteredRows.length === 0 ? (
+        <AdminEmpty
+          icon={<Activity size={20} />}
+          title="조건에 맞는 매장이 없습니다"
+          description="필터를 조정하거나 새로고침을 시도하세요."
+        />
       ) : (
         <>
-          <div className="hidden md:block overflow-x-auto rounded-xl bg-bg-card">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
-                  <th className="px-3 py-2">매장</th>
-                  <th className="px-3 py-2">본사 / 지역</th>
-                  <th className="px-3 py-2">상태</th>
-                  <th className="px-3 py-2 text-right">접속</th>
-                  <th className="px-3 py-2 text-right">배터리</th>
-                  <th className="px-3 py-2 text-right">음량</th>
-                  <th className="px-3 py-2">버전</th>
-                  <th className="px-3 py-2">현재곡</th>
-                  <th className="px-3 py-2 text-right">정책 동기화</th>
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
+            <table className="w-full min-w-[1200px] text-xs">
+              <thead className="bg-bg-deep text-[10px] uppercase tracking-wider text-ink-dim">
+                <tr>
+                  <th className="px-3 py-2 text-left">매장</th>
+                  <th className="px-3 py-2 text-left">지역</th>
+                  <th className="px-3 py-2 text-left">기업</th>
+                  <th className="px-3 py-2 text-center">상태</th>
+                  <th className="px-3 py-2 text-left">heartbeat</th>
+                  <th className="px-3 py-2 text-left">정책</th>
+                  <th className="px-3 py-2 text-left">version</th>
+                  <th className="px-3 py-2 text-left">device</th>
+                  <th className="px-3 py-2 text-left">최근 오류</th>
                   <th className="px-3 py-2 text-right">액션</th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-line/5 hover:bg-bg-hover/30">
+              <tbody className="divide-y divide-line/10">
+                {filteredRows.map((r) => (
+                  <tr key={r.id}
+                    onClick={() => setDetailTarget(r)}
+                    className="cursor-pointer hover:bg-bg-hover/40">
                     <td className="px-3 py-2">
-                      <div className="font-semibold">{r.store_name}</div>
-                      <div className="text-[10px] text-ink-dim">{r.store_email ?? '—'}</div>
+                      <div className={adminTypography.bodyStrong}>{r.store_name}</div>
+                      {r.store_email && <div className={adminTypography.hint}>{r.store_email}</div>}
                     </td>
-                    <td className="px-3 py-2 text-[11px] text-ink-mute">
-                      {r.franchise_name && <div className="flex items-center gap-1"><Building2 size={10} />{r.franchise_name}</div>}
-                      {r.enterprise_region_name && <div className="flex items-center gap-1"><MapPin size={10} />{r.enterprise_region_name}</div>}
-                      {!r.franchise_name && !r.enterprise_region_name && '—'}
+                    <td className="px-3 py-2 text-ink-mute">
+                      {r.enterprise_region_name ?? '—'}
+                      {r.enterprise_region_code && <span className={`ml-1 font-mono ${adminTypography.hint}`}>{r.enterprise_region_code}</span>}
                     </td>
-                    <td className="px-3 py-2"><StatusBadge row={r} /></td>
-                    <td className="px-3 py-2 text-right text-[10px] tabular-nums text-ink-mute">
-                      {r.last_seen_at ? formatRelative(r.last_seen_at) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {r.battery_level != null ? (
-                        <span className={r.battery_level < 20 ? 'text-rose-300' : 'text-ink-mute'}>
-                          <Battery size={10} className="inline" /> {r.battery_level}%
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {r.volume != null ? (
-                        <span className={r.has_volume_error ? 'text-amber-300 font-bold' : 'text-ink-mute'}>
-                          {r.volume}%
-                        </span>
-                      ) : '—'}
-                    </td>
+                    <td className="px-3 py-2 text-ink-mute">{r.franchise_name ?? '—'}</td>
+                    <td className="px-3 py-2 text-center"><StatusBadge row={r} /></td>
                     <td className="px-3 py-2 text-[10px] text-ink-mute">
-                      {r.app_version ?? '—'}
-                      {r.has_update_required && <span className="ml-1 text-fuchsia-300">⚠</span>}
+                      <div>{timeAgo(r.last_seen_at)}</div>
+                      <div className={adminTypography.hint}>{fmtDateTime(r.last_seen_at)}</div>
                     </td>
-                    <td className="px-3 py-2 text-[10px] text-ink-mute truncate max-w-[140px]">
-                      {r.current_track_title
-                        ? <>{r.current_track_title}<div className="text-ink-dim">{r.current_track_artist}</div></>
-                        : '—'}
+                    <td className="px-3 py-2">
+                      <div className="text-ink-mute">v{r.active_version_number}</div>
+                      {r.has_policy_outdated && (
+                        <AdminBadge tone="info" size="sm">미동기화</AdminBadge>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-right text-[10px] text-ink-mute tabular-nums">
-                      {r.last_policy_sync_at
-                        ? formatRelative(r.last_policy_sync_at)
-                        : <span className="text-sky-300">미적용</span>}
+                    <td className="px-3 py-2 font-mono text-[11px]">
+                      <div className="text-ink">{r.app_version ?? '—'}</div>
+                      {r.has_update_required && <AdminBadge tone="primary" size="sm">업데이트</AdminBadge>}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-[11px]">
+                      <div className="text-ink truncate max-w-[140px]">{r.device_model ?? '—'}</div>
+                      <div className={`${adminTypography.hint} truncate max-w-[140px]`}>{r.device_os ?? '—'}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.playback_error
+                        ? <span className="text-rose-300 text-[10px] truncate max-w-[180px] inline-block">{r.playback_error}</span>
+                        : <span className={adminTypography.hint}>—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <RowActions
-                        row={r} busy={busyId === r.store_id}
-                        onAssignRegion={() => setAssignTarget(r)}
-                        onForceResync={() => void handleForceResync(r.store_id)}
+                        row={r} busy={busyId === r.id}
+                        onAssign={() => setAssignTarget(r)}
+                        onResync={() => void handleForceResync(r)}
                       />
                     </td>
                   </tr>
@@ -286,172 +374,299 @@ export default function StoreMonitoringPanel() {
 
           {/* Mobile cards */}
           <div className="space-y-2 md:hidden">
-            {rows.map((r) => (
-              <div key={r.id} className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+            {filteredRows.map((r) => (
+              <div key={r.id}
+                onClick={() => setDetailTarget(r)}
+                className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10 cursor-pointer">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-sm">{r.store_name}</div>
-                    <div className="text-[10px] text-ink-mute">
-                      {r.franchise_name} {r.enterprise_region_name && `· ${r.enterprise_region_name}`}
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-ink">{r.store_name}</div>
+                    <div className={adminTypography.hint}>
+                      {r.franchise_name ?? '—'}
+                      {r.enterprise_region_name && ` · ${r.enterprise_region_name}`}
                     </div>
                   </div>
                   <StatusBadge row={r} />
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-1 text-[11px]">
-                  <div className="text-ink-mute">접속: {r.last_seen_at ? formatRelative(r.last_seen_at) : '—'}</div>
-                  <div className="text-ink-mute">정책: {r.last_policy_sync_at ? formatRelative(r.last_policy_sync_at) : '미적용'}</div>
-                  {r.battery_level != null && <div>배터리 {r.battery_level}%</div>}
-                  {r.volume != null && <div>음량 {r.volume}%</div>}
-                  {r.app_version && <div className="col-span-2">버전 {r.app_version}</div>}
-                  {r.current_track_title && (
-                    <div className="col-span-2 truncate"><Music size={10} className="inline" /> {r.current_track_title}</div>
-                  )}
+                <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-ink-mute">
+                  <div>heartbeat: <b className="text-ink">{timeAgo(r.last_seen_at)}</b></div>
+                  <div>version: <b className="text-ink font-mono">{r.app_version ?? '—'}</b></div>
+                  <div>policy: <b className="text-ink">v{r.active_version_number}</b></div>
+                  <div className="truncate">device: <b className="text-ink">{r.device_model ?? '—'}</b></div>
                 </div>
-                <div className="mt-2 flex gap-1">
-                  <button onClick={() => setAssignTarget(r)}
-                    className="flex-1 rounded bg-bg-deep px-2 py-1 text-[11px] font-bold">지역</button>
-                  <button onClick={() => void handleForceResync(r.store_id)} disabled={busyId === r.store_id}
-                    className="flex-1 rounded bg-sky-500/20 px-2 py-1 text-[11px] font-bold text-sky-300 disabled:opacity-50">재동기화</button>
-                </div>
+                {r.playback_error && (
+                  <div className="mt-1 text-[10px] text-rose-300 truncate">{r.playback_error}</div>
+                )}
               </div>
             ))}
           </div>
 
           {/* Pagination */}
           {total > PAGE_SIZE && (
-            <div className="flex items-center justify-between rounded-xl bg-bg-card px-3 py-2 text-xs">
-              <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">이전</button>
-              <span className="text-ink-mute">
-                {offset + 1} – {Math.min(offset + PAGE_SIZE, total)} / {total}
-              </span>
-              <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}
-                className="rounded bg-bg-deep px-2 py-1 disabled:opacity-30">다음</button>
+            <div className="flex items-center justify-between text-xs text-ink-mute">
+              <span>{offset + 1} – {Math.min(offset + PAGE_SIZE, total)} / {total.toLocaleString('ko-KR')}</span>
+              <div className="flex gap-2">
+                <AdminButton tone="neutral" variant="subtle" size="sm" disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>이전</AdminButton>
+                <AdminButton tone="neutral" variant="subtle" size="sm" disabled={offset + PAGE_SIZE >= total}
+                  onClick={() => setOffset(offset + PAGE_SIZE)}>다음</AdminButton>
+              </div>
             </div>
           )}
         </>
       )}
 
+      {/* Assign region modal */}
       {assignTarget && (
-        <AssignRegionModal target={assignTarget} regions={regions}
-          busy={busyId === assignTarget.store_id}
-          onCancel={() => setAssignTarget(null)}
-          onAssign={(rid) => void handleAssignRegion(assignTarget.store_id, rid)} />
+        <AssignRegionModal
+          row={assignTarget}
+          regions={regions}
+          onClose={() => setAssignTarget(null)}
+          onSaved={() => { setAssignTarget(null); void load(); }}
+        />
       )}
-    </div>
+
+      {/* Detail modal */}
+      {detailTarget && (
+        <StoreDetailModal
+          row={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onResync={() => void handleForceResync(detailTarget)}
+          onAssign={() => { setAssignTarget(detailTarget); setDetailTarget(null); }}
+        />
+      )}
+    </AdminSection>
   );
 }
 
-// =============================================================================
-// Subcomponents
-// =============================================================================
 
-function StatusBadge({ row }: { row: StoreMonitoringRow }) {
-  // 우선순위: playback_error > offline > idle_24h > policy_outdated > idle_1h > device_missing > online
-  const v = (() => {
-    if (row.has_playback_error) return { ko: '재생 오류', cls: 'bg-purple-500/15 text-purple-300 ring-purple-500/30' };
-    if (row.is_offline_24h) return { ko: '오프라인', cls: 'bg-rose-500/25 text-rose-300 ring-rose-500/50' };
-    if (row.is_idle_1h_to_24h) return { ko: '24h 미접속', cls: 'bg-orange-500/15 text-orange-300 ring-orange-500/30' };
-    if (row.has_policy_outdated) return { ko: '정책 미동기화', cls: 'bg-sky-500/25 text-sky-300 ring-sky-500/50' };
-    if (row.is_idle_5m_to_1h) return { ko: '1h 미접속', cls: 'bg-amber-500/25 text-amber-300 ring-amber-500/50' };
-    if (row.has_device_missing) return { ko: '기기 미연결', cls: 'bg-ink/15 text-ink-mute ring-line/20' };
-    if (row.is_online) return { ko: '정상', cls: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/50' };
-    return { ko: '대기', cls: 'bg-ink/15 text-ink-mute ring-line/20' };
-  })();
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${v.cls}`}>{v.ko}</span>;
-}
+// =============================================================================
+// Row actions
+// =============================================================================
 
 function RowActions({
-  row, busy, onAssignRegion, onForceResync,
+  row, busy, onAssign, onResync,
 }: {
   row: StoreMonitoringRow; busy: boolean;
-  onAssignRegion: () => void; onForceResync: () => void;
+  onAssign: () => void; onResync: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1">
-      <button onClick={onAssignRegion} disabled={busy} title={row.enterprise_region_name ? `지역: ${row.enterprise_region_name}` : '지역 매핑'}
-        className="rounded bg-sky-500/20 p-1 hover:bg-sky-500/30 disabled:opacity-50">
-        <LinkIcon size={11} className="text-sky-300" />
-      </button>
-      <button onClick={onForceResync} disabled={busy} title="강제 재동기화"
-        className="rounded bg-emerald-500/20 p-1 hover:bg-emerald-500/30 disabled:opacity-50">
-        <RotateCcw size={11} className="text-emerald-300" />
-      </button>
+      <AdminTooltip label="지역 매핑">
+        <AdminButton tone="info" variant="subtle" size="sm" onClick={onAssign} disabled={busy}>
+          <LinkIcon size={11} />
+        </AdminButton>
+      </AdminTooltip>
+      <AdminTooltip label="강제 재동기화">
+        <AdminButton tone="primary" variant="subtle" size="sm" onClick={onResync} disabled={busy}>
+          <RotateCcw size={11} />
+        </AdminButton>
+      </AdminTooltip>
     </div>
   );
+  void row;
 }
 
-function EmptyState() {
-  return (
-    <div className="rounded-xl bg-bg-card px-6 py-12 text-center">
-      <Activity size={32} className="mx-auto text-ink-dim" />
-      <p className="mt-3 text-sm font-bold">표시할 매장이 없습니다.</p>
-      <p className="mt-1 text-[11px] text-ink-mute">필터를 변경하거나 business 사용자가 매장 모드에 진입하면 표시됩니다.</p>
-    </div>
-  );
-}
 
-function SkeletonRows() {
-  return (
-    <div className="space-y-2">
-      <div className="hidden md:block rounded-xl bg-bg-card">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-12 animate-pulse border-b border-line/5 bg-bg-deep/30" />
-        ))}
-      </div>
-      <div className="space-y-2 md:hidden">
-        {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-bg-card" />)}
-      </div>
-    </div>
-  );
-}
+// =============================================================================
+// Assign Region Modal
+// =============================================================================
 
 function AssignRegionModal({
-  target, regions, busy, onCancel, onAssign,
+  row, regions, onClose, onSaved,
 }: {
-  target: StoreMonitoringRow; regions: EnterpriseRegion[];
-  busy: boolean; onCancel: () => void; onAssign: (regionId: string | null) => void;
+  row: StoreMonitoringRow;
+  regions: EnterpriseRegion[];
+  onClose: () => void;
+  onSaved: () => void;
 }) {
-  const [selected, setSelected] = useState<string>(target.enterprise_region_id ?? '');
+  const [regionId, setRegionId] = useState<string>(row.enterprise_region_id ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      await adminAssignStoreToEnterpriseRegion(row.store_id, regionId || null);
+      toast.success('지역이 매핑되었습니다');
+      onSaved();
+    } catch (e) { toast.error(`매핑 실패: ${(e as Error).message}`); }
+    finally { setSaving(false); }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold">지역 매핑</h3>
-          <button onClick={onCancel} className="rounded p-1 hover:bg-bg-hover"><X size={14} /></button>
-        </div>
-        <p className="text-[11px] text-ink-mute mb-3">매장: <b>{target.store_name}</b></p>
-        <select value={selected} onChange={(e) => setSelected(e.target.value)}
-          className="input mb-3">
-          <option value="">(매핑 없음)</option>
-          {regions.map((r) => <option key={r.id} value={r.id}>{r.region_name} ({r.region_code})</option>)}
+    <AdminModal
+      open onClose={onClose} size="sm"
+      title={<><MapPin size={14} /> 지역 매핑</>}
+      footer={
+        <>
+          <AdminButton tone="neutral" variant="subtle" onClick={onClose} disabled={saving}>취소</AdminButton>
+          <AdminButton tone="primary" loading={saving} onClick={() => void onSave()} disabled={saving}>
+            저장
+          </AdminButton>
+        </>
+      }
+    >
+      <div className="space-y-2 text-xs">
+        <p className={adminTypography.description}>
+          매장 <b className="text-ink">{row.store_name}</b> 의 지역을 선택하세요.
+        </p>
+        <select value={regionId} onChange={(e) => setRegionId(e.target.value)}
+          className="input">
+          <option value="">— 해제 —</option>
+          {regions.map((r) => (
+            <option key={r.id} value={r.id}>{r.region_name} ({r.region_code})</option>
+          ))}
         </select>
-        <div className="flex gap-2">
-          <button onClick={onCancel} disabled={busy}
-            className="flex-1 rounded bg-bg-deep px-3 py-2 text-xs font-bold disabled:opacity-50">취소</button>
-          <button onClick={() => onAssign(selected || null)} disabled={busy}
-            className="flex-1 rounded bg-accent px-3 py-2 text-xs font-bold text-black disabled:opacity-50">
-            {busy ? '저장 중…' : '적용'}
-          </button>
-        </div>
       </div>
+    </AdminModal>
+  );
+}
+
+
+// =============================================================================
+// Detail Modal — 매장 정보 + Heartbeat + 오류 + 정책 + Device + 확장
+// =============================================================================
+
+function StoreDetailModal({
+  row, onClose, onResync, onAssign,
+}: {
+  row: StoreMonitoringRow;
+  onClose: () => void;
+  onResync: () => void;
+  onAssign: () => void;
+}) {
+  return (
+    <AdminModal
+      open onClose={onClose} size="lg"
+      title={<><Activity size={14} /> {row.store_name}</>}
+      headerExtra={<StatusBadge row={row} />}
+      footer={
+        <>
+          <AdminButton tone="neutral" variant="subtle" onClick={onClose}>닫기</AdminButton>
+          <AdminButton tone="info" variant="subtle" leftIcon={<LinkIcon size={11} />} onClick={onAssign}>
+            지역 매핑
+          </AdminButton>
+          <AdminButton tone="primary" variant="solid" leftIcon={<RotateCcw size={11} />} onClick={onResync}>
+            강제 재동기화
+          </AdminButton>
+        </>
+      }
+    >
+      <div className="space-y-3 text-xs">
+        <AdminCard title="매장 정보">
+          <dl className="grid grid-cols-2 gap-2 text-[11px]">
+            <KV k="매장명" v={row.store_name} />
+            <KV k="이메일" v={row.store_email ?? '—'} />
+            <KV k="기업" v={row.franchise_name ?? '—'} />
+            <KV k="지역" v={row.enterprise_region_name ? `${row.enterprise_region_name} (${row.enterprise_region_code ?? '—'})` : '—'} />
+          </dl>
+        </AdminCard>
+
+        <AdminCard title={<><Wifi size={11} className="inline mr-1" /> Heartbeat & 접속</>}>
+          <dl className="grid grid-cols-2 gap-2 text-[11px]">
+            <KV k="최근 접속" v={fmtDateTime(row.last_seen_at)} />
+            <KV k="경과" v={timeAgo(row.last_seen_at)} />
+            <KV k="player_status" v={row.player_status} mono />
+            <KV k="connection" v={row.connection_type ?? '—'} />
+            <KV k="wifi_ssid" v={row.wifi_ssid ?? '—'} />
+            <KV k="updated_at" v={fmtDateTime(row.updated_at)} />
+          </dl>
+        </AdminCard>
+
+        <AdminCard title={<><AlertTriangle size={11} className="inline mr-1" /> 최근 오류</>}>
+          {row.playback_error ? (
+            <AdminAlert tone="danger" title="재생 오류" description={row.playback_error} />
+          ) : (
+            <p className={adminTypography.description}>오류 없음</p>
+          )}
+          {row.has_volume_error && (
+            <div className="mt-2">
+              <AdminAlert tone="warning" title="음량 오류"
+                description={`현재 볼륨 ${row.volume ?? '—'} — 0 또는 95 이상`} />
+            </div>
+          )}
+          {row.has_device_missing && (
+            <div className="mt-2">
+              <AdminAlert tone="warning" title="기기 미연결"
+                description="device_identifier 가 비어있습니다." />
+            </div>
+          )}
+        </AdminCard>
+
+        <AdminCard title={<><ShieldAlert size={11} className="inline mr-1" /> 정책</>}>
+          <dl className="grid grid-cols-2 gap-2 text-[11px]">
+            <KV k="active_policy_id" v={row.active_policy_id ?? '—'} mono />
+            <KV k="active_version" v={`v${row.active_version_number}`} />
+            <KV k="last_synced_at" v={fmtDateTime(row.last_synced_at)} />
+            <KV k="last_policy_sync_at" v={fmtDateTime(row.last_policy_sync_at)} />
+          </dl>
+          {row.has_policy_outdated && (
+            <div className="mt-2">
+              <AdminAlert tone="info" title="정책 미동기화"
+                description="최근 24시간 내 정책 동기화 신호 없음. 강제 재동기화 검토." />
+            </div>
+          )}
+        </AdminCard>
+
+        <AdminCard title={<><Cpu size={11} className="inline mr-1" /> Device & Version</>}>
+          <dl className="grid grid-cols-2 gap-2 text-[11px]">
+            <KV k="App Version" v={row.app_version ?? '—'} mono />
+            <KV k="last_player_version" v={row.last_player_version ?? '—'} mono />
+            <KV k="device_model" v={row.device_model ?? '—'} />
+            <KV k="device_os" v={row.device_os ?? '—'} />
+            <KV k="device_identifier" v={row.device_identifier ?? '—'} mono />
+            <KV k="battery" v={row.battery_level != null ? `${row.battery_level}%` : '—'} />
+            <KV k="volume" v={row.volume != null ? `${row.volume}%` : '—'} />
+          </dl>
+          {row.has_update_required && (
+            <div className="mt-2">
+              <AdminAlert tone="info" title="업데이트 필요"
+                description={`App version (${row.app_version ?? '—'}) 가 최소 권장 버전 미만입니다.`} />
+            </div>
+          )}
+        </AdminCard>
+
+        <AdminCard title={<><Music size={11} className="inline mr-1" /> 현재 재생</>}>
+          {row.current_track_id ? (
+            <div className="text-[11px]">
+              <div className={adminTypography.bodyStrong}>{row.current_track_title ?? '(제목 없음)'}</div>
+              <div className={adminTypography.hint}>{row.current_track_artist ?? '—'}</div>
+              {row.current_track_started_at && (
+                <div className={`mt-1 ${adminTypography.hint}`}>
+                  시작: {fmtDateTime(row.current_track_started_at)}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className={adminTypography.description}>현재 재생 중인 트랙 없음</p>
+          )}
+        </AdminCard>
+
+        <AdminCard title="향후 확장 (NOC)">
+          <ul className={`list-disc pl-5 ${adminTypography.description} space-y-0.5`}>
+            <li>실시간 알림 / 긴급 정책 강제 배포</li>
+            <li>Realtime Player 직접 연결</li>
+            <li>AI 추천 / 지역별 통계 / 장애 timeline</li>
+          </ul>
+        </AdminCard>
+      </div>
+    </AdminModal>
+  );
+}
+
+
+// =============================================================================
+// Small helper
+// =============================================================================
+
+function KV({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div>
+      <dt className="text-[10px] text-ink-dim">{k}</dt>
+      <dd className={`text-[11px] text-ink ${mono ? 'font-mono' : ''} break-words`}>{v}</dd>
     </div>
   );
 }
 
-// =============================================================================
-// Helpers
-// =============================================================================
-
-function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}초 전`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  const day = Math.floor(hr / 24);
-  return `${day}일 전`;
-}
+// unused-import 회피 (lucide-react Battery/Volume2 등 SVG icon import 만 활용)
+const _icons = [Battery, Volume2]; void _icons;
