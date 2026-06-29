@@ -9,6 +9,7 @@ import {
   RefreshCw, Plus, Music, Upload, Trash2, Edit3, Pause, Play, Power,
   Calendar, ListChecks, History, Volume2,
 } from 'lucide-react';
+import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge, AdminButton,
   AdminModal, AdminAlert, AdminEmpty, AdminSkeleton, AdminTooltip,
@@ -838,16 +839,12 @@ function ScheduleModal({
             className="w-full rounded-md bg-bg-deep px-2 py-1.5" />
         </Field>
 
-        <Field label="반복 규칙 *" full>
-          <input type="text" value={recurrence} onChange={(e) => setRecurrence(e.target.value)}
-            placeholder="예: daily:12:00 / weekly:MON,WED,FRI:18:00 / once:2026-12-24T18:00"
-            className="w-full rounded-md bg-bg-deep px-2 py-1.5 font-mono text-[11px]" />
-          <div className="mt-1 space-y-0.5 text-[10px] text-ink-dim">
-            <div>· 매일 12시 → <code>daily:12:00</code></div>
-            <div>· 월수금 18시 → <code>weekly:MON,WED,FRI:18:00</code></div>
-            <div>· 1회성 → <code>once:2026-12-24T18:00</code></div>
-            <div>· 타임존 Asia/Seoul · 매장은 fire time + 5분 안에 BGM 사이 자동 삽입</div>
-          </div>
+        <Field label="반복 일정 *" full>
+          <RecurrenceRuleBuilder
+            value={recurrence || null}
+            onChange={(v) => setRecurrence(v ?? '')}
+            defaultOnceDt={startsAt || ''}
+          />
         </Field>
 
         <Field label="재생 모드">
