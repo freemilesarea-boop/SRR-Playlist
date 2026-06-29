@@ -76,7 +76,10 @@ export interface DueAnnouncement {
   asset_id: string;
   schedule_name: string;
   asset_title: string;
+  /** 저장된 URL — 과거에 signed URL 이 들어가있는 레코드도 있음. 항상 file_path 로 재생성 권장. */
   asset_file_url: string;
+  /** 0387 — Storage path. 클라이언트가 supabase.storage.getPublicUrl 로 fresh URL 재생성. */
+  asset_file_path: string | null;
   asset_duration: number | null;
   asset_mime_type: string | null;
   play_mode: AnnouncementPlayMode;
@@ -138,6 +141,48 @@ interface ListResponse<T> {
   data: T[];
   pagination: { total: number; limit: number; offset: number; has_more: boolean };
   computed_at: string;
+}
+
+// =============================================================================
+// URL resolver — 0387
+// =============================================================================
+/**
+ * 안내음 재생 직전 fresh playable URL 을 반환.
+ *
+ * 동작:
+ *   1) file_path 가 있으면 supabase.storage.getPublicUrl 로 무만료 public URL 생성
+ *      (bucket 이 public=true 일 때 즉시 200; SDK 호출만, 네트워크 없음)
+ *   2) file_path 가 없거나 publicUrl 생성 실패 시 createSignedUrl 1h 로 fallback
+ *   3) 모두 실패 시 storedUrl 그대로 반환
+ *
+ * 사용 측: AnnouncementOverlay.startAnnouncement (audio.src 설정 직전).
+ * 저장된 file_url 이 과거 signed URL (만료) 인 환경에서도 항상 fresh URL.
+ */
+export async function resolveAnnouncementPlayableUrl(
+  filePath: string | null | undefined,
+  storedUrl: string,
+): Promise<{ url: string; source: 'public' | 'signed' | 'stored'; reason?: string }> {
+  if (!filePath || !filePath.trim()) {
+    return { url: storedUrl, source: 'stored', reason: 'no_file_path' };
+  }
+  // Step 1: public URL (instant, no network)
+  try {
+    const { data } = supabase.storage.from(ANNOUNCEMENT_BUCKET).getPublicUrl(filePath);
+    if (data?.publicUrl) return { url: data.publicUrl, source: 'public' };
+  } catch (e) {
+    console.warn('[announcement] getPublicUrl failed', e);
+  }
+  // Step 2: signed URL fallback (1h TTL)
+  try {
+    const { data, error } = await supabase.storage
+      .from(ANNOUNCEMENT_BUCKET)
+      .createSignedUrl(filePath, 3600);
+    if (error) console.warn('[announcement] createSignedUrl failed', error.message);
+    if (data?.signedUrl) return { url: data.signedUrl, source: 'signed' };
+  } catch (e) {
+    console.warn('[announcement] createSignedUrl threw', e);
+  }
+  return { url: storedUrl, source: 'stored', reason: 'fallback' };
 }
 
 // =============================================================================
