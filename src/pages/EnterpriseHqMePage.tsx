@@ -40,6 +40,7 @@ import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import EnterpriseHqMonthlySettlementsCard from '@/components/enterprise/EnterpriseHqMonthlySettlementsCard';
+import EnterpriseHqBillingCard from '@/components/enterprise/EnterpriseHqBillingCard';
 
 export default function EnterpriseHqMePage() {
   const user = useAuthStore((s) => s.user);
@@ -161,6 +162,9 @@ function DashboardContent({
 
       {/* Phase 1-11 — 월 정산 내역 (read-only, admin generate) */}
       <EnterpriseHqMonthlySettlementsCard />
+
+      {/* Priority 6 — 청구 현황 (본사 → 플랫폼 incoming billing, read-only) */}
+      <EnterpriseHqBillingCard />
 
       {/* Phase 1-9 — 매장 현황 카드 (전체/활성/정지/inactive/최근 7일) */}
       {dashboard.store_stats && <StoreStatsCard stats={dashboard.store_stats} />}
