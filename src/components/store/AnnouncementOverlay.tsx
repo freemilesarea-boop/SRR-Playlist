@@ -63,13 +63,36 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import {
-  getDueAnnouncements, markAnnouncementPlayed,
+  getDueAnnouncements, markAnnouncementPlayed, resolveAnnouncementPlayableUrl,
   type DueAnnouncement,
 } from '@/lib/api/announcementApi';
 
 const POLL_INTERVAL_MS = 10_000;  // 서버 due 폴링 주기
 const TICK_INTERVAL_MS = 5_000;   // local grace tick (서버 호출 없음)
 const GRACE_PERIOD_MS  = 60_000;  // due 감지 후 자연 트랙 전환을 기다리는 최대 시간
+
+/**
+ * 안내음 재생 실패 reason 분류 — failure 로그 + DB 기록용.
+ *
+ * HTMLMediaElement.error.code:
+ *   1 MEDIA_ERR_ABORTED
+ *   2 MEDIA_ERR_NETWORK         ← 403/404/네트워크
+ *   3 MEDIA_ERR_DECODE
+ *   4 MEDIA_ERR_SRC_NOT_SUPPORTED ← URL 유효하지 않음 / MIME / 권한
+ *
+ * play() 자체 rejection (autoplay block, NotAllowedError) 도 분류.
+ */
+function classifyAnnouncementError(err: unknown, audio: HTMLAudioElement): string {
+  const code = audio.error?.code ?? null;
+  const name = (err as Error)?.name ?? '';
+  if (name === 'NotAllowedError')   return 'autoplay_blocked';
+  if (name === 'AbortError')        return 'play_aborted';
+  if (code === 4) return 'reserved_track_audio_403';     // SRC_NOT_SUPPORTED — signed URL 만료 / public URL 권한
+  if (code === 2) return 'reserved_track_audio_network'; // NETWORK
+  if (code === 3) return 'reserved_track_audio_decode';
+  if (code === 1) return 'reserved_track_audio_aborted';
+  return 'reserved_track_audio_unknown';
+}
 
 export interface AnnouncementOverlayProps {
   /** 매장 사용자 id (auth.uid()). null 이면 비활성. */
@@ -109,6 +132,10 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
 
   // ───────────────────────────────────────────────────────────────────────
   // 안내음 재생 시작
+  //
+  // 0387: 저장된 asset_file_url 은 과거 signed URL (만료 → 403) 인 케이스 존재.
+  //       resolveAnnouncementPlayableUrl 로 file_path 기반 fresh URL 우선 사용.
+  //       실패 시 reserved_track_audio_403 로 별도 reason 기록 → 관리자가 원인 추적.
   // ───────────────────────────────────────────────────────────────────────
   const startAnnouncement = useCallback((ann: DueAnnouncement, reason: string) => {
     if (playingRef.current) return;
@@ -119,28 +146,63 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
 
     log('start', {
       schedule_id: ann.schedule_id,
+      asset_id: ann.asset_id,
       asset_title: ann.asset_title,
+      asset_file_path: ann.asset_file_path,
+      asset_file_url_stored: ann.asset_file_url,
       reason,
     });
 
-    // BGM 일시정지
+    // BGM 일시정지 (안내음 재생 전)
     try {
       usePlayerStore.getState().pause();
     } catch (e) {
       log('pause BGM failed', e);
     }
 
-    a.src = ann.asset_file_url;
-    a.volume = 1.0;
-    a.currentTime = 0;
-    void a.play().catch((e) => {
-      log('play announcement failed', e);
-      void markAnnouncementPlayed(ann.schedule_id, ann.asset_id, 'failed', (e as Error).message)
-        .catch(() => undefined);
-      playingRef.current = false;
-      setActive(null);
-      try { usePlayerStore.getState().play(); } catch (_e) { void _e; }
-    });
+    void (async () => {
+      // 0387 — 매 재생 직전 fresh URL 발급 (저장된 signed URL 만료 회피)
+      const resolved = await resolveAnnouncementPlayableUrl(ann.asset_file_path, ann.asset_file_url);
+      log('resolved url', {
+        schedule_id: ann.schedule_id,
+        url_source: resolved.source,   // 'public' | 'signed' | 'stored'
+        url_head:   resolved.url.substring(0, 120),
+        fallback_reason: resolved.reason ?? null,
+      });
+
+      a.src = resolved.url;
+      a.volume = 1.0;
+      a.currentTime = 0;
+
+      void a.play().catch((playErr) => {
+        // play() rejection — autoplay block / decoding error / network 403 (전부 여기로)
+        const failReason = classifyAnnouncementError(playErr, a);
+        const errorMsg = `${failReason} :: ${(playErr as Error).message}`;
+        // 운영 디버그를 위해 console.error 로 항상 출력 (debug flag 와 무관)
+        console.error('[announcement-overlay] play failed', {
+          schedule_id: ann.schedule_id,
+          asset_id: ann.asset_id,
+          asset_file_path: ann.asset_file_path,
+          url_source: resolved.source,
+          url_head: resolved.url.substring(0, 120),
+          audio_error_code: a.error?.code ?? null,
+          audio_error_message: a.error?.message ?? null,
+          reason: failReason,
+          js_error: (playErr as Error).message,
+        });
+        void markAnnouncementPlayed(ann.schedule_id, ann.asset_id, 'failed', errorMsg)
+          .catch((mpErr) => {
+            console.error('[announcement-overlay] mark_played(failed) RPC error', {
+              schedule_id: ann.schedule_id,
+              asset_id: ann.asset_id,
+              rpc_error: (mpErr as Error).message,
+            });
+          });
+        playingRef.current = false;
+        setActive(null);
+        try { usePlayerStore.getState().play(); } catch (_e) { void _e; }
+      });
+    })();
   }, [log]);
 
   // ───────────────────────────────────────────────────────────────────────
@@ -320,7 +382,20 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     const a = audioRef.current;
     if (!a) return;
     const onEnded = () => void finishAnnouncement('played');
-    const onError = () => void finishAnnouncement('failed', 'audio error');
+    const onError = () => {
+      // play() rejection 으로 이미 finishAnnouncement 호출됐을 수 있지만,
+      // 일부 브라우저는 src 변경 직후 error 이벤트만 발생 (play() 가 resolve 후 error).
+      // playingRef 가 아직 true 이면 여기서 처리.
+      if (!playingRef.current) return;
+      const reason = classifyAnnouncementError(new Error('media error'), a);
+      console.error('[announcement-overlay] audio error event', {
+        reason,
+        audio_error_code: a.error?.code ?? null,
+        audio_error_message: a.error?.message ?? null,
+        src_head: a.src.substring(0, 120),
+      });
+      void finishAnnouncement('failed', `${reason} :: media error (code=${a.error?.code ?? 'null'})`);
+    };
     a.addEventListener('ended', onEnded);
     a.addEventListener('error', onError);
     return () => {
