@@ -41,6 +41,7 @@ import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import EnterpriseHqMonthlySettlementsCard from '@/components/enterprise/EnterpriseHqMonthlySettlementsCard';
 import EnterpriseHqBillingCard from '@/components/enterprise/EnterpriseHqBillingCard';
+import EnterpriseHqContractCard from '@/components/enterprise/EnterpriseHqContractCard';
 
 export default function EnterpriseHqMePage() {
   const user = useAuthStore((s) => s.user);
@@ -162,6 +163,9 @@ function DashboardContent({
 
       {/* Phase 1-11 — 월 정산 내역 (read-only, admin generate) */}
       <EnterpriseHqMonthlySettlementsCard />
+
+      {/* Phase 4-12 — 계약 정보 (read-only, admin manages) */}
+      <EnterpriseHqContractCard />
 
       {/* Priority 6 — 청구 현황 (본사 → 플랫폼 incoming billing, read-only) */}
       <EnterpriseHqBillingCard />
