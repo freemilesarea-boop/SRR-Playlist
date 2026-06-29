@@ -19,8 +19,9 @@ import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 // Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
 // StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
 import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
-import AnnouncementOverlay from '@/components/store/AnnouncementOverlay';
-import EmergencyBroadcastOverlay from '@/components/store/EmergencyBroadcastOverlay';
+// AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
+// GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
+// 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
 
 /**
  * 매장 재생 모드(키오스크) — 전역 <Player> 의 오디오 엔진/큐를 그대로 사용하는 풀스크린 UI.
@@ -236,11 +237,7 @@ export default function StorePlayerPage() {
         </div>
       </footer>
 
-      {/* Priority 5 — 광고/안내 음원 오버레이 (BGM 사이 삽입). Player 로직 무수정. */}
-      <AnnouncementOverlay storeId={storeId} />
-
-      {/* Priority 7 — 긴급 방송 오버레이 (즉시 송출). 별도 audio element. Player 로직 무수정. */}
-      <EmergencyBroadcastOverlay storeId={storeId} />
+      {/* Priority 5/7 overlays 는 AppShell <GlobalStoreAudioOverlays /> 에서 전역 마운트. */}
     </div>
   );
 }

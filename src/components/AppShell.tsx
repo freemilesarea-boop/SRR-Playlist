@@ -8,6 +8,10 @@ import InstallPromptBanner from './InstallPromptBanner';
 import Player from './player/Player';
 import ThemeQuickToggle from './ThemeQuickToggle';
 import Footer from './common/Footer';
+// Priority 5/7 — 안내음/긴급방송 overlay 를 전역 마운트.
+// 매장 BGM 이 어떤 화면에서 흐르고 있어도 예약 안내/긴급 방송 발화 보장.
+// /admin · /artist · /auth/* 등은 내부 route guard 가 차단.
+import GlobalStoreAudioOverlays from './store/GlobalStoreAudioOverlays';
 // FloatingSupportButton 은 App.tsx 루트에서 마운트 (createPortal → document.body)
 // AppShell 내부 마운트 중단 — 어떤 컨테이너 의존성도 없도록 격리.
 import {
@@ -59,6 +63,7 @@ export default function AppShell() {
 
       <Player />
       <BottomNav />
+      <GlobalStoreAudioOverlays />
     </div>
   );
 }
