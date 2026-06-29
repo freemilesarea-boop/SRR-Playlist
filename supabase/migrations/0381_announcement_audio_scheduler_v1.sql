@@ -210,6 +210,7 @@ declare
   v_dow_tokens text[];
   v_dow        text;
   v_dow_now    int;
+  v_target_dow int;
   v_target     timestamptz;
   v_once       timestamp;
 begin
@@ -242,10 +243,17 @@ begin
     v_minute     := v_parts[4]::int;
     v_dow_now    := extract(dow from v_local)::int;
     foreach v_dow in array v_dow_tokens loop
-      if v_dow_now = case upper(btrim(v_dow))
-        when 'SUN' then 0 when 'MON' then 1 when 'TUE' then 2 when 'WED' then 3
-        when 'THU' then 4 when 'FRI' then 5 when 'SAT' then 6 else -1 end
-      then
+      v_target_dow := case upper(btrim(v_dow))
+        when 'SUN' then 0
+        when 'MON' then 1
+        when 'TUE' then 2
+        when 'WED' then 3
+        when 'THU' then 4
+        when 'FRI' then 5
+        when 'SAT' then 6
+        else -1
+      end;
+      if v_dow_now = v_target_dow then
         v_target := (v_local::date + make_time(v_hour, v_minute, 0)) at time zone p_tz;
         return p_now between v_target and (v_target + interval '5 minutes');
       end if;
