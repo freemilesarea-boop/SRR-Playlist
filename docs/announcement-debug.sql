@@ -79,11 +79,18 @@ select s.name,
 -- ============================================================================
 -- §5. 매장 sync_status 확인 (scope=region 경우 필수)
 --     ':STORE_ID' 를 실제 UUID 로 치환
+--
+--     NOTE: store_policy_sync_status 의 실제 timestamp 컬럼은
+--           last_seen_at (heartbeat 수신) / last_synced_at (정책 sync) /
+--           last_policy_sync_at (0353) / updated_at (table 표준).
+--           store_now_playing VIEW 가 노출하는 last_heartbeat_at 은
+--           updated_at 의 alias 이므로 sync_status 테이블 직접 조회 시 사용 X.
 -- ============================================================================
 select store_id,
        enterprise_region_id,
-       last_seen_at,
-       last_heartbeat_at,
+       last_seen_at,        -- heartbeat ping
+       last_synced_at,      -- 정책 sync 시각
+       updated_at,          -- 마지막 record 갱신
        app_version
   from public.store_policy_sync_status
  where store_id = ':STORE_ID'::uuid;
