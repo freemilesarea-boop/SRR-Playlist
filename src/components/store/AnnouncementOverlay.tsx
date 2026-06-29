@@ -102,6 +102,20 @@ export interface AnnouncementOverlayProps {
 }
 
 export default function AnnouncementOverlay({ storeId, debug = false }: AnnouncementOverlayProps) {
+  // 진입/언마운트 — debug flag 와 무관하게 항상 1회 출력 (운영 마운트 확인)
+  useEffect(() => {
+    console.warn('[announcement-overlay] mount', {
+      store_id: storeId ? `${storeId.slice(0, 8)}…` : null,
+      debug_prop: debug,
+      poll_interval_ms: POLL_INTERVAL_MS,
+      tick_interval_ms: TICK_INTERVAL_MS,
+      grace_period_ms: GRACE_PERIOD_MS,
+    });
+    return () => console.warn('[announcement-overlay] unmount', {
+      store_id: storeId ? `${storeId.slice(0, 8)}…` : null,
+    });
+  }, [storeId, debug]);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [due, setDue] = useState<DueAnnouncement[]>([]);
   const [active, setActive] = useState<DueAnnouncement | null>(null);
@@ -144,12 +158,13 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     playingRef.current = true;
     setActive(ann);
 
-    log('start', {
+    // 진단 항상 출력 (debug flag 무관) — startAnnouncement 진입 1회
+    console.warn('[announcement-overlay] start', {
       schedule_id: ann.schedule_id,
       asset_id: ann.asset_id,
       asset_title: ann.asset_title,
       asset_file_path: ann.asset_file_path,
-      asset_file_url_stored: ann.asset_file_url,
+      asset_file_url_stored: ann.asset_file_url?.substring(0, 80),
       reason,
     });
 
@@ -163,10 +178,11 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     void (async () => {
       // 0387 — 매 재생 직전 fresh URL 발급 (저장된 signed URL 만료 회피)
       const resolved = await resolveAnnouncementPlayableUrl(ann.asset_file_path, ann.asset_file_url);
-      log('resolved url', {
+      // 항상 출력 (debug flag 무관) — URL resolver 결과 추적
+      console.warn('[announcement-overlay] resolved url', {
         schedule_id: ann.schedule_id,
         url_source: resolved.source,   // 'public' | 'signed' | 'stored'
-        url_head:   resolved.url.substring(0, 120),
+        url_head:   resolved.url.substring(0, 160),
         fallback_reason: resolved.reason ?? null,
       });
 
@@ -174,7 +190,14 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       a.volume = 1.0;
       a.currentTime = 0;
 
-      void a.play().catch((playErr) => {
+      void a.play().then(() => {
+        // 성공도 1회 출력 — 운영에서 "재생까지 도달했는지" 확정
+        console.warn('[announcement-overlay] play started', {
+          schedule_id: ann.schedule_id,
+          duration: a.duration,
+          ready_state: a.readyState,
+        });
+      }).catch((playErr) => {
         // play() rejection — autoplay block / decoding error / network 403 (전부 여기로)
         const failReason = classifyAnnouncementError(playErr, a);
         const errorMsg = `${failReason} :: ${(playErr as Error).message}`;
@@ -184,11 +207,12 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
           asset_id: ann.asset_id,
           asset_file_path: ann.asset_file_path,
           url_source: resolved.source,
-          url_head: resolved.url.substring(0, 120),
+          url_head: resolved.url.substring(0, 160),
           audio_error_code: a.error?.code ?? null,
           audio_error_message: a.error?.message ?? null,
           reason: failReason,
-          js_error: (playErr as Error).message,
+          js_error_name: (playErr as Error)?.name ?? null,
+          js_error_message: (playErr as Error)?.message ?? null,
         });
         void markAnnouncementPlayed(ann.schedule_id, ann.asset_id, 'failed', errorMsg)
           .catch((mpErr) => {
