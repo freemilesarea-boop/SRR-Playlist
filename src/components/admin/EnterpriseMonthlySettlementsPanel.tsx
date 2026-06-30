@@ -21,10 +21,12 @@ import {
   currentMonthFirstDay,
   formatSettlementMonth,
   SETTLEMENT_STATUS_LABEL,
+  SETTLEMENT_RATE_SOURCE_LABEL,
   type EnterpriseMonthlySettlementRow,
   type EnterpriseMonthlySettlementStatus,
   type EnterpriseMonthlySettlementDetail,
   type EnterpriseMonthlySettlementItem,
+  type SettlementRateSource,
 } from '@/lib/api/enterpriseMonthlySettlementApi';
 import { toast } from '@/store/toastStore';
 import {
@@ -197,7 +199,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
         />
       ) : (
         <div className="overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
-          <table className="w-full min-w-[920px] text-xs">
+          <table className="w-full min-w-[1040px] text-xs">
             <thead className="bg-bg-deep text-[10px] uppercase tracking-wider text-ink-dim">
               <tr>
                 <th className="px-3 py-2 text-left">월</th>
@@ -205,6 +207,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
                 <th className="px-3 py-2 text-right">활성 매장</th>
                 <th className="px-3 py-2 text-right">단가</th>
                 <th className="px-3 py-2 text-right">수수료율</th>
+                <th className="px-3 py-2 text-center">적용 출처</th>
                 <th className="px-3 py-2 text-right">매장당</th>
                 <th className="px-3 py-2 text-right">총 정산금</th>
                 <th className="px-3 py-2 text-center">상태</th>
@@ -224,6 +227,9 @@ export default function EnterpriseMonthlySettlementsPanel() {
                   <td className="px-3 py-2 text-right tabular-nums">{r.active_store_count.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.monthly_store_price.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.commission_rate}%</td>
+                  <td className="px-3 py-2 text-center">
+                    <RateSourceBadge source={r.rate_source} contractNo={r.contract_no} />
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.per_store_commission.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-emerald-300">{r.total_commission.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-center"><StatusBadge status={r.status} /></td>
@@ -387,6 +393,15 @@ function DetailModal({
                   <KV k="매장당" v={`${settlement.per_store_commission.toLocaleString('ko-KR')}원`} />
                   <KV k="총 정산금" v={`${settlement.total_commission.toLocaleString('ko-KR')}원`} highlight />
                 </dl>
+                {/* 0390 — 적용된 계약 스냅샷 (생성 시점 고정) */}
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                  <KV k="적용 출처" v={settlement.rate_source ? SETTLEMENT_RATE_SOURCE_LABEL[settlement.rate_source] : '—'} />
+                  <KV k="계약번호" v={settlement.contract_no ?? '—'} mono />
+                  <KV k="정산방법" v={settlement.settlement_method ?? '—'} />
+                  {settlement.minimum_payout != null && (
+                    <KV k="최소 정산금" v={`${settlement.minimum_payout.toLocaleString('ko-KR')}원`} />
+                  )}
+                </dl>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-ink-dim">
                   <KV k="생성" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
                   {settlement.approved_at && <KV k="승인" v={new Date(settlement.approved_at).toLocaleString('ko-KR')} />}
@@ -541,6 +556,27 @@ function DetailModal({
 // =============================================================================
 // Small components
 // =============================================================================
+
+/** 0390 — 정산에 적용된 단가/수수료 출처 배지 (계약 적용 시 계약번호 tooltip). */
+function RateSourceBadge({ source, contractNo }: {
+  source: SettlementRateSource | null;
+  contractNo: string | null;
+}) {
+  if (!source) return <span className="text-ink-dim">—</span>;
+  const cls = source === 'contract'
+    ? 'bg-violet-500/20 text-violet-200 ring-violet-400/40'
+    : source === 'profile'
+      ? 'bg-sky-500/20 text-sky-200 ring-sky-400/40'
+      : 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40';
+  return (
+    <span
+      title={contractNo ? `계약 ${contractNo}` : undefined}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${cls}`}
+    >
+      {SETTLEMENT_RATE_SOURCE_LABEL[source]}
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: EnterpriseMonthlySettlementStatus }) {
   const ICON = {
