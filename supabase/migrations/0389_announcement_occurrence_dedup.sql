@@ -105,6 +105,23 @@ begin
   raise notice '0389 — backfilled occurrence_key on % play_log row(s)', v_done;
 end$$;
 
+-- 과거 중복 재생분 정리 — 같은 occurrence 에 played 가 여럿이면 (이번 버그로 생긴 중복)
+-- 가장 이른 row 만 occurrence_key 유지, 나머지는 key 를 null 로 (unique index 생성 가능하게).
+-- status 는 'played' 로 보존 (today_count/감사 이력 유지). 한 row 만 key 가 있어도 회차 제외엔 충분.
+with dups as (
+  select id,
+         row_number() over (
+           partition by schedule_id, store_id, occurrence_key
+           order by coalesce(played_at, created_at) asc, id asc
+         ) as rn
+    from public.enterprise_announcement_play_logs
+   where status = 'played' and occurrence_key is not null
+)
+update public.enterprise_announcement_play_logs pl
+   set occurrence_key = null
+  from dups
+ where pl.id = dups.id and dups.rn > 1;
+
 -- ============================================================
 -- 3) 중복 차단 인덱스
 -- ============================================================
