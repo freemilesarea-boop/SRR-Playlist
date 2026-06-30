@@ -76,6 +76,33 @@ type TriggerReason =
   | 'player_not_ready'
   | 'audio_play_failed';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// occurrence lock 영속화 (sessionStorage) — 새로고침/리마운트 직후 중복 재생 방지.
+// 서버 play_logs (occurrence_key 제외) 가 1차 방어, sessionStorage 는 다음 poll 전
+// 짧은 공백을 메우는 2차 방어. occurrence_key 에 날짜가 포함돼 daily 익일 재생은 정상.
+// ─────────────────────────────────────────────────────────────────────────────
+const SESSION_FIRED_KEY = 'srr.ann.fired';
+
+function loadFiredKeys(): Map<string, number> {
+  const m = new Map<string, number>();
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_FIRED_KEY);
+    if (!raw) return m;
+    const obj = JSON.parse(raw) as Record<string, number>;
+    const now = Date.now();
+    for (const [k, ts] of Object.entries(obj)) {
+      if (typeof ts === 'number' && now - ts < FIRED_KEY_TTL_MS) m.set(k, ts);
+    }
+  } catch { /* sessionStorage 불가 환경 → in-memory only */ }
+  return m;
+}
+
+function persistFiredKeys(m: Map<string, number>): void {
+  try {
+    window.sessionStorage.setItem(SESSION_FIRED_KEY, JSON.stringify(Object.fromEntries(m)));
+  } catch { /* quota/불가 → 무시 */ }
+}
+
 /**
  * 안내음 재생 실패 reason 분류 — failure 로그 + DB 기록용.
  *
@@ -123,12 +150,27 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
 
   // Trigger 추적 refs
   const playingRef       = useRef(false);                      // overlay 자체 재생 중 flag
-  const activeRef        = useRef<UpcomingAnnouncement | null>(null); // finish 핸들러용 최신 active
+  const playingAnnRef    = useRef<UpcomingAnnouncement | null>(null); // 재생 중 occurrence (동기 — finish 핸들러용)
   const serverOffsetRef  = useRef(0);                          // serverNowEpoch - clientNowEpoch (ms)
   const timersRef        = useRef<Map<string, number>>(new Map());  // occurrence_key → setTimeout id
   const firedKeysRef     = useRef<Map<string, number>>(new Map());  // occurrence_key → fired client epoch
 
-  useEffect(() => { activeRef.current = active; }, [active]);
+  // 최초 렌더 시 sessionStorage 에서 fired occurrence lock 복원 (새로고침 후 중복 방지)
+  const seededRef = useRef(false);
+  if (!seededRef.current) {
+    seededRef.current = true;
+    for (const [k, ts] of loadFiredKeys()) firedKeysRef.current.set(k, ts);
+  }
+
+  // occurrence lock 등록 (in-memory + sessionStorage 동시)
+  const lockOccurrence = useCallback((key: string) => {
+    firedKeysRef.current.set(key, Date.now());
+    persistFiredKeys(firedKeysRef.current);
+  }, []);
+  const unlockOccurrence = useCallback((key: string) => {
+    firedKeysRef.current.delete(key);
+    persistFiredKeys(firedKeysRef.current);
+  }, []);
 
   const debugEnabled = useCallback((): boolean => {
     if (debug) return true;
@@ -154,13 +196,18 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     status: 'played' | 'failed' | 'skipped',
     errorMsg?: string,
   ) => {
-    const ann = activeRef.current;
+    const ann = playingAnnRef.current;
     if (!ann) return;
     playingRef.current = false;
+    playingAnnRef.current = null;
     setActive(null);
 
     try {
-      await markAnnouncementPlayed(ann.schedule_id, ann.asset_id, status, errorMsg ?? null);
+      // occurrence_key + scheduled_for 기록 → 서버가 같은 회차 재출력 차단 (durable dedup)
+      await markAnnouncementPlayed(
+        ann.schedule_id, ann.asset_id, status, errorMsg ?? null,
+        ann.occurrence_key, ann.scheduled_at,
+      );
     } catch (e) {
       log('mark played failed', e);
     }
@@ -177,13 +224,15 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
   const startAnnouncement = useCallback((ann: UpcomingAnnouncement, reason: TriggerReason) => {
     const a = audioRef.current;
     if (!a) {
-      // audio element 미준비 — firedKey 해제하여 다음 폴링에서 재시도
+      // audio element 미준비 — lock 해제하여 다음 폴링에서 재시도
       logTrigger('player_not_ready', { schedule_id: ann.schedule_id, occurrence_key: ann.occurrence_key });
-      firedKeysRef.current.delete(ann.occurrence_key);
+      unlockOccurrence(ann.occurrence_key);
       playingRef.current = false;
+      playingAnnRef.current = null;
       return;
     }
     playingRef.current = true;
+    playingAnnRef.current = ann;  // 동기 기록 — finish 핸들러가 즉시 참조
     setActive(ann);
 
     logTrigger(reason, {
@@ -193,6 +242,12 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       scheduled_at: ann.scheduled_at,
       offset_ms: Math.round(serverOffsetRef.current),
     });
+
+    // 재생 시작 즉시 'started' 기록 — 서버 durable lock (재생 중 새로고침/크래시에도 회차 보호)
+    void markAnnouncementPlayed(
+      ann.schedule_id, ann.asset_id, 'started', null,
+      ann.occurrence_key, ann.scheduled_at,
+    ).catch((e) => log('mark started failed', e));
 
     // 현재 매장음악 즉시 interrupt (자연 종료 대기 없음)
     try {
@@ -240,7 +295,7 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
         void finishAnnouncement('failed', errorMsg);
       });
     })();
-  }, [log, logTrigger, finishAnnouncement]);
+  }, [log, logTrigger, finishAnnouncement, unlockOccurrence]);
 
   // ───────────────────────────────────────────────────────────────────────
   // occurrence 발화 — in-memory lock + 단일 재생 보장
@@ -257,14 +312,14 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       return;
     }
     if (playingRef.current) {
-      // 다른 안내음 재생 중 — firedKey 잠그지 않고 종료 후 폴링 복구에 맡김
+      // 다른 안내음 재생 중 — lock 잠그지 않고 종료 후 폴링 복구에 맡김
       logTrigger('skipped_duplicate', { occurrence_key: key, note: 'overlay busy, will recover via poll' });
       return;
     }
 
-    firedKeysRef.current.set(key, Date.now());
+    lockOccurrence(key);  // in-memory + sessionStorage 동시 lock
     startAnnouncement(item, reason);
-  }, [logTrigger, startAnnouncement]);
+  }, [logTrigger, lockOccurrence, startAnnouncement]);
 
   // ───────────────────────────────────────────────────────────────────────
   // 폴링 + exact timer re-arm
@@ -288,9 +343,11 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       }
       // firedKeys TTL 정리 (메모리 bound — recovery window 보다 충분히 길게 보관 후 제거)
       const nowMs = Date.now();
+      let prunedAny = false;
       for (const [key, firedAt] of Array.from(firedKeysRef.current.entries())) {
-        if (nowMs - firedAt > FIRED_KEY_TTL_MS) firedKeysRef.current.delete(key);
+        if (nowMs - firedAt > FIRED_KEY_TTL_MS) { firedKeysRef.current.delete(key); prunedAny = true; }
       }
+      if (prunedAny) persistFiredKeys(firedKeysRef.current);
 
       log('poll-upcoming', {
         server_now: r.now_at,

@@ -435,17 +435,29 @@ export async function getUpcomingAnnouncements(
   };
 }
 
+/**
+ * 0389 — occurrence_key / scheduled_for 를 함께 기록.
+ *
+ * status 'started' (재생 시작) → 'played'/'failed'/'skipped' (종료) 흐름.
+ * 서버는 occurrence_key 가 ('played','started','failed') 로 기록된 회차를 due/upcoming
+ * 에서 제외 → 같은 occurrence 중복 재생을 새로고침/리마운트 이후에도 차단.
+ * played 는 멱등 (이미 기록된 회차면 기존 log 반환).
+ */
 export async function markAnnouncementPlayed(
   scheduleId: string, assetId: string,
-  status: AnnouncementLogStatus = 'played',
+  status: AnnouncementLogStatus | 'started' = 'played',
   errorMessage?: string | null,
-): Promise<{ success: boolean; log_id: string; status: AnnouncementLogStatus }> {
+  occurrenceKey?: string | null,
+  scheduledFor?: string | null,
+): Promise<{ success: boolean; log_id: string; status: string; deduped?: boolean }> {
   const { data, error } = await supabase.rpc('store_mark_announcement_played', {
-    p_schedule_id:   scheduleId,
-    p_asset_id:      assetId,
-    p_status:        status,
-    p_error_message: errorMessage ?? null,
+    p_schedule_id:    scheduleId,
+    p_asset_id:       assetId,
+    p_status:         status,
+    p_error_message:  errorMessage ?? null,
+    p_occurrence_key: occurrenceKey ?? null,
+    p_scheduled_for:  scheduledFor ?? null,
   });
   if (error) { console.error('[announcementApi] mark played failed', error); throw error; }
-  return data as { success: boolean; log_id: string; status: AnnouncementLogStatus };
+  return data as { success: boolean; log_id: string; status: string; deduped?: boolean };
 }
