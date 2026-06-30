@@ -25,10 +25,11 @@
 
 export const config = { runtime: 'edge' };
 
-// 알림 디스패치 조회 윈도우 (cron 주기보다 약간 크게 — 경계 누락 방지).
-// 주의: dispatch-admin-notifications 는 발송 마커가 없어 윈도우 겹침 시 중복 발송 가능.
-//       (Phase 1-2 에서 admin_notifications.dispatched_at 마커로 멱등화 예정.)
-const NOTIFY_WINDOW_SEC = 20 * 60;
+// 알림 디스패치 조회 윈도우.
+// 0392(Phase 1-2)로 dispatch-admin-notifications 가 dispatched_at IS NULL + 채널별 멱등
+// 처리하므로 윈도우 겹침 중복 발송이 없음. 윈도우를 24h 로 넓혀 일시 실패(예: Resend 다운)
+// 알림이 해소될 때까지 다음 주기에 자동 재시도되게 한다 (성공한 채널은 skip).
+const NOTIFY_WINDOW_SEC = 24 * 60 * 60;
 
 interface TaskOutcome {
   ok: boolean;

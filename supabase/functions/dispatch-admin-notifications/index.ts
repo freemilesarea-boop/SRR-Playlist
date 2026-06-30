@@ -50,7 +50,17 @@ interface NotificationRow {
   context: Record<string, unknown> | null;
   track_id: string | null;
   created_at: string;
+  // 0392 — dispatch 멱등 마커 (채널별 성공 시각 / 시도 횟수)
+  dispatched_at?: string | null;
+  dispatch_slack_at?: string | null;
+  dispatch_email_at?: string | null;
+  dispatch_attempts?: number | null;
 }
+
+// 0392 — admin_notifications select 컬럼 (dispatch 마커 포함)
+const NOTIF_SELECT =
+  'id, kind, severity, title, body, context, track_id, created_at, ' +
+  'dispatched_at, dispatch_slack_at, dispatch_email_at, dispatch_attempts';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -198,18 +208,21 @@ serve(async (req) => {
   // 알림 row 가져오기
   let notifications: NotificationRow[] = [];
   if (body.notification_id) {
+    // 단건 모드: 관리자 명시 재발송 허용 (dispatched_at 필터 없음). 마커는 갱신.
     const { data, error } = await sbAdmin
       .from('admin_notifications')
-      .select('id, kind, severity, title, body, context, track_id, created_at')
+      .select(NOTIF_SELECT)
       .eq('id', body.notification_id);
     if (error) return json({ ok: false, error: error.message }, 500);
     notifications = (data ?? []) as NotificationRow[];
   } else {
+    // 배치(cron) 모드: 미발송분만 (0392 멱등) — dispatched_at IS NULL.
     const sinceTs = body.since_ts ?? new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const limit = Math.min(Math.max(1, body.limit ?? 20), 100);
     const { data, error } = await sbAdmin
       .from('admin_notifications')
-      .select('id, kind, severity, title, body, context, track_id, created_at')
+      .select(NOTIF_SELECT)
+      .is('dispatched_at', null)
       .gte('created_at', sinceTs)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -220,23 +233,73 @@ serve(async (req) => {
   const minSevLevel = SEV_ORDER[minSeverity] ?? 2;
   const targets = notifications.filter((n) => (SEV_ORDER[n.severity] ?? 1) >= minSevLevel);
 
+  const isSingle = !!body.notification_id;
+  const nowIso = new Date().toISOString();
+  let sentCount = 0, failedCount = 0, markFailures = 0;
+
   const results: any[] = [];
   for (const n of targets) {
     const r: any = { id: n.id, severity: n.severity, slack: 'skipped', email: 'skipped' };
-    if (slackEnabled) {
-      const sr = await sendSlack(slackUrl, n);
-      r.slack = sr.ok ? 'sent' : `failed: ${sr.error}`;
-    }
-    if (emailReady) {
-      const er = await sendEmail(RESEND_API_KEY, RESEND_FROM, emailTo, n);
-      r.email = er.ok ? 'sent' : `failed: ${er.error}`;
+    try {
+      let slackOkNow = false, emailOkNow = false;
+      const errParts: string[] = [];
+
+      // Slack — 채널별 멱등: 이미 성공(dispatch_slack_at)했고 단건 강제 재발송이 아니면 skip
+      if (slackEnabled) {
+        if (!isSingle && n.dispatch_slack_at) {
+          r.slack = 'already';
+        } else {
+          const sr = await sendSlack(slackUrl, n);
+          if (sr.ok) { slackOkNow = true; r.slack = 'sent'; }
+          else { r.slack = `failed: ${sr.error}`; errParts.push(`slack: ${sr.error}`); }
+        }
+      }
+
+      // Email — 채널별 멱등 (Slack 성공/실패와 독립)
+      if (emailReady) {
+        if (!isSingle && n.dispatch_email_at) {
+          r.email = 'already';
+        } else {
+          const er = await sendEmail(RESEND_API_KEY, RESEND_FROM, emailTo, n);
+          if (er.ok) { emailOkNow = true; r.email = 'sent'; }
+          else { r.email = `failed: ${er.error}`; errParts.push(`email: ${er.error}`); }
+        }
+      }
+
+      // 적용 채널이 모두 해소(비활성 or 기존성공 or 이번성공)되면 dispatched_at set → 재발송 차단.
+      const slackResolved = !slackEnabled || !!n.dispatch_slack_at || slackOkNow;
+      const emailResolved = !emailReady || !!n.dispatch_email_at || emailOkNow;
+
+      const patch: Record<string, unknown> = {
+        dispatch_attempts: (n.dispatch_attempts ?? 0) + 1,
+        dispatch_error: errParts.length ? errParts.join(' | ').slice(0, 500) : null,
+      };
+      if (slackOkNow) patch.dispatch_slack_at = nowIso;
+      if (emailOkNow) patch.dispatch_email_at = nowIso;
+      if (slackResolved && emailResolved) patch.dispatched_at = nowIso;
+
+      // service_role 클라이언트(RLS 우회 + 0083 UPDATE grant)로 마커 갱신
+      const { error: upErr } = await sbAdmin
+        .from('admin_notifications').update(patch).eq('id', n.id);
+      if (upErr) { r.mark = `mark_failed: ${upErr.message}`; markFailures++; }
+
+      if (errParts.length) failedCount++; else sentCount++;
+    } catch (e) {
+      // 한 알림 처리 실패가 나머지 디스패치를 막지 않도록 격리
+      r.error = e instanceof Error ? e.message : String(e);
+      failedCount++;
     }
     results.push(r);
   }
-  console.log('[notify-dispatch] done', { mode, attempted: targets.length, total: notifications.length });
+
+  console.log('[notify-dispatch] done', {
+    mode, attempted: targets.length, total: notifications.length,
+    sent: sentCount, failed: failedCount, mark_failures: markFailures,
+  });
   return json({
     ok: true, mode,
     processed: targets.length, total_fetched: notifications.length,
+    sent: sentCount, failed: failedCount, mark_failures: markFailures,
     channels: { slack: slackEnabled, email: emailReady },
     min_severity: minSeverity,
     results,
