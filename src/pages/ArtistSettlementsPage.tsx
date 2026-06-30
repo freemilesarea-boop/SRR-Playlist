@@ -17,8 +17,15 @@ function fmtMonth(s: string): string {
   return s.slice(0, 7);
 }
 
+// 0388 — 아티스트 노출 허용 status (관리자 확정 완료된 상태만).
+// 'pending' (계산 중) 은 정책상 노출 금지 — 서버 RPC + RLS 가 1차 차단,
+// 이 화면 필터링은 2중 방어선.
+const ALLOWED_ARTIST_STATUSES: ReadonlySet<SettlementStatus> = new Set<SettlementStatus>([
+  'carried_over', 'payable', 'paid', 'held', 'disputed',
+]);
+
 const STATUS_TONE: Record<SettlementStatus, string> = {
-  pending: 'bg-ink/10 text-ink-dim',
+  pending: 'bg-ink/10 text-ink-dim',  // 노출 안 됨 — 안전 default
   carried_over: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
   payable: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
   paid: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
@@ -27,7 +34,7 @@ const STATUS_TONE: Record<SettlementStatus, string> = {
 };
 
 const STATUS_LABEL: Record<SettlementStatus, string> = {
-  pending: '계산 중 (미확정)',
+  pending: '확정 대기',                 // 노출되지 않지만, 만약 통과 시 "실시간" 단어 사용 금지
   carried_over: '5만원 미만 → 이월',
   payable: '지급 예정',
   paid: '지급 완료',
@@ -45,7 +52,8 @@ export default function ArtistSettlementsPage() {
     let alive = true;
     setLoading(true);
     getMySettlements()
-      .then((r) => alive && setRows(r))
+      // 0388 — 2중 방어선: 서버 RPC + RLS 가 pending 차단하지만, 만일을 위해 client 도 필터.
+      .then((r) => alive && setRows(r.filter((row) => ALLOWED_ARTIST_STATUSES.has(row.status))))
       .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -92,7 +100,7 @@ export default function ArtistSettlementsPage() {
                 </span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                <Kv label="이번 달 net" value={fmtKrw(r.artist_net_settlement)} />
+                <Kv label="당월 net" value={fmtKrw(r.artist_net_settlement)} />
                 <Kv label="직전월 이월" value={r.previous_carried_amount > 0 ? `+${fmtKrw(r.previous_carried_amount)}` : '—'} />
                 <Kv label="총 정산액" value={fmtKrw(r.total_settlement_amount)} bold />
                 {r.meets_min_payout ? (
