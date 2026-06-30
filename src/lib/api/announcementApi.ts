@@ -88,6 +88,20 @@ export interface DueAnnouncement {
   last_played_at: string | null;
 }
 
+/**
+ * UpcomingAnnouncement — 0388 V2 exact-time trigger.
+ *
+ * store_get_upcoming_announcements 가 반환. DueAnnouncement 의 모든 필드 +
+ *   scheduled_at   : occurrence 의 정확한 발화 시각 (ISO timestamptz, 서버 시계 기준)
+ *   occurrence_key : '<schedule_id>:YYYYMMDDTHHMM' — in-memory 중복 방지 lock 키
+ * 클라이언트는 응답의 server now_at 로 시계 오차를 보정해 scheduled_at 까지
+ * setTimeout 을 걸고 00초에 정시 재생한다.
+ */
+export interface UpcomingAnnouncement extends DueAnnouncement {
+  scheduled_at: string;
+  occurrence_key: string;
+}
+
 export interface AnnouncementAssetCreateInput {
   title: string;
   fileUrl: string;
@@ -386,17 +400,64 @@ export async function getDueAnnouncements(
   return data as { success: boolean; store_id: string; now_at: string; data: DueAnnouncement[] };
 }
 
+/**
+ * 0388 V2 — 정확한 scheduled_at + occurrence_key 가 포함된 due/upcoming 목록.
+ *
+ * store_get_due_announcements (boolean 구간 판정) 와 달리, 각 schedule 의
+ * "다음/현재 occurrence 의 정확한 timestamptz" 를 계산해서 반환한다.
+ * 윈도우: now - 15min (놓침 복구) <= scheduled_at <= now + lookaheadSeconds.
+ *
+ * 클라이언트 (AnnouncementOverlay) 는 응답의 now_at 으로 시계 오차(offset)를
+ * 보정하고, scheduled_at 까지 setTimeout 을 걸어 HH:MM:00 에 즉시 interrupt 재생한다.
+ * scheduled_at 이 이미 과거(놓침)면 즉시 복구 재생.
+ */
+export async function getUpcomingAnnouncements(
+  storeId?: string | null,
+  lookaheadSeconds = 900,
+): Promise<{
+  success: boolean;
+  store_id: string;
+  now_at: string;
+  lookahead_seconds: number;
+  data: UpcomingAnnouncement[];
+}> {
+  const { data, error } = await supabase.rpc('store_get_upcoming_announcements', {
+    p_store_id:          storeId ?? null,
+    p_lookahead_seconds: lookaheadSeconds,
+  });
+  if (error) { console.error('[announcementApi] get upcoming failed', error); throw error; }
+  return data as {
+    success: boolean;
+    store_id: string;
+    now_at: string;
+    lookahead_seconds: number;
+    data: UpcomingAnnouncement[];
+  };
+}
+
+/**
+ * 0389 — occurrence_key / scheduled_for 를 함께 기록.
+ *
+ * status 'started' (재생 시작) → 'played'/'failed'/'skipped' (종료) 흐름.
+ * 서버는 occurrence_key 가 ('played','started','failed') 로 기록된 회차를 due/upcoming
+ * 에서 제외 → 같은 occurrence 중복 재생을 새로고침/리마운트 이후에도 차단.
+ * played 는 멱등 (이미 기록된 회차면 기존 log 반환).
+ */
 export async function markAnnouncementPlayed(
   scheduleId: string, assetId: string,
-  status: AnnouncementLogStatus = 'played',
+  status: AnnouncementLogStatus | 'started' = 'played',
   errorMessage?: string | null,
-): Promise<{ success: boolean; log_id: string; status: AnnouncementLogStatus }> {
+  occurrenceKey?: string | null,
+  scheduledFor?: string | null,
+): Promise<{ success: boolean; log_id: string; status: string; deduped?: boolean }> {
   const { data, error } = await supabase.rpc('store_mark_announcement_played', {
-    p_schedule_id:   scheduleId,
-    p_asset_id:      assetId,
-    p_status:        status,
-    p_error_message: errorMessage ?? null,
+    p_schedule_id:    scheduleId,
+    p_asset_id:       assetId,
+    p_status:         status,
+    p_error_message:  errorMessage ?? null,
+    p_occurrence_key: occurrenceKey ?? null,
+    p_scheduled_for:  scheduledFor ?? null,
   });
   if (error) { console.error('[announcementApi] mark played failed', error); throw error; }
-  return data as { success: boolean; log_id: string; status: AnnouncementLogStatus };
+  return data as { success: boolean; log_id: string; status: string; deduped?: boolean };
 }

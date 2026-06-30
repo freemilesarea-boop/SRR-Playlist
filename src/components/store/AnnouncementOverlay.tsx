@@ -1,57 +1,59 @@
 /**
- * AnnouncementOverlay — Priority 5 (Announcement Audio Scheduler V1).
+ * AnnouncementOverlay — Priority 5 (Announcement Audio Scheduler).
  *
  * 매장 플레이어에 안전하게 부착되는 광고/안내 음원 오버레이.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Trigger 정책 (2026-06 reliability fix)
+ * Trigger 정책 V2 (2026-06 — 00초 정밀 재생)
  * ─────────────────────────────────────────────────────────────────────────────
- *  실행 채널 3가지 — 어느 하나라도 발화하면 안내음 재생:
+ *  목표: 예약 시각 HH:MM 이면 HH:MM:00 에 (오차 1~2초 이내) 즉시 재생.
+ *        현재 매장음악이 재생 중이어도 기다리지 않고 즉시 pause/interrupt.
  *
- *  (1) 폴링 채널  : POLL_INTERVAL_MS (10s) 마다 store_get_due_announcements 호출.
- *                  due 가 비어있지 않으면 evaluateTrigger('poll') 실행.
+ *  핵심 = client-side exact timer (setTimeout):
  *
- *  (2) 트랙 전환  : usePlayerStore.subscribe 로 queue[index].id 변경 감지.
- *                  변경 즉시 evaluateTrigger('track_change') — 자연스러운 삽입.
+ *  (1) 폴링(re-arm) : POLL_INTERVAL_MS (15s) 마다 store_get_upcoming_announcements 호출.
+ *                     서버가 각 schedule 의 "정확한 scheduled_at + occurrence_key + now_at"
+ *                     을 반환. 응답 now_at 으로 클라이언트 시계 오차(offset)를 보정.
  *
- *  (3) Grace tick : TICK_INTERVAL_MS (5s) 마다 local tick.
- *                  due 가 GRACE_PERIOD_MS (60s) 이상 유지되면 강제 interrupt.
+ *  (2) Exact timer  : scheduled_at 이 미래면 (targetEpoch - now) 만큼 setTimeout 예약.
+ *                     timer 발화 = HH:MM:00 → reason 'exact_time_interrupt' 로 즉시 재생.
+ *                     매 폴링마다 offset 을 갱신해 timer 를 re-arm (시계 보정).
  *
- *  서버 측 _announcement_is_due_now (0386 hotfix 후 window=15min) 가
- *  scheduled_time <= now <= scheduled_time + 15min 범위를 판정.
- *  클라이언트는 서버 판정을 신뢰하고, 같은 schedule_id 가 비어있던 상태에서
- *  처음 등장한 시각 (dueFirstSeenAt) 부터 grace 를 측정.
+ *  (3) Late recovery: scheduled_at 이 이미 과거(놓침)지만 서버 recovery window(15min)
+ *                     이내면 즉시 재생 → reason 'poll_late_recovery'.
+ *                     (서버 폴링은 "놓친 예약 복구용" 백업 경로로만 동작.)
  *
- *  대단순 비교 (now.minute === scheduled.minute) 는 사용하지 않음 —
- *  interval 비교 (lastSeen <= scheduledTime <= now + window) 는 서버가 처리하고,
- *  클라이언트는 "서버가 due 라고 답한 시점부터의 경과 시간" 을 기준으로 판단.
+ *  (4) Visibility    : 탭이 다시 보이면 즉시 re-arm (background throttle 보정).
+ *
+ *  중복 방지:
+ *    - in-memory lock: occurrence_key ('<schedule_id>:YYYYMMDDTHHMM') 기준 firedKeys.
+ *      한 occurrence 는 세션 내 1회만 발화 ('duplicate_blocked' 로 차단).
+ *    - 서버: max_plays_per_day + 5min debounce (store_get_upcoming_announcements 내부 필터).
+ *
+ *  제거됨 (V1 → V2):
+ *    - GRACE_PERIOD_MS (60s) 자연 트랙 전환 대기 → 즉시 interrupt 로 대체.
+ *    - track_change fast-path / grace tick → exact timer 로 대체.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Recovery (놓침 복구)
+ * 로그 reason
  * ─────────────────────────────────────────────────────────────────────────────
- *  - 15min 서버 window 안에 매장이 polling 만 하면 반드시 한 번은 due 감지.
- *  - 감지 후 60s 안에 트랙 전환이 없으면 force-interrupt 로 발화.
- *  - max_plays_per_day + 5min 서버 debounce 가 중복 실행 차단 (안전).
- *  - 매장 reload / overlay remount 시 dueFirstSeenAt 은 리셋되지만,
- *    같은 schedule 이 여전히 due 이면 다음 poll 부터 다시 카운팅 시작.
+ *    exact_time_interrupt  — 예약 시각 정시 (setTimeout) 발화
+ *    poll_late_recovery    — 놓친 예약을 폴링으로 복구 발화
+ *    duplicate_blocked     — 같은 occurrence 재발화 차단 (또는 다른 안내음 재생 중)
+ *    player_not_ready      — audio element 미준비 (다음 폴링에서 재시도)
+ *    audio_play_failed     — play() 실패 (autoplay block / 403 / decode 등)
+ *    timer_drift_too_high  — exact-fire drift > 5s (정각성 실패 — 운영 경보)
+ *
+ *  정각성 검증 로그 (console.warn, 항상 출력):
+ *    [announcement-overlay] timer-armed { schedule_id, occurrence_key, target_epoch_ms, corrected_now_ms, delay_ms }
+ *    [announcement-overlay] exact-fire  { schedule_id, occurrence_key, target_epoch_ms, fired_at_ms, drift_ms }
+ *      성공: drift_ms 0~2000ms / 실패: 5000ms 초과 → timer_drift_too_high
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * 디버그
  * ─────────────────────────────────────────────────────────────────────────────
- *  localStorage.setItem('debug', 'announcement-overlay') 로 활성화 또는
- *  props.debug = true.
- *  콘솔 출력:
- *    [announcement-overlay] eval {source, schedule_id, scheduled_time(서버 NOW),
- *      now, last_poll_at, first_seen_at, elapsed_ms, grace_ms,
- *      current_track_id, is_playing, today_count, max_plays_per_day,
- *      shouldTrigger, reason}
- *
- *  실패 디버깅 시나리오:
- *    daily:HH:MM 예약 후 HH:MM-1 / HH:MM / HH:MM+1 콘솔 확인:
- *      - HH:MM-1 → eval 없음 또는 due=0
- *      - HH:MM    → eval poll, dueFirstSeenAt 기록, shouldTrigger=false (대기)
- *      - HH:MM+1  → eval poll/tick, elapsed 누적, 트랙 전환 시 fire
- *      - HH:MM+1m → 트랙 전환 없으면 grace 초과로 force-interrupt
+ *  localStorage.setItem('debug', 'announcement-overlay') 또는 props.debug = true.
+ *  trigger reason 은 debug flag 와 무관하게 console.warn 으로 항상 출력.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * 절대 무수정
@@ -63,31 +65,66 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import {
-  getDueAnnouncements, markAnnouncementPlayed, resolveAnnouncementPlayableUrl,
-  type DueAnnouncement,
+  getUpcomingAnnouncements, markAnnouncementPlayed, resolveAnnouncementPlayableUrl,
+  type UpcomingAnnouncement,
 } from '@/lib/api/announcementApi';
 
-const POLL_INTERVAL_MS = 10_000;  // 서버 due 폴링 주기
-const TICK_INTERVAL_MS = 5_000;   // local grace tick (서버 호출 없음)
-const GRACE_PERIOD_MS  = 60_000;  // due 감지 후 자연 트랙 전환을 기다리는 최대 시간
+const POLL_INTERVAL_MS    = 15_000;  // 서버 upcoming 폴링/타이머 re-arm 주기 (백업 + 시계 보정)
+const LOOKAHEAD_SECONDS   = 900;     // 서버에 요청할 미래 occurrence 조회 범위 (15min)
+const LEAD_ARM_MS         = 1_000;   // delay 가 이보다 크면 setTimeout 예약, 작으면 즉시 발화
+const ON_TIME_TOLERANCE_MS = 3_000;  // 예약 시각 대비 이 범위 내 지각이면 'exact', 넘으면 'recovery'
+const FIRED_KEY_TTL_MS    = 3_600_000; // firedKeys 보관 시간 (1h) — recovery window(15min) 보다 충분히 김
+
+type TriggerReason =
+  | 'exact_time_interrupt'
+  | 'poll_late_recovery'
+  | 'duplicate_blocked'
+  | 'player_not_ready'
+  | 'audio_play_failed';
+
+// 정각성(drift) 실패 임계 — exact timer 발화 시각이 target 대비 이만큼 벗어나면 실패로 로그.
+const DRIFT_FAIL_MS = 5_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// occurrence lock 영속화 (sessionStorage) — 새로고침/리마운트 직후 중복 재생 방지.
+// 서버 play_logs (occurrence_key 제외) 가 1차 방어, sessionStorage 는 다음 poll 전
+// 짧은 공백을 메우는 2차 방어. occurrence_key 에 날짜가 포함돼 daily 익일 재생은 정상.
+// ─────────────────────────────────────────────────────────────────────────────
+const SESSION_FIRED_KEY = 'srr.ann.fired';
+
+function loadFiredKeys(): Map<string, number> {
+  const m = new Map<string, number>();
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_FIRED_KEY);
+    if (!raw) return m;
+    const obj = JSON.parse(raw) as Record<string, number>;
+    const now = Date.now();
+    for (const [k, ts] of Object.entries(obj)) {
+      if (typeof ts === 'number' && now - ts < FIRED_KEY_TTL_MS) m.set(k, ts);
+    }
+  } catch { /* sessionStorage 불가 환경 → in-memory only */ }
+  return m;
+}
+
+function persistFiredKeys(m: Map<string, number>): void {
+  try {
+    window.sessionStorage.setItem(SESSION_FIRED_KEY, JSON.stringify(Object.fromEntries(m)));
+  } catch { /* quota/불가 → 무시 */ }
+}
 
 /**
  * 안내음 재생 실패 reason 분류 — failure 로그 + DB 기록용.
  *
  * HTMLMediaElement.error.code:
- *   1 MEDIA_ERR_ABORTED
- *   2 MEDIA_ERR_NETWORK         ← 403/404/네트워크
- *   3 MEDIA_ERR_DECODE
- *   4 MEDIA_ERR_SRC_NOT_SUPPORTED ← URL 유효하지 않음 / MIME / 권한
- *
- * play() 자체 rejection (autoplay block, NotAllowedError) 도 분류.
+ *   1 MEDIA_ERR_ABORTED / 2 MEDIA_ERR_NETWORK (403/404) /
+ *   3 MEDIA_ERR_DECODE / 4 MEDIA_ERR_SRC_NOT_SUPPORTED (URL/권한)
  */
 function classifyAnnouncementError(err: unknown, audio: HTMLAudioElement): string {
   const code = audio.error?.code ?? null;
   const name = (err as Error)?.name ?? '';
   if (name === 'NotAllowedError')   return 'autoplay_blocked';
   if (name === 'AbortError')        return 'play_aborted';
-  if (code === 4) return 'reserved_track_audio_403';     // SRC_NOT_SUPPORTED — signed URL 만료 / public URL 권한
+  if (code === 4) return 'reserved_track_audio_403';     // SRC_NOT_SUPPORTED
   if (code === 2) return 'reserved_track_audio_network'; // NETWORK
   if (code === 3) return 'reserved_track_audio_decode';
   if (code === 1) return 'reserved_track_audio_aborted';
@@ -108,8 +145,8 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       store_id: storeId ? `${storeId.slice(0, 8)}…` : null,
       debug_prop: debug,
       poll_interval_ms: POLL_INTERVAL_MS,
-      tick_interval_ms: TICK_INTERVAL_MS,
-      grace_period_ms: GRACE_PERIOD_MS,
+      lookahead_seconds: LOOKAHEAD_SECONDS,
+      trigger: 'exact-timer-v2',
     });
     return () => console.warn('[announcement-overlay] unmount', {
       store_id: storeId ? `${storeId.slice(0, 8)}…` : null,
@@ -117,20 +154,32 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
   }, [storeId, debug]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [due, setDue] = useState<DueAnnouncement[]>([]);
-  const [active, setActive] = useState<DueAnnouncement | null>(null);
+  const [active, setActive] = useState<UpcomingAnnouncement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Trigger 추적 refs (poll/tick/track-change 모두 공유)
-  const playingRef        = useRef(false);          // overlay 자체 재생 중 flag
-  const dueRef            = useRef<DueAnnouncement[]>([]);  // 최신 due 스냅샷
-  const dueFirstSeenAtRef = useRef<Map<string, number>>(new Map()); // schedule_id → ms timestamp
-  const lastPollAtRef     = useRef<number>(0);
-  const lastServerNowRef  = useRef<string | null>(null);
-  const lastTrackIdRef    = useRef<string | null>(null);
+  // Trigger 추적 refs
+  const playingRef       = useRef(false);                      // overlay 자체 재생 중 flag
+  const playingAnnRef    = useRef<UpcomingAnnouncement | null>(null); // 재생 중 occurrence (동기 — finish 핸들러용)
+  const serverOffsetRef  = useRef(0);                          // serverNowEpoch - clientNowEpoch (ms)
+  const timersRef        = useRef<Map<string, number>>(new Map());  // occurrence_key → setTimeout id
+  const firedKeysRef     = useRef<Map<string, number>>(new Map());  // occurrence_key → fired client epoch
 
-  // due state 와 dueRef 동기화 (tick/subscribe 가 항상 최신 due 참조)
-  useEffect(() => { dueRef.current = due; }, [due]);
+  // 최초 렌더 시 sessionStorage 에서 fired occurrence lock 복원 (새로고침 후 중복 방지)
+  const seededRef = useRef(false);
+  if (!seededRef.current) {
+    seededRef.current = true;
+    for (const [k, ts] of loadFiredKeys()) firedKeysRef.current.set(k, ts);
+  }
+
+  // occurrence lock 등록 (in-memory + sessionStorage 동시)
+  const lockOccurrence = useCallback((key: string) => {
+    firedKeysRef.current.set(key, Date.now());
+    persistFiredKeys(firedKeysRef.current);
+  }, []);
+  const unlockOccurrence = useCallback((key: string) => {
+    firedKeysRef.current.delete(key);
+    persistFiredKeys(firedKeysRef.current);
+  }, []);
 
   const debugEnabled = useCallback((): boolean => {
     if (debug) return true;
@@ -144,31 +193,72 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     if (debugEnabled()) console.log('[announcement-overlay]', ...args);
   }, [debugEnabled]);
 
+  // trigger reason 은 항상 출력 (운영 진단 — 'exact_time_interrupt' 등 확인용)
+  const logTrigger = useCallback((reason: TriggerReason, data: Record<string, unknown>) => {
+    console.warn('[announcement-overlay] trigger', { reason, ...data });
+  }, []);
+
   // ───────────────────────────────────────────────────────────────────────
-  // 안내음 재생 시작
+  // 안내음 종료/실패 핸들러 (startAnnouncement 보다 먼저 선언 — 의존성 순서)
+  // ───────────────────────────────────────────────────────────────────────
+  const finishAnnouncement = useCallback(async (
+    status: 'played' | 'failed' | 'skipped',
+    errorMsg?: string,
+  ) => {
+    const ann = playingAnnRef.current;
+    if (!ann) return;
+    playingRef.current = false;
+    playingAnnRef.current = null;
+    setActive(null);
+
+    try {
+      // occurrence_key + scheduled_for 기록 → 서버가 같은 회차 재출력 차단 (durable dedup)
+      await markAnnouncementPlayed(
+        ann.schedule_id, ann.asset_id, status, errorMsg ?? null,
+        ann.occurrence_key, ann.scheduled_at,
+      );
+    } catch (e) {
+      log('mark played failed', e);
+    }
+
+    // BGM 재개 (안내음 재생 전 우리가 pause 했으므로 복귀)
+    try { usePlayerStore.getState().play(); } catch (e) { log('resume BGM failed', e); }
+  }, [log]);
+
+  // ───────────────────────────────────────────────────────────────────────
+  // 안내음 재생 시작 — 현재 BGM 즉시 interrupt(pause) 후 안내음 우선 재생.
   //
-  // 0387: 저장된 asset_file_url 은 과거 signed URL (만료 → 403) 인 케이스 존재.
-  //       resolveAnnouncementPlayableUrl 로 file_path 기반 fresh URL 우선 사용.
-  //       실패 시 reserved_track_audio_403 로 별도 reason 기록 → 관리자가 원인 추적.
+  // 0387: 저장된 file_url 이 만료된 signed URL 인 케이스 → file_path 기반 fresh URL 우선.
   // ───────────────────────────────────────────────────────────────────────
-  const startAnnouncement = useCallback((ann: DueAnnouncement, reason: string) => {
-    if (playingRef.current) return;
+  const startAnnouncement = useCallback((ann: UpcomingAnnouncement, reason: TriggerReason) => {
     const a = audioRef.current;
-    if (!a) return;
+    if (!a) {
+      // audio element 미준비 — lock 해제하여 다음 폴링에서 재시도
+      logTrigger('player_not_ready', { schedule_id: ann.schedule_id, occurrence_key: ann.occurrence_key });
+      unlockOccurrence(ann.occurrence_key);
+      playingRef.current = false;
+      playingAnnRef.current = null;
+      return;
+    }
     playingRef.current = true;
+    playingAnnRef.current = ann;  // 동기 기록 — finish 핸들러가 즉시 참조
     setActive(ann);
 
-    // 진단 항상 출력 (debug flag 무관) — startAnnouncement 진입 1회
-    console.warn('[announcement-overlay] start', {
+    logTrigger(reason, {
       schedule_id: ann.schedule_id,
-      asset_id: ann.asset_id,
+      occurrence_key: ann.occurrence_key,
       asset_title: ann.asset_title,
-      asset_file_path: ann.asset_file_path,
-      asset_file_url_stored: ann.asset_file_url?.substring(0, 80),
-      reason,
+      scheduled_at: ann.scheduled_at,
+      offset_ms: Math.round(serverOffsetRef.current),
     });
 
-    // BGM 일시정지 (안내음 재생 전)
+    // 재생 시작 즉시 'started' 기록 — 서버 durable lock (재생 중 새로고침/크래시에도 회차 보호)
+    void markAnnouncementPlayed(
+      ann.schedule_id, ann.asset_id, 'started', null,
+      ann.occurrence_key, ann.scheduled_at,
+    ).catch((e) => log('mark started failed', e));
+
+    // 현재 매장음악 즉시 interrupt (자연 종료 대기 없음)
     try {
       usePlayerStore.getState().pause();
     } catch (e) {
@@ -176,12 +266,11 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     }
 
     void (async () => {
-      // 0387 — 매 재생 직전 fresh URL 발급 (저장된 signed URL 만료 회피)
+      // 매 재생 직전 fresh URL 발급 (저장된 signed URL 만료 회피)
       const resolved = await resolveAnnouncementPlayableUrl(ann.asset_file_path, ann.asset_file_url);
-      // 항상 출력 (debug flag 무관) — URL resolver 결과 추적
       console.warn('[announcement-overlay] resolved url', {
         schedule_id: ann.schedule_id,
-        url_source: resolved.source,   // 'public' | 'signed' | 'stored'
+        url_source: resolved.source,
         url_head:   resolved.url.substring(0, 160),
         fallback_reason: resolved.reason ?? null,
       });
@@ -191,213 +280,184 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       a.currentTime = 0;
 
       void a.play().then(() => {
-        // 성공도 1회 출력 — 운영에서 "재생까지 도달했는지" 확정
         console.warn('[announcement-overlay] play started', {
           schedule_id: ann.schedule_id,
           duration: a.duration,
           ready_state: a.readyState,
         });
       }).catch((playErr) => {
-        // play() rejection — autoplay block / decoding error / network 403 (전부 여기로)
         const failReason = classifyAnnouncementError(playErr, a);
         const errorMsg = `${failReason} :: ${(playErr as Error).message}`;
-        // 운영 디버그를 위해 console.error 로 항상 출력 (debug flag 와 무관)
-        console.error('[announcement-overlay] play failed', {
+        logTrigger('audio_play_failed', {
           schedule_id: ann.schedule_id,
           asset_id: ann.asset_id,
-          asset_file_path: ann.asset_file_path,
+          occurrence_key: ann.occurrence_key,
           url_source: resolved.source,
           url_head: resolved.url.substring(0, 160),
           audio_error_code: a.error?.code ?? null,
-          audio_error_message: a.error?.message ?? null,
-          reason: failReason,
+          classify: failReason,
           js_error_name: (playErr as Error)?.name ?? null,
           js_error_message: (playErr as Error)?.message ?? null,
         });
-        void markAnnouncementPlayed(ann.schedule_id, ann.asset_id, 'failed', errorMsg)
-          .catch((mpErr) => {
-            console.error('[announcement-overlay] mark_played(failed) RPC error', {
-              schedule_id: ann.schedule_id,
-              asset_id: ann.asset_id,
-              rpc_error: (mpErr as Error).message,
-            });
-          });
-        playingRef.current = false;
-        setActive(null);
-        try { usePlayerStore.getState().play(); } catch (_e) { void _e; }
+        // failed 기록 (last_played_at 은 played 만 갱신 → debounce 영향 없음).
+        // firedKey 는 유지하여 같은 occurrence 무한 재시도 방지 (occurrence 당 1회 시도).
+        void finishAnnouncement('failed', errorMsg);
       });
     })();
-  }, [log]);
+  }, [log, logTrigger, finishAnnouncement, unlockOccurrence]);
 
   // ───────────────────────────────────────────────────────────────────────
-  // 폴링: 서버에서 due 새로 가져오기
+  // occurrence 발화 — in-memory lock + 단일 재생 보장
   // ───────────────────────────────────────────────────────────────────────
-  const refresh = useCallback(async () => {
-    if (!storeId) return;
-    const startedAt = performance.now();
-    try {
-      const r = await getDueAnnouncements(storeId);
-      const next = r.data ?? [];
-      const nowMs = startedAt;  // 초기 호출 시각으로 통일 (Date.now 회피 시 ref 기반 카운팅)
-      lastPollAtRef.current = nowMs;
-      lastServerNowRef.current = r.now_at ?? null;
+  const fireOccurrence = useCallback((
+    item: UpcomingAnnouncement,
+    reason: TriggerReason,
+    targetEpochMs?: number,   // server 절대 scheduled epoch (정각성 drift 측정용)
+  ) => {
+    const key = item.occurrence_key;
 
-      // dueFirstSeenAt 갱신: 새 schedule 등장 시 now 기록, 사라진 schedule 은 제거
-      const seen = dueFirstSeenAtRef.current;
-      const liveIds = new Set(next.map(d => d.schedule_id));
-      for (const id of Array.from(seen.keys())) {
-        if (!liveIds.has(id)) seen.delete(id);
-      }
-      for (const d of next) {
-        if (!seen.has(d.schedule_id)) seen.set(d.schedule_id, nowMs);
-      }
+    // 예약된 timer 가 있으면 정리 (즉시 발화 또는 timer 콜백 진입 모두 여기로 수렴)
+    const t = timersRef.current.get(key);
+    if (t !== undefined) { clearTimeout(t); timersRef.current.delete(key); }
 
-      setDue(next);
-      setError(null);
+    if (firedKeysRef.current.has(key)) {
+      logTrigger('duplicate_blocked', { occurrence_key: key, note: 'already fired this occurrence' });
+      return;
+    }
+    if (playingRef.current) {
+      // 다른 안내음 재생 중 — lock 잠그지 않고 종료 후 폴링 복구에 맡김
+      logTrigger('duplicate_blocked', { occurrence_key: key, note: 'overlay busy, will recover via poll' });
+      return;
+    }
 
-      log('poll', {
-        store_id: storeId,
-        server_now: r.now_at,
-        client_now_ms: Math.round(nowMs),
-        due_count: next.length,
-        due_ids: next.map(d => d.schedule_id),
+    // exact-fire 정각성 로그 (exact timer 경로만) — drift 측정.
+    // corrected_now = Date.now() + serverOffset → server 시계 기준 현재. drift = corrected_now - target.
+    if (reason === 'exact_time_interrupt' && targetEpochMs !== undefined) {
+      const correctedNow = Date.now() + serverOffsetRef.current;
+      const drift = Math.round(correctedNow - targetEpochMs);
+      console.warn('[announcement-overlay] exact-fire', {
+        schedule_id: item.schedule_id,
+        occurrence_key: key,
+        target_epoch_ms: targetEpochMs,
+        fired_at_ms: Math.round(correctedNow),
+        drift_ms: drift,
       });
+      if (Math.abs(drift) > DRIFT_FAIL_MS) {
+        console.warn('[announcement-overlay] trigger', {
+          reason: 'timer_drift_too_high', occurrence_key: key, drift_ms: drift,
+        });
+      }
+    }
+
+    lockOccurrence(key);  // in-memory + sessionStorage 동시 lock
+    startAnnouncement(item, reason);
+  }, [logTrigger, lockOccurrence, startAnnouncement]);
+
+  // ───────────────────────────────────────────────────────────────────────
+  // 폴링 + exact timer re-arm
+  // ───────────────────────────────────────────────────────────────────────
+  const armUpcoming = useCallback(async () => {
+    if (!storeId) return;
+    try {
+      const r = await getUpcomingAnnouncements(storeId, LOOKAHEAD_SECONDS);
+      const items = r.data ?? [];
+
+      // 서버 시계 오차 보정: offset = serverNow - clientNow (ms)
+      const serverNow = r.now_at ? Date.parse(r.now_at) : NaN;
+      if (!Number.isNaN(serverNow)) serverOffsetRef.current = serverNow - Date.now();
+      const offset = serverOffsetRef.current;
+
+      const liveKeys = new Set(items.map((i) => i.occurrence_key));
+
+      // 더 이상 upcoming 이 아닌 occurrence 의 timer 정리
+      for (const [key, tid] of Array.from(timersRef.current.entries())) {
+        if (!liveKeys.has(key)) { clearTimeout(tid); timersRef.current.delete(key); }
+      }
+      // firedKeys TTL 정리 (메모리 bound — recovery window 보다 충분히 길게 보관 후 제거)
+      const nowMs = Date.now();
+      let prunedAny = false;
+      for (const [key, firedAt] of Array.from(firedKeysRef.current.entries())) {
+        if (nowMs - firedAt > FIRED_KEY_TTL_MS) { firedKeysRef.current.delete(key); prunedAny = true; }
+      }
+      if (prunedAny) persistFiredKeys(firedKeysRef.current);
+
+      log('poll-upcoming', {
+        server_now: r.now_at,
+        offset_ms: Math.round(offset),
+        count: items.length,
+        keys: items.map((i) => i.occurrence_key),
+      });
+
+      for (const item of items) {
+        const key = item.occurrence_key;
+        if (firedKeysRef.current.has(key)) continue;
+
+        const sched = Date.parse(item.scheduled_at);
+        if (Number.isNaN(sched)) continue;
+
+        // 클라이언트 시계 기준 목표 시각 = server 절대시각 - offset
+        const targetClient = sched - offset;
+        const delay = targetClient - Date.now();
+
+        if (delay > LEAD_ARM_MS) {
+          // 미래 → 정확히 그 시각에 발화하도록 (re-)arm
+          const existing = timersRef.current.get(key);
+          if (existing !== undefined) clearTimeout(existing);
+          const tid = window.setTimeout(() => fireOccurrence(item, 'exact_time_interrupt', sched), delay);
+          timersRef.current.set(key, tid);
+          // 정각성 검증 로그 — 항상 출력 (target/corrected_now/delay)
+          console.warn('[announcement-overlay] timer-armed', {
+            schedule_id: item.schedule_id,
+            occurrence_key: key,
+            target_epoch_ms: sched,
+            corrected_now_ms: Math.round(Date.now() + offset),
+            delay_ms: Math.round(delay),
+          });
+        } else if (delay > -ON_TIME_TOLERANCE_MS) {
+          // 거의 정시 (도래 직전 ~ 3초 이내 지각) → 정시 발화
+          fireOccurrence(item, 'exact_time_interrupt', sched);
+        } else {
+          // 놓침 (3초 초과 지각, recovery window 내) → 복구 발화
+          fireOccurrence(item, 'poll_late_recovery', sched);
+        }
+      }
+      setError(null);
     } catch (e) {
       const msg = (e as Error).message;
-      log('poll failed', msg);
       setError(msg);
+      log('poll-upcoming failed', msg);
     }
-  }, [storeId, log]);
+  }, [storeId, fireOccurrence, log]);
 
   // ───────────────────────────────────────────────────────────────────────
-  // Trigger 평가 — poll / tick / track_change 어디서든 호출 가능
-  // ───────────────────────────────────────────────────────────────────────
-  const evaluateTrigger = useCallback((source: 'poll' | 'tick' | 'track_change' | 'initial') => {
-    const dueNow = dueRef.current;
-    if (playingRef.current) {
-      log('eval skipped — already playing announcement', { source });
-      return;
-    }
-    if (dueNow.length === 0) {
-      // dueRef 가 비어있으면 굳이 매 tick 로그 찍지 않음 (noise)
-      if (source !== 'tick') log('eval skipped — no due', { source });
-      return;
-    }
-
-    const nowMs = performance.now();
-    const next = dueNow[0];
-    const firstSeen = dueFirstSeenAtRef.current.get(next.schedule_id) ?? nowMs;
-    const elapsedMs = nowMs - firstSeen;
-
-    const ps = usePlayerStore.getState();
-    const currentTrack = ps.queue[ps.index] ?? null;
-    const isPlaying = ps.playing;
-
-    let shouldTrigger = false;
-    let reason: string;
-
-    if (!currentTrack) {
-      shouldTrigger = true;
-      reason = 'no_current_track';
-    } else if (!isPlaying) {
-      shouldTrigger = true;
-      reason = 'player_paused';
-    } else if (source === 'track_change') {
-      shouldTrigger = true;
-      reason = 'natural_track_change';
-    } else if (elapsedMs >= GRACE_PERIOD_MS) {
-      shouldTrigger = true;
-      reason = `grace_exceeded (${Math.round(elapsedMs / 1000)}s >= ${GRACE_PERIOD_MS / 1000}s)`;
-    } else {
-      reason = `wait_for_track_change (${Math.round(elapsedMs / 1000)}s / ${GRACE_PERIOD_MS / 1000}s)`;
-    }
-
-    log('eval', {
-      source,
-      schedule_id: next.schedule_id,
-      schedule_name: next.schedule_name,
-      asset_title: next.asset_title,
-      server_now: lastServerNowRef.current,
-      client_now_ms: Math.round(nowMs),
-      last_poll_at_ms: Math.round(lastPollAtRef.current),
-      first_seen_at_ms: Math.round(firstSeen),
-      elapsed_ms: Math.round(elapsedMs),
-      grace_ms: GRACE_PERIOD_MS,
-      current_track_id: currentTrack?.id ?? null,
-      is_playing: isPlaying,
-      today_count: next.today_count,
-      max_plays_per_day: next.max_plays_per_day,
-      shouldTrigger,
-      reason,
-    });
-
-    if (shouldTrigger) startAnnouncement(next, reason);
-  }, [log, startAnnouncement]);
-
-  // due state 변경 직후마다 trigger 평가 (poll 완료 또는 finish 후 refresh)
-  useEffect(() => { evaluateTrigger('poll'); }, [due, evaluateTrigger]);
-
-  // ───────────────────────────────────────────────────────────────────────
-  // 안내음 종료/실패 핸들러
-  // ───────────────────────────────────────────────────────────────────────
-  const finishAnnouncement = useCallback(async (
-    status: 'played' | 'failed' | 'skipped',
-    errorMsg?: string,
-  ) => {
-    const ann = active;
-    if (!ann) return;
-    playingRef.current = false;
-    setActive(null);
-
-    // 동일 schedule 즉시 재발화 방지: dueFirstSeenAt 에서 제거
-    dueFirstSeenAtRef.current.delete(ann.schedule_id);
-
-    try {
-      await markAnnouncementPlayed(ann.schedule_id, ann.asset_id, status, errorMsg ?? null);
-    } catch (e) {
-      log('mark played failed', e);
-    }
-
-    // BGM 재개 (사용자가 직접 pause 한 게 아닌 경우만)
-    try { usePlayerStore.getState().play(); } catch (e) { log('resume BGM failed', e); }
-
-    // 서버 측 debounce + max_plays_per_day 반영하여 due 새로고침
-    void refresh();
-  }, [active, refresh, log]);
-
-  // ───────────────────────────────────────────────────────────────────────
-  // 폴링 effect (10s)
+  // 폴링 effect (15s) — 초기 1회 + 주기 re-arm. cleanup 시 모든 timer 해제.
   // ───────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!storeId) return;
-    void refresh();
-    const id = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [storeId, refresh]);
+    void armUpcoming();
+    const id = window.setInterval(() => void armUpcoming(), POLL_INTERVAL_MS);
+    const timers = timersRef.current;
+    return () => {
+      window.clearInterval(id);
+      for (const tid of timers.values()) clearTimeout(tid);
+      timers.clear();
+    };
+  }, [storeId, armUpcoming]);
 
   // ───────────────────────────────────────────────────────────────────────
-  // Grace tick effect (5s) — due 가 일정 시간 유지되면 force-interrupt
+  // Visibility 변경 — 탭이 다시 보이면 즉시 re-arm (background timer throttle 보정)
   // ───────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!storeId) return;
-    const id = window.setInterval(() => evaluateTrigger('tick'), TICK_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [storeId, evaluateTrigger]);
-
-  // ───────────────────────────────────────────────────────────────────────
-  // 트랙 전환 감지 (자연 삽입 fast-path)
-  // ───────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!storeId) return;
-    const unsub = usePlayerStore.subscribe((state) => {
-      const cur = state.queue[state.index]?.id ?? null;
-      const prev = lastTrackIdRef.current;
-      lastTrackIdRef.current = cur;
-      if (!cur || !prev || cur === prev) return;  // 트랙 변경 아님
-      evaluateTrigger('track_change');
-    });
-    return unsub;
-  }, [storeId, evaluateTrigger]);
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        log('visibility → re-arm');
+        void armUpcoming();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [storeId, armUpcoming, log]);
 
   // ───────────────────────────────────────────────────────────────────────
   // 안내음 오디오 이벤트 wiring
@@ -405,15 +465,15 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    const onEnded = () => void finishAnnouncement('played');
+    const onEnded = () => {
+      // 종료 후 다음 occurrence (놓침/연속 예약) 즉시 복구 평가
+      void finishAnnouncement('played').then(() => void armUpcoming());
+    };
     const onError = () => {
-      // play() rejection 으로 이미 finishAnnouncement 호출됐을 수 있지만,
-      // 일부 브라우저는 src 변경 직후 error 이벤트만 발생 (play() 가 resolve 후 error).
-      // playingRef 가 아직 true 이면 여기서 처리.
       if (!playingRef.current) return;
       const reason = classifyAnnouncementError(new Error('media error'), a);
-      console.error('[announcement-overlay] audio error event', {
-        reason,
+      logTrigger('audio_play_failed', {
+        classify: reason,
         audio_error_code: a.error?.code ?? null,
         audio_error_message: a.error?.message ?? null,
         src_head: a.src.substring(0, 120),
@@ -426,7 +486,7 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       a.removeEventListener('ended', onEnded);
       a.removeEventListener('error', onError);
     };
-  }, [finishAnnouncement]);
+  }, [finishAnnouncement, armUpcoming, logTrigger]);
 
   if (!storeId) return null;
 
