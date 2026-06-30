@@ -160,9 +160,29 @@ export async function uploadContractFile(
       upsert: false,
     });
   if (error) throw new Error(`storage upload 실패: ${error.message}`);
+  // 0394 — 버킷 private 전환. 다운로드는 file_path 로 signed URL 발급(getContractFileSignedUrl).
+  //        file_url 메타데이터는 기록용으로 path 기반 값을 저장(직링크 비활성, signed URL 사용).
   const { data } = supabase.storage.from(CONTRACT_BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) throw new Error('public URL 생성 실패');
-  return { path, publicUrl: data.publicUrl, sizeBytes: file.size, mimeType: file.type || 'application/pdf' };
+  const recordedUrl = data?.publicUrl ?? path;
+  return { path, publicUrl: recordedUrl, sizeBytes: file.size, mimeType: file.type || 'application/pdf' };
+}
+
+/**
+ * 0394 — 계약 파일 다운로드용 만료형 signed URL 발급.
+ * 버킷이 private 이므로 file_path 로 createSignedUrl 발급(super_admin storage SELECT 정책 필요).
+ * @param filePath enterprise_contract_files.file_path
+ * @param expiresIn 만료(초), 기본 300초(5분)
+ */
+export async function getContractFileSignedUrl(
+  filePath: string, expiresIn = 300,
+): Promise<string> {
+  if (!filePath || !filePath.trim()) throw new Error('파일 경로가 없습니다.');
+  const { data, error } = await supabase.storage
+    .from(CONTRACT_BUCKET)
+    .createSignedUrl(filePath, expiresIn);
+  if (error) { console.error('[enterpriseContractApi] signed url 실패', error); throw error; }
+  if (!data?.signedUrl) throw new Error('signed URL 생성 실패');
+  return data.signedUrl;
 }
 
 // =============================================================================
