@@ -27,7 +27,7 @@
  *
  *  중복 방지:
  *    - in-memory lock: occurrence_key ('<schedule_id>:YYYYMMDDTHHMM') 기준 firedKeys.
- *      한 occurrence 는 세션 내 1회만 발화 ('skipped_duplicate' 로 차단).
+ *      한 occurrence 는 세션 내 1회만 발화 ('duplicate_blocked' 로 차단).
  *    - 서버: max_plays_per_day + 5min debounce (store_get_upcoming_announcements 내부 필터).
  *
  *  제거됨 (V1 → V2):
@@ -39,9 +39,15 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *    exact_time_interrupt  — 예약 시각 정시 (setTimeout) 발화
  *    poll_late_recovery    — 놓친 예약을 폴링으로 복구 발화
- *    skipped_duplicate     — 같은 occurrence 재발화 차단 (또는 다른 안내음 재생 중)
+ *    duplicate_blocked     — 같은 occurrence 재발화 차단 (또는 다른 안내음 재생 중)
  *    player_not_ready      — audio element 미준비 (다음 폴링에서 재시도)
  *    audio_play_failed     — play() 실패 (autoplay block / 403 / decode 등)
+ *    timer_drift_too_high  — exact-fire drift > 5s (정각성 실패 — 운영 경보)
+ *
+ *  정각성 검증 로그 (console.warn, 항상 출력):
+ *    [announcement-overlay] timer-armed { schedule_id, occurrence_key, target_epoch_ms, corrected_now_ms, delay_ms }
+ *    [announcement-overlay] exact-fire  { schedule_id, occurrence_key, target_epoch_ms, fired_at_ms, drift_ms }
+ *      성공: drift_ms 0~2000ms / 실패: 5000ms 초과 → timer_drift_too_high
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * 디버그
@@ -72,9 +78,12 @@ const FIRED_KEY_TTL_MS    = 3_600_000; // firedKeys 보관 시간 (1h) — recov
 type TriggerReason =
   | 'exact_time_interrupt'
   | 'poll_late_recovery'
-  | 'skipped_duplicate'
+  | 'duplicate_blocked'
   | 'player_not_ready'
   | 'audio_play_failed';
+
+// 정각성(drift) 실패 임계 — exact timer 발화 시각이 target 대비 이만큼 벗어나면 실패로 로그.
+const DRIFT_FAIL_MS = 5_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // occurrence lock 영속화 (sessionStorage) — 새로고침/리마운트 직후 중복 재생 방지.
@@ -300,7 +309,11 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
   // ───────────────────────────────────────────────────────────────────────
   // occurrence 발화 — in-memory lock + 단일 재생 보장
   // ───────────────────────────────────────────────────────────────────────
-  const fireOccurrence = useCallback((item: UpcomingAnnouncement, reason: TriggerReason) => {
+  const fireOccurrence = useCallback((
+    item: UpcomingAnnouncement,
+    reason: TriggerReason,
+    targetEpochMs?: number,   // server 절대 scheduled epoch (정각성 drift 측정용)
+  ) => {
     const key = item.occurrence_key;
 
     // 예약된 timer 가 있으면 정리 (즉시 발화 또는 timer 콜백 진입 모두 여기로 수렴)
@@ -308,13 +321,32 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
     if (t !== undefined) { clearTimeout(t); timersRef.current.delete(key); }
 
     if (firedKeysRef.current.has(key)) {
-      logTrigger('skipped_duplicate', { occurrence_key: key, note: 'already fired this occurrence' });
+      logTrigger('duplicate_blocked', { occurrence_key: key, note: 'already fired this occurrence' });
       return;
     }
     if (playingRef.current) {
       // 다른 안내음 재생 중 — lock 잠그지 않고 종료 후 폴링 복구에 맡김
-      logTrigger('skipped_duplicate', { occurrence_key: key, note: 'overlay busy, will recover via poll' });
+      logTrigger('duplicate_blocked', { occurrence_key: key, note: 'overlay busy, will recover via poll' });
       return;
+    }
+
+    // exact-fire 정각성 로그 (exact timer 경로만) — drift 측정.
+    // corrected_now = Date.now() + serverOffset → server 시계 기준 현재. drift = corrected_now - target.
+    if (reason === 'exact_time_interrupt' && targetEpochMs !== undefined) {
+      const correctedNow = Date.now() + serverOffsetRef.current;
+      const drift = Math.round(correctedNow - targetEpochMs);
+      console.warn('[announcement-overlay] exact-fire', {
+        schedule_id: item.schedule_id,
+        occurrence_key: key,
+        target_epoch_ms: targetEpochMs,
+        fired_at_ms: Math.round(correctedNow),
+        drift_ms: drift,
+      });
+      if (Math.abs(drift) > DRIFT_FAIL_MS) {
+        console.warn('[announcement-overlay] trigger', {
+          reason: 'timer_drift_too_high', occurrence_key: key, drift_ms: drift,
+        });
+      }
     }
 
     lockOccurrence(key);  // in-memory + sessionStorage 동시 lock
@@ -371,15 +403,22 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
           // 미래 → 정확히 그 시각에 발화하도록 (re-)arm
           const existing = timersRef.current.get(key);
           if (existing !== undefined) clearTimeout(existing);
-          const tid = window.setTimeout(() => fireOccurrence(item, 'exact_time_interrupt'), delay);
+          const tid = window.setTimeout(() => fireOccurrence(item, 'exact_time_interrupt', sched), delay);
           timersRef.current.set(key, tid);
-          log('armed', { occurrence_key: key, delay_ms: Math.round(delay), scheduled_at: item.scheduled_at });
+          // 정각성 검증 로그 — 항상 출력 (target/corrected_now/delay)
+          console.warn('[announcement-overlay] timer-armed', {
+            schedule_id: item.schedule_id,
+            occurrence_key: key,
+            target_epoch_ms: sched,
+            corrected_now_ms: Math.round(Date.now() + offset),
+            delay_ms: Math.round(delay),
+          });
         } else if (delay > -ON_TIME_TOLERANCE_MS) {
           // 거의 정시 (도래 직전 ~ 3초 이내 지각) → 정시 발화
-          fireOccurrence(item, 'exact_time_interrupt');
+          fireOccurrence(item, 'exact_time_interrupt', sched);
         } else {
           // 놓침 (3초 초과 지각, recovery window 내) → 복구 발화
-          fireOccurrence(item, 'poll_late_recovery');
+          fireOccurrence(item, 'poll_late_recovery', sched);
         }
       }
       setError(null);
