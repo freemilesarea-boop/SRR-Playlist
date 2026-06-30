@@ -39,11 +39,14 @@
 -- 1) enterprise_monthly_settlements — snapshot 컬럼 추가 (additive, nullable)
 -- ============================================================
 alter table public.enterprise_monthly_settlements
-  add column if not exists contract_id        uuid references public.enterprise_contracts(id) on delete set null,
-  add column if not exists contract_no         text,
-  add column if not exists minimum_payout      integer check (minimum_payout is null or minimum_payout >= 0),
-  add column if not exists settlement_method   text,
-  add column if not exists rate_source         text check (rate_source is null or rate_source in ('contract','profile','default'));
+  add column if not exists contract_id          uuid references public.enterprise_contracts(id) on delete set null,
+  add column if not exists contract_no           text,
+  add column if not exists contract_start_date   date,
+  add column if not exists contract_end_date     date,
+  add column if not exists contract_version      timestamptz,   -- 적용 당시 계약 개정 시각(버전)
+  add column if not exists minimum_payout        integer check (minimum_payout is null or minimum_payout >= 0),
+  add column if not exists settlement_method     text,
+  add column if not exists rate_source           text check (rate_source is null or rate_source in ('contract','profile','default'));
 
 create index if not exists idx_ems_contract on public.enterprise_monthly_settlements(contract_id)
   where contract_id is not null;
@@ -75,6 +78,9 @@ declare
   v_month date := date_trunc('month', coalesce(p_month, current_date))::date;
   v_ea record;
   v_contract record;
+  v_cstart date;
+  v_cend date;
+  v_cver timestamptz;
   v_active_count int;
   v_price int;
   v_rate numeric;
@@ -137,6 +143,13 @@ begin
 
     -- 활성 계약 snapshot + effective 값 (contract > profile > default)
     select * into v_contract from public._enterprise_active_contract(v_ea.ea_id) limit 1;
+    v_cstart := null; v_cend := null; v_cver := null;
+    if v_contract.id is not null then
+      -- "당시 계약" 기간/버전(개정 시각) snapshot — 추후 계약 수정과 무관하게 고정
+      select c.start_date, c.end_date, c.updated_at
+        into v_cstart, v_cend, v_cver
+        from public.enterprise_contracts c where c.id = v_contract.id;
+    end if;
     v_price  := public._enterprise_monthly_store_price(v_ea.ea_id);
     v_rate   := public._enterprise_effective_commission_rate(v_ea.ea_id);
     v_min    := public._enterprise_effective_minimum_payout(v_ea.ea_id);
@@ -156,13 +169,15 @@ begin
       (enterprise_account_id, settlement_month,
        active_store_count, monthly_store_price, commission_rate,
        per_store_commission, total_commission,
-       contract_id, contract_no, minimum_payout, settlement_method, rate_source,
+       contract_id, contract_no, contract_start_date, contract_end_date, contract_version,
+       minimum_payout, settlement_method, rate_source,
        status, generated_by)
     values
       (v_ea.ea_id, v_month,
        v_active_count, v_price, v_rate,
        v_per_store, v_total,
-       v_contract.id, v_contract.contract_no, v_min, v_method, v_rate_source,
+       v_contract.id, v_contract.contract_no, v_cstart, v_cend, v_cver,
+       v_min, v_method, v_rate_source,
        'pending', v_uid)
     returning id into v_settlement_id;
 
@@ -255,6 +270,9 @@ begin
     'total_commission', ems.total_commission,
     'contract_id', ems.contract_id,
     'contract_no', ems.contract_no,
+    'contract_start_date', ems.contract_start_date,
+    'contract_end_date', ems.contract_end_date,
+    'contract_version', ems.contract_version,
     'minimum_payout', ems.minimum_payout,
     'settlement_method', ems.settlement_method,
     'rate_source', ems.rate_source,
@@ -327,6 +345,9 @@ begin
       'total_commission', v_settlement.total_commission,
       'contract_id', v_settlement.contract_id,
       'contract_no', v_settlement.contract_no,
+      'contract_start_date', v_settlement.contract_start_date,
+      'contract_end_date', v_settlement.contract_end_date,
+      'contract_version', v_settlement.contract_version,
       'minimum_payout', v_settlement.minimum_payout,
       'settlement_method', v_settlement.settlement_method,
       'rate_source', v_settlement.rate_source,
@@ -369,6 +390,9 @@ begin
     'total_commission', ems.total_commission,
     'contract_id', ems.contract_id,
     'contract_no', ems.contract_no,
+    'contract_start_date', ems.contract_start_date,
+    'contract_end_date', ems.contract_end_date,
+    'contract_version', ems.contract_version,
     'minimum_payout', ems.minimum_payout,
     'settlement_method', ems.settlement_method,
     'rate_source', ems.rate_source,
@@ -437,6 +461,9 @@ begin
       'total_commission', v_settlement.total_commission,
       'contract_id', v_settlement.contract_id,
       'contract_no', v_settlement.contract_no,
+      'contract_start_date', v_settlement.contract_start_date,
+      'contract_end_date', v_settlement.contract_end_date,
+      'contract_version', v_settlement.contract_version,
       'minimum_payout', v_settlement.minimum_payout,
       'settlement_method', v_settlement.settlement_method,
       'rate_source', v_settlement.rate_source,
@@ -459,10 +486,11 @@ declare v_cols int; v_gen_ok boolean;
 begin
   select count(*) into v_cols from information_schema.columns
    where table_schema='public' and table_name='enterprise_monthly_settlements'
-     and column_name in ('contract_id','contract_no','minimum_payout','settlement_method','rate_source');
+     and column_name in ('contract_id','contract_no','contract_start_date','contract_end_date',
+                         'contract_version','minimum_payout','settlement_method','rate_source');
   raise notice '====== 0390 Enterprise settlement contract integration ======';
-  raise notice 'ems snapshot columns: % / 5', v_cols;
-  if v_cols = 5 then
+  raise notice 'ems snapshot columns: % / 8', v_cols;
+  if v_cols = 8 then
     raise notice '0390 COMPLETE — generate uses contract-aware effective helpers + snapshots active contract';
   else
     raise warning '0390 INCOMPLETE — expected 5 new columns, found %', v_cols;

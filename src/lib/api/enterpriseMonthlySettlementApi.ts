@@ -30,6 +30,10 @@ export type SettlementRateSource = 'contract' | 'profile' | 'default';
 export interface SettlementContractSnapshot {
   contract_id: string | null;
   contract_no: string | null;
+  /** 0390 — 적용 당시 계약 기간/버전 snapshot (생성 시점 고정, read-only) */
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  contract_version: string | null;   // 계약 개정 시각(버전) = 적용 당시 contract.updated_at
   minimum_payout: number | null;
   settlement_method: string | null;
   rate_source: SettlementRateSource | null;
