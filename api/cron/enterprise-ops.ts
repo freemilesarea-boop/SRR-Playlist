@@ -143,7 +143,13 @@ export default async function handler(req: Request) {
   // (2) 청구 연체 마킹 — 독립 실행
   results.billing_overdue = await callRpc(url, key, 'admin_mark_enterprise_billing_overdue', {});
 
-  // (3) 알림 외부 디스패치 — 독립 실행
+  // (3) NOC 알림 감시 — 독립 실행. NOC active alerts(major+critical) → admin_notifications 생성
+  //     (store:condition dedup + 6h cooldown). 디스패치 전에 실행해 같은 주기에 발송되게 함.
+  results.noc_alert_sync = await callRpc(url, key, 'admin_noc_sync_alerts_to_notifications', {
+    p_cooldown_hours: 6,
+  });
+
+  // (4) 알림 외부 디스패치 — 독립 실행 (위에서 생성된 알림 포함, 0392 멱등)
   const sinceTs = new Date(Date.now() - NOTIFY_WINDOW_SEC * 1000).toISOString();
   results.notifications_dispatch = await callEdge(url, key, secret, 'dispatch-admin-notifications', {
     since_ts: sinceTs,
