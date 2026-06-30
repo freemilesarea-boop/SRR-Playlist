@@ -1049,10 +1049,12 @@ function SettlementHoldCard({
         </div>
       </div>
 
-      {/* 누적 예상 정산금 */}
+      {/* 0388 — "예상" 표현 금지 (실시간 추정 오해 방지).
+              hold_status RPC 가 반환하는 금액은 admin 이 이미 확정한
+              held + carried_over 합산 (지급만 보류된 상태). */}
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-bg-deep/40 p-3 text-[12px] ring-1 ring-line/10">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-ink-dim">예상 정산금 (누적)</p>
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">보류 정산금 (확정·미지급)</p>
           <p className="mt-0.5 font-mono text-lg font-bold text-emerald-300">
             {formatAmount(status.total_pending_amount)}
           </p>
