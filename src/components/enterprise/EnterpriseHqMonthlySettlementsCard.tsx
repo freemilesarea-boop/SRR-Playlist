@@ -16,6 +16,7 @@ import {
   getMyEnterpriseMonthlySettlementItems,
   formatSettlementMonth,
   SETTLEMENT_STATUS_LABEL,
+  SETTLEMENT_RATE_SOURCE_LABEL,
   type HqEnterpriseMonthlySettlementRow,
   type HqEnterpriseMonthlySettlementDetail,
   type EnterpriseMonthlySettlementItem,
@@ -169,6 +170,14 @@ function HqDetailModal({
                 <KV k="총 정산금" v={`${settlement.total_commission.toLocaleString('ko-KR')}원`} highlight />
                 {settlement.paid_at && <KV k="지급일" v={new Date(settlement.paid_at).toLocaleDateString('ko-KR')} />}
               </dl>
+              {/* 0390 — 적용된 계약 스냅샷 (생성 시점 고정) */}
+              {(settlement.rate_source || settlement.contract_no || settlement.settlement_method) && (
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px] border-t border-line/10 pt-2">
+                  <KV k="적용 출처" v={settlement.rate_source ? SETTLEMENT_RATE_SOURCE_LABEL[settlement.rate_source] : '—'} />
+                  <KV k="계약번호" v={settlement.contract_no ?? '—'} />
+                  <KV k="정산방법" v={settlement.settlement_method ?? '—'} />
+                </dl>
+              )}
               {settlement.payment_reference && (
                 <p className="mt-2 text-[10px] text-ink-dim">
                   지급 참조: <span className="font-mono">{settlement.payment_reference}</span>

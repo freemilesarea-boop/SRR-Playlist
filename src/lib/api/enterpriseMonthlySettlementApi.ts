@@ -17,7 +17,29 @@ export type EnterpriseMonthlySettlementStatus =
 
 export type EnterpriseMonthlySettlementItemStatus = 'included' | 'excluded';
 
-export interface EnterpriseMonthlySettlementRow {
+/**
+ * 0390 — 정산 생성 시 적용된 단가/수수료의 출처.
+ *   contract: 활성 계약값 적용 / profile: 정산 프로필값 / default: 시스템 기본값.
+ */
+export type SettlementRateSource = 'contract' | 'profile' | 'default';
+
+/**
+ * 0390 — 월 정산 생성 시 "당시 계약" 스냅샷 필드.
+ * 계약 수정은 다음 달 정산부터 반영되며, 이미 생성된 정산은 이 값으로 고정된다.
+ */
+export interface SettlementContractSnapshot {
+  contract_id: string | null;
+  contract_no: string | null;
+  /** 0390 — 적용 당시 계약 기간/버전 snapshot (생성 시점 고정, read-only) */
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  contract_version: string | null;   // 계약 개정 시각(버전) = 적용 당시 contract.updated_at
+  minimum_payout: number | null;
+  settlement_method: string | null;
+  rate_source: SettlementRateSource | null;
+}
+
+export interface EnterpriseMonthlySettlementRow extends SettlementContractSnapshot {
   id: string;
   enterprise_account_id: string;
   enterprise_name: string;
@@ -51,7 +73,7 @@ export interface EnterpriseMonthlySettlementItem {
   reason: string | null;
 }
 
-export interface EnterpriseMonthlySettlementDetail {
+export interface EnterpriseMonthlySettlementDetail extends SettlementContractSnapshot {
   id: string;
   enterprise_account_id: string;
   enterprise_name: string;
@@ -73,7 +95,7 @@ export interface EnterpriseMonthlySettlementDetail {
 }
 
 // HQ 쪽 — 본인 본사만, manager 정보 제외
-export interface HqEnterpriseMonthlySettlementRow {
+export interface HqEnterpriseMonthlySettlementRow extends SettlementContractSnapshot {
   id: string;
   settlement_month: string;
   active_store_count: number;
@@ -88,7 +110,7 @@ export interface HqEnterpriseMonthlySettlementRow {
   payment_reference: string | null;
 }
 
-export interface HqEnterpriseMonthlySettlementDetail {
+export interface HqEnterpriseMonthlySettlementDetail extends SettlementContractSnapshot {
   id: string;
   settlement_month: string;
   active_store_count: number;
@@ -292,4 +314,11 @@ export const SETTLEMENT_STATUS_LABEL: Record<EnterpriseMonthlySettlementStatus, 
   approved: '승인됨',
   paid: '지급완료',
   cancelled: '취소됨',
+};
+
+/** 0390 — 정산에 적용된 단가/수수료 출처 라벨 (관리자/HQ 화면 배지용) */
+export const SETTLEMENT_RATE_SOURCE_LABEL: Record<SettlementRateSource, string> = {
+  contract: '계약 적용',
+  profile: '정산 프로필',
+  default: '기본값',
 };

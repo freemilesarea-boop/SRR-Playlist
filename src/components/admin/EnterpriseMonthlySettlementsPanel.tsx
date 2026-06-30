@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   RefreshCw, AlertCircle, Wallet, Play, ThumbsUp, BadgeCheck, X, Ban,
   FileText, CheckCircle2, XCircle, Clock as ClockIcon, AlertTriangle,
+  Lock, ScrollText,
 } from 'lucide-react';
 import {
   adminGenerateEnterpriseMonthlySettlement,
@@ -21,10 +22,12 @@ import {
   currentMonthFirstDay,
   formatSettlementMonth,
   SETTLEMENT_STATUS_LABEL,
+  SETTLEMENT_RATE_SOURCE_LABEL,
   type EnterpriseMonthlySettlementRow,
   type EnterpriseMonthlySettlementStatus,
   type EnterpriseMonthlySettlementDetail,
   type EnterpriseMonthlySettlementItem,
+  type SettlementRateSource,
 } from '@/lib/api/enterpriseMonthlySettlementApi';
 import { toast } from '@/store/toastStore';
 import {
@@ -197,7 +200,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
         />
       ) : (
         <div className="overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
-          <table className="w-full min-w-[920px] text-xs">
+          <table className="w-full min-w-[1040px] text-xs">
             <thead className="bg-bg-deep text-[10px] uppercase tracking-wider text-ink-dim">
               <tr>
                 <th className="px-3 py-2 text-left">월</th>
@@ -205,6 +208,7 @@ export default function EnterpriseMonthlySettlementsPanel() {
                 <th className="px-3 py-2 text-right">활성 매장</th>
                 <th className="px-3 py-2 text-right">단가</th>
                 <th className="px-3 py-2 text-right">수수료율</th>
+                <th className="px-3 py-2 text-center">적용 출처</th>
                 <th className="px-3 py-2 text-right">매장당</th>
                 <th className="px-3 py-2 text-right">총 정산금</th>
                 <th className="px-3 py-2 text-center">상태</th>
@@ -224,6 +228,9 @@ export default function EnterpriseMonthlySettlementsPanel() {
                   <td className="px-3 py-2 text-right tabular-nums">{r.active_store_count.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.monthly_store_price.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.commission_rate}%</td>
+                  <td className="px-3 py-2 text-center">
+                    <RateSourceBadge source={r.rate_source} contractNo={r.contract_no} />
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.per_store_commission.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-emerald-300">{r.total_commission.toLocaleString('ko-KR')}</td>
                   <td className="px-3 py-2 text-center"><StatusBadge status={r.status} /></td>
@@ -387,6 +394,8 @@ function DetailModal({
                   <KV k="매장당" v={`${settlement.per_store_commission.toLocaleString('ko-KR')}원`} />
                   <KV k="총 정산금" v={`${settlement.total_commission.toLocaleString('ko-KR')}원`} highlight />
                 </dl>
+                {/* 0390 — 적용 계약 Snapshot 검증 카드 (생성 시점 고정, read-only) */}
+                <ContractSnapshotCard settlement={settlement} />
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-ink-dim">
                   <KV k="생성" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
                   {settlement.approved_at && <KV k="승인" v={new Date(settlement.approved_at).toLocaleString('ko-KR')} />}
@@ -541,6 +550,76 @@ function DetailModal({
 // =============================================================================
 // Small components
 // =============================================================================
+
+/**
+ * 0390 — 적용 계약 Snapshot 검증 카드 (read-only).
+ *
+ * "이 정산이 어떤 계약/조건으로 계산됐는지" 를 한 화면에서 100% 확인.
+ * 모든 값은 정산 생성 시점에 고정된 snapshot 이며, 이후 계약 수정과 무관하다.
+ */
+function ContractSnapshotCard({ settlement }: { settlement: EnterpriseMonthlySettlementDetail }) {
+  const fromContract = settlement.rate_source === 'contract';
+  const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleDateString('ko-KR') : '—');
+  const period = settlement.contract_start_date || settlement.contract_end_date
+    ? `${fmtDate(settlement.contract_start_date)} ~ ${settlement.contract_end_date ? fmtDate(settlement.contract_end_date) : '무기한'}`
+    : '—';
+  return (
+    <div className="mt-3 rounded-lg border border-violet-400/30 bg-violet-500/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold text-violet-200">
+          <ScrollText size={12} /> 적용 계약 Snapshot
+        </p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-bg-deep px-2 py-0.5 text-[9px] text-ink-dim ring-1 ring-line/20">
+          <Lock size={9} /> 생성 시점 고정 · 읽기 전용
+        </span>
+      </div>
+      <dl className="grid grid-cols-3 gap-2 text-[11px]">
+        <div>
+          <dt className="text-[10px] text-ink-dim">적용 출처</dt>
+          <dd className="mt-0.5"><RateSourceBadge source={settlement.rate_source} contractNo={settlement.contract_no} /></dd>
+        </div>
+        <KV k="계약번호" v={settlement.contract_no ?? (fromContract ? '—' : '계약 없음')} mono />
+        <KV k="계약 버전(개정)" v={settlement.contract_version ? new Date(settlement.contract_version).toLocaleString('ko-KR') : '—'} />
+        <KV k="계약 기간" v={period} colSpan />
+        <KV k="매장 단가" v={`${settlement.monthly_store_price.toLocaleString('ko-KR')}원`} />
+        <KV k="수수료율" v={`${settlement.commission_rate}%`} />
+        <KV k="최소 정산금" v={settlement.minimum_payout != null ? `${settlement.minimum_payout.toLocaleString('ko-KR')}원` : '—'} />
+        <KV k="정산방법" v={settlement.settlement_method ?? '—'} />
+        <KV k="생성 시각" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
+      </dl>
+      <p className="mt-2 text-[10px] leading-relaxed text-ink-dim">
+        총 정산금 {settlement.total_commission.toLocaleString('ko-KR')}원 =
+        활성 매장 {settlement.active_store_count.toLocaleString('ko-KR')}개 ×
+        (매장 단가 {settlement.monthly_store_price.toLocaleString('ko-KR')}원 ×
+        수수료율 {settlement.commission_rate}% = 매장당 {settlement.per_store_commission.toLocaleString('ko-KR')}원).
+        {fromContract
+          ? ' 위 조건은 적용 당시 계약 snapshot 이며 이후 계약 수정과 무관하게 고정됩니다.'
+          : ' 활성 계약이 없어 정산 프로필/기본값 기준으로 계산되었습니다.'}
+      </p>
+    </div>
+  );
+}
+
+/** 0390 — 정산에 적용된 단가/수수료 출처 배지 (계약 적용 시 계약번호 tooltip). */
+function RateSourceBadge({ source, contractNo }: {
+  source: SettlementRateSource | null;
+  contractNo: string | null;
+}) {
+  if (!source) return <span className="text-ink-dim">—</span>;
+  const cls = source === 'contract'
+    ? 'bg-violet-500/20 text-violet-200 ring-violet-400/40'
+    : source === 'profile'
+      ? 'bg-sky-500/20 text-sky-200 ring-sky-400/40'
+      : 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40';
+  return (
+    <span
+      title={contractNo ? `계약 ${contractNo}` : undefined}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${cls}`}
+    >
+      {SETTLEMENT_RATE_SOURCE_LABEL[source]}
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: EnterpriseMonthlySettlementStatus }) {
   const ICON = {
