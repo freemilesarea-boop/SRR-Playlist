@@ -15,7 +15,7 @@ import {
 import {
   listEnterpriseContracts, getEnterpriseContract, createEnterpriseContract,
   updateEnterpriseContract, setEnterpriseContractStatus, softDeleteEnterpriseContract,
-  uploadContractFile, recordContractFile, deleteContractFile, getContractKpi,
+  uploadContractFile, recordContractFile, deleteContractFile, getContractFileSignedUrl, getContractKpi,
   type EnterpriseContract, type ContractDetail, type ContractStatus,
   type ContractKpi, type SettlementMethod,
   CONTRACT_ALLOWED_MIME, CONTRACT_MAX_BYTES,
@@ -558,6 +558,15 @@ function ContractDetailModal({
     finally { setBusy(false); }
   };
 
+  // 0394 — 버킷 private 전환: file_path 로 만료형 signed URL 발급 후 새 탭 열기
+  const onOpenFile = async (filePath: string | null) => {
+    if (!filePath) { onToast({ tone: 'danger', title: '열기 실패', body: '파일 경로가 없습니다.' }); return; }
+    try {
+      const url = await getContractFileSignedUrl(filePath);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) { onToast({ tone: 'danger', title: '파일 열기 실패', body: (e as Error).message }); }
+  };
+
   const onDeleteFile = async (fileId: string, fileName: string) => {
     if (!window.confirm(`"${fileName}" 파일을 삭제하시겠습니까?`)) return;
     setBusy(true);
@@ -633,12 +642,12 @@ function ContractDetailModal({
               <ul className="space-y-1">
                 {detail.files.map((f) => (
                   <li key={f.id} className="flex items-center justify-between rounded bg-bg-deep/60 px-2 py-1.5">
-                    <a href={f.file_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-[11px] text-ink hover:underline">
+                    <button type="button" onClick={() => void onOpenFile(f.file_path)}
+                      className="flex items-center gap-2 text-[11px] text-ink hover:underline text-left">
                       <FileText size={11} />
                       <span className="truncate max-w-[280px]">{f.file_name}</span>
                       <span className="text-[10px] text-ink-mute">{fmtBytes(f.file_size)}</span>
-                    </a>
+                    </button>
                     <AdminButton tone="danger" variant="ghost" size="sm" leftIcon={<Trash2 size={11} />}
                       loading={busy} onClick={() => void onDeleteFile(f.id, f.file_name)}>—</AdminButton>
                   </li>
