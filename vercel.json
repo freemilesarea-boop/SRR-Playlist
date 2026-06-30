@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/daily-metrics",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/enterprise-ops",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
