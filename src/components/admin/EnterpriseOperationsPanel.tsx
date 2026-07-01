@@ -24,15 +24,18 @@ import {
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminBadge, AdminButton,
-  AdminAlert, AdminEmpty, AdminSkeleton, AdminTooltip,
+  AdminAlert, AdminEmpty, AdminSkeleton, AdminTooltip, AdminModal,
 } from '@/components/admin/ui';
 import {
   fetchEnterpriseOpsOverview, fetchEnterpriseOpsCronStatus,
   fetchEnterpriseOpsNotificationsSummary, fetchEnterpriseOpsActivityFeed,
+  runEnterpriseOpsCron, dispatchPendingNotifications, recalculateNoc,
+  refreshPolicyAutomation, exportCronLogs, downloadLogsAsCsv,
   type EnterpriseOpsOverview, type EnterpriseOpsCronStatus,
   type EnterpriseOpsNotificationsSummary, type EnterpriseOpsActivityFeed,
-  type EnterpriseOpsActivityType,
+  type EnterpriseOpsActivityType, type QuickActionOutcome,
 } from '@/lib/api/enterpriseOperationsApi';
+import { toast } from '@/store/toastStore';
 import {
   getNocActiveAlerts, getNocStoreHealthList,
   type NocAlert, type NocStoreHealth,
@@ -514,31 +517,198 @@ export default function EnterpriseOperationsPanel() {
         )}
       </AdminCard>
 
-      {/* ─── §6. Quick Actions (read-only placeholder) ─── */}
+      {/* ─── §6. Quick Actions ─── */}
+      <QuickActionsCard onAfterAction={() => void load()} />
+    </AdminSection>
+  );
+}
+
+// ================================================================
+// Quick Actions — Phase 2-2 (Option B: 5 active, Generate Settlement disabled)
+// ================================================================
+
+type QuickActionKey =
+  | 'run_cron'
+  | 'dispatch_pending'
+  | 'recalculate_noc'
+  | 'refresh_policy'
+  | 'generate_settlement'
+  | 'export_logs';
+
+interface QuickActionDef {
+  key: QuickActionKey;
+  label: string;
+  icon: JSX.Element;
+  description: string;
+  scope: string;               // 영향 범위 (사용자용 설명)
+  disabled?: { reason: string };
+}
+
+const QUICK_ACTIONS: QuickActionDef[] = [
+  { key: 'run_cron',            label: 'Run Enterprise Cron',
+    icon: <TimerReset size={12} />,
+    description: '즉시 enterprise-ops cron 을 1회 실행. policy_automation / billing_overdue / noc_alert_sync / notifications_dispatch 4 단계 동시 실행.',
+    scope: '전체 Enterprise + 정책 자동화 + 알림 발송' },
+  { key: 'dispatch_pending',    label: 'Dispatch Pending',
+    icon: <Bell size={12} />,
+    description: '미발송(dispatched_at IS NULL) admin_notifications 최근 24h 를 Slack/Email 로 발송. 이미 발송된 채널은 skip (0392 멱등).',
+    scope: '알림 시스템 (외부 채널 발송 발생)' },
+  { key: 'recalculate_noc',     label: 'Recalculate NOC',
+    icon: <AlertTriangle size={12} />,
+    description: 'NOC active alerts 를 admin_notifications 로 즉시 동기화. 6h cooldown + dedup index 로 중복 방지.',
+    scope: '알림 생성 (외부 발송은 dispatch 별도)' },
+  { key: 'refresh_policy',      label: 'Refresh Policy',
+    icon: <ShieldCheck size={12} />,
+    description: '정책 자동화 규칙 due 인 것만 실행 + next_run_at 전진 (중복 실행 내장 방지).',
+    scope: '정책 자동화 규칙 + 정책 배포' },
+  { key: 'generate_settlement', label: 'Generate Settlement',
+    icon: <Database size={12} />,
+    description: '(Phase 2-3 예정) 위험도 🔴 — enterprise + 월 지정 modal 필요.',
+    scope: '월 정산 데이터 생성 (irreversible-like)',
+    disabled: { reason: 'Phase 2-3 에서 활성화 예정 (위험도 🔴, enterprise+월 지정 UI 필요)' } },
+  { key: 'export_logs',         label: 'Export Logs',
+    icon: <Download size={12} />,
+    description: '최근 30일 cron 로그를 CSV 로 다운로드. 최대 5000 행.',
+    scope: '읽기 전용 export — 시스템 상태 변경 없음' },
+];
+
+const DEBOUNCE_MS = 10_000; // 10s: 요구사항
+
+interface QuickActionRun {
+  outcome: QuickActionOutcome;
+  at: number;
+}
+
+function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
+  const [pending, setPending] = useState<QuickActionKey | null>(null);
+  const [confirming, setConfirming] = useState<QuickActionDef | null>(null);
+  const [lastRunAt, setLastRunAt] = useState<Partial<Record<QuickActionKey, number>>>({});
+  const [lastOutcome, setLastOutcome] = useState<Partial<Record<QuickActionKey, QuickActionRun>>>({});
+
+  const runAction = useCallback(async (a: QuickActionDef) => {
+    if (a.disabled) return;
+    if (pending) return;
+    // Debounce — client-side 10s
+    const last = lastRunAt[a.key] ?? 0;
+    const remain = Math.ceil((DEBOUNCE_MS - (Date.now() - last)) / 1000);
+    if (remain > 0) {
+      toast.error(`${a.label}: ${remain}초 후 다시 시도`);
+      return;
+    }
+    setPending(a.key);
+    setConfirming(null);
+    try {
+      let outcome: QuickActionOutcome;
+      switch (a.key) {
+        case 'run_cron':
+          outcome = await runEnterpriseOpsCron();
+          break;
+        case 'dispatch_pending':
+          outcome = await dispatchPendingNotifications();
+          break;
+        case 'recalculate_noc':
+          outcome = await recalculateNoc();
+          break;
+        case 'refresh_policy':
+          outcome = await refreshPolicyAutomation();
+          break;
+        case 'export_logs': {
+          const r = await exportCronLogs({ days: 30, source: 'cron', limit: 5000 });
+          if (r.ok && r.data) downloadLogsAsCsv(r.data);
+          outcome = r;
+          break;
+        }
+        default:
+          outcome = { ok: false, error: 'disabled' };
+      }
+      setLastRunAt((m) => ({ ...m, [a.key]: Date.now() }));
+      setLastOutcome((m) => ({ ...m, [a.key]: { outcome, at: Date.now() } }));
+      if (outcome.ok) {
+        toast.success(`${a.label} 완료 (${outcome.duration_ms ?? '?'}ms)`);
+      } else {
+        toast.error(`${a.label} 실패: ${outcome.error ?? 'unknown'}`);
+      }
+    } catch (e) {
+      const msg = (e as Error).message;
+      toast.error(`${a.label} 오류: ${msg}`);
+      setLastOutcome((m) => ({ ...m, [a.key]: { outcome: { ok: false, error: msg }, at: Date.now() } }));
+    } finally {
+      setPending(null);
+      onAfterAction();
+    }
+  }, [pending, lastRunAt, onAfterAction]);
+
+  return (
+    <>
       <AdminCard
         title={<span className="flex items-center gap-2"><PlayCircle size={13} /> Quick Actions</span>}
-        subtitle={<span className="text-[10px] text-amber-300">Phase 2-2 에서 활성화 예정 — 이번 버전은 read-only 관제만 제공</span>}
+        subtitle={<span className="text-[10px] text-amber-300">super_admin 전용. 모든 실행은 audit log 기록됨. 10초 debounce 적용.</span>}
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {[
-            { key: 'run_cron',            label: 'Run Enterprise Cron',  icon: <TimerReset size={12} /> },
-            { key: 'dispatch_pending',    label: 'Dispatch Pending',     icon: <Bell size={12} /> },
-            { key: 'recalculate_noc',     label: 'Recalculate NOC',      icon: <AlertTriangle size={12} /> },
-            { key: 'refresh_policy',      label: 'Refresh Policy',       icon: <ShieldCheck size={12} /> },
-            { key: 'generate_settlement', label: 'Generate Settlement',  icon: <Database size={12} /> },
-            { key: 'export_logs',         label: 'Export Logs',          icon: <Download size={12} /> },
-          ].map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              disabled
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 opacity-50 cursor-not-allowed"
-            >
-              {a.icon} {a.label}
-            </button>
-          ))}
+          {QUICK_ACTIONS.map((a) => {
+            const isPending = pending === a.key;
+            const isDisabled = !!a.disabled || (pending !== null && !isPending);
+            const last = lastOutcome[a.key];
+            const lastAgo = last ? Math.floor((Date.now() - last.at) / 1000) : null;
+            return (
+              <div key={a.key} className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => setConfirming(a)}
+                  className={
+                    a.disabled
+                      ? 'flex items-center justify-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 opacity-50 cursor-not-allowed'
+                    : isPending
+                      ? 'flex items-center justify-center gap-1.5 rounded-xl bg-accent/25 px-3 py-2 text-[11px] font-semibold text-accent ring-1 ring-accent/40'
+                    : isDisabled
+                      ? 'flex items-center justify-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 opacity-50 cursor-not-allowed'
+                      : 'flex items-center justify-center gap-1.5 rounded-xl bg-bg-card px-3 py-2 text-[11px] font-semibold text-ink ring-1 ring-line/20 hover:bg-bg-hover'
+                  }
+                >
+                  {isPending ? <RefreshCw size={12} className="animate-spin" /> : a.icon}
+                  {a.label}
+                </button>
+                {last && (
+                  <div className="flex items-center justify-between gap-1 px-1 text-[10px]">
+                    <AdminBadge tone={last.outcome.ok ? 'success' : 'danger'} variant="subtle">
+                      {last.outcome.ok ? '성공' : '실패'}
+                    </AdminBadge>
+                    <span className="text-ink-mute">{lastAgo}초 전</span>
+                  </div>
+                )}
+                {a.disabled && (
+                  <p className="px-1 text-[9px] text-amber-300">{a.disabled.reason}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </AdminCard>
-    </AdminSection>
+
+      {/* Confirmation modal */}
+      {confirming && (
+        <AdminModal
+          open
+          onClose={() => setConfirming(null)}
+          title={`${confirming.label} 실행하시겠어요?`}
+        >
+          <div className="space-y-3 text-[12px]">
+            <p className="text-ink-mute">{confirming.description}</p>
+            <div className="rounded-xl bg-bg-card p-2.5 ring-1 ring-line/10">
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim">영향 범위</p>
+              <p className="mt-0.5 font-medium text-ink">{confirming.scope}</p>
+            </div>
+            <div className="rounded-xl bg-amber-500/25 p-2.5 text-[10px] text-amber-100 ring-1 ring-amber-500/50">
+              실행 후 취소 불가. 실패해도 다른 액션에 영향 없음. 결과는 audit log 에 기록됩니다.
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <AdminButton onClick={() => setConfirming(null)}>취소</AdminButton>
+            <AdminButton onClick={() => void runAction(confirming)}>실행</AdminButton>
+          </div>
+        </AdminModal>
+      )}
+    </>
   );
 }
