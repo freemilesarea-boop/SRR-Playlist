@@ -142,3 +142,204 @@ export async function fetchEnterpriseOpsActivityFeed(limit = 20): Promise<Enterp
   if (error) { console.error('[enterpriseOps] activity feed failed', error); throw error; }
   return data as EnterpriseOpsActivityFeed;
 }
+
+
+// ============================================================================
+// Phase 2-2 — Quick Actions (5 activated; Generate Settlement deferred to 2-3)
+// ============================================================================
+
+export interface QuickActionOutcome {
+  ok: boolean;
+  status?: number;
+  duration_ms?: number;
+  detail?: unknown;
+  error?: string;
+}
+
+/**
+ * Server audit helper. RPC 자체 실패해도 mutation 결과에 영향 주지 않도록 silent.
+ * (0197 admin_log_operation 은 서버 사이드 게이트 있음 — 일반 사용자는 무시됨.)
+ */
+async function audit(
+  category: string, level: 'success' | 'error', status: 'success' | 'failed',
+  message: string, details: Record<string, unknown>, error_message?: string,
+): Promise<void> {
+  try {
+    await supabase.rpc('admin_log_operation', {
+      p_source: 'enterprise_operations',
+      p_category: category,
+      p_level: level,
+      p_status: status,
+      p_message: message,
+      p_details: details,
+      ...(error_message ? { p_error_message: error_message } : {}),
+    });
+  } catch { /* silent — log 실패가 mutation 자체를 실패시키지 않음 */ }
+}
+
+/**
+ * QA-1: Run Enterprise Cron (via /api/admin/enterprise-ops-run server wrapper).
+ * 서버 wrapper 가 CRON_SECRET 부착 + super_admin 검증 + 60s debounce 처리.
+ */
+export async function runEnterpriseOpsCron(): Promise<QuickActionOutcome> {
+  const t0 = performance.now();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { ok: false, error: 'no_session' };
+  try {
+    const r = await fetch('/api/admin/enterprise-ops-run', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'content-type': 'application/json' },
+    });
+    const body = await r.json().catch(() => ({}));
+    const durMs = Math.round(performance.now() - t0);
+    return { ok: r.ok, status: r.status, duration_ms: durMs, detail: body };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * QA-2: Dispatch Pending Notifications (dispatch-admin-notifications edge function).
+ * 0392 dispatch 멱등 (dispatched_at IS NULL 만 처리) 을 재사용.
+ */
+export async function dispatchPendingNotifications(): Promise<QuickActionOutcome> {
+  const t0 = performance.now();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { ok: false, error: 'no_session' };
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  try {
+    const { data, error } = await supabase.functions.invoke('dispatch-admin-notifications', {
+      body: { since_ts: since, limit: 50 },
+    });
+    const durMs = Math.round(performance.now() - t0);
+    if (error) {
+      await audit('quick_action.dispatch_pending', 'error', 'failed',
+        'admin quick action: dispatch pending', { since_ts: since }, error.message);
+      return { ok: false, error: error.message, duration_ms: durMs };
+    }
+    await audit('quick_action.dispatch_pending', 'success', 'success',
+      'admin quick action: dispatch pending', { since_ts: since, result: data ?? null, duration_ms: durMs });
+    return { ok: true, duration_ms: durMs, detail: data };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * QA-3: Recalculate NOC (admin_noc_sync_alerts_to_notifications).
+ * 0393 감시 워커 를 즉시 1회 실행. 6h cooldown + dedup index 가 내장.
+ */
+export async function recalculateNoc(): Promise<QuickActionOutcome> {
+  const t0 = performance.now();
+  try {
+    const { data, error } = await supabase.rpc('admin_noc_sync_alerts_to_notifications', { p_cooldown_hours: 6 });
+    const durMs = Math.round(performance.now() - t0);
+    if (error) {
+      await audit('quick_action.recalculate_noc', 'error', 'failed',
+        'admin quick action: recalculate NOC', {}, error.message);
+      return { ok: false, error: error.message, duration_ms: durMs };
+    }
+    await audit('quick_action.recalculate_noc', 'success', 'success',
+      'admin quick action: recalculate NOC', { result: data ?? null, duration_ms: durMs });
+    return { ok: true, duration_ms: durMs, detail: data };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * QA-4: Refresh Policy Automation (admin_evaluate_policy_automation_rules, p_dry_run=false).
+ * 0378 자동화 엔진 — due 규칙만 처리 + next_run_at 전진 (중복 실행 내장 방지).
+ */
+export async function refreshPolicyAutomation(): Promise<QuickActionOutcome> {
+  const t0 = performance.now();
+  try {
+    const { data, error } = await supabase.rpc('admin_evaluate_policy_automation_rules', { p_dry_run: false });
+    const durMs = Math.round(performance.now() - t0);
+    if (error) {
+      await audit('quick_action.refresh_policy', 'error', 'failed',
+        'admin quick action: refresh policy automation', {}, error.message);
+      return { ok: false, error: error.message, duration_ms: durMs };
+    }
+    await audit('quick_action.refresh_policy', 'success', 'success',
+      'admin quick action: refresh policy automation', { result: data ?? null, duration_ms: durMs });
+    return { ok: true, duration_ms: durMs, detail: data };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export interface ExportLogsResult {
+  success: true;
+  source: string;
+  category: string | null;
+  days: number;
+  from_at: string;
+  to_at: string;
+  row_count: number;
+  row_limit: number;
+  truncated: boolean;
+  rows: Array<{
+    id: string; source: string; category: string; level: string; status: string;
+    message: string; details: Record<string, unknown>; user_id: string | null;
+    related_id: string | null; duration_ms: number | null; error_code: string | null;
+    error_message: string | null; created_at: string;
+  }>;
+  computed_at: string;
+}
+
+/**
+ * QA-6: Export Logs (admin_enterprise_ops_export_logs, LIMIT 10000).
+ * source 기본 'cron', category null. CSV 변환은 client 에서 처리 (browser download).
+ */
+export async function exportCronLogs(opts: {
+  days?: number; source?: string; category?: string | null; limit?: number;
+} = {}): Promise<QuickActionOutcome & { data?: ExportLogsResult }> {
+  const t0 = performance.now();
+  try {
+    const { data, error } = await supabase.rpc('admin_enterprise_ops_export_logs', {
+      p_days: opts.days ?? 30,
+      p_source: opts.source ?? 'cron',
+      p_category: opts.category ?? null,
+      p_limit: opts.limit ?? 5000,
+    });
+    const durMs = Math.round(performance.now() - t0);
+    if (error) {
+      await audit('quick_action.export_logs', 'error', 'failed',
+        'admin quick action: export cron logs', { opts }, error.message);
+      return { ok: false, error: error.message, duration_ms: durMs };
+    }
+    const result = data as ExportLogsResult;
+    await audit('quick_action.export_logs', 'success', 'success',
+      'admin quick action: export cron logs',
+      { opts, row_count: result?.row_count ?? 0, truncated: result?.truncated ?? false, duration_ms: durMs });
+    return { ok: true, duration_ms: durMs, data: result };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * Client-side CSV 변환 + browser download 트리거.
+ */
+export function downloadLogsAsCsv(res: ExportLogsResult, filename?: string): void {
+  const headers = ['id', 'source', 'category', 'level', 'status', 'message', 'duration_ms', 'user_id', 'related_id', 'error_code', 'error_message', 'created_at'];
+  const escape = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    const s = String(v).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+  const lines = [headers.join(',')];
+  for (const r of res.rows) {
+    lines.push(headers.map((h) => escape((r as unknown as Record<string, unknown>)[h])).join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename ?? `enterprise-ops-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
