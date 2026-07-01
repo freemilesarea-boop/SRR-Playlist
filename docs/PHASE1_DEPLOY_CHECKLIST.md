@@ -249,6 +249,14 @@ Phase 1 조건부 완료 후 다음 파도. 각 항목은 별도 계획/PR 로 �
 | P0-2 | 실측 후 발견된 실패/이상은 최소 수정 PR 로 hotfix | smoke 결과 기반 |
 | P0-3 | Migration numbering CI Guard (PR #231) merge 후 회귀 없음 재확인 | 이미 merge — 후속 PR 에서 실제 감지되는지 관찰 |
 
+### P1 진행 상태 (Phase 2 실장)
+
+| 항목 | 상태 | 근거 |
+|------|------|------|
+| **Phase 2-1** Enterprise Operations Center | ✅ **완료** (2026-07-01) | PR #234 merge (`8047bbc`) + migration 0395 prod apply + 6개 검증 통과 |
+| **Phase 2-2** Quick Actions 활성화 | 🟡 **킥오프 대기** | `docs/PHASE2_2_QUICK_ACTIONS_KICKOFF.md` 참조 |
+| Phase 2-3+ | ⚪ 대기 | Phase 2-2 완료 후 재우선순위화 |
+
 ### P1 — Enterprise 운영 관제 강화 (Phase 2 본편 후보)
 
 | # | 항목 | 배경 |
