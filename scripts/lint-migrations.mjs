@@ -2,20 +2,33 @@
 /**
  * scripts/lint-migrations.mjs
  *
- * Detects unsafe text[] || 'literal' concat patterns in Supabase migrations.
+ * Two rules:
+ *   1) unsafe-array-concat — text[] || 'literal' 감지 (기존 rule)
+ *   2) duplicate-prefix    — `<NNNN>_` prefix 중복 감지 (신규 rule)
+ *      → 병합된 prod migration 순서 혼동 방지. legacy allowlist 예외.
  *
- * Bug pattern (회귀 방지 대상):
- *   v_reason_codes := v_reason_codes || 'ai_store_top3_match';
+ * ─────────────────────────────────────────────────────────────────
+ * Rule 1: unsafe-array-concat (회귀 방지)
+ * ─────────────────────────────────────────────────────────────────
+ *   Bug pattern:
+ *     v_reason_codes := v_reason_codes || 'ai_store_top3_match';
+ *   → PostgreSQL casts RHS to text[], fails: malformed array literal.
+ *   Safe:
+ *     v_reason_codes := array_append(v_reason_codes, 'ai_store_top3_match');
+ *     v_reason_codes := v_reason_codes || ARRAY['ai_store_top3_match'];
+ *   Per-file opt-out (사용 자제):
+ *     -- lint-disable-file: unsafe-array-concat
  *
- * → PostgreSQL casts right-hand 'literal' to text[], fails on missing curly braces:
- *   ERROR: malformed array literal: "ai_store_top3_match"
- *
- * Safe alternatives:
- *   v_reason_codes := array_append(v_reason_codes, 'ai_store_top3_match');
- *   v_reason_codes := v_reason_codes || ARRAY['ai_store_top3_match'];
- *
- * Per-file opt-out (for historical migrations already superseded):
- *   -- lint-disable-file: unsafe-array-concat
+ * ─────────────────────────────────────────────────────────────────
+ * Rule 2: duplicate-prefix
+ * ─────────────────────────────────────────────────────────────────
+ *   같은 4자리 prefix 를 두 개 이상의 migration 파일이 사용하면 실패:
+ *     0395_foo.sql + 0395_bar.sql  → ✗ FAIL
+ *   Suffix (알파벳/숫자) 는 정상:
+ *     0395a_foo.sql + 0395b_bar.sql  → ✓ OK
+ *   Legacy allowlist (이미 prod 반영, 절대 rename 금지):
+ *     0068, 0214, 0388
+ *   신규 prefix 는 반드시 최신 + 1 을 사용해 duplicate 를 예방.
  *
  * Usage:
  *   node scripts/lint-migrations.mjs
@@ -133,8 +146,48 @@ function lintFile(filepath) {
   return { violations, optedOut };
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Rule 2: duplicate-prefix
+// ─────────────────────────────────────────────────────────────────
+// 이미 prod 에 반영된 3쌍은 rename 금지 → allowlist.
+// 새 collision 이 감지되면 exit 1 + PR 실패.
+const LEGACY_PREFIX_ALLOWLIST = new Set(['0068', '0214', '0388']);
+
+/**
+ * 파일명에서 앞부분 4자리 숫자 prefix 를 추출.
+ *   '0395_foo.sql'  → '0395'
+ *   '0395a_foo.sql' → null  (suffix 있음 — 알파벳/숫자, 4자리 이후)
+ *   'phase_x1.sql'  → null  (timestamp/phase 형식은 검사 대상 외)
+ *
+ * duplicate 은 "정확히 4자리 숫자만" 인 경우만 잡음. suffix (0068b, 0155b, 0193a 등)
+ * 는 collision 이 아님.
+ */
+function extractPrefix(filename) {
+  const m = filename.match(/^(\d{4})_/);
+  return m ? m[1] : null;
+}
+
+function findDuplicatePrefixes(files) {
+  const map = new Map(); // prefix → filenames[]
+  for (const f of files) {
+    const p = extractPrefix(f);
+    if (!p) continue;
+    if (!map.has(p)) map.set(p, []);
+    map.get(p).push(f);
+  }
+  const duplicates = [];
+  for (const [prefix, filenames] of map.entries()) {
+    if (filenames.length < 2) continue;
+    duplicates.push({ prefix, filenames, allowed: LEGACY_PREFIX_ALLOWLIST.has(prefix) });
+  }
+  duplicates.sort((a, b) => a.prefix.localeCompare(b.prefix));
+  return duplicates;
+}
+
 function main() {
   const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
+
+  // ── Rule 1: unsafe-array-concat ────────────────────────────────
   let totalViolations = 0;
   let totalOptedOut = 0;
   const findings = [];
@@ -155,30 +208,59 @@ function main() {
     }
   }
 
+  // ── Rule 2: duplicate-prefix ───────────────────────────────────
+  const duplicates = findDuplicatePrefixes(files);
+  const newDuplicates = duplicates.filter((d) => !d.allowed);
+  const allowedDuplicates = duplicates.filter((d) => d.allowed);
+
+  // ── Report ─────────────────────────────────────────────────────
   console.log(`scanned ${files.length} migration files`);
   if (totalOptedOut > 0) {
     console.log(`opted-out (lint-disable-file): ${totalOptedOut} file(s)`);
   }
+  if (allowedDuplicates.length > 0) {
+    console.log(`legacy duplicate prefixes (allowlisted, rename 금지): ${allowedDuplicates.map((d) => d.prefix).join(', ')}`);
+  }
 
-  if (totalViolations === 0) {
-    console.log(`✓ migration lint passed — 0 violations`);
+  const failed = totalViolations > 0 || newDuplicates.length > 0;
+
+  if (!failed) {
+    console.log(`✓ migration lint passed — 0 violations, 0 new duplicate prefix`);
     process.exit(0);
   }
 
-  console.error(`✗ migration lint FAILED — ${totalViolations} violation(s) in ${findings.filter((f) => !f.optedOut).length} file(s)`);
-  for (const { file, optedOut, violations } of findings) {
-    const tag = optedOut ? ' [opted-out]' : '';
-    console.error(`\n  ${file}${tag}:`);
-    for (const v of violations) {
-      console.error(`    line ${v.line} [${v.pattern}]`);
-      console.error(`      bad : ${v.match}`);
-      console.error(`      fix : ${v.suggestion}`);
+  // Rule 1 실패 리포트
+  if (totalViolations > 0) {
+    console.error(`\n✗ unsafe-array-concat: ${totalViolations} violation(s) in ${findings.filter((f) => !f.optedOut).length} file(s)`);
+    for (const { file, optedOut, violations } of findings) {
+      const tag = optedOut ? ' [opted-out]' : '';
+      console.error(`  ${file}${tag}:`);
+      for (const v of violations) {
+        console.error(`    line ${v.line} [${v.pattern}]`);
+        console.error(`      bad : ${v.match}`);
+        console.error(`      fix : ${v.suggestion}`);
+      }
     }
+    console.error(`\n  Rule: text[] variables must use array_append(arr, val) or arr || ARRAY[val].`);
+    console.error(`  Historical opt-out: add header comment "-- lint-disable-file: unsafe-array-concat"`);
   }
-  console.error(`\nRule: text[] variables must use array_append(arr, val) or arr || ARRAY[val].`);
-  console.error(`See docs/MIGRATION_RULES.md`);
-  console.error(`\nHistorical opt-out: add header comment to migration file:`);
-  console.error(`  -- lint-disable-file: unsafe-array-concat`);
+
+  // Rule 2 실패 리포트
+  if (newDuplicates.length > 0) {
+    console.error(`\n✗ Duplicate migration prefix detected:`);
+    for (const d of newDuplicates) {
+      console.error(`\n  ${d.prefix}`);
+      for (const f of d.filenames) {
+        console.error(`    - ${f}`);
+      }
+    }
+    console.error(`\n  Rule: 같은 4자리 prefix 를 2개 이상 파일이 사용할 수 없습니다.`);
+    console.error(`        새 migration 은 최신 prefix + 1 을 사용하세요.`);
+    console.error(`        같은 도메인을 여러 파일로 나눠야 할 때는 suffix (0395a, 0395b) 를 사용하세요.`);
+    console.error(`        legacy allowlist: ${Array.from(LEGACY_PREFIX_ALLOWLIST).sort().join(', ')} (이미 prod 반영, rename 금지)`);
+  }
+
+  console.error(`\nSee docs/migrations.md`);
   process.exit(1);
 }
 
