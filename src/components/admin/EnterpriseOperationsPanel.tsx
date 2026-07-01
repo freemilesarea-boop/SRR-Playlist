@@ -292,8 +292,8 @@ export default function EnterpriseOperationsPanel() {
             </div>
 
             {cron.last_error && (
-              <div className="mt-3 rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-200 ring-1 ring-rose-500/20">
-                <b className="text-rose-100">마지막 오류:</b> <span className="font-mono">{cron.last_error}</span>
+              <div className="mt-3 rounded-xl bg-rose-500/25 p-2.5 text-[11px] text-rose-100 ring-1 ring-rose-500/40">
+                <b className="text-rose-50">마지막 오류:</b> <span className="font-mono">{cron.last_error}</span>
               </div>
             )}
 
