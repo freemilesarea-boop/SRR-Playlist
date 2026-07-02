@@ -373,11 +373,14 @@ function ContractSnapshotModal({
 // ============================================================================
 // Settlements view — spec 4, 5 (Generate Modal + snapshot freeze)
 // ============================================================================
+type SettlementRow = Awaited<ReturnType<typeof import('@/lib/api/enterpriseMonthlySettlementApi').adminListEnterpriseMonthlySettlements>>['rows'][number];
+
 function SettlementsView({ tick, onChange }: { tick: number; onChange: () => void }) {
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof import('@/lib/api/enterpriseMonthlySettlementApi').adminListEnterpriseMonthlySettlements>>['rows']>([]);
+  const [rows, setRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [openGen, setOpenGen] = useState(false);
+  const [snapshotFor, setSnapshotFor] = useState<SettlementRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -395,7 +398,7 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
     <>
       <AdminCard
         title="정산 목록 (Snapshot freeze 확인)"
-        subtitle={<span className="text-[10px] text-ink-mute">contract snapshot 은 이미 0390 에서 저장됨 — 표시만</span>}
+        subtitle={<span className="text-[10px] text-ink-mute">contract snapshot 은 이미 0390 에서 저장됨 — 행 클릭 시 Read-only Snapshot 표시</span>}
         action={
           <AdminButton size="md" tone="warning" onClick={() => setOpenGen(true)}>
             <PlayCircle size={12} /> Generate Settlement
@@ -418,11 +421,17 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
                   <th className="px-2 py-1 text-right">총 커미션</th>
                   <th className="px-2 py-1 text-left">상태</th>
                   <th className="px-2 py-1 text-left">Snapshot 출처</th>
+                  <th className="px-2 py-1 text-right"></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-line/10">
+                  <tr
+                    key={r.id}
+                    className="border-t border-line/10 cursor-pointer hover:bg-bg-hover"
+                    onClick={() => setSnapshotFor(r)}
+                    title="클릭하여 계약 스냅샷 상세 보기"
+                  >
                     <td className="px-2 py-1">{fmtMonth(r.settlement_month)}</td>
                     <td className="px-2 py-1 truncate max-w-[140px]">{r.enterprise_name}</td>
                     <td className="px-2 py-1 font-mono text-ink-mute">{r.contract_no ?? '—'}</td>
@@ -432,6 +441,16 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
                     <td className="px-2 py-1 text-right font-bold">{fmtMoney(r.total_commission)}</td>
                     <td className="px-2 py-1"><AdminBadge tone={r.status === 'paid' ? 'success' : r.status === 'cancelled' ? 'danger' : 'info'} variant="subtle">{r.status.toUpperCase()}</AdminBadge></td>
                     <td className="px-2 py-1 text-ink-mute">{r.rate_source ?? '—'}</td>
+                    <td className="px-2 py-1 text-right">
+                      <AdminButton
+                        size="sm"
+                        variant="subtle"
+                        tone="primary"
+                        onClick={(e) => { e.stopPropagation(); setSnapshotFor(r); }}
+                      >
+                        Snapshot
+                      </AdminButton>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -446,7 +465,119 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
           onDone={() => { setOpenGen(false); onChange(); void load(); }}
         />
       )}
+
+      {snapshotFor && (
+        <SettlementSnapshotModal
+          row={snapshotFor}
+          onClose={() => setSnapshotFor(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ============================================================================
+// SettlementSnapshotModal — 정산 행 클릭 시 계약 스냅샷 read-only 표시
+//   기존 Settlement 생성 로직 무수정 — row 는 이미 fetch 된 스냅샷 필드만 참조.
+//   0390 에서 저장된 필드: contract_no / contract_version / contract_start_date /
+//     contract_end_date / minimum_payout / settlement_method / rate_source /
+//     monthly_store_price / commission_rate.
+//   auto_renew 는 0390 스냅샷에 포함되지 않음 → "—" 로 표시하고 주석 처리.
+// ============================================================================
+function SettlementSnapshotModal({
+  row, onClose,
+}: { row: SettlementRow; onClose: () => void }) {
+  return (
+    <AdminModal
+      open
+      size="lg"
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-2">
+          <FileText size={14} />
+          Settlement Snapshot — {fmtMonth(row.settlement_month)} · {row.enterprise_name}
+        </span>
+      }
+      headerExtra={<AdminBadge tone="primary" variant="subtle">Read-only</AdminBadge>}
+      footer={
+        <AdminButton size="lg" variant="subtle" tone="neutral" onClick={onClose}>
+          닫기
+        </AdminButton>
+      }
+    >
+      <div className="space-y-3 text-[12px]">
+        <p className="text-ink-mute">
+          이 정산 생성 시점에 <b className="text-ink">freeze 된 계약값</b> 입니다.
+          계약이 이후 수정되어도 이 값은 변하지 않습니다. (0390 스냅샷 컬럼 재사용)
+        </p>
+
+        {/* 계약 식별 */}
+        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+            <Handshake size={12} /> 계약 식별
+          </p>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+            <dt className="text-ink-mute">계약번호</dt>
+            <dd className="font-mono">{row.contract_no ?? '—'}</dd>
+            <dt className="text-ink-mute">계약버전</dt>
+            <dd className="font-mono text-[11px]">{row.contract_version ? fmtDate(row.contract_version) : '—'}</dd>
+            <dt className="text-ink-mute">계약 시작일</dt>
+            <dd>{fmtDate(row.contract_start_date)}</dd>
+            <dt className="text-ink-mute">계약 종료일</dt>
+            <dd>{fmtDate(row.contract_end_date)}</dd>
+          </dl>
+        </div>
+
+        {/* 정산 조건 (freeze 값) */}
+        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+            <Wallet size={12} /> 정산 조건 (freeze)
+          </p>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+            <dt className="text-ink-mute">정산방식</dt>
+            <dd>{row.settlement_method ?? 'monthly'}</dd>
+            <dt className="text-ink-mute">최소정산금</dt>
+            <dd>{fmtMoney(row.minimum_payout)}</dd>
+            <dt className="text-ink-mute">매장 단가</dt>
+            <dd>{fmtMoney(row.monthly_store_price)}</dd>
+            <dt className="text-ink-mute">수수료율</dt>
+            <dd>{row.commission_rate}%</dd>
+            <dt className="text-ink-mute">자동갱신</dt>
+            <dd className="text-ink-mute">— <span className="text-[10px]">(0390 스냅샷 미저장 필드)</span></dd>
+            <dt className="text-ink-mute">적용 출처</dt>
+            <dd>
+              <AdminBadge
+                tone={
+                  row.rate_source === 'contract' ? 'success'
+                  : row.rate_source === 'profile' ? 'info'
+                  : 'neutral'
+                }
+                variant="subtle"
+              >
+                {row.rate_source ?? '—'}
+              </AdminBadge>
+            </dd>
+          </dl>
+        </div>
+
+        {/* 생성 정보 */}
+        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+            <Calendar size={12} /> 생성 정보
+          </p>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+            <dt className="text-ink-mute">생성시각</dt>
+            <dd>{row.generated_at ? new Date(row.generated_at).toLocaleString('ko-KR') : '—'}</dd>
+            <dt className="text-ink-mute">정산월</dt>
+            <dd>{fmtMonth(row.settlement_month)}</dd>
+            <dt className="text-ink-mute">매장수 (생성 당시)</dt>
+            <dd>{row.active_store_count.toLocaleString('ko-KR')} 개</dd>
+            <dt className="text-ink-mute">총 커미션</dt>
+            <dd className="font-bold">{fmtMoney(row.total_commission)}</dd>
+          </dl>
+        </div>
+      </div>
+    </AdminModal>
   );
 }
 
