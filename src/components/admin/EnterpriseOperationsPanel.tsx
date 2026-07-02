@@ -20,7 +20,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, Bell, Building2, CheckCircle2, Clock, Database,
-  Download, PlayCircle, RefreshCw, ScrollText, ShieldCheck, TimerReset, Users, Wifi, WifiOff,
+  Download, Info, PlayCircle, RefreshCw, ScrollText, ShieldCheck, Target,
+  TimerReset, Users, Wifi, WifiOff,
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminBadge, AdminButton,
@@ -93,6 +94,26 @@ const ACTIVITY_META: Record<EnterpriseOpsActivityType,
   announcement_play:   { label: '안내음',     icon: <PlayCircle size={12} /> },
   settlement_snapshot: { label: '정산 스냅샷', icon: <Database size={12} /> },
 };
+
+/**
+ * QuickActionOutcome → 사용자에게 보여줄 실패 문구.
+ * 절대 'unknown' 반환하지 않는다. status / error / detail 순으로 최대한 조합.
+ */
+function formatOutcomeMessage(outcome: QuickActionOutcome): string {
+  const bits: string[] = [];
+  if (typeof outcome.error === 'string' && outcome.error.trim()) {
+    bits.push(outcome.error.trim());
+  } else if (typeof outcome.status === 'number') {
+    bits.push(`HTTP ${outcome.status}`);
+  } else if (outcome.detail !== undefined && outcome.detail !== null) {
+    const dump = typeof outcome.detail === 'string'
+      ? outcome.detail
+      : JSON.stringify(outcome.detail);
+    if (dump && dump !== '{}') bits.push(dump.slice(0, 240));
+  }
+  if (typeof outcome.duration_ms === 'number') bits.push(`${outcome.duration_ms}ms`);
+  return bits.length > 0 ? bits.join(' · ') : '(상세 없음 — devtools console 확인)';
+}
 
 function severityTone(sev: string): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
   const s = sev.toLowerCase();
@@ -626,10 +647,10 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
       if (outcome.ok) {
         toast.success(`${a.label} 완료 (${outcome.duration_ms ?? '?'}ms)`);
       } else {
-        toast.error(`${a.label} 실패: ${outcome.error ?? 'unknown'}`);
+        toast.error(`${a.label} 실패: ${formatOutcomeMessage(outcome)}`);
       }
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = (e as Error).message || `${(e as Error).name ?? 'Error'}: 상세 없음 — devtools console 확인`;
       toast.error(`${a.label} 오류: ${msg}`);
       setLastOutcome((m) => ({ ...m, [a.key]: { outcome: { ok: false, error: msg }, at: Date.now() } }));
     } finally {
@@ -686,26 +707,70 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
         </div>
       </AdminCard>
 
-      {/* Confirmation modal */}
+      {/* Confirmation modal — 3-card layout, 3초 안에 파악 가능 */}
       {confirming && (
         <AdminModal
           open
+          size="lg"
           onClose={() => setConfirming(null)}
-          title={`${confirming.label} 실행하시겠어요?`}
+          title={
+            <span className="flex items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/40">
+                {confirming.icon}
+              </span>
+              <span className="text-base font-bold text-ink">{confirming.label}</span>
+            </span>
+          }
+          headerExtra={
+            <AdminBadge tone="warning" variant="subtle">실행 전 확인</AdminBadge>
+          }
+          footer={
+            <>
+              <AdminButton tone="neutral" variant="subtle" size="lg" onClick={() => setConfirming(null)}>
+                취소
+              </AdminButton>
+              <AdminButton tone="warning" variant="solid" size="lg" onClick={() => void runAction(confirming)}>
+                실행하기
+              </AdminButton>
+            </>
+          }
         >
-          <div className="space-y-3 text-[12px]">
-            <p className="text-ink-mute">{confirming.description}</p>
-            <div className="rounded-xl bg-bg-card p-2.5 ring-1 ring-line/10">
-              <p className="text-[10px] uppercase tracking-wider text-ink-dim">영향 범위</p>
-              <p className="mt-0.5 font-medium text-ink">{confirming.scope}</p>
+          <div className="space-y-3">
+            <p className="text-[13px] font-semibold text-ink">이 작업을 실행하시겠어요?</p>
+
+            {/* 실행 내용 */}
+            <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+                <PlayCircle size={12} /> 실행 내용
+              </p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-ink">{confirming.description}</p>
             </div>
-            <div className="rounded-xl bg-amber-500/25 p-2.5 text-[10px] text-amber-100 ring-1 ring-amber-500/50">
-              실행 후 취소 불가. 실패해도 다른 액션에 영향 없음. 결과는 audit log 에 기록됩니다.
+
+            {/* 영향 범위 */}
+            <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+                <Target size={12} /> 영향 범위
+              </p>
+              <p className="mt-1.5 text-[12px] font-medium text-ink">{confirming.scope}</p>
             </div>
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <AdminButton onClick={() => setConfirming(null)}>취소</AdminButton>
-            <AdminButton onClick={() => void runAction(confirming)}>실행</AdminButton>
+
+            {/* 주의사항 */}
+            <div className="rounded-xl bg-amber-500/25 p-3 ring-1 ring-amber-500/50">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-100">
+                <AlertTriangle size={12} /> 주의사항
+              </p>
+              <ul className="mt-1.5 space-y-1 text-[12px] leading-relaxed text-amber-50">
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>실행 후 <b className="text-amber-50">취소 불가</b>.</li>
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>실패해도 다른 Quick Action 에 영향 없음.</li>
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>결과는 <b className="text-amber-50">audit log</b> 에 자동 기록됩니다.</li>
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>10초 debounce 적용 — 실행 직후 재클릭은 차단됩니다.</li>
+              </ul>
+            </div>
+
+            <p className="flex items-start gap-1.5 pt-0.5 text-[11px] text-ink-mute">
+              <Info size={11} className="mt-0.5 shrink-0" />
+              <span>실패 시 toast 에 HTTP status 와 서버 error 문구가 그대로 표시됩니다. 상세는 개발자 도구 콘솔에서 확인 가능.</span>
+            </p>
           </div>
         </AdminModal>
       )}

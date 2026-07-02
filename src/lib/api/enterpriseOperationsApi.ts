@@ -180,22 +180,66 @@ async function audit(
 /**
  * QA-1: Run Enterprise Cron (via /api/admin/enterprise-ops-run server wrapper).
  * 서버 wrapper 가 CRON_SECRET 부착 + super_admin 검증 + 60s debounce 처리.
+ *
+ * 응답 body 예시 (실제 서버 스키마):
+ *   200: { ok:true,  upstream_status, ran_at, duration_ms, upstream }
+ *   429: { error:'debounced', wait_seconds }
+ *   403: { error:'forbidden', reason:'not_admin'|'invalid_token'|... }
+ *   500: { error:'missing_env', hint } | { ok:false, error }
+ *   502: { ok:false, upstream_status, upstream }
+ *
+ * 요구사항: 사용자에게 'unknown' 을 노출하지 말 것. status + 서버 error 문구를 항상 조합.
  */
 export async function runEnterpriseOpsCron(): Promise<QuickActionOutcome> {
   const t0 = performance.now();
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return { ok: false, error: 'no_session' };
+  if (!session) return { ok: false, error: '세션 없음 — 다시 로그인 후 시도하세요.' };
   try {
     const r = await fetch('/api/admin/enterprise-ops-run', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}`, 'content-type': 'application/json' },
     });
-    const body = await r.json().catch(() => ({}));
+    const raw = await r.text().catch(() => '');
+    let body: unknown = raw;
+    try { body = raw ? JSON.parse(raw) : raw; } catch { /* raw 유지 */ }
     const durMs = Math.round(performance.now() - t0);
-    return { ok: r.ok, status: r.status, duration_ms: durMs, detail: body };
+    if (r.ok) {
+      return { ok: true, status: r.status, duration_ms: durMs, detail: body };
+    }
+    return {
+      ok: false, status: r.status, duration_ms: durMs, detail: body,
+      error: summarizeHttpError(r.status, body),
+    };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: (e as Error).message, duration_ms: Math.round(performance.now() - t0) };
   }
+}
+
+/**
+ * HTTP 실패 응답 body 에서 사람이 읽을 수 있는 요약 문구를 만든다.
+ * status + 알려진 필드(error/reason/message/hint/wait_seconds/upstream) 를 조합.
+ * 알아볼 필드가 없으면 body JSON 앞 240자를 그대로 노출.
+ * 절대 'unknown' 반환 금지.
+ */
+function summarizeHttpError(status: number, body: unknown): string {
+  if (body && typeof body === 'object') {
+    const b = body as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof b.error === 'string' && b.error.trim()) parts.push(b.error.trim());
+    if (typeof b.reason === 'string' && b.reason.trim()) parts.push(`(${b.reason.trim()})`);
+    if (typeof b.message === 'string' && b.message.trim() && b.message !== b.error) parts.push(b.message.trim());
+    if (typeof b.wait_seconds === 'number') parts.push(`${b.wait_seconds}s 후 재시도`);
+    if (typeof b.hint === 'string' && b.hint.trim()) parts.push(`hint: ${b.hint.trim()}`);
+    if (parts.length === 0 && b.upstream !== undefined) {
+      const u = typeof b.upstream === 'string' ? b.upstream : JSON.stringify(b.upstream);
+      parts.push(`upstream: ${u.slice(0, 200)}`);
+    }
+    if (parts.length > 0) return `HTTP ${status} — ${parts.join(' ')}`;
+    const dump = JSON.stringify(b).slice(0, 240);
+    return `HTTP ${status} — ${dump}`;
+  }
+  if (typeof body === 'string' && body.trim()) return `HTTP ${status} — ${body.trim().slice(0, 240)}`;
+  return `HTTP ${status}`;
 }
 
 /**
