@@ -65,8 +65,21 @@ export default async function handler(req: Request) {
     ?? process.env.VERCEL_URL       // vercel deploy
     ?? 'http://localhost:3000';
 
+  // Runtime env 진단 — Boolean 존재 여부만. 실제 값은 절대 로그/응답에 포함하지 않음.
+  const envPresence = {
+    SUPABASE_URL:              Boolean(supabaseUrl),
+    SUPABASE_ANON_KEY:         Boolean(anonKey),
+    SUPABASE_SERVICE_ROLE_KEY: Boolean(serviceKey),
+    CRON_SECRET:               Boolean(cronSecret),
+  };
+  console.log('[enterprise-ops-run] env presence:', envPresence);
+
   if (!supabaseUrl || !anonKey || !serviceKey || !cronSecret) {
-    return j(500, { error: 'missing_env', hint: 'SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY / CRON_SECRET' });
+    return j(500, {
+      error: 'missing_env',
+      hint: JSON.stringify(envPresence),
+      env_presence: envPresence,
+    });
   }
 
   const authHeader = req.headers.get('authorization') ?? '';
