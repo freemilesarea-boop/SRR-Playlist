@@ -91,6 +91,7 @@ const EnterpriseContractsPanel = lazy(() => import('@/components/admin/Enterpris
 const EnterpriseEmergencyBroadcastPanel = lazy(() => import('@/components/admin/EnterpriseEmergencyBroadcastPanel'));
 const EnterpriseNocPanel = lazy(() => import('@/components/admin/EnterpriseNocPanel'));
 const EnterpriseOperationsPanel = lazy(() => import('@/components/admin/EnterpriseOperationsPanel'));
+const EnterpriseSettlementCenterPanel = lazy(() => import('@/components/admin/EnterpriseSettlementCenterPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -126,6 +127,7 @@ type Tab =
   | 'enterprise-emergency'
   | 'enterprise-noc'
   | 'enterprise-operations'
+  | 'enterprise-settlement-center'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -184,6 +186,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-emergency', label: '긴급 방송', icon: <Music size={14} /> },
   { key: 'enterprise-noc', label: '운영센터 (NOC)', icon: <Activity size={14} /> },
   { key: 'enterprise-operations', label: '운영 관제 (Ops)', icon: <Activity size={14} />, superOnly: true },
+  { key: 'enterprise-settlement-center', label: '정산·청구 통합', icon: <Wallet size={14} />, superOnly: true },
   { key: 'enterprise-billing', label: '본사 청구', icon: <Wallet size={14} /> },
   { key: 'enterprise-contracts', label: '계약 관리', icon: <ShieldCheck size={14} /> },
   { key: 'franchise', label: '프랜차이즈 관리', icon: <StoreIcon size={14} /> },
@@ -233,7 +236,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-operations', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-operations', 'enterprise-settlement-center', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -449,6 +452,7 @@ export default function AdminPage() {
           {tab === 'enterprise-emergency' && <EnterpriseEmergencyBroadcastPanel />}
           {tab === 'enterprise-noc' && <EnterpriseNocPanel />}
           {tab === 'enterprise-operations' && <EnterpriseOperationsPanel />}
+          {tab === 'enterprise-settlement-center' && <EnterpriseSettlementCenterPanel />}
           {tab === 'franchise' && (
             <FranchiseManagementPanel
               initialDetailTab={pendingFranchiseDeepLink ?? undefined}

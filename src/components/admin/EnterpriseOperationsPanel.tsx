@@ -584,9 +584,8 @@ const QUICK_ACTIONS: QuickActionDef[] = [
     scope: '정책 자동화 규칙 + 정책 배포' },
   { key: 'generate_settlement', label: 'Generate Settlement',
     icon: <Database size={12} />,
-    description: '(Phase 2-3 예정) 위험도 🔴 — enterprise + 월 지정 modal 필요.',
-    scope: '월 정산 데이터 생성 (irreversible-like)',
-    disabled: { reason: 'Phase 2-3 에서 활성화 예정 (위험도 🔴, enterprise+월 지정 UI 필요)' } },
+    description: '월 정산 생성 폼이 있는 [정산·청구 통합] 탭으로 이동합니다. 실제 실행은 그 탭에서 enterprise/월 선택 후 진행됩니다. 기존 계산식 무수정.',
+    scope: '월 정산 데이터 생성 (Snapshot freeze 이미 0390 에서 저장됨)' },
   { key: 'export_logs',         label: 'Export Logs',
     icon: <Download size={12} />,
     description: '최근 30일 cron 로그를 CSV 로 다운로드. 최대 5000 행.',
@@ -637,6 +636,20 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
           const r = await exportCronLogs({ days: 30, source: 'cron', limit: 5000 });
           if (r.ok && r.data) downloadLogsAsCsv(r.data);
           outcome = r;
+          break;
+        }
+        case 'generate_settlement': {
+          // Phase 3-1: 실제 실행은 정산·청구 통합 탭의 Modal 폼에서 수행.
+          // 여기서는 그 탭으로 이동만 트리거 (URL 파라미터로 tab 지정).
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'enterprise-settlement-center');
+            window.history.pushState({}, '', url);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            outcome = { ok: true, duration_ms: 0, detail: { redirected_to: 'enterprise-settlement-center' } };
+          } catch (e) {
+            outcome = { ok: false, error: (e as Error).message };
+          }
           break;
         }
         default:
