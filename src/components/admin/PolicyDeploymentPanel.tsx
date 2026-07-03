@@ -28,6 +28,8 @@ import {
   CheckCircle2, Clock, RotateCcw, Calculator, ChevronDown, Star,
   Inbox, Store as StoreIcon, ArrowRight, ShieldCheck, Activity, Wifi, WifiOff,
   TrendingUp, History, Search,
+  // Ops Center Phase additions
+  Bot, ExternalLink, Radio, Siren, Sparkles, Zap,
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge, AdminButton,
@@ -332,32 +334,7 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
     return () => window.clearTimeout(id);
   }, [retryToast]);
 
-  // ---------------------------------------------------------------------------
-  // KPI cards
-  // ---------------------------------------------------------------------------
-
-  const kpiCards = useMemo(() => {
-    if (!overview) return null;
-    const total = overview.total_target_stores;
-    const succ  = overview.success_stores;
-    const pend  = overview.pending_stores;
-    const fail  = overview.failed_stores;
-    const rate  = overview.success_rate ?? 0;
-    const lastTime = overview.last_deployment_at
-      ? new Date(overview.last_deployment_at).toLocaleString('ko-KR', {
-          month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit',
-        })
-      : '—';
-    return [
-      { label: '총 대상 매장', value: total.toLocaleString(), tone: 'neutral' as AdminToneName, icon: <StoreIcon size={14} /> },
-      { label: '적용 완료',  value: succ.toLocaleString(),  tone: 'success' as AdminToneName, icon: <CheckCircle2 size={14} /> },
-      { label: '대기',       value: pend.toLocaleString(),  tone: 'warning' as AdminToneName, icon: <Clock size={14} /> },
-      { label: '실패',       value: fail.toLocaleString(),  tone: 'danger'  as AdminToneName, icon: <AlertCircle size={14} /> },
-      { label: '적용률',     value: `${rate.toFixed(1)}%`,  tone: 'primary' as AdminToneName, icon: <TrendingUp size={14} /> },
-      { label: '최근 배포',  value: lastTime,               tone: 'info'    as AdminToneName, icon: <History size={14} /> },
-    ];
-  }, [overview]);
+  // KPI cards 는 새 OpsHeroKpi 컴포넌트로 대체됨 (Ops Center Phase).
 
   // ---------------------------------------------------------------------------
   // Render
@@ -399,74 +376,53 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
         </div>
       }
     >
-      {/* Overview KPI */}
+      {/* Overview KPI — Ops Center spec 1: Enterprise Hero 스타일 재사용 */}
       {overviewError ? (
         <AdminAlert
           tone="danger" title="개요 로드 실패" description={overviewError}
           action={<AdminButton tone="danger" variant="subtle" size="sm" onClick={() => void loadOverview()}>재시도</AdminButton>}
         />
-      ) : kpiCards ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {kpiCards.map((c) => (
-            <AdminStatCard key={c.label} label={c.label} value={c.value} tone={c.tone} icon={c.icon} />
+      ) : overview ? (
+        <OpsHeroKpi overview={overview} />
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-bg-card ring-1 ring-line/15 animate-pulse" />
           ))}
         </div>
-      ) : (
-        <AdminSkeleton variant="kpi" />
       )}
 
-      {/* Adoption rate bar */}
+      {/* Ops Center spec 8 — AI Deployment Insight (Rule-based) */}
+      {overview && <AiDeploymentInsight overview={overview} rows={rows} failedRows={failedRows} />}
+
+      {/* Ops Center spec 2, 3 — Progress + Health + Failed side panel */}
       {overview && overview.total_target_stores > 0 && (
-        <AdminCard
-          title={<span className="flex items-center gap-2"><TrendingUp size={14} /> 적용률</span>}
-          subtitle={
-            overview.last_deployment_name
-              ? `최근 배포: ${overview.last_deployment_name}`
-              : '아직 진행된 배포가 없습니다.'
-          }
-        >
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between text-xs">
-              <span className="text-ink">
-                <span className="text-2xl font-extrabold tabular-nums">{overview.success_stores.toLocaleString()}</span>
-                <span className="text-ink-mute"> / {overview.total_target_stores.toLocaleString()} 매장</span>
-              </span>
-              <span className="text-lg font-bold tabular-nums text-emerald-300">
-                {overview.success_rate.toFixed(2)}%
-              </span>
-            </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-bg-deep">
-              <div
-                className="h-full bg-emerald-500 transition-[width] duration-500"
-                style={{ width: `${Math.min(100, overview.success_rate)}%` }}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-mute">
-              <span className="inline-flex items-center gap-1">
-                <CheckCircle2 size={11} className="text-emerald-300" />
-                완료 {overview.success_stores.toLocaleString()}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Clock size={11} className="text-amber-300" />
-                대기 {overview.pending_stores.toLocaleString()}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <AlertCircle size={11} className="text-red-300" />
-                실패 {overview.failed_stores.toLocaleString()}
-              </span>
-              {overview.skipped_stores > 0 && (
-                <span className="inline-flex items-center gap-1">
-                  <X size={11} className="text-ink-dim" />
-                  제외 {overview.skipped_stores.toLocaleString()}
-                </span>
-              )}
-              <span className="ml-auto inline-flex items-center gap-1">
-                <Activity size={11} />
-                전체 배포 {overview.total_deployments.toLocaleString()} · 최근 24h {overview.recent_24h_deployments.toLocaleString()}
-              </span>
-            </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <OpsProgressCard overview={overview} />
           </div>
-        </AdminCard>
+          <div className="space-y-3">
+            <DeploymentHealthCard overview={overview} kpi={kpi} />
+            <FailedStoresMiniPanel
+              failedRows={failedRows}
+              loading={failedLoading}
+              onSwitchToFailed={() => setActiveTab('failed')}
+              onOpenDetail={openDetail}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Ops Center spec 9 — Deployment Queue + spec 5 — Deployment Timeline */}
+      {overview && (
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="lg:col-span-1">
+            <DeploymentQueueCard rows={rows} onOpen={openDetail} />
+          </div>
+          <div className="lg:col-span-2">
+            <DeploymentTimelineCard rows={rows} />
+          </div>
+        </div>
       )}
 
       {/* Tab nav */}
@@ -1440,5 +1396,502 @@ function CreateDeploymentModal({
         {err && <AdminAlert tone="danger" title="배포 생성 실패" description={err} />}
       </div>
     </AdminModal>
+  );
+}
+
+// =============================================================================
+// Music Policy Operations Center — Rule-based / 새 API/RPC/polling 0
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// spec 1 — Hero KPI (Enterprise Command Center 스타일 재사용)
+// -----------------------------------------------------------------------------
+interface OpsHeroItem {
+  label: string;
+  desc: string;
+  value: string;
+  icon: JSX.Element;
+  tone: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+}
+
+function OpsHeroKpi({ overview }: { overview: PolicyDeploymentOverview }) {
+  const total = overview.total_target_stores;
+  const succ  = overview.success_stores;
+  const pend  = overview.pending_stores;
+  const fail  = overview.failed_stores;
+  const rate  = overview.success_rate ?? 0;
+  const lastTime = overview.last_deployment_at
+    ? new Date(overview.last_deployment_at).toLocaleString('ko-KR', {
+        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
+
+  const items: OpsHeroItem[] = [
+    { label: '배포 대상',   desc: '총 매장',       value: total.toLocaleString(),  icon: <StoreIcon size={22} />,     tone: 'primary' },
+    { label: '적용 완료',   desc: 'success',       value: succ.toLocaleString(),   icon: <CheckCircle2 size={22} />, tone: 'success' },
+    { label: '진행 중',     desc: 'pending',       value: pend.toLocaleString(),   icon: <Clock size={22} />,        tone: pend > 0 ? 'warning' : 'success' },
+    { label: '실패',        desc: 'failed',        value: fail.toLocaleString(),   icon: <AlertCircle size={22} />,  tone: fail > 0 ? 'danger'  : 'success' },
+    { label: '적용률',      desc: 'success rate',  value: `${rate.toFixed(1)}%`,   icon: <TrendingUp size={22} />,   tone: rate >= 95 ? 'success' : rate >= 80 ? 'primary' : rate >= 60 ? 'warning' : 'danger' },
+    { label: '최근 배포',   desc: 'last event',    value: lastTime,                icon: <History size={22} />,      tone: 'info' },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map((item) => {
+        const cls =
+          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-emerald-100' }
+          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-amber-100' }
+          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-rose-100' }
+          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-sky-100' }
+          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-violet-100' };
+        return (
+          <div
+            key={item.label}
+            className={`rounded-xl p-2.5 ring-1 transition-all duration-150 hover:shadow-md ${cls.bg} ${cls.ring}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${cls.chip}`}>
+                {item.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold text-ink leading-tight">{item.label}</p>
+                <p className="truncate text-[9.5px] text-ink-mute leading-tight">{item.desc}</p>
+              </div>
+            </div>
+            <p className="mt-1.5 tabular-nums text-2xl font-black text-ink truncate" title={item.value}>{item.value}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 2 — Deployment Progress (색상 세분화 · 완료/대기/실패 실시간)
+// -----------------------------------------------------------------------------
+function OpsProgressCard({ overview }: { overview: PolicyDeploymentOverview }) {
+  const total  = overview.total_target_stores;
+  const succ   = overview.success_stores;
+  const pend   = overview.pending_stores;
+  const fail   = overview.failed_stores;
+  const skip   = overview.skipped_stores;
+  const rate   = overview.success_rate ?? 0;
+  const pctSucc = total > 0 ? (succ / total) * 100 : 0;
+  const pctPend = total > 0 ? (pend / total) * 100 : 0;
+  const pctFail = total > 0 ? (fail / total) * 100 : 0;
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><TrendingUp size={13} /> Deployment Progress</span>}
+      subtitle={
+        overview.last_deployment_name
+          ? <span className="text-[10px] text-ink-mute">최근: {overview.last_deployment_name}</span>
+          : <span className="text-[10px] text-ink-mute">아직 진행된 배포가 없습니다.</span>
+      }
+    >
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between text-xs">
+          <span className="text-ink">
+            <span className="text-3xl font-black tabular-nums">{succ.toLocaleString()}</span>
+            <span className="ml-1 text-ink-mute"> / {total.toLocaleString()} 매장</span>
+          </span>
+          <span className="tabular-nums text-lg font-bold text-emerald-300">{rate.toFixed(2)}%</span>
+        </div>
+        {/* 색상 세분화 progress bar */}
+        <div className="flex h-3 w-full overflow-hidden rounded-full bg-bg-deep ring-1 ring-line/15">
+          <div className="h-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${pctSucc}%` }} title={`완료 ${succ}`} />
+          <div className="h-full bg-amber-500  transition-[width] duration-500" style={{ width: `${pctPend}%` }} title={`대기 ${pend}`} />
+          <div className="h-full bg-rose-500   transition-[width] duration-500" style={{ width: `${pctFail}%` }} title={`실패 ${fail}`} />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <ProgressStat label="완료"  value={succ} tone="success" icon={<CheckCircle2 size={10} />} />
+          <ProgressStat label="대기"  value={pend} tone={pend > 0 ? 'warning' : 'success'} icon={<Clock size={10} />} />
+          <ProgressStat label="실패"  value={fail} tone={fail > 0 ? 'danger' : 'success'}  icon={<AlertCircle size={10} />} />
+          <ProgressStat label="제외"  value={skip} tone="neutral" icon={<X size={10} />} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-mute">
+          <span className="inline-flex items-center gap-1">
+            <Activity size={11} />
+            전체 배포 {overview.total_deployments.toLocaleString()} · 24h {overview.recent_24h_deployments.toLocaleString()}
+          </span>
+        </div>
+      </div>
+    </AdminCard>
+  );
+}
+
+function ProgressStat({ label, value, tone, icon }: {
+  label: string; value: number; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: JSX.Element;
+}) {
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+            :                      { bg: 'bg-bg-card',        ring: 'ring-line/15',        text: 'text-ink-mute' };
+  return (
+    <div className={`rounded-md p-1.5 ring-1 ${cls.bg} ${cls.ring}`}>
+      <p className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider ${cls.text}`}>
+        {icon}{label}
+      </p>
+      <p className="mt-0.5 tabular-nums text-[15px] font-black text-ink">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 3 — Deployment Health (Healthy / Warning / Critical)
+// -----------------------------------------------------------------------------
+function computeDeploymentHealth(overview: PolicyDeploymentOverview, kpi: PolicyDeploymentKpi | null): {
+  label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger';
+  reason: string;
+} {
+  const total = overview.total_target_stores;
+  const fail  = overview.failed_stores;
+  const failRate = total > 0 ? (fail / total) * 100 : 0;
+  const running  = kpi?.running ?? 0;
+
+  if (failRate >= 20 || overview.success_rate < 60) {
+    return { label: 'Critical', tone: 'danger',  reason: `실패율 ${failRate.toFixed(1)}%` };
+  }
+  if (failRate >= 5 || overview.success_rate < 90 || running > 5) {
+    return { label: 'Warning',  tone: 'warning', reason: `실패율 ${failRate.toFixed(1)}% · 진행 ${running}` };
+  }
+  return { label: 'Healthy',  tone: 'success', reason: `적용률 ${overview.success_rate.toFixed(1)}%` };
+}
+
+function DeploymentHealthCard({
+  overview, kpi,
+}: {
+  overview: PolicyDeploymentOverview; kpi: PolicyDeploymentKpi | null;
+}) {
+  const h = computeDeploymentHealth(overview, kpi);
+  const cls = h.tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100', icon: <CheckCircle2 size={16} /> }
+            : h.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100',   icon: <AlertCircle size={16} /> }
+            :                        { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100',    icon: <Siren size={16} className="animate-pulse" /> };
+  return (
+    <div className={`rounded-xl p-3 ring-1 ${cls.bg} ${cls.ring}`}>
+      <div className="flex items-center gap-2">
+        <span className={cls.text}>{cls.icon}</span>
+        <div className="min-w-0">
+          <p className={`text-[10px] font-bold uppercase tracking-wider ${cls.text}`}>Deployment Health</p>
+          <p className="text-[18px] font-black text-ink">{h.label}</p>
+        </div>
+      </div>
+      <p className="mt-1 text-[10.5px] text-ink-mute">{h.reason}</p>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 4 — Failed Store Panel (mini, 우측 사이드)
+// -----------------------------------------------------------------------------
+function FailedStoresMiniPanel({
+  failedRows, loading, onSwitchToFailed, onOpenDetail,
+}: {
+  failedRows: FailedDeploymentStore[]; loading: boolean;
+  onSwitchToFailed: () => void; onOpenDetail: (id: string) => void;
+}) {
+  const top = failedRows.slice(0, 5);
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><AlertCircle size={13} className="text-rose-300" /> 실패 매장</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">상위 5개 · 즉시 조치 필요</span>}
+      action={
+        <AdminButton size="sm" variant="subtle" tone="danger" onClick={onSwitchToFailed}>
+          전체 보기 <ArrowRight size={11} />
+        </AdminButton>
+      }
+    >
+      {loading ? <AdminSkeleton variant="block" />
+        : top.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+            <CheckCircle2 size={22} className="text-emerald-200" />
+            <p className="text-[12px] font-bold text-emerald-100">실패 매장이 없습니다.</p>
+          </div>
+        ) : (
+          <ul className="space-y-1.5">
+            {top.map((r) => {
+              const cat = r.failure_category ? FAILURE_CATEGORY_META[r.failure_category] : null;
+              return (
+                <li key={`${r.deployment_id}:${r.store_id}`} className="rounded-lg bg-rose-500/20 p-2 ring-1 ring-rose-500/40">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[11.5px] font-bold text-rose-100">{r.store_name}</p>
+                      <p className="mt-0.5 text-[10px] text-ink-mute truncate">
+                        {cat ? `${cat.ko} · ` : ''}{r.deployment_name ?? '이름 없는 배포'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenDetail(r.deployment_id)}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-md bg-rose-500/40 px-2 py-1 text-[10px] font-bold text-rose-50 ring-1 ring-rose-400/60 transition hover:bg-rose-500/50 hover:shadow-sm"
+                    >
+                      상세 <ArrowRight size={9} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 5 — Deployment Timeline
+// -----------------------------------------------------------------------------
+function DeploymentTimelineCard({ rows }: { rows: PolicyDeployment[] }) {
+  const events = useMemo(() => {
+    const out: Array<{
+      key: string; at: string; label: string; deployment_name: string;
+      tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+      icon: JSX.Element;
+    }> = [];
+    for (const r of rows.slice(0, 12)) {
+      if (r.created_at) {
+        out.push({
+          key: `${r.deployment_id}:created`,
+          at: r.created_at,
+          label: '배포 생성',
+          deployment_name: r.deployment_name,
+          tone: 'info',
+          icon: <Plus size={11} />,
+        });
+      }
+      if (r.started_at) {
+        out.push({
+          key: `${r.deployment_id}:started`,
+          at: r.started_at,
+          label: '배포 시작',
+          deployment_name: r.deployment_name,
+          tone: 'info',
+          icon: <Radio size={11} />,
+        });
+      }
+      if (r.completed_at) {
+        const tone: 'success' | 'warning' | 'danger' =
+          r.status === 'completed' ? 'success'
+          : r.status === 'partial_failed' ? 'warning'
+          : 'danger';
+        out.push({
+          key: `${r.deployment_id}:completed`,
+          at: r.completed_at,
+          label: r.status === 'completed' ? '배포 완료'
+               : r.status === 'partial_failed' ? '부분 실패'
+               : r.status === 'failed' ? '배포 실패'
+               : '배포 종료',
+          deployment_name: r.deployment_name,
+          tone,
+          icon: tone === 'success' ? <CheckCircle2 size={11} />
+              : tone === 'warning' ? <AlertCircle size={11} />
+              : <X size={11} />,
+        });
+      }
+    }
+    out.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return out.slice(0, 12);
+  }, [rows]);
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><History size={13} /> Deployment Timeline</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">배포 이벤트 · 시간 역순 · 최근 12건</span>}
+    >
+      {events.length === 0 ? (
+        <AdminEmpty title="이벤트 없음" description="배포 이벤트가 아직 없습니다." />
+      ) : (
+        <ul className="max-h-[360px] space-y-1 overflow-y-auto pr-1">
+          {events.map((e) => {
+            const rail = e.tone === 'success' ? 'bg-emerald-500'
+                       : e.tone === 'warning' ? 'bg-amber-500'
+                       : e.tone === 'danger'  ? 'bg-rose-500'
+                       : e.tone === 'info'    ? 'bg-sky-500'
+                       :                        'bg-ink-mute';
+            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-emerald-100'
+                       : e.tone === 'warning' ? 'bg-amber-500/40   text-amber-100'
+                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-rose-100'
+                       : e.tone === 'info'    ? 'bg-sky-500/40     text-sky-100'
+                       :                        'bg-bg-hover       text-ink-mute';
+            return (
+              <li key={e.key} className="flex items-stretch gap-2">
+                <span className="w-14 shrink-0 pt-1 text-right font-mono text-[10px] tabular-nums text-ink-mute">
+                  {new Date(e.at).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className={`w-0.5 shrink-0 rounded-full ${rail}`} aria-hidden />
+                <div className="min-w-0 flex-1 rounded-md bg-bg-card p-1.5 text-[11px] ring-1 ring-line/10">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ${chip}`} aria-hidden>
+                      {e.icon}
+                    </span>
+                    <span className="font-bold text-ink">{e.label}</span>
+                    <span className="min-w-0 truncate text-ink-mute">· {e.deployment_name}</span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 6, 9 — Deployment Queue (pending + running 상단 강조) + Version 표시
+// -----------------------------------------------------------------------------
+function DeploymentQueueCard({
+  rows, onOpen,
+}: {
+  rows: PolicyDeployment[]; onOpen: (id: string) => void;
+}) {
+  const queue = useMemo(() => {
+    return rows
+      .filter((r) => r.status === 'pending' || r.status === 'running')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 6);
+  }, [rows]);
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Zap size={13} /> Deployment Queue</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">진행 중 / 대기 · 최대 6개</span>}
+    >
+      {queue.length === 0 ? (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+          <CheckCircle2 size={22} className="text-emerald-200" />
+          <p className="text-[12px] font-bold text-emerald-100">진행 중인 배포가 없습니다.</p>
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {queue.map((r) => {
+            const meta = DEPLOYMENT_STATUS_META[r.status];
+            const cls = r.status === 'running' ? { bg: 'bg-sky-500/25',    ring: 'ring-sky-500/45',    text: 'text-sky-100' }
+                      : r.status === 'pending' ? { bg: 'bg-amber-500/25', ring: 'ring-amber-500/45', text: 'text-amber-100' }
+                      :                          { bg: 'bg-bg-card',      ring: 'ring-line/15',      text: 'text-ink' };
+            const done = r.success_count + r.failed_count + r.skipped_count;
+            const targetTotal = r.target_store_count || 0;
+            const pct = targetTotal > 0 ? Math.round((done / targetTotal) * 100) : 0;
+            return (
+              <li key={r.deployment_id} className={`rounded-lg p-2 ring-1 transition-all duration-200 hover:shadow-md ${cls.bg} ${cls.ring}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={`truncate text-[11.5px] font-bold ${cls.text}`}>{r.deployment_name}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[9.5px] text-ink-mute">
+                      <AdminBadge tone={meta.tone} variant="subtle">{meta.ko}</AdminBadge>
+                      {/* spec 6 — Policy Version chip */}
+                      {r.policy_version_number != null && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-bg-card px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-violet-200 ring-1 ring-violet-400/40">
+                          v{r.policy_version_number}
+                        </span>
+                      )}
+                      <span>· {r.target_store_count} 매장</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(r.deployment_id)}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md bg-bg-card px-2 py-1 text-[10px] font-bold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm"
+                  >
+                    상세 <ExternalLink size={9} />
+                  </button>
+                </div>
+                {/* 진행률 mini bar */}
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-bg-hover ring-1 ring-line/15">
+                  <div className="h-full bg-sky-400 transition-[width] duration-500" style={{ width: `${pct}%` }} aria-label={`${pct}%`} />
+                </div>
+                <p className="mt-0.5 flex items-center justify-between text-[9.5px] text-ink-mute">
+                  <span className="tabular-nums">{done}/{targetTotal}</span>
+                  <span className="tabular-nums">{pct}%</span>
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 8 — AI Deployment Insight (Rule-based)
+// -----------------------------------------------------------------------------
+function AiDeploymentInsight({
+  overview, rows, failedRows,
+}: {
+  overview: PolicyDeploymentOverview;
+  rows: PolicyDeployment[];
+  failedRows: FailedDeploymentStore[];
+}) {
+  const insights = useMemo(() => {
+    const out: Array<{ key: string; tone: 'success' | 'warning' | 'danger' | 'info'; text: string; emoji: string }> = [];
+    const total = overview.total_target_stores;
+    const fail  = overview.failed_stores;
+    const rate  = overview.success_rate ?? 0;
+    const failRate = total > 0 ? (fail / total) * 100 : 0;
+
+    if (rate >= 98) {
+      out.push({ key: 'excellent', tone: 'success', emoji: '🏆', text: `적용률 ${rate.toFixed(1)}% — 배포 운영이 매우 안정적입니다.` });
+    } else if (rate >= 90) {
+      out.push({ key: 'good', tone: 'success', emoji: '✅', text: `적용률 ${rate.toFixed(1)}% — 정상 운영 중입니다.` });
+    }
+
+    if (failRate >= 20) {
+      out.push({ key: 'high_fail', tone: 'danger', emoji: '🚨', text: `실패율이 ${failRate.toFixed(1)}% 로 높습니다. Heartbeat / 매장 상태를 즉시 확인하세요.` });
+    } else if (failRate >= 5) {
+      out.push({ key: 'mid_fail', tone: 'warning', emoji: '⚠️', text: `실패율 ${failRate.toFixed(1)}% — 실패 매장 원인 분석이 필요합니다.` });
+    }
+
+    // failure_category 별 반복
+    const catCounts = new Map<PolicyFailureCategory, number>();
+    for (const f of failedRows) {
+      if (!f.failure_category) continue;
+      catCounts.set(f.failure_category, (catCounts.get(f.failure_category) ?? 0) + 1);
+    }
+    if (catCounts.size > 0) {
+      const [topCat, topCount] = Array.from(catCounts).sort((a, b) => b[1] - a[1])[0];
+      const meta = FAILURE_CATEGORY_META[topCat];
+      out.push({
+        key: 'top_failure', tone: meta.tone === 'danger' ? 'danger' : 'warning', emoji: '🤖',
+        text: `${topCount}개 매장이 "${meta.ko}" 로 실패했습니다. ${meta.hint}.`,
+      });
+    }
+
+    // 진행 중 배포 알림
+    const running = rows.filter((r) => r.status === 'running').length;
+    if (running > 0) {
+      out.push({ key: 'running', tone: 'info', emoji: '📡', text: `${running}개 배포가 진행 중입니다. Timeline 에서 실시간 상황을 확인하세요.` });
+    }
+
+    return out.slice(0, 5);
+  }, [overview, rows, failedRows]);
+
+  if (insights.length === 0) return null;
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Bot size={13} /> AI 배포 인사이트
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+          <Sparkles size={9} /> BETA
+        </span>
+      </span>}
+      subtitle={<span className="text-[10px] text-ink-mute">Rule-based · LLM 미사용 · 기존 KPI 조합</span>}
+    >
+      <ul className="space-y-1.5">
+        {insights.map((i) => {
+          const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+                    : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+                    : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+                    :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+          return (
+            <li key={i.key} className={`rounded-lg p-2.5 ring-1 ${cls.bg} ${cls.ring}`}>
+              <div className="flex items-start gap-2">
+                <span className="shrink-0 text-[14px] leading-tight" aria-hidden>{i.emoji}</span>
+                <p className={`text-[11.5px] leading-relaxed ${cls.text}`}>{i.text}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </AdminCard>
   );
 }
