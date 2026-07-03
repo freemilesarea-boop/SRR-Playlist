@@ -123,6 +123,11 @@ export interface BrandOverviewRow {
   unpaid_count: number;
   unpaid_amount: number;
   updated_at: string;
+  // Phase 2 additive — 이미 조회된 account 데이터에서 채움 (신규 쿼리 없음).
+  // 검색 대상 확장 (담당자 이름/이메일) 및 최근 통신 표시용.
+  manager_name: string | null;
+  manager_email: string | null;
+  last_login_at: string | null;
 }
 
 /**
@@ -185,6 +190,10 @@ export async function fetchBrandOverviewList(): Promise<BrandOverviewRow[]> {
       unpaid_count: overdueInfo?.count ?? 0,
       unpaid_amount: overdueInfo?.amount ?? 0,
       updated_at: b.updated_at,
+      // Phase 2 additive — 이미 조회한 account/brand 데이터에서 채움. 신규 쿼리 없음.
+      manager_name: account?.manager_name ?? b.manager_name ?? null,
+      manager_email: account?.manager_email ?? b.manager_email ?? null,
+      last_login_at: account?.last_login_at ?? null,
     });
   }
   return rows;
