@@ -21,6 +21,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
+import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
@@ -177,6 +178,24 @@ export default function Player() {
 
   const { crossfadeEnabled, crossfadeSeconds, autoplayRecommendations } = usePlaybackSettingsStore();
   const businessMode = useBusinessStore((s) => s.businessMode);
+  // Audio Output Phase 1 — 선택된 sinkId 를 양쪽 audio element 에 적용.
+  // 재생 로직 변경 없음, 새 polling 도입 없음. setSinkId 실패는 조용히 무시.
+  const audioSinkId = useAudioOutputStore((s) => s.sinkId);
+  const audioSinkAppliedAt = useAudioOutputStore((s) => s.lastAppliedAt);
+  useEffect(() => {
+    const applyAll = async () => {
+      const targets = [audioARef.current, audioBRef.current].filter((a): a is HTMLAudioElement => !!a);
+      if (targets.length === 0) return;
+      const desired = audioSinkId ?? 'default';
+      for (const a of targets) {
+        const withSink = a as unknown as { setSinkId?: (id: string) => Promise<void> };
+        if (typeof withSink.setSinkId !== 'function') return;
+        try { await withSink.setSinkId(desired); }
+        catch (e) { console.warn('[Player] setSinkId failed', e); }
+      }
+    };
+    void applyAll();
+  }, [audioSinkId, audioSinkAppliedAt]);
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
