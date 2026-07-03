@@ -1,11 +1,18 @@
-import { User, Store, Mic2, Building2, MapPin, Sparkles } from 'lucide-react';
+import { User, Store, Mic2, Building2, MapPin } from 'lucide-react';
 
+/**
+ * 사용자 노출용 회원가입 유형 — 5개만.
+ *
+ * `enterprise-hq` 는 Phase 3-2 이후 내부적으로 Brand Registry 자동 매칭 flow 를
+ * 기본값으로 사용한다 (LoginPage → EnterpriseBrandSignupForm 라우팅).
+ * 기존 0363 invite code flow 는 URL 직접 접근 (`signup=enterprise-hq-legacy`) 로만
+ * 유지 — 별도 카드로 노출하지 않는다.
+ */
 export type AccountType =
   | 'individual'
   | 'business'
   | 'artist'
   | 'enterprise-hq'
-  | 'enterprise-brand'
   | 'enterprise-store';
 
 interface Props {
@@ -32,19 +39,11 @@ const TYPES: { key: AccountType; icon: React.ReactNode; title: string; desc: str
     title: '아티스트 회원',
     desc: '본인 음원 등록 · 관리자 승인 필요',
   },
-  // Phase 1-6 — 본사가 사전 발급한 초대코드로 셀프 가입
   {
     key: 'enterprise-hq',
     icon: <Building2 size={18} />,
-    title: '엔터프라이즈 본사 담당자',
-    desc: '본사 초대코드로 가입 · 본사 대시보드 접근',
-  },
-  // Phase 3-2 — Brand Registry 자동 매칭 가입
-  {
-    key: 'enterprise-brand',
-    icon: <Sparkles size={18} />,
-    title: '브랜드 자동 매칭 (본사)',
-    desc: '브랜드명+코드로 자동 매칭 가입 · 계약 자동 생성 · 관리자 승인 후 활성',
+    title: '엔터프라이즈 본사',
+    desc: '본사 코드로 가입 · 관리자 승인 후 활성화',
   },
   {
     key: 'enterprise-store',

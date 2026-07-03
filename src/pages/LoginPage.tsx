@@ -23,8 +23,8 @@ type Mode =
   | 'signup-individual'
   | 'signup-business'
   | 'signup-artist'
-  | 'signup-enterprise-hq'
-  | 'signup-enterprise-brand'
+  | 'signup-enterprise-hq'          // Brand Registry 자동 매칭 flow (기본, Phase 3-2+)
+  | 'signup-enterprise-hq-legacy'   // 0363 invite code flow (URL only, 카드 노출 X)
   | 'signup-enterprise-store';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
@@ -101,17 +101,25 @@ export default function LoginPage() {
       setSearchParams(next, { replace: true });
     }
 
-    // Phase 1-9 — 초대 링크 prefill
-    // /login?signup=enterprise-hq&brand=<encoded>&code=<encoded>
-    // /login?signup=enterprise-store&brand=<encoded>&code=<encoded>
+    // Phase 1-9 / Phase 3-2 — 초대 링크 prefill
+    // /login?signup=enterprise-hq&brand=<encoded>&code=<encoded>          → Brand Registry (기본, Phase 3-2+)
+    // /login?signup=enterprise-brand&brand=<encoded>&code=<encoded>       → alias (backward compat) → Brand Registry
+    // /login?signup=enterprise-hq-legacy&brand=<encoded>&code=<encoded>   → 0363 invite (legacy, 카드 없음)
+    // /login?signup=enterprise-store&brand=<encoded>&code=<encoded>       → 매장 초대
     const signupParam = searchParams.get('signup');
-    if (signupParam === 'enterprise-hq' || signupParam === 'enterprise-store' || signupParam === 'enterprise-brand') {
+    if (
+      signupParam === 'enterprise-hq'
+      || signupParam === 'enterprise-brand'
+      || signupParam === 'enterprise-hq-legacy'
+      || signupParam === 'enterprise-store'
+    ) {
       const brand = searchParams.get('brand') ?? '';
       const code = searchParams.get('code') ?? '';
       const nextMode: Mode =
-        signupParam === 'enterprise-hq'    ? 'signup-enterprise-hq'
-      : signupParam === 'enterprise-brand' ? 'signup-enterprise-brand'
-      :                                      'signup-enterprise-store';
+        signupParam === 'enterprise-hq'         ? 'signup-enterprise-hq'
+      : signupParam === 'enterprise-brand'      ? 'signup-enterprise-hq'          // alias
+      : signupParam === 'enterprise-hq-legacy'  ? 'signup-enterprise-hq-legacy'   // 0363 invite
+      :                                           'signup-enterprise-store';
       setMode(nextMode);
       setEnterprisePrefill({ brandName: brand, inviteCode: code });
       // URL 정리 — 새로고침 시 prefill 반복 안내 방지
@@ -224,8 +232,8 @@ export default function LoginPage() {
     if (t === 'individual') setMode('signup-individual');
     else if (t === 'business') setMode('signup-business');
     else if (t === 'artist') setMode('signup-artist');
+    // Phase 3-2+: 엔터프라이즈 본사 카드 → Brand Registry 자동 매칭 flow
     else if (t === 'enterprise-hq') setMode('signup-enterprise-hq');
-    else if (t === 'enterprise-brand') setMode('signup-enterprise-brand');
     else setMode('signup-enterprise-store');
   }
 
@@ -401,10 +409,15 @@ export default function LoginPage() {
               />
             )}
 
+            {/*
+              Phase 3-2+ — 엔터프라이즈 본사 카드는 Brand Registry 자동 매칭 flow 를 기본으로 사용.
+              validate_brand_registry_signup / claim_brand_registry_enterprise RPC 흐름.
+              성공 시 enterprise_accounts + contract 자동 생성 + 관리자 승인 대기 상태.
+            */}
             {mode === 'signup-enterprise-hq' && (
-              <EnterpriseHqSignupForm
+              <EnterpriseBrandSignupForm
                 initialBrandName={enterprisePrefill?.brandName ?? ''}
-                initialInviteCode={enterprisePrefill?.inviteCode ?? ''}
+                initialBrandCode={enterprisePrefill?.inviteCode ?? ''}
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);
@@ -412,10 +425,15 @@ export default function LoginPage() {
               />
             )}
 
-            {mode === 'signup-enterprise-brand' && (
-              <EnterpriseBrandSignupForm
+            {/*
+              Legacy — 0363 invite code flow. 사용자 노출 카드 없음.
+              /login?signup=enterprise-hq-legacy&brand=X&code=Y 로만 접근 가능.
+              기존 발급된 초대 코드가 있는 본사 담당자용 backward-compat.
+            */}
+            {mode === 'signup-enterprise-hq-legacy' && (
+              <EnterpriseHqSignupForm
                 initialBrandName={enterprisePrefill?.brandName ?? ''}
-                initialBrandCode={enterprisePrefill?.inviteCode ?? ''}
+                initialInviteCode={enterprisePrefill?.inviteCode ?? ''}
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);
