@@ -26,6 +26,7 @@ import {
   Bell,
   Activity,
   MessageSquare,
+  Compass,
 } from 'lucide-react';
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -93,6 +94,7 @@ const EnterpriseNocPanel = lazy(() => import('@/components/admin/EnterpriseNocPa
 const EnterpriseOperationsPanel = lazy(() => import('@/components/admin/EnterpriseOperationsPanel'));
 const EnterpriseSettlementCenterPanel = lazy(() => import('@/components/admin/EnterpriseSettlementCenterPanel'));
 const BrandRegistryPanel = lazy(() => import('@/components/admin/BrandRegistryPanel'));
+const EnterpriseCommandCenterPanel = lazy(() => import('@/components/admin/EnterpriseCommandCenterPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -130,6 +132,7 @@ type Tab =
   | 'enterprise-operations'
   | 'enterprise-settlement-center'
   | 'brand-registry'
+  | 'enterprise-command-center'
   | 'franchise'
   | 'sales-agents'
   | 'sales-partners'
@@ -187,6 +190,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-announcements', label: '안내/광고 음원', icon: <Music size={14} /> },
   { key: 'enterprise-emergency', label: '긴급 방송', icon: <Music size={14} /> },
   { key: 'enterprise-noc', label: '운영센터 (NOC)', icon: <Activity size={14} /> },
+  { key: 'enterprise-command-center', label: 'Command Center', icon: <Compass size={14} />, superOnly: true },
   { key: 'enterprise-operations', label: '운영 관제 (Ops)', icon: <Activity size={14} />, superOnly: true },
   { key: 'enterprise-settlement-center', label: '정산·청구 통합', icon: <Wallet size={14} />, superOnly: true },
   { key: 'brand-registry', label: '브랜드 관리', icon: <Building2 size={14} />, superOnly: true },
@@ -239,7 +243,7 @@ type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
+  { key: '엔터프라이즈', tabs: ['enterprise-command-center', 'enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
@@ -454,6 +458,7 @@ export default function AdminPage() {
           {tab === 'enterprise-contracts' && <EnterpriseContractsPanel />}
           {tab === 'enterprise-emergency' && <EnterpriseEmergencyBroadcastPanel />}
           {tab === 'enterprise-noc' && <EnterpriseNocPanel />}
+          {tab === 'enterprise-command-center' && <EnterpriseCommandCenterPanel />}
           {tab === 'enterprise-operations' && <EnterpriseOperationsPanel />}
           {tab === 'enterprise-settlement-center' && <EnterpriseSettlementCenterPanel />}
           {tab === 'brand-registry' && <BrandRegistryPanel />}
