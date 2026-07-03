@@ -14,8 +14,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertOctagon, AlertTriangle, ArrowRight, Bell, Bot, Building2, CheckCircle2, Clock,
-  Compass, Database, ExternalLink, Handshake, Heart, HeartPulse, Minus, PlayCircle, Plus,
-  RadioTower, RefreshCw, Search, ShieldCheck, ShieldX, Siren, Sparkles,
+  Compass, Database, ExternalLink, Handshake, Heart, HeartPulse, Lightbulb, Minus, Music2,
+  PlayCircle, Plus, RadioTower, RefreshCw, Search, ShieldCheck, ShieldX, Siren, Sparkles,
   Store as StoreIcon, TrendingDown, TrendingUp, Wallet, Wifi, WifiOff, X, Zap,
 } from 'lucide-react';
 import {
@@ -216,6 +216,15 @@ export default function EnterpriseCommandCenterPanel() {
       <FleetHeatStrip fleet={fleet} />
       <FleetOverviewCard fleet={fleet} kpi={kpi} />
       <StoreFleetGrid
+        fleet={fleet}
+        timeline={timeline}
+        loading={loading && fleet.length === 0}
+      />
+
+      {/* ==================================================================== */}
+      {/* AI Playlist Intelligence Center — Rule-based 음악 운영 인사이트     */}
+      {/* ==================================================================== */}
+      <PlaylistIntelligenceSection
         fleet={fleet}
         timeline={timeline}
         loading={loading && fleet.length === 0}
@@ -2148,5 +2157,390 @@ function StoreQuickAction({ icon, tab, title }: { icon: JSX.Element; tab: string
     >
       {icon}
     </button>
+  );
+}
+
+// ============================================================================
+// AI Playlist Intelligence Center — Rule-based 음악 운영 인사이트 (spec 1~11)
+// ----------------------------------------------------------------------------
+// LLM/새 AI 모델 호출 0. 기존 fleet (StoreMonitoringRow) + timeline 조합.
+// per-policy 이름/카테고리/업종 metadata 는 기존 API 미제공 — 아래 항목 스킵/근사:
+//   • Playlist 이름 → policy_id prefix 표기
+//   • 업종 (카페/병원/헬스장) → franchise_name 그룹핑으로 근사
+//   • 시간대별 반응 → timeline 이벤트 시각 분포
+// ============================================================================
+
+interface PlaylistPerformance {
+  policy_id: string;           // active_policy_id
+  policy_label: string;        // "정책 xxxxxxxx" 등
+  store_count: number;         // 이 정책 적용 매장 수
+  success_rate: number;        // 재생 오류 없는 비율 (0-100)
+  health_label: 'Excellent' | 'Good' | 'Warning' | 'Critical';
+  tone: 'success' | 'warning' | 'danger';
+}
+
+/**
+ * 정책별 성과 (spec 2, 4) — fleet 에서 active_policy_id 로 그루핑.
+ * 성공률 = (오류 없는 매장 / 이 정책 매장 수) × 100.
+ * 이름 metadata 없어 policy_id prefix + 매장 수만 표기.
+ */
+function computePlaylistPerformance(fleet: StoreMonitoringRow[]): PlaylistPerformance[] {
+  const buckets = new Map<string, StoreMonitoringRow[]>();
+  for (const r of fleet) {
+    const key = r.active_policy_id ?? '__no_policy__';
+    const arr = buckets.get(key) ?? [];
+    arr.push(r);
+    buckets.set(key, arr);
+  }
+  const rows: PlaylistPerformance[] = [];
+  for (const [key, arr] of buckets) {
+    if (key === '__no_policy__') continue;
+    const total = arr.length;
+    if (total === 0) continue;
+    const errCount = arr.filter((r) => r.has_playback_error || r.has_policy_outdated).length;
+    const success = Math.round(((total - errCount) / total) * 100);
+    const tone: 'success' | 'warning' | 'danger' =
+      success >= 95 ? 'success' : success >= 80 ? 'success' : success >= 60 ? 'warning' : 'danger';
+    const label =
+      success >= 95 ? 'Excellent'
+      : success >= 80 ? 'Good'
+      : success >= 60 ? 'Warning'
+      : 'Critical';
+    rows.push({
+      policy_id: key,
+      policy_label: `정책 ${key.slice(0, 8)}`,
+      store_count: total,
+      success_rate: success,
+      health_label: label,
+      tone,
+    });
+  }
+  rows.sort((a, b) => b.success_rate - a.success_rate || b.store_count - a.store_count);
+  return rows.slice(0, 6);
+}
+
+interface MusicInsight {
+  key: string;
+  emoji: string;
+  text: string;
+  tone: 'primary' | 'success' | 'warning' | 'danger';
+}
+
+/**
+ * AI Music Insight (spec 1) — Rule-based 최대 5개.
+ * 매장 상태 + timeline 분포 기반 자연어 요약. 정책 이름 metadata 없으므로
+ * 정책 카테고리 (Acoustic/Lo-fi/Jazz) 언급은 정직하게 skip 하고 현황 요약 중심.
+ */
+function generateMusicInsights(
+  fleet: StoreMonitoringRow[],
+  timeline: EnterpriseOpsActivityEvent[],
+  performance: PlaylistPerformance[],
+): MusicInsight[] {
+  const out: MusicInsight[] = [];
+
+  // (a) 재생 중 매장 비율
+  const total = fleet.length;
+  const playing = fleet.filter((r) => r.player_status === 'playing').length;
+  if (total > 0) {
+    const rate = Math.round((playing / total) * 100);
+    if (rate >= 90) {
+      out.push({ key: 'playing_high', emoji: '🎵', text: `재생 중 매장 비율 ${rate}% — 매장 음악 운영이 안정적입니다.`, tone: 'success' });
+    } else if (rate >= 60) {
+      out.push({ key: 'playing_mid',  emoji: '🎵', text: `재생 중 매장 비율 ${rate}% — 일부 매장이 재생 중이 아닙니다. 점검을 권장합니다.`, tone: 'warning' });
+    } else {
+      out.push({ key: 'playing_low',  emoji: '🎵', text: `재생 중 매장이 ${rate}% 로 낮습니다. Policy 재배포 또는 매장 상태 확인이 필요합니다.`, tone: 'danger' });
+    }
+  }
+
+  // (b) 재생 오류 매장 유무
+  const errStores = fleet.filter((r) => r.has_playback_error).length;
+  if (errStores > 0) {
+    out.push({ key: 'playback_err', emoji: '⚠️', text: `${errStores}개 매장에서 재생 오류가 감지됩니다. Policy 교체 또는 트랙 검토를 권장합니다.`, tone: 'danger' });
+  }
+
+  // (c) 최고 성과 정책
+  if (performance.length > 0) {
+    const top = performance[0];
+    if (top.success_rate >= 95) {
+      out.push({ key: 'top_policy', emoji: '🏆', text: `${top.policy_label} 의 성공률이 ${top.success_rate}% 로 가장 안정적입니다. 다른 매장 확산 검토를 권장합니다.`, tone: 'success' });
+    }
+  }
+
+  // (d) 최저 성과 정책
+  if (performance.length >= 2) {
+    const worst = performance[performance.length - 1];
+    if (worst.success_rate < 70) {
+      out.push({ key: 'weak_policy', emoji: '🔻', text: `${worst.policy_label} 의 성공률이 ${worst.success_rate}% 로 저조합니다. 정책 교체 검토를 권장합니다.`, tone: 'warning' });
+    }
+  }
+
+  // (e) 시간대 활동 요약 (timeline 시각 분포)
+  if (timeline.length > 0) {
+    const hours = timeline.map((e) => new Date(e.at).getHours()).filter((h) => !Number.isNaN(h));
+    if (hours.length > 0) {
+      const busiest = hours.reduce<Record<number, number>>((acc, h) => { acc[h] = (acc[h] ?? 0) + 1; return acc; }, {});
+      const [hour] = Object.entries(busiest).sort((a, b) => b[1] - a[1])[0];
+      out.push({ key: 'peak_hour', emoji: '🕒', text: `최근 이벤트가 ${hour}시 대에 가장 활발합니다. 해당 시간대 정책 반응을 우선 모니터링하세요.`, tone: 'primary' });
+    }
+  }
+
+  return out.slice(0, 5);
+}
+
+interface StoreMusicRecommendation {
+  id: string;
+  store_name: string;
+  reason: string;
+  action_tab: string;
+  tone: 'warning' | 'danger';
+}
+
+/** Store Recommendation (spec 3, 7) — fleet critical/warning 매장 대상 rule-based 추천. */
+function generateStoreRecommendations(fleet: StoreMonitoringRow[]): StoreMusicRecommendation[] {
+  const list: StoreMusicRecommendation[] = [];
+  for (const r of fleet) {
+    if (r.has_playback_error) {
+      list.push({ id: r.store_id, store_name: r.store_name, reason: '재생 오류 감지 — Policy 재배포 권장', action_tab: 'policy-deployment', tone: 'danger' });
+    } else if (r.has_policy_outdated) {
+      list.push({ id: r.store_id, store_name: r.store_name, reason: '정책 미적용 — 최신 Policy 배포 권장', action_tab: 'policy-deployment', tone: 'warning' });
+    } else if (r.is_offline_24h) {
+      list.push({ id: r.store_id, store_name: r.store_name, reason: '24h+ Offline — 매장 연결 상태 점검', action_tab: 'store-monitoring', tone: 'danger' });
+    } else if (r.is_idle_1h_to_24h) {
+      list.push({ id: r.store_id, store_name: r.store_name, reason: '장시간 재생 중지 — 상태 확인 권장', action_tab: 'store-now-playing', tone: 'warning' });
+    }
+    if (list.length >= 8) break;
+  }
+  return list;
+}
+
+interface MusicTrendItem { label: string; count: number; direction: 'up' | 'down' | 'flat'; tone: 'success' | 'warning' | 'danger'; }
+
+/** Trend (spec 6) — Timeline severity 방향성 (Rule-based 근사). */
+function computeMusicTrend(timeline: EnterpriseOpsActivityEvent[]): MusicTrendItem[] {
+  let errCount = 0, warnCount = 0, okCount = 0;
+  for (const e of timeline) {
+    const s = String(e.severity ?? 'info');
+    if (s === 'error' || s === 'critical') errCount++;
+    else if (s === 'warning') warnCount++;
+    else if (s === 'success') okCount++;
+  }
+  return [
+    { label: '정상 재생',   count: okCount,   direction: okCount   > 0 ? 'up' : 'flat', tone: 'success' },
+    { label: '주의 이벤트', count: warnCount, direction: warnCount > 0 ? 'up' : 'flat', tone: warnCount > 0 ? 'warning' : 'success' },
+    { label: '재생 오류',   count: errCount,  direction: errCount  > 0 ? 'up' : 'flat', tone: errCount  > 0 ? 'danger'  : 'success' },
+  ];
+}
+
+// -----------------------------------------------------------------------------
+// Section Root
+// -----------------------------------------------------------------------------
+function PlaylistIntelligenceSection({
+  fleet, timeline, loading,
+}: {
+  fleet: StoreMonitoringRow[];
+  timeline: EnterpriseOpsActivityEvent[];
+  loading: boolean;
+}) {
+  const performance    = useMemo(() => computePlaylistPerformance(fleet), [fleet]);
+  const insights       = useMemo(() => generateMusicInsights(fleet, timeline, performance), [fleet, timeline, performance]);
+  const recommendations = useMemo(() => generateStoreRecommendations(fleet), [fleet]);
+  const trend          = useMemo(() => computeMusicTrend(timeline), [timeline]);
+
+  return (
+    <div className="space-y-3">
+      {/* Section header */}
+      <div className="flex items-center gap-2">
+        <Music2 size={14} className="text-violet-200" />
+        <h2 className="text-[13px] font-black text-ink">AI Playlist Intelligence</h2>
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+          <Sparkles size={9} /> BETA
+        </span>
+        <span className="text-[10px] text-ink-mute">Rule-based · LLM 미사용 · 기존 fleet + timeline 조합</span>
+      </div>
+
+      {/* spec 10 responsive: Desktop grid 2/3 + 1/3, Tablet/Mobile 세로 */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        {/* Left — Insights + Performance */}
+        <div className="space-y-3 lg:col-span-2">
+          <MusicInsightList insights={insights} loading={loading} />
+          <PlaylistPerformanceCard performance={performance} loading={loading} />
+        </div>
+        {/* Right — Recommendation Queue + Trend */}
+        <div className="space-y-3 lg:col-span-1">
+          <AiRecommendationQueueCard recommendations={recommendations} loading={loading} />
+          <MusicTrendCard trend={trend} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 1 — AI Music Insights
+// -----------------------------------------------------------------------------
+function MusicInsightList({ insights, loading }: { insights: MusicInsight[]; loading: boolean }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Lightbulb size={13} /> AI 음악 인사이트</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">기존 데이터로 자동 생성 · 최대 5개</span>}
+    >
+      {loading ? <AdminSkeleton variant="block" />
+        : insights.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/20 py-4 text-center ring-1 ring-emerald-500/40">
+            <Bot size={24} className="text-emerald-200" />
+            <p className="text-[12px] font-bold text-emerald-100">현재 추천할 음악 정책이 없습니다.</p>
+            <p className="text-[10px] text-emerald-200/80">매장 상태 안정 · 정책 조정 불필요</p>
+          </div>
+        ) : (
+          <ul className="space-y-1.5">
+            {insights.map((i) => {
+              const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+                        : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+                        : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+                        :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+              return (
+                <li key={i.key} className={`rounded-lg p-2.5 ring-1 transition ${cls.bg} ${cls.ring}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 text-[14px] leading-tight" aria-hidden>{i.emoji}</span>
+                    <p className={`text-[11.5px] leading-relaxed ${cls.text}`}>{i.text}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 2, 4 — Playlist Performance (정책별 성과 + 비교)
+// -----------------------------------------------------------------------------
+function PlaylistPerformanceCard({ performance, loading }: { performance: PlaylistPerformance[]; loading: boolean }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><PlayCircle size={13} /> Playlist Performance</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">활성 정책 별 성공률 · 상위 6개</span>}
+    >
+      {loading ? <AdminSkeleton variant="block" />
+        : performance.length === 0 ? (
+          <AdminEmpty
+            title="활성 정책 없음"
+            description="배포된 정책이 있는 매장이 확인되면 성과가 여기에 표시됩니다."
+            action={
+              <AdminButton tone="primary" onClick={() => navigateToTab('policy-deployment')}>
+                <ShieldCheck size={12} /> Policy 배포
+              </AdminButton>
+            }
+          />
+        ) : (
+          <ul className="space-y-1.5">
+            {performance.map((p) => {
+              const cls = p.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100', bar: 'bg-emerald-400' }
+                        : p.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100',   bar: 'bg-amber-400' }
+                        :                        { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100',    bar: 'bg-rose-400' };
+              return (
+                <li key={p.policy_id} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`truncate text-[11.5px] font-bold ${cls.text}`}>{p.policy_label}</p>
+                      <p className="text-[10px] text-ink-mute">{p.store_count} 매장 · <span className={cls.text}>{p.health_label}</span></p>
+                    </div>
+                    <p className="shrink-0 tabular-nums text-[16px] font-black text-ink">{p.success_rate}<span className="text-[10px] font-normal text-ink-mute">%</span></p>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-bg-hover ring-1 ring-line/15">
+                    <div className={`h-full rounded-full transition-all duration-300 ${cls.bar}`} style={{ width: `${p.success_rate}%` }} aria-label={`${p.policy_label} ${p.success_rate}%`} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 3, 7 — AI Recommendation Queue (매장별 추천, spec 8 History 겸용)
+// -----------------------------------------------------------------------------
+function AiRecommendationQueueCard({
+  recommendations, loading,
+}: {
+  recommendations: StoreMusicRecommendation[]; loading: boolean;
+}) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Bot size={13} /> AI 추천 Queue</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">매장별 자동 감지 · 최대 8개</span>}
+    >
+      {loading ? <AdminSkeleton variant="block" />
+        : recommendations.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/20 py-4 text-center ring-1 ring-emerald-500/40">
+            <Bot size={22} className="text-emerald-200" />
+            <p className="text-[11px] font-bold text-emerald-100">추천할 매장이 없습니다.</p>
+            <p className="text-[9.5px] text-emerald-200/80">전 매장 안정 운영 중</p>
+          </div>
+        ) : (
+          <ul className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
+            {recommendations.map((r) => {
+              const cls = r.tone === 'danger'
+                ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-rose-100', btn: 'bg-rose-500/40 ring-rose-400/60 hover:bg-rose-500/50' }
+                : { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-amber-100', btn: 'bg-amber-500/40 ring-amber-400/60 hover:bg-amber-500/50' };
+              return (
+                <li key={r.id} className={`rounded-lg p-2 ring-1 transition-all duration-200 ${cls.bg} ${cls.ring}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-1.5">
+                      <Bot size={12} className={`mt-0.5 shrink-0 ${cls.text}`} />
+                      <div className="min-w-0">
+                        <p className={`truncate text-[11.5px] font-bold ${cls.text}`}>{r.store_name}</p>
+                        <p className="mt-0.5 text-[10px] text-ink">→ {r.reason}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab(r.action_tab)}
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-1 transition hover:shadow-sm ${cls.btn} text-white`}
+                    >
+                      이동 <ArrowRight size={9} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 6 — Music Trend
+// -----------------------------------------------------------------------------
+function MusicTrendCard({ trend }: { trend: MusicTrendItem[] }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><TrendingUp size={13} /> 최근 추세</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">Timeline 20건 기반 · Rule-based 근사</span>}
+    >
+      <div className="grid grid-cols-3 gap-1.5">
+        {trend.map((t) => {
+          const dirIcon = t.direction === 'up'   ? <TrendingUp   size={12} />
+                        : t.direction === 'down' ? <TrendingDown size={12} />
+                        :                          <Minus        size={12} />;
+          const cls = t.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+                    : t.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+                    :                        { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' };
+          return (
+            <div key={t.label} className={`rounded-md p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+              <p className="text-[9px] uppercase tracking-wider text-ink-mute">{t.label}</p>
+              <div className="mt-0.5 flex items-center gap-1">
+                <span className={cls.text} aria-hidden>{dirIcon}</span>
+                <span className="tabular-nums text-[14px] font-black text-ink">{t.count}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </AdminCard>
   );
 }
