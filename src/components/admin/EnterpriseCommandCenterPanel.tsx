@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, AlertOctagon, AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock,
+  Activity, AlertOctagon, AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock,
   Compass, Database, ExternalLink, Handshake, Heart, HeartPulse, PlayCircle, Plus,
   RadioTower, RefreshCw, Search, ShieldCheck, ShieldX, Siren,
   Store as StoreIcon, TrendingUp, Wallet, Wifi, WifiOff, X, Zap,
@@ -144,27 +144,23 @@ export default function EnterpriseCommandCenterPanel() {
 
       <GlobalSearchBar />
 
-      {/* Hero KPI — 3초 안에 파악해야 하는 최우선 4개 지표 (클릭 시 관련 탭 이동) */}
+      {/* Polish spec 1 — Hero KPI (compact) */}
       <HeroKpi kpi={kpi} />
 
-      {/* Phase 3 spec 6 — 한 줄 요약 (Hero 아래) */}
+      {/* SummaryStrip — 한 줄 요약 (Hero 바로 아래, 얇음) */}
       <SummaryStrip kpi={kpi} alerts={alerts} />
 
-      {/* Phase 3 spec 1 — NOC Dashboard 6 카드 */}
+      {/* Polish spec 2 — NOC Dashboard 승격 (Hero 바로 아래) */}
       <NocDashboard kpi={kpi} alerts={alerts} loading={loading && !kpi} />
 
-      {/* Secondary KPI (좌 2/3) + Quick Actions (우 1/3) */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <SecondaryKpi kpi={kpi} />
-        </div>
-        <div>
-          <QuickActionsCard />
-        </div>
-      </div>
+      {/* Polish spec 2, 3 — Quick Actions (compact 6열) */}
+      <QuickActionsCard />
 
+      {/* Polish spec 2 — Secondary KPI (하위 배치) */}
+      <SecondaryKpi kpi={kpi} />
+
+      {/* Brand Overview (좌 2/3) + Sidebar (우 1/3) */}
       <div className="grid gap-3 lg:grid-cols-3">
-        {/* 좌측 2/3 — Brand Overview */}
         <div className="lg:col-span-2">
           <BrandOverviewGrid
             brands={brands}
@@ -173,7 +169,6 @@ export default function EnterpriseCommandCenterPanel() {
             selectedId={selectedBrandId}
           />
         </div>
-        {/* 우측 1/3 — Sidebar */}
         <div className="space-y-3">
           {selectedBrandId ? (
             <BrandDetailSidebar
@@ -182,10 +177,9 @@ export default function EnterpriseCommandCenterPanel() {
             />
           ) : (
             <>
-              {/* Phase 3 spec 3, 5 — Incident Queue with Priority + Quick Fix */}
-              <IncidentQueueCard alerts={alerts} loading={loading && alerts.length === 0} />
-              {/* Phase 3 spec 8 — Timeline 색상 rail 개선 */}
+              {/* Polish spec 2 순서: Timeline → Alerts (Alerts 마지막) */}
               <TimelineCard events={timeline} loading={loading && timeline.length === 0} />
+              <IncidentQueueCard alerts={alerts} loading={loading && alerts.length === 0} />
             </>
           )}
         </div>
@@ -230,12 +224,12 @@ function HeroKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
     { key: 'offline', label: '오프라인',    desc: '점검 필요',        value: kpi.offline_stores, icon: <WifiOff size={22} />,      tone: kpi.offline_stores > 0 ? 'danger' : 'success', tab: 'enterprise-noc' },
   ] : [];
 
-  // Empty state — 로딩 중에도 4 카드 스켈레톤 유지 (spec 7 layout 안정성)
+  // Polish spec 1 — Hero compact (기존 h-32 → h-24, p-4 → p-2.5, 값 text-3xl → text-2xl)
   if (!kpi) {
     return (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="h-32 rounded-2xl bg-bg-card ring-1 ring-line/15 animate-pulse" />
+          <div key={i} className="h-24 rounded-xl bg-bg-card ring-1 ring-line/15 animate-pulse" />
         ))}
       </div>
     );
@@ -248,7 +242,7 @@ function HeroKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
           key={item.key}
           type="button"
           onClick={() => navigateToTab(item.tab)}
-          className={`group text-left rounded-2xl p-4 ring-1 transition-all duration-150 hover:shadow-lg ${
+          className={`group text-left rounded-xl p-2.5 ring-1 transition-all duration-150 hover:shadow-md ${
             item.tone === 'success'
               ? 'bg-emerald-500/25 ring-emerald-400/50 hover:bg-emerald-500/30'
               : item.tone === 'warning'
@@ -258,20 +252,24 @@ function HeroKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
               : 'bg-violet-500/25 ring-violet-400/50 hover:bg-violet-500/30'
           }`}
         >
-          <div className="flex items-start justify-between">
-            <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${
-              item.tone === 'success'  ? 'bg-emerald-500/40 text-emerald-100'
-              : item.tone === 'warning' ? 'bg-amber-500/40 text-amber-100'
-              : item.tone === 'danger'  ? 'bg-rose-500/40 text-rose-100'
-              :                           'bg-violet-500/40 text-violet-100'
-            }`}>
-              {item.icon}
-            </span>
-            <ExternalLink size={12} className="text-ink-mute opacity-50 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center justify-between gap-2">
+            {/* 좌: 아이콘 + 라벨 스택 */}
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                item.tone === 'success'  ? 'bg-emerald-500/40 text-emerald-100'
+                : item.tone === 'warning' ? 'bg-amber-500/40 text-amber-100'
+                : item.tone === 'danger'  ? 'bg-rose-500/40 text-rose-100'
+                :                           'bg-violet-500/40 text-violet-100'
+              }`}>{item.icon}</span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold text-ink leading-tight">{item.label}</p>
+                <p className="truncate text-[9.5px] text-ink-mute leading-tight">{item.desc}</p>
+              </div>
+            </div>
+            <ExternalLink size={11} className="shrink-0 text-ink-mute opacity-50 group-hover:opacity-100 transition-opacity" />
           </div>
-          <p className="mt-3 text-3xl font-black tabular-nums text-ink">{fmtNumber(item.value)}</p>
-          <p className="mt-1 text-[12px] font-bold text-ink">{item.label}</p>
-          <p className="text-[10px] text-ink-mute">{item.desc}</p>
+          {/* 값 — 크게 유지, 여백만 축소 */}
+          <p className="mt-1.5 text-2xl font-black tabular-nums text-ink">{fmtNumber(item.value)}</p>
         </button>
       ))}
     </div>
@@ -306,23 +304,38 @@ function SecondaryKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
 }
 
 // ============================================================================
-// Quick Actions (spec 6, 7) — 세로 카드형 (Hero 오른쪽 정렬)
+// Quick Actions — Polish spec 3
+// ----------------------------------------------------------------------------
+// 6열 grid (Desktop) · 2열 (Mobile) · 아이콘 강조 · 라벨 간결.
+// spec 3 매핑: ＋ 브랜드 / 📝 계약 / 💳 Billing / 🎵 Policy / 📢 공지 / 🚚 Dispatch
 // ============================================================================
+const QUICK_ACTION_ICONS: Record<string, JSX.Element> = {
+  create_brand:        <Plus size={14} />,
+  create_contract:     <Handshake size={14} />,
+  create_billing:      <Wallet size={14} />,
+  policy_deploy:       <ShieldCheck size={14} />,
+  emergency_broadcast: <Siren size={14} />,
+  dispatch:            <RadioTower size={14} />,
+};
+
 function QuickActionsCard() {
   return (
     <AdminCard
       title={<span className="flex items-center gap-2"><PlayCircle size={13} /> Quick Actions</span>}
-      subtitle={<span className="text-[10px] text-ink-mute">기존 탭으로 이동</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">기존 탭으로 이동 · 조회 전용 (실행 액션 아님)</span>}
     >
-      <div className="grid grid-cols-2 gap-1.5">
+      {/* Polish spec 3, 9 responsive: 2 → 3 → 6열 */}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
         {QUICK_ACTION_LINKS.map((a) => (
           <button
             key={a.key}
             type="button"
             onClick={() => navigateToTab(a.target_tab)}
-            className="inline-flex items-center justify-start gap-1.5 rounded-lg bg-bg-card px-2.5 py-2 text-[11px] font-semibold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm"
+            className="group inline-flex items-center justify-start gap-1.5 rounded-lg bg-bg-card px-2 py-1.5 text-[11px] font-semibold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm"
           >
-            <PlayCircle size={11} className="shrink-0 text-violet-300" />
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40 transition group-hover:bg-violet-500/35">
+              {QUICK_ACTION_ICONS[a.key] ?? <PlayCircle size={12} />}
+            </span>
             <span className="truncate">{a.label}</span>
           </button>
         ))}
@@ -622,7 +635,26 @@ function BrandOverviewGrid({
                     </div>
                   </div>
 
-                  {/* 자동 상태 Badge (spec 3) + 계약 상태 */}
+                  {/* Polish spec 4 — Progress Bar (Health Score 시각화) */}
+                  <div className="mt-2">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-hover ring-1 ring-line/15">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          health.tone === 'success' ? 'bg-emerald-400'
+                          : health.tone === 'warning' ? 'bg-amber-400'
+                          : 'bg-rose-400'
+                        }`}
+                        style={{ width: `${score}%` }}
+                        aria-label={`Health ${score}/100`}
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[9.5px] text-ink-mute">
+                      <span className="tabular-nums">{score}/100</span>
+                      <span className="inline-flex items-center gap-0.5">{health.icon}{health.label}</span>
+                    </div>
+                  </div>
+
+                  {/* 자동 상태 Badge + 계약 상태 */}
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     <AdminBadge tone={derived.tone as 'success' | 'warning' | 'danger' | 'neutral'} variant="subtle">
                       {derived.label}
@@ -630,10 +662,6 @@ function BrandOverviewGrid({
                     <span className="text-[10px] text-ink-mute">·</span>
                     <span className="text-[10px] text-ink-mute">
                       {b.contract_status === 'no_contract' ? '계약 없음' : `계약 ${b.contract_status.toUpperCase()}`}
-                    </span>
-                    <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-ink-mute">
-                      {health.icon}
-                      {health.label}
                     </span>
                   </div>
 
@@ -896,6 +924,16 @@ function IncidentQueueCard({ alerts, loading }: { alerts: CommandCenterAlert[]; 
                 >
                   <div className="flex items-start justify-between gap-2 px-2.5 py-2">
                     <div className="flex min-w-0 items-start gap-1.5">
+                      {/* Polish spec 7 — 색 원 상태 시각화 */}
+                      <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${
+                        priority === 'P1' ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60'
+                        : priority === 'P2' ? 'bg-amber-500/40 text-amber-50 ring-amber-400/60'
+                        : 'bg-sky-500/40 text-sky-50 ring-sky-400/60'
+                      }`} aria-hidden>
+                        {priority === 'P1' ? <AlertOctagon size={11} />
+                          : priority === 'P2' ? <AlertTriangle size={11} />
+                          : <Bell size={11} />}
+                      </span>
                       <PriorityBadge p={priority} />
                       <div className="min-w-0">
                         <p className={`truncate text-[12px] font-bold ${
@@ -943,43 +981,56 @@ function fmtTime(iso: string | null | undefined): string {
   } catch { return '—'; }
 }
 
-function severityRailClasses(sev: string): { rail: string; badge: 'success' | 'warning' | 'danger' | 'info' | 'neutral' } {
+interface SeverityVisual {
+  rail: string;
+  badge: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+  dotBg: string;
+  dotIcon: JSX.Element;
+}
+
+function severityVisual(sev: string): SeverityVisual {
   switch (sev) {
     case 'error':
-    case 'critical': return { rail: 'bg-rose-500',    badge: 'danger'  };
-    case 'warning':  return { rail: 'bg-amber-500',   badge: 'warning' };
-    case 'success':  return { rail: 'bg-emerald-500', badge: 'success' };
-    case 'info':     return { rail: 'bg-sky-500',     badge: 'info'    };
-    default:         return { rail: 'bg-ink-mute',    badge: 'neutral' };
+    case 'critical': return { rail: 'bg-rose-500',    badge: 'danger',  dotBg: 'bg-rose-500/40 text-rose-100',       dotIcon: <AlertOctagon size={11} /> };
+    case 'warning':  return { rail: 'bg-amber-500',   badge: 'warning', dotBg: 'bg-amber-500/40 text-amber-100',     dotIcon: <AlertTriangle size={11} /> };
+    case 'success':  return { rail: 'bg-emerald-500', badge: 'success', dotBg: 'bg-emerald-500/40 text-emerald-100', dotIcon: <CheckCircle2 size={11} /> };
+    case 'info':     return { rail: 'bg-sky-500',     badge: 'info',    dotBg: 'bg-sky-500/40 text-sky-100',         dotIcon: <Activity size={11} /> };
+    default:         return { rail: 'bg-ink-mute',    badge: 'neutral', dotBg: 'bg-bg-hover text-ink-mute',          dotIcon: <Activity size={11} /> };
   }
 }
 
+// Polish spec 6 — Timeline 카드 형태
+// [🟢 dot] │ [type badge] [제목/브랜드명] │ [시각]
 function TimelineCard({ events, loading }: { events: EnterpriseOpsActivityEvent[]; loading: boolean }) {
   return (
     <AdminCard
       title={<span className="flex items-center gap-2"><Activity size={13} /> 운영 Timeline</span>}
-      subtitle={<span className="text-[10px] text-ink-mute">최근 20건 · severity 색상 rail</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">최근 20건 · 카드형</span>}
     >
       {loading ? <AdminSkeleton variant="block" />
-        : events.length === 0 ? <AdminEmpty title="이벤트 없음" description="최근 활동 없음" />
+        : events.length === 0 ? (
+          <AdminEmpty title="이벤트 없음" description="최근 활동 없음. 30초 후 자동 갱신됩니다." />
+        )
         : (
-          <ul className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
+          <ul className="max-h-[380px] space-y-1.5 overflow-y-auto pr-1">
             {events.map((e) => {
-              const sc = severityRailClasses(String(e.severity ?? 'info'));
+              const sv = severityVisual(String(e.severity ?? 'info'));
               return (
                 <li key={`${e.type}:${e.id}`} className="flex items-stretch gap-2">
-                  {/* 좌측 시각 */}
-                  <span className="w-16 shrink-0 pt-1 text-right font-mono text-[10px] tabular-nums text-ink-mute">
-                    {fmtTime(e.at)}
-                  </span>
-                  {/* Severity rail */}
-                  <span className={`w-0.5 shrink-0 rounded-full ${sc.rail}`} aria-hidden />
-                  {/* 본문 */}
-                  <div className="min-w-0 flex-1 rounded-md bg-bg-card px-2 py-1.5 text-[11px] ring-1 ring-line/10">
-                    <div className="flex items-center gap-1.5">
-                      <AdminBadge tone={sc.badge} variant="subtle">{e.type}</AdminBadge>
-                      <span className="truncate text-ink">{e.title}</span>
+                  {/* Severity rail (좌측) */}
+                  <span className={`w-0.5 shrink-0 rounded-full ${sv.rail}`} aria-hidden />
+                  {/* 카드 본문 */}
+                  <div className="min-w-0 flex-1 rounded-lg bg-bg-card p-2 ring-1 ring-line/15 transition-shadow hover:shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${sv.dotBg}`} aria-hidden>
+                          {sv.dotIcon}
+                        </span>
+                        <AdminBadge tone={sv.badge} variant="subtle">{e.type}</AdminBadge>
+                      </div>
+                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-ink-mute">{fmtTime(e.at)}</span>
                     </div>
+                    <p className="mt-1 truncate text-[11.5px] text-ink">{e.title}</p>
                     <p className="mt-0.5 text-[9.5px] text-ink-dim">{fmtRelative(e.at)}</p>
                   </div>
                 </li>

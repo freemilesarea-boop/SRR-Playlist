@@ -438,13 +438,13 @@ export interface QuickActionLink {
 }
 
 export const QUICK_ACTION_LINKS: QuickActionLink[] = [
-  { key: 'create_brand',       label: '브랜드 생성',   target_tab: 'brand-registry' },
-  { key: 'create_contract',    label: '계약 생성',     target_tab: 'enterprise-contracts' },
-  { key: 'create_billing',     label: 'Billing 생성',  target_tab: 'enterprise-billing' },
-  { key: 'create_settlement',  label: 'Settlement 생성', target_tab: 'enterprise-settlement-center' },
-  { key: 'policy_deploy',      label: 'Policy 배포',   target_tab: 'policy-deployment' },
-  { key: 'emergency_broadcast', label: '긴급공지',    target_tab: 'enterprise-emergency' },
-  { key: 'dispatch',           label: 'Dispatch',      target_tab: 'enterprise-operations' },
+  // Polish Phase — label compact (아이콘은 Panel 에서 key 로 매핑)
+  { key: 'create_brand',        label: '브랜드',    target_tab: 'brand-registry' },
+  { key: 'create_contract',     label: '계약',      target_tab: 'enterprise-contracts' },
+  { key: 'create_billing',      label: 'Billing',   target_tab: 'enterprise-billing' },
+  { key: 'policy_deploy',       label: 'Policy',    target_tab: 'policy-deployment' },
+  { key: 'emergency_broadcast', label: '공지',      target_tab: 'enterprise-emergency' },
+  { key: 'dispatch',            label: 'Dispatch',  target_tab: 'enterprise-operations' },
 ];
 
 // ============================================================================
