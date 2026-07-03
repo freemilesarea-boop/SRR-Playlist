@@ -21,7 +21,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
-import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
@@ -178,31 +178,11 @@ export default function Player() {
 
   const { crossfadeEnabled, crossfadeSeconds, autoplayRecommendations } = usePlaybackSettingsStore();
   const businessMode = useBusinessStore((s) => s.businessMode);
-  // Audio Output Phase 1+2 — 선택된 sinkId 를 양쪽 audio element 에 적용.
-  // Phase 2: effectiveSinkId store 마킹 → Diagnostics 카드에서 실제 적용 여부 표시.
-  // 재생 로직 변경 없음, 새 polling 도입 없음. setSinkId 실패는 조용히 무시.
-  const audioSinkId = useAudioOutputStore((s) => s.sinkId);
-  const audioSinkAppliedAt = useAudioOutputStore((s) => s.lastAppliedAt);
-  const markAudioSinkApplied = useAudioOutputStore((s) => s.markApplied);
-  useEffect(() => {
-    const applyAll = async () => {
-      const targets = [audioARef.current, audioBRef.current].filter((a): a is HTMLAudioElement => !!a);
-      if (targets.length === 0) return;
-      const desired = audioSinkId ?? 'default';
-      let anyOk = false;
-      for (const a of targets) {
-        const withSink = a as unknown as { setSinkId?: (id: string) => Promise<void> };
-        if (typeof withSink.setSinkId !== 'function') return;
-        try { await withSink.setSinkId(desired); anyOk = true; }
-        catch (e) { console.warn('[Player] setSinkId failed', e); }
-      }
-      // effectiveSinkId 기록 — 성공한 경우만. 실패 시 이전 값 유지.
-      if (anyOk) markAudioSinkApplied(audioSinkId ?? null);
-    };
-    void applyAll();
-    // markAudioSinkApplied 는 store action (안정) — deps 에 포함하면 재실행 불필요
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioSinkId, audioSinkAppliedAt]);
+  // Audio Output Phase 2 hotfix — audio element 두 개 각각에 sink guardian 적용.
+  // useLayoutEffect 로 paint 이전 즉시 apply + loadstart/loadedmetadata/canplay
+  // 이벤트마다 재확인. 재생 로직 무변경.
+  useAudioSinkGuardian(audioARef);
+  useAudioSinkGuardian(audioBRef);
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
