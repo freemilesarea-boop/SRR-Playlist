@@ -78,6 +78,10 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
 export function useAudioSinkGuardian(
   audioRef: { current: HTMLAudioElement | null },
 ): void {
+  // Phase 2-1 QA — hook 이 실제로 mount 되는지 즉시 확인.
+  // 함수 body 최상단 · React hook rules 준수 · 매 render 마다 출력.
+  console.warn('[audio:sink] guardian mounted');
+
   const sinkId       = useAudioOutputStore((s) => s.sinkId);
   const markApplied  = useAudioOutputStore((s) => s.markApplied);
 
