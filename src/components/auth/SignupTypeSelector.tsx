@@ -1,10 +1,11 @@
-import { User, Store, Mic2, Building2, MapPin } from 'lucide-react';
+import { User, Store, Mic2, Building2, MapPin, Sparkles } from 'lucide-react';
 
 export type AccountType =
   | 'individual'
   | 'business'
   | 'artist'
   | 'enterprise-hq'
+  | 'enterprise-brand'
   | 'enterprise-store';
 
 interface Props {
@@ -37,6 +38,13 @@ const TYPES: { key: AccountType; icon: React.ReactNode; title: string; desc: str
     icon: <Building2 size={18} />,
     title: '엔터프라이즈 본사 담당자',
     desc: '본사 초대코드로 가입 · 본사 대시보드 접근',
+  },
+  // Phase 3-2 — Brand Registry 자동 매칭 가입
+  {
+    key: 'enterprise-brand',
+    icon: <Sparkles size={18} />,
+    title: '브랜드 자동 매칭 (본사)',
+    desc: '브랜드명+코드로 자동 매칭 가입 · 계약 자동 생성 · 관리자 승인 후 활성',
   },
   {
     key: 'enterprise-store',

@@ -11,6 +11,7 @@ import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
 import ArtistSignupForm from '@/components/auth/ArtistSignupForm';
 import EnterpriseHqSignupForm from '@/components/auth/EnterpriseHqSignupForm';
+import EnterpriseBrandSignupForm from '@/components/auth/EnterpriseBrandSignupForm';
 import EnterpriseStoreSignupForm from '@/components/auth/EnterpriseStoreSignupForm';
 import InAppBrowserWarningModal from '@/components/auth/InAppBrowserWarningModal';
 import Logo from '@/components/Logo';
@@ -23,6 +24,7 @@ type Mode =
   | 'signup-business'
   | 'signup-artist'
   | 'signup-enterprise-hq'
+  | 'signup-enterprise-brand'
   | 'signup-enterprise-store';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
@@ -103,10 +105,14 @@ export default function LoginPage() {
     // /login?signup=enterprise-hq&brand=<encoded>&code=<encoded>
     // /login?signup=enterprise-store&brand=<encoded>&code=<encoded>
     const signupParam = searchParams.get('signup');
-    if (signupParam === 'enterprise-hq' || signupParam === 'enterprise-store') {
+    if (signupParam === 'enterprise-hq' || signupParam === 'enterprise-store' || signupParam === 'enterprise-brand') {
       const brand = searchParams.get('brand') ?? '';
       const code = searchParams.get('code') ?? '';
-      setMode(signupParam === 'enterprise-hq' ? 'signup-enterprise-hq' : 'signup-enterprise-store');
+      const nextMode: Mode =
+        signupParam === 'enterprise-hq'    ? 'signup-enterprise-hq'
+      : signupParam === 'enterprise-brand' ? 'signup-enterprise-brand'
+      :                                      'signup-enterprise-store';
+      setMode(nextMode);
       setEnterprisePrefill({ brandName: brand, inviteCode: code });
       // URL 정리 — 새로고침 시 prefill 반복 안내 방지
       const next = new URLSearchParams(searchParams);
@@ -219,6 +225,7 @@ export default function LoginPage() {
     else if (t === 'business') setMode('signup-business');
     else if (t === 'artist') setMode('signup-artist');
     else if (t === 'enterprise-hq') setMode('signup-enterprise-hq');
+    else if (t === 'enterprise-brand') setMode('signup-enterprise-brand');
     else setMode('signup-enterprise-store');
   }
 
@@ -398,6 +405,17 @@ export default function LoginPage() {
               <EnterpriseHqSignupForm
                 initialBrandName={enterprisePrefill?.brandName ?? ''}
                 initialInviteCode={enterprisePrefill?.inviteCode ?? ''}
+                onDone={(submittedEmail) => {
+                  setSignupEmail(submittedEmail);
+                  setSignupDone(true);
+                }}
+              />
+            )}
+
+            {mode === 'signup-enterprise-brand' && (
+              <EnterpriseBrandSignupForm
+                initialBrandName={enterprisePrefill?.brandName ?? ''}
+                initialBrandCode={enterprisePrefill?.inviteCode ?? ''}
                 onDone={(submittedEmail) => {
                   setSignupEmail(submittedEmail);
                   setSignupDone(true);
