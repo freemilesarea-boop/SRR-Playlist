@@ -14,9 +14,11 @@ import {
   RefreshCw, Plus, AlertCircle, Calendar, Clock, Repeat,
   CloudRain, Snowflake, Sun, Pause, Play, Power, Trash2, Eye, Zap,
   Activity, History, ListChecks, Edit3,
+  // Automation Center Phase additions
+  ArrowRight, Bot, CheckCircle2, ExternalLink, RotateCcw, ShieldCheck, Siren, Sparkles, TrendingUp,
 } from 'lucide-react';
 import {
-  AdminSection, AdminStatCard, AdminSearch, AdminBadge, AdminButton,
+  AdminSection, AdminSearch, AdminBadge, AdminButton,
   AdminModal, AdminAlert, AdminEmpty, AdminSkeleton, AdminTooltip,
   type AdminToneName,
 } from '@/components/admin/ui';
@@ -311,20 +313,7 @@ export default function PolicyAutomationPanel({ onRequestFranchisePolicyNav }: P
   // KPI cards
   // ---------------------------------------------------------------------------
 
-  const kpiCards = useMemo(() => {
-    if (!kpi) return null;
-    const nextRun = kpi.next_run_at
-      ? new Date(kpi.next_run_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-      : '—';
-    return [
-      { label: '전체 스케줄',    value: kpi.total_rules,    tone: 'neutral' as AdminToneName, icon: <ListChecks size={14} /> },
-      { label: '활성 스케줄',    value: kpi.active_rules,   tone: 'success' as AdminToneName, icon: <Play size={14} /> },
-      { label: '24시간 내 예정', value: kpi.upcoming_24h,   tone: 'info'    as AdminToneName, icon: <Clock size={14} /> },
-      { label: '최근 7일 배포',  value: kpi.recent_7d_runs, tone: 'primary' as AdminToneName, icon: <Activity size={14} /> },
-      { label: '7일 실패',       value: kpi.failed_runs_7d, tone: 'danger'  as AdminToneName, icon: <AlertCircle size={14} /> },
-      { label: '다음 배포 시각', value: nextRun,            tone: 'warning' as AdminToneName, icon: <Calendar size={14} /> },
-    ];
-  }, [kpi]);
+  // KPI cards 는 Automation Center Phase 의 AutomationHeroKpi 로 대체됨.
 
   // ---------------------------------------------------------------------------
   // Render
@@ -363,14 +352,28 @@ export default function PolicyAutomationPanel({ onRequestFranchisePolicyNav }: P
       {kpiError ? (
         <AdminAlert tone="danger" title="KPI 로드 실패" description={kpiError}
           action={<AdminButton tone="danger" variant="subtle" size="sm" onClick={() => void loadKpi()}>재시도</AdminButton>} />
-      ) : kpiCards ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {kpiCards.map((c) => (
-            <AdminStatCard key={c.label} label={c.label} value={c.value} tone={c.tone} icon={c.icon} />
+      ) : kpi ? (
+        <AutomationHeroKpi kpi={kpi} runs={runs} />
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-bg-card ring-1 ring-line/15 animate-pulse" />
           ))}
         </div>
-      ) : (
-        <AdminSkeleton variant="kpi" />
+      )}
+
+      {/* ============================================================ */}
+      {/* Automation Center — Rule-based (LLM 미사용, 새 API/RPC/polling 0) */}
+      {/* ============================================================ */}
+      {kpi && (
+        <AutomationCenterSection
+          kpi={kpi}
+          rules={rules}
+          runs={runs}
+          onCreateNew={() => setShowCreate(true)}
+          onSwitchToRules={() => setActiveTab('rules')}
+          onSwitchToRuns={() => setActiveTab('runs')}
+        />
       )}
 
       <div className="flex items-center gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
@@ -1259,5 +1262,741 @@ function SummaryStat({ label, value }: { label: string; value: React.ReactNode }
       <div className="text-[10px] uppercase tracking-wider text-ink-mute">{label}</div>
       <div className="mt-0.5 text-base font-bold tabular-nums text-ink">{value}</div>
     </div>
+  );
+}
+
+// =============================================================================
+// Music Policy Automation Center (spec 1~11) — Rule-based, LLM 미사용
+// -----------------------------------------------------------------------------
+// 새 API/RPC/DB/Migration/polling 도입 0. 새 fetch 함수 도입 없음.
+// 기존 kpi + rules + runs 만 조합.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// spec 1 — Automation Hero KPI (Enterprise Hero 스타일)
+// -----------------------------------------------------------------------------
+function AutomationHeroKpi({ kpi, runs }: { kpi: PolicyAutomationKpi; runs: PolicyAutomationRun[] }) {
+  const activeRuns = runs.filter((r) => r.status === 'running' || r.status === 'pending').length;
+  const nextRun = kpi.next_run_at
+    ? new Date(kpi.next_run_at).toLocaleString('ko-KR', {
+        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
+  const failRate = kpi.recent_7d_runs > 0 ? (kpi.failed_runs_7d / kpi.recent_7d_runs) * 100 : 0;
+  const health: { label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger' } =
+    failRate >= 20 ? { label: 'Critical', tone: 'danger' }
+    : failRate >= 5 || kpi.paused_rules > 0 ? { label: 'Warning', tone: 'warning' }
+    : { label: 'Healthy', tone: 'success' };
+
+  const items: Array<{ label: string; desc: string; value: string; icon: JSX.Element; tone: 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = [
+    { label: '자동 배포',         desc: '7d runs',        value: kpi.recent_7d_runs.toLocaleString(), icon: <Repeat size={22} />,       tone: 'primary' },
+    { label: '예약 작업',         desc: '24h upcoming',   value: kpi.upcoming_24h.toLocaleString(),   icon: <Calendar size={22} />,     tone: kpi.upcoming_24h > 0 ? 'info' : 'success' },
+    { label: '실행 중',           desc: 'active runs',    value: activeRuns.toLocaleString(),         icon: <Activity size={22} />,     tone: activeRuns > 0 ? 'info' : 'success' },
+    { label: '실패',              desc: '7d failed',      value: kpi.failed_runs_7d.toLocaleString(), icon: <AlertCircle size={22} />,  tone: kpi.failed_runs_7d > 0 ? 'danger' : 'success' },
+    { label: '다음 실행',         desc: 'next_run_at',    value: nextRun,                              icon: <Clock size={22} />,        tone: 'warning' },
+    { label: 'Automation Health', desc: 'aggregate',      value: health.label,                         icon: <Bot size={22} />,          tone: health.tone },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map((item) => {
+        const cls =
+          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-emerald-100' }
+          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-amber-100' }
+          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-rose-100' }
+          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-sky-100' }
+          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-violet-100' };
+        return (
+          <div
+            key={item.label}
+            className={`rounded-xl p-2.5 ring-1 transition-all duration-150 hover:shadow-md ${cls.bg} ${cls.ring}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${cls.chip}`}>
+                {item.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold text-ink leading-tight">{item.label}</p>
+                <p className="truncate text-[9.5px] text-ink-mute leading-tight">{item.desc}</p>
+              </div>
+            </div>
+            <p className="mt-1.5 tabular-nums text-2xl font-black text-ink truncate" title={item.value}>{item.value}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 3 — Automation Health helper
+// -----------------------------------------------------------------------------
+function computeAutomationHealth(kpi: PolicyAutomationKpi): {
+  label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger';
+  reason: string;
+} {
+  const failRate = kpi.recent_7d_runs > 0 ? (kpi.failed_runs_7d / kpi.recent_7d_runs) * 100 : 0;
+  if (failRate >= 20) {
+    return { label: 'Critical', tone: 'danger',  reason: `실패율 ${failRate.toFixed(1)}%` };
+  }
+  if (failRate >= 5 || kpi.paused_rules > 0 || kpi.disabled_rules > 0) {
+    return { label: 'Warning',  tone: 'warning', reason: `실패율 ${failRate.toFixed(1)}% · 일시정지 ${kpi.paused_rules}` };
+  }
+  return { label: 'Healthy',  tone: 'success', reason: `자동 배포 안정 운영 중` };
+}
+
+// -----------------------------------------------------------------------------
+// Section root
+// -----------------------------------------------------------------------------
+function AutomationCenterSection({
+  kpi, rules, runs, onCreateNew, onSwitchToRules, onSwitchToRuns,
+}: {
+  kpi: PolicyAutomationKpi;
+  rules: PolicyAutomationRule[];
+  runs: PolicyAutomationRun[];
+  onCreateNew: () => void;
+  onSwitchToRules: () => void;
+  onSwitchToRuns: () => void;
+}) {
+  const health = useMemo(() => computeAutomationHealth(kpi), [kpi]);
+
+  const scheduled = useMemo(() => {
+    return [...rules]
+      .filter((r) => r.status === 'active' && r.next_run_at)
+      .sort((a, b) => new Date(a.next_run_at ?? 0).getTime() - new Date(b.next_run_at ?? 0).getTime())
+      .slice(0, 6);
+  }, [rules]);
+
+  const summary = useMemo(() => {
+    const today = new Date();
+    const y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
+    const start = new Date(y, m, d).getTime();
+    const end = start + 24 * 60 * 60 * 1000;
+    const todayRuns = runs.filter((r) => {
+      const t = new Date(r.started_at).getTime();
+      return t >= start && t < end;
+    });
+    return {
+      total:    todayRuns.length,
+      success:  todayRuns.filter((r) => r.status === 'completed').length,
+      failed:   todayRuns.filter((r) => r.status === 'failed').length,
+      upcoming: kpi.upcoming_24h,
+    };
+  }, [runs, kpi]);
+
+  const empty = rules.length === 0 && kpi.total_rules === 0;
+
+  return (
+    <div className="space-y-3">
+      {/* Section header */}
+      <div className="flex items-center gap-2">
+        <Bot size={14} className="text-violet-200" />
+        <h2 className="text-[13px] font-black text-ink">Automation Center</h2>
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+          <Sparkles size={9} /> BETA
+        </span>
+        <span className="text-[10px] text-ink-mute">자동 스케줄 · 자동 배포 · 자동 검증 · 자동 복구 · Rule-based · LLM 미사용</span>
+      </div>
+
+      {/* spec 3 — Automation Health Center */}
+      <AutomationHealthCenter health={health} kpi={kpi} summary={summary} />
+
+      {empty ? (
+        // spec 10 — Empty
+        <AdminEmpty
+          title="예약된 자동 작업이 없습니다."
+          description="자동 스케줄을 생성하면 이 곳에서 lifecycle 을 확인할 수 있습니다."
+          action={
+            <AdminButton tone="primary" onClick={onCreateNew}>
+              <Plus size={12} /> 자동 스케줄 생성
+            </AdminButton>
+          }
+        />
+      ) : (
+        <>
+          {/* spec 4 + 7 + 9 — Deck 3열 */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <AiAutomationInsightCard kpi={kpi} rules={rules} runs={runs} scheduled={scheduled} />
+            </div>
+            <div className="lg:col-span-1">
+              <AutomationSummaryCard summary={summary} onOpenRuns={onSwitchToRuns} />
+            </div>
+            <div className="lg:col-span-1">
+              <RecoveryRecommendationCard runs={runs} rules={rules} onOpenRuns={onSwitchToRuns} />
+            </div>
+          </div>
+
+          {/* spec 2 + 5 — Scheduled Jobs + Queue */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ScheduledJobsCard scheduled={scheduled} onOpenRules={onSwitchToRules} />
+            </div>
+            <div className="lg:col-span-1">
+              <AutomationQueueCard runs={runs} onOpenRuns={onSwitchToRuns} />
+            </div>
+          </div>
+
+          {/* spec 6 + 8 — Timeline + Retry Queue */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <AutomationTimelineCard runs={runs} />
+            </div>
+            <div className="lg:col-span-1">
+              <RetryQueueCard runs={runs} onOpenRuns={onSwitchToRuns} />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 3 — Automation Health Center
+// -----------------------------------------------------------------------------
+function AutomationHealthCenter({
+  health, kpi, summary,
+}: {
+  health: { label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger'; reason: string };
+  kpi: PolicyAutomationKpi;
+  summary: { total: number; success: number; failed: number; upcoming: number };
+}) {
+  const healthTone = health.tone === 'success' ? 'bg-emerald-500/25 ring-emerald-500/45 text-emerald-100'
+                   : health.tone === 'warning' ? 'bg-amber-500/25   ring-amber-500/45   text-amber-100'
+                   :                             'bg-rose-500/25    ring-rose-500/45    text-rose-100';
+  const successRate = kpi.recent_7d_runs > 0 ? Math.round(((kpi.recent_7d_runs - kpi.failed_runs_7d) / kpi.recent_7d_runs) * 100) : 100;
+
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><ShieldCheck size={13} /> Automation Health</span>}
+      subtitle="실시간 자동 배포 상태 · Rule-based"
+    >
+      <div className="grid gap-2 md:grid-cols-5">
+        <div className={`col-span-2 rounded-xl p-3 ring-1 md:col-span-1 ${healthTone}`}>
+          <div className="flex items-center gap-2">
+            <span>
+              {health.tone === 'success' ? <CheckCircle2 size={20} />
+                : health.tone === 'warning' ? <AlertCircle size={20} />
+                : <Siren size={20} className="animate-pulse" />}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider">Health</p>
+              <p className="text-[20px] font-black text-ink">{health.label}</p>
+            </div>
+          </div>
+          <p className="mt-1 text-[10.5px] text-ink-mute">{health.reason}</p>
+        </div>
+        <HealthMiniAuto label="활성 스케줄" value={kpi.active_rules.toLocaleString()} tone="success" icon={<Play size={12} />} />
+        <HealthMiniAuto label="일시정지" value={kpi.paused_rules.toLocaleString()} tone={kpi.paused_rules > 0 ? 'warning' : 'success'} icon={<Pause size={12} />} />
+        <HealthMiniAuto label="7d 성공률" value={`${successRate}%`} tone={successRate >= 95 ? 'success' : successRate >= 80 ? 'warning' : 'danger'} icon={<TrendingUp size={12} />} />
+        <HealthMiniAuto label="오늘 예정" value={summary.upcoming.toLocaleString()} tone="info" icon={<Clock size={12} />} />
+      </div>
+    </AdminCardAuto>
+  );
+}
+
+function HealthMiniAuto({ label, value, tone, icon }: {
+  label: string; value: string;
+  tone: 'success' | 'warning' | 'danger' | 'info';
+  icon: JSX.Element;
+}) {
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100' }
+            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-sky-100' };
+  return (
+    <div className={`rounded-xl p-2.5 ring-1 ${cls.bg} ${cls.ring}`}>
+      <p className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider ${cls.text}`}>
+        {icon}{label}
+      </p>
+      <p className="mt-0.5 tabular-nums text-[18px] font-black text-ink">{value}</p>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 4 — AI Automation Insight (Rule-based)
+// -----------------------------------------------------------------------------
+function AiAutomationInsightCard({
+  kpi, rules, runs, scheduled,
+}: {
+  kpi: PolicyAutomationKpi; rules: PolicyAutomationRule[];
+  runs: PolicyAutomationRun[]; scheduled: PolicyAutomationRule[];
+}) {
+  const insights = useMemo(() => {
+    const out: Array<{ key: string; emoji: string; text: string; tone: 'success' | 'warning' | 'danger' | 'info' }> = [];
+    // 가장 임박한 실행
+    if (scheduled.length > 0 && scheduled[0].next_run_at) {
+      const s = scheduled[0];
+      const at = new Date(s.next_run_at!);
+      const label = at.toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+      out.push({
+        key: 'next',
+        emoji: '🤖',
+        text: `${label} 에 "${s.name}" 이(가) 실행됩니다. 정책 교체 예정.`,
+        tone: 'info',
+      });
+    }
+    if (kpi.upcoming_24h > 0) {
+      out.push({
+        key: 'upcoming',
+        emoji: '🤖',
+        text: `예약 작업이 ${kpi.upcoming_24h}건 대기 중입니다.`,
+        tone: 'info',
+      });
+    }
+    const successRate = kpi.recent_7d_runs > 0 ? ((kpi.recent_7d_runs - kpi.failed_runs_7d) / kpi.recent_7d_runs) * 100 : 100;
+    if (kpi.recent_7d_runs >= 3 && successRate === 100) {
+      out.push({ key: 'perfect', emoji: '🏆', text: `최근 자동 배포 성공률 100% · ${kpi.recent_7d_runs}회 모두 성공.`, tone: 'success' });
+    } else if (successRate < 80 && kpi.recent_7d_runs > 0) {
+      out.push({ key: 'drop', emoji: '⚠️', text: `자동 배포 성공률 ${successRate.toFixed(1)}% — 실패 원인 점검을 권장합니다.`, tone: 'warning' });
+    }
+    // 오래 실행되지 않은 활성 rule
+    const now = Date.now();
+    const stale = rules.find((r) => r.status === 'active' && r.last_run_at
+      && (now - new Date(r.last_run_at).getTime()) > 14 * 24 * 60 * 60 * 1000);
+    if (stale) {
+      out.push({ key: 'stale', emoji: '🕒', text: `"${stale.name}" 는 최근 14일간 실행되지 않았습니다. 조건 재확인.`, tone: 'warning' });
+    }
+    // 실패 rule 언급
+    const failedRun = runs.find((r) => r.status === 'failed');
+    if (failedRun && failedRun.rule_name) {
+      out.push({
+        key: 'fail_rule',
+        emoji: '🚨',
+        text: `"${failedRun.rule_name}" 실행 실패. ${failedRun.error_message ? '오류: ' + failedRun.error_message.slice(0, 40) + '…' : '재시도 검토.'}`,
+        tone: 'danger',
+      });
+    }
+    return out.slice(0, 5);
+  }, [kpi, rules, runs, scheduled]);
+
+  return (
+    <AdminCardAuto title={<span className="flex items-center gap-2"><Bot size={13} /> AI Automation Insight
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+        <Sparkles size={9} /> BETA
+      </span>
+    </span>} subtitle="Rule-based · LLM 미사용">
+      {insights.length === 0 ? (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+          <Bot size={22} className="text-emerald-200" />
+          <p className="text-[11px] font-bold text-emerald-100">이상 신호가 없습니다.</p>
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {insights.map((i) => {
+            const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+                      : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+                      : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+                      :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+            return (
+              <li key={i.key} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+                <div className="flex items-start gap-2">
+                  <span className="shrink-0 text-[13px] leading-tight" aria-hidden>{i.emoji}</span>
+                  <p className={`text-[11px] leading-relaxed ${cls.text}`}>{i.text}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCardAuto>
+  );
+}
+
+// Reusable card wrapper (기존 AdminCard 를 이 파일에서 import 하지 않았으므로 간이 wrapper)
+function AdminCardAuto({ title, subtitle, action, children }: {
+  title: React.ReactNode; subtitle?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10 transition hover:ring-line/20">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[12px] font-bold text-ink">{title}</div>
+          {subtitle && <div className="mt-0.5 text-[10px] text-ink-mute">{subtitle}</div>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 9 — Automation Summary
+// -----------------------------------------------------------------------------
+function AutomationSummaryCard({
+  summary, onOpenRuns,
+}: {
+  summary: { total: number; success: number; failed: number; upcoming: number };
+  onOpenRuns: () => void;
+}) {
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><Activity size={13} /> 오늘 요약</span>}
+      subtitle="자동 배포 · 오늘 00:00 ~ 24:00"
+      action={
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={onOpenRuns}>
+          로그 <ArrowRight size={10} />
+        </AdminButton>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <SummaryStatAuto label="자동 실행" value={summary.total} tone="info" />
+        <SummaryStatAuto label="성공"       value={summary.success} tone="success" />
+        <SummaryStatAuto label="실패"       value={summary.failed} tone={summary.failed > 0 ? 'danger' : 'success'} />
+        <SummaryStatAuto label="예정"       value={summary.upcoming} tone={summary.upcoming > 0 ? 'warning' : 'success'} />
+      </div>
+    </AdminCardAuto>
+  );
+}
+
+function SummaryStatAuto({ label, value, tone }: { label: string; value: number; tone: 'success' | 'warning' | 'danger' | 'info' }) {
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100' }
+            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-sky-100' };
+  return (
+    <div className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+      <p className={`text-[9.5px] font-bold uppercase tracking-wider ${cls.text}`}>{label}</p>
+      <p className="tabular-nums text-[18px] font-black text-ink">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 7 — Recovery Recommendation
+// -----------------------------------------------------------------------------
+function RecoveryRecommendationCard({
+  runs, rules, onOpenRuns,
+}: {
+  runs: PolicyAutomationRun[]; rules: PolicyAutomationRule[]; onOpenRuns: () => void;
+}) {
+  const items = useMemo(() => {
+    const failedRuns = runs.filter((r) => r.status === 'failed').slice(0, 3);
+    const out: Array<{ key: string; text: string; tone: 'danger' | 'warning'; icon: JSX.Element }> = [];
+    for (const r of failedRuns) {
+      const err = (r.error_message ?? '').toLowerCase();
+      if (err.includes('heartbeat') || err.includes('sync')) {
+        out.push({ key: `hb:${r.id}`, text: `${r.rule_name ?? '알 수 없음'} — Heartbeat 이상. 재배포 권장.`, tone: 'danger', icon: <RotateCcw size={11} /> });
+      } else if (err.includes('offline') || err.includes('disconnect')) {
+        out.push({ key: `off:${r.id}`, text: `${r.rule_name ?? '알 수 없음'} — Offline. 정책 보류 권장.`, tone: 'warning', icon: <Pause size={11} /> });
+      } else {
+        out.push({ key: `fail:${r.id}`, text: `${r.rule_name ?? '알 수 없음'} — 실행 실패. 조건 재확인 권장.`, tone: 'warning', icon: <AlertCircle size={11} /> });
+      }
+    }
+    // 오래 실행되지 않은 active rule
+    const now = Date.now();
+    const stale = rules.filter((r) => r.status === 'active' && r.last_run_at
+      && (now - new Date(r.last_run_at).getTime()) > 14 * 24 * 60 * 60 * 1000).slice(0, 2);
+    for (const r of stale) {
+      out.push({ key: `stale:${r.id}`, text: `${r.name} — 14일간 미실행. 조건/타이밍 검토.`, tone: 'warning', icon: <Clock size={11} /> });
+    }
+    return out.slice(0, 4);
+  }, [runs, rules]);
+
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><RotateCcw size={13} /> Recovery Recommendation</span>}
+      subtitle="자동 복구 추천 · Rule-based"
+      action={
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={onOpenRuns}>
+          로그 <ArrowRight size={10} />
+        </AdminButton>
+      }
+    >
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+          <CheckCircle2 size={22} className="text-emerald-200" />
+          <p className="text-[11px] font-bold text-emerald-100">복구 필요 항목이 없습니다.</p>
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((i) => {
+            const cls = i.tone === 'danger'
+              ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-rose-100' }
+              : { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-amber-100' };
+            return (
+              <li key={i.key} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+                <div className="flex items-start gap-1.5">
+                  <span className={`mt-0.5 shrink-0 ${cls.text}`}>{i.icon}</span>
+                  <p className={`text-[11px] leading-relaxed ${cls.text}`}>{i.text}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCardAuto>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 2 — Scheduled Jobs (예약 작업 목록)
+// -----------------------------------------------------------------------------
+function ScheduledJobsCard({
+  scheduled, onOpenRules,
+}: {
+  scheduled: PolicyAutomationRule[]; onOpenRules: () => void;
+}) {
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><Calendar size={13} /> Scheduled Jobs</span>}
+      subtitle={`가장 임박한 예약 작업 · 상위 ${scheduled.length}개`}
+      action={
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={onOpenRules}>
+          전체 <ExternalLink size={10} />
+        </AdminButton>
+      }
+    >
+      {scheduled.length === 0 ? (
+        <AdminEmpty title="예약 작업 없음" description="활성 스케줄에 next_run_at 값이 설정되면 표시됩니다." />
+      ) : (
+        <ul className="space-y-1.5">
+          {scheduled.map((r) => {
+            const type = RULE_TYPE_META[r.rule_type];
+            const at = r.next_run_at
+              ? new Date(r.next_run_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+              : '—';
+            return (
+              <li key={r.id} className="rounded-lg bg-bg-card p-2 ring-1 ring-line/15 transition hover:shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-bold text-ink">{r.name}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-ink-mute">
+                      <AdminBadge tone={type.tone} variant="subtle">{type.icon}{type.ko}</AdminBadge>
+                      {r.policy_name && <span className="truncate">· {r.policy_name}</span>}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-ink-mute">
+                      대상 <span className="text-ink">{SCOPE_META[r.scope_type].ko}</span>
+                      {' · '}최근 실행 {r.last_run_at
+                        ? new Date(r.last_run_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-mono text-[10.5px] tabular-nums text-ink">{at}</p>
+                    <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-100 ring-1 ring-emerald-500/45">
+                      <Play size={9} /> 활성
+                    </span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCardAuto>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 5 — Automation Queue (실행 예정 / 실행 중 / 재시도 / 완료)
+// -----------------------------------------------------------------------------
+function AutomationQueueCard({
+  runs, onOpenRuns,
+}: {
+  runs: PolicyAutomationRun[]; onOpenRuns: () => void;
+}) {
+  const groups = useMemo(() => {
+    const pending  = runs.filter((r) => r.status === 'pending').slice(0, 3);
+    const running  = runs.filter((r) => r.status === 'running').slice(0, 3);
+    const failed   = runs.filter((r) => r.status === 'failed').slice(0, 3);
+    const completed = runs.filter((r) => r.status === 'completed').slice(0, 3);
+    return { pending, running, failed, completed };
+  }, [runs]);
+
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><Zap size={13} /> Automation Queue</span>}
+      subtitle="실행 예정 / 실행 중 / 재시도 / 완료"
+      action={
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={onOpenRuns}>
+          로그 <ArrowRight size={10} />
+        </AdminButton>
+      }
+    >
+      <div className="space-y-2 text-[11px]">
+        <QueueSectionAuto label="실행 예정" tone="warning" items={groups.pending}   emptyText="대기 없음" />
+        <QueueSectionAuto label="실행 중"   tone="info"    items={groups.running}   emptyText="실행 중 없음" />
+        <QueueSectionAuto label="재시도"    tone="danger"  items={groups.failed}    emptyText="재시도 없음" />
+        <QueueSectionAuto label="완료"      tone="success" items={groups.completed} emptyText="완료 이력 없음" />
+      </div>
+    </AdminCardAuto>
+  );
+}
+
+function QueueSectionAuto({ label, tone, items, emptyText }: {
+  label: string; tone: 'success' | 'warning' | 'danger' | 'info';
+  items: PolicyAutomationRun[]; emptyText: string;
+}) {
+  const cls = tone === 'success' ? { text: 'text-emerald-200', chip: 'bg-emerald-500/25 text-emerald-100 ring-emerald-500/45' }
+            : tone === 'warning' ? { text: 'text-amber-200',   chip: 'bg-amber-500/25 text-amber-100 ring-amber-500/45' }
+            : tone === 'danger'  ? { text: 'text-rose-200',    chip: 'bg-rose-500/25 text-rose-100 ring-rose-500/45' }
+            :                      { text: 'text-sky-200',     chip: 'bg-sky-500/25 text-sky-100 ring-sky-500/45' };
+  return (
+    <div>
+      <p className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${cls.text}`}>{label}</p>
+      {items.length === 0 ? (
+        <p className="text-[10px] text-ink-mute">{emptyText}</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((r) => (
+            <li key={r.id} className={`flex items-center justify-between rounded-md px-2 py-1 ring-1 ${cls.chip}`}>
+              <span className="min-w-0 truncate font-semibold">{r.rule_name ?? '알 수 없음'}</span>
+              <span className="shrink-0 tabular-nums text-[10px]">{r.target_store_count}매장</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 6 — Automation Timeline
+// -----------------------------------------------------------------------------
+function AutomationTimelineCard({ runs }: { runs: PolicyAutomationRun[] }) {
+  const events = useMemo(() => {
+    const out: Array<{ key: string; at: string; label: string; rule: string; tone: 'success' | 'warning' | 'danger' | 'info' }> = [];
+    for (const r of runs.slice(0, 20)) {
+      const name = r.rule_name ?? '알 수 없음';
+      if (r.started_at) {
+        out.push({
+          key: `${r.id}:start`,
+          at: r.started_at,
+          label: r.status === 'pending' ? '자동 배포 예약' : '자동 배포 실행',
+          rule: name,
+          tone: r.status === 'pending' ? 'info' : 'info',
+        });
+      }
+      if (r.completed_at) {
+        const tone: 'success' | 'warning' | 'danger' =
+          r.status === 'completed' ? 'success'
+          : r.status === 'failed' ? 'danger'
+          : 'warning';
+        out.push({
+          key: `${r.id}:done`,
+          at: r.completed_at,
+          label: r.status === 'completed' ? '자동 배포 완료 · 검증 완료'
+               : r.status === 'failed' ? '자동 배포 실패'
+               : r.status === 'skipped' ? '자동 배포 제외'
+               : '자동 배포 종료',
+          rule: name,
+          tone,
+        });
+      }
+    }
+    out.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return out.slice(0, 14);
+  }, [runs]);
+
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><History size={13} /> Automation Timeline</span>}
+      subtitle="자동 배포 이벤트 · 시간 역순 · 최근 14건"
+    >
+      {events.length === 0 ? (
+        <AdminEmpty title="이벤트 없음" description="자동 배포 실행 로그가 아직 없습니다." />
+      ) : (
+        <ul className="space-y-1">
+          {events.map((e) => {
+            const rail = e.tone === 'success' ? 'bg-emerald-500'
+                       : e.tone === 'warning' ? 'bg-amber-500'
+                       : e.tone === 'danger'  ? 'bg-rose-500'
+                       :                        'bg-sky-500';
+            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-emerald-100'
+                       : e.tone === 'warning' ? 'bg-amber-500/40   text-amber-100'
+                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-rose-100'
+                       :                        'bg-sky-500/40     text-sky-100';
+            return (
+              <li key={e.key} className="flex items-stretch gap-2">
+                <span className="w-14 shrink-0 pt-1 text-right font-mono text-[10px] tabular-nums text-ink-mute">
+                  {new Date(e.at).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className={`w-0.5 shrink-0 rounded-full ${rail}`} aria-hidden />
+                <div className="min-w-0 flex-1 rounded-md bg-bg-card p-1.5 text-[11px] ring-1 ring-line/10">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${chip}`} aria-hidden>
+                      <Bot size={9} />
+                    </span>
+                    <span className="font-bold text-ink">{e.label}</span>
+                    <span className="min-w-0 truncate text-ink-mute">· {e.rule}</span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCardAuto>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 8 — Retry Queue (Priority)
+// -----------------------------------------------------------------------------
+function RetryQueueCard({
+  runs, onOpenRuns,
+}: {
+  runs: PolicyAutomationRun[]; onOpenRuns: () => void;
+}) {
+  const items = useMemo(() => {
+    const failed = runs.filter((r) => r.status === 'failed');
+    return failed
+      .map((r) => {
+        const err = (r.error_message ?? '').toLowerCase();
+        const priority: 'P1' | 'P2' | 'P3' =
+          err.includes('heartbeat') || err.includes('offline') || err.includes('sync') ? 'P1'
+          : (r.failed_count ?? 0) > 0 ? 'P2'
+          : 'P3';
+        return { r, priority };
+      })
+      .sort((a, b) => (a.priority === 'P1' ? 0 : a.priority === 'P2' ? 1 : 2)
+                    - (b.priority === 'P1' ? 0 : b.priority === 'P2' ? 1 : 2))
+      .slice(0, 6);
+  }, [runs]);
+
+  return (
+    <AdminCardAuto
+      title={<span className="flex items-center gap-2"><RotateCcw size={13} /> Retry Queue</span>}
+      subtitle="P1 → P2 → P3 순 · 최대 6개"
+      action={
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={onOpenRuns}>
+          로그 <ArrowRight size={10} />
+        </AdminButton>
+      }
+    >
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+          <CheckCircle2 size={22} className="text-emerald-200" />
+          <p className="text-[11px] font-bold text-emerald-100">재시도 대기 없음.</p>
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map(({ r, priority }) => {
+            const cls = priority === 'P1' ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-rose-100', chip: 'bg-rose-500/40 text-rose-50' }
+                      : priority === 'P2' ? { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-amber-100', chip: 'bg-amber-500/40 text-amber-50' }
+                      :                     { bg: 'bg-sky-500/20',    ring: 'ring-sky-500/40',    text: 'text-sky-100',    chip: 'bg-sky-500/40 text-sky-50' };
+            return (
+              <li key={r.id} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ring-1 ${cls.chip} ring-white/20`}>
+                      {priority}
+                    </span>
+                    <p className={`min-w-0 truncate text-[11.5px] font-bold ${cls.text}`}>{r.rule_name ?? '알 수 없음'}</p>
+                  </div>
+                  <p className="shrink-0 text-[10px] text-ink-mute">
+                    {r.error_message ? r.error_message.slice(0, 24) + (r.error_message.length > 24 ? '…' : '') : '재시도 대기'}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCardAuto>
   );
 }
