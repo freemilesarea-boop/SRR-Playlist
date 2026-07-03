@@ -392,17 +392,21 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
         </div>
       )}
 
-      {/* Ops Center spec 8 — AI Deployment Insight (Rule-based) */}
-      {overview && <AiDeploymentInsight overview={overview} rows={rows} failedRows={failedRows} />}
+      {/* NOC spec 1 — Deployment Health Center (Hero 바로 아래) */}
+      {overview && <DeploymentHealthCenter overview={overview} kpi={kpi} rows={rows} failedRows={failedRows} />}
 
-      {/* Ops Center spec 2, 3 — Progress + Health + Failed side panel */}
+      {/* Progress bar (기존 유지, spec 4 상단 강조) */}
       {overview && overview.total_target_stores > 0 && (
+        <OpsProgressCard overview={overview} />
+      )}
+
+      {/* NOC spec 10 — Desktop 3열 Deck (Assistant + Failed Dashboard + Queue Groups) */}
+      {overview && (
         <div className="grid gap-3 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <OpsProgressCard overview={overview} />
+          <div className="lg:col-span-1">
+            <AiDeploymentInsight overview={overview} rows={rows} failedRows={failedRows} />
           </div>
-          <div className="space-y-3">
-            <DeploymentHealthCard overview={overview} kpi={kpi} />
+          <div className="lg:col-span-1">
             <FailedStoresMiniPanel
               failedRows={failedRows}
               loading={failedLoading}
@@ -410,14 +414,30 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
               onOpenDetail={openDetail}
             />
           </div>
+          <div className="lg:col-span-1">
+            <DeploymentQueueCard rows={rows} onOpen={openDetail} />
+          </div>
         </div>
       )}
 
-      {/* Ops Center spec 9 — Deployment Queue + spec 5 — Deployment Timeline */}
+      {/* NOC spec 5, 8, 9 — Store Deployment Grid + Bulk Selection */}
+      {overview && (
+        <StoreDeploymentGrid
+          failedRows={failedRows}
+          loading={failedLoading}
+          totalTargets={overview.total_target_stores}
+          onOpenDeployment={openDetail}
+          onCreateNew={() => setShowCreate(true)}
+          hasDeployablePolicy={hasDeployablePolicy !== false}
+        />
+      )}
+
+      {/* NOC spec 4 — Deployment Timeline (한글 문구 강화) */}
       {overview && (
         <div className="grid gap-3 lg:grid-cols-3">
           <div className="lg:col-span-1">
-            <DeploymentQueueCard rows={rows} onOpen={openDetail} />
+            {/* 예비 자리 — 데스크탑 좌측 여백 */}
+            <div className="hidden lg:block" />
           </div>
           <div className="lg:col-span-2">
             <DeploymentTimelineCard rows={rows} />
@@ -1558,28 +1578,7 @@ function computeDeploymentHealth(overview: PolicyDeploymentOverview, kpi: Policy
   return { label: 'Healthy',  tone: 'success', reason: `적용률 ${overview.success_rate.toFixed(1)}%` };
 }
 
-function DeploymentHealthCard({
-  overview, kpi,
-}: {
-  overview: PolicyDeploymentOverview; kpi: PolicyDeploymentKpi | null;
-}) {
-  const h = computeDeploymentHealth(overview, kpi);
-  const cls = h.tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100', icon: <CheckCircle2 size={16} /> }
-            : h.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100',   icon: <AlertCircle size={16} /> }
-            :                        { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100',    icon: <Siren size={16} className="animate-pulse" /> };
-  return (
-    <div className={`rounded-xl p-3 ring-1 ${cls.bg} ${cls.ring}`}>
-      <div className="flex items-center gap-2">
-        <span className={cls.text}>{cls.icon}</span>
-        <div className="min-w-0">
-          <p className={`text-[10px] font-bold uppercase tracking-wider ${cls.text}`}>Deployment Health</p>
-          <p className="text-[18px] font-black text-ink">{h.label}</p>
-        </div>
-      </div>
-      <p className="mt-1 text-[10.5px] text-ink-mute">{h.reason}</p>
-    </div>
-  );
-}
+// DeploymentHealthCard 는 NOC Phase 의 DeploymentHealthCenter 로 대체됨 (파일 하단).
 
 // -----------------------------------------------------------------------------
 // spec 4 — Failed Store Panel (mini, 우측 사이드)
@@ -1893,5 +1892,364 @@ function AiDeploymentInsight({
         })}
       </ul>
     </AdminCard>
+  );
+}
+
+// =============================================================================
+// Music Deployment NOC Phase (spec 1~11) — 기존 Ops Center 컴포넌트 확장
+// -----------------------------------------------------------------------------
+// 새 API/RPC/DB/Migration/polling 도입 0. 새 fetch 0.
+// 기존 overview / rows / failedRows / kpi 조합만.
+// =============================================================================
+
+/** NOC — 탭 이동 (기존 AdminPage URL param 방식 재사용). */
+function noc_navigateToTab(tabKey: string): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tabKey);
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  } catch { /* silent */ }
+}
+
+// -----------------------------------------------------------------------------
+// spec 7 — Retry Priority (P1/P2/P3) 계산
+// -----------------------------------------------------------------------------
+type RetryPriority = 'P1' | 'P2' | 'P3';
+
+function retryPriorityFor(r: FailedDeploymentStore): RetryPriority {
+  if (r.failure_category === 'heartbeat_missing' || r.failure_category === 'device_offline') {
+    return 'P1';
+  }
+  if (r.failure_reason || r.failed_at) return 'P2';
+  return 'P3';
+}
+
+function priorityClass(p: RetryPriority): { bg: string; ring: string; text: string; label: string } {
+  switch (p) {
+    case 'P1': return { bg: 'bg-rose-500/40',  ring: 'ring-rose-400/60',  text: 'text-rose-50',   label: 'P1' };
+    case 'P2': return { bg: 'bg-amber-500/40', ring: 'ring-amber-400/60', text: 'text-amber-50',  label: 'P2' };
+    case 'P3': return { bg: 'bg-sky-500/40',   ring: 'ring-sky-400/60',   text: 'text-sky-50',    label: 'P3' };
+  }
+}
+
+function PriorityBadgeNoc({ p }: { p: RetryPriority }) {
+  const cls = priorityClass(p);
+  return (
+    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ring-1 ${cls.bg} ${cls.ring} ${cls.text}`}>
+      {cls.label}
+    </span>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 1 — Deployment Health Center (Hero 바로 아래 확대 카드)
+// -----------------------------------------------------------------------------
+function DeploymentHealthCenter({
+  overview, kpi, rows, failedRows,
+}: {
+  overview: PolicyDeploymentOverview;
+  kpi: PolicyDeploymentKpi | null;
+  rows: PolicyDeployment[];
+  failedRows: FailedDeploymentStore[];
+}) {
+  const h = computeDeploymentHealth(overview, kpi);
+  const running = rows.filter((r) => r.status === 'running').length;
+  const pending = overview.pending_stores;
+  const failed  = overview.failed_stores;
+  const retryNeeded = failedRows.filter((r) => retryPriorityFor(r) === 'P1' || retryPriorityFor(r) === 'P2').length;
+
+  // 예상 완료 시간 — 가장 오래된 running deployment 의 started_at + 평균 5분 heuristic
+  const estimate = useMemo(() => {
+    const runningRows = rows.filter((r) => r.status === 'running' && r.started_at);
+    if (runningRows.length === 0) return '—';
+    // 평균 배포 진행률에서 남은 %로 시간 근사
+    const avgProgress = runningRows.reduce((s, r) => {
+      const total = r.target_store_count || 0;
+      const done = r.success_count + r.failed_count + r.skipped_count;
+      return s + (total > 0 ? (done / total) : 1);
+    }, 0) / runningRows.length;
+    const remain = Math.max(0, 1 - avgProgress);
+    // 5분 기준 근사
+    const mins = Math.round(remain * 5);
+    if (mins < 1) return '<1분';
+    return `~${mins}분`;
+  }, [rows]);
+
+  const healthTone = h.tone === 'success' ? 'bg-emerald-500/25 ring-emerald-500/45 text-emerald-100'
+                   : h.tone === 'warning' ? 'bg-amber-500/25   ring-amber-500/45   text-amber-100'
+                   :                        'bg-rose-500/25    ring-rose-500/45    text-rose-100';
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><ShieldCheck size={13} /> Deployment Health Center</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">실시간 배포 상태 · Rule-based · 새 fetch 없음</span>}
+    >
+      <div className="grid gap-2 md:grid-cols-6">
+        {/* Health 카드 (가장 강조) */}
+        <div className={`col-span-2 rounded-xl p-3 ring-1 md:col-span-2 ${healthTone}`}>
+          <div className="flex items-center gap-2">
+            <span>
+              {h.tone === 'success' ? <CheckCircle2 size={20} />
+                : h.tone === 'warning' ? <AlertCircle size={20} />
+                : <Siren size={20} className="animate-pulse" />}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider">Deployment Health</p>
+              <p className="text-[22px] font-black text-ink">{h.label}</p>
+            </div>
+          </div>
+          <p className="mt-1 text-[10.5px] text-ink-mute">{h.reason}</p>
+        </div>
+        {/* 5 sub stats */}
+        <HealthMini label="현재 배포중" value={running.toLocaleString()} tone={running > 0 ? 'info' : 'success'} icon={<Radio size={12} />} />
+        <HealthMini label="대기 매장"   value={pending.toLocaleString()} tone={pending > 0 ? 'warning' : 'success'} icon={<Clock size={12} />} />
+        <HealthMini label="실패 매장"   value={failed.toLocaleString()}  tone={failed > 0 ? 'danger' : 'success'} icon={<AlertCircle size={12} />} />
+        <HealthMini label="예상 완료"   value={estimate}                  tone="info"    icon={<Zap size={12} />} />
+        <HealthMini label="재시도 필요" value={retryNeeded.toLocaleString()} tone={retryNeeded > 0 ? 'danger' : 'success'} icon={<RotateCcw size={12} />} />
+      </div>
+    </AdminCard>
+  );
+}
+
+function HealthMini({ label, value, tone, icon }: {
+  label: string; value: string;
+  tone: 'success' | 'warning' | 'danger' | 'info';
+  icon: JSX.Element;
+}) {
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100' }
+            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-sky-100' };
+  return (
+    <div className={`rounded-xl p-2.5 ring-1 ${cls.bg} ${cls.ring}`}>
+      <p className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider ${cls.text}`}>
+        {icon}{label}
+      </p>
+      <p className="mt-0.5 tabular-nums text-[18px] font-black text-ink">{value}</p>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 5, 8, 9 — Store Deployment Grid (실패 매장 대상 카드 grid + Bulk)
+// -----------------------------------------------------------------------------
+function StoreDeploymentGrid({
+  failedRows, loading, totalTargets, onOpenDeployment, onCreateNew, hasDeployablePolicy,
+}: {
+  failedRows: FailedDeploymentStore[];
+  loading: boolean;
+  totalTargets: number;
+  onOpenDeployment: (id: string) => void;
+  onCreateNew: () => void;
+  hasDeployablePolicy: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const cards = useMemo(() => failedRows.slice(0, 48), [failedRows]);
+
+  const toggle = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const clear = useCallback(() => setSelected(new Set()), []);
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><StoreIcon size={13} /> Store Deployment Grid</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">
+        실패/대기 매장 대상 · 새 fetch 없이 failed_stores 재사용
+        {totalTargets > 0 && ` · 배포 대상 ${totalTargets.toLocaleString()}`}
+      </span>}
+    >
+      {/* NOC spec 8 — Bulk Selection Bar */}
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-violet-500/25 px-3 py-2 ring-1 ring-violet-500/45">
+          <p className="text-[11px] font-bold text-violet-100">
+            <span className="tabular-nums">{selected.size}</span>개 매장 선택
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <NocBulkBtn icon={<ShieldCheck size={11} />} label="정책 보기" onClick={() => noc_navigateToTab('policy-deployment')} />
+            <NocBulkBtn icon={<Radio size={11} />}       label="Dispatch"   onClick={() => noc_navigateToTab('enterprise-operations')} />
+            <NocBulkBtn icon={<Siren size={11} />}       label="긴급공지"    onClick={() => noc_navigateToTab('enterprise-emergency')} />
+            <button
+              type="button"
+              onClick={clear}
+              className="inline-flex items-center gap-1 rounded-md bg-bg-card px-2 py-1 text-[10px] font-semibold text-ink-mute ring-1 ring-line/20 transition hover:text-ink"
+            >
+              <X size={10} /> 해제
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading && failedRows.length === 0 ? <AdminSkeleton variant="block" />
+        : cards.length === 0 && totalTargets === 0 ? (
+          // NOC spec 9 — Empty state
+          <AdminEmpty
+            title="현재 배포 대상 매장이 없습니다."
+            description="신규 음악 배포를 시작해 매장을 대상으로 지정하세요."
+            action={
+              hasDeployablePolicy ? (
+                <AdminButton tone="primary" onClick={onCreateNew}>
+                  <Plus size={12} /> 신규 음악 배포
+                </AdminButton>
+              ) : (
+                <AdminButton tone="neutral" variant="subtle" onClick={() => noc_navigateToTab('franchise-management')}>
+                  프랜차이즈에서 정책 등록
+                </AdminButton>
+              )
+            }
+          />
+        ) : cards.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-6 text-center ring-1 ring-emerald-500/45">
+            <CheckCircle2 size={28} className="text-emerald-200" />
+            <p className="text-[13px] font-bold text-emerald-100">실패/대기 매장이 없습니다.</p>
+            <p className="text-[10px] text-emerald-200/80">배포 대상 {totalTargets.toLocaleString()} 개 매장 모두 안정 운영 중</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {cards.map((r) => (
+              <StoreDeploymentCard
+                key={`${r.deployment_id}:${r.store_id}`}
+                row={r}
+                selected={selected.has(r.target_id)}
+                onToggle={() => toggle(r.target_id)}
+                onOpenDeployment={() => onOpenDeployment(r.deployment_id)}
+              />
+            ))}
+            {failedRows.length > 48 && (
+              <div className="col-span-full rounded-lg bg-bg-card p-2 text-center text-[10px] text-ink-mute ring-1 ring-line/15">
+                {failedRows.length - 48} 개 매장 추가 — Failed 탭에서 전체 확인
+              </div>
+            )}
+          </div>
+        )}
+    </AdminCard>
+  );
+}
+
+function NocBulkBtn({ icon, label, onClick }: { icon: JSX.Element; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded-md bg-violet-500/40 px-2 py-1 text-[10px] font-bold text-violet-50 ring-1 ring-violet-400/60 transition hover:bg-violet-500/50 hover:shadow-sm"
+    >
+      {icon}{label}
+    </button>
+  );
+}
+
+function storeHealthTone(r: FailedDeploymentStore): 'danger' | 'warning' {
+  const p = retryPriorityFor(r);
+  return p === 'P1' ? 'danger' : 'warning';
+}
+
+function StoreDeploymentCard({ row, selected, onToggle, onOpenDeployment }: {
+  row: FailedDeploymentStore; selected: boolean;
+  onToggle: () => void; onOpenDeployment: () => void;
+}) {
+  const p = retryPriorityFor(row);
+  const t = storeHealthTone(row);
+  const cls = t === 'danger'
+    ? { border: 'ring-rose-500/40',  bar: 'bg-rose-400',  chip: 'bg-rose-500/25 text-rose-100' }
+    : { border: 'ring-amber-500/40', bar: 'bg-amber-400', chip: 'bg-amber-500/25 text-amber-100' };
+  const cat = FAILURE_CATEGORY_META[row.failure_category];
+
+  return (
+    <div
+      className={`group rounded-xl p-2.5 ring-1 transition-all duration-200 hover:shadow-md ${
+        selected ? 'bg-violet-500/25 ring-violet-400/50' : `bg-bg-card ${cls.border} hover:ring-line/30`
+      }`}
+    >
+      {/* 상단: 체크박스 + 매장/브랜드 + Priority */}
+      <div className="flex items-start justify-between gap-2">
+        <label className="flex min-w-0 items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-violet-500"
+            aria-label={`${row.store_name} 선택`}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-[12px] font-bold text-ink">{row.store_name}</p>
+            <p className="truncate text-[10px] text-ink-mute">
+              {row.enterprise_name ?? '개별 매장'}
+              {row.region_name && ` · ${row.region_name}`}
+            </p>
+          </div>
+        </label>
+        <PriorityBadgeNoc p={p} />
+      </div>
+
+      {/* Health rail */}
+      <div className={`mt-2 h-1 w-full overflow-hidden rounded-full ring-1 ring-line/15 bg-bg-hover`}>
+        <div className={`h-full rounded-full ${cls.bar}`} style={{ width: t === 'danger' ? '30%' : '65%' }} aria-label={`상태 ${t}`} />
+      </div>
+
+      {/* 상태 + 실패 원인 */}
+      <div className={`mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold ring-1 ${cls.chip}`}>
+        <AlertCircle size={9} />
+        {cat.ko}
+      </div>
+
+      {/* 세부 grid */}
+      <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[10.5px]">
+        <dt className="text-ink-mute">배포</dt>
+        <dd className="min-w-0 truncate text-ink">{row.deployment_name || '이름 없음'}</dd>
+
+        <dt className="text-ink-mute">정책</dt>
+        <dd className="min-w-0 truncate text-ink">
+          {row.expected_policy_name ?? '—'}
+          {row.expected_version_number != null && <span className="ml-1 font-mono text-[9.5px] text-violet-200">v{row.expected_version_number}</span>}
+        </dd>
+
+        <dt className="text-ink-mute">시작</dt>
+        <dd className="text-ink">
+          {row.deployment_started_at
+            ? new Date(row.deployment_started_at).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })
+            : '—'}
+        </dd>
+
+        <dt className="text-ink-mute">마지막 시도</dt>
+        <dd className="text-ink">
+          {row.last_attempt_at
+            ? new Date(row.last_attempt_at).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })
+            : '—'}
+        </dd>
+
+        {row.retry_count > 0 && (
+          <>
+            <dt className="text-ink-mute">재시도</dt>
+            <dd className="text-ink tabular-nums">{row.retry_count} 회</dd>
+          </>
+        )}
+      </dl>
+
+      {/* Quick Actions — spec 2, 5 */}
+      <div className="mt-2 flex items-center justify-end gap-1 border-t border-line/10 pt-2 opacity-70 transition-opacity group-hover:opacity-100">
+        <StoreNocQuickAction icon={<ShieldCheck size={10} />} title="정책 보기"  onClick={() => noc_navigateToTab('policy-deployment')} />
+        <StoreNocQuickAction icon={<StoreIcon size={10} />}   title="매장 보기"  onClick={() => noc_navigateToTab('store-monitoring')} />
+        <StoreNocQuickAction icon={<ExternalLink size={10} />} title="배포 상세" onClick={onOpenDeployment} />
+      </div>
+    </div>
+  );
+}
+
+function StoreNocQuickAction({ icon, title, onClick }: { icon: JSX.Element; title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      title={title}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-bg-card text-ink-mute ring-1 ring-line/20 transition hover:bg-bg-hover hover:text-ink hover:shadow-sm"
+    >
+      {icon}
+    </button>
   );
 }
