@@ -120,6 +120,9 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
   const [regions, setRegions] = useState<EnterpriseRegion[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [hasDeployablePolicy, setHasDeployablePolicy] = useState<boolean | null>(null);
+  // Lifecycle Center — 기존 listDeployablePolicies 를 gate check(limit:1) 외에 정책 목록으로 재사용.
+  // 새 API/RPC 없음 · 새 fetch 함수 도입 없음.
+  const [deployablePolicies, setDeployablePolicies] = useState<DeployablePolicy[]>([]);
 
   // logs tab state
   const [rows, setRows] = useState<PolicyDeployment[]>([]);
@@ -245,11 +248,15 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
   // deployable policy gate (Create 버튼 활성/비활성)
   const checkDeployablePolicies = useCallback(async () => {
     try {
-      const r = await listDeployablePolicies({ limit: 1 });
+      // Lifecycle Center — gate check 겸 정책 목록 fetch 통합 (limit:200).
+      // 기존 listDeployablePolicies 함수 재사용, 새 API 아님. 새 polling 없음.
+      const r = await listDeployablePolicies({ limit: 200 });
       setHasDeployablePolicy(r.data.length > 0);
+      setDeployablePolicies(r.data);
     } catch (e) {
       console.warn('[PolicyDeployment] deployable policies check failed', e);
       setHasDeployablePolicy(null);
+      setDeployablePolicies([]);
     }
   }, []);
   useEffect(() => { void checkDeployablePolicies(); }, [checkDeployablePolicies]);
@@ -444,6 +451,17 @@ export default function PolicyDeploymentPanel({ onRequestFranchisePolicyNav }: P
           </div>
         </div>
       )}
+
+      {/* ==================================================================== */}
+      {/* Lifecycle Center — 정책 생명주기 (생성 → 배포 → 운영 → 교체 → 종료) */}
+      {/* ==================================================================== */}
+      <PolicyLifecycleSection
+        policies={deployablePolicies}
+        rows={rows}
+        overview={overview}
+        onCreateNew={() => setShowCreate(true)}
+        hasDeployablePolicy={hasDeployablePolicy !== false}
+      />
 
       {/* Tab nav */}
       <div className="flex items-center gap-1 rounded-xl bg-bg-card p-1 ring-1 ring-line/10">
@@ -2251,5 +2269,714 @@ function StoreNocQuickAction({ icon, title, onClick }: { icon: JSX.Element; titl
     >
       {icon}
     </button>
+  );
+}
+
+// =============================================================================
+// Policy Lifecycle Center (spec 1~13) — 정책 생명주기 운영 센터
+// -----------------------------------------------------------------------------
+// 새 API/RPC/DB/Migration/polling 도입 0. 새 fetch 함수 도입 없음.
+// 기존 listDeployablePolicies(limit:200) 재사용 + rows(deployments) 조합.
+// LLM 호출 0. Rule-based 만.
+// =============================================================================
+
+const DAYS = 24 * 60 * 60 * 1000;
+
+interface PolicyStat {
+  policy_id: string;
+  policy_name: string;
+  version: number | null;
+  status: 'draft' | 'active' | 'archived';
+  franchise_name: string | null;
+  active_stores: number;      // active_store_count
+  target_stores: number;      // target_store_count
+  coverage: number;           // 0-100 (active / target × 100)
+  latest_deployment_at: string | null;
+  latest_success_rate: number | null; // 0-100 from deployment.success_rate
+  age_days: number;           // now - created_at
+  effective_until: string | null;
+  health: 'Healthy' | 'Warning' | 'Critical';
+  tone: 'success' | 'warning' | 'danger';
+}
+
+/**
+ * 정책별 통계 계산 — rule-based, LLM 없음.
+ * policies (DeployablePolicy) 를 rows (deployments) 와 조합해서 최근 배포/성공률 매핑.
+ */
+function computePolicyStats(
+  policies: DeployablePolicy[],
+  rows: PolicyDeployment[],
+): PolicyStat[] {
+  const latestByPolicy = new Map<string, PolicyDeployment>();
+  for (const d of rows) {
+    const cur = latestByPolicy.get(d.policy_id);
+    const dAt = d.created_at;
+    if (!cur || (dAt && new Date(dAt).getTime() > new Date(cur.created_at).getTime())) {
+      latestByPolicy.set(d.policy_id, d);
+    }
+  }
+
+  const now = Date.now();
+  const stats: PolicyStat[] = policies.map((p) => {
+    const latest = latestByPolicy.get(p.policy_id) ?? null;
+    const coverage = p.target_store_count > 0
+      ? Math.round((p.active_store_count / p.target_store_count) * 100)
+      : 0;
+    const ageMs = p.created_at ? now - new Date(p.created_at).getTime() : 0;
+    const ageDays = Math.max(0, Math.floor(ageMs / DAYS));
+    const successRate = latest ? latest.success_rate : null;
+
+    // Health 판단 (rule-based)
+    let health: PolicyStat['health'] = 'Healthy';
+    if (p.policy_status === 'archived') health = 'Warning';
+    else if (successRate != null && successRate < 60) health = 'Critical';
+    else if (coverage < 60 && p.policy_status === 'active') health = 'Warning';
+    else if (successRate != null && successRate < 90) health = 'Warning';
+    else if (ageDays >= 40 && p.policy_status === 'active') health = 'Warning';
+
+    const tone: 'success' | 'warning' | 'danger' =
+      health === 'Healthy' ? 'success' : health === 'Warning' ? 'warning' : 'danger';
+
+    return {
+      policy_id: p.policy_id,
+      policy_name: p.policy_name,
+      version: p.latest_version_number,
+      status: p.policy_status,
+      franchise_name: p.franchise_name,
+      active_stores: p.active_store_count,
+      target_stores: p.target_store_count,
+      coverage,
+      latest_deployment_at: latest?.completed_at ?? latest?.created_at ?? null,
+      latest_success_rate: successRate,
+      age_days: ageDays,
+      effective_until: p.effective_until,
+      health,
+      tone,
+    };
+  });
+  return stats;
+}
+
+// -----------------------------------------------------------------------------
+// spec 4, 9 — Rotation / AI Policy Assistant 공통 Insight 타입
+// -----------------------------------------------------------------------------
+interface PolicyLifecycleInsight {
+  key: string;
+  emoji: string;
+  text: string;
+  tone: 'success' | 'warning' | 'danger' | 'info';
+}
+
+/**
+ * spec 4 — Rotation Recommendation.
+ * 오래된 정책 / 성공률 하락 / 낮은 커버리지 등을 rule-based 로 감지.
+ */
+function generateRotationInsights(stats: PolicyStat[]): PolicyLifecycleInsight[] {
+  const out: PolicyLifecycleInsight[] = [];
+  const oldActive = stats
+    .filter((s) => s.status === 'active' && s.age_days >= 40)
+    .sort((a, b) => b.age_days - a.age_days)
+    .slice(0, 2);
+  for (const s of oldActive) {
+    out.push({
+      key: `rotate:${s.policy_id}`,
+      emoji: '🤖',
+      text: `${s.policy_name} — 최근 ${s.age_days}일 운영. 교체 권장.`,
+      tone: 'warning',
+    });
+  }
+  const droppingRate = stats
+    .filter((s) => s.status === 'active' && s.latest_success_rate != null && s.latest_success_rate < 85)
+    .sort((a, b) => (a.latest_success_rate ?? 100) - (b.latest_success_rate ?? 100))
+    .slice(0, 2);
+  for (const s of droppingRate) {
+    out.push({
+      key: `drop:${s.policy_id}`,
+      emoji: '🤖',
+      text: `${s.policy_name} — 성공률 ${s.latest_success_rate!.toFixed(1)}%. 새 버전 권장.`,
+      tone: 'danger',
+    });
+  }
+  const lowCoverage = stats
+    .filter((s) => s.status === 'active' && s.coverage > 0 && s.coverage < 60)
+    .sort((a, b) => a.coverage - b.coverage)
+    .slice(0, 1);
+  for (const s of lowCoverage) {
+    out.push({
+      key: `coverage:${s.policy_id}`,
+      emoji: '🤖',
+      text: `${s.policy_name} — 적용률 ${s.coverage}%. 미적용 매장 배포 검토.`,
+      tone: 'warning',
+    });
+  }
+  return out.slice(0, 5);
+}
+
+/** spec 9 — AI Policy Assistant. rule-based 자연어. */
+function generateAssistantInsights(
+  stats: PolicyStat[],
+  overview: PolicyDeploymentOverview | null,
+): PolicyLifecycleInsight[] {
+  const out: PolicyLifecycleInsight[] = [];
+  const activePolicies = stats.filter((s) => s.status === 'active');
+  const bestPolicy = activePolicies
+    .filter((s) => s.latest_success_rate != null)
+    .sort((a, b) => (b.latest_success_rate ?? 0) - (a.latest_success_rate ?? 0))[0];
+  if (bestPolicy && bestPolicy.latest_success_rate! >= 95) {
+    out.push({
+      key: 'best',
+      emoji: '🏆',
+      text: `${bestPolicy.policy_name} — 최근 성공률이 ${bestPolicy.latest_success_rate!.toFixed(1)}% 로 가장 높습니다.`,
+      tone: 'success',
+    });
+  }
+  if (overview && overview.success_rate < 90 && overview.total_target_stores > 0) {
+    out.push({
+      key: 'coverage_drop',
+      emoji: '📉',
+      text: `최근 적용률이 ${overview.success_rate.toFixed(1)}% 로 하락. 배포 상태를 확인하세요.`,
+      tone: 'warning',
+    });
+  }
+  const oldest = activePolicies.filter((s) => s.age_days >= 40).sort((a, b) => b.age_days - a.age_days)[0];
+  if (oldest) {
+    out.push({
+      key: 'oldest',
+      emoji: '⏰',
+      text: `${oldest.policy_name} — ${oldest.age_days}일 이상 운영 중. 교체 검토가 필요합니다.`,
+      tone: 'warning',
+    });
+  }
+  const criticals = activePolicies.filter((s) => s.health === 'Critical');
+  if (criticals.length > 0) {
+    out.push({
+      key: 'critical',
+      emoji: '🚨',
+      text: `${criticals.length}개 정책이 Critical 상태입니다. 즉시 재배포 또는 교체를 권장합니다.`,
+      tone: 'danger',
+    });
+  }
+  if (out.length === 0) {
+    out.push({
+      key: 'ok',
+      emoji: '✅',
+      text: '현재 모든 정책이 안정적으로 운영 중입니다.',
+      tone: 'success',
+    });
+  }
+  return out.slice(0, 5);
+}
+
+// -----------------------------------------------------------------------------
+// Section root
+// -----------------------------------------------------------------------------
+function PolicyLifecycleSection({
+  policies, rows, overview, onCreateNew, hasDeployablePolicy,
+}: {
+  policies: DeployablePolicy[];
+  rows: PolicyDeployment[];
+  overview: PolicyDeploymentOverview | null;
+  onCreateNew: () => void;
+  hasDeployablePolicy: boolean;
+}) {
+  const stats = useMemo(() => computePolicyStats(policies, rows), [policies, rows]);
+  const rotation = useMemo(() => generateRotationInsights(stats), [stats]);
+  const assistant = useMemo(() => generateAssistantInsights(stats, overview), [stats, overview]);
+  const now = Date.now();
+
+  const heroKpi = useMemo(() => {
+    const active   = stats.filter((s) => s.status === 'active').length;
+    const draft    = stats.filter((s) => s.status === 'draft').length;
+    const closing  = stats.filter((s) =>
+      s.effective_until && new Date(s.effective_until).getTime() - now < 14 * DAYS
+    ).length + stats.filter((s) => s.status === 'archived').length;
+    const recentDeployments = overview?.recent_24h_deployments ?? 0;
+    const rate = overview?.success_rate ?? 0;
+    // Policy Health = active 정책의 tone 분포 기반
+    const criticalCount = stats.filter((s) => s.status === 'active' && s.health === 'Critical').length;
+    const warningCount  = stats.filter((s) => s.status === 'active' && s.health === 'Warning').length;
+    const health: { label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger' } =
+      criticalCount > 0 ? { label: 'Critical', tone: 'danger' }
+      : warningCount > 0 ? { label: 'Warning',  tone: 'warning' }
+      : { label: 'Healthy',  tone: 'success' };
+    return { active, draft, closing, recentDeployments, rate, health };
+  }, [stats, overview, now]);
+
+  // Empty state
+  const empty = policies.length === 0;
+
+  return (
+    <div className="space-y-3">
+      {/* Section header */}
+      <div className="flex items-center gap-2">
+        <ShieldCheck size={14} className="text-violet-200" />
+        <h2 className="text-[13px] font-black text-ink">Policy Lifecycle Center</h2>
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+          <Sparkles size={9} /> BETA
+        </span>
+        <span className="text-[10px] text-ink-mute">생성 → 배포 → 운영 → 교체 → 종료 · Rule-based · LLM 미사용</span>
+      </div>
+
+      {/* spec 1 — Lifecycle Hero KPI (Enterprise Hero 스타일) */}
+      <LifecycleHero
+        active={heroKpi.active}
+        draft={heroKpi.draft}
+        closing={heroKpi.closing}
+        recentDeployments={heroKpi.recentDeployments}
+        rate={heroKpi.rate}
+        health={heroKpi.health}
+      />
+
+      {empty ? (
+        // spec 11 — Empty
+        <AdminEmpty
+          title="운영 중인 정책이 없습니다."
+          description="정책을 생성하면 이 곳에서 생명주기를 관리할 수 있습니다."
+          action={
+            hasDeployablePolicy
+              ? (
+                <AdminButton tone="primary" onClick={onCreateNew}>
+                  <Plus size={12} /> 정책 생성
+                </AdminButton>
+              )
+              : (
+                <AdminButton tone="neutral" variant="subtle" onClick={() => noc_navigateToTab('franchise-management')}>
+                  프랜차이즈에서 플레이리스트 등록
+                </AdminButton>
+              )
+          }
+        />
+      ) : (
+        <>
+          {/* spec 2, 3, 5, 6, 8 — Active Policy Dashboard */}
+          <ActivePolicyDashboard stats={stats} />
+
+          {/* spec 4 + 9 + 10 — Deck (Rotation + Queue + Assistant) */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <RotationRecommendationCard insights={rotation} />
+            </div>
+            <div className="lg:col-span-1">
+              <PolicyQueueCard stats={stats} />
+            </div>
+            <div className="lg:col-span-1">
+              <AiPolicyAssistantCard insights={assistant} />
+            </div>
+          </div>
+
+          {/* spec 7 — Policy Timeline (Deployment Timeline 재해석) */}
+          <PolicyLifecycleTimeline rows={rows} policies={policies} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 1 — Lifecycle Hero (6 KPI)
+// -----------------------------------------------------------------------------
+function LifecycleHero({
+  active, draft, closing, recentDeployments, rate, health,
+}: {
+  active: number; draft: number; closing: number;
+  recentDeployments: number; rate: number;
+  health: { label: 'Healthy' | 'Warning' | 'Critical'; tone: 'success' | 'warning' | 'danger' };
+}) {
+  const items: Array<{ label: string; desc: string; value: string; icon: JSX.Element; tone: 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = [
+    { label: '운영 정책',    desc: 'active',     value: active.toLocaleString(),           icon: <ShieldCheck size={22} />,   tone: 'success' },
+    { label: '예약 정책',    desc: 'draft',      value: draft.toLocaleString(),            icon: <Clock size={22} />,          tone: draft > 0 ? 'warning' : 'success' },
+    { label: '종료 예정',    desc: 'closing',    value: closing.toLocaleString(),          icon: <History size={22} />,        tone: closing > 0 ? 'warning' : 'success' },
+    { label: '최근 배포',    desc: '24h',        value: recentDeployments.toLocaleString(), icon: <Radio size={22} />,          tone: 'info' },
+    { label: '성공률',       desc: 'overview',   value: `${rate.toFixed(1)}%`,             icon: <TrendingUp size={22} />,     tone: rate >= 95 ? 'success' : rate >= 80 ? 'primary' : rate >= 60 ? 'warning' : 'danger' },
+    { label: 'Policy Health', desc: 'aggregate', value: health.label,                       icon: <Bot size={22} />,            tone: health.tone },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map((item) => {
+        const cls =
+          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-emerald-100' }
+          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-amber-100' }
+          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-rose-100' }
+          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-sky-100' }
+          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-violet-100' };
+        return (
+          <div
+            key={item.label}
+            className={`rounded-xl p-2.5 ring-1 transition-all duration-150 hover:shadow-md ${cls.bg} ${cls.ring}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${cls.chip}`}>
+                {item.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold text-ink leading-tight">{item.label}</p>
+                <p className="truncate text-[9.5px] text-ink-mute leading-tight">{item.desc}</p>
+              </div>
+            </div>
+            <p className="mt-1.5 tabular-nums text-2xl font-black text-ink truncate" title={item.value}>{item.value}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 2, 3, 5, 6, 8 — Active Policy Dashboard (정렬 가능)
+// -----------------------------------------------------------------------------
+type PolicySortKey = 'name' | 'stores' | 'coverage' | 'success_rate' | 'age' | 'health';
+
+function ActivePolicyDashboard({ stats }: { stats: PolicyStat[] }) {
+  const [sortKey, setSortKey] = useState<PolicySortKey>('coverage');
+  const [asc, setAsc] = useState(false);
+
+  const sorted = useMemo(() => {
+    const arr = [...stats];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'name':         cmp = a.policy_name.localeCompare(b.policy_name); break;
+        case 'stores':       cmp = a.active_stores - b.active_stores; break;
+        case 'coverage':     cmp = a.coverage - b.coverage; break;
+        case 'success_rate': cmp = (a.latest_success_rate ?? -1) - (b.latest_success_rate ?? -1); break;
+        case 'age':          cmp = a.age_days - b.age_days; break;
+        case 'health': {
+          const order: Record<PolicyStat['health'], number> = { Critical: 0, Warning: 1, Healthy: 2 };
+          cmp = order[a.health] - order[b.health];
+          break;
+        }
+      }
+      return asc ? cmp : -cmp;
+    });
+    return arr;
+  }, [stats, sortKey, asc]);
+
+  const toggleSort = (k: PolicySortKey) => {
+    if (sortKey === k) setAsc((v) => !v);
+    else { setSortKey(k); setAsc(false); }
+  };
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><ListChecks size={13} /> Active Policy Dashboard</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">
+        정책 lifecycle 관측 · 정렬 가능 · 총 {sorted.length}개
+      </span>}
+    >
+      {sorted.length === 0 ? (
+        <AdminEmpty title="정책 없음" description="deployablePolicies 결과가 비어있습니다." />
+      ) : (
+        <>
+          {/* Sort tabs */}
+          <div className="mb-2 flex flex-wrap gap-1 border-b border-line/10 pb-2">
+            <SortChip active={sortKey === 'name'}         onClick={() => toggleSort('name')}         label="이름" />
+            <SortChip active={sortKey === 'stores'}       onClick={() => toggleSort('stores')}       label="적용 매장" />
+            <SortChip active={sortKey === 'coverage'}     onClick={() => toggleSort('coverage')}     label="적용률" />
+            <SortChip active={sortKey === 'success_rate'} onClick={() => toggleSort('success_rate')} label="성공률" />
+            <SortChip active={sortKey === 'age'}          onClick={() => toggleSort('age')}          label="운영일" />
+            <SortChip active={sortKey === 'health'}       onClick={() => toggleSort('health')}       label="Health" />
+            <span className="ml-auto text-[9.5px] text-ink-mute self-center">
+              {asc ? '오름차순' : '내림차순'}
+            </span>
+          </div>
+
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {sorted.slice(0, 24).map((s) => (
+              <PolicyLifecycleRow key={s.policy_id} s={s} />
+            ))}
+          </ul>
+          {sorted.length > 24 && (
+            <p className="mt-2 rounded-lg bg-bg-card p-2 text-center text-[10px] text-ink-mute ring-1 ring-line/15">
+              {sorted.length - 24} 개 정책 추가 — 필터로 좁혀보세요.
+            </p>
+          )}
+        </>
+      )}
+    </AdminCard>
+  );
+}
+
+function SortChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+        active
+          ? 'bg-violet-500/30 text-violet-100 ring-1 ring-violet-400/50'
+          : 'bg-bg-card text-ink-mute ring-1 ring-line/15 hover:text-ink hover:ring-line/25'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PolicyLifecycleRow({ s }: { s: PolicyStat }) {
+  const statusCls = s.status === 'active'
+    ? 'bg-emerald-500/25 text-emerald-100 ring-emerald-500/45'
+    : s.status === 'draft'
+    ? 'bg-amber-500/25 text-amber-100 ring-amber-500/45'
+    : 'bg-bg-hover text-ink-mute ring-line/20';
+  const barCls = s.tone === 'success' ? 'bg-emerald-400'
+             : s.tone === 'warning' ? 'bg-amber-400'
+             : 'bg-rose-400';
+  const healthChip = s.tone === 'success' ? 'bg-emerald-500/25 text-emerald-100 ring-emerald-500/45'
+                  : s.tone === 'warning' ? 'bg-amber-500/25 text-amber-100 ring-amber-500/45'
+                  : 'bg-rose-500/25 text-rose-100 ring-rose-500/45';
+
+  return (
+    <li className="rounded-xl bg-bg-card p-2.5 ring-1 ring-line/15 transition-all duration-150 hover:bg-bg-hover hover:shadow-md hover:ring-line/30">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-bold text-ink">{s.policy_name}</p>
+          <p className="truncate text-[10px] text-ink-mute">
+            {s.franchise_name ?? '개별 프랜차이즈'}
+            {s.version != null && (
+              <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-violet-100 ring-1 ring-violet-400/50">
+                v{s.version}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ring-1 ${statusCls}`}>
+            {s.status === 'active' ? '운영' : s.status === 'draft' ? '예약' : '종료'}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold ring-1 ${healthChip}`}>
+            {s.health}
+          </span>
+        </div>
+      </div>
+
+      {/* Coverage bar (spec 6) */}
+      <div className="mt-2">
+        <div className="flex items-center justify-between text-[9.5px] text-ink-mute">
+          <span>Coverage</span>
+          <span className="tabular-nums text-ink">{s.active_stores}/{s.target_stores} · {s.coverage}%</span>
+        </div>
+        <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-bg-hover ring-1 ring-line/15">
+          <div className={`h-full rounded-full transition-all duration-300 ${barCls}`} style={{ width: `${s.coverage}%` }} aria-label={`Coverage ${s.coverage}%`} />
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+        <dt className="text-ink-mute">최근 배포</dt>
+        <dd className="text-ink">{s.latest_deployment_at
+          ? new Date(s.latest_deployment_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })
+          : '—'}</dd>
+        <dt className="text-ink-mute">성공률</dt>
+        <dd className="text-ink tabular-nums">
+          {s.latest_success_rate != null ? `${s.latest_success_rate.toFixed(1)}%` : '—'}
+        </dd>
+        <dt className="text-ink-mute">운영일</dt>
+        <dd className="text-ink tabular-nums">{s.age_days}일</dd>
+        <dt className="text-ink-mute">유효기한</dt>
+        <dd className="text-ink">{s.effective_until
+          ? new Date(s.effective_until).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })
+          : '—'}</dd>
+      </dl>
+    </li>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 4 — Rotation Recommendation
+// -----------------------------------------------------------------------------
+function RotationRecommendationCard({ insights }: { insights: PolicyLifecycleInsight[] }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><RotateCcw size={13} /> Rotation Recommendation</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">교체/새 버전 권장 · 최대 5개</span>}
+    >
+      {insights.length === 0 ? (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
+          <CheckCircle2 size={22} className="text-emerald-200" />
+          <p className="text-[11px] font-bold text-emerald-100">교체 권장 정책이 없습니다.</p>
+        </div>
+      ) : (
+        <InsightList insights={insights} />
+      )}
+    </AdminCard>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 9 — AI Policy Assistant
+// -----------------------------------------------------------------------------
+function AiPolicyAssistantCard({ insights }: { insights: PolicyLifecycleInsight[] }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Bot size={13} /> AI Policy Assistant
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+          <Sparkles size={9} /> BETA
+        </span>
+      </span>}
+      subtitle={<span className="text-[10px] text-ink-mute">Rule-based · LLM 미사용</span>}
+    >
+      <InsightList insights={insights} />
+    </AdminCard>
+  );
+}
+
+function InsightList({ insights }: { insights: PolicyLifecycleInsight[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {insights.map((i) => {
+        const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
+                  : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
+                  : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+                  :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+        return (
+          <li key={i.key} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
+            <div className="flex items-start gap-2">
+              <span className="shrink-0 text-[13px] leading-tight" aria-hidden>{i.emoji}</span>
+              <p className={`text-[11px] leading-relaxed ${cls.text}`}>{i.text}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 10 — Policy Queue (예약 / 운영 / 종료 예정)
+// -----------------------------------------------------------------------------
+function PolicyQueueCard({ stats }: { stats: PolicyStat[] }) {
+  const now = Date.now();
+  const drafts = stats.filter((s) => s.status === 'draft').slice(0, 3);
+  const actives = stats
+    .filter((s) => s.status === 'active')
+    .sort((a, b) => b.coverage - a.coverage)
+    .slice(0, 3);
+  const closings = stats.filter((s) =>
+    (s.effective_until && new Date(s.effective_until).getTime() - now < 14 * DAYS)
+    || s.status === 'archived'
+  ).slice(0, 3);
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Inbox size={13} /> Policy Queue</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">예약 · 운영 · 종료 예정</span>}
+    >
+      <div className="space-y-2 text-[11px]">
+        <QueueSection label="예약" tone="warning" items={drafts} emptyText="예약 정책 없음" />
+        <QueueSection label="운영" tone="success" items={actives} emptyText="운영 정책 없음" />
+        <QueueSection label="종료 예정" tone="danger" items={closings} emptyText="종료 예정 정책 없음" />
+      </div>
+    </AdminCard>
+  );
+}
+
+function QueueSection({ label, tone, items, emptyText }: {
+  label: string; tone: 'success' | 'warning' | 'danger';
+  items: PolicyStat[]; emptyText: string;
+}) {
+  const cls = tone === 'success' ? { text: 'text-emerald-200', chip: 'bg-emerald-500/25 text-emerald-100 ring-emerald-500/45' }
+            : tone === 'warning' ? { text: 'text-amber-200',   chip: 'bg-amber-500/25 text-amber-100 ring-amber-500/45' }
+            :                      { text: 'text-rose-200',    chip: 'bg-rose-500/25 text-rose-100 ring-rose-500/45' };
+  return (
+    <div>
+      <p className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${cls.text}`}>{label}</p>
+      {items.length === 0 ? (
+        <p className="text-[10px] text-ink-mute">{emptyText}</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((s) => (
+            <li key={s.policy_id} className={`flex items-center justify-between rounded-md px-2 py-1 ring-1 ${cls.chip}`}>
+              <span className="min-w-0 truncate font-semibold">{s.policy_name}</span>
+              <span className="shrink-0 tabular-nums text-[10px]">
+                {s.version != null && <span className="font-mono">v{s.version}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// spec 7 — Policy Timeline (Deployment 이벤트 → 운영자 언어 문구)
+// -----------------------------------------------------------------------------
+function PolicyLifecycleTimeline({
+  rows, policies,
+}: {
+  rows: PolicyDeployment[]; policies: DeployablePolicy[];
+}) {
+  const events = useMemo(() => {
+    const policyName = new Map(policies.map((p) => [p.policy_id, p.policy_name] as const));
+    const out: Array<{
+      key: string; at: string;
+      label: string; policy: string;
+      tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+    }> = [];
+    for (const r of rows.slice(0, 20)) {
+      const pName = policyName.get(r.policy_id) ?? r.policy_name ?? `정책 ${r.policy_id.slice(0, 8)}`;
+      if (r.created_at) {
+        out.push({ key: `${r.deployment_id}:created`, at: r.created_at, label: '정책 배포 예약', policy: pName, tone: 'info' });
+      }
+      if (r.started_at) {
+        out.push({ key: `${r.deployment_id}:started`, at: r.started_at, label: '정책 배포 시작', policy: pName, tone: 'info' });
+      }
+      if (r.completed_at) {
+        const tone: 'success' | 'warning' | 'danger' =
+          r.status === 'completed' ? 'success'
+          : r.status === 'partial_failed' ? 'warning'
+          : 'danger';
+        out.push({
+          key: `${r.deployment_id}:completed`, at: r.completed_at,
+          label: tone === 'success' ? '정책 적용 완료' : tone === 'warning' ? '정책 일부 실패' : '정책 배포 실패',
+          policy: pName, tone,
+        });
+      }
+    }
+    out.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return out.slice(0, 14);
+  }, [rows, policies]);
+
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><Activity size={13} /> Policy Timeline</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">정책 생명주기 이벤트 · 시간 역순 · 최근 14건</span>}
+    >
+      {events.length === 0 ? (
+        <AdminEmpty title="이벤트 없음" description="정책 배포 이벤트가 아직 없습니다." />
+      ) : (
+        <ul className="space-y-1">
+          {events.map((e) => {
+            const rail = e.tone === 'success' ? 'bg-emerald-500'
+                       : e.tone === 'warning' ? 'bg-amber-500'
+                       : e.tone === 'danger'  ? 'bg-rose-500'
+                       : e.tone === 'info'    ? 'bg-sky-500'
+                       :                        'bg-ink-mute';
+            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-emerald-100'
+                       : e.tone === 'warning' ? 'bg-amber-500/40   text-amber-100'
+                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-rose-100'
+                       : e.tone === 'info'    ? 'bg-sky-500/40     text-sky-100'
+                       :                        'bg-bg-hover       text-ink-mute';
+            return (
+              <li key={e.key} className="flex items-stretch gap-2">
+                <span className="w-14 shrink-0 pt-1 text-right font-mono text-[10px] tabular-nums text-ink-mute">
+                  {new Date(e.at).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className={`w-0.5 shrink-0 rounded-full ${rail}`} aria-hidden />
+                <div className="min-w-0 flex-1 rounded-md bg-bg-card p-1.5 text-[11px] ring-1 ring-line/10">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${chip}`} aria-hidden>
+                      <ShieldCheck size={9} />
+                    </span>
+                    <span className="font-bold text-ink">{e.label}</span>
+                    <span className="min-w-0 truncate text-ink-mute">· {e.policy}</span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminCard>
   );
 }
