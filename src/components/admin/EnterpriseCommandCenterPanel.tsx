@@ -13,9 +13,9 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, AlertTriangle, Bell, Building2, CheckCircle2, Clock, Compass, Database,
-  ExternalLink, Handshake, PlayCircle, RefreshCw, Search, ShieldCheck, Store as StoreIcon,
-  TrendingUp, Wallet, Wifi, WifiOff, X,
+  Activity, AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock, Compass,
+  Database, ExternalLink, Handshake, Heart, Plus, PlayCircle, RefreshCw, Search,
+  ShieldCheck, Store as StoreIcon, TrendingUp, Wallet, Wifi, WifiOff, X,
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminBadge, AdminButton,
@@ -395,68 +395,273 @@ function GlobalSearchBar() {
 }
 
 // ============================================================================
-// Quick Actions (spec 7)
+// Brand Overview grid (Phase 2 리디자인)
+// ----------------------------------------------------------------------------
+// spec 1: Enterprise 검색 (debounce)
+// spec 2: 상태 필터 chip (즉시 적용)
+// spec 3: 자동 상태 Badge (unpaid/inactive/suspended/expired/expiring/pending/정상)
+// spec 4: Health Score (0-100) — 기존 KPI 조합만
+// spec 5: 최근 통신 상대 시간
+// spec 6: 클릭 가능한 KPI (Health Score 클릭 → 상세)
+// spec 7: hover shadow + border transition
+// spec 8: "관리 →" 명확한 상세 버튼
+// spec 9: Empty state — 아이콘 + CTA
+// spec 10: Responsive (검색+필터 1줄→2줄→세로)
+// spec 11: debounce + useMemo
 // ============================================================================
-// ============================================================================
-// Brand Overview grid (spec 3)
-// ============================================================================
+
+/** 자동 상태 라벨 — 운영 상황 기반 (신규 쿼리 없음, 기존 필드만 조합). */
+type DerivedBrandStatus =
+  | { key: 'unpaid';      label: '미납',       tone: 'danger' }
+  | { key: 'inactive';    label: '전체 오프라인', tone: 'danger' }
+  | { key: 'expired';     label: '계약 만료',   tone: 'danger' }
+  | { key: 'suspended';   label: '정책 확인 필요', tone: 'warning' }
+  | { key: 'expiring';    label: '만료 임박',   tone: 'warning' }
+  | { key: 'pending';     label: '승인 대기',   tone: 'warning' }
+  | { key: 'no_contract'; label: '계약 없음',   tone: 'neutral' }
+  | { key: 'normal';      label: '정상 운영',   tone: 'success' };
+
+function deriveBrandStatus(b: BrandOverviewRow): DerivedBrandStatus {
+  if (b.unpaid_count > 0)                                                                return { key: 'unpaid',      label: '미납',           tone: 'danger'  };
+  if (b.status === 'INACTIVE')                                                           return { key: 'inactive',    label: '전체 오프라인',    tone: 'danger'  };
+  if (b.contract_status === 'expired' || b.contract_status === 'terminated')             return { key: 'expired',     label: '계약 만료',        tone: 'danger'  };
+  if (b.status === 'SUSPENDED')                                                          return { key: 'suspended',   label: '정책 확인 필요',   tone: 'warning' };
+  if (b.contract_status === 'expiring')                                                  return { key: 'expiring',    label: '만료 임박',        tone: 'warning' };
+  if (b.status === 'PENDING')                                                            return { key: 'pending',     label: '승인 대기',        tone: 'warning' };
+  if (b.contract_status === 'no_contract')                                               return { key: 'no_contract', label: '계약 없음',        tone: 'neutral' };
+  return                                                                                        { key: 'normal',      label: '정상 운영',        tone: 'success' };
+}
+
+/** Health Score (0-100) — status / contract / unpaid 만 사용. 신규 쿼리 없음. */
+function computeHealthScore(b: BrandOverviewRow): number {
+  let score = 100;
+  // Enterprise 상태
+  if (b.status === 'PENDING')   score -= 20;
+  if (b.status === 'SUSPENDED') score -= 40;
+  if (b.status === 'INACTIVE')  score -= 50;
+  // 계약
+  switch (b.contract_status) {
+    case 'expiring':    score -= 10; break;
+    case 'draft':       score -= 15; break;
+    case 'expired':     score -= 25; break;
+    case 'terminated':  score -= 30; break;
+    case 'no_contract': score -= 30; break;
+    default: break;
+  }
+  // 미납
+  if (b.unpaid_count >= 3)       score -= 30;
+  else if (b.unpaid_count > 0)   score -= 15;
+  return Math.max(0, Math.min(100, score));
+}
+
+function healthTone(score: number): { label: string; tone: 'success' | 'warning' | 'danger'; icon: JSX.Element } {
+  if (score >= 95) return { label: 'Excellent', tone: 'success', icon: <Heart size={11} /> };
+  if (score >= 80) return { label: 'Good',      tone: 'success', icon: <Heart size={11} /> };
+  if (score >= 60) return { label: 'Warning',   tone: 'warning', icon: <AlertTriangle size={11} /> };
+  return              { label: 'Critical',  tone: 'danger',  icon: <AlertTriangle size={11} /> };
+}
+
+type BrandFilterKey = 'all' | 'normal' | 'partial_offline' | 'all_offline' | 'policy_drift' | 'unpaid';
+
+const FILTER_CHIPS: Array<{ key: BrandFilterKey; label: string }> = [
+  { key: 'all',              label: '전체' },
+  { key: 'normal',           label: '정상 운영' },
+  { key: 'partial_offline',  label: '일부 오프라인' },
+  { key: 'all_offline',      label: '전체 오프라인' },
+  { key: 'policy_drift',     label: '정책 미동기' },
+  { key: 'unpaid',           label: '미납 존재' },
+];
+
+function matchesFilter(b: BrandOverviewRow, filter: BrandFilterKey): boolean {
+  const d = deriveBrandStatus(b);
+  switch (filter) {
+    case 'all':               return true;
+    case 'normal':            return d.key === 'normal';
+    case 'partial_offline':   return d.key === 'suspended' || d.key === 'pending';
+    case 'all_offline':       return d.key === 'inactive';
+    case 'policy_drift':      return d.key === 'suspended' || d.key === 'expiring';
+    case 'unpaid':            return b.unpaid_count > 0;
+    default:                  return true;
+  }
+}
+
 function BrandOverviewGrid({
   brands, loading, onSelect, selectedId,
 }: {
   brands: BrandOverviewRow[]; loading: boolean;
   onSelect: (id: string) => void; selectedId: string | null;
 }) {
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [filter, setFilter] = useState<BrandFilterKey>('all');
+
+  // Debounce 200ms (spec 1)
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 200);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  // useMemo 로 필터 안정화 (spec 11)
+  const filtered = useMemo(() => {
+    return brands.filter((b) => {
+      if (!matchesFilter(b, filter)) return false;
+      if (!debouncedQuery) return true;
+      const q = debouncedQuery;
+      return (
+        b.brand_name.toLowerCase().includes(q)
+        || b.brand_code.toLowerCase().includes(q)
+        || (b.manager_name?.toLowerCase().includes(q) ?? false)
+        || (b.manager_email?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [brands, debouncedQuery, filter]);
+
   return (
     <AdminCard
-      title={<span className="flex items-center gap-2"><Building2 size={13} /> 브랜드 개요 ({brands.length})</span>}
-      subtitle={<span className="text-[10px] text-ink-mute">클릭 시 우측에 상세 정보 표시</span>}
+      title={<span className="flex items-center gap-2"><Building2 size={13} /> 브랜드 개요 ({filtered.length}/{brands.length})</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">Health Score · 자동 상태 · 검색/필터 지원</span>}
     >
-      {loading ? <AdminSkeleton variant="block" />
-        : brands.length === 0 ? <AdminEmpty title="브랜드 없음" description="Brand Registry 에서 등록 필요" />
-        : (
+      {/* 검색 + 필터 (spec 1, 2, 10) — Desktop 1줄, Tablet 2줄, Mobile 세로 */}
+      <div className="mb-3 space-y-2 md:space-y-0 md:flex md:items-center md:gap-2">
+        <div className="flex items-center gap-2 rounded-lg bg-bg-card px-2.5 py-1.5 ring-1 ring-line/20 md:flex-1 md:min-w-[240px]">
+          <Search size={12} className="text-ink-mute" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="브랜드명 / 코드 / 담당자 검색"
+            className="flex-1 bg-transparent text-[11px] text-ink outline-none placeholder:text-ink-dim"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} className="text-ink-mute hover:text-ink" aria-label="검색어 지우기">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {FILTER_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setFilter(c.key)}
+              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                filter === c.key
+                  ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/50'
+                  : 'bg-bg-card text-ink-mute ring-1 ring-line/15 hover:text-ink hover:ring-line/25'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && brands.length === 0 ? <AdminSkeleton variant="block" />
+        : brands.length === 0 ? (
+          <AdminEmpty
+            title="등록된 브랜드가 없습니다"
+            description="Brand Registry 에서 새 브랜드를 등록하세요."
+            action={
+              <AdminButton tone="primary" onClick={() => navigateToTab('brand-registry')}>
+                <Plus size={12} /> 새 브랜드 등록
+              </AdminButton>
+            }
+          />
+        ) : filtered.length === 0 ? (
+          <AdminEmpty
+            title="검색 결과 없음"
+            description={`"${debouncedQuery || filter}" 에 매칭되는 브랜드가 없습니다.`}
+            action={
+              <AdminButton variant="subtle" tone="neutral" onClick={() => { setQuery(''); setFilter('all'); }}>
+                필터 초기화
+              </AdminButton>
+            }
+          />
+        ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {brands.map((b) => (
-              <button
-                key={b.brand_id}
-                type="button"
-                onClick={() => onSelect(b.brand_id)}
-                className={`text-left rounded-xl p-3 ring-1 transition ${
-                  selectedId === b.brand_id
-                    ? 'bg-violet-500/15 ring-violet-400/50'
-                    : 'bg-bg-card ring-line/15 hover:bg-bg-hover'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-bold text-ink">{b.brand_name}</p>
-                    <p className="font-mono text-[10px] text-ink-mute">{b.brand_code}</p>
+            {filtered.map((b) => {
+              const derived = deriveBrandStatus(b);
+              const score = computeHealthScore(b);
+              const health = healthTone(score);
+              const isSelected = selectedId === b.brand_id;
+              return (
+                <div
+                  key={b.brand_id}
+                  onClick={() => onSelect(b.brand_id)}
+                  className={`group cursor-pointer rounded-xl p-3 ring-1 transition-all duration-150 hover:shadow-md ${
+                    isSelected
+                      ? 'bg-violet-500/25 ring-violet-400/50'
+                      : 'bg-bg-card ring-line/15 hover:bg-bg-hover hover:ring-line/30'
+                  }`}
+                >
+                  {/* 상단: 브랜드 + Health Score */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-bold text-ink">{b.brand_name}</p>
+                      <p className="font-mono text-[10px] text-ink-mute">{b.brand_code}</p>
+                    </div>
+                    <div className={`shrink-0 rounded-lg px-2 py-1 text-right ring-1 ${
+                      health.tone === 'success' ? 'bg-emerald-500/25 ring-emerald-400/50'
+                      : health.tone === 'warning' ? 'bg-amber-500/25 ring-amber-400/50'
+                      : 'bg-rose-500/25 ring-rose-400/50'
+                    }`}>
+                      <p className={`text-[9px] font-bold uppercase tracking-wider ${
+                        health.tone === 'success' ? 'text-emerald-100'
+                        : health.tone === 'warning' ? 'text-amber-100'
+                        : 'text-rose-100'
+                      }`}>Health</p>
+                      <p className="tabular-nums text-[14px] font-black leading-tight text-ink">{score}</p>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <AdminBadge tone={
-                      b.status === 'ACTIVE' ? 'success'
-                      : b.status === 'PENDING' ? 'warning'
-                      : b.status === 'SUSPENDED' ? 'warning'
-                      : 'neutral'
-                    } variant="subtle">{b.status}</AdminBadge>
-                    <AdminBadge tone={
-                      b.contract_status === 'active' ? 'success'
-                      : b.contract_status === 'expiring' ? 'warning'
-                      : b.contract_status === 'expired' || b.contract_status === 'terminated' ? 'danger'
-                      : b.contract_status === 'draft' ? 'info'
-                      : 'neutral'
-                    } variant="subtle">
-                      {b.contract_status === 'no_contract' ? '계약 없음' : b.contract_status.toUpperCase()}
+
+                  {/* 자동 상태 Badge (spec 3) + 계약 상태 */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <AdminBadge tone={derived.tone as 'success' | 'warning' | 'danger' | 'neutral'} variant="subtle">
+                      {derived.label}
                     </AdminBadge>
+                    <span className="text-[10px] text-ink-mute">·</span>
+                    <span className="text-[10px] text-ink-mute">
+                      {b.contract_status === 'no_contract' ? '계약 없음' : `계약 ${b.contract_status.toUpperCase()}`}
+                    </span>
+                    <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-ink-mute">
+                      {health.icon}
+                      {health.label}
+                    </span>
+                  </div>
+
+                  {/* KPI grid */}
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-ink-mute">미납</span>
+                      <span className={b.unpaid_count > 0 ? 'text-rose-200 font-bold' : 'text-ink'}>{b.unpaid_count} 건</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-mute">미납 금액</span>
+                      <span className={b.unpaid_amount > 0 ? 'text-rose-200 font-bold' : 'text-ink'}>{fmtMoney(b.unpaid_amount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-mute">다음 청구</span>
+                      <span>{fmtDate(b.next_due_date)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-mute">최근 통신</span>
+                      <span>{fmtRelative(b.last_login_at ?? b.updated_at)}</span>
+                    </div>
+                  </div>
+
+                  {/* 담당자 + 관리 버튼 (spec 8) */}
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/10 pt-2">
+                    <p className="min-w-0 truncate text-[10px] text-ink-mute">
+                      {b.manager_name ? `👤 ${b.manager_name}` : ''}
+                      {b.manager_email ? <span className="ml-1">· {b.manager_email}</span> : ''}
+                    </p>
+                    <div className="inline-flex items-center gap-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-violet-200 opacity-70 group-hover:opacity-100 transition-opacity">
+                      관리
+                      <ArrowRight size={11} />
+                    </div>
                   </div>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                  <div className="flex justify-between"><span className="text-ink-mute">미납</span><span className={b.unpaid_count > 0 ? 'text-rose-300 font-bold' : 'text-ink'}>{b.unpaid_count} 건</span></div>
-                  <div className="flex justify-between"><span className="text-ink-mute">미납 금액</span><span className={b.unpaid_amount > 0 ? 'text-rose-300 font-bold' : 'text-ink'}>{fmtMoney(b.unpaid_amount)}</span></div>
-                  <div className="flex justify-between"><span className="text-ink-mute">다음 청구</span><span>{fmtDate(b.next_due_date)}</span></div>
-                  <div className="flex justify-between"><span className="text-ink-mute">최근 수정</span><span>{fmtRelative(b.updated_at)}</span></div>
-                </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
     </AdminCard>
