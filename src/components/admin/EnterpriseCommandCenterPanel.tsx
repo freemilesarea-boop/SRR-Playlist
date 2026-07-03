@@ -13,10 +13,10 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, AlertOctagon, AlertTriangle, ArrowRight, Bell, Building2, CheckCircle2, Clock,
-  Compass, Database, ExternalLink, Handshake, Heart, HeartPulse, PlayCircle, Plus,
-  RadioTower, RefreshCw, Search, ShieldCheck, ShieldX, Siren,
-  Store as StoreIcon, TrendingUp, Wallet, Wifi, WifiOff, X, Zap,
+  Activity, AlertOctagon, AlertTriangle, ArrowRight, Bell, Bot, Building2, CheckCircle2, Clock,
+  Compass, Database, ExternalLink, Handshake, Heart, HeartPulse, Minus, PlayCircle, Plus,
+  RadioTower, RefreshCw, Search, ShieldCheck, ShieldX, Siren, Sparkles,
+  Store as StoreIcon, TrendingDown, TrendingUp, Wallet, Wifi, WifiOff, X, Zap,
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminBadge, AdminButton,
@@ -150,8 +150,23 @@ export default function EnterpriseCommandCenterPanel() {
       {/* SummaryStrip — 한 줄 요약 (Hero 바로 아래, 얇음) */}
       <SummaryStrip kpi={kpi} alerts={alerts} />
 
-      {/* Polish spec 2 — NOC Dashboard 승격 (Hero 바로 아래) */}
-      <NocDashboard kpi={kpi} alerts={alerts} loading={loading && !kpi} />
+      {/* AI spec 10 responsive: Desktop NOC(2/3) + AI Ops(1/3) · Tablet/Mobile 세로 */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          {/* Polish spec 2 — NOC Dashboard 승격 */}
+          <NocDashboard kpi={kpi} alerts={alerts} loading={loading && !kpi} />
+        </div>
+        <div className="lg:col-span-1">
+          {/* AI spec 1~9 — Rule-based AI 운영 분석 */}
+          <AiOperationsCard
+            kpi={kpi}
+            alerts={alerts}
+            brands={brands}
+            timeline={timeline}
+            loading={loading && !kpi}
+          />
+        </div>
+      </div>
 
       {/* Polish spec 2, 3 — Quick Actions (compact 6열) */}
       <QuickActionsCard />
@@ -702,6 +717,453 @@ function BrandOverviewGrid({
           </div>
         )}
     </AdminCard>
+  );
+}
+
+// ============================================================================
+// AI Operations Center — Rule-based Insight generator
+// ----------------------------------------------------------------------------
+// LLM 호출 없음. 이미 fetch 한 kpi/alerts/brands/timeline 을 조합해서
+// 자연어 recommendation 생성. 새 API/RPC/polling 없음.
+// ============================================================================
+
+type InsightLevel = 'critical' | 'warning' | 'info';
+
+interface AiInsight {
+  key: string;
+  level: InsightLevel;
+  title: string;
+  detail: string;
+  recommendation: string;
+  action_tab?: string;
+  action_label?: string;
+}
+
+/** Alert.key 별 자연어 recommendation 매핑 (Rule-based). */
+function alertToRecommendation(key: string): string {
+  switch (key) {
+    case 'all_offline':        return '즉시 매장 연결 상태를 점검하세요.';
+    case 'offline_stores':     return '오프라인 매장을 개별 진단하세요.';
+    case 'heartbeat_missing':  return '연결 상태를 확인하세요.';
+    case 'noc_critical':       return 'NOC 알림을 즉시 확인하세요.';
+    case 'drift_stores':       return '지금 배포를 권장합니다.';
+    case 'overdue_billing':    return '이번 주 청구 권장.';
+    case 'pending_approvals':  return '승인 대기 브랜드를 검토하세요.';
+    case 'expiring_contracts': return '갱신 논의를 시작하세요.';
+    default:                   return '해당 항목을 확인하세요.';
+  }
+}
+
+/** 기존 alerts + brand health 를 조합한 Insight 리스트 (최대 5, 우선순위 순). */
+function generateInsights(
+  alerts: CommandCenterAlert[],
+  brands: BrandOverviewRow[],
+): AiInsight[] {
+  const list: AiInsight[] = [];
+
+  for (const a of alerts) {
+    const level: InsightLevel = a.priority === 'P1' ? 'critical'
+      : a.priority === 'P2' ? 'warning' : 'info';
+    list.push({
+      key: a.key, level,
+      title: a.label,
+      detail: `${a.count} 건`,
+      recommendation: alertToRecommendation(a.key),
+      action_tab: a.action_tab,
+      action_label: a.action_label,
+    });
+  }
+
+  // Brand Health 평균이 60 미만이면 추가 insight (spec 5 기준 반영)
+  if (brands.length > 0) {
+    const avg = Math.round(brands.reduce((s, b) => s + computeHealthScore(b), 0) / brands.length);
+    if (avg < 60) {
+      list.push({
+        key: 'health_low', level: 'warning',
+        title: 'Health Score 평균 저조',
+        detail: `${avg}/100`,
+        recommendation: '주요 브랜드 상태를 점검하세요.',
+        action_tab: 'brand-registry',
+        action_label: '브랜드',
+      });
+    }
+  }
+
+  const order: Record<InsightLevel, number> = { critical: 0, warning: 1, info: 2 };
+  list.sort((a, b) => order[a.level] - order[b.level]);
+  return list.slice(0, 5);
+}
+
+/**
+ * Enterprise Score (0-100) — Rule-based 자동 계산.
+ * 온라인률(25) · 정책(20) · Heartbeat(20) · 미납(15) · Health 평균(20) 가중 합.
+ */
+function computeEnterpriseScore(
+  kpi: CommandCenterKpi | null,
+  brands: BrandOverviewRow[],
+): number {
+  if (!kpi) return 100;
+  const total = kpi.total_stores || 0;
+  let acc = 0;
+
+  // 온라인률 (25점) — 매장 없으면 만점 처리
+  acc += total > 0 ? (kpi.online_stores / total) * 25 : 25;
+  // 정책 동기률 (20점)
+  const driftShare = total > 0 ? kpi.noc.policy_drift / total : 0;
+  acc += (1 - driftShare) * 20;
+  // Heartbeat (20점)
+  const hbShare = total > 0 ? kpi.noc.heartbeat_missing / total : 0;
+  acc += (1 - hbShare) * 20;
+  // 미납 (15점) — 금액 임계값 기반
+  if (kpi.unpaid_amount === 0)              acc += 15;
+  else if (kpi.unpaid_amount < 1_000_000)   acc += 10;
+  else if (kpi.unpaid_amount < 10_000_000)  acc += 5;
+  else                                       acc += 0;
+  // Brand Health 평균 (20점)
+  if (brands.length > 0) {
+    const avg = brands.reduce((s, b) => s + computeHealthScore(b), 0) / brands.length;
+    acc += (avg / 100) * 20;
+  } else {
+    acc += 20;
+  }
+
+  return Math.round(Math.max(0, Math.min(100, acc)));
+}
+
+/** Daily Summary — 정상률/주의/긴급 (spec 4). */
+function computeDailySummary(
+  kpi: CommandCenterKpi | null,
+  alerts: CommandCenterAlert[],
+): { onlineRate: number; criticalCount: number; warningCount: number } {
+  const total = kpi?.total_stores ?? 0;
+  const onlineRate = total > 0 ? Math.round(((kpi?.online_stores ?? 0) / total) * 100) : 100;
+  const criticalCount = alerts.filter((a) => a.priority === 'P1').length;
+  const warningCount  = alerts.filter((a) => a.priority === 'P2').length;
+  return { onlineRate, criticalCount, warningCount };
+}
+
+interface TrendItem {
+  label: string;
+  count: number;
+  direction: 'up' | 'down' | 'flat';
+  tone: 'success' | 'warning' | 'danger';
+}
+
+/**
+ * AI Trend (spec 6) — 최근 timeline 이벤트 severity 분포.
+ * 실제 7일 전 비교 데이터가 없어 (기존 API 미제공) 현재 20건 안에서
+ * severity 별 빈도를 방향성 signal 로 매핑. Rule-based 근사.
+ */
+function computeTrend(timeline: EnterpriseOpsActivityEvent[]): TrendItem[] {
+  const counts = { error: 0, warning: 0, success: 0, info: 0 };
+  for (const e of timeline) {
+    const s = String(e.severity ?? 'info');
+    if (s === 'critical' || s === 'error') counts.error++;
+    else if (s in counts) counts[s as keyof typeof counts]++;
+  }
+  return [
+    { label: '오류 이벤트',   count: counts.error,   direction: counts.error > 0 ? 'up' : 'flat',   tone: counts.error > 0 ? 'danger' : 'success' },
+    { label: '경고 이벤트',   count: counts.warning, direction: counts.warning > 0 ? 'up' : 'flat', tone: counts.warning > 0 ? 'warning' : 'success' },
+    { label: '정상 이벤트',   count: counts.success, direction: counts.success > 0 ? 'up' : 'flat', tone: 'success' },
+  ];
+}
+
+/** 반복 패턴 감지 (spec 7) — 같은 type+title prefix 가 3회 이상. */
+function detectRepeatingIssues(
+  timeline: EnterpriseOpsActivityEvent[],
+): Array<{ key: string; count: number; title: string; latestAt: string; severity: string }> {
+  const buckets = new Map<string, EnterpriseOpsActivityEvent[]>();
+  for (const e of timeline) {
+    const key = `${e.type}:${e.title.split(/\s+/).slice(0, 2).join(' ')}`;
+    const arr = buckets.get(key) ?? [];
+    arr.push(e);
+    buckets.set(key, arr);
+  }
+  const repeats: Array<{ key: string; count: number; title: string; latestAt: string; severity: string }> = [];
+  for (const [k, arr] of buckets) {
+    if (arr.length >= 3) {
+      repeats.push({
+        key: k,
+        count: arr.length,
+        title: arr[0].title,
+        latestAt: arr[0].at,
+        severity: String(arr[0].severity ?? 'info'),
+      });
+    }
+  }
+  repeats.sort((a, b) => b.count - a.count);
+  return repeats.slice(0, 3);
+}
+
+/** Recommendation History (spec 8) — severity != info 인 최근 10건 재해석. */
+function recommendationHistory(
+  timeline: EnterpriseOpsActivityEvent[],
+): Array<{ id: string; at: string; title: string; severity: string; type: string }> {
+  return timeline
+    .filter((e) => String(e.severity) !== 'info')
+    .slice(0, 10)
+    .map((e) => ({
+      id: `${e.type}:${e.id}`,
+      at: e.at,
+      title: e.title,
+      severity: String(e.severity ?? 'info'),
+      type: e.type,
+    }));
+}
+
+// ============================================================================
+// AI Operations Card — Rule-based UI (spec 1~11)
+// ============================================================================
+function AiOperationsCard({
+  kpi, alerts, brands, timeline, loading,
+}: {
+  kpi: CommandCenterKpi | null;
+  alerts: CommandCenterAlert[];
+  brands: BrandOverviewRow[];
+  timeline: EnterpriseOpsActivityEvent[];
+  loading: boolean;
+}) {
+  const insights = useMemo(() => generateInsights(alerts, brands), [alerts, brands]);
+  const score    = useMemo(() => computeEnterpriseScore(kpi, brands), [kpi, brands]);
+  const summary  = useMemo(() => computeDailySummary(kpi, alerts), [kpi, alerts]);
+  const trend    = useMemo(() => computeTrend(timeline), [timeline]);
+  const repeats  = useMemo(() => detectRepeatingIssues(timeline), [timeline]);
+  const history  = useMemo(() => recommendationHistory(timeline), [timeline]);
+
+  // Score tone
+  const scoreTone: 'success' | 'warning' | 'danger' =
+    score >= 90 ? 'success' : score >= 70 ? 'warning' : 'danger';
+
+  return (
+    <AdminCard
+      title={
+        <span className="flex items-center gap-2">
+          <Bot size={13} /> AI 운영 분석
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+            <Sparkles size={9} /> BETA
+          </span>
+        </span>
+      }
+      subtitle={<span className="text-[10px] text-ink-mute">Rule-based · LLM 미사용 · 기존 데이터 조합</span>}
+    >
+      {loading ? <AdminSkeleton variant="block" /> : (
+        <div className="space-y-3">
+          {/* spec 4 — Daily Summary */}
+          <DailySummaryStrip summary={summary} />
+
+          {/* spec 5 — Enterprise Score */}
+          <EnterpriseScoreBar score={score} tone={scoreTone} />
+
+          {/* spec 1, 2, 3, 9 — Insights */}
+          <InsightList insights={insights} />
+
+          {/* spec 6 — Trend */}
+          <TrendGrid trend={trend} />
+
+          {/* spec 7 — Repeating issues */}
+          {repeats.length > 0 && <RepeatingIssues repeats={repeats} />}
+
+          {/* spec 8 — Recommendation history */}
+          <RecommendationHistory items={history} />
+        </div>
+      )}
+    </AdminCard>
+  );
+}
+
+// ---- AI sub-components ----------------------------------------------------
+
+function DailySummaryStrip({
+  summary,
+}: {
+  summary: { onlineRate: number; criticalCount: number; warningCount: number };
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-bg-card p-2 ring-1 ring-line/15">
+      <StatMini label="정상률"    value={`${summary.onlineRate}%`}          tone="success" />
+      <StatMini label="주의"       value={String(summary.warningCount)}      tone={summary.warningCount > 0 ? 'warning' : 'success'} />
+      <StatMini label="긴급"       value={String(summary.criticalCount)}     tone={summary.criticalCount > 0 ? 'danger' : 'success'} />
+    </div>
+  );
+}
+
+function StatMini({ label, value, tone }: { label: string; value: string; tone: 'success' | 'warning' | 'danger' }) {
+  const t = tone === 'success'
+    ? { bg: 'bg-emerald-500/25', text: 'text-emerald-100', ring: 'ring-emerald-400/45' }
+    : tone === 'warning'
+    ? { bg: 'bg-amber-500/25',   text: 'text-amber-100',   ring: 'ring-amber-400/45' }
+    : { bg: 'bg-rose-500/25',    text: 'text-rose-100',    ring: 'ring-rose-400/45' };
+  return (
+    <div className={`rounded-md px-2 py-1.5 ring-1 ${t.bg} ${t.ring}`}>
+      <p className={`text-[9px] font-bold uppercase tracking-wider ${t.text}`}>{label}</p>
+      <p className="text-[14px] font-black tabular-nums text-ink">{value}</p>
+    </div>
+  );
+}
+
+function EnterpriseScoreBar({ score, tone }: { score: number; tone: 'success' | 'warning' | 'danger' }) {
+  const label = score >= 90 ? 'Excellent' : score >= 70 ? 'Good' : score >= 50 ? 'Warning' : 'Critical';
+  const barColor = tone === 'success' ? 'bg-emerald-400' : tone === 'warning' ? 'bg-amber-400' : 'bg-rose-400';
+  return (
+    <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/15">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-ink">Enterprise Score</p>
+        <p className="tabular-nums text-[18px] font-black text-ink">{score}<span className="text-[10px] font-normal text-ink-mute">/100</span></p>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg-hover ring-1 ring-line/15">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+          style={{ width: `${score}%` }}
+          aria-label={`Enterprise Score ${score}/100`}
+        />
+      </div>
+      <p className="mt-1 text-[10px] text-ink-mute">{label} · 온라인률 · 정책 · Heartbeat · 미납 · Health 평균</p>
+    </div>
+  );
+}
+
+function InsightList({ insights }: { insights: AiInsight[] }) {
+  if (insights.length === 0) {
+    // spec 9 — Empty state
+    return (
+      <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/20 py-4 text-center ring-1 ring-emerald-500/40">
+        <Bot size={24} className="text-emerald-200" />
+        <p className="text-[12px] font-bold text-emerald-100">오늘은 조치가 필요한 사항이 없습니다.</p>
+        <p className="text-[10px] text-emerald-200/80">AI 분석 결과 정상 운영 중</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">오늘 확인할 사항</p>
+      <ul className="space-y-1.5">
+        {insights.map((i) => (
+          <li
+            key={i.key}
+            className={`rounded-lg p-2 ring-1 transition-all duration-200 ${
+              i.level === 'critical' ? 'bg-rose-500/20 ring-rose-500/40'
+              : i.level === 'warning' ? 'bg-amber-500/20 ring-amber-500/40'
+              : 'bg-sky-500/20 ring-sky-500/35'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-start gap-1.5">
+                <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ${
+                  i.level === 'critical' ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60'
+                  : i.level === 'warning' ? 'bg-amber-500/40 text-amber-50 ring-amber-400/60'
+                  : 'bg-sky-500/40 text-sky-50 ring-sky-400/60'
+                }`} aria-hidden>
+                  {i.level === 'critical' ? <AlertOctagon size={9} />
+                    : i.level === 'warning' ? <AlertTriangle size={9} />
+                    : <Sparkles size={9} />}
+                </span>
+                <div className="min-w-0">
+                  <p className={`truncate text-[11.5px] font-bold ${
+                    i.level === 'critical' ? 'text-rose-100'
+                    : i.level === 'warning' ? 'text-amber-100' : 'text-sky-100'
+                  }`}>{i.title}</p>
+                  <p className="text-[10px] text-ink-mute tabular-nums">{i.detail}</p>
+                  <p className="mt-0.5 text-[10.5px] text-ink">→ {i.recommendation}</p>
+                </div>
+              </div>
+              {i.action_tab && (
+                <button
+                  type="button"
+                  onClick={() => navigateToTab(i.action_tab!)}
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-1 transition hover:shadow-sm ${
+                    i.level === 'critical' ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60 hover:bg-rose-500/50'
+                    : i.level === 'warning' ? 'bg-amber-500/40 text-amber-50 ring-amber-400/60 hover:bg-amber-500/50'
+                    : 'bg-sky-500/40 text-sky-50 ring-sky-400/60 hover:bg-sky-500/50'
+                  }`}
+                >
+                  {i.action_label ?? '이동'}
+                  <ArrowRight size={9} />
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TrendGrid({ trend }: { trend: TrendItem[] }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">최근 활동 (Timeline 20건)</p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {trend.map((t) => {
+          const dirIcon = t.direction === 'up'   ? <TrendingUp   size={11} />
+                        : t.direction === 'down' ? <TrendingDown size={11} />
+                        :                          <Minus        size={11} />;
+          const dirTone = t.tone === 'success' ? 'text-emerald-200'
+                        : t.tone === 'warning' ? 'text-amber-200'
+                        : 'text-rose-200';
+          return (
+            <div key={t.label} className="rounded-md bg-bg-card p-1.5 ring-1 ring-line/15">
+              <p className="text-[9px] uppercase tracking-wider text-ink-mute">{t.label}</p>
+              <div className="mt-0.5 flex items-center gap-1">
+                <span className={`inline-flex ${dirTone}`} aria-hidden>{dirIcon}</span>
+                <span className="tabular-nums text-[13px] font-black text-ink">{t.count}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RepeatingIssues({
+  repeats,
+}: {
+  repeats: Array<{ key: string; count: number; title: string; latestAt: string; severity: string }>;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+        <AlertTriangle size={11} /> 반복 감지
+      </p>
+      <ul className="space-y-1">
+        {repeats.map((r) => (
+          <li key={r.key} className="rounded-md bg-amber-500/20 p-1.5 ring-1 ring-amber-500/40">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-[11px] font-semibold text-amber-100">{r.title}</p>
+              <span className="shrink-0 tabular-nums text-[10px] font-bold text-amber-100">{r.count}회</span>
+            </div>
+            <p className="mt-0.5 text-[10px] text-ink-mute">→ 반복 발생. 장비 · 정책 · 계정 상태 점검 권장.</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RecommendationHistory({
+  items,
+}: {
+  items: Array<{ id: string; at: string; title: string; severity: string; type: string }>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">AI 감지 이력 (최근 10)</p>
+      <ul className="max-h-[180px] space-y-1 overflow-y-auto pr-1">
+        {items.map((h) => {
+          const sv = severityVisual(h.severity);
+          return (
+            <li key={h.id} className="flex items-center gap-1.5 rounded-md bg-bg-card p-1.5 text-[10.5px] ring-1 ring-line/10">
+              <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ${sv.dotBg}`} aria-hidden>
+                {sv.dotIcon}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-ink">{h.title}</span>
+              <span className="shrink-0 font-mono text-[9px] tabular-nums text-ink-mute">{fmtRelative(h.at)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
