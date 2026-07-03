@@ -40,6 +40,7 @@ import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
 import PushNotificationToggle from '@/components/PushNotificationToggle';
 import EnterpriseHqProfileCard from '@/components/profile/EnterpriseHqProfileCard';
 import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCard';
+import AudioOutputSection from '@/components/settings/AudioOutputSection';
 import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import {
   usePlaybackSettingsStore,
@@ -263,6 +264,9 @@ export default function ProfilePage() {
           </span>
         </button>
       </section>
+
+      {/* Audio Output Phase 1 — 재생 설정 하위 · setSinkId 지원 브라우저 자동 감지 */}
+      <AudioOutputSection />
 
       {/* Phase 1-7 — enterprise HQ / 매장 우선 표시 — Phase 1-8 hotfix 로 상단으로 이동됨.
           이 위치는 ArtistManagementCard 분기 가드 유지를 위해 비워둠. */}
