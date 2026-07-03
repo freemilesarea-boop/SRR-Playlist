@@ -2,13 +2,18 @@
 /**
  * DEUDDA Service Worker (injectManifest)
  *
- * - workbox precache 는 빌드 시 self.__WB_MANIFEST 로 inject 됨
- * - runtimeCaching 는 의도적으로 두지 않음 — 오디오 Range 요청을 SW 가
- *   가로채면 206 → opaque cache 깨짐 (모바일 재생 실패 원인이었음)
- * - push event handler 추가 — Web Push API 알림 표시
- * - notificationclick 으로 클릭 시 target URL 로 focus/openWindow
+ * 갱신 전략 (Auth UX QA 이후 강화):
+ *   • module-level skipWaiting + clientsClaim → 즉시 대기 없이 활성
+ *   • message SKIP_WAITING → main.tsx 가 새 SW installed 감지 시 강제 activate
+ *   • activate 시 workbox-precache-v2 만 유지 (구 precache 전부 삭제)
+ *   • activate 후 SW_ACTIVATED postMessage → 열린 탭 강제 reload
+ *
+ * 유지:
+ *   • workbox precache — 빌드 시 self.__WB_MANIFEST 로 inject
+ *   • runtimeCaching 없음 — 오디오 Range 요청 가로채기 방지 (206 → opaque 방지)
+ *   • push handler + notificationclick handler
  */
-import { precacheAndRoute } from 'workbox-precaching';
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { clientsClaim } from 'workbox-core';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -16,24 +21,38 @@ declare const self: ServiceWorkerGlobalScope;
 self.skipWaiting();
 clientsClaim();
 
+// 이전 workbox 버전에서 남은 오래된 precache 항목을 자동 정리.
+// workbox 는 revision 이 바뀐 파일은 자연히 갱신하지만, 삭제된 파일 항목은 남을 수 있음.
+cleanupOutdatedCaches();
+
 precacheAndRoute(self.__WB_MANIFEST);
 
 // 빌드 시점 inject — main.tsx 의 SW_RELOAD_KEY 와 일치하는 BUILD_ID.
 // import.meta.env 는 SW 컨텍스트에서도 vite define 으로 inject 됨.
 declare const __SW_BUILD_ID__: string | undefined;
 
-// 오래된 캐시 정리 + 모든 window client 에 활성화 알림 (옛 chunk stuck 우회).
+// main.tsx 의 updatefound → SKIP_WAITING 메시지로 대기중 SW 즉시 활성화.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    void self.skipWaiting();
+  }
+});
+
+// activate — 오래된 캐시 정리 + 모든 window client 에 활성화 알림.
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    // 현재 SW 가 관리하는 workbox precache 이름 (workbox 는 scope 별로 이름 부여)
+    // 그 외 workbox- prefix 캐시는 이전 SW/빌드 유물 → 삭제.
+    const currentScope = self.registration.scope;
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter((k) => k.startsWith('workbox-') && !k.includes(self.registration.scope))
+        .filter((k) => k.startsWith('workbox-') && !k.includes(currentScope))
         .map((k) => caches.delete(k)),
     );
-    // clientsClaim 은 위 module-level 호출로 이미 처리됐지만, activate 사이클 보장 위해 한 번 더.
+    // clientsClaim 은 module-level 이미 호출됐지만, activate 사이클 보장 위해 한 번 더.
     await self.clients.claim();
-    // 새 SW activate 직후 모든 열린 탭에 통지 — main.tsx 가 받아서 1회 reload (탭 내 옛 chunk 우회)
+    // 새 SW activate 직후 모든 열린 탭에 통지 — main.tsx 가 받아서 1회 reload
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const buildId = typeof __SW_BUILD_ID__ === 'string' ? __SW_BUILD_ID__ : Date.now().toString(36);
     for (const c of windows) {
