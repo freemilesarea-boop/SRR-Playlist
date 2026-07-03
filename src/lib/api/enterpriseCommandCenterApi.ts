@@ -61,6 +61,20 @@ export interface CommandCenterKpi {
   offline_stores: number;
   drift_stores: number;
   computed_at: string;
+  // Phase 3 additive — 이미 호출된 overview 결과에서 그대로 노출 (신규 fetch 없음).
+  // NOC 관제센터 카드용 세부 지표 + 서버 계산된 overall severity.
+  overall_status: 'healthy' | 'warning' | 'critical';
+  noc: {
+    critical: number;
+    major: number;
+    minor: number;
+    heartbeat_missing: number;
+    policy_drift: number;
+    playback_error: number;
+    device_disconnected: number;
+    offline: number;
+    version_update_needed: number;
+  };
 }
 
 /**
@@ -104,6 +118,19 @@ export async function fetchCommandCenterKpi(): Promise<CommandCenterKpi> {
     offline_stores:               overview?.offline_stores ?? 0,
     drift_stores:                 overview?.drift_stores ?? 0,
     computed_at:                  new Date().toISOString(),
+    // Phase 3 additive — 이미 호출된 overview 필드 매핑, 새 RPC 없음.
+    overall_status:               overview?.overall_status ?? 'healthy',
+    noc: {
+      critical:               (overview?.noc?.critical              as number | undefined) ?? 0,
+      major:                  (overview?.noc?.major                 as number | undefined) ?? 0,
+      minor:                  (overview?.noc?.minor                 as number | undefined) ?? 0,
+      heartbeat_missing:      (overview?.noc?.heartbeat_missing     as number | undefined) ?? 0,
+      policy_drift:           (overview?.noc?.policy_drift          as number | undefined) ?? (overview?.drift_stores ?? 0),
+      playback_error:         (overview?.noc?.playback_error        as number | undefined) ?? 0,
+      device_disconnected:    (overview?.noc?.device_disconnected   as number | undefined) ?? 0,
+      offline:                (overview?.noc?.offline               as number | undefined) ?? (overview?.offline_stores ?? 0),
+      version_update_needed:  (overview?.noc?.version_update_needed as number | undefined) ?? 0,
+    },
   };
 }
 
@@ -266,12 +293,18 @@ export async function fetchCommandCenterTimeline(limit = 20): Promise<Enterprise
 
 export type AlertLevel = 'critical' | 'warning' | 'info';
 
+/** Phase 3 — Incident Queue Priority */
+export type IncidentPriority = 'P1' | 'P2' | 'P3';
+
 export interface CommandCenterAlert {
   key: string;
   level: AlertLevel;
   label: string;
   count: number;
   action_tab?: string;   // 클릭 시 이동할 탭 key
+  // Phase 3 additive — Incident Queue 정렬/표시용. 기존 소비자 회귀 0.
+  priority?: IncidentPriority;
+  action_label?: string; // Quick Fix 버튼 라벨 (예: "배포", "청구", "매장 보기")
 }
 
 export async function fetchCommandCenterAlerts(): Promise<CommandCenterAlert[]> {
@@ -287,17 +320,58 @@ export async function fetchCommandCenterAlerts(): Promise<CommandCenterAlert[]> 
   ).length;
 
   const alerts: CommandCenterAlert[] = [];
-  if (pendingApprovals > 0)   alerts.push({ key: 'pending_approvals', level: 'warning', label: '승인 대기', count: pendingApprovals, action_tab: 'brand-registry' });
-  const expiring = contractKpi?.expiring_30d ?? 0;
-  if (expiring > 0)           alerts.push({ key: 'expiring_contracts', level: 'warning', label: '30일 내 만료', count: expiring, action_tab: 'enterprise-contracts' });
-  const overdueCount = (overdue?.data ?? []).length;
-  if (overdueCount > 0)       alerts.push({ key: 'overdue_billing', level: 'critical', label: 'Billing 미납', count: overdueCount, action_tab: 'enterprise-settlement-center' });
+  // Phase 3 spec 2 우선순위:
+  //   P1 = 전체 오프라인 / Heartbeat 장시간 없음 / 정책 전체 실패
+  //   P2 = 일부 오프라인 / 정책 미동기
+  //   P3 = 미납 / 승인 대기 / 계약 만료 임박
+  const totalStores = overview?.total_stores ?? 0;
   const offline = overview?.offline_stores ?? 0;
-  if (offline > 0)            alerts.push({ key: 'offline_stores', level: 'warning', label: '오프라인 매장', count: offline, action_tab: 'store-monitoring' });
   const drift = overview?.drift_stores ?? 0;
-  if (drift > 0)              alerts.push({ key: 'drift_stores', level: 'warning', label: '정책 미동기', count: drift, action_tab: 'policy-deployment' });
+  const heartbeatMissing = (overview?.noc?.heartbeat_missing as number | undefined) ?? 0;
   const noc = (overview?.noc?.critical as number | undefined) ?? 0;
-  if (noc > 0)                alerts.push({ key: 'noc_critical', level: 'critical', label: 'NOC Critical', count: noc, action_tab: 'enterprise-noc' });
+  const overdueCount = (overdue?.data ?? []).length;
+  const expiring = contractKpi?.expiring_30d ?? 0;
+
+  // P1 — 전체 오프라인 (매장이 있고 온라인이 0)
+  if (totalStores > 0 && offline === totalStores) {
+    alerts.push({ key: 'all_offline', level: 'critical', label: '전체 오프라인', count: offline, action_tab: 'store-monitoring', priority: 'P1', action_label: '매장 보기' });
+  } else if (offline > 0) {
+    alerts.push({ key: 'offline_stores', level: 'warning', label: '일부 오프라인', count: offline, action_tab: 'store-monitoring', priority: 'P2', action_label: '매장 보기' });
+  }
+
+  // P1 — Heartbeat 장시간 없음
+  if (heartbeatMissing > 0) {
+    alerts.push({ key: 'heartbeat_missing', level: 'critical', label: 'Heartbeat 이상', count: heartbeatMissing, action_tab: 'store-monitoring', priority: 'P1', action_label: '매장 보기' });
+  }
+
+  // P1 — NOC critical (플레이백 오류/디바이스 disconnect 등 상위 집계)
+  if (noc > 0) {
+    alerts.push({ key: 'noc_critical', level: 'critical', label: 'NOC Critical', count: noc, action_tab: 'enterprise-noc', priority: 'P1', action_label: 'NOC 열기' });
+  }
+
+  // P2 — 정책 미동기
+  if (drift > 0) {
+    alerts.push({ key: 'drift_stores', level: 'warning', label: '정책 미동기', count: drift, action_tab: 'policy-deployment', priority: 'P2', action_label: '배포' });
+  }
+
+  // P3 — Billing 미납
+  if (overdueCount > 0) {
+    alerts.push({ key: 'overdue_billing', level: 'critical', label: 'Billing 미납', count: overdueCount, action_tab: 'enterprise-settlement-center', priority: 'P3', action_label: '청구' });
+  }
+
+  // P3 — 승인 대기
+  if (pendingApprovals > 0) {
+    alerts.push({ key: 'pending_approvals', level: 'warning', label: '승인 대기', count: pendingApprovals, action_tab: 'brand-registry', priority: 'P3', action_label: '승인' });
+  }
+
+  // P3 — 계약 만료 임박
+  if (expiring > 0) {
+    alerts.push({ key: 'expiring_contracts', level: 'warning', label: '30일 내 만료', count: expiring, action_tab: 'enterprise-contracts', priority: 'P3', action_label: '계약 관리' });
+  }
+
+  // P1 → P2 → P3 순 정렬 (Incident Queue spec 3)
+  const order: Record<IncidentPriority, number> = { P1: 0, P2: 1, P3: 2 };
+  alerts.sort((a, b) => (order[a.priority ?? 'P3']) - (order[b.priority ?? 'P3']));
   return alerts;
 }
 
