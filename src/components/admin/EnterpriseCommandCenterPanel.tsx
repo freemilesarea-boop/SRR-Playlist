@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, Bell, Building2, CheckCircle2, Clock, Compass, Database,
   ExternalLink, Handshake, PlayCircle, RefreshCw, Search, ShieldCheck, Store as StoreIcon,
-  Wallet, Wifi, WifiOff, X,
+  TrendingUp, Wallet, Wifi, WifiOff, X,
 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminBadge, AdminButton,
@@ -118,32 +118,43 @@ export default function EnterpriseCommandCenterPanel() {
       title={
         <span className="flex items-center gap-2">
           <Compass size={16} /> Command Center
-          <AdminBadge tone="primary" variant="subtle">Phase 4</AdminBadge>
+          <LiveBadge />
         </span>
       }
       description={
-        <span className="text-[11px] text-ink-mute">
-          Enterprise 운영자용 통합 대시보드. 30초마다 자동 갱신. 조회 전용 — 실행은 기존 탭에서.
+        <span className="flex items-center gap-2 text-[11px] text-ink-mute">
+          <span>30초 자동 갱신 · 조회 전용</span>
+          <span className="text-ink-dim">·</span>
+          <span>
+            마지막 업데이트{' '}
+            <span className="font-mono text-ink">
+              {lastLoadedAt ? lastLoadedAt.toLocaleTimeString('ko-KR', { hour12: false }) : '—'}
+            </span>
+          </span>
         </span>
       }
       action={
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-ink-dim">
-            {lastLoadedAt ? `업데이트 ${fmtRelative(lastLoadedAt.toISOString())}` : ''}
-          </span>
-          <AdminButton size="sm" variant="subtle" tone="neutral" onClick={() => void loadAll()}>
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
-          </AdminButton>
-        </div>
+        <AdminButton size="sm" variant="subtle" tone="neutral" onClick={() => void loadAll()}>
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
+        </AdminButton>
       }
     >
       {err && <AdminAlert tone="danger" title="조회 실패">{err}</AdminAlert>}
 
       <GlobalSearchBar />
 
-      <KpiGrid kpi={kpi} />
+      {/* Hero KPI — 3초 안에 파악해야 하는 최우선 4개 지표 (클릭 시 관련 탭 이동) */}
+      <HeroKpi kpi={kpi} />
 
-      <QuickActionsBar />
+      {/* Secondary KPI (좌 2/3) + Quick Actions (우 1/3) */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <SecondaryKpi kpi={kpi} />
+        </div>
+        <div>
+          <QuickActionsCard />
+        </div>
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
         {/* 좌측 2/3 — Brand Overview */}
@@ -175,27 +186,139 @@ export default function EnterpriseCommandCenterPanel() {
 }
 
 // ============================================================================
-// KPI (spec 2)
+// LIVE badge — 실시간 상태 표시 (spec 4)
 // ============================================================================
-function KpiGrid({ kpi }: { kpi: CommandCenterKpi | null }) {
-  if (!kpi) return <AdminSkeleton variant="kpi" />;
+function LiveBadge() {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
-      <AdminStatCard label="총 Enterprise"    value={fmtNumber(kpi.total_enterprises)}   tone="primary" icon={<Building2 size={12} />} />
-      <AdminStatCard label="활성"             value={fmtNumber(kpi.active_enterprises)}  tone="success" icon={<CheckCircle2 size={12} />} />
-      <AdminStatCard label="승인 대기"        value={fmtNumber(kpi.pending_approvals)}   tone={kpi.pending_approvals > 0 ? 'warning' : 'neutral'} icon={<Handshake size={12} />} />
-      <AdminStatCard label="총 계약"          value={fmtNumber(kpi.total_contracts)}     tone="info" icon={<ShieldCheck size={12} />} />
-      <AdminStatCard label="ACTIVE 계약"      value={fmtNumber(kpi.active_contracts)}    tone="success" icon={<ShieldCheck size={12} />} />
-      <AdminStatCard label="만료 임박(30d)"   value={fmtNumber(kpi.expiring_contracts)}  tone={kpi.expiring_contracts > 0 ? 'warning' : 'neutral'} icon={<Clock size={12} />} />
-      <AdminStatCard label="이번달 Billing"   value={fmtNumber(kpi.this_month_billing_count)} tone="info" icon={<Wallet size={12} />} />
-      <AdminStatCard label="이번달 Settlement" value={fmtNumber(kpi.this_month_settlement_count)} tone="info" icon={<Wallet size={12} />} />
-      <AdminStatCard label="이번달 매출"      value={fmtMoney(kpi.this_month_revenue)}   tone="primary" icon={<Wallet size={12} />} />
-      <AdminStatCard label="미납 금액"        value={fmtMoney(kpi.unpaid_amount)}        tone={kpi.unpaid_amount > 0 ? 'danger' : 'success'} icon={<AlertTriangle size={12} />} />
-      <AdminStatCard label="총 매장"          value={fmtNumber(kpi.total_stores)}        tone="neutral" icon={<StoreIcon size={12} />} />
-      <AdminStatCard label="온라인"           value={fmtNumber(kpi.online_stores)}       tone="success" icon={<Wifi size={12} />} />
-      <AdminStatCard label="오프라인"         value={fmtNumber(kpi.offline_stores)}      tone={kpi.offline_stores > 0 ? 'danger' : 'success'} icon={<WifiOff size={12} />} />
-      <AdminStatCard label="정책 미동기"      value={fmtNumber(kpi.drift_stores)}        tone={kpi.drift_stores > 0 ? 'warning' : 'success'} icon={<ShieldCheck size={12} />} />
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100 ring-1 ring-emerald-400/50">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-75"></span>
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300"></span>
+      </span>
+      LIVE
+    </span>
+  );
+}
+
+// ============================================================================
+// Hero KPI (spec 1, 5) — 4 큰 카드, 클릭 시 관련 탭 이동
+// ============================================================================
+interface HeroItem {
+  key: 'total' | 'online' | 'drift' | 'offline';
+  label: string;
+  desc: string;
+  value: number;
+  icon: JSX.Element;
+  tone: 'primary' | 'success' | 'warning' | 'danger';
+  tab: string;
+}
+
+function HeroKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
+  const items: HeroItem[] = kpi ? [
+    { key: 'total',   label: '총 매장',     desc: '전체 등록 매장',   value: kpi.total_stores,   icon: <StoreIcon size={22} />,    tone: 'primary', tab: 'brand-registry' },
+    { key: 'online',  label: '온라인',      desc: '현재 접속 중',     value: kpi.online_stores,  icon: <Wifi size={22} />,         tone: 'success', tab: 'store-monitoring' },
+    { key: 'drift',   label: '정책 미동기', desc: '동기화 필요',      value: kpi.drift_stores,   icon: <ShieldCheck size={22} />,  tone: kpi.drift_stores > 0 ? 'warning' : 'success', tab: 'policy-deployment' },
+    { key: 'offline', label: '오프라인',    desc: '점검 필요',        value: kpi.offline_stores, icon: <WifiOff size={22} />,      tone: kpi.offline_stores > 0 ? 'danger' : 'success', tab: 'enterprise-noc' },
+  ] : [];
+
+  // Empty state — 로딩 중에도 4 카드 스켈레톤 유지 (spec 7 layout 안정성)
+  if (!kpi) {
+    return (
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="h-32 rounded-2xl bg-bg-card ring-1 ring-line/15 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          onClick={() => navigateToTab(item.tab)}
+          className={`group text-left rounded-2xl p-4 ring-1 transition-all duration-150 hover:shadow-lg ${
+            item.tone === 'success'
+              ? 'bg-emerald-500/25 ring-emerald-400/50 hover:bg-emerald-500/30'
+              : item.tone === 'warning'
+              ? 'bg-amber-500/25 ring-amber-400/50 hover:bg-amber-500/30'
+              : item.tone === 'danger'
+              ? 'bg-rose-500/25 ring-rose-400/50 hover:bg-rose-500/30'
+              : 'bg-violet-500/25 ring-violet-400/50 hover:bg-violet-500/30'
+          }`}
+        >
+          <div className="flex items-start justify-between">
+            <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${
+              item.tone === 'success'  ? 'bg-emerald-500/40 text-emerald-100'
+              : item.tone === 'warning' ? 'bg-amber-500/40 text-amber-100'
+              : item.tone === 'danger'  ? 'bg-rose-500/40 text-rose-100'
+              :                           'bg-violet-500/40 text-violet-100'
+            }`}>
+              {item.icon}
+            </span>
+            <ExternalLink size={12} className="text-ink-mute opacity-50 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <p className="mt-3 text-3xl font-black tabular-nums text-ink">{fmtNumber(item.value)}</p>
+          <p className="mt-1 text-[12px] font-bold text-ink">{item.label}</p>
+          <p className="text-[10px] text-ink-mute">{item.desc}</p>
+        </button>
+      ))}
     </div>
+  );
+}
+
+// ============================================================================
+// Secondary KPI (spec 2, 3) — 통계 카드
+// ============================================================================
+function SecondaryKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><TrendingUp size={13} /> 주요 지표</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">정상 · 주의 · 오류 · 정보 색상으로 통일</span>}
+    >
+      {!kpi ? <AdminSkeleton variant="kpi" /> : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5">
+          <AdminStatCard label="총 Enterprise"     value={fmtNumber(kpi.total_enterprises)}     tone="primary" icon={<Building2 size={12} />} />
+          <AdminStatCard label="활성"              value={fmtNumber(kpi.active_enterprises)}    tone="success" icon={<CheckCircle2 size={12} />} />
+          <AdminStatCard label="승인 대기"         value={fmtNumber(kpi.pending_approvals)}     tone={kpi.pending_approvals > 0 ? 'warning' : 'neutral'} icon={<Handshake size={12} />} />
+          <AdminStatCard label="총 계약"           value={fmtNumber(kpi.total_contracts)}       tone="info" icon={<ShieldCheck size={12} />} />
+          <AdminStatCard label="ACTIVE 계약"       value={fmtNumber(kpi.active_contracts)}      tone="success" icon={<ShieldCheck size={12} />} />
+          <AdminStatCard label="만료 임박(30d)"    value={fmtNumber(kpi.expiring_contracts)}    tone={kpi.expiring_contracts > 0 ? 'warning' : 'neutral'} icon={<Clock size={12} />} />
+          <AdminStatCard label="이번달 Billing"    value={fmtNumber(kpi.this_month_billing_count)} tone="info" icon={<Wallet size={12} />} />
+          <AdminStatCard label="이번달 Settlement" value={fmtNumber(kpi.this_month_settlement_count)} tone="info" icon={<Wallet size={12} />} />
+          <AdminStatCard label="이번달 매출"       value={fmtMoney(kpi.this_month_revenue)}     tone="primary" icon={<Wallet size={12} />} />
+          <AdminStatCard label="미납 금액"         value={fmtMoney(kpi.unpaid_amount)}          tone={kpi.unpaid_amount > 0 ? 'danger' : 'success'} icon={<AlertTriangle size={12} />} />
+        </div>
+      )}
+    </AdminCard>
+  );
+}
+
+// ============================================================================
+// Quick Actions (spec 6, 7) — 세로 카드형 (Hero 오른쪽 정렬)
+// ============================================================================
+function QuickActionsCard() {
+  return (
+    <AdminCard
+      title={<span className="flex items-center gap-2"><PlayCircle size={13} /> Quick Actions</span>}
+      subtitle={<span className="text-[10px] text-ink-mute">기존 탭으로 이동</span>}
+    >
+      <div className="grid grid-cols-2 gap-1.5">
+        {QUICK_ACTION_LINKS.map((a) => (
+          <button
+            key={a.key}
+            type="button"
+            onClick={() => navigateToTab(a.target_tab)}
+            className="inline-flex items-center justify-start gap-1.5 rounded-lg bg-bg-card px-2.5 py-2 text-[11px] font-semibold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm"
+          >
+            <PlayCircle size={11} className="shrink-0 text-violet-300" />
+            <span className="truncate">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </AdminCard>
   );
 }
 
@@ -274,23 +397,6 @@ function GlobalSearchBar() {
 // ============================================================================
 // Quick Actions (spec 7)
 // ============================================================================
-function QuickActionsBar() {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {QUICK_ACTION_LINKS.map((a) => (
-        <button
-          key={a.key}
-          type="button"
-          onClick={() => navigateToTab(a.target_tab)}
-          className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-2.5 py-1.5 text-[11px] font-semibold text-ink ring-1 ring-line/20 hover:bg-bg-hover"
-        >
-          <PlayCircle size={11} /> {a.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ============================================================================
 // Brand Overview grid (spec 3)
 // ============================================================================
