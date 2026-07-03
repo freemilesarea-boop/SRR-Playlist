@@ -18,6 +18,9 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
+      // 등록은 main.tsx 에서 명시적으로 수행 (updateViaCache:'none' + focus/interval update).
+      // vite-plugin-pwa 자동 registerSW.js 와의 충돌 방지 — 이중 registration 회피.
+      injectRegister: null,
       includeAssets: [
         'favicon.svg',
         'favicon.ico',
