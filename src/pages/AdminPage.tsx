@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -356,18 +356,37 @@ export default function AdminPage() {
   }, []);
 
   const visibleTabs = TABS.filter((t) => !t.superOnly || perms?.is_super_admin);
-  const tabsInGroup = visibleTabs.filter((t) =>
-    (GROUPS.find((g) => g.key === group)?.tabs ?? []).includes(t.key),
-  );
-
-  // 엔터프라이즈 그룹일 때만 서브그룹 필터 적용. 다른 그룹은 기존 동작 그대로.
   const enterpriseTabs = visibleTabs.filter((t) =>
     (GROUPS.find((g) => g.key === '엔터프라이즈')?.tabs ?? []).includes(t.key),
   );
-  const enterpriseSubgroupTabs = enterpriseTabs.filter((t) =>
-    (ENTERPRISE_SUBGROUPS.find((s) => s.key === enterpriseSubgroup)?.tabs ?? []).includes(t.key),
-  );
-  const displayTabs = group === '엔터프라이즈' ? enterpriseSubgroupTabs : tabsInGroup;
+
+  // 방탄 filtering — useMemo 로 안정화. 엔터프라이즈 그룹일 때는 반드시 서브그룹 필터만 적용.
+  // 원본 GROUPS['엔터프라이즈'] 전체 리스트가 실수로 노출되는 경로 없음.
+  const displayTabs = useMemo(() => {
+    if (group === '엔터프라이즈') {
+      const subgroupTabKeys = ENTERPRISE_SUBGROUPS.find((s) => s.key === enterpriseSubgroup)?.tabs ?? [];
+      const filtered = enterpriseTabs.filter((t) => subgroupTabKeys.includes(t.key));
+      // 서브그룹에 해당하는 탭이 하나도 없으면 (권한 등) '종합' 로 fallback — 빈 nav 방지
+      if (filtered.length === 0 && enterpriseSubgroup !== '종합') {
+        const jonghapKeys = ENTERPRISE_SUBGROUPS.find((s) => s.key === '종합')?.tabs ?? [];
+        return enterpriseTabs.filter((t) => jonghapKeys.includes(t.key));
+      }
+      return filtered;
+    }
+    // 다른 그룹은 기존 동작 그대로
+    return visibleTabs.filter((t) =>
+      (GROUPS.find((g) => g.key === group)?.tabs ?? []).includes(t.key),
+    );
+  }, [group, enterpriseSubgroup, enterpriseTabs, visibleTabs]);
+
+  // group 변경 시 enterpriseSubgroup 이 유효한지 확인. 엔터프라이즈로 이동했는데 서브그룹이
+  // 다른 그룹의 잔재라면 '종합' 으로 리셋. 반대로 다른 그룹이면 subgroup 무영향.
+  useEffect(() => {
+    if (group === '엔터프라이즈') {
+      const valid = ENTERPRISE_SUBGROUPS.some((s) => s.key === enterpriseSubgroup);
+      if (!valid) setEnterpriseSubgroup('종합');
+    }
+  }, [group, enterpriseSubgroup]);
 
   // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화
   function selectTab(next: Tab) {
