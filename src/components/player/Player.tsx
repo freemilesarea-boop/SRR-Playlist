@@ -23,6 +23,7 @@ import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
+import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRecoveryManager';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
@@ -453,6 +454,11 @@ export default function Player() {
   const lastProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({ trackId: null, ct: 0, ts: 0 });
   const lastStuckRecoveryAtRef = useRef<number>(0);
 
+  // Phase 4-1 — Recovery Manager ref (Phase 3-2 checkAudioHealth · onError · visibility
+  //             · online 핸들러가 stale closure 없이 recoverAudio 호출).
+  //             실제 함수는 useAudioRecoveryManager 후 대입.
+  const recoverAudioRef = useRef<((reason: RecoveryReason, detail?: Record<string, unknown>) => Promise<void>) | null>(null);
+
   // ============================================================
   // Phase 3-2 — Audio Engine Health Monitor
   // ============================================================
@@ -611,50 +617,23 @@ export default function Player() {
         issue === 'crossfade-stuck' ? 'forceCompleteCrossfade' :
         'noop';
 
-      try {
-        if (issue === 'inactive-playing' || issue === 'both-playing') {
-          if (!state.crossfading && inactiveEl) {
-            try { inactiveEl.pause(); } catch { /* silent */ }
-            try { inactiveEl.volume = 0; } catch { /* silent */ }
-            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
-          }
-        } else if (issue === 'sink-mismatch') {
-          const fn = ensureSinkReadyRef.current;
-          if (fn) {
-            void fn('health-monitor').then((ok) => {
-              audioDebugWarn('[audio:health:recovery]', { issue, action, ok, error: null });
-            }).catch((e) => {
-              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
-            });
-          } else {
-            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'ensureSinkReady unavailable' });
-          }
-        } else if (issue === 'active-stalled' || issue === 'neither-playing-while-playing-state') {
-          if (activeEl) {
-            const p = activeEl.play();
-            if (p && typeof p.catch === 'function') {
-              p.then(() => {
-                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
-              }).catch((e) => {
-                const err = e as { name?: string; message?: string };
-                const errStr = err.name ?? err.message ?? String(e);
-                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: errStr });
-                try { toast.warning('재생이 멈춘 것 같아요. 다시 재생해 주세요.'); } catch { /* silent */ }
-              });
-            } else {
-              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
-            }
-          }
-        } else if (issue === 'crossfade-stuck') {
-          if (forceCompleteCrossfadeRef.current) {
-            forceCompleteCrossfadeRef.current('health-monitor-stuck');
-            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
-          } else {
-            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'no forceComplete ref' });
-          }
-        }
-      } catch (e) {
-        audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
+      // Phase 4-1 — issue → recovery reason mapping · Recovery Manager 위임.
+      // 기존 Phase 3-2 직접 액션은 제거 · recoverAudio 가 단일 진입점.
+      // Recovery Manager 내부에 per-reason cooldown / escalation 이 있어 안전.
+      const reasonMap: Record<string, RecoveryReason | undefined> = {
+        'inactive-playing': 'inactive-playing',
+        'both-playing': 'both-playing',
+        'sink-mismatch': 'sink-mismatch',
+        'active-stalled': 'stalled',
+        'neither-playing-while-playing-state': 'neither-playing',
+        'crossfade-stuck': 'crossfade-stuck',
+      };
+      const mappedReason = reasonMap[issue];
+      if (mappedReason && recoverAudioRef.current) {
+        void recoverAudioRef.current(mappedReason, { source: 'health-monitor', action });
+        audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, delegated: mappedReason });
+      } else {
+        audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'recoverAudio unavailable' });
       }
     }
   }, []);
@@ -676,6 +655,24 @@ export default function Player() {
     getSinkReady: () => sinkReady,
     getCurrentTrackId: () => current?.id ?? null,
   });
+
+  // ============================================================
+  // Phase 4-1 — Self-Healing Audio Recovery Manager
+  // ============================================================
+  // Phase 3-2 health monitor / onError / visibility·network 복귀 시 단계적
+  // 자동 복구. reason 별 1s cooldown · 10s window 5회 → escalation 60s.
+  // getForceCompleteCrossfade 는 closure — forceCompleteCrossfadeRef 는 line 1165
+  // 근방 crossfade engine 섹션에서 선언되지만, 함수 호출 시점에는 이미 정의된 상태.
+  const { recoverAudio } = useAudioRecoveryManager({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getCrossfading: () => crossfading,
+    getForceCompleteCrossfade: () => forceCompleteCrossfadeRef.current,
+    ensureSinkReady,
+  });
+  // Phase 4-1 — 다른 handler 에서 recoverAudio 를 stable ref 로 접근
+  recoverAudioRef.current = recoverAudio;
 
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
@@ -1094,23 +1091,29 @@ export default function Player() {
         recoverStuckCrossfade('visibility');
         tryResume('visibility');
         checkAudioHealth('visibilitychange');
+        // Phase 4-1 — visibility 복귀 시 Recovery Manager 도 함께 진입.
+        void recoverAudioRef.current?.('visibility-resume', { source: 'visibilitychange' });
       }
     };
     const onOnline = () => {
       tryResume('online');
       checkAudioHealth('online');
+      // Phase 4-1 — network 복귀 시 Recovery Manager 진입.
+      void recoverAudioRef.current?.('network-resume', { source: 'online' });
     };
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
         recoverStuckCrossfade('pageshow');
         tryResume('pageshow');
         checkAudioHealth('pageshow');
+        void recoverAudioRef.current?.('visibility-resume', { source: 'pageshow' });
       }
     };
     const onFocus = () => {
       recoverStuckCrossfade('focus');
       tryResume('focus');
       checkAudioHealth('focus');
+      void recoverAudioRef.current?.('visibility-resume', { source: 'focus' });
     };
 
     document.addEventListener('visibilitychange', onVis);
@@ -1928,6 +1931,9 @@ export default function Player() {
     const target = e.currentTarget;
     const err = target.error;
     const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
+    // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
+    // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
+    void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });
     // iOS Safari 실기기 원격 디버깅용 — 프로덕션에서도 항상 상세 로그(에러는 드물어 spam 아님).
     // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
      
