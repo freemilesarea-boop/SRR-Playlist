@@ -23,6 +23,7 @@ import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -181,8 +182,22 @@ export default function Player() {
   // Audio Output Phase 2 hotfix — audio element 두 개 각각에 sink guardian 적용.
   // useLayoutEffect 로 paint 이전 즉시 apply + loadstart/loadedmetadata/canplay
   // 이벤트마다 재확인. 재생 로직 무변경.
-  useAudioSinkGuardian(audioARef);
-  useAudioSinkGuardian(audioBRef);
+  //
+  // Phase 2-4 — Guardian 이 { sinkReady, ensureSinkReady } 노출.
+  //   • sinkReady = A/B 모두 audio.sinkId === desired 인 상태
+  //   • ensureSinkReady 는 첫 play 직전에 attemptPlay 최상단에서 await
+  const guardianA = useAudioSinkGuardian(audioARef);
+  const guardianB = useAudioSinkGuardian(audioBRef);
+  const sinkReady = guardianA.sinkReady && guardianB.sinkReady;
+  const ensureSinkReady = useCallback(async (reason: string): Promise<boolean> => {
+    const results = await Promise.allSettled([
+      guardianA.ensureSinkReady(reason),
+      guardianB.ensureSinkReady(reason),
+    ]);
+    const okA = results[0].status === 'fulfilled' && results[0].value === true;
+    const okB = results[1].status === 'fulfilled' && results[1].value === true;
+    return okA && okB;
+  }, [guardianA, guardianB]);
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
@@ -1229,6 +1244,29 @@ export default function Player() {
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
   async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    // Phase 2-4 hotfix — 첫 play 이전에 audio.sinkId === desired 보장.
+    //   • sinkReady=true 이면 즉시 skip (fast path, per-tag idempotent)
+    //   • 실패해도 play 자체는 진행 (기본 출력 fallback)
+    {
+      const desiredSinkId = useAudioOutputStore.getState().sinkId;
+      const activeAudio = activeRef() as (HTMLAudioElement & { sinkId?: string }) | null;
+      const inactiveAudio = nextRef() as (HTMLAudioElement & { sinkId?: string }) | null;
+      console.warn('[audio:sink:first-play-check]', {
+        label,
+        desiredSinkId,
+        activeSinkId: activeAudio?.sinkId,
+        inactiveSinkId: inactiveAudio?.sinkId,
+        sinkReady,
+        activeReadyState: activeAudio?.readyState,
+        inactiveReadyState: inactiveAudio?.readyState,
+      });
+      if (!sinkReady) {
+        const ok = await ensureSinkReady(label);
+        if (!ok) {
+          console.warn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
+        }
+      }
+    }
     const expectedSrc = audio.currentSrc;
     try {
       await audio.play();
