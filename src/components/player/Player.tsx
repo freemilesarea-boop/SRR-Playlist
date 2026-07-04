@@ -26,6 +26,7 @@ import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
+import { audioDebugWarn } from '@/lib/audioDebug';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -164,10 +165,10 @@ export default function Player() {
     if (node && node !== lastMountedARef.current) {
       lastMountedARef.current = node;
       setAudioMountRevision((v) => v + 1);
-      console.warn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
+      audioDebugWarn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
       // Phase 2-6 진단 로그 E — audio ref mount 시 audio 객체 identity 를 부여하고 기록.
       // 이후 Guardian apply · Player play 로그의 audioObjectId 와 대조하기 위함.
-      console.warn('[audio:sink:audio-ref]', {
+      audioDebugWarn('[audio:sink:audio-ref]', {
         slot: 'A',
         audioObjectId: getAudioObjectId(node),
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
@@ -182,8 +183,8 @@ export default function Player() {
     if (node && node !== lastMountedBRef.current) {
       lastMountedBRef.current = node;
       setAudioMountRevision((v) => v + 1);
-      console.warn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
-      console.warn('[audio:sink:audio-ref]', {
+      audioDebugWarn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
+      audioDebugWarn('[audio:sink:audio-ref]', {
         slot: 'B',
         audioObjectId: getAudioObjectId(node),
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
@@ -584,7 +585,7 @@ export default function Player() {
     if (issues.length === 0) return;
 
     for (const issue of issues) {
-      console.warn('[audio:health]', {
+      audioDebugWarn('[audio:health]', {
         reason,
         issue,
         activeIdx: state.activeIdx,
@@ -615,45 +616,45 @@ export default function Player() {
           if (!state.crossfading && inactiveEl) {
             try { inactiveEl.pause(); } catch { /* silent */ }
             try { inactiveEl.volume = 0; } catch { /* silent */ }
-            console.warn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
           }
         } else if (issue === 'sink-mismatch') {
           const fn = ensureSinkReadyRef.current;
           if (fn) {
             void fn('health-monitor').then((ok) => {
-              console.warn('[audio:health:recovery]', { issue, action, ok, error: null });
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok, error: null });
             }).catch((e) => {
-              console.warn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
             });
           } else {
-            console.warn('[audio:health:recovery]', { issue, action, ok: false, error: 'ensureSinkReady unavailable' });
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'ensureSinkReady unavailable' });
           }
         } else if (issue === 'active-stalled' || issue === 'neither-playing-while-playing-state') {
           if (activeEl) {
             const p = activeEl.play();
             if (p && typeof p.catch === 'function') {
               p.then(() => {
-                console.warn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
               }).catch((e) => {
                 const err = e as { name?: string; message?: string };
                 const errStr = err.name ?? err.message ?? String(e);
-                console.warn('[audio:health:recovery]', { issue, action, ok: false, error: errStr });
+                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: errStr });
                 try { toast.warning('재생이 멈춘 것 같아요. 다시 재생해 주세요.'); } catch { /* silent */ }
               });
             } else {
-              console.warn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
             }
           }
         } else if (issue === 'crossfade-stuck') {
           if (forceCompleteCrossfadeRef.current) {
             forceCompleteCrossfadeRef.current('health-monitor-stuck');
-            console.warn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
           } else {
-            console.warn('[audio:health:recovery]', { issue, action, ok: false, error: 'no forceComplete ref' });
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'no forceComplete ref' });
           }
         }
       } catch (e) {
-        console.warn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
+        audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
       }
     }
   }, []);
@@ -1016,7 +1017,7 @@ export default function Player() {
     const b = audioBRef.current;
     const inactive = activeIdx === 0 ? b : a;
     if (inactive && !inactive.paused) {
-      console.warn('[audio:engine:invariant]', {
+      audioDebugWarn('[audio:engine:invariant]', {
         activeIdx,
         activePaused: (activeIdx === 0 ? a : b)?.paused,
         inactivePaused: inactive.paused,
@@ -1181,7 +1182,7 @@ export default function Player() {
     // Phase 3-2 — health monitor crossfade-stuck timestamp clear
     crossfadeStartedAtRef.current = 0;
     if (hadRaf || hadTimeout || hadForce) {
-      console.warn('[audio:engine:crossfade-abort]', { hadRaf, hadTimeout, hadForce });
+      audioDebugWarn('[audio:engine:crossfade-abort]', { hadRaf, hadTimeout, hadForce });
       checkAudioHealth('crossfade-abort');
     }
   }
@@ -1227,7 +1228,7 @@ export default function Player() {
     crossfadeStartedAtRef.current = performance.now();
 
     // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
-    console.warn('[audio:engine:crossfade-start]', {
+    audioDebugWarn('[audio:engine:crossfade-start]', {
       fromTrackId: current.id,
       toTrackId: nextTrack.id,
       activeIdx,
@@ -1264,7 +1265,7 @@ export default function Player() {
         reason, from: current.id, to: nextTrack.id, elapsedMs: Math.round(performance.now() - startedAt),
       });
       // Phase 3-1 — engine-scope crossfade complete 로그 (reason 별 종료 경로 추적)
-      console.warn('[audio:engine:crossfade-complete]', {
+      audioDebugWarn('[audio:engine:crossfade-complete]', {
         reason,
         fromTrackId: current.id,
         toTrackId: nextTrack.id,
@@ -1388,7 +1389,7 @@ export default function Player() {
       if (!el) return;
       events.forEach((ev) => {
         const fn = () => {
-          console.warn('[audio:engine:event]', {
+          audioDebugWarn('[audio:engine:event]', {
             slot,
             event: ev,
             paused: el.paused,
@@ -1409,7 +1410,7 @@ export default function Player() {
     attach(b, 'B');
     return () => {
       handlers.forEach(({ el, ev, fn }) => el.removeEventListener(ev, fn));
-      console.warn('[audio:engine:cleanup] event listeners removed', {
+      audioDebugWarn('[audio:engine:cleanup] event listeners removed', {
         count: handlers.length,
         audioMountRevision,
       });
@@ -1453,7 +1454,7 @@ export default function Player() {
     ) {
       if (nowTs - lastStuckRecoveryAtRef.current > 1000) {
         lastStuckRecoveryAtRef.current = nowTs;
-        console.warn('[audio:engine:stuck]', {
+        audioDebugWarn('[audio:engine:stuck]', {
           trackId: nowTrackId,
           currentTime: t,
           lastCT: lastProgress.ct,
@@ -1465,10 +1466,10 @@ export default function Player() {
         const p = target.play();
         if (p && typeof p.catch === 'function') {
           p.then(() => {
-            console.warn('[audio:engine:recovery-play] ok', { trackId: nowTrackId });
+            audioDebugWarn('[audio:engine:recovery-play] ok', { trackId: nowTrackId });
           }).catch((e) => {
             const err = e as { name?: string; message?: string };
-            console.warn('[audio:engine:recovery-play] failed', {
+            audioDebugWarn('[audio:engine:recovery-play] failed', {
               trackId: nowTrackId,
               err: err.name ?? err.message ?? String(e),
             });
@@ -1684,7 +1685,7 @@ export default function Player() {
       const desiredSinkId = useAudioOutputStore.getState().sinkId;
       const activeAudio = activeRef() as (HTMLAudioElement & { sinkId?: string }) | null;
       const inactiveAudio = nextRef() as (HTMLAudioElement & { sinkId?: string }) | null;
-      console.warn('[audio:sink:first-play-check]', {
+      audioDebugWarn('[audio:sink:first-play-check]', {
         label,
         desiredSinkId,
         activeSinkId: activeAudio?.sinkId,
@@ -1699,7 +1700,7 @@ export default function Player() {
       const audioObjectId = getAudioObjectId(audio);
       const activeAudioObjectId = activeAudio ? getAudioObjectId(activeAudio) : '<null>';
       const nextAudioObjectId = inactiveAudio ? getAudioObjectId(inactiveAudio) : '<null>';
-      console.warn('[audio:sink:play-audit]', {
+      audioDebugWarn('[audio:sink:play-audit]', {
         label,
         desiredSinkId,
         sinkReady,
@@ -1719,7 +1720,7 @@ export default function Player() {
       if (!sinkReady) {
         const ok = await ensureSinkReady(label);
         if (!ok) {
-          console.warn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
+          audioDebugWarn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
         }
       }
     }
@@ -1855,7 +1856,7 @@ export default function Player() {
     const nowTrackId = current?.id ?? null;
     const lastEnded = lastEndedAtRef.current;
     if (lastEnded.trackId === nowTrackId && nowMs - lastEnded.ts < 500) {
-      console.warn('[audio:engine:ended-lock] duplicate ended ignored', {
+      audioDebugWarn('[audio:engine:ended-lock] duplicate ended ignored', {
         trackId: nowTrackId,
         dtMs: Math.round(nowMs - lastEnded.ts),
       });
@@ -1931,7 +1932,7 @@ export default function Player() {
     // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
      
     // iOS Safari 실기기 디버깅용 상세 로그 (track/src/code/networkState/readyState/시간/상태/UA)
-    console.warn('[audio:error]', {
+    audioDebugWarn('[audio:error]', {
       id: current?.id,
       title: current?.title,
       audio_url: current?.audio_url,

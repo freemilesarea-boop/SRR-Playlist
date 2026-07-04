@@ -20,6 +20,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { audioDebugWarn } from '@/lib/audioDebug';
 
 const STORAGE_KEY = 'deudda.audioLongRun';
 const QUERY_PARAM = 'audioLongRun';
@@ -129,7 +130,7 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
     if (!isEnabled()) return; // flag OFF → interval 생성 0
     const startedAt = performance.now();
     const startedAtIso = new Date().toISOString();
-    console.warn('[audio:longrun:start]', {
+    audioDebugWarn('[audio:longrun:start]', {
       startedAtIso,
       tickIntervalMs: TICK_INTERVAL_MS,
       summaryIntervalMs: SUMMARY_INTERVAL_MS,
@@ -196,9 +197,9 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
 
     const tickId = window.setInterval(() => {
       const snap = buildSnapshot();
-      console.warn('[audio:longrun:tick]', snap);
+      audioDebugWarn('[audio:longrun:tick]', snap);
       for (const issue of snap.issues) {
-        console.warn('[audio:longrun:issue]', {
+        audioDebugWarn('[audio:longrun:issue]', {
           issue,
           tickIndex: snap.counters.ticks,
           elapsedMs: snap.elapsedMs,
@@ -209,7 +210,7 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
 
     const summaryId = window.setInterval(() => {
       const snap = buildSnapshot();
-      console.warn('[audio:longrun:summary]', {
+      audioDebugWarn('[audio:longrun:summary]', {
         ...snap,
         startedAtIso,
       });
@@ -221,7 +222,7 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
     return () => {
       window.clearInterval(tickId);
       window.clearInterval(summaryId);
-      console.warn('[audio:longrun:cleanup]', {
+      audioDebugWarn('[audio:longrun:cleanup]', {
         elapsedMs: Math.round(performance.now() - startedAt),
         finalCounters: { ...countersForCleanup },
       });
