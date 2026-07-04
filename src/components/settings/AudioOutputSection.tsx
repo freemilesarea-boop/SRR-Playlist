@@ -45,12 +45,25 @@ export default function AudioOutputSection() {
   }, []);
 
   const onChangeDevice = useCallback((deviceId: string) => {
+    const dev = devices.find((d) => d.deviceId === deviceId);
+    const selectedLabel = dev?.label ?? (deviceId === '' ? '(default)' : null);
     if (deviceId === '') {
       resetToDefault();
     } else {
-      const dev = devices.find((d) => d.deviceId === deviceId);
       setSink(deviceId, dev?.label ?? null);
     }
+    // Phase 2-6 진단 로그 A — UI 선택값이 store 와 localStorage 에 실제로 반영되는지 검증.
+    let storageValue: string | null = null;
+    try {
+      storageValue = window.localStorage.getItem('deudda.audioOutput.v1');
+    } catch { /* silent */ }
+    console.warn('[audio:sink:ui-select]', {
+      selectedLabel,
+      selectedDeviceId: deviceId,
+      storeSinkIdAfterSelect: useAudioOutputStore.getState().sinkId,
+      storeSinkLabelAfterSelect: useAudioOutputStore.getState().sinkLabel,
+      storageValue,
+    });
   }, [devices, setSink, resetToDefault]);
 
   const onTest = useCallback(() => {

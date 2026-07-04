@@ -15,6 +15,25 @@
  *   • Safari  — setSinkId 미지원 (감지 후 안내)
  */
 
+// ============================================================
+// Phase 2-6 — 진단용 audio element 안정 identifier.
+// WeakMap 이라 audio 가 GC 되면 자동 정리. 로그 상에서 동일 audio 객체를
+// 시간축 across 로 추적하기 위한 것 (Guardian apply · Player play · crossfade
+// swap 이 모두 같은 element 위에서 벌어지는지 확인).
+// ============================================================
+const audioObjectIdMap: WeakMap<HTMLAudioElement, string> = new WeakMap();
+let audioObjectIdCounter = 0;
+
+export function getAudioObjectId(audio: HTMLAudioElement | null | undefined): string {
+  if (!audio) return '<null>';
+  const existing = audioObjectIdMap.get(audio);
+  if (existing) return existing;
+  audioObjectIdCounter += 1;
+  const id = `AO${audioObjectIdCounter}-${Math.random().toString(36).slice(2, 6)}`;
+  audioObjectIdMap.set(audio, id);
+  return id;
+}
+
 /** setSinkId API 지원 여부 (HTMLAudioElement 기준). */
 export function isSetSinkIdSupported(): boolean {
   if (typeof window === 'undefined') return false;

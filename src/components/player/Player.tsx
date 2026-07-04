@@ -23,6 +23,8 @@ import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { getAudioObjectId } from '@/lib/audioOutput';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -142,11 +144,54 @@ function computeNextIndex(
 }
 
 export default function Player() {
-  const audioARef = useRef<HTMLAudioElement>(null);
-  const audioBRef = useRef<HTMLAudioElement>(null);
+  // Phase 2-5 — MutableRefObject 로 변경. callback ref 안에서 .current 를 직접 대입해야 함.
+  const audioARef = useRef<HTMLAudioElement | null>(null);
+  const audioBRef = useRef<HTMLAudioElement | null>(null);
   const [activeIdx, setActiveIdx] = useState<0 | 1>(0); // 0=A, 1=B
   const activeRef = () => (activeIdx === 0 ? audioARef.current : audioBRef.current);
   const nextRef = () => (activeIdx === 0 ? audioBRef.current : audioARef.current);
+
+  // Phase 2-5 hotfix — audio element 실제 mount 시점을 Guardian 에게 알리는 revision.
+  // Player 는 `if (!current) return null;` 로 초기 mount 시 <audio> 를 render 안 하고,
+  // queue 채워진 이후에야 refs 가 붙는다. Guardian effect 의 deps 에 이 revision 을
+  // 포함시켜, ref 연결 순간 자동으로 setSinkId 를 재적용한다.
+  const [audioMountRevision, setAudioMountRevision] = useState(0);
+  const lastMountedARef = useRef<HTMLAudioElement | null>(null);
+  const lastMountedBRef = useRef<HTMLAudioElement | null>(null);
+  const setAudioARef = useCallback((node: HTMLAudioElement | null) => {
+    audioARef.current = node;
+    if (node && node !== lastMountedARef.current) {
+      lastMountedARef.current = node;
+      setAudioMountRevision((v) => v + 1);
+      console.warn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
+      // Phase 2-6 진단 로그 E — audio ref mount 시 audio 객체 identity 를 부여하고 기록.
+      // 이후 Guardian apply · Player play 로그의 audioObjectId 와 대조하기 위함.
+      console.warn('[audio:sink:audio-ref]', {
+        slot: 'A',
+        audioObjectId: getAudioObjectId(node),
+        sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
+        currentSrc: node.currentSrc,
+      });
+    } else if (!node) {
+      lastMountedARef.current = null;
+    }
+  }, []);
+  const setAudioBRef = useCallback((node: HTMLAudioElement | null) => {
+    audioBRef.current = node;
+    if (node && node !== lastMountedBRef.current) {
+      lastMountedBRef.current = node;
+      setAudioMountRevision((v) => v + 1);
+      console.warn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
+      console.warn('[audio:sink:audio-ref]', {
+        slot: 'B',
+        audioObjectId: getAudioObjectId(node),
+        sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
+        currentSrc: node.currentSrc,
+      });
+    } else if (!node) {
+      lastMountedBRef.current = null;
+    }
+  }, []);
 
   const {
     queue,
@@ -181,8 +226,22 @@ export default function Player() {
   // Audio Output Phase 2 hotfix — audio element 두 개 각각에 sink guardian 적용.
   // useLayoutEffect 로 paint 이전 즉시 apply + loadstart/loadedmetadata/canplay
   // 이벤트마다 재확인. 재생 로직 무변경.
-  useAudioSinkGuardian(audioARef);
-  useAudioSinkGuardian(audioBRef);
+  //
+  // Phase 2-4 — Guardian 이 { sinkReady, ensureSinkReady } 노출.
+  //   • sinkReady = A/B 모두 audio.sinkId === desired 인 상태
+  //   • ensureSinkReady 는 첫 play 직전에 attemptPlay 최상단에서 await
+  const guardianA = useAudioSinkGuardian(audioARef, audioMountRevision);
+  const guardianB = useAudioSinkGuardian(audioBRef, audioMountRevision);
+  const sinkReady = guardianA.sinkReady && guardianB.sinkReady;
+  const ensureSinkReady = useCallback(async (reason: string): Promise<boolean> => {
+    const results = await Promise.allSettled([
+      guardianA.ensureSinkReady(reason),
+      guardianB.ensureSinkReady(reason),
+    ]);
+    const okA = results[0].status === 'fulfilled' && results[0].value === true;
+    const okB = results[1].status === 'fulfilled' && results[1].value === true;
+    return okA && okB;
+  }, [guardianA, guardianB]);
 
   const current = queue[index];
   const playable = isPlayableUrl(current?.audio_url);
@@ -1229,6 +1288,52 @@ export default function Player() {
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
   async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    // Phase 2-4 hotfix — 첫 play 이전에 audio.sinkId === desired 보장.
+    //   • sinkReady=true 이면 즉시 skip (fast path, per-tag idempotent)
+    //   • 실패해도 play 자체는 진행 (기본 출력 fallback)
+    {
+      const desiredSinkId = useAudioOutputStore.getState().sinkId;
+      const activeAudio = activeRef() as (HTMLAudioElement & { sinkId?: string }) | null;
+      const inactiveAudio = nextRef() as (HTMLAudioElement & { sinkId?: string }) | null;
+      console.warn('[audio:sink:first-play-check]', {
+        label,
+        desiredSinkId,
+        activeSinkId: activeAudio?.sinkId,
+        inactiveSinkId: inactiveAudio?.sinkId,
+        sinkReady,
+        activeReadyState: activeAudio?.readyState,
+        inactiveReadyState: inactiveAudio?.readyState,
+      });
+      // Phase 2-6 진단 로그 D — 실제 play 대상 audio 가 Guardian 이 sink 적용한 audio 와
+      // 동일 객체인지 검증. activeRef/nextRef 매핑 오류, crossfade swap race, 다른 audio 에
+      // play() 호출되는 경우 등을 판별.
+      const audioObjectId = getAudioObjectId(audio);
+      const activeAudioObjectId = activeAudio ? getAudioObjectId(activeAudio) : '<null>';
+      const nextAudioObjectId = inactiveAudio ? getAudioObjectId(inactiveAudio) : '<null>';
+      console.warn('[audio:sink:play-audit]', {
+        label,
+        desiredSinkId,
+        sinkReady,
+        activeRefSinkId: activeAudio?.sinkId,
+        nextRefSinkId: inactiveAudio?.sinkId,
+        playTargetSinkId: (audio as HTMLAudioElement & { sinkId?: string }).sinkId,
+        playTargetMatchesActive: audio === activeAudio,
+        playTargetMatchesNext: audio === inactiveAudio,
+        playTargetSrc: audio.currentSrc,
+        activeSrc: activeAudio?.currentSrc,
+        nextSrc: inactiveAudio?.currentSrc,
+        playTargetAudioObjectId: audioObjectId,
+        activeAudioObjectId,
+        nextAudioObjectId,
+        activeIdx,
+      });
+      if (!sinkReady) {
+        const ok = await ensureSinkReady(label);
+        if (!ok) {
+          console.warn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
+        }
+      }
+    }
     const expectedSrc = audio.currentSrc;
     try {
       await audio.play();
@@ -1606,7 +1711,7 @@ export default function Player() {
     <>
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
-        ref={audioARef}
+        ref={setAudioARef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
@@ -1617,7 +1722,7 @@ export default function Player() {
         playsInline
       />
       <audio
-        ref={audioBRef}
+        ref={setAudioBRef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
