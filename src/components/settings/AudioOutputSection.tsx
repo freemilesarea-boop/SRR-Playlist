@@ -1,15 +1,22 @@
 /**
- * AudioOutputSection — Phase 1 UI.
+ * AudioOutputSection — Phase 1 + Phase 2.
  *
- * Player Settings 안에 audio output 선택 UI 추가.
- * setSinkId 즉시 적용 · 3초 테스트음 · 브라우저 미지원 안내 · 권한 안내.
+ * Phase 1: 장치 선택 UI · 미지원 안내 · 3초 테스트음.
+ * Phase 2 확장:
+ *   • Connection Status Badge (🟢 연결 / 🟡 기본 / 🔴 제거)
+ *   • Status Card (저장/적용/지원 여부/이벤트 요약)
+ *   • User Actions (현재 장치 다시 적용 / 기본 출력 / 새로 검색)
+ *   • Auto restore 는 AppShell 의 useAudioOutputAutoRestore 에서 담당.
  *
- * DB / API / RPC / polling 도입 0. Enterprise 기존 기능 영향 0.
+ * 새 DB / API / RPC / polling 도입 0. Enterprise 기존 기능 영향 0.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Headphones, RefreshCw, Volume2, AlertTriangle, CheckCircle2, ShieldAlert, Speaker } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Headphones, RefreshCw, Volume2, AlertTriangle, ShieldAlert, Speaker,
+  Circle, RotateCcw, Trash2, ListChecks,
+} from 'lucide-react';
 import { useAudioOutputDevices } from '@/hooks/useAudioOutputDevices';
-import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { useAudioOutputStore, type AudioConnectionStatus } from '@/store/audioOutputStore';
 import { playTestTone, type TestToneHandle } from '@/lib/audioOutput';
 
 export default function AudioOutputSection() {
@@ -18,7 +25,12 @@ export default function AudioOutputSection() {
   } = useAudioOutputDevices();
   const sinkId = useAudioOutputStore((s) => s.sinkId);
   const sinkLabel = useAudioOutputStore((s) => s.sinkLabel);
+  const savedAt = useAudioOutputStore((s) => s.savedAt);
+  const lastAppliedAt = useAudioOutputStore((s) => s.lastAppliedAt);
+  const effectiveSinkId = useAudioOutputStore((s) => s.effectiveSinkId);
+  const connectionStatus = useAudioOutputStore((s) => s.connectionStatus);
   const setSink = useAudioOutputStore((s) => s.setSink);
+  const resetToDefault = useAudioOutputStore((s) => s.resetToDefault);
 
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
@@ -32,12 +44,12 @@ export default function AudioOutputSection() {
 
   const onChangeDevice = useCallback((deviceId: string) => {
     if (deviceId === '') {
-      setSink(null, null);
+      resetToDefault();
     } else {
       const dev = devices.find((d) => d.deviceId === deviceId);
       setSink(deviceId, dev?.label ?? null);
     }
-  }, [devices, setSink]);
+  }, [devices, setSink, resetToDefault]);
 
   const onTest = useCallback(() => {
     if (testing) {
@@ -66,6 +78,14 @@ export default function AudioOutputSection() {
     finally { setPermBusy(false); }
   }, [requestLabelPermission]);
 
+  // Phase 2 — 저장된 sinkId 를 강제 재적용 (label 이 바뀌었을 수도 있으므로 최신 label 사용)
+  const onReapply = useCallback(() => {
+    if (!sinkId) return;
+    const dev = devices.find((d) => d.deviceId === sinkId);
+    // setSink 는 lastAppliedAt 을 갱신하므로 Player useEffect 가 재실행
+    setSink(sinkId, dev?.label ?? sinkLabel);
+  }, [sinkId, sinkLabel, devices, setSink]);
+
   // ============================================================
   // Unsupported browser
   // ============================================================
@@ -90,6 +110,9 @@ export default function AudioOutputSection() {
                 Chrome / Edge / Electron 환경에서만 USB DAC · HDMI · 외부 앰프 등을 매장 스피커 전용 출력으로 지정할 수 있습니다.
                 Safari · Firefox 는 브라우저 정책상 미지원 — 크롬 계열 브라우저에서 재접속해 주세요.
               </p>
+              <p className="mt-1 text-[10.5px] text-amber-50/70">
+                자동으로 브라우저 기본 출력 장치를 사용합니다.
+              </p>
             </div>
           </div>
         </div>
@@ -102,6 +125,7 @@ export default function AudioOutputSection() {
   // ============================================================
   const activeDevice = devices.find((d) => d.deviceId === sinkId) ?? null;
   const activeLabel = activeDevice?.label ?? sinkLabel ?? '기본 장치';
+  const badge = connectionBadge(connectionStatus);
 
   return (
     <section className="space-y-2">
@@ -119,19 +143,26 @@ export default function AudioOutputSection() {
       </div>
 
       <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
-        {/* 현재 출력 장치 표시 */}
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40">
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/30 text-emerald-100" aria-hidden>
+        {/* 현재 출력 장치 표시 + Phase 2 Connection Badge */}
+        <div className={`flex items-center gap-2 rounded-xl p-2.5 ring-1 transition ${badge.bg} ${badge.ring}`}>
+          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${badge.chip}`} aria-hidden>
             <Headphones size={16} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">현재 출력</p>
-            <p className="mt-0.5 truncate text-[13px] font-bold text-ink" title={activeLabel}>{activeLabel}</p>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${badge.textLabel}`}>현재 출력</p>
+            <p className="mt-0.5 truncate text-[13px] font-bold text-ink" title={activeLabel}>
+              {connectionStatus === 'disconnected'
+                ? `${sinkLabel ?? '저장된 장치'} (연결 안됨)`
+                : activeLabel}
+            </p>
           </div>
-          <CheckCircle2 size={16} className="text-emerald-200" />
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-bold ring-1 ${badge.chip}`}>
+            <Circle size={7} className={badge.dot} fill="currentColor" />
+            {badge.label}
+          </span>
         </div>
 
-        {/* 권한 안내 (label 이 안 보이는 경우) */}
+        {/* 권한 안내 */}
         {needPermission && (
           <div className="mt-2 rounded-xl bg-sky-500/20 p-2.5 ring-1 ring-sky-500/40">
             <div className="flex items-start gap-2">
@@ -174,7 +205,7 @@ export default function AudioOutputSection() {
           </select>
           <p className="text-[10px] leading-relaxed text-ink-dim">
             매장 스피커 전용 출력으로 지정하면 매장 운영 프로그램(주문/결제/알림)의 소리와 완전히 분리됩니다.
-            선택 즉시 재생 중인 곡에도 적용됩니다.
+            선택 즉시 재생 중인 곡에도 적용되고, 앱 재실행 후에도 자동 복원됩니다.
           </p>
         </div>
 
@@ -210,7 +241,173 @@ export default function AudioOutputSection() {
             감지된 출력 장치가 없습니다. USB DAC / HDMI / 블루투스 스피커 연결 후 새로고침을 눌러 주세요.
           </p>
         )}
+
+        {/* Phase 2 spec 10 — User Actions */}
+        <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          <ActionBtn
+            icon={<RotateCcw size={11} />}
+            label="현재 장치 다시 적용"
+            onClick={onReapply}
+            disabled={!sinkId}
+          />
+          <ActionBtn
+            icon={<Trash2 size={11} />}
+            label="기본 출력으로 변경"
+            onClick={() => resetToDefault()}
+            disabled={!sinkId}
+          />
+          <ActionBtn
+            icon={<ListChecks size={11} />}
+            label="장치 새로 검색"
+            onClick={() => void refresh()}
+          />
+        </div>
+
+        {/* Phase 2 spec 9 — Diagnostics */}
+        <DiagnosticsCard
+          sinkId={sinkId}
+          sinkLabel={sinkLabel}
+          savedAt={savedAt}
+          lastAppliedAt={lastAppliedAt}
+          effectiveSinkId={effectiveSinkId}
+          supportEnum={supportEnum}
+          supportSink={supportSink}
+          connectionStatus={connectionStatus}
+          deviceCount={devices.length}
+        />
       </div>
     </section>
   );
+}
+
+// ============================================================
+// Sub-components
+// ============================================================
+
+function ActionBtn({ icon, label, onClick, disabled }: {
+  icon: JSX.Element; label: string; onClick: () => void; disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center justify-start gap-1.5 rounded-lg bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      <span className="text-violet-200">{icon}</span>
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function DiagnosticsCard({
+  sinkId, sinkLabel, savedAt, lastAppliedAt, effectiveSinkId, supportEnum, supportSink, connectionStatus, deviceCount,
+}: {
+  sinkId: string | null; sinkLabel: string | null;
+  savedAt: string | null; lastAppliedAt: string | null; effectiveSinkId: string | null;
+  supportEnum: boolean; supportSink: boolean;
+  connectionStatus: AudioConnectionStatus; deviceCount: number;
+}) {
+  const rows = useMemo(() => [
+    { label: 'setSinkId',      value: supportSink ? '지원'   : '미지원',  tone: supportSink ? 'success' : 'danger'   as const },
+    { label: 'enumerateDevices', value: supportEnum ? '지원' : '미지원',  tone: supportEnum ? 'success' : 'danger'   as const },
+    { label: 'devicechange',   value: supportEnum ? '구독 중' : '미지원', tone: supportEnum ? 'success' : 'neutral'  as const },
+    { label: '연결 상태',      value: statusLabelKo(connectionStatus),   tone: statusTone(connectionStatus) },
+    { label: '감지된 장치',    value: `${deviceCount} 개`,                 tone: 'neutral' as const },
+    { label: '저장 Sink ID',   value: sinkId ? shortenId(sinkId) : '없음', tone: sinkId ? 'info' : 'neutral' as const },
+    { label: '저장 Label',     value: sinkLabel ?? '—',                    tone: 'neutral' as const },
+    { label: '실제 적용 ID',   value: effectiveSinkId ? shortenId(effectiveSinkId) : '기본 출력', tone: effectiveSinkId ? 'success' : 'neutral' as const },
+    { label: '저장 시각',      value: fmtLocal(savedAt),                   tone: 'neutral' as const },
+    { label: '적용 시각',      value: fmtLocal(lastAppliedAt),             tone: 'neutral' as const },
+  ], [supportSink, supportEnum, connectionStatus, deviceCount, sinkId, sinkLabel, effectiveSinkId, savedAt, lastAppliedAt]);
+
+  return (
+    <div className="mt-3 rounded-xl bg-bg-soft p-2.5 ring-1 ring-line/15">
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-mute">Diagnostics (read-only)</p>
+      <dl className="grid grid-cols-1 gap-x-3 gap-y-1 text-[10.5px] sm:grid-cols-2">
+        {rows.map((r) => {
+          const cls = r.tone === 'success' ? 'text-emerald-200'
+                    : r.tone === 'warning' ? 'text-amber-200'
+                    : r.tone === 'danger'  ? 'text-rose-200'
+                    : r.tone === 'info'    ? 'text-sky-200'
+                    : 'text-ink';
+          return (
+            <div key={r.label} className="flex items-center justify-between gap-2">
+              <dt className="text-ink-mute">{r.label}</dt>
+              <dd className={`truncate font-mono ${cls}`} title={r.value}>{r.value}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+interface ConnectionBadgeVisual {
+  label: string;
+  bg: string;
+  ring: string;
+  chip: string;
+  dot: string;
+  textLabel: string;
+}
+
+function connectionBadge(status: AudioConnectionStatus): ConnectionBadgeVisual {
+  switch (status) {
+    case 'connected':
+      return {
+        label: '연결됨', bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40',
+        chip: 'bg-emerald-500/30 text-emerald-100 ring-emerald-500/45',
+        dot: 'text-emerald-300', textLabel: 'text-emerald-100',
+      };
+    case 'disconnected':
+      return {
+        label: '장치 제거', bg: 'bg-rose-500/20', ring: 'ring-rose-500/40',
+        chip: 'bg-rose-500/30 text-rose-100 ring-rose-500/45',
+        dot: 'text-rose-300', textLabel: 'text-rose-100',
+      };
+    case 'unsupported':
+      return {
+        label: '미지원', bg: 'bg-amber-500/20', ring: 'ring-amber-500/40',
+        chip: 'bg-amber-500/30 text-amber-100 ring-amber-500/45',
+        dot: 'text-amber-300', textLabel: 'text-amber-100',
+      };
+    case 'default':
+    default:
+      return {
+        label: '기본 출력', bg: 'bg-amber-500/20', ring: 'ring-amber-500/40',
+        chip: 'bg-amber-500/30 text-amber-100 ring-amber-500/45',
+        dot: 'text-amber-300', textLabel: 'text-amber-100',
+      };
+  }
+}
+
+function statusLabelKo(s: AudioConnectionStatus): string {
+  return s === 'connected' ? '연결됨'
+       : s === 'disconnected' ? '장치 제거됨'
+       : s === 'unsupported' ? '미지원'
+       : '기본 출력 사용';
+}
+
+function statusTone(s: AudioConnectionStatus): 'success' | 'warning' | 'danger' | 'neutral' {
+  return s === 'connected' ? 'success'
+       : s === 'disconnected' ? 'danger'
+       : s === 'unsupported' ? 'warning'
+       : 'warning';
+}
+
+function shortenId(id: string): string {
+  if (id.length <= 16) return id;
+  return `${id.slice(0, 8)}…${id.slice(-4)}`;
+}
+
+function fmtLocal(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return '—'; }
 }
