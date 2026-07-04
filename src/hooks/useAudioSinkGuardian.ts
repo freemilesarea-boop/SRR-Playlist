@@ -21,6 +21,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { toast } from '@/store/toastStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
+import { audioDebugWarn, audioDebugError } from '@/lib/audioDebug';
 
 type SinkCapableAudio = HTMLAudioElement & {
   setSinkId?: (deviceId: string) => Promise<void>;
@@ -83,7 +84,7 @@ function recoverPlaybackAfterSinkChange(
   const now = Date.now();
   const lastAt = recoveryLastAt.get(audio) ?? 0;
   if (now - lastAt < RECOVERY_COOLDOWN_MS) {
-    console.warn(`[audio:sink:recovery] skip cooldown tag=${tag} elapsed=${now - lastAt}ms`);
+    audioDebugWarn(`[audio:sink:recovery] skip cooldown tag=${tag} elapsed=${now - lastAt}ms`);
     return;
   }
   recoveryLastAt.set(audio, now);
@@ -101,41 +102,41 @@ function recoverPlaybackAfterSinkChange(
     volume: audio.volume,
     ctBefore,
   };
-  console.warn('[audio:sink:recovery]', snapshot);
-  console.warn(
+  audioDebugWarn('[audio:sink:recovery]', snapshot);
+  audioDebugWarn(
     `[audio:sink:recovery] entry tag=${tag} requested=${desired} after=${audio.sinkId ?? '""'} wasPlaying=${!audio.paused && !audio.ended} paused=${audio.paused} ct=${audio.currentTime} ctBefore=${ctBefore} readyState=${audio.readyState} networkState=${audio.networkState}`,
   );
 
   // 즉시 play() 재호출 — 수동 장치 변경은 user gesture context 안이므로
   // autoplay 정책 통과. 실패 시 warn 만 하고 swallow (crossfade 경합 등)
   audio.play().then(() => {
-    console.warn(`[audio:sink:recovery] immediate play ok tag=${tag}`);
+    audioDebugWarn(`[audio:sink:recovery] immediate play ok tag=${tag}`);
   }).catch((e) => {
     const err = e as { name?: string; message?: string };
-    console.warn(`[audio:sink:recovery] immediate play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+    audioDebugWarn(`[audio:sink:recovery] immediate play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
   });
 
   // 200ms 후 verify — 무음 stall (paused=false 인데 currentTime 안 움직임) 감지
   window.setTimeout(() => {
     if (audio.sinkId !== desired) {
-      console.warn(`[audio:sink:recovery] verify abort — sink changed tag=${tag} audio=${audio.sinkId ?? '""'}`);
+      audioDebugWarn(`[audio:sink:recovery] verify abort — sink changed tag=${tag} audio=${audio.sinkId ?? '""'}`);
       return;
     }
     if (audio.paused || audio.ended) {
-      console.warn(`[audio:sink:recovery] verify skip — paused/ended tag=${tag} paused=${audio.paused} ended=${audio.ended}`);
+      audioDebugWarn(`[audio:sink:recovery] verify skip — paused/ended tag=${tag} paused=${audio.paused} ended=${audio.ended}`);
       return;
     }
     if (audio.currentTime > ctBefore + 0.05) {
-      console.warn(`[audio:sink:recovery] verify ok — progressing tag=${tag} ct=${audio.currentTime}`);
+      audioDebugWarn(`[audio:sink:recovery] verify ok — progressing tag=${tag} ct=${audio.currentTime}`);
       return;
     }
     // paused=false but no progress → silent stall → 1회 retry (cooldown 이미 write 됨)
-    console.warn(`[audio:sink:recovery] verify stall — retry play tag=${tag} ct=${audio.currentTime} ctBefore=${ctBefore}`);
+    audioDebugWarn(`[audio:sink:recovery] verify stall — retry play tag=${tag} ct=${audio.currentTime} ctBefore=${ctBefore}`);
     audio.play().then(() => {
-      console.warn(`[audio:sink:recovery] retry play ok tag=${tag}`);
+      audioDebugWarn(`[audio:sink:recovery] retry play ok tag=${tag}`);
     }).catch((e) => {
       const err = e as { name?: string; message?: string };
-      console.warn(`[audio:sink:recovery] retry play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+      audioDebugWarn(`[audio:sink:recovery] retry play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
       try {
         toast.warning('출력 장치 전환 후 재생을 다시 시작해 주세요.');
       } catch { /* silent */ }
@@ -145,7 +146,7 @@ function recoverPlaybackAfterSinkChange(
 
 async function applySink(audio: SinkCapableAudio, desired: string, tag: string): Promise<ApplyResult> {
   // Phase 2-2 QA — applySink 진입 여부 자체를 filter/cache 우회하여 확인.
-  console.warn('[audio:sink] applySink entered', {
+  audioDebugWarn('[audio:sink] applySink entered', {
     tag,
     desired,
     audioSinkIdNow: audio.sinkId,
@@ -154,13 +155,13 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
   });
   // 단일 라인 문자열 로그 — DevTools 가 object 를 collapse 해서 안 보이는 경우 대비
   const storeSnapshot = useAudioOutputStore.getState();
-  console.warn(
+  audioDebugWarn(
     `[audio:sink:state] tag=${tag} desired=${desired} store=${storeSnapshot.sinkId ?? 'null'} audio=${audio.sinkId ?? '""'} hasHydrated=${storeSnapshot.hasHydrated}`,
   );
   // Phase 2-6 진단 로그 C-1 — setSinkId 시도 직전 audio object identity + 실제 상태.
   // 시간축을 따라 audio 객체가 재생 대상 audio 와 일치하는지 추적하기 위함.
   const audioObjectId = getAudioObjectId(audio);
-  console.warn('[audio:sink:apply-audit]', {
+  audioDebugWarn('[audio:sink:apply-audit]', {
     tag,
     reason: tag,
     desiredSinkId: desired,
@@ -180,12 +181,12 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
 
   // 이미 desired 이면 skip (idempotent)
   if (supported && beforeSinkId === desired) {
-    console.warn('[audio:sink]', tag, 'skip (already applied)', { beforeSinkId, requested: desired, supported, ...stateBefore });
+    audioDebugWarn('[audio:sink]', tag, 'skip (already applied)', { beforeSinkId, requested: desired, supported, ...stateBefore });
     return { requested: desired, beforeSinkId, afterSinkId: beforeSinkId, supported, exception: null, effective: true };
   }
 
   if (!supported) {
-    console.warn('[audio:sink]', tag, 'unsupported', { beforeSinkId, requested: desired, supported, ...stateBefore });
+    audioDebugWarn('[audio:sink]', tag, 'unsupported', { beforeSinkId, requested: desired, supported, ...stateBefore });
     return { requested: desired, beforeSinkId, afterSinkId: beforeSinkId, supported, exception: null, effective: false };
   }
 
@@ -200,7 +201,7 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
   const afterSinkId = audio.sinkId;
   const effective = afterSinkId === desired;
 
-  console.warn('[audio:sink]', tag, effective ? 'ok' : 'MISMATCH', {
+  audioDebugWarn('[audio:sink]', tag, effective ? 'ok' : 'MISMATCH', {
     beforeSinkId,
     requested: desired,
     afterSinkId,
@@ -215,7 +216,7 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
   });
   // Phase 2-6 진단 로그 C-2 — setSinkId 결과 요약 (Guardian apply 로 실제 audio 가
   // desired 로 라우팅됐는지 여부와 audio object identity 를 같이 기록).
-  console.warn('[audio:sink:apply-result]', {
+  audioDebugWarn('[audio:sink:apply-result]', {
     tag,
     reason: tag,
     desiredSinkId: desired,
@@ -260,10 +261,10 @@ export function useAudioSinkGuardian(
   //   2) console.error — filter 무관 (별도 diag)
   //   3) document.body.dataset.audioSinkGuardian — Elements panel 에서 눈으로 확인
   //   4) localStorage marker — Application → Local Storage 에서 확인
-  console.warn('[audio:sink] guardian mounted');
-  console.error('[audio:sink] guardian mounted (diag)');
+  audioDebugWarn('[audio:sink] guardian mounted');
+  audioDebugError('[audio:sink] guardian mounted (diag)');
   // audio ref identity 즉시 노출 — instanceof / null 여부 확인용
-  console.warn('[audio-ref]', {
+  audioDebugWarn('[audio-ref]', {
     ref: audioRef.current,
     isHTMLAudio: audioRef.current instanceof HTMLAudioElement,
     sinkIdNow: (audioRef.current as SinkCapableAudio | null)?.sinkId,
@@ -311,7 +312,7 @@ export function useAudioSinkGuardian(
     const a = audioRef.current as SinkCapableAudio | null;
     const s = useAudioOutputStore.getState();
     // Phase 2-2 QA — reapply 실제 호출 여부 + audio ref 상태 확인 (call-path trace)
-    console.warn('[audio:sink] reapply called', {
+    audioDebugWarn('[audio:sink] reapply called', {
       tag,
       reason,
       audioRefExists: !!a,
@@ -323,14 +324,14 @@ export function useAudioSinkGuardian(
       audioMountRevision,
     });
     // 단일 라인 문자열 로그 — DevTools 가 object 를 collapse 해도 확인 가능
-    console.warn(
+    audioDebugWarn(
       `[audio:sink:state] reapply tag=${tag} reason=${reason} desired=${sinkIdRef.current ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${s.hasHydrated} mountRev=${audioMountRevision}`,
     );
     // Phase 2-5 hotfix — audioRef.current null 이면 절대 sinkReady 승격 X.
     // audio 없는 상태에서 setSinkId 를 성공으로 처리하지 말고, mount revision 이 바뀌면
     // effect 가 다시 실행되면서 재시도한다.
     if (!a) {
-      console.warn('[audio:sink] no audio ref yet', {
+      audioDebugWarn('[audio:sink] no audio ref yet', {
         tag, reason, desiredSinkId: sinkIdRef.current ?? 'default', audioMountRevision,
       });
       setSinkReady(false);
@@ -345,7 +346,7 @@ export function useAudioSinkGuardian(
       markApplied(desired === 'default' ? null : desired);
       // Phase 2-4 — audio.sinkId === desired 확인된 시점만 sinkReady 승격
       setSinkReady(true);
-      console.warn('[audio:sink:ready]', {
+      audioDebugWarn('[audio:sink:ready]', {
         tag,
         desiredSinkId: desired,
         currentSinkId: a.sinkId,
@@ -367,7 +368,7 @@ export function useAudioSinkGuardian(
 
     // Phase 2-5 — audio ref 없음 → 절대 true 반환 X · sinkReady 승격 X
     if (!a) {
-      console.warn('[audio:sink:ensure] no audio ref', {
+      audioDebugWarn('[audio:sink:ensure] no audio ref', {
         tag, reason, desiredSinkId: desired, audioMountRevision,
       });
       setSinkReady(false);
@@ -375,21 +376,21 @@ export function useAudioSinkGuardian(
     }
     // 브라우저 미지원 → fallback 허용 (sinkReady=true)
     if (typeof a.setSinkId !== 'function') {
-      console.warn(`[audio:sink:ensure] unsupported browser tag=${tag} reason=${reason} → default fallback ok`);
+      audioDebugWarn(`[audio:sink:ensure] unsupported browser tag=${tag} reason=${reason} → default fallback ok`);
       setSinkReady(true);
       return true;
     }
     // 이미 desired 이면 즉시 승격
     if (a.sinkId === desired) {
-      console.warn(`[audio:sink:ensure] already applied tag=${tag} reason=${reason} desired=${desired}`);
+      audioDebugWarn(`[audio:sink:ensure] already applied tag=${tag} reason=${reason} desired=${desired}`);
       setSinkReady(true);
-      console.warn('[audio:sink:ready]', {
+      audioDebugWarn('[audio:sink:ready]', {
         tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
       });
       return true;
     }
     // Phase 2-5 확장 진단 — setSinkId 시도 직전 상태 snapshot
-    console.warn('[audio:sink:ensure]', {
+    audioDebugWarn('[audio:sink:ensure]', {
       tag,
       reason,
       desiredSinkId: desired,
@@ -402,7 +403,7 @@ export function useAudioSinkGuardian(
     if (result.effective) {
       markApplied(desired === 'default' ? null : desired);
       setSinkReady(true);
-      console.warn('[audio:sink:ready]', {
+      audioDebugWarn('[audio:sink:ready]', {
         tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
       });
       return true;
@@ -411,16 +412,16 @@ export function useAudioSinkGuardian(
     // async 하게 늦어지는 케이스가 관찰됨.
     await new Promise((r) => window.setTimeout(r, ENSURE_VERIFY_DELAY_MS));
     if (a.sinkId === desired) {
-      console.warn(`[audio:sink:ensure] verify ok tag=${tag} reason=${reason} desired=${desired}`);
+      audioDebugWarn(`[audio:sink:ensure] verify ok tag=${tag} reason=${reason} desired=${desired}`);
       markApplied(desired === 'default' ? null : desired);
       setSinkReady(true);
-      console.warn('[audio:sink:ready]', {
+      audioDebugWarn('[audio:sink:ready]', {
         tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
       });
       return true;
     }
     // fallback — play 는 허용하되 sinkReady 는 false 유지
-    console.warn(`[audio:sink:ensure] verify failed tag=${tag} reason=${reason} desired=${desired} audio=${a.sinkId ?? '""'} → default fallback allowed`);
+    audioDebugWarn(`[audio:sink:ensure] verify failed tag=${tag} reason=${reason} desired=${desired} audio=${a.sinkId ?? '""'} → default fallback allowed`);
     return false;
   }, [audioRef, markApplied, tag, audioMountRevision]);
 
@@ -432,7 +433,7 @@ export function useAudioSinkGuardian(
     const a = audioRef.current as SinkCapableAudio | null;
     const s = useAudioOutputStore.getState();
     // Phase 2-5 — ref 연결 상태 진단. audio 없으면 sinkReady 승격 X.
-    console.warn('[audio:sink:ref-ready]', {
+    audioDebugWarn('[audio:sink:ref-ready]', {
       tag,
       audioMountRevision,
       exists: Boolean(a),
@@ -440,7 +441,7 @@ export function useAudioSinkGuardian(
       currentSinkId: a?.sinkId,
     });
     // Phase 2-2 QA — layoutEffect 실행 여부 + 3개 sinkId 값 동시 확인
-    console.warn('[audio:sink] layoutEffect', {
+    audioDebugWarn('[audio:sink] layoutEffect', {
       tag,
       desiredSinkId: sinkId ?? 'default',
       storeSinkId: s.sinkId,
@@ -450,18 +451,18 @@ export function useAudioSinkGuardian(
       hasHydrated,
       audioMountRevision,
     });
-    console.warn(
+    audioDebugWarn(
       `[audio:sink:state] layoutEffect tag=${tag} desired=${sinkId ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${hasHydrated} mountRev=${audioMountRevision}`,
     );
     // hydrate 이전이면 skip — sinkId 가 null 인 채로 apply 하면 audio.sinkId 가 "" 로
     // 고정되고, hydrate 후 재실행되지 않는 문제 방지.
     if (!hasHydrated) {
-      console.warn(`[audio:sink] layoutEffect skipped — waiting for hydration (tag=${tag})`);
+      audioDebugWarn(`[audio:sink] layoutEffect skipped — waiting for hydration (tag=${tag})`);
       return;
     }
     // Phase 2-5 — audio ref 아직 없으면 skip (mount revision 변경 시 재실행)
     if (!a) {
-      console.warn(`[audio:sink] layoutEffect skipped — audio ref null (tag=${tag} mountRev=${audioMountRevision})`);
+      audioDebugWarn(`[audio:sink] layoutEffect skipped — audio ref null (tag=${tag} mountRev=${audioMountRevision})`);
       setSinkReady(false);
       return;
     }
@@ -472,18 +473,18 @@ export function useAudioSinkGuardian(
   useEffect(() => {
     const a = audioRef.current;
     // Phase 2-2 QA — lifecycle listener useEffect 실행 여부 + audio ref 존재 확인
-    console.warn('[audio:sink] lifecycle useEffect entered', {
+    audioDebugWarn('[audio:sink] lifecycle useEffect entered', {
       tag,
       audioRefExists: !!a,
       audioIsHTMLAudio: a instanceof HTMLAudioElement,
     });
     if (!a) {
-      console.warn('[audio:sink] listener SKIPPED — audio ref is null', { tag });
+      audioDebugWarn('[audio:sink] listener SKIPPED — audio ref is null', { tag });
       return;
     }
     const onLifecycle = (ev: Event) => {
       // Phase 2-2 QA — lifecycle event 실제 fire 확인 (loadstart/metadata/canplay)
-      console.warn(`[audio:sink] ${ev.type} fired`, {
+      audioDebugWarn(`[audio:sink] ${ev.type} fired`, {
         tag,
         eventType: ev.type,
         target: ev.target === a ? 'same-ref' : 'other',
@@ -496,7 +497,7 @@ export function useAudioSinkGuardian(
     a.addEventListener('loadedmetadata', onLifecycle);
     a.addEventListener('canplay', onLifecycle);
     // Phase 2-2 QA — 세 리스너가 실제로 등록되었는지 확인
-    console.warn('[audio:sink] listener registered', {
+    audioDebugWarn('[audio:sink] listener registered', {
       tag,
       audioRefExists: !!a,
       currentSrc: a.currentSrc,
@@ -528,9 +529,9 @@ export function useAudioSinkGuardian(
       done = true;
       const result = await reapply(`gesture:${ev.type}`);
       if (result?.effective) {
-        console.warn('[audio:sink]', tag, 'deferred apply succeeded on first user activation', { event: ev.type });
+        audioDebugWarn('[audio:sink]', tag, 'deferred apply succeeded on first user activation', { event: ev.type });
       } else {
-        console.warn('[audio:sink]', tag, 'deferred apply still failing', { event: ev.type, result });
+        audioDebugWarn('[audio:sink]', tag, 'deferred apply still failing', { event: ev.type, result });
       }
       cleanup();
     };
@@ -544,7 +545,7 @@ export function useAudioSinkGuardian(
     document.addEventListener('pointerdown', onGesture, { capture: true });
     document.addEventListener('click', onGesture, { capture: true });
 
-    console.warn('[audio:sink]', tag, 'deferred apply armed', {
+    audioDebugWarn('[audio:sink]', tag, 'deferred apply armed', {
       currentSinkId: a.sinkId, desired,
     });
 

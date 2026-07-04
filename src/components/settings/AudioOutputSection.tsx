@@ -18,6 +18,7 @@ import {
 import { useAudioOutputDevices } from '@/hooks/useAudioOutputDevices';
 import { useAudioOutputStore, type AudioConnectionStatus } from '@/store/audioOutputStore';
 import { playTestTone, type TestToneHandle, type AudioOutputDeviceKind } from '@/lib/audioOutput';
+import { audioDebugWarn } from '@/lib/audioDebug';
 
 export default function AudioOutputSection() {
   const {
@@ -57,7 +58,7 @@ export default function AudioOutputSection() {
     try {
       storageValue = window.localStorage.getItem('deudda.audioOutput.v1');
     } catch { /* silent */ }
-    console.warn('[audio:sink:ui-select]', {
+    audioDebugWarn('[audio:sink:ui-select]', {
       selectedLabel,
       selectedDeviceId: deviceId,
       storeSinkIdAfterSelect: useAudioOutputStore.getState().sinkId,

@@ -22,9 +22,11 @@ import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
+import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
+import { audioDebugWarn } from '@/lib/audioDebug';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -163,10 +165,10 @@ export default function Player() {
     if (node && node !== lastMountedARef.current) {
       lastMountedARef.current = node;
       setAudioMountRevision((v) => v + 1);
-      console.warn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
+      audioDebugWarn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
       // Phase 2-6 진단 로그 E — audio ref mount 시 audio 객체 identity 를 부여하고 기록.
       // 이후 Guardian apply · Player play 로그의 audioObjectId 와 대조하기 위함.
-      console.warn('[audio:sink:audio-ref]', {
+      audioDebugWarn('[audio:sink:audio-ref]', {
         slot: 'A',
         audioObjectId: getAudioObjectId(node),
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
@@ -181,8 +183,8 @@ export default function Player() {
     if (node && node !== lastMountedBRef.current) {
       lastMountedBRef.current = node;
       setAudioMountRevision((v) => v + 1);
-      console.warn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
-      console.warn('[audio:sink:audio-ref]', {
+      audioDebugWarn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
+      audioDebugWarn('[audio:sink:audio-ref]', {
         slot: 'B',
         audioObjectId: getAudioObjectId(node),
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
@@ -442,6 +444,239 @@ export default function Player() {
   // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
   // 마운트 해제 후 stale next() 발화를 막는다.
   const nextTimerRef = useRef<number | null>(null);
+  // Phase 3-1 — dual audio engine hardening.
+  //   • lastEndedAtRef: onEnded 중복 발화 500ms dedup
+  //   • lastProgressRef: currentTime 진행 tracking (stuck 감지 기준)
+  //   • lastStuckRecoveryAtRef: recovery play 1초 cooldown
+  //   • 이전 재생 로직 무변경 — guard 만 추가
+  const lastEndedAtRef = useRef<{ trackId: string | null; ts: number }>({ trackId: null, ts: 0 });
+  const lastProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({ trackId: null, ct: 0, ts: 0 });
+  const lastStuckRecoveryAtRef = useRef<number>(0);
+
+  // ============================================================
+  // Phase 3-2 — Audio Engine Health Monitor
+  // ============================================================
+  // 이벤트 기반. 새 polling / setInterval 없음.
+  // 기존 이벤트 훅 (onTimeUpdate · onCanPlay · onEnded · native listeners ·
+  // visibility/focus/pageshow · crossfade complete/abort) 안에서 checkAudioHealth
+  // 를 호출하면 snapshot 생성 → issue 평가 → 위험 상태별 최소 복구.
+  // Phase 2 sinkId · Phase 3-1 guard 로직은 무변경.
+  type HealthIssue =
+    | 'inactive-playing'
+    | 'active-stalled'
+    | 'sink-mismatch'
+    | 'both-playing'
+    | 'neither-playing-while-playing-state'
+    | 'crossfade-stuck';
+  const HEALTH_COOLDOWN_MS = 1000;
+
+  // React state snapshot ref — native listener 안에서도 stale closure 없이 접근.
+  const healthStateRef = useRef({
+    activeIdx: 0 as 0 | 1,
+    playing: false,
+    crossfading: false,
+    sinkReady: false,
+    currentTrackId: null as string | null,
+    crossfadeSeconds: 0,
+  });
+  healthStateRef.current = {
+    activeIdx,
+    playing,
+    crossfading,
+    sinkReady,
+    currentTrackId: current?.id ?? null,
+    crossfadeSeconds,
+  };
+
+  // ensureSinkReady 는 useCallback → 각 렌더마다 재생성. ref 로 보관해서
+  // stable checkAudioHealth 가 접근.
+  const ensureSinkReadyRef = useRef(ensureSinkReady);
+  ensureSinkReadyRef.current = ensureSinkReady;
+
+  // crossfade-stuck 감지용 — startCrossfade 에서 set, completeSwap/cancelCrossfade
+  // 에서 clear. 0 이면 crossfade 진입 안 함.
+  const crossfadeStartedAtRef = useRef<number>(0);
+
+  // per-issue 1초 cooldown
+  const healthLastRecoveryRef = useRef<Map<HealthIssue, number>>(new Map());
+
+  // active-stalled 감지용 — snapshot 시점 활성 audio 의 currentTime 진행 tracking.
+  // Phase 3-1 lastProgressRef 와 별도 (event context 다름).
+  const healthLastActiveProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({
+    trackId: null, ct: 0, ts: 0,
+  });
+
+  const checkAudioHealth = useCallback((reason: string) => {
+    const state = healthStateRef.current;
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const activeEl = state.activeIdx === 0 ? a : b;
+    const inactiveEl = state.activeIdx === 0 ? b : a;
+
+    type SlotSnap = {
+      paused: boolean; ended: boolean; currentTime: number; duration: number;
+      volume: number; muted: boolean; readyState: number; networkState: number;
+      sinkId: string; currentSrc: string;
+    };
+    const snapshotSlot = (el: HTMLAudioElement | null): SlotSnap | null => el ? {
+      paused: el.paused,
+      ended: el.ended,
+      currentTime: el.currentTime,
+      duration: Number.isFinite(el.duration) ? el.duration : 0,
+      volume: el.volume,
+      muted: el.muted,
+      readyState: el.readyState,
+      networkState: el.networkState,
+      sinkId: (el as HTMLAudioElement & { sinkId?: string }).sinkId ?? '',
+      currentSrc: el.currentSrc,
+    } : null;
+
+    const desiredSinkId = useAudioOutputStore.getState().sinkId;
+    const active = snapshotSlot(activeEl);
+    const inactive = snapshotSlot(inactiveEl);
+
+    const issues: HealthIssue[] = [];
+
+    // inactive-playing (crossfade 아닌 상태에서 inactive 재생 중)
+    if (!state.crossfading && inactive && !inactive.paused) {
+      issues.push('inactive-playing');
+    }
+    // both-playing (crossfade 아닌 상태에서 둘 다 재생 중 — 이중 재생)
+    if (!state.crossfading && active && inactive && !active.paused && !inactive.paused) {
+      issues.push('both-playing');
+    }
+    // sink-mismatch — sinkReady 승격됐는데 실제 active.sinkId 가 desired 와 다름
+    if (desiredSinkId && state.sinkReady && active && active.sinkId !== desiredSinkId) {
+      issues.push('sink-mismatch');
+    }
+    // neither-playing-while-playing-state
+    if (state.playing && !state.crossfading && active && active.paused && (!inactive || inactive.paused)) {
+      issues.push('neither-playing-while-playing-state');
+    }
+    // active-stalled — playing 이면서 active !paused && !ended · ct 정지 > 2.5s
+    if (state.playing && active && !active.paused && !active.ended) {
+      const nowTs = performance.now();
+      const last = healthLastActiveProgressRef.current;
+      if (
+        last.trackId === state.currentTrackId &&
+        Math.abs(active.currentTime - last.ct) < 0.01 &&
+        nowTs - last.ts > 2500
+      ) {
+        issues.push('active-stalled');
+      }
+      if (Math.abs(active.currentTime - last.ct) >= 0.01 || last.trackId !== state.currentTrackId) {
+        healthLastActiveProgressRef.current = {
+          trackId: state.currentTrackId, ct: active.currentTime, ts: nowTs,
+        };
+      }
+    }
+    // crossfade-stuck — crossfading + bothPlaying + 시간 초과
+    if (
+      state.crossfading && active && inactive &&
+      !active.paused && !inactive.paused &&
+      crossfadeStartedAtRef.current > 0
+    ) {
+      const elapsed = performance.now() - crossfadeStartedAtRef.current;
+      if (elapsed > (state.crossfadeSeconds * 1000) + 2000) {
+        issues.push('crossfade-stuck');
+      }
+    }
+
+    if (issues.length === 0) return;
+
+    for (const issue of issues) {
+      audioDebugWarn('[audio:health]', {
+        reason,
+        issue,
+        activeIdx: state.activeIdx,
+        playing: state.playing,
+        crossfadeInProgress: state.crossfading,
+        sinkReady: state.sinkReady,
+        desiredSinkId,
+        currentTrackId: state.currentTrackId,
+        active,
+        inactive,
+      });
+
+      // per-issue 1초 cooldown
+      const nowRec = performance.now();
+      const lastRec = healthLastRecoveryRef.current.get(issue) ?? 0;
+      if (nowRec - lastRec < HEALTH_COOLDOWN_MS) continue;
+      healthLastRecoveryRef.current.set(issue, nowRec);
+
+      const action =
+        issue === 'inactive-playing' || issue === 'both-playing' ? 'inactive.pause+volume=0' :
+        issue === 'sink-mismatch' ? 'ensureSinkReady(health-monitor)' :
+        issue === 'active-stalled' || issue === 'neither-playing-while-playing-state' ? 'active.play()' :
+        issue === 'crossfade-stuck' ? 'forceCompleteCrossfade' :
+        'noop';
+
+      try {
+        if (issue === 'inactive-playing' || issue === 'both-playing') {
+          if (!state.crossfading && inactiveEl) {
+            try { inactiveEl.pause(); } catch { /* silent */ }
+            try { inactiveEl.volume = 0; } catch { /* silent */ }
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+          }
+        } else if (issue === 'sink-mismatch') {
+          const fn = ensureSinkReadyRef.current;
+          if (fn) {
+            void fn('health-monitor').then((ok) => {
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok, error: null });
+            }).catch((e) => {
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
+            });
+          } else {
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'ensureSinkReady unavailable' });
+          }
+        } else if (issue === 'active-stalled' || issue === 'neither-playing-while-playing-state') {
+          if (activeEl) {
+            const p = activeEl.play();
+            if (p && typeof p.catch === 'function') {
+              p.then(() => {
+                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+              }).catch((e) => {
+                const err = e as { name?: string; message?: string };
+                const errStr = err.name ?? err.message ?? String(e);
+                audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: errStr });
+                try { toast.warning('재생이 멈춘 것 같아요. 다시 재생해 주세요.'); } catch { /* silent */ }
+              });
+            } else {
+              audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+            }
+          }
+        } else if (issue === 'crossfade-stuck') {
+          if (forceCompleteCrossfadeRef.current) {
+            forceCompleteCrossfadeRef.current('health-monitor-stuck');
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: true, error: null });
+          } else {
+            audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: 'no forceComplete ref' });
+          }
+        }
+      } catch (e) {
+        audioDebugWarn('[audio:health:recovery]', { issue, action, ok: false, error: String(e) });
+      }
+    }
+  }, []);
+
+  // ============================================================
+  // Phase 3-3 — Long-Run Playback Stability Test Harness
+  // ============================================================
+  // 매장 12h/24h 장시간 재생 관측용. 활성화 flag 가 켜졌을 때만 hook 내부에서
+  // 30초 tick + 10분 summary interval 을 생성. flag OFF 일 때는 no-op — 새
+  // polling / setInterval 0. 관찰 전용 · 재생 로직 변경 없음.
+  //
+  // 활성화: URL `?audioLongRun=1` 또는 localStorage 'deudda.audioLongRun'='1'
+  useAudioLongRunDiagnostics({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getPlaying: () => playing,
+    getCrossfading: () => crossfading,
+    getSinkReady: () => sinkReady,
+    getCurrentTrackId: () => current?.id ?? null,
+  });
+
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
   // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
@@ -775,6 +1010,23 @@ export default function Player() {
     if (crossfading) return; // crossfade 중엔 rAF 가 직접 제어
     if (audioARef.current) audioARef.current.volume = activeIdx === 0 ? volume : 0;
     if (audioBRef.current) audioBRef.current.volume = activeIdx === 1 ? volume : 0;
+    // Phase 3-1 — invariant: crossfade 아닌 상태에서 inactive audio 는 paused 여야 함.
+    // completeSwap 은 old-active 를 이미 pause 하지만, cancelCrossfade / seek race /
+    // browser 자체 resume 등으로 inactive 가 재생 중이면 이중 재생 발생.
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const inactive = activeIdx === 0 ? b : a;
+    if (inactive && !inactive.paused) {
+      audioDebugWarn('[audio:engine:invariant]', {
+        activeIdx,
+        activePaused: (activeIdx === 0 ? a : b)?.paused,
+        inactivePaused: inactive.paused,
+        activeVolume: (activeIdx === 0 ? a : b)?.volume,
+        inactiveVolume: inactive.volume,
+        crossfadeInProgress: crossfading,
+      });
+      try { inactive.pause(); } catch { /* noop */ }
+    }
   }, [volume, activeIdx, crossfading]);
 
   /* ============================================
@@ -841,18 +1093,24 @@ export default function Player() {
         console.info('[player] visibility resume');
         recoverStuckCrossfade('visibility');
         tryResume('visibility');
+        checkAudioHealth('visibilitychange');
       }
     };
-    const onOnline = () => tryResume('online');
+    const onOnline = () => {
+      tryResume('online');
+      checkAudioHealth('online');
+    };
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
         recoverStuckCrossfade('pageshow');
         tryResume('pageshow');
+        checkAudioHealth('pageshow');
       }
     };
     const onFocus = () => {
       recoverStuckCrossfade('focus');
       tryResume('focus');
+      checkAudioHealth('focus');
     };
 
     document.addEventListener('visibilitychange', onVis);
@@ -906,6 +1164,10 @@ export default function Player() {
   const forceCompleteCrossfadeRef = useRef<((reason: string) => void) | null>(null);
 
   function cancelCrossfade() {
+    // Phase 3-1 — cancel 로그 (rAF/timeout 실제로 있었는지, force ref 있었는지 함께 기록)
+    const hadRaf = crossfadeRafRef.current !== null;
+    const hadTimeout = crossfadeTimeoutRef.current !== null;
+    const hadForce = forceCompleteCrossfadeRef.current !== null;
     if (crossfadeRafRef.current !== null) {
       cancelAnimationFrame(crossfadeRafRef.current);
       crossfadeRafRef.current = null;
@@ -917,6 +1179,12 @@ export default function Player() {
     forceCompleteCrossfadeRef.current = null;  // X6.88
     setCrossfading(false);
     triggeredAtTrackIdRef.current = null;
+    // Phase 3-2 — health monitor crossfade-stuck timestamp clear
+    crossfadeStartedAtRef.current = 0;
+    if (hadRaf || hadTimeout || hadForce) {
+      audioDebugWarn('[audio:engine:crossfade-abort]', { hadRaf, hadTimeout, hadForce });
+      checkAudioHealth('crossfade-abort');
+    }
   }
 
   /** 트랙 종료 X초 전 도달 시 crossfade 시작 */
@@ -956,6 +1224,19 @@ export default function Player() {
     if (!nextAudio || !activeAudio) return;
 
     triggeredAtTrackIdRef.current = current.id;
+    // Phase 3-2 — crossfade start timestamp (health monitor crossfade-stuck 감지 기준)
+    crossfadeStartedAtRef.current = performance.now();
+
+    // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
+    audioDebugWarn('[audio:engine:crossfade-start]', {
+      fromTrackId: current.id,
+      toTrackId: nextTrack.id,
+      activeIdx,
+      swapToIdx: activeIdx === 0 ? 1 : 0,
+      crossfadeSeconds,
+      currentTime,
+      duration,
+    });
 
     nextAudio.src = nextTrack.audio_url;
     nextAudio.currentTime = 0;
@@ -983,6 +1264,14 @@ export default function Player() {
       console.info('[player] crossfade complete', {
         reason, from: current.id, to: nextTrack.id, elapsedMs: Math.round(performance.now() - startedAt),
       });
+      // Phase 3-1 — engine-scope crossfade complete 로그 (reason 별 종료 경로 추적)
+      audioDebugWarn('[audio:engine:crossfade-complete]', {
+        reason,
+        fromTrackId: current.id,
+        toTrackId: nextTrack.id,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        swapToIdx,
+      });
       // 양쪽 audio 안전 처리 — 어떤 reason 이든 active 즉시 pause
       if (activeAudio) {
         activeAudio.pause();
@@ -1008,8 +1297,12 @@ export default function Player() {
         crossfadeTimeoutRef.current = null;
       }
       forceCompleteCrossfadeRef.current = null;
+      // Phase 3-2 — health monitor crossfade-stuck 감지용 timestamp clear
+      crossfadeStartedAtRef.current = 0;
       // playerStore 의 index 도 다음으로 (jumpTo 가 src 재설정하면 안 되니 단순 set)
       jumpTo(nextIdx);
+      // Phase 3-2 — swap 직후 health check (invariant 확인)
+      checkAudioHealth('crossfade-complete');
     };
 
     // 외부 (visibility / heartbeat / onEnded) 에서 호출 가능하게 expose
@@ -1074,10 +1367,58 @@ export default function Player() {
     }
   }, [businessMode, currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, playing, repeat, startCrossfade]);
 
-  // 사용자 next/prev 시 fade 취소
+  // 사용자 next/prev 시 fade 취소 (unmount 시 정리)
+  // cancelCrossfade 는 매 렌더 재생성되지만 unmount 시점에 stale ref 를 참조해도
+  // 실제 취소해야 할 rAF/timeout 은 이미 unmount 로 무의미해지므로 무해.
   useEffect(() => {
     return () => cancelCrossfade();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Phase 3-1 — audio element 진단 이벤트 listener.
+  // stalled / waiting / suspend / emptied / playing / pause 는 React 이벤트 props 로
+  // 노출 안 되거나 부수효과 있어 native addEventListener 로 감지 로그만 남긴다.
+  // audio ref 가 remount 되면 audioMountRevision 이 오르므로 재부착.
+  useEffect(() => {
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const events = ['stalled', 'waiting', 'suspend', 'emptied', 'playing', 'pause'] as const;
+    type Handler = { el: HTMLAudioElement; ev: string; fn: (e: Event) => void };
+    const handlers: Handler[] = [];
+    const attach = (el: HTMLAudioElement | null, slot: 'A' | 'B') => {
+      if (!el) return;
+      events.forEach((ev) => {
+        const fn = () => {
+          audioDebugWarn('[audio:engine:event]', {
+            slot,
+            event: ev,
+            paused: el.paused,
+            ended: el.ended,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: el.currentTime,
+            crossfadeInProgress: crossfading,
+          });
+          // Phase 3-2 — engine event 마다 health check
+          checkAudioHealth(`event:${ev}`);
+        };
+        el.addEventListener(ev, fn);
+        handlers.push({ el, ev, fn });
+      });
+    };
+    attach(a, 'A');
+    attach(b, 'B');
+    return () => {
+      handlers.forEach(({ el, ev, fn }) => el.removeEventListener(ev, fn));
+      audioDebugWarn('[audio:engine:cleanup] event listeners removed', {
+        count: handlers.length,
+        audioMountRevision,
+      });
+    };
+    // crossfading 은 log 안에서만 쓰이는 snapshot 이므로 deps 로 안 넣어도 됨.
+    // audioMountRevision 은 A/B ref 실제 mount 시점 신호.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioMountRevision]);
 
   if (!current) return null;
 
@@ -1097,6 +1438,52 @@ export default function Player() {
       return;
     }
     const t = target.currentTime;
+
+    // Phase 3-1 — stuck detection.
+    // paused=false 인데 currentTime 이 2초 이상 진행 안 하면 recovery play 1회.
+    // 1초 cooldown. play() 만 재호출, load()/src 재설정 X.
+    const nowTs = performance.now();
+    const nowTrackId = current?.id ?? null;
+    const lastProgress = lastProgressRef.current;
+    if (
+      lastProgress.trackId === nowTrackId &&
+      Math.abs(t - lastProgress.ct) < 0.01 &&
+      !target.paused &&
+      !target.ended &&
+      nowTs - lastProgress.ts > 2000
+    ) {
+      if (nowTs - lastStuckRecoveryAtRef.current > 1000) {
+        lastStuckRecoveryAtRef.current = nowTs;
+        audioDebugWarn('[audio:engine:stuck]', {
+          trackId: nowTrackId,
+          currentTime: t,
+          lastCT: lastProgress.ct,
+          stallMs: Math.round(nowTs - lastProgress.ts),
+          readyState: target.readyState,
+          networkState: target.networkState,
+          paused: target.paused,
+        });
+        const p = target.play();
+        if (p && typeof p.catch === 'function') {
+          p.then(() => {
+            audioDebugWarn('[audio:engine:recovery-play] ok', { trackId: nowTrackId });
+          }).catch((e) => {
+            const err = e as { name?: string; message?: string };
+            audioDebugWarn('[audio:engine:recovery-play] failed', {
+              trackId: nowTrackId,
+              err: err.name ?? err.message ?? String(e),
+            });
+            try {
+              toast.warning('재생이 멈춘 것 같아요. 다시 재생해 주세요.');
+            } catch { /* silent */ }
+          });
+        }
+      }
+    }
+    if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
+      lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
+    }
+
     setCurrentTime(t);
     accumulatePlaylistView(t);
     enforcePreviewLimit(t);
@@ -1109,6 +1496,8 @@ export default function Player() {
         duration: Number.isFinite(dur) ? dur : 0,
       };
     }
+    // Phase 3-2 — health monitor hook (event-driven, cooldown-guarded)
+    checkAudioHealth('timeupdate');
   }
 
   // 직전 트랙이 "스킵"인지 판정해 silent 하게 기록. (다음/다른곡선택/중도이탈 = 스킵)
@@ -1284,6 +1673,7 @@ export default function Player() {
       console.debug('[Player] canplay → auto-play', { id: current?.id, readyState: audio.readyState, currentSrc: audio.currentSrc });
     }
     void attemptPlay(audio, 'canplay');
+    checkAudioHealth('canplay');
   }
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
@@ -1295,7 +1685,7 @@ export default function Player() {
       const desiredSinkId = useAudioOutputStore.getState().sinkId;
       const activeAudio = activeRef() as (HTMLAudioElement & { sinkId?: string }) | null;
       const inactiveAudio = nextRef() as (HTMLAudioElement & { sinkId?: string }) | null;
-      console.warn('[audio:sink:first-play-check]', {
+      audioDebugWarn('[audio:sink:first-play-check]', {
         label,
         desiredSinkId,
         activeSinkId: activeAudio?.sinkId,
@@ -1310,7 +1700,7 @@ export default function Player() {
       const audioObjectId = getAudioObjectId(audio);
       const activeAudioObjectId = activeAudio ? getAudioObjectId(activeAudio) : '<null>';
       const nextAudioObjectId = inactiveAudio ? getAudioObjectId(inactiveAudio) : '<null>';
-      console.warn('[audio:sink:play-audit]', {
+      audioDebugWarn('[audio:sink:play-audit]', {
         label,
         desiredSinkId,
         sinkReady,
@@ -1330,7 +1720,7 @@ export default function Player() {
       if (!sinkReady) {
         const ok = await ensureSinkReady(label);
         if (!ok) {
-          console.warn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
+          audioDebugWarn(`[audio:sink:first-play-check] ensureSinkReady=false (${label}) — proceeding with default fallback`);
         }
       }
     }
@@ -1459,6 +1849,21 @@ export default function Player() {
       return;
     }
 
+    // Phase 3-1 — onEnded 중복 발화 방지 (같은 트랙에서 500ms 이내 재발화 시 skip).
+    // 일부 브라우저 (특히 iOS Safari · Chrome/Windows) 에서 seek/reset 후 ended 가
+    // 두 번 fire 되어 next() 가 두 번 호출되는 케이스 차단.
+    const nowMs = performance.now();
+    const nowTrackId = current?.id ?? null;
+    const lastEnded = lastEndedAtRef.current;
+    if (lastEnded.trackId === nowTrackId && nowMs - lastEnded.ts < 500) {
+      audioDebugWarn('[audio:engine:ended-lock] duplicate ended ignored', {
+        trackId: nowTrackId,
+        dtMs: Math.round(nowMs - lastEnded.ts),
+      });
+      return;
+    }
+    lastEndedAtRef.current = { trackId: nowTrackId, ts: nowMs };
+
     // 자연 종료 — 다음 트랙 변경 시 스킵으로 집계하지 않도록 표시.
     if (current) naturalEndRef.current = current.id;
 
@@ -1514,6 +1919,7 @@ export default function Player() {
       if (endedId !== null && st.queue[st.index]?.id !== endedId) return;
       next();
     });
+    checkAudioHealth('ended');
   }
 
   function onError(e: React.SyntheticEvent<HTMLAudioElement>) {
@@ -1526,7 +1932,7 @@ export default function Player() {
     // codeName=SRC_NOT_SUPPORTED/DECODE 이면 코덱/컨테이너 문제(예: iOS 가 못 읽는 WAV).
      
     // iOS Safari 실기기 디버깅용 상세 로그 (track/src/code/networkState/readyState/시간/상태/UA)
-    console.warn('[audio:error]', {
+    audioDebugWarn('[audio:error]', {
       id: current?.id,
       title: current?.title,
       audio_url: current?.audio_url,

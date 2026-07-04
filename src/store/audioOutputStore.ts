@@ -10,6 +10,7 @@
  */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { audioDebugWarn } from '@/lib/audioDebug';
 
 const STORAGE_KEY = 'deudda.audioOutput.v1';
 
@@ -94,7 +95,7 @@ export const useAudioOutputStore = create<AudioOutputState>()(
       // localStorage 는 이론상 동기이지만 zustand 4 의 persist 는 별도 rehydration
       // step 을 거치므로 Guardian 이 hydrate 이전에 sinkId=null 을 읽을 수 있음.
       onRehydrateStorage: () => (state, error) => {
-        console.warn('[audio:sink:hydrate]', {
+        audioDebugWarn('[audio:sink:hydrate]', {
           fired: true,
           error: error ? String(error) : null,
           rehydratedSinkId: state?.sinkId ?? null,
@@ -109,7 +110,7 @@ export const useAudioOutputStore = create<AudioOutputState>()(
             rawStorage = window.localStorage.getItem(STORAGE_KEY);
           }
         } catch { /* silent */ }
-        console.warn('[audio:sink:store-hydrate]', {
+        audioDebugWarn('[audio:sink:store-hydrate]', {
           sinkId: state?.sinkId ?? null,
           sinkLabel: state?.sinkLabel ?? null,
           hasHydrated: true,
