@@ -78,12 +78,29 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
 export function useAudioSinkGuardian(
   audioRef: { current: HTMLAudioElement | null },
 ): void {
-  // Phase 2-1 QA — hook 이 실제로 mount 되는지 즉시 확인.
-  // 함수 body 최상단 · React hook rules 준수 · 매 render 마다 출력.
+  // Phase 2-1 QA — hook 실행 여부를 filter/cache 우회하여 3중으로 확인.
+  // 함수 body 최상단 · React hook rules 준수 · 매 render 마다 실행.
+  //   1) console.warn — DevTools console filter 가 warning level 표시할 때
+  //   2) console.error — filter 무관 (별도 diag)
+  //   3) document.body.dataset.audioSinkGuardian — Elements panel 에서 눈으로 확인
+  //   4) localStorage marker — Application → Local Storage 에서 확인
   console.warn('[audio:sink] guardian mounted');
+  console.error('[audio:sink] guardian mounted (diag)');
 
   const sinkId       = useAudioOutputStore((s) => s.sinkId);
   const markApplied  = useAudioOutputStore((s) => s.markApplied);
+
+  // DOM/localStorage marker — react-hooks/immutability 회피 위해 useEffect 안에서.
+  useEffect(() => {
+    try {
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.dataset.audioSinkGuardian = new Date().toISOString();
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('deudda.audioSink.guardianMount', new Date().toISOString());
+      }
+    } catch { /* silent */ }
+  });
 
   // sinkId 를 ref 로 보관 — 이벤트 리스너가 stale 값 잡지 않도록.
   const sinkIdRef = useRef<string | null>(sinkId);
