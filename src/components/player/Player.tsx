@@ -22,6 +22,7 @@ import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
+import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
@@ -656,6 +657,25 @@ export default function Player() {
       }
     }
   }, []);
+
+  // ============================================================
+  // Phase 3-3 — Long-Run Playback Stability Test Harness
+  // ============================================================
+  // 매장 12h/24h 장시간 재생 관측용. 활성화 flag 가 켜졌을 때만 hook 내부에서
+  // 30초 tick + 10분 summary interval 을 생성. flag OFF 일 때는 no-op — 새
+  // polling / setInterval 0. 관찰 전용 · 재생 로직 변경 없음.
+  //
+  // 활성화: URL `?audioLongRun=1` 또는 localStorage 'deudda.audioLongRun'='1'
+  useAudioLongRunDiagnostics({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getPlaying: () => playing,
+    getCrossfading: () => crossfading,
+    getSinkReady: () => sinkReady,
+    getCurrentTrackId: () => current?.id ?? null,
+  });
+
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
   // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
