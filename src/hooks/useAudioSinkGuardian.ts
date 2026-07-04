@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { toast } from '@/store/toastStore';
 
 type SinkCapableAudio = HTMLAudioElement & {
   setSinkId?: (deviceId: string) => Promise<void>;
@@ -53,6 +54,94 @@ function snapshotAudioState(audio: HTMLAudioElement): Record<string, unknown> {
   };
 }
 
+// ============================================================
+// Phase 2-3 — Post-setSinkId playback recovery
+// ============================================================
+// Chrome 은 재생 중 audio 에 setSinkId 를 걸면 파이프라인을 잠깐 끊었다 다시
+// 붙이는데, 특정 조합 (crossfade dual audio, PWA context, USB sink switch)
+// 에서 audio.paused=false 이지만 실제 output 은 무음 상태로 정지하는 케이스가
+// 관찰된다. 표준 대처는 setSinkId promise resolve 후 audio 가 원래 재생 중
+// 이었으면 play() 를 한 번 재호출하는 것.
+//
+// 규칙:
+//   • wasPlaying=true 일 때만 recovery (paused/ended 였으면 손대지 않음)
+//   • 같은 audio element 에 대해 1초 안에 중복 recovery 금지 (loop guard)
+//   • audio.load() / src 재설정 금지 (재생 로직 무변경)
+//   • 200ms 후 currentTime 이 진행 안 하면 stall 로 판단 → play() 1회 retry
+//   • retry 실패 시 toast 1회
+const RECOVERY_COOLDOWN_MS = 1000;
+const RECOVERY_VERIFY_DELAY_MS = 200;
+const recoveryLastAt = new WeakMap<HTMLAudioElement, number>();
+
+function recoverPlaybackAfterSinkChange(
+  audio: SinkCapableAudio,
+  desired: string,
+  tag: string,
+  ctBefore: number,
+): void {
+  const now = Date.now();
+  const lastAt = recoveryLastAt.get(audio) ?? 0;
+  if (now - lastAt < RECOVERY_COOLDOWN_MS) {
+    console.warn(`[audio:sink:recovery] skip cooldown tag=${tag} elapsed=${now - lastAt}ms`);
+    return;
+  }
+  recoveryLastAt.set(audio, now);
+
+  const snapshot = {
+    tag,
+    requested: desired,
+    afterSinkId: audio.sinkId,
+    wasPlaying: !audio.paused && !audio.ended,
+    paused: audio.paused,
+    currentTime: audio.currentTime,
+    readyState: audio.readyState,
+    networkState: audio.networkState,
+    muted: audio.muted,
+    volume: audio.volume,
+    ctBefore,
+  };
+  console.warn('[audio:sink:recovery]', snapshot);
+  console.warn(
+    `[audio:sink:recovery] entry tag=${tag} requested=${desired} after=${audio.sinkId ?? '""'} wasPlaying=${!audio.paused && !audio.ended} paused=${audio.paused} ct=${audio.currentTime} ctBefore=${ctBefore} readyState=${audio.readyState} networkState=${audio.networkState}`,
+  );
+
+  // 즉시 play() 재호출 — 수동 장치 변경은 user gesture context 안이므로
+  // autoplay 정책 통과. 실패 시 warn 만 하고 swallow (crossfade 경합 등)
+  audio.play().then(() => {
+    console.warn(`[audio:sink:recovery] immediate play ok tag=${tag}`);
+  }).catch((e) => {
+    const err = e as { name?: string; message?: string };
+    console.warn(`[audio:sink:recovery] immediate play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+  });
+
+  // 200ms 후 verify — 무음 stall (paused=false 인데 currentTime 안 움직임) 감지
+  window.setTimeout(() => {
+    if (audio.sinkId !== desired) {
+      console.warn(`[audio:sink:recovery] verify abort — sink changed tag=${tag} audio=${audio.sinkId ?? '""'}`);
+      return;
+    }
+    if (audio.paused || audio.ended) {
+      console.warn(`[audio:sink:recovery] verify skip — paused/ended tag=${tag} paused=${audio.paused} ended=${audio.ended}`);
+      return;
+    }
+    if (audio.currentTime > ctBefore + 0.05) {
+      console.warn(`[audio:sink:recovery] verify ok — progressing tag=${tag} ct=${audio.currentTime}`);
+      return;
+    }
+    // paused=false but no progress → silent stall → 1회 retry (cooldown 이미 write 됨)
+    console.warn(`[audio:sink:recovery] verify stall — retry play tag=${tag} ct=${audio.currentTime} ctBefore=${ctBefore}`);
+    audio.play().then(() => {
+      console.warn(`[audio:sink:recovery] retry play ok tag=${tag}`);
+    }).catch((e) => {
+      const err = e as { name?: string; message?: string };
+      console.warn(`[audio:sink:recovery] retry play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+      try {
+        toast.warning('출력 장치 전환 후 재생을 다시 시작해 주세요.');
+      } catch { /* silent */ }
+    });
+  }, RECOVERY_VERIFY_DELAY_MS);
+}
+
 async function applySink(audio: SinkCapableAudio, desired: string, tag: string): Promise<ApplyResult> {
   // Phase 2-2 QA — applySink 진입 여부 자체를 filter/cache 우회하여 확인.
   console.warn('[audio:sink] applySink entered', {
@@ -67,6 +156,9 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
   console.warn(
     `[audio:sink:state] tag=${tag} desired=${desired} store=${storeSnapshot.sinkId ?? 'null'} audio=${audio.sinkId ?? '""'} hasHydrated=${storeSnapshot.hasHydrated}`,
   );
+  // Phase 2-3 — recovery 판정을 위해 setSinkId 이전 재생 상태 capture
+  const wasPlaying = !audio.paused && !audio.ended;
+  const ctBefore = audio.currentTime;
   const supported = typeof audio.setSinkId === 'function';
   const beforeSinkId = audio.sinkId;
   const stateBefore = snapshotAudioState(audio);
@@ -102,9 +194,18 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
     userActivationHint: !effective && !exception
       ? 'audio.sinkId != requested — Chrome User Activation 정책 가능성. 첫 gesture 대기.'
       : undefined,
+    wasPlayingBefore: wasPlaying,
     // audio element runtime state
     ...snapshotAudioState(audio),
   });
+
+  // Phase 2-3 — sink 실제로 바뀌었고 재생 중이었으면 파이프라인 recovery.
+  //   • beforeSinkId !== afterSinkId 확인 → 같은 sink 재적용은 recovery 대상 X
+  //   • wasPlaying=true 만 대상 (paused 였으면 사용자가 정지 상태 유지 원함)
+  //   • 중복 recovery 는 module-level WeakMap cooldown 으로 방지
+  if (effective && wasPlaying && beforeSinkId !== afterSinkId) {
+    recoverPlaybackAfterSinkChange(audio, desired, tag, ctBefore);
+  }
 
   return { requested: desired, beforeSinkId, afterSinkId, supported, exception, effective };
 }
