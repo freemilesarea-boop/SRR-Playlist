@@ -442,6 +442,14 @@ export default function Player() {
   // onError 등 이벤트 핸들러에서 예약하는 auto-next 타이머. 언마운트/재예약 시 정리해
   // 마운트 해제 후 stale next() 발화를 막는다.
   const nextTimerRef = useRef<number | null>(null);
+  // Phase 3-1 — dual audio engine hardening.
+  //   • lastEndedAtRef: onEnded 중복 발화 500ms dedup
+  //   • lastProgressRef: currentTime 진행 tracking (stuck 감지 기준)
+  //   • lastStuckRecoveryAtRef: recovery play 1초 cooldown
+  //   • 이전 재생 로직 무변경 — guard 만 추가
+  const lastEndedAtRef = useRef<{ trackId: string | null; ts: number }>({ trackId: null, ts: 0 });
+  const lastProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({ trackId: null, ct: 0, ts: 0 });
+  const lastStuckRecoveryAtRef = useRef<number>(0);
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
   // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
@@ -775,6 +783,23 @@ export default function Player() {
     if (crossfading) return; // crossfade 중엔 rAF 가 직접 제어
     if (audioARef.current) audioARef.current.volume = activeIdx === 0 ? volume : 0;
     if (audioBRef.current) audioBRef.current.volume = activeIdx === 1 ? volume : 0;
+    // Phase 3-1 — invariant: crossfade 아닌 상태에서 inactive audio 는 paused 여야 함.
+    // completeSwap 은 old-active 를 이미 pause 하지만, cancelCrossfade / seek race /
+    // browser 자체 resume 등으로 inactive 가 재생 중이면 이중 재생 발생.
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const inactive = activeIdx === 0 ? b : a;
+    if (inactive && !inactive.paused) {
+      console.warn('[audio:engine:invariant]', {
+        activeIdx,
+        activePaused: (activeIdx === 0 ? a : b)?.paused,
+        inactivePaused: inactive.paused,
+        activeVolume: (activeIdx === 0 ? a : b)?.volume,
+        inactiveVolume: inactive.volume,
+        crossfadeInProgress: crossfading,
+      });
+      try { inactive.pause(); } catch { /* noop */ }
+    }
   }, [volume, activeIdx, crossfading]);
 
   /* ============================================
@@ -906,6 +931,10 @@ export default function Player() {
   const forceCompleteCrossfadeRef = useRef<((reason: string) => void) | null>(null);
 
   function cancelCrossfade() {
+    // Phase 3-1 — cancel 로그 (rAF/timeout 실제로 있었는지, force ref 있었는지 함께 기록)
+    const hadRaf = crossfadeRafRef.current !== null;
+    const hadTimeout = crossfadeTimeoutRef.current !== null;
+    const hadForce = forceCompleteCrossfadeRef.current !== null;
     if (crossfadeRafRef.current !== null) {
       cancelAnimationFrame(crossfadeRafRef.current);
       crossfadeRafRef.current = null;
@@ -917,6 +946,9 @@ export default function Player() {
     forceCompleteCrossfadeRef.current = null;  // X6.88
     setCrossfading(false);
     triggeredAtTrackIdRef.current = null;
+    if (hadRaf || hadTimeout || hadForce) {
+      console.warn('[audio:engine:crossfade-abort]', { hadRaf, hadTimeout, hadForce });
+    }
   }
 
   /** 트랙 종료 X초 전 도달 시 crossfade 시작 */
@@ -957,6 +989,17 @@ export default function Player() {
 
     triggeredAtTrackIdRef.current = current.id;
 
+    // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
+    console.warn('[audio:engine:crossfade-start]', {
+      fromTrackId: current.id,
+      toTrackId: nextTrack.id,
+      activeIdx,
+      swapToIdx: activeIdx === 0 ? 1 : 0,
+      crossfadeSeconds,
+      currentTime,
+      duration,
+    });
+
     nextAudio.src = nextTrack.audio_url;
     nextAudio.currentTime = 0;
     nextAudio.volume = 0;
@@ -982,6 +1025,14 @@ export default function Player() {
       completed = true;
       console.info('[player] crossfade complete', {
         reason, from: current.id, to: nextTrack.id, elapsedMs: Math.round(performance.now() - startedAt),
+      });
+      // Phase 3-1 — engine-scope crossfade complete 로그 (reason 별 종료 경로 추적)
+      console.warn('[audio:engine:crossfade-complete]', {
+        reason,
+        fromTrackId: current.id,
+        toTrackId: nextTrack.id,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        swapToIdx,
       });
       // 양쪽 audio 안전 처리 — 어떤 reason 이든 active 즉시 pause
       if (activeAudio) {
@@ -1079,6 +1130,49 @@ export default function Player() {
     return () => cancelCrossfade();
   }, []);
 
+  // Phase 3-1 — audio element 진단 이벤트 listener.
+  // stalled / waiting / suspend / emptied / playing / pause 는 React 이벤트 props 로
+  // 노출 안 되거나 부수효과 있어 native addEventListener 로 감지 로그만 남긴다.
+  // audio ref 가 remount 되면 audioMountRevision 이 오르므로 재부착.
+  useEffect(() => {
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const events = ['stalled', 'waiting', 'suspend', 'emptied', 'playing', 'pause'] as const;
+    type Handler = { el: HTMLAudioElement; ev: string; fn: (e: Event) => void };
+    const handlers: Handler[] = [];
+    const attach = (el: HTMLAudioElement | null, slot: 'A' | 'B') => {
+      if (!el) return;
+      events.forEach((ev) => {
+        const fn = () => {
+          console.warn('[audio:engine:event]', {
+            slot,
+            event: ev,
+            paused: el.paused,
+            ended: el.ended,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: el.currentTime,
+            crossfadeInProgress: crossfading,
+          });
+        };
+        el.addEventListener(ev, fn);
+        handlers.push({ el, ev, fn });
+      });
+    };
+    attach(a, 'A');
+    attach(b, 'B');
+    return () => {
+      handlers.forEach(({ el, ev, fn }) => el.removeEventListener(ev, fn));
+      console.warn('[audio:engine:cleanup] event listeners removed', {
+        count: handlers.length,
+        audioMountRevision,
+      });
+    };
+    // crossfading 은 log 안에서만 쓰이는 snapshot 이므로 deps 로 안 넣어도 됨.
+    // audioMountRevision 은 A/B ref 실제 mount 시점 신호.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioMountRevision]);
+
   if (!current) return null;
 
   /* ---------- audio element handlers (active 만) ---------- */
@@ -1097,6 +1191,52 @@ export default function Player() {
       return;
     }
     const t = target.currentTime;
+
+    // Phase 3-1 — stuck detection.
+    // paused=false 인데 currentTime 이 2초 이상 진행 안 하면 recovery play 1회.
+    // 1초 cooldown. play() 만 재호출, load()/src 재설정 X.
+    const nowTs = performance.now();
+    const nowTrackId = current?.id ?? null;
+    const lastProgress = lastProgressRef.current;
+    if (
+      lastProgress.trackId === nowTrackId &&
+      Math.abs(t - lastProgress.ct) < 0.01 &&
+      !target.paused &&
+      !target.ended &&
+      nowTs - lastProgress.ts > 2000
+    ) {
+      if (nowTs - lastStuckRecoveryAtRef.current > 1000) {
+        lastStuckRecoveryAtRef.current = nowTs;
+        console.warn('[audio:engine:stuck]', {
+          trackId: nowTrackId,
+          currentTime: t,
+          lastCT: lastProgress.ct,
+          stallMs: Math.round(nowTs - lastProgress.ts),
+          readyState: target.readyState,
+          networkState: target.networkState,
+          paused: target.paused,
+        });
+        const p = target.play();
+        if (p && typeof p.catch === 'function') {
+          p.then(() => {
+            console.warn('[audio:engine:recovery-play] ok', { trackId: nowTrackId });
+          }).catch((e) => {
+            const err = e as { name?: string; message?: string };
+            console.warn('[audio:engine:recovery-play] failed', {
+              trackId: nowTrackId,
+              err: err.name ?? err.message ?? String(e),
+            });
+            try {
+              toast.warning('재생이 멈춘 것 같아요. 다시 재생해 주세요.');
+            } catch { /* silent */ }
+          });
+        }
+      }
+    }
+    if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
+      lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
+    }
+
     setCurrentTime(t);
     accumulatePlaylistView(t);
     enforcePreviewLimit(t);
@@ -1458,6 +1598,21 @@ export default function Player() {
       console.debug('[player] ended ignored', { reason: 'not_active' });
       return;
     }
+
+    // Phase 3-1 — onEnded 중복 발화 방지 (같은 트랙에서 500ms 이내 재발화 시 skip).
+    // 일부 브라우저 (특히 iOS Safari · Chrome/Windows) 에서 seek/reset 후 ended 가
+    // 두 번 fire 되어 next() 가 두 번 호출되는 케이스 차단.
+    const nowMs = performance.now();
+    const nowTrackId = current?.id ?? null;
+    const lastEnded = lastEndedAtRef.current;
+    if (lastEnded.trackId === nowTrackId && nowMs - lastEnded.ts < 500) {
+      console.warn('[audio:engine:ended-lock] duplicate ended ignored', {
+        trackId: nowTrackId,
+        dtMs: Math.round(nowMs - lastEnded.ts),
+      });
+      return;
+    }
+    lastEndedAtRef.current = { trackId: nowTrackId, ts: nowMs };
 
     // 자연 종료 — 다음 트랙 변경 시 스킵으로 집계하지 않도록 표시.
     if (current) naturalEndRef.current = current.id;
