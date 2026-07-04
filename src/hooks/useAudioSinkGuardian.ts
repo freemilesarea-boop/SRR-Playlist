@@ -35,18 +35,37 @@ interface ApplyResult {
   effective: boolean;
 }
 
+// Phase 2-1 QA 확장 — audio element 실제 상태를 함께 출력.
+function snapshotAudioState(audio: HTMLAudioElement): Record<string, unknown> {
+  return {
+    identity: audio,                                              // ref console 접근용 (fold 하면 실체 확인)
+    isHTMLAudio: audio instanceof HTMLAudioElement,
+    currentSrc: audio.currentSrc,
+    src: audio.src,
+    readyState: audio.readyState,     // 0 HAVE_NOTHING · 1 HAVE_METADATA · 4 HAVE_ENOUGH_DATA
+    networkState: audio.networkState, // 0 EMPTY · 1 IDLE · 2 LOADING · 3 NO_SOURCE
+    paused: audio.paused,
+    ended: audio.ended,
+    muted: audio.muted,
+    volume: audio.volume,
+    duration: audio.duration,
+    currentTime: audio.currentTime,
+  };
+}
+
 async function applySink(audio: SinkCapableAudio, desired: string, tag: string): Promise<ApplyResult> {
   const supported = typeof audio.setSinkId === 'function';
   const beforeSinkId = audio.sinkId;
+  const stateBefore = snapshotAudioState(audio);
 
   // 이미 desired 이면 skip (idempotent)
   if (supported && beforeSinkId === desired) {
-    console.warn('[audio:sink]', tag, 'skip (already applied)', { beforeSinkId, requested: desired, supported });
+    console.warn('[audio:sink]', tag, 'skip (already applied)', { beforeSinkId, requested: desired, supported, ...stateBefore });
     return { requested: desired, beforeSinkId, afterSinkId: beforeSinkId, supported, exception: null, effective: true };
   }
 
   if (!supported) {
-    console.warn('[audio:sink]', tag, 'unsupported', { beforeSinkId, requested: desired, supported });
+    console.warn('[audio:sink]', tag, 'unsupported', { beforeSinkId, requested: desired, supported, ...stateBefore });
     return { requested: desired, beforeSinkId, afterSinkId: beforeSinkId, supported, exception: null, effective: false };
   }
 
@@ -70,6 +89,8 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
     userActivationHint: !effective && !exception
       ? 'audio.sinkId != requested — Chrome User Activation 정책 가능성. 첫 gesture 대기.'
       : undefined,
+    // audio element runtime state
+    ...snapshotAudioState(audio),
   });
 
   return { requested: desired, beforeSinkId, afterSinkId, supported, exception, effective };
@@ -86,6 +107,12 @@ export function useAudioSinkGuardian(
   //   4) localStorage marker — Application → Local Storage 에서 확인
   console.warn('[audio:sink] guardian mounted');
   console.error('[audio:sink] guardian mounted (diag)');
+  // audio ref identity 즉시 노출 — instanceof / null 여부 확인용
+  console.warn('[audio-ref]', {
+    ref: audioRef.current,
+    isHTMLAudio: audioRef.current instanceof HTMLAudioElement,
+    sinkIdNow: (audioRef.current as SinkCapableAudio | null)?.sinkId,
+  });
 
   const sinkId       = useAudioOutputStore((s) => s.sinkId);
   const markApplied  = useAudioOutputStore((s) => s.markApplied);
