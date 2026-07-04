@@ -54,6 +54,14 @@ function snapshotAudioState(audio: HTMLAudioElement): Record<string, unknown> {
 }
 
 async function applySink(audio: SinkCapableAudio, desired: string, tag: string): Promise<ApplyResult> {
+  // Phase 2-2 QA — applySink 진입 여부 자체를 filter/cache 우회하여 확인.
+  console.warn('[audio:sink] applySink entered', {
+    tag,
+    desired,
+    audioSinkIdNow: audio.sinkId,
+    hasSetSinkId: typeof audio.setSinkId === 'function',
+    isHTMLAudio: audio instanceof HTMLAudioElement,
+  });
   const supported = typeof audio.setSinkId === 'function';
   const beforeSinkId = audio.sinkId;
   const stateBefore = snapshotAudioState(audio);
@@ -144,6 +152,16 @@ export function useAudioSinkGuardian(
   // 재적용 콜백
   const reapply = useCallback(async (reason: string): Promise<ApplyResult | null> => {
     const a = audioRef.current as SinkCapableAudio | null;
+    // Phase 2-2 QA — reapply 실제 호출 여부 + audio ref 상태 확인 (call-path trace)
+    console.warn('[audio:sink] reapply called', {
+      tag,
+      reason,
+      audioRefExists: !!a,
+      audioIsHTMLAudio: a instanceof HTMLAudioElement,
+      desiredSinkId: sinkIdRef.current ?? 'default',
+      storeSinkId: useAudioOutputStore.getState().sinkId,
+      audioSinkIdNow: a?.sinkId,
+    });
     if (!a) return null;
     const desired = sinkIdRef.current ?? 'default';
     const result = await applySink(a, desired, `${tag}:${reason}`);
@@ -153,23 +171,59 @@ export function useAudioSinkGuardian(
 
   // (1) mount + sinkId 변경 시 즉시 apply (paint 이전 useLayoutEffect)
   useLayoutEffect(() => {
+    // Phase 2-2 QA — layoutEffect 실행 여부 + 3개 sinkId 값 동시 확인
+    const a = audioRef.current as SinkCapableAudio | null;
+    console.warn('[audio:sink] layoutEffect', {
+      tag,
+      desiredSinkId: sinkId ?? 'default',
+      storeSinkId: useAudioOutputStore.getState().sinkId,
+      audioSinkIdNow: a?.sinkId,
+      audioRefExists: !!a,
+      sinkIdDeps: sinkId,
+    });
     void reapply('mount/sinkChange');
-  }, [reapply, sinkId]);
+  }, [reapply, sinkId, audioRef, tag]);
 
   // (2) audio element lifecycle 이벤트마다 재확인 — 재생 시작 이전 시점 보장
   useEffect(() => {
     const a = audioRef.current;
-    if (!a) return;
-    const onLifecycle = (ev: Event) => { void reapply(ev.type); };
+    // Phase 2-2 QA — lifecycle listener useEffect 실행 여부 + audio ref 존재 확인
+    console.warn('[audio:sink] lifecycle useEffect entered', {
+      tag,
+      audioRefExists: !!a,
+      audioIsHTMLAudio: a instanceof HTMLAudioElement,
+    });
+    if (!a) {
+      console.warn('[audio:sink] listener SKIPPED — audio ref is null', { tag });
+      return;
+    }
+    const onLifecycle = (ev: Event) => {
+      // Phase 2-2 QA — lifecycle event 실제 fire 확인 (loadstart/metadata/canplay)
+      console.warn(`[audio:sink] ${ev.type} fired`, {
+        tag,
+        eventType: ev.type,
+        target: ev.target === a ? 'same-ref' : 'other',
+        currentSrc: a.currentSrc,
+        readyState: a.readyState,
+      });
+      void reapply(ev.type);
+    };
     a.addEventListener('loadstart', onLifecycle);
     a.addEventListener('loadedmetadata', onLifecycle);
     a.addEventListener('canplay', onLifecycle);
+    // Phase 2-2 QA — 세 리스너가 실제로 등록되었는지 확인
+    console.warn('[audio:sink] listener registered', {
+      tag,
+      audioRefExists: !!a,
+      currentSrc: a.currentSrc,
+      readyState: a.readyState,
+    });
     return () => {
       a.removeEventListener('loadstart', onLifecycle);
       a.removeEventListener('loadedmetadata', onLifecycle);
       a.removeEventListener('canplay', onLifecycle);
     };
-  }, [audioRef, reapply]);
+  }, [audioRef, reapply, tag]);
 
   // (3) Phase 2-1 — Deferred User Activation Apply.
   //     audio.sinkId !== desired 이면 Chrome User Activation 정책 실패로 판단하고,
