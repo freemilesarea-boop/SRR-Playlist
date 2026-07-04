@@ -32,12 +32,21 @@ interface AudioOutputState {
   effectiveSinkId: string | null;
   /** 실시간 연결 상태 (persist 하지 않음). */
   connectionStatus: AudioConnectionStatus;
+  /**
+   * persist 미들웨어 rehydration 완료 여부.
+   * Guardian 이 hydrate 이전에 실행되면 sinkId=null → desired='default' 로
+   * setSinkId 를 호출해 audio.sinkId 가 "" 로 고정되는 문제 방지.
+   * persist 하지 않는 runtime flag.
+   */
+  hasHydrated: boolean;
 
   setSink: (deviceId: string | null, label: string | null) => void;
   markApplied: (effectiveSinkId: string | null) => void;
   setConnectionStatus: (s: AudioConnectionStatus) => void;
   /** 기본 출력으로 전환 (사용자 액션 또는 recovery 자동). */
   resetToDefault: () => void;
+  /** persist onRehydrateStorage 콜백이 호출하는 internal setter. */
+  _setHasHydrated: (v: boolean) => void;
 }
 
 export const useAudioOutputStore = create<AudioOutputState>()(
@@ -49,6 +58,7 @@ export const useAudioOutputStore = create<AudioOutputState>()(
       lastAppliedAt: null,
       effectiveSinkId: null,
       connectionStatus: 'default',
+      hasHydrated: false,
 
       setSink: (deviceId, label) =>
         set({
@@ -72,6 +82,7 @@ export const useAudioOutputStore = create<AudioOutputState>()(
           effectiveSinkId: null,
           connectionStatus: 'default',
         }),
+      _setHasHydrated: (v) => set({ hasHydrated: v }),
     }),
     {
       name: STORAGE_KEY,
@@ -79,6 +90,19 @@ export const useAudioOutputStore = create<AudioOutputState>()(
       // sinkId/sinkLabel/savedAt 만 persist. 나머지는 runtime 계산.
       partialize: (s) => ({ sinkId: s.sinkId, sinkLabel: s.sinkLabel, savedAt: s.savedAt }),
       version: 1,
+      // Phase 2-2 hotfix — persist rehydration 완료 시점 명시적 감지.
+      // localStorage 는 이론상 동기이지만 zustand 4 의 persist 는 별도 rehydration
+      // step 을 거치므로 Guardian 이 hydrate 이전에 sinkId=null 을 읽을 수 있음.
+      onRehydrateStorage: () => (state, error) => {
+        console.warn('[audio:sink:hydrate]', {
+          fired: true,
+          error: error ? String(error) : null,
+          rehydratedSinkId: state?.sinkId ?? null,
+          rehydratedSinkLabel: state?.sinkLabel ?? null,
+          rehydratedSavedAt: state?.savedAt ?? null,
+        });
+        state?._setHasHydrated(true);
+      },
     },
   ),
 );
