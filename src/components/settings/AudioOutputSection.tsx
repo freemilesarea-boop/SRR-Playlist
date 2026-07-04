@@ -13,11 +13,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Headphones, RefreshCw, Volume2, AlertTriangle, ShieldAlert, Speaker,
-  Circle, RotateCcw, Trash2, ListChecks,
+  Circle, RotateCcw, Trash2, ListChecks, Eye, EyeOff, PhoneCall,
 } from 'lucide-react';
 import { useAudioOutputDevices } from '@/hooks/useAudioOutputDevices';
 import { useAudioOutputStore, type AudioConnectionStatus } from '@/store/audioOutputStore';
-import { playTestTone, type TestToneHandle } from '@/lib/audioOutput';
+import { playTestTone, type TestToneHandle, type AudioOutputDeviceKind } from '@/lib/audioOutput';
 
 export default function AudioOutputSection() {
   const {
@@ -35,6 +35,8 @@ export default function AudioOutputSection() {
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [permBusy, setPermBusy] = useState(false);
+  // Phase 2-2 hotfix — Windows communications 장치는 기본 UI 에서 숨긴다.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const testHandleRef = useRef<TestToneHandle | null>(null);
 
   // 컴포넌트 unmount 시 테스트음 중지
@@ -86,6 +88,13 @@ export default function AudioOutputSection() {
     setSink(sinkId, dev?.label ?? sinkLabel);
   }, [sinkId, sinkLabel, devices, setSink]);
 
+  // Hook rules — 모든 useMemo/useCallback 은 early return 이전에 호출한다.
+  const commsCount = useMemo(() => devices.filter((d) => d.kind === 'communications').length, [devices]);
+  const visibleDevices = useMemo(
+    () => (showAdvanced ? devices : devices.filter((d) => d.kind !== 'communications')),
+    [devices, showAdvanced],
+  );
+
   // ============================================================
   // Unsupported browser
   // ============================================================
@@ -126,6 +135,8 @@ export default function AudioOutputSection() {
   const activeDevice = devices.find((d) => d.deviceId === sinkId) ?? null;
   const activeLabel = activeDevice?.label ?? sinkLabel ?? '기본 장치';
   const badge = connectionBadge(connectionStatus);
+  const activeKind: AudioOutputDeviceKind | null = activeDevice?.kind ?? (sinkId ? null : 'default');
+  const activeIsComms = activeKind === 'communications';
 
   return (
     <section className="space-y-2">
@@ -187,9 +198,24 @@ export default function AudioOutputSection() {
 
         {/* 장치 선택 dropdown */}
         <div className="mt-3 space-y-1.5">
-          <label className="block text-[11px] font-semibold text-ink-mute" htmlFor="audio-output-select">
-            출력 장치 선택
-          </label>
+          <div className="flex items-end justify-between gap-2">
+            <label className="block text-[11px] font-semibold text-ink-mute" htmlFor="audio-output-select">
+              출력 장치 선택
+            </label>
+            {commsCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-md bg-bg-soft px-1.5 py-0.5 text-[9.5px] font-semibold text-ink-mute ring-1 ring-line/15 transition hover:bg-bg-hover hover:text-ink"
+                title={showAdvanced
+                  ? '커뮤니케이션 장치를 숨깁니다'
+                  : `${commsCount}개의 커뮤니케이션(통화용) 장치가 숨겨져 있습니다`}
+              >
+                {showAdvanced ? <EyeOff size={10} /> : <Eye size={10} />}
+                {showAdvanced ? '통화용 숨김' : `고급 (+${commsCount})`}
+              </button>
+            )}
+          </div>
           <select
             id="audio-output-select"
             value={sinkId ?? ''}
@@ -197,12 +223,32 @@ export default function AudioOutputSection() {
             className="w-full appearance-none rounded-lg bg-bg-soft px-3 py-2 text-[12px] text-ink ring-1 ring-line/20 outline-none focus:ring-accent/60"
           >
             <option value="">기본 장치 (Windows 기본 출력)</option>
-            {devices.map((d) => (
+            {visibleDevices.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
-                {d.label} {d.deviceId === 'default' ? '· default' : ''}
+                {d.label}
+                {d.deviceId === 'default' ? ' · default' : ''}
+                {d.kind === 'communications' ? ' · ⚠ 통화용' : ''}
               </option>
             ))}
           </select>
+
+          {/* Phase 2-2 hotfix — 커뮤니케이션 장치 선택 시 인라인 경고 */}
+          {activeIsComms && (
+            <div className="mt-1.5 rounded-lg bg-amber-500/20 p-2 ring-1 ring-amber-500/40">
+              <div className="flex items-start gap-1.5">
+                <PhoneCall size={12} className="mt-0.5 shrink-0 text-amber-200" />
+                <div className="min-w-0 text-[10.5px] leading-relaxed">
+                  <p className="font-bold text-amber-100">
+                    커뮤니케이션 장치는 통화/알림용 장치입니다.
+                  </p>
+                  <p className="mt-0.5 text-amber-50/85">
+                    매장 BGM 출력에는 권장하지 않습니다. 새로고침 시 같은 물리 장치의 일반 출력으로 자동 보정됩니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <p className="text-[10px] leading-relaxed text-ink-dim">
             매장 스피커 전용 출력으로 지정하면 매장 운영 프로그램(주문/결제/알림)의 소리와 완전히 분리됩니다.
             선택 즉시 재생 중인 곡에도 적용되고, 앱 재실행 후에도 자동 복원됩니다.
@@ -274,6 +320,8 @@ export default function AudioOutputSection() {
           supportSink={supportSink}
           connectionStatus={connectionStatus}
           deviceCount={devices.length}
+          commsCount={commsCount}
+          activeKind={activeKind}
         />
       </div>
     </section>
@@ -302,24 +350,37 @@ function ActionBtn({ icon, label, onClick, disabled }: {
 
 function DiagnosticsCard({
   sinkId, sinkLabel, savedAt, lastAppliedAt, effectiveSinkId, supportEnum, supportSink, connectionStatus, deviceCount,
+  commsCount, activeKind,
 }: {
   sinkId: string | null; sinkLabel: string | null;
   savedAt: string | null; lastAppliedAt: string | null; effectiveSinkId: string | null;
   supportEnum: boolean; supportSink: boolean;
   connectionStatus: AudioConnectionStatus; deviceCount: number;
+  commsCount: number; activeKind: AudioOutputDeviceKind | null;
 }) {
+  const kindTone: 'success' | 'warning' | 'danger' | 'neutral' | 'info' =
+    activeKind === 'physical'       ? 'success'
+    : activeKind === 'communications' ? 'danger'
+    : activeKind === 'default'        ? 'info'
+    : 'neutral';
+  const kindLabel =
+    activeKind === 'physical'       ? '일반 장치 (권장)'
+    : activeKind === 'communications' ? '커뮤니케이션 ⚠'
+    : activeKind === 'default'        ? '기본 출력'
+    : '—';
   const rows = useMemo(() => [
     { label: 'setSinkId',      value: supportSink ? '지원'   : '미지원',  tone: supportSink ? 'success' : 'danger'   as const },
     { label: 'enumerateDevices', value: supportEnum ? '지원' : '미지원',  tone: supportEnum ? 'success' : 'danger'   as const },
     { label: 'devicechange',   value: supportEnum ? '구독 중' : '미지원', tone: supportEnum ? 'success' : 'neutral'  as const },
     { label: '연결 상태',      value: statusLabelKo(connectionStatus),   tone: statusTone(connectionStatus) },
-    { label: '감지된 장치',    value: `${deviceCount} 개`,                 tone: 'neutral' as const },
+    { label: '장치 종류',      value: kindLabel,                            tone: kindTone },
+    { label: '감지된 장치',    value: `${deviceCount} 개${commsCount > 0 ? ` (통화용 ${commsCount})` : ''}`, tone: 'neutral' as const },
     { label: '저장 Sink ID',   value: sinkId ? shortenId(sinkId) : '없음', tone: sinkId ? 'info' : 'neutral' as const },
     { label: '저장 Label',     value: sinkLabel ?? '—',                    tone: 'neutral' as const },
     { label: '실제 적용 ID',   value: effectiveSinkId ? shortenId(effectiveSinkId) : '기본 출력', tone: effectiveSinkId ? 'success' : 'neutral' as const },
     { label: '저장 시각',      value: fmtLocal(savedAt),                   tone: 'neutral' as const },
     { label: '적용 시각',      value: fmtLocal(lastAppliedAt),             tone: 'neutral' as const },
-  ], [supportSink, supportEnum, connectionStatus, deviceCount, sinkId, sinkLabel, effectiveSinkId, savedAt, lastAppliedAt]);
+  ], [supportSink, supportEnum, connectionStatus, deviceCount, sinkId, sinkLabel, effectiveSinkId, savedAt, lastAppliedAt, commsCount, kindLabel, kindTone]);
 
   return (
     <div className="mt-3 rounded-xl bg-bg-soft p-2.5 ring-1 ring-line/15">

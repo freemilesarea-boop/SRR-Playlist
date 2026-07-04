@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { toast } from '@/store/toastStore';
 
 type SinkCapableAudio = HTMLAudioElement & {
   setSinkId?: (deviceId: string) => Promise<void>;
@@ -53,6 +54,94 @@ function snapshotAudioState(audio: HTMLAudioElement): Record<string, unknown> {
   };
 }
 
+// ============================================================
+// Phase 2-3 — Post-setSinkId playback recovery
+// ============================================================
+// Chrome 은 재생 중 audio 에 setSinkId 를 걸면 파이프라인을 잠깐 끊었다 다시
+// 붙이는데, 특정 조합 (crossfade dual audio, PWA context, USB sink switch)
+// 에서 audio.paused=false 이지만 실제 output 은 무음 상태로 정지하는 케이스가
+// 관찰된다. 표준 대처는 setSinkId promise resolve 후 audio 가 원래 재생 중
+// 이었으면 play() 를 한 번 재호출하는 것.
+//
+// 규칙:
+//   • wasPlaying=true 일 때만 recovery (paused/ended 였으면 손대지 않음)
+//   • 같은 audio element 에 대해 1초 안에 중복 recovery 금지 (loop guard)
+//   • audio.load() / src 재설정 금지 (재생 로직 무변경)
+//   • 200ms 후 currentTime 이 진행 안 하면 stall 로 판단 → play() 1회 retry
+//   • retry 실패 시 toast 1회
+const RECOVERY_COOLDOWN_MS = 1000;
+const RECOVERY_VERIFY_DELAY_MS = 200;
+const recoveryLastAt = new WeakMap<HTMLAudioElement, number>();
+
+function recoverPlaybackAfterSinkChange(
+  audio: SinkCapableAudio,
+  desired: string,
+  tag: string,
+  ctBefore: number,
+): void {
+  const now = Date.now();
+  const lastAt = recoveryLastAt.get(audio) ?? 0;
+  if (now - lastAt < RECOVERY_COOLDOWN_MS) {
+    console.warn(`[audio:sink:recovery] skip cooldown tag=${tag} elapsed=${now - lastAt}ms`);
+    return;
+  }
+  recoveryLastAt.set(audio, now);
+
+  const snapshot = {
+    tag,
+    requested: desired,
+    afterSinkId: audio.sinkId,
+    wasPlaying: !audio.paused && !audio.ended,
+    paused: audio.paused,
+    currentTime: audio.currentTime,
+    readyState: audio.readyState,
+    networkState: audio.networkState,
+    muted: audio.muted,
+    volume: audio.volume,
+    ctBefore,
+  };
+  console.warn('[audio:sink:recovery]', snapshot);
+  console.warn(
+    `[audio:sink:recovery] entry tag=${tag} requested=${desired} after=${audio.sinkId ?? '""'} wasPlaying=${!audio.paused && !audio.ended} paused=${audio.paused} ct=${audio.currentTime} ctBefore=${ctBefore} readyState=${audio.readyState} networkState=${audio.networkState}`,
+  );
+
+  // 즉시 play() 재호출 — 수동 장치 변경은 user gesture context 안이므로
+  // autoplay 정책 통과. 실패 시 warn 만 하고 swallow (crossfade 경합 등)
+  audio.play().then(() => {
+    console.warn(`[audio:sink:recovery] immediate play ok tag=${tag}`);
+  }).catch((e) => {
+    const err = e as { name?: string; message?: string };
+    console.warn(`[audio:sink:recovery] immediate play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+  });
+
+  // 200ms 후 verify — 무음 stall (paused=false 인데 currentTime 안 움직임) 감지
+  window.setTimeout(() => {
+    if (audio.sinkId !== desired) {
+      console.warn(`[audio:sink:recovery] verify abort — sink changed tag=${tag} audio=${audio.sinkId ?? '""'}`);
+      return;
+    }
+    if (audio.paused || audio.ended) {
+      console.warn(`[audio:sink:recovery] verify skip — paused/ended tag=${tag} paused=${audio.paused} ended=${audio.ended}`);
+      return;
+    }
+    if (audio.currentTime > ctBefore + 0.05) {
+      console.warn(`[audio:sink:recovery] verify ok — progressing tag=${tag} ct=${audio.currentTime}`);
+      return;
+    }
+    // paused=false but no progress → silent stall → 1회 retry (cooldown 이미 write 됨)
+    console.warn(`[audio:sink:recovery] verify stall — retry play tag=${tag} ct=${audio.currentTime} ctBefore=${ctBefore}`);
+    audio.play().then(() => {
+      console.warn(`[audio:sink:recovery] retry play ok tag=${tag}`);
+    }).catch((e) => {
+      const err = e as { name?: string; message?: string };
+      console.warn(`[audio:sink:recovery] retry play failed tag=${tag} err=${err.name ?? String(err.message ?? err)}`);
+      try {
+        toast.warning('출력 장치 전환 후 재생을 다시 시작해 주세요.');
+      } catch { /* silent */ }
+    });
+  }, RECOVERY_VERIFY_DELAY_MS);
+}
+
 async function applySink(audio: SinkCapableAudio, desired: string, tag: string): Promise<ApplyResult> {
   // Phase 2-2 QA — applySink 진입 여부 자체를 filter/cache 우회하여 확인.
   console.warn('[audio:sink] applySink entered', {
@@ -62,6 +151,14 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
     hasSetSinkId: typeof audio.setSinkId === 'function',
     isHTMLAudio: audio instanceof HTMLAudioElement,
   });
+  // 단일 라인 문자열 로그 — DevTools 가 object 를 collapse 해서 안 보이는 경우 대비
+  const storeSnapshot = useAudioOutputStore.getState();
+  console.warn(
+    `[audio:sink:state] tag=${tag} desired=${desired} store=${storeSnapshot.sinkId ?? 'null'} audio=${audio.sinkId ?? '""'} hasHydrated=${storeSnapshot.hasHydrated}`,
+  );
+  // Phase 2-3 — recovery 판정을 위해 setSinkId 이전 재생 상태 capture
+  const wasPlaying = !audio.paused && !audio.ended;
+  const ctBefore = audio.currentTime;
   const supported = typeof audio.setSinkId === 'function';
   const beforeSinkId = audio.sinkId;
   const stateBefore = snapshotAudioState(audio);
@@ -97,9 +194,18 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
     userActivationHint: !effective && !exception
       ? 'audio.sinkId != requested — Chrome User Activation 정책 가능성. 첫 gesture 대기.'
       : undefined,
+    wasPlayingBefore: wasPlaying,
     // audio element runtime state
     ...snapshotAudioState(audio),
   });
+
+  // Phase 2-3 — sink 실제로 바뀌었고 재생 중이었으면 파이프라인 recovery.
+  //   • beforeSinkId !== afterSinkId 확인 → 같은 sink 재적용은 recovery 대상 X
+  //   • wasPlaying=true 만 대상 (paused 였으면 사용자가 정지 상태 유지 원함)
+  //   • 중복 recovery 는 module-level WeakMap cooldown 으로 방지
+  if (effective && wasPlaying && beforeSinkId !== afterSinkId) {
+    recoverPlaybackAfterSinkChange(audio, desired, tag, ctBefore);
+  }
 
   return { requested: desired, beforeSinkId, afterSinkId, supported, exception, effective };
 }
@@ -124,6 +230,8 @@ export function useAudioSinkGuardian(
 
   const sinkId       = useAudioOutputStore((s) => s.sinkId);
   const markApplied  = useAudioOutputStore((s) => s.markApplied);
+  // Phase 2-2 hotfix — hydrate 이전에 apply 하지 않도록 gate
+  const hasHydrated  = useAudioOutputStore((s) => s.hasHydrated);
 
   // DOM/localStorage marker — react-hooks/immutability 회피 위해 useEffect 안에서.
   useEffect(() => {
@@ -152,6 +260,7 @@ export function useAudioSinkGuardian(
   // 재적용 콜백
   const reapply = useCallback(async (reason: string): Promise<ApplyResult | null> => {
     const a = audioRef.current as SinkCapableAudio | null;
+    const s = useAudioOutputStore.getState();
     // Phase 2-2 QA — reapply 실제 호출 여부 + audio ref 상태 확인 (call-path trace)
     console.warn('[audio:sink] reapply called', {
       tag,
@@ -159,30 +268,50 @@ export function useAudioSinkGuardian(
       audioRefExists: !!a,
       audioIsHTMLAudio: a instanceof HTMLAudioElement,
       desiredSinkId: sinkIdRef.current ?? 'default',
-      storeSinkId: useAudioOutputStore.getState().sinkId,
+      storeSinkId: s.sinkId,
       audioSinkIdNow: a?.sinkId,
+      hasHydrated: s.hasHydrated,
     });
+    // 단일 라인 문자열 로그 — DevTools 가 object 를 collapse 해도 확인 가능
+    console.warn(
+      `[audio:sink:state] reapply tag=${tag} reason=${reason} desired=${sinkIdRef.current ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${s.hasHydrated}`,
+    );
     if (!a) return null;
-    const desired = sinkIdRef.current ?? 'default';
+    // Phase 2-2 hotfix — hydrate 이전 apply 를 skip 하지 않고, 대신 sinkIdRef 대신
+    // store 의 최신 값을 우선 참조. sinkIdRef 는 effect deps 로 업데이트되지만,
+    // 첫 render 에서 hydrate 가 늦으면 stale null 을 잡을 수 있음.
+    const desired = s.sinkId ?? sinkIdRef.current ?? 'default';
     const result = await applySink(a, desired, `${tag}:${reason}`);
-    if (result.effective) markApplied(sinkIdRef.current ?? null);
+    if (result.effective) markApplied(desired === 'default' ? null : desired);
     return result;
   }, [audioRef, markApplied, tag]);
 
   // (1) mount + sinkId 변경 시 즉시 apply (paint 이전 useLayoutEffect)
+  //     Phase 2-2 hotfix — hasHydrated 도 deps 에 포함해서 hydrate 완료 시점에 재실행.
   useLayoutEffect(() => {
-    // Phase 2-2 QA — layoutEffect 실행 여부 + 3개 sinkId 값 동시 확인
     const a = audioRef.current as SinkCapableAudio | null;
+    const s = useAudioOutputStore.getState();
+    // Phase 2-2 QA — layoutEffect 실행 여부 + 3개 sinkId 값 동시 확인
     console.warn('[audio:sink] layoutEffect', {
       tag,
       desiredSinkId: sinkId ?? 'default',
-      storeSinkId: useAudioOutputStore.getState().sinkId,
+      storeSinkId: s.sinkId,
       audioSinkIdNow: a?.sinkId,
       audioRefExists: !!a,
       sinkIdDeps: sinkId,
+      hasHydrated,
     });
+    console.warn(
+      `[audio:sink:state] layoutEffect tag=${tag} desired=${sinkId ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${hasHydrated}`,
+    );
+    // hydrate 이전이면 skip — sinkId 가 null 인 채로 apply 하면 audio.sinkId 가 "" 로
+    // 고정되고, hydrate 후 재실행되지 않는 문제 방지.
+    if (!hasHydrated) {
+      console.warn(`[audio:sink] layoutEffect skipped — waiting for hydration (tag=${tag})`);
+      return;
+    }
     void reapply('mount/sinkChange');
-  }, [reapply, sinkId, audioRef, tag]);
+  }, [reapply, sinkId, audioRef, tag, hasHydrated]);
 
   // (2) audio element lifecycle 이벤트마다 재확인 — 재생 시작 이전 시점 보장
   useEffect(() => {
@@ -230,6 +359,7 @@ export function useAudioSinkGuardian(
   //     첫 play / pointerdown / click 이벤트 중 가장 먼저 발생하는 시점에 재시도.
   //     이미 성공했으면 리스너 무동작.
   useEffect(() => {
+    if (!hasHydrated) return; // Phase 2-2 hotfix — hydrate 이전엔 대기 리스너 등록 X
     const desired = sinkId ?? 'default';
     const a = audioRef.current as SinkCapableAudio | null;
     if (!a) return;
@@ -265,5 +395,5 @@ export function useAudioSinkGuardian(
 
     return cleanup;
     // sinkId 변경 시 재무장, lastAppliedAt 은 성공 여부에 따라 갱신되므로 deps 로.
-  }, [audioRef, sinkId, reapply, tag]);
+  }, [audioRef, sinkId, reapply, tag, hasHydrated]);
 }

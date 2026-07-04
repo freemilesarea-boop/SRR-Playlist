@@ -29,10 +29,48 @@ export function isEnumerateDevicesSupported(): boolean {
   return typeof md?.enumerateDevices === 'function';
 }
 
+/**
+ * Windows enumerateDevices 는 같은 물리 장치를 default / communications / physical
+ * 3 종으로 중복 노출한다. communications 는 통화/알림 우선 채널이라 매장 BGM 을
+ * 라우팅하면 실제로는 노트북 스피커로 나가는 문제가 발생한다.
+ */
+export type AudioOutputDeviceKind = 'default' | 'communications' | 'physical';
+
+/** label 에 "커뮤니케이션" / "communications" / "communication" 이 포함되는지 판정. */
+const COMMS_LABEL_PATTERN = /(?:커뮤니케이션|Communications?)/i;
+
+export function classifyAudioOutputDevice(deviceId: string, label: string): AudioOutputDeviceKind {
+  if (deviceId === 'default') return 'default';
+  if (deviceId === 'communications') return 'communications';
+  if (COMMS_LABEL_PATTERN.test(label)) return 'communications';
+  return 'physical';
+}
+
+/**
+ * communications 관련 prefix / suffix / 괄호 표기를 제거한 label.
+ * 자동 교체 시 physical sibling 을 label 기반으로 찾을 때 사용.
+ * 예:
+ *   "커뮤니케이션 - 헤드폰 (Realtek)" → "헤드폰 (Realtek)"
+ *   "Headphones - Communications"    → "Headphones"
+ *   "Speaker (Communications)"        → "Speaker"
+ */
+export function normalizeAudioOutputLabel(label: string): string {
+  return label
+    .replace(/^\s*(?:커뮤니케이션|Communications?)\s*[-–—:]\s*/i, '')
+    .replace(/\s*[-–—:]\s*(?:커뮤니케이션|Communications?)\s*$/i, '')
+    .replace(/\s*\(\s*(?:커뮤니케이션|Communications?)\s*\)\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export interface AudioOutputDevice {
   deviceId: string;
   label: string;
   groupId: string;
+  /** default / communications / physical 분류. */
+  kind: AudioOutputDeviceKind;
+  /** communications suffix/prefix 제거된 label. auto-swap 매칭 용. */
+  normalizedLabel: string;
 }
 
 /**
@@ -46,15 +84,46 @@ export async function enumerateAudioOutputs(): Promise<AudioOutputDevice[]> {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices
       .filter((d) => d.kind === 'audiooutput')
-      .map((d) => ({
-        deviceId: d.deviceId,
-        label: d.label && d.label.length > 0 ? d.label : '(이름 미공개)',
-        groupId: d.groupId,
-      }));
+      .map((d) => {
+        const label = d.label && d.label.length > 0 ? d.label : '(이름 미공개)';
+        return {
+          deviceId: d.deviceId,
+          label,
+          groupId: d.groupId,
+          kind: classifyAudioOutputDevice(d.deviceId, label),
+          normalizedLabel: normalizeAudioOutputLabel(label),
+        };
+      });
   } catch (e) {
     console.warn('[audioOutput] enumerateDevices failed', e);
     return [];
   }
+}
+
+/**
+ * 저장된 communications 장치의 physical sibling 을 찾는다.
+ * 매칭 우선순위:
+ *   1) 같은 groupId 이면서 kind='physical'
+ *   2) normalizedLabel 이 같으면서 kind='physical'
+ * 실패 시 null.
+ */
+export function findPhysicalSibling(
+  devices: AudioOutputDevice[],
+  target: AudioOutputDevice,
+): AudioOutputDevice | null {
+  if (target.groupId) {
+    const byGroup = devices.find(
+      (d) => d.deviceId !== target.deviceId && d.groupId === target.groupId && d.kind === 'physical',
+    );
+    if (byGroup) return byGroup;
+  }
+  if (target.normalizedLabel) {
+    const byLabel = devices.find(
+      (d) => d.deviceId !== target.deviceId && d.kind === 'physical' && d.normalizedLabel === target.normalizedLabel,
+    );
+    if (byLabel) return byLabel;
+  }
+  return null;
 }
 
 /**
