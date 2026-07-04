@@ -21,6 +21,10 @@ import {
   enumerateAudioOutputs,
   isEnumerateDevicesSupported,
   isSetSinkIdSupported,
+  findPhysicalSibling,
+  normalizeAudioOutputLabel,
+  classifyAudioOutputDevice,
+  type AudioOutputDevice,
 } from '@/lib/audioOutput';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { toast } from '@/store/toastStore';
@@ -69,9 +73,41 @@ export function useAudioOutputAutoRestore(): void {
       }
       firstEnumDone.current = true;
 
+      // Phase 2-2 hotfix — 저장된 장치가 communications 인지 미리 판정.
+      // deviceId 만으로도 판정 가능 ('communications' 리터럴) 하지만 실제 GUID 뒤에
+      // label 만 "커뮤니케이션 - ..." 로 저장된 케이스도 존재.
+      const savedIsComms =
+        savedId === 'communications' ||
+        (!!savedLabel && classifyAudioOutputDevice(savedId, savedLabel) === 'communications');
+
+      // 자동 교체 helper — target 이 communications 이면 physical sibling 으로 setSink.
+      const trySwapCommsToPhysical = (target: AudioOutputDevice): boolean => {
+        const sibling = findPhysicalSibling(devices, target);
+        if (sibling) {
+          setSink(sibling.deviceId, sibling.label);
+          setConnectionStatus('connected');
+          if (lastStatus.current !== 'connected') {
+            toast.success('음악 출력용 장치로 자동 보정되었습니다.');
+          }
+          lastStatus.current = 'connected';
+          return true;
+        }
+        // physical sibling 없음 — default 로 fallback 하지 말고 사용자에게 재선택 안내.
+        setConnectionStatus('disconnected');
+        if (lastStatus.current !== 'disconnected') {
+          toast.warning('현재 저장된 장치는 통화/알림용(커뮤니케이션) 장치입니다. 매장 BGM 용으로 재선택해 주세요.');
+        }
+        lastStatus.current = 'disconnected';
+        return false;
+      };
+
       // (c) deviceId 완전 일치
       const idMatch = devices.find((d) => d.deviceId === savedId);
       if (idMatch) {
+        if (idMatch.kind === 'communications' || savedIsComms) {
+          trySwapCommsToPhysical(idMatch);
+          return;
+        }
         markApplied(savedId);
         setConnectionStatus('connected');
         if (lastStatus.current === 'disconnected') {
@@ -84,10 +120,15 @@ export function useAudioOutputAutoRestore(): void {
       // (d) label fallback — Chrome 은 세션마다 deviceId 를 새로 발급할 수 있음.
       //     label 이 같은 장치가 있으면 새 deviceId 로 store 교체 후 apply.
       if (savedLabel && savedLabel !== '(이름 미공개)') {
-        const labelMatch = devices.find(
-          (d) => d.label && d.label.length > 0 && d.label === savedLabel,
-        );
+        // 정확 label 매칭 우선. 없으면 normalizedLabel 로 매칭 (communications suffix 제거).
+        const labelMatch =
+          devices.find((d) => d.label && d.label.length > 0 && d.label === savedLabel) ??
+          devices.find((d) => d.normalizedLabel && d.normalizedLabel === normalizeAudioOutputLabel(savedLabel));
         if (labelMatch) {
+          if (labelMatch.kind === 'communications' || savedIsComms) {
+            trySwapCommsToPhysical(labelMatch);
+            return;
+          }
           setSink(labelMatch.deviceId, labelMatch.label);
           setConnectionStatus('connected');
           if (lastStatus.current === 'disconnected') {
