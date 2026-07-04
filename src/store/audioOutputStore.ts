@@ -101,6 +101,20 @@ export const useAudioOutputStore = create<AudioOutputState>()(
           rehydratedSinkLabel: state?.sinkLabel ?? null,
           rehydratedSavedAt: state?.savedAt ?? null,
         });
+        // Phase 2-6 진단 로그 B — hydrate 직후 store state + localStorage raw 를 함께 확인.
+        // UI 표시값이 아닌 실제 store state 를 신뢰할 수 있는지 검증용.
+        let rawStorage: string | null = null;
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            rawStorage = window.localStorage.getItem(STORAGE_KEY);
+          }
+        } catch { /* silent */ }
+        console.warn('[audio:sink:store-hydrate]', {
+          sinkId: state?.sinkId ?? null,
+          sinkLabel: state?.sinkLabel ?? null,
+          hasHydrated: true,
+          rawStorage,
+        });
         state?._setHasHydrated(true);
       },
     },

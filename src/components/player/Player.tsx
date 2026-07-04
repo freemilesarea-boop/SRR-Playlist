@@ -24,6 +24,7 @@ import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
+import { getAudioObjectId } from '@/lib/audioOutput';
 import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
@@ -163,6 +164,14 @@ export default function Player() {
       lastMountedARef.current = node;
       setAudioMountRevision((v) => v + 1);
       console.warn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
+      // Phase 2-6 진단 로그 E — audio ref mount 시 audio 객체 identity 를 부여하고 기록.
+      // 이후 Guardian apply · Player play 로그의 audioObjectId 와 대조하기 위함.
+      console.warn('[audio:sink:audio-ref]', {
+        slot: 'A',
+        audioObjectId: getAudioObjectId(node),
+        sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
+        currentSrc: node.currentSrc,
+      });
     } else if (!node) {
       lastMountedARef.current = null;
     }
@@ -173,6 +182,12 @@ export default function Player() {
       lastMountedBRef.current = node;
       setAudioMountRevision((v) => v + 1);
       console.warn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
+      console.warn('[audio:sink:audio-ref]', {
+        slot: 'B',
+        audioObjectId: getAudioObjectId(node),
+        sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
+        currentSrc: node.currentSrc,
+      });
     } else if (!node) {
       lastMountedBRef.current = null;
     }
@@ -1288,6 +1303,29 @@ export default function Player() {
         sinkReady,
         activeReadyState: activeAudio?.readyState,
         inactiveReadyState: inactiveAudio?.readyState,
+      });
+      // Phase 2-6 진단 로그 D — 실제 play 대상 audio 가 Guardian 이 sink 적용한 audio 와
+      // 동일 객체인지 검증. activeRef/nextRef 매핑 오류, crossfade swap race, 다른 audio 에
+      // play() 호출되는 경우 등을 판별.
+      const audioObjectId = getAudioObjectId(audio);
+      const activeAudioObjectId = activeAudio ? getAudioObjectId(activeAudio) : '<null>';
+      const nextAudioObjectId = inactiveAudio ? getAudioObjectId(inactiveAudio) : '<null>';
+      console.warn('[audio:sink:play-audit]', {
+        label,
+        desiredSinkId,
+        sinkReady,
+        activeRefSinkId: activeAudio?.sinkId,
+        nextRefSinkId: inactiveAudio?.sinkId,
+        playTargetSinkId: (audio as HTMLAudioElement & { sinkId?: string }).sinkId,
+        playTargetMatchesActive: audio === activeAudio,
+        playTargetMatchesNext: audio === inactiveAudio,
+        playTargetSrc: audio.currentSrc,
+        activeSrc: activeAudio?.currentSrc,
+        nextSrc: inactiveAudio?.currentSrc,
+        playTargetAudioObjectId: audioObjectId,
+        activeAudioObjectId,
+        nextAudioObjectId,
+        activeIdx,
       });
       if (!sinkReady) {
         const ok = await ensureSinkReady(label);

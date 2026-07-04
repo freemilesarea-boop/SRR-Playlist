@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { toast } from '@/store/toastStore';
+import { getAudioObjectId } from '@/lib/audioOutput';
 
 type SinkCapableAudio = HTMLAudioElement & {
   setSinkId?: (deviceId: string) => Promise<void>;
@@ -156,6 +157,20 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
   console.warn(
     `[audio:sink:state] tag=${tag} desired=${desired} store=${storeSnapshot.sinkId ?? 'null'} audio=${audio.sinkId ?? '""'} hasHydrated=${storeSnapshot.hasHydrated}`,
   );
+  // Phase 2-6 진단 로그 C-1 — setSinkId 시도 직전 audio object identity + 실제 상태.
+  // 시간축을 따라 audio 객체가 재생 대상 audio 와 일치하는지 추적하기 위함.
+  const audioObjectId = getAudioObjectId(audio);
+  console.warn('[audio:sink:apply-audit]', {
+    tag,
+    reason: tag,
+    desiredSinkId: desired,
+    beforeSinkId: audio.sinkId,
+    audioObjectId,
+    audioSrc: audio.currentSrc,
+    paused: audio.paused,
+    readyState: audio.readyState,
+    networkState: audio.networkState,
+  });
   // Phase 2-3 — recovery 판정을 위해 setSinkId 이전 재생 상태 capture
   const wasPlaying = !audio.paused && !audio.ended;
   const ctBefore = audio.currentTime;
@@ -197,6 +212,17 @@ async function applySink(audio: SinkCapableAudio, desired: string, tag: string):
     wasPlayingBefore: wasPlaying,
     // audio element runtime state
     ...snapshotAudioState(audio),
+  });
+  // Phase 2-6 진단 로그 C-2 — setSinkId 결과 요약 (Guardian apply 로 실제 audio 가
+  // desired 로 라우팅됐는지 여부와 audio object identity 를 같이 기록).
+  console.warn('[audio:sink:apply-result]', {
+    tag,
+    reason: tag,
+    desiredSinkId: desired,
+    afterSinkId,
+    effective,
+    audioObjectId,
+    exception,
   });
 
   // Phase 2-3 — sink 실제로 바뀌었고 재생 중이었으면 파이프라인 recovery.
