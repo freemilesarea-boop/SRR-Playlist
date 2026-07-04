@@ -143,11 +143,40 @@ function computeNextIndex(
 }
 
 export default function Player() {
-  const audioARef = useRef<HTMLAudioElement>(null);
-  const audioBRef = useRef<HTMLAudioElement>(null);
+  // Phase 2-5 — MutableRefObject 로 변경. callback ref 안에서 .current 를 직접 대입해야 함.
+  const audioARef = useRef<HTMLAudioElement | null>(null);
+  const audioBRef = useRef<HTMLAudioElement | null>(null);
   const [activeIdx, setActiveIdx] = useState<0 | 1>(0); // 0=A, 1=B
   const activeRef = () => (activeIdx === 0 ? audioARef.current : audioBRef.current);
   const nextRef = () => (activeIdx === 0 ? audioBRef.current : audioARef.current);
+
+  // Phase 2-5 hotfix — audio element 실제 mount 시점을 Guardian 에게 알리는 revision.
+  // Player 는 `if (!current) return null;` 로 초기 mount 시 <audio> 를 render 안 하고,
+  // queue 채워진 이후에야 refs 가 붙는다. Guardian effect 의 deps 에 이 revision 을
+  // 포함시켜, ref 연결 순간 자동으로 setSinkId 를 재적용한다.
+  const [audioMountRevision, setAudioMountRevision] = useState(0);
+  const lastMountedARef = useRef<HTMLAudioElement | null>(null);
+  const lastMountedBRef = useRef<HTMLAudioElement | null>(null);
+  const setAudioARef = useCallback((node: HTMLAudioElement | null) => {
+    audioARef.current = node;
+    if (node && node !== lastMountedARef.current) {
+      lastMountedARef.current = node;
+      setAudioMountRevision((v) => v + 1);
+      console.warn('[audio:sink:mount] audio A connected', { revisionBumpTo: 'next', hasNode: true });
+    } else if (!node) {
+      lastMountedARef.current = null;
+    }
+  }, []);
+  const setAudioBRef = useCallback((node: HTMLAudioElement | null) => {
+    audioBRef.current = node;
+    if (node && node !== lastMountedBRef.current) {
+      lastMountedBRef.current = node;
+      setAudioMountRevision((v) => v + 1);
+      console.warn('[audio:sink:mount] audio B connected', { revisionBumpTo: 'next', hasNode: true });
+    } else if (!node) {
+      lastMountedBRef.current = null;
+    }
+  }, []);
 
   const {
     queue,
@@ -186,8 +215,8 @@ export default function Player() {
   // Phase 2-4 — Guardian 이 { sinkReady, ensureSinkReady } 노출.
   //   • sinkReady = A/B 모두 audio.sinkId === desired 인 상태
   //   • ensureSinkReady 는 첫 play 직전에 attemptPlay 최상단에서 await
-  const guardianA = useAudioSinkGuardian(audioARef);
-  const guardianB = useAudioSinkGuardian(audioBRef);
+  const guardianA = useAudioSinkGuardian(audioARef, audioMountRevision);
+  const guardianB = useAudioSinkGuardian(audioBRef, audioMountRevision);
   const sinkReady = guardianA.sinkReady && guardianB.sinkReady;
   const ensureSinkReady = useCallback(async (reason: string): Promise<boolean> => {
     const results = await Promise.allSettled([
@@ -1644,7 +1673,7 @@ export default function Player() {
     <>
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
-        ref={audioARef}
+        ref={setAudioARef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
@@ -1655,7 +1684,7 @@ export default function Player() {
         playsInline
       />
       <audio
-        ref={audioBRef}
+        ref={setAudioBRef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}

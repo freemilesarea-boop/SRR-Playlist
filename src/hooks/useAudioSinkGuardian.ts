@@ -226,6 +226,7 @@ const ENSURE_VERIFY_DELAY_MS = 200;
 
 export function useAudioSinkGuardian(
   audioRef: { current: HTMLAudioElement | null },
+  audioMountRevision: number = 0,
 ): SinkGuardianHandle {
   // Phase 2-1 QA — hook 실행 여부를 filter/cache 우회하여 3중으로 확인.
   // 함수 body 최상단 · React hook rules 준수 · 매 render 마다 실행.
@@ -251,8 +252,9 @@ export function useAudioSinkGuardian(
   //   • sinkReady=false → play() 이전 ensureSinkReady() 필요
   //   • setSinkId 성공 (혹은 이미 desired) 시 true 로 승격
   //   • sinkId 변경 시 리셋
+  //   • Phase 2-5 — audioMountRevision 변경 시에도 리셋 (audio element 교체)
   const [sinkReady, setSinkReady] = useState(false);
-  useEffect(() => { setSinkReady(false); }, [sinkId]);
+  useEffect(() => { setSinkReady(false); }, [sinkId, audioMountRevision]);
 
   // DOM/localStorage marker — react-hooks/immutability 회피 위해 useEffect 안에서.
   useEffect(() => {
@@ -292,12 +294,22 @@ export function useAudioSinkGuardian(
       storeSinkId: s.sinkId,
       audioSinkIdNow: a?.sinkId,
       hasHydrated: s.hasHydrated,
+      audioMountRevision,
     });
     // 단일 라인 문자열 로그 — DevTools 가 object 를 collapse 해도 확인 가능
     console.warn(
-      `[audio:sink:state] reapply tag=${tag} reason=${reason} desired=${sinkIdRef.current ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${s.hasHydrated}`,
+      `[audio:sink:state] reapply tag=${tag} reason=${reason} desired=${sinkIdRef.current ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${s.hasHydrated} mountRev=${audioMountRevision}`,
     );
-    if (!a) return null;
+    // Phase 2-5 hotfix — audioRef.current null 이면 절대 sinkReady 승격 X.
+    // audio 없는 상태에서 setSinkId 를 성공으로 처리하지 말고, mount revision 이 바뀌면
+    // effect 가 다시 실행되면서 재시도한다.
+    if (!a) {
+      console.warn('[audio:sink] no audio ref yet', {
+        tag, reason, desiredSinkId: sinkIdRef.current ?? 'default', audioMountRevision,
+      });
+      setSinkReady(false);
+      return null;
+    }
     // Phase 2-2 hotfix — hydrate 이전 apply 를 skip 하지 않고, 대신 sinkIdRef 대신
     // store 의 최신 값을 우선 참조. sinkIdRef 는 effect deps 로 업데이트되지만,
     // 첫 render 에서 hydrate 가 늦으면 stale null 을 잡을 수 있음.
@@ -307,24 +319,35 @@ export function useAudioSinkGuardian(
       markApplied(desired === 'default' ? null : desired);
       // Phase 2-4 — audio.sinkId === desired 확인된 시점만 sinkReady 승격
       setSinkReady(true);
+      console.warn('[audio:sink:ready]', {
+        tag,
+        desiredSinkId: desired,
+        currentSinkId: a.sinkId,
+        sinkReady: true,
+        audioMountRevision,
+      });
     }
     return result;
-  }, [audioRef, markApplied, tag]);
+  }, [audioRef, markApplied, tag, audioMountRevision]);
 
   // Phase 2-4 hotfix — 첫 play 직전에 호출. sinkReady 이면 즉시 true, 아니면
-  // setSinkId 적용 + 200ms 후 실제 audio.sinkId 재확인. 실패해도 play 자체는
-  // 막지 않고 (기본 출력 fallback 허용) false 반환.
+  // setSinkId 적용 + 200ms 후 실제 audio.sinkId 재확인.
+  // Phase 2-5 hotfix — audio ref null 일 때는 true 반환 X (오승격 방지). Player 는
+  // false 를 받으면 warn 후 fallback 재생 허용.
   const ensureSinkReady = useCallback(async (reason: string): Promise<boolean> => {
     const a = audioRef.current as SinkCapableAudio | null;
     const s = useAudioOutputStore.getState();
     const desired = s.sinkId ?? 'default';
 
-    // audio ref 없음 → 아직 mount 안 된 상태 · play 진행 불가. true 반환 (upstream 판단)
+    // Phase 2-5 — audio ref 없음 → 절대 true 반환 X · sinkReady 승격 X
     if (!a) {
-      console.warn(`[audio:sink:ensure] no audio ref tag=${tag} reason=${reason} → skip`);
-      return true;
+      console.warn('[audio:sink:ensure] no audio ref', {
+        tag, reason, desiredSinkId: desired, audioMountRevision,
+      });
+      setSinkReady(false);
+      return false;
     }
-    // 브라우저 미지원 → fallback 허용
+    // 브라우저 미지원 → fallback 허용 (sinkReady=true)
     if (typeof a.setSinkId !== 'function') {
       console.warn(`[audio:sink:ensure] unsupported browser tag=${tag} reason=${reason} → default fallback ok`);
       setSinkReady(true);
@@ -334,14 +357,28 @@ export function useAudioSinkGuardian(
     if (a.sinkId === desired) {
       console.warn(`[audio:sink:ensure] already applied tag=${tag} reason=${reason} desired=${desired}`);
       setSinkReady(true);
+      console.warn('[audio:sink:ready]', {
+        tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
+      });
       return true;
     }
-    // desired 가 null → 기본 출력 요청 · setSinkId('default') 도 setSinkId 호출 필요
-    console.warn(`[audio:sink:ensure] apply tag=${tag} reason=${reason} desired=${desired} audio=${a.sinkId ?? '""'}`);
+    // Phase 2-5 확장 진단 — setSinkId 시도 직전 상태 snapshot
+    console.warn('[audio:sink:ensure]', {
+      tag,
+      reason,
+      desiredSinkId: desired,
+      beforeSinkId: a.sinkId,
+      audioMountRevision,
+      readyState: a.readyState,
+      networkState: a.networkState,
+    });
     const result = await applySink(a, desired, `${tag}:ensure:${reason}`);
     if (result.effective) {
       markApplied(desired === 'default' ? null : desired);
       setSinkReady(true);
+      console.warn('[audio:sink:ready]', {
+        tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
+      });
       return true;
     }
     // 200ms 후 verify — setSinkId 는 promise resolve 후에도 audio.sinkId 반영이
@@ -351,18 +388,31 @@ export function useAudioSinkGuardian(
       console.warn(`[audio:sink:ensure] verify ok tag=${tag} reason=${reason} desired=${desired}`);
       markApplied(desired === 'default' ? null : desired);
       setSinkReady(true);
+      console.warn('[audio:sink:ready]', {
+        tag, desiredSinkId: desired, currentSinkId: a.sinkId, sinkReady: true, audioMountRevision,
+      });
       return true;
     }
     // fallback — play 는 허용하되 sinkReady 는 false 유지
     console.warn(`[audio:sink:ensure] verify failed tag=${tag} reason=${reason} desired=${desired} audio=${a.sinkId ?? '""'} → default fallback allowed`);
     return false;
-  }, [audioRef, markApplied, tag]);
+  }, [audioRef, markApplied, tag, audioMountRevision]);
 
   // (1) mount + sinkId 변경 시 즉시 apply (paint 이전 useLayoutEffect)
   //     Phase 2-2 hotfix — hasHydrated 도 deps 에 포함해서 hydrate 완료 시점에 재실행.
+  //     Phase 2-5 hotfix — audioMountRevision 도 deps 에 포함해서 audio ref 연결
+  //     시점에 자동 재실행.
   useLayoutEffect(() => {
     const a = audioRef.current as SinkCapableAudio | null;
     const s = useAudioOutputStore.getState();
+    // Phase 2-5 — ref 연결 상태 진단. audio 없으면 sinkReady 승격 X.
+    console.warn('[audio:sink:ref-ready]', {
+      tag,
+      audioMountRevision,
+      exists: Boolean(a),
+      desiredSinkId: sinkId ?? (s.sinkId ?? 'default'),
+      currentSinkId: a?.sinkId,
+    });
     // Phase 2-2 QA — layoutEffect 실행 여부 + 3개 sinkId 값 동시 확인
     console.warn('[audio:sink] layoutEffect', {
       tag,
@@ -372,9 +422,10 @@ export function useAudioSinkGuardian(
       audioRefExists: !!a,
       sinkIdDeps: sinkId,
       hasHydrated,
+      audioMountRevision,
     });
     console.warn(
-      `[audio:sink:state] layoutEffect tag=${tag} desired=${sinkId ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${hasHydrated}`,
+      `[audio:sink:state] layoutEffect tag=${tag} desired=${sinkId ?? 'null'} store=${s.sinkId ?? 'null'} audio=${a?.sinkId ?? '""'} hydrated=${hasHydrated} mountRev=${audioMountRevision}`,
     );
     // hydrate 이전이면 skip — sinkId 가 null 인 채로 apply 하면 audio.sinkId 가 "" 로
     // 고정되고, hydrate 후 재실행되지 않는 문제 방지.
@@ -382,8 +433,14 @@ export function useAudioSinkGuardian(
       console.warn(`[audio:sink] layoutEffect skipped — waiting for hydration (tag=${tag})`);
       return;
     }
+    // Phase 2-5 — audio ref 아직 없으면 skip (mount revision 변경 시 재실행)
+    if (!a) {
+      console.warn(`[audio:sink] layoutEffect skipped — audio ref null (tag=${tag} mountRev=${audioMountRevision})`);
+      setSinkReady(false);
+      return;
+    }
     void reapply('mount/sinkChange');
-  }, [reapply, sinkId, audioRef, tag, hasHydrated]);
+  }, [reapply, sinkId, audioRef, tag, hasHydrated, audioMountRevision]);
 
   // (2) audio element lifecycle 이벤트마다 재확인 — 재생 시작 이전 시점 보장
   useEffect(() => {
@@ -424,7 +481,7 @@ export function useAudioSinkGuardian(
       a.removeEventListener('loadedmetadata', onLifecycle);
       a.removeEventListener('canplay', onLifecycle);
     };
-  }, [audioRef, reapply, tag]);
+  }, [audioRef, reapply, tag, audioMountRevision]);
 
   // (3) Phase 2-1 — Deferred User Activation Apply.
   //     audio.sinkId !== desired 이면 Chrome User Activation 정책 실패로 판단하고,
@@ -467,7 +524,7 @@ export function useAudioSinkGuardian(
 
     return cleanup;
     // sinkId 변경 시 재무장, lastAppliedAt 은 성공 여부에 따라 갱신되므로 deps 로.
-  }, [audioRef, sinkId, reapply, tag, hasHydrated]);
+  }, [audioRef, sinkId, reapply, tag, hasHydrated, audioMountRevision]);
 
   return { sinkReady, ensureSinkReady };
 }
