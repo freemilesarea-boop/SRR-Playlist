@@ -128,6 +128,73 @@ const ERROR_TOAST_DEBOUNCE_MS = 3_000;
 let lastRecommendToastAt = 0;
 const RECOMMEND_TOAST_DEDUP_MS = 10 * 60 * 1000;
 
+/**
+ * Phase 5-2 — next track preload / crossfade readiness 상수.
+ *
+ * PRELOAD_LEAD_MS   : crossfade 시점 이전에 next audio 를 미리 준비하는 lead time.
+ *                     remaining ∈ [crossfadeSeconds+1, crossfadeSeconds+LEAD/1000] 창 안에서
+ *                     idempotent 하게 nextAudio.src 세팅.
+ * READINESS_TIMEOUT : startCrossfade 진입 시 nextAudio.readyState<HAVE_FUTURE_DATA 이면
+ *                     canplay/canplaythrough 를 최대 timeout ms 대기. 초과 시 fallback.
+ * DECODE_SLOW_MS    : 대기가 이 값을 넘으면 [audio:decode:slow] 로그.
+ */
+const PHASE_5_2_PRELOAD_LEAD_MS = 8000;
+const PHASE_5_2_READINESS_TIMEOUT_MS = 800;
+const PHASE_5_2_DECODE_SLOW_MS = 300;
+
+/**
+ * Phase 5-2 — nextAudio 의 readyState 를 HAVE_FUTURE_DATA(3) 이상으로 대기.
+ * setInterval 사용 X · canplay/canplaythrough event listener + 단일 timeout.
+ * 이미 준비되어 있으면 즉시 resolve · 아니면 timeout ms 대기 후 fallback.
+ * 이 함수는 아무런 audio.load() / src 재설정 / currentTime 변경도 하지 않음.
+ */
+function awaitAudioReadiness(
+  audio: HTMLAudioElement,
+  timeoutMs: number,
+): Promise<{ ready: boolean; waitedMs: number; readyState: number; networkState: number }> {
+  if (audio.readyState >= 3 /* HAVE_FUTURE_DATA */) {
+    return Promise.resolve({
+      ready: true,
+      waitedMs: 0,
+      readyState: audio.readyState,
+      networkState: audio.networkState,
+    });
+  }
+  const startedAt = performance.now();
+  return new Promise((resolve) => {
+    let done = false;
+    const onCan = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve({
+        ready: true,
+        waitedMs: performance.now() - startedAt,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+      });
+    };
+    audio.addEventListener('canplay', onCan, { once: true });
+    audio.addEventListener('canplaythrough', onCan, { once: true });
+    const timerId = window.setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve({
+        ready: false,
+        waitedMs: performance.now() - startedAt,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+      });
+    }, timeoutMs);
+    const cleanup = () => {
+      audio.removeEventListener('canplay', onCan);
+      audio.removeEventListener('canplaythrough', onCan);
+      window.clearTimeout(timerId);
+    };
+  });
+}
+
 /** 큐 안에서 next index 계산 (shuffle/repeat 반영) — 미리보기용 (실제 next() 와 동일 로직) */
 function computeNextIndex(
   queueLength: number,
@@ -509,6 +576,12 @@ export default function Player() {
   // crossfade-stuck 감지용 — startCrossfade 에서 set, completeSwap/cancelCrossfade
   // 에서 clear. 0 이면 crossfade 진입 안 함.
   const crossfadeStartedAtRef = useRef<number>(0);
+
+  // Phase 5-2 — next audio preload state.
+  // • preloadedNextIdRef: 마지막으로 preload 한 next track id (idempotent guard).
+  // • preloadTimeoutRef : preload 타임아웃 setTimeout handle (cleanup 용).
+  const preloadedNextIdRef = useRef<string | null>(null);
+  const preloadTimeoutRef = useRef<number | null>(null);
 
   // per-issue 1초 cooldown
   const healthLastRecoveryRef = useRef<Map<HealthIssue, number>>(new Map());
@@ -1219,7 +1292,7 @@ export default function Player() {
   }
 
   /** 트랙 종료 X초 전 도달 시 crossfade 시작 */
-  const startCrossfade = useCallback(() => {
+  const startCrossfade = useCallback(async () => {
     // X6.88.1 — 매장 모드 hard runtime guard. localStorage 상태/사용자 override 무관
     // 매장에서는 어떤 경우에도 crossfade 가 동작하지 않음 (rAF stall 회귀 절대 차단).
     if (businessMode) return;
@@ -1258,6 +1331,10 @@ export default function Player() {
     // Phase 3-2 — crossfade start timestamp (health monitor crossfade-stuck 감지 기준)
     crossfadeStartedAtRef.current = performance.now();
 
+    // Phase 5-2 — src 재설정 idempotent guard.
+    // preload effect 가 이미 nextAudio.src 를 세팅했으면 재설정 skip → 브라우저 재fetch 방지.
+    const nextUrl = nextTrack.audio_url;
+    const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
     // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
     audioDebugWarn('[audio:engine:crossfade-start]', {
       fromTrackId: current.id,
@@ -1267,11 +1344,52 @@ export default function Player() {
       crossfadeSeconds,
       currentTime,
       duration,
+      preloadedSrcMatch: alreadyLoaded,
+      readyStateBefore: nextAudio.readyState,
+      networkStateBefore: nextAudio.networkState,
     });
 
-    nextAudio.src = nextTrack.audio_url;
+    if (!alreadyLoaded) {
+      nextAudio.src = nextUrl;
+    }
+    // 기존 setup 유지 — currentTime=0/volume=0 은 fresh src 상태에서 idempotent.
     nextAudio.currentTime = 0;
     nextAudio.volume = 0;
+
+    // Phase 5-2 — readyState<HAVE_FUTURE_DATA 이면 canplay 최대 READINESS_TIMEOUT_MS 대기.
+    // 이미 준비되어 있으면 즉시 resolve (waitedMs=0). 초과 시 fallback 하고 그대로 진행.
+    const readiness = await awaitAudioReadiness(nextAudio, PHASE_5_2_READINESS_TIMEOUT_MS);
+    if (readiness.waitedMs > PHASE_5_2_DECODE_SLOW_MS) {
+      audioDebugWarn('[audio:decode:slow]', {
+        toTrackId: nextTrack.id,
+        waitedMs: Math.round(readiness.waitedMs),
+        ready: readiness.ready,
+        readyState: readiness.readyState,
+      });
+    }
+    if (!readiness.ready && nextAudio.networkState === 2 /* NETWORK_LOADING */) {
+      audioDebugWarn('[audio:network:waiting]', {
+        toTrackId: nextTrack.id,
+        waitedMs: Math.round(readiness.waitedMs),
+        networkState: nextAudio.networkState,
+        readyState: nextAudio.readyState,
+      });
+    }
+
+    // Phase 5-2 — 대기 도중 사용자가 skip 하면 current.id 가 바뀐다. 그 경우 이 crossfade 는
+    // 이미 무효 (진짜 다음 곡이 다른 트랙일 수 있음). 안전하게 abort.
+    const stAfterWait = usePlayerStore.getState();
+    if (stAfterWait.queue[stAfterWait.index]?.id !== current.id) {
+      audioDebugWarn('[audio:crossfade:superseded]', {
+        expectedFromId: current.id,
+        actualCurrentId: stAfterWait.queue[stAfterWait.index]?.id ?? null,
+        toTrackId: nextTrack.id,
+      });
+      triggeredAtTrackIdRef.current = null;
+      crossfadeStartedAtRef.current = 0;
+      return;
+    }
+
     const p = nextAudio.play();
     if (p && typeof p.catch === 'function') {
       p.catch(() => {
@@ -1394,9 +1512,163 @@ export default function Player() {
     if (currentTime <= 10) return; // 시작 10초 안에는 절대 금지
     const remaining = duration - currentTime;
     if (remaining <= crossfadeSeconds && remaining > 0.2) {
-      startCrossfade();
+      // startCrossfade 는 async. 실패는 내부에서 처리, 여기서는 fire-and-forget.
+      void startCrossfade();
     }
   }, [businessMode, currentTime, duration, crossfadeEnabled, crossfadeSeconds, crossfading, playing, repeat, startCrossfade]);
+
+  /* ============================================
+   * Phase 5-2 — Next Track Preload
+   * ----------------------------------------------
+   * 목적: crossfade 시점보다 lead time 만큼 이전에 nextAudio.src 를 세팅해
+   *   fetch/decode 을 미리 시작. crossfade 시작 latency 를 최소화.
+   *
+   * 규칙:
+   *   • businessMode / crossfade 비활성 / repeat=one / no next → skip.
+   *   • current.id 당 1회만 실행 (preloadedNextIdRef idempotent guard).
+   *   • nextAudio.src 이미 같은 URL 이면 재설정 X (currentSrc/src 매칭).
+   *   • audio.load() 신규 호출 X · currentTime 초기화 X · play() X.
+   *   • canplay/error 리스너 { once: true } + 단일 setTimeout — polling 없음.
+   *   • 모든 로그는 audioDebugWarn (debug flag OFF 시 조용).
+   *   • 실패해도 startCrossfade 는 기존 경로로 fallback.
+   * ============================================ */
+  const preloadNextTrack = useCallback(() => {
+    if (businessMode) return;
+    if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
+    if (!playing) return;
+    if (crossfading) return;
+    if (repeat === 'one') return;
+    if (!current) return;
+    const nextIdx = computeNextIndex(queue.length, index, shuffle, shuffleOrder, repeat);
+    if (nextIdx === null) return;
+    const nextTrack = queue[nextIdx];
+    if (!nextTrack || !nextTrack.audio_url || !isPlayableUrl(nextTrack.audio_url)) return;
+    if (preloadedNextIdRef.current === nextTrack.id) return; // idempotent
+    const nextAudio = nextRef();
+    if (!nextAudio) return;
+
+    // 이미 같은 src 로 로드되어 있으면 재설정 skip (browser 재fetch 방지).
+    const nextUrl = nextTrack.audio_url;
+    const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
+    if (alreadyLoaded) {
+      preloadedNextIdRef.current = nextTrack.id;
+      audioDebugWarn('[audio:preload:skip]', {
+        fromTrackId: current.id,
+        toTrackId: nextTrack.id,
+        reason: 'already-loaded',
+        readyState: nextAudio.readyState,
+      });
+      return;
+    }
+
+    preloadedNextIdRef.current = nextTrack.id;
+    const startedAt = performance.now();
+
+    audioDebugWarn('[audio:preload:start]', {
+      fromTrackId: current.id,
+      toTrackId: nextTrack.id,
+      readyStateBefore: nextAudio.readyState,
+      networkStateBefore: nextAudio.networkState,
+      leadMs: PHASE_5_2_PRELOAD_LEAD_MS,
+    });
+
+    // src 재설정만 — load() / currentTime / play 모두 호출 안 함.
+    // preload="metadata" 속성이 걸려 있으므로 브라우저가 자동으로 metadata fetch.
+    nextAudio.src = nextUrl;
+
+    // 이전 preload timer 정리 (다른 track 으로 preload 재시작한 경우)
+    if (preloadTimeoutRef.current !== null) {
+      window.clearTimeout(preloadTimeoutRef.current);
+      preloadTimeoutRef.current = null;
+    }
+
+    let done = false;
+    const cleanup = () => {
+      nextAudio.removeEventListener('canplay', onReady);
+      nextAudio.removeEventListener('error', onErrorEv);
+      if (preloadTimeoutRef.current !== null) {
+        window.clearTimeout(preloadTimeoutRef.current);
+        preloadTimeoutRef.current = null;
+      }
+    };
+    const onReady = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      audioDebugWarn('[audio:preload:ready]', {
+        toTrackId: nextTrack.id,
+        waitedMs: Math.round(performance.now() - startedAt),
+        readyState: nextAudio.readyState,
+        networkState: nextAudio.networkState,
+      });
+    };
+    const onErrorEv = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      audioDebugWarn('[audio:preload:error]', {
+        toTrackId: nextTrack.id,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        errCode: nextAudio.error?.code ?? null,
+      });
+      // preload 실패 시 idempotent guard 해제 → 다음 preload trigger 에서 재시도 가능.
+      // startCrossfade 는 나중에 자체 readiness 대기로 fallback.
+      preloadedNextIdRef.current = null;
+    };
+    nextAudio.addEventListener('canplay', onReady, { once: true });
+    nextAudio.addEventListener('error', onErrorEv, { once: true });
+    preloadTimeoutRef.current = window.setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup();
+      audioDebugWarn('[audio:preload:timeout]', {
+        toTrackId: nextTrack.id,
+        elapsedMs: PHASE_5_2_PRELOAD_LEAD_MS,
+        readyState: nextAudio.readyState,
+        networkState: nextAudio.networkState,
+      });
+      // timeout 은 poison 아님 — src 는 이미 세팅, 브라우저는 계속 로드 중.
+      // startCrossfade 의 awaitAudioReadiness 가 최종 800ms 대기 후 fallback 처리.
+    }, PHASE_5_2_PRELOAD_LEAD_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessMode, crossfadeEnabled, crossfadeSeconds, playing, crossfading, repeat, current, queue, index, shuffle, shuffleOrder]);
+
+  // Preload trigger — remaining ∈ [crossfadeSeconds+1, crossfadeSeconds+PRELOAD_LEAD_MS/1000] 창에서 실행.
+  useEffect(() => {
+    if (businessMode) return;
+    if (!crossfadeEnabled || crossfadeSeconds <= 0) return;
+    if (!playing) return;
+    if (crossfading) return;
+    if (repeat === 'one') return;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (duration <= crossfadeSeconds + 5) return;
+    if (currentTime <= 10) return;
+    const remaining = duration - currentTime;
+    const preloadWindowEnd = crossfadeSeconds + PHASE_5_2_PRELOAD_LEAD_MS / 1000;
+    const preloadWindowStart = crossfadeSeconds + 1; // crossfade 진입 직전 1초 buffer
+    if (remaining <= preloadWindowEnd && remaining > preloadWindowStart) {
+      preloadNextTrack();
+    }
+  }, [businessMode, crossfadeEnabled, crossfadeSeconds, playing, crossfading, repeat, currentTime, duration, preloadNextTrack]);
+
+  // 트랙 변경 시 idempotent guard 리셋 · 진행 중 preload timer 정리.
+  useEffect(() => {
+    preloadedNextIdRef.current = null;
+    if (preloadTimeoutRef.current !== null) {
+      window.clearTimeout(preloadTimeoutRef.current);
+      preloadTimeoutRef.current = null;
+    }
+  }, [current?.id]);
+
+  // 언마운트 시 preload timer 정리.
+  useEffect(() => {
+    return () => {
+      if (preloadTimeoutRef.current !== null) {
+        window.clearTimeout(preloadTimeoutRef.current);
+        preloadTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 사용자 next/prev 시 fade 취소 (unmount 시 정리)
   // cancelCrossfade 는 매 렌더 재생성되지만 unmount 시점에 stale ref 를 참조해도
