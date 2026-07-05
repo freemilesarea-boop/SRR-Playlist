@@ -12,6 +12,7 @@ import type {
 } from '@/hooks/useAudioRecoveryManager';
 import type { LongRunSummary } from '@/hooks/useAudioLongRunDiagnostics';
 import type { LifecycleSnapshot } from '@/hooks/useAudioLifecycleAudit';
+import type { SessionSummary } from '@/hooks/useAudioSessionState';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 
 export interface DashboardInputs {
@@ -28,6 +29,8 @@ export interface DashboardInputs {
   getLongRunSummary: () => LongRunSummary;
   // Phase 5-1 (optional · flag OFF 세션에는 필요 없으므로 nullable)
   getLifecycleSummary?: () => LifecycleSnapshot;
+  // Phase 6-1 SessionState (optional · 상위 호환).
+  getSessionSummary?: () => SessionSummary;
 }
 
 interface DashboardSnapshot {
@@ -35,6 +38,7 @@ interface DashboardSnapshot {
   history: RecoveryHistoryEntry[];
   longRun: LongRunSummary;
   lifecycle: LifecycleSnapshot | null;
+  session: SessionSummary | null;
   audio: {
     activeIdx: 0 | 1;
     playing: boolean;
@@ -74,6 +78,7 @@ function createDashboardSnapshot(inputs: DashboardInputs): DashboardSnapshot {
     history: inputs.getRecoveryHistory(),
     longRun: inputs.getLongRunSummary(),
     lifecycle: inputs.getLifecycleSummary ? inputs.getLifecycleSummary() : null,
+    session: inputs.getSessionSummary ? inputs.getSessionSummary() : null,
     audio: {
       activeIdx,
       playing: inputs.getPlaying(),
@@ -152,7 +157,7 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
   if (!enabled) return null;
   if (!snapshot) return null;
 
-  const { recovery, history, longRun, audio, lifecycle } = snapshot;
+  const { recovery, history, longRun, audio, lifecycle, session } = snapshot;
 
   return (
     <div
@@ -194,6 +199,37 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
       </div>
       {!collapsed && (
         <div style={{ padding: '8px 10px', overflowY: 'auto', maxHeight: 'calc(80vh - 40px)' }}>
+          {/* Phase 6-1 — Current Session */}
+          {session && (
+            <Section title="Current Session">
+              <Row k="State" v={session.currentState} tone={
+                session.currentState === 'playing' ? 'success' :
+                session.currentState === 'error' || session.currentState === 'recovering' ? 'danger' :
+                session.currentState === 'crossfading' || session.currentState === 'waiting-network' || session.currentState === 'waiting-decode' ? 'warning' :
+                'dim'
+              } />
+              <Row k="Previous" v={session.previousState ?? '—'} tone="dim" />
+              <Row k="In state for" v={fmtMs(session.currentStateDurationMs)} />
+              <Row k="Transitions" v={String(session.transitionCount)} />
+              {session.recentTransitions.length > 0 && (
+                <div style={{ marginTop: 4, opacity: 0.85 }}>
+                  {(() => {
+                    const t = session.recentTransitions[session.recentTransitions.length - 1];
+                    return (
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', fontSize: 10 }}>
+                        <span style={{ opacity: 0.55, minWidth: 42 }}>{fmtTs(t.ts)}</span>
+                        <span style={{ flex: 1 }}>
+                          {t.from} → <span style={{ color: '#8bb7ff' }}>{t.to}</span>
+                        </span>
+                        <span style={{ opacity: 0.55 }}>{t.reason}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </Section>
+          )}
+
           {/* Recovery Summary */}
           <Section title="Recovery Summary">
             <Row k="Total" v={String(recovery.totalRecoveries)} />

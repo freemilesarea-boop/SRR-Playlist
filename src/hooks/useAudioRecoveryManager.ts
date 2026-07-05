@@ -15,6 +15,7 @@
 import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
 import { toast } from '@/store/toastStore';
+import type { AudioSessionState } from '@/hooks/useAudioSessionState';
 
 export type RecoveryReason =
   | 'stalled'
@@ -41,6 +42,11 @@ export interface RecoveryContext {
    * 미제공 시 안전 fallback = false (block).
    */
   getPlayingExpected?: () => boolean;
+  /**
+   * Phase 6-1 SessionState — recovery 진입 시점의 세션 상태 스냅샷.
+   * 관측 전용 · recovery 판단 로직에는 영향 X. history / 로그에만 기록.
+   */
+  getSessionState?: () => AudioSessionState;
 }
 
 export interface RecoveryHistoryEntry {
@@ -48,6 +54,8 @@ export interface RecoveryHistoryEntry {
   reason: RecoveryReason;
   outcome: 'success' | 'failed' | 'skipped';
   detail: string;
+  /** Phase 6-1 — 진입 시점 SessionState (관측 전용). */
+  sessionState?: AudioSessionState;
 }
 
 export interface RecoverySummary {
@@ -66,6 +74,8 @@ export interface RecoveryManagerHandle {
   recoverAudio: (reason: RecoveryReason, detail?: Record<string, unknown>) => Promise<void>;
   getRecoveryHistory: () => RecoveryHistoryEntry[];
   getRecoverySummary: () => RecoverySummary;
+  /** Phase 6-1 — 진행 중 여부 (SessionState 계산 입력용). */
+  isRecovering: () => boolean;
 }
 
 const REASON_COOLDOWN_MS = 1000;
@@ -99,6 +109,9 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
   const historyRef = useRef<RecoveryHistoryEntry[]>([]);
   const lastByReasonRef = useRef<Map<RecoveryReason, number>>(new Map());
   const escalatedUntilRef = useRef<number>(0);
+  // Phase 6-1 — 진행 중 flag (SessionState computeState 가 읽음).
+  // recoverAudio 진입 시 true, 종료 시 false. cooldown/skipped 케이스는 즉시 false 유지.
+  const inProgressRef = useRef<boolean>(false);
   // Phase 4-2 — lifetime counters (history 는 최근 20개만 유지하므로 별도)
   const totalsRef = useRef({
     totalRecoveries: 0,
@@ -120,26 +133,33 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     totalsRef.current.perReasonCounts[reason] =
       (totalsRef.current.perReasonCounts[reason] ?? 0) + 1;
 
+    // Phase 6-1 — 진입 시점 SessionState 스냅샷 (관측 전용).
+    const sessionState = ctxRef.current.getSessionState
+      ? ctxRef.current.getSessionState()
+      : undefined;
+
     // (1) escalation cooldown 중이면 skip
     if (now < escalatedUntilRef.current) {
-      pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: 'escalated-cooldown' });
+      pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: 'escalated-cooldown', sessionState });
       totalsRef.current.skippedCount += 1;
-      audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'escalated-cooldown' });
+      audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'escalated-cooldown', sessionState });
       return;
     }
 
     // (2) per-reason cooldown
     const last = lastByReasonRef.current.get(reason) ?? 0;
     if (now - last < REASON_COOLDOWN_MS) {
-      pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: `cooldown ${Math.round(now - last)}ms` });
+      pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: `cooldown ${Math.round(now - last)}ms`, sessionState });
       totalsRef.current.skippedCount += 1;
-      audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'cooldown' });
+      audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'cooldown', sessionState });
       return;
     }
     lastByReasonRef.current.set(reason, now);
     totalsRef.current.totalRecoveries += 1;
+    // Phase 6-1 — 실제 recovery 작업 시작 → in-progress flag set.
+    inProgressRef.current = true;
 
-    audioDebugWarn('[audio:recovery:start]', { reason, detail });
+    audioDebugWarn('[audio:recovery:start]', { reason, detail, sessionState });
 
     const c = ctxRef.current;
     const activeIdx = c.getActiveIdx();
@@ -282,17 +302,19 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     }
 
     const outcomeDetail = parts.join('');
-    pushHistory(historyRef, { ts: now, reason, outcome, detail: outcomeDetail });
+    pushHistory(historyRef, { ts: now, reason, outcome, detail: outcomeDetail, sessionState });
     // Phase 4-2 — lifetime outcome 카운터. Phase 4-1 hotfix — skipped 도 별도 집계.
     if (outcome === 'success') totalsRef.current.successCount += 1;
     else if (outcome === 'failed') totalsRef.current.failedCount += 1;
     else totalsRef.current.skippedCount += 1;
+    // Phase 6-1 — recovery 작업 종료.
+    inProgressRef.current = false;
 
     audioDebugWarn(
       outcome === 'success' ? '[audio:recovery:success]'
       : outcome === 'failed' ? '[audio:recovery:failed]'
       : '[audio:recovery:skipped]',
-      { reason, detail: outcomeDetail, historySize: historyRef.current.length },
+      { reason, detail: outcomeDetail, historySize: historyRef.current.length, sessionState },
     );
 
     // (3) escalation check — 10s window · 5회 이상 · 60s cooldown.
@@ -335,5 +357,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     };
   }, []);
 
-  return { recoverAudio, getRecoveryHistory, getRecoverySummary };
+  const isRecovering = useCallback((): boolean => inProgressRef.current, []);
+
+  return { recoverAudio, getRecoveryHistory, getRecoverySummary, isRecovering };
 }

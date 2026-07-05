@@ -25,6 +25,7 @@ import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRecoveryManager';
 import { useAudioLifecycleAudit } from '@/hooks/useAudioLifecycleAudit';
+import { useAudioSessionState, type AudioSessionState } from '@/hooks/useAudioSessionState';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
@@ -528,6 +529,15 @@ export default function Player() {
   //             실제 함수는 useAudioRecoveryManager 후 대입.
   const recoverAudioRef = useRef<((reason: RecoveryReason, detail?: Record<string, unknown>) => Promise<void>) | null>(null);
 
+  // Phase 6-1 — SessionState ↔ Recovery Manager cross-dependency lazy refs.
+  // Session 은 recovery 진행 중 여부를 알아야 하고, Recovery 는 진입 시점 세션 상태를
+  // 기록해야 한다. 두 hook 이 서로를 참조하므로 useRef 를 통해 지연 연결한다.
+  const isRecoveringLazyRef = useRef<() => boolean>(() => false);
+  const getSessionStateLazyRef = useRef<() => AudioSessionState>(() => 'idle');
+  // Phase 6-1 — recordSessionTransition 을 checkAudioHealth · 이벤트 핸들러에서
+  // 참조하기 위한 stable ref (useAudioSessionState 후 대입).
+  const recordSessionTransitionRef = useRef<((reason: string) => AudioSessionState) | null>(null);
+
   // Phase 5-1 — Lifecycle Audit 용 counter (Phase 3-1 native listener useEffect
   //             attach/detach 시 증가). flag OFF 이면 값 그대로 · 부작용 없음.
   const listenerAttachCountRef = useRef<number>(0);
@@ -593,6 +603,9 @@ export default function Player() {
   });
 
   const checkAudioHealth = useCallback((reason: string) => {
+    // Phase 6-1 — 이벤트 진입 시점에 SessionState 전이 기록 (health 판단 로직에는 영향 X).
+    // recordSessionTransition 은 상태가 실제로 바뀔 때만 history/log 를 push.
+    recordSessionTransitionRef.current?.(reason);
     const state = healthStateRef.current;
     const a = audioARef.current;
     const b = audioBRef.current;
@@ -670,6 +683,8 @@ export default function Player() {
 
     if (issues.length === 0) return;
 
+    // Phase 6-1 — health log 에 현재 SessionState 포함 (관측 통합).
+    const sessionState = getSessionStateLazyRef.current();
     for (const issue of issues) {
       audioDebugWarn('[audio:health]', {
         reason,
@@ -680,6 +695,7 @@ export default function Player() {
         sinkReady: state.sinkReady,
         desiredSinkId,
         currentTrackId: state.currentTrackId,
+        sessionState,
         active,
         inactive,
       });
@@ -741,9 +757,29 @@ export default function Player() {
   // ============================================================
   // Phase 3-2 health monitor / onError / visibility·network 복귀 시 단계적
   // 자동 복구. reason 별 1s cooldown · 10s window 5회 → escalation 60s.
+  // Phase 6-1 — Audio Session State Machine (관측 전용).
+  // 재생 로직 변경 없음 · Recovery / Health / Dashboard 가 단일 상태 모델 참조.
+  const {
+    getCurrentSessionState,
+    getSessionSummary,
+    recordTransition: recordSessionTransition,
+  } = useAudioSessionState({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getPlaying: () => playing,
+    getCrossfading: () => crossfading,
+    getCurrentTrackId: () => current?.id ?? null,
+    getErrored: () => errored,
+    getRecovering: () => isRecoveringLazyRef.current(),
+  });
+  // Lazy ref 로 Recovery ↔ Session cross-wiring.
+  getSessionStateLazyRef.current = getCurrentSessionState;
+  recordSessionTransitionRef.current = recordSessionTransition;
+
   // getForceCompleteCrossfade 는 closure — forceCompleteCrossfadeRef 는 line 1165
   // 근방 crossfade engine 섹션에서 선언되지만, 함수 호출 시점에는 이미 정의된 상태.
-  const { recoverAudio, getRecoveryHistory, getRecoverySummary } = useAudioRecoveryManager({
+  const { recoverAudio, getRecoveryHistory, getRecoverySummary, isRecovering } = useAudioRecoveryManager({
     audioARef,
     audioBRef,
     getActiveIdx: () => activeIdx,
@@ -754,9 +790,31 @@ export default function Player() {
     // playing=false 이면 어떤 recovery 경로도 active.play() 호출 X + 이미 재생
     // 중이면 강제 pause. UI 와 DOM 상태 sync.
     getPlayingExpected: () => playing,
+    // Phase 6-1 SessionState — 진입 시점 상태 스냅샷 (관측 전용).
+    getSessionState: () => getSessionStateLazyRef.current(),
   });
+  // Phase 6-1 — recoverAudio wrapper: Recovery 진입 시 sync 로 inProgressRef=true 가
+  // 설정된 직후 recordSessionTransition 을 호출해 'recovering' state 를 기록.
+  // 완료 후 다시 호출해 다음 state 로 전이 기록. Recovery priority · 실행 로직은
+  // 무변경 (wrapper 는 pre/post 로그만 담당).
+  const recoverAudioWithSession: (
+    reason: RecoveryReason,
+    detail?: Record<string, unknown>,
+  ) => Promise<void> = async (reason, detail) => {
+    // recoverAudio 는 첫 await 이전 sync 코드에서 inProgressRef 를 세팅한다.
+    // Promise 참조를 먼저 확보한 뒤 transition 을 기록해야 최신 flag 반영됨.
+    const promise = recoverAudio(reason, detail);
+    recordSessionTransition(`recovery:${reason}`);
+    try {
+      await promise;
+    } finally {
+      recordSessionTransition(`recovery-end:${reason}`);
+    }
+  };
   // Phase 4-1 — 다른 handler 에서 recoverAudio 를 stable ref 로 접근
-  recoverAudioRef.current = recoverAudio;
+  recoverAudioRef.current = recoverAudioWithSession;
+  // Phase 6-1 — Recovery 진행 flag 를 Session 이 참조.
+  isRecoveringLazyRef.current = isRecovering;
 
   // Phase 5-1 — Memory Leak Detection & Lifecycle Audit.
   // flag ON (audioDebug 또는 audioLongRun) 이면 60초 tick 으로 snapshot + leak
@@ -2455,6 +2513,7 @@ export default function Player() {
         getRecoveryHistory={getRecoveryHistory}
         getLongRunSummary={getLongRunSummary}
         getLifecycleSummary={getLifecycleSummary}
+        getSessionSummary={getSessionSummary}
       />
       <audio
         ref={setAudioBRef}
