@@ -34,6 +34,13 @@ export interface RecoveryContext {
   getCrossfading: () => boolean;
   getForceCompleteCrossfade: () => ((reason: string) => void) | null;
   ensureSinkReady: (reason: string) => Promise<boolean>;
+  /**
+   * Phase 4-1 autoplay hotfix — 사용자 재생 의도. store.playing 을 그대로 반영.
+   * false 이면 recovery 가 active.play() 를 절대 호출하지 않고, 되레 실행 중이면
+   * 강제로 pause 한다.
+   * 미제공 시 안전 fallback = false (block).
+   */
+  getPlayingExpected?: () => boolean;
 }
 
 export interface RecoveryHistoryEntry {
@@ -141,8 +148,41 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     const active = activeIdx === 0 ? a : b;
     const inactive = activeIdx === 0 ? b : a;
 
-    let outcome: 'success' | 'failed' = 'success';
+    let outcome: 'success' | 'failed' | 'skipped' = 'success';
     const parts: string[] = [];
+
+    // Phase 4-1 autoplay hotfix — playingExpected 확인.
+    // 미제공 시 fallback = false (block · safe default).
+    const playingExpected = c.getPlayingExpected ? c.getPlayingExpected() === true : false;
+
+    /**
+     * play-required reason 은 이 함수를 통해서만 active.play() 를 호출.
+     * playing=false 이면:
+     *   • active/inactive 가 재생 중이면 강제로 pause (UI 와 DOM 상태 sync)
+     *   • [audio:recovery:blocked-autoplay] 로그 · parts 에 blocked-autoplay 마킹
+     *   • outcome 을 skipped 로 하여 escalation window 에서 제외
+     * true 반환 시 호출자가 tryPlay(active, ...) 실행.
+     */
+    const shouldAttemptPlay = (): boolean => {
+      if (playingExpected) return true;
+      let forced = 0;
+      if (active && !active.paused) {
+        try { active.pause(); parts.push('force-pause-active;'); forced += 1; } catch { /* silent */ }
+      }
+      if (inactive && !inactive.paused) {
+        try { inactive.pause(); parts.push('force-pause-inactive;'); forced += 1; } catch { /* silent */ }
+      }
+      audioDebugWarn('[audio:recovery:blocked-autoplay]', {
+        reason,
+        playingExpected,
+        activePaused: active?.paused,
+        inactivePaused: inactive?.paused,
+        forcePauseApplied: forced,
+      });
+      parts.push('blocked-autoplay;');
+      outcome = 'skipped';
+      return false;
+    };
 
     const tryPlay = async (el: HTMLAudioElement | null, tag: string): Promise<boolean> => {
       if (!el) { parts.push(`${tag}=no-el;`); return false; }
@@ -161,9 +201,12 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     try {
       switch (reason) {
         case 'sink-mismatch': {
+          // ensureSinkReady 는 playing 여부와 무관하게 항상 허용 · active.play() 만 gate.
           const ok = await c.ensureSinkReady('recovery-manager');
           parts.push(`ensureSink=${ok};`);
-          if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+          if (shouldAttemptPlay()) {
+            if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+          }
           break;
         }
         case 'stalled':
@@ -171,6 +214,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
         case 'visibility-resume':
         case 'network-resume': {
           if (!active) { outcome = 'failed'; parts.push('no-active;'); break; }
+          if (!shouldAttemptPlay()) break; // Phase 4-1 autoplay guard
           if (!(await tryPlay(active, 'play1'))) {
             const ok = await c.ensureSinkReady('recovery-manager');
             parts.push(`ensureSink=${ok};`);
@@ -190,16 +234,30 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
             try { inactive.volume = 0; parts.push('inactive.vol=0;'); }
             catch { /* silent */ }
           }
-          if (active && active.paused) {
+          // active.play() 만 gate — active 가 paused 이고 실제 재생 의도가 있을 때만.
+          if (active && active.paused && shouldAttemptPlay()) {
             if (!(await tryPlay(active, 'active.play'))) outcome = 'failed';
+          } else if (active && !active.paused && !playingExpected) {
+            // 사용자 재생 의도 없는데 active 가 재생 중 → 강제 pause (autoplay leak 정리)
+            try { active.pause(); parts.push('force-pause-active-both;'); } catch { /* silent */ }
+            audioDebugWarn('[audio:recovery:blocked-autoplay]', {
+              reason,
+              playingExpected,
+              activePaused: active.paused,
+              inactivePaused: inactive?.paused,
+              context: 'both-playing without intent',
+            });
           }
           break;
         }
         case 'crossfade-stuck': {
+          // forceComplete 는 안전 (swap 만) — gate 없이 실행
           const fn = c.getForceCompleteCrossfade();
           if (fn) { fn('recovery-manager'); parts.push('forceComplete=ok;'); }
           else { parts.push('no-force-ref;'); }
-          if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+          if (shouldAttemptPlay()) {
+            if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+          }
           break;
         }
         case 'media-error': {
@@ -207,7 +265,9 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
           const codeName = MEDIA_ERROR_NAMES[errCode] ?? `code=${errCode}`;
           parts.push(`errCode=${codeName};`);
           if (errCode === 2 /* NETWORK */) {
-            if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+            if (shouldAttemptPlay()) {
+              if (!(await tryPlay(active, 'play'))) outcome = 'failed';
+            }
           } else {
             // DECODE / SRC_NOT_SUPPORTED / ABORTED — auto-skip 하지 않고 로그+toast
             outcome = 'failed';
@@ -223,18 +283,23 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
 
     const outcomeDetail = parts.join('');
     pushHistory(historyRef, { ts: now, reason, outcome, detail: outcomeDetail });
-    // Phase 4-2 — lifetime outcome 카운터
+    // Phase 4-2 — lifetime outcome 카운터. Phase 4-1 hotfix — skipped 도 별도 집계.
     if (outcome === 'success') totalsRef.current.successCount += 1;
-    else totalsRef.current.failedCount += 1;
+    else if (outcome === 'failed') totalsRef.current.failedCount += 1;
+    else totalsRef.current.skippedCount += 1;
 
     audioDebugWarn(
-      outcome === 'success' ? '[audio:recovery:success]' : '[audio:recovery:failed]',
+      outcome === 'success' ? '[audio:recovery:success]'
+      : outcome === 'failed' ? '[audio:recovery:failed]'
+      : '[audio:recovery:skipped]',
       { reason, detail: outcomeDetail, historySize: historyRef.current.length },
     );
 
-    // (3) escalation check — 10s window · 5회 이상 · 60s cooldown
+    // (3) escalation check — 10s window · 5회 이상 · 60s cooldown.
+    // Phase 4-1 hotfix — skipped (blocked-autoplay 포함) 는 escalation 에서 제외
+    // 하여 반복적 tab-switch 등이 잘못된 toast 를 유발하지 않도록.
     const cutoff = now - ESCALATION_WINDOW_MS;
-    const recent = historyRef.current.filter((h) => h.ts >= cutoff);
+    const recent = historyRef.current.filter((h) => h.ts >= cutoff && h.outcome !== 'skipped');
     if (recent.length >= ESCALATION_COUNT_THRESHOLD && now >= escalatedUntilRef.current) {
       escalatedUntilRef.current = now + ESCALATION_COOLDOWN_MS;
       totalsRef.current.escalationCount += 1;
