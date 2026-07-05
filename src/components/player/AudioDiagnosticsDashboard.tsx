@@ -13,6 +13,7 @@ import type {
 import type { LongRunSummary } from '@/hooks/useAudioLongRunDiagnostics';
 import type { LifecycleSnapshot } from '@/hooks/useAudioLifecycleAudit';
 import type { SessionSummary } from '@/hooks/useAudioSessionState';
+import type { InvalidStateSummary } from '@/hooks/useAudioInvalidStateGuard';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 
 export interface DashboardInputs {
@@ -31,6 +32,8 @@ export interface DashboardInputs {
   getLifecycleSummary?: () => LifecycleSnapshot;
   // Phase 6-1 SessionState (optional · 상위 호환).
   getSessionSummary?: () => SessionSummary;
+  // Phase 6-2 Invalid State Guard (optional · 상위 호환).
+  getInvalidStateSummary?: () => InvalidStateSummary;
 }
 
 interface DashboardSnapshot {
@@ -39,6 +42,7 @@ interface DashboardSnapshot {
   longRun: LongRunSummary;
   lifecycle: LifecycleSnapshot | null;
   session: SessionSummary | null;
+  invalidState: InvalidStateSummary | null;
   audio: {
     activeIdx: 0 | 1;
     playing: boolean;
@@ -79,6 +83,7 @@ function createDashboardSnapshot(inputs: DashboardInputs): DashboardSnapshot {
     longRun: inputs.getLongRunSummary(),
     lifecycle: inputs.getLifecycleSummary ? inputs.getLifecycleSummary() : null,
     session: inputs.getSessionSummary ? inputs.getSessionSummary() : null,
+    invalidState: inputs.getInvalidStateSummary ? inputs.getInvalidStateSummary() : null,
     audio: {
       activeIdx,
       playing: inputs.getPlaying(),
@@ -157,7 +162,7 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
   if (!enabled) return null;
   if (!snapshot) return null;
 
-  const { recovery, history, longRun, audio, lifecycle, session } = snapshot;
+  const { recovery, history, longRun, audio, lifecycle, session, invalidState } = snapshot;
 
   return (
     <div
@@ -226,6 +231,20 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
                     );
                   })()}
                 </div>
+              )}
+            </Section>
+          )}
+
+          {/* Phase 6-2 — Invalid State Guard */}
+          {invalidState && (
+            <Section title={`Invalid State${invalidState.currentIssues.length > 0 ? ' ⚠' : ''}`}>
+              <Row k="Total invalid" v={String(invalidState.totalInvalid)} tone={invalidState.totalInvalid > 0 ? 'warning' : 'dim'} />
+              <Row k="Corrected" v={String(invalidState.totalCorrected)} tone={invalidState.totalCorrected > 0 ? 'success' : 'dim'} />
+              <Row k="Current issues" v={invalidState.currentIssues.length > 0 ? invalidState.currentIssues.join(', ') : 'none'} tone={invalidState.currentIssues.length > 0 ? 'danger' : 'dim'} />
+              <Row k="Last issue" v={invalidState.lastIssue ?? '—'} tone={invalidState.lastIssue ? 'warning' : 'dim'} />
+              <Row k="Last correction" v={invalidState.lastCorrectionIssue ?? '—'} tone={invalidState.lastCorrectionIssue ? 'success' : 'dim'} />
+              {invalidState.lastCorrectionTs > 0 && (
+                <Row k="Corrected at" v={fmtTs(invalidState.lastCorrectionTs)} tone="dim" />
               )}
             </Section>
           )}

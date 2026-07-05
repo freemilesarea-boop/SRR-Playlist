@@ -26,6 +26,7 @@ import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRecoveryManager';
 import { useAudioLifecycleAudit } from '@/hooks/useAudioLifecycleAudit';
 import { useAudioSessionState, type AudioSessionState } from '@/hooks/useAudioSessionState';
+import { useAudioInvalidStateGuard } from '@/hooks/useAudioInvalidStateGuard';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
@@ -537,6 +538,8 @@ export default function Player() {
   // Phase 6-1 — recordSessionTransition 을 checkAudioHealth · 이벤트 핸들러에서
   // 참조하기 위한 stable ref (useAudioSessionState 후 대입).
   const recordSessionTransitionRef = useRef<((reason: string) => AudioSessionState) | null>(null);
+  // Phase 6-2 — Invalid State Guard 도 checkAudioHealth 에서 piggyback.
+  const runInvalidStateCheckRef = useRef<((reason: string) => void) | null>(null);
 
   // Phase 5-1 — Lifecycle Audit 용 counter (Phase 3-1 native listener useEffect
   //             attach/detach 시 증가). flag OFF 이면 값 그대로 · 부작용 없음.
@@ -606,6 +609,8 @@ export default function Player() {
     // Phase 6-1 — 이벤트 진입 시점에 SessionState 전이 기록 (health 판단 로직에는 영향 X).
     // recordSessionTransition 은 상태가 실제로 바뀔 때만 history/log 를 push.
     recordSessionTransitionRef.current?.(reason);
+    // Phase 6-2 — Invalid State 감지 + pause 계열 최소 보정 (play() 는 절대 호출 X).
+    runInvalidStateCheckRef.current?.(reason);
     const state = healthStateRef.current;
     const a = audioARef.current;
     const b = audioBRef.current;
@@ -815,6 +820,23 @@ export default function Player() {
   recoverAudioRef.current = recoverAudioWithSession;
   // Phase 6-1 — Recovery 진행 flag 를 Session 이 참조.
   isRecoveringLazyRef.current = isRecovering;
+
+  // Phase 6-2 — Invalid State Detector / State Consistency Guard.
+  // 관측 + pause 계열 최소 보정만 담당. play() / load() / src / currentTime 무변경.
+  // Recovery 진행 중이면 보정 skip 하여 Recovery Manager 와 경합 방지.
+  const { runCheck: runInvalidStateCheck, getInvalidStateSummary } = useAudioInvalidStateGuard({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getPlaying: () => playing,
+    getCrossfading: () => crossfading,
+    getSinkReady: () => sinkReady,
+    getDesiredSinkId: () => useAudioOutputStore.getState().sinkId,
+    getSessionSummary,
+    getIsRecovering: isRecovering,
+  });
+  // checkAudioHealth 에서 참조하는 lazy ref 에 연결.
+  runInvalidStateCheckRef.current = runInvalidStateCheck;
 
   // Phase 5-1 — Memory Leak Detection & Lifecycle Audit.
   // flag ON (audioDebug 또는 audioLongRun) 이면 60초 tick 으로 snapshot + leak
@@ -2514,6 +2536,7 @@ export default function Player() {
         getLongRunSummary={getLongRunSummary}
         getLifecycleSummary={getLifecycleSummary}
         getSessionSummary={getSessionSummary}
+        getInvalidStateSummary={getInvalidStateSummary}
       />
       <audio
         ref={setAudioBRef}
