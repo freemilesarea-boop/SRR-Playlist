@@ -24,6 +24,7 @@ import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRecoveryManager';
+import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
@@ -646,7 +647,7 @@ export default function Player() {
   // polling / setInterval 0. 관찰 전용 · 재생 로직 변경 없음.
   //
   // 활성화: URL `?audioLongRun=1` 또는 localStorage 'deudda.audioLongRun'='1'
-  useAudioLongRunDiagnostics({
+  const { getLongRunSummary } = useAudioLongRunDiagnostics({
     audioARef,
     audioBRef,
     getActiveIdx: () => activeIdx,
@@ -663,7 +664,7 @@ export default function Player() {
   // 자동 복구. reason 별 1s cooldown · 10s window 5회 → escalation 60s.
   // getForceCompleteCrossfade 는 closure — forceCompleteCrossfadeRef 는 line 1165
   // 근방 crossfade engine 섹션에서 선언되지만, 함수 호출 시점에는 이미 정의된 상태.
-  const { recoverAudio } = useAudioRecoveryManager({
+  const { recoverAudio, getRecoveryHistory, getRecoverySummary } = useAudioRecoveryManager({
     audioARef,
     audioBRef,
     getActiveIdx: () => activeIdx,
@@ -2132,6 +2133,20 @@ export default function Player() {
         onEnded={onEnded}
         onError={onError}
         playsInline
+      />
+      {/* Phase 4-2 — Debug-gated Diagnostics Dashboard. isAudioDebugEnabled() OFF 이면 null. */}
+      <AudioDiagnosticsDashboard
+        audioARef={audioARef}
+        audioBRef={audioBRef}
+        getActiveIdx={() => activeIdx}
+        getPlaying={() => playing}
+        getCrossfading={() => crossfading}
+        getSinkReady={() => sinkReady}
+        getCurrentTrackId={() => current?.id ?? null}
+        getCurrentTrackTitle={() => current?.title ?? null}
+        getRecoverySummary={getRecoverySummary}
+        getRecoveryHistory={getRecoveryHistory}
+        getLongRunSummary={getLongRunSummary}
       />
       <audio
         ref={setAudioBRef}

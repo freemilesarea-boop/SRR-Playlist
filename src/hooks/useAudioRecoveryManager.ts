@@ -43,9 +43,22 @@ export interface RecoveryHistoryEntry {
   detail: string;
 }
 
+export interface RecoverySummary {
+  totalRecoveries: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  escalationCount: number;
+  currentCooldownMs: number;
+  perReasonCounts: Partial<Record<RecoveryReason, number>>;
+  historySize: number;
+  startedAtMs: number;
+}
+
 export interface RecoveryManagerHandle {
   recoverAudio: (reason: RecoveryReason, detail?: Record<string, unknown>) => Promise<void>;
   getRecoveryHistory: () => RecoveryHistoryEntry[];
+  getRecoverySummary: () => RecoverySummary;
 }
 
 const REASON_COOLDOWN_MS = 1000;
@@ -79,6 +92,16 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
   const historyRef = useRef<RecoveryHistoryEntry[]>([]);
   const lastByReasonRef = useRef<Map<RecoveryReason, number>>(new Map());
   const escalatedUntilRef = useRef<number>(0);
+  // Phase 4-2 — lifetime counters (history 는 최근 20개만 유지하므로 별도)
+  const totalsRef = useRef({
+    totalRecoveries: 0,
+    successCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    escalationCount: 0,
+    perReasonCounts: {} as Partial<Record<RecoveryReason, number>>,
+    startedAtMs: performance.now(),
+  });
 
   const recoverAudio = useCallback(async (
     reason: RecoveryReason,
@@ -86,9 +109,14 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
   ): Promise<void> => {
     const now = performance.now();
 
+    // Phase 4-2 — lifetime perReason counter (skipped 포함 모든 진입 카운트)
+    totalsRef.current.perReasonCounts[reason] =
+      (totalsRef.current.perReasonCounts[reason] ?? 0) + 1;
+
     // (1) escalation cooldown 중이면 skip
     if (now < escalatedUntilRef.current) {
       pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: 'escalated-cooldown' });
+      totalsRef.current.skippedCount += 1;
       audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'escalated-cooldown' });
       return;
     }
@@ -97,10 +125,12 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     const last = lastByReasonRef.current.get(reason) ?? 0;
     if (now - last < REASON_COOLDOWN_MS) {
       pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: `cooldown ${Math.round(now - last)}ms` });
+      totalsRef.current.skippedCount += 1;
       audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'cooldown' });
       return;
     }
     lastByReasonRef.current.set(reason, now);
+    totalsRef.current.totalRecoveries += 1;
 
     audioDebugWarn('[audio:recovery:start]', { reason, detail });
 
@@ -193,6 +223,9 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
 
     const outcomeDetail = parts.join('');
     pushHistory(historyRef, { ts: now, reason, outcome, detail: outcomeDetail });
+    // Phase 4-2 — lifetime outcome 카운터
+    if (outcome === 'success') totalsRef.current.successCount += 1;
+    else totalsRef.current.failedCount += 1;
 
     audioDebugWarn(
       outcome === 'success' ? '[audio:recovery:success]' : '[audio:recovery:failed]',
@@ -204,6 +237,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     const recent = historyRef.current.filter((h) => h.ts >= cutoff);
     if (recent.length >= ESCALATION_COUNT_THRESHOLD && now >= escalatedUntilRef.current) {
       escalatedUntilRef.current = now + ESCALATION_COOLDOWN_MS;
+      totalsRef.current.escalationCount += 1;
       audioDebugWarn('[audio:recovery:escalated]', {
         recentCount: recent.length,
         windowMs: ESCALATION_WINDOW_MS,
@@ -219,5 +253,22 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     return [...historyRef.current];
   }, []);
 
-  return { recoverAudio, getRecoveryHistory };
+  const getRecoverySummary = useCallback((): RecoverySummary => {
+    const t = totalsRef.current;
+    const nowMs = performance.now();
+    const cooldown = Math.max(0, escalatedUntilRef.current - nowMs);
+    return {
+      totalRecoveries: t.totalRecoveries,
+      successCount: t.successCount,
+      failedCount: t.failedCount,
+      skippedCount: t.skippedCount,
+      escalationCount: t.escalationCount,
+      currentCooldownMs: cooldown,
+      perReasonCounts: { ...t.perReasonCounts },
+      historySize: historyRef.current.length,
+      startedAtMs: t.startedAtMs,
+    };
+  }, []);
+
+  return { recoverAudio, getRecoveryHistory, getRecoverySummary };
 }

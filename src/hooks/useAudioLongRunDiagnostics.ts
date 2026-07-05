@@ -18,7 +18,7 @@
  * 실제 재생 로직 · Guardian · Player · Phase 3-1/3-2 guard 전부 무변경.
  * 관찰만 하고 아무것도 복구하지 않음 (recovery 는 Phase 3-2 가 담당).
  */
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { audioDebugWarn } from '@/lib/audioDebug';
 
@@ -35,6 +35,23 @@ export interface LongRunHarnessInputs {
   getCrossfading: () => boolean;
   getSinkReady: () => boolean;
   getCurrentTrackId: () => string | null;
+}
+
+export interface LongRunSummary {
+  active: boolean;
+  startedAtMs: number;
+  elapsedMs: number;
+  ticks: number;
+  trackTransitions: number;
+  healthIssueCount: number;
+  sinkMismatchCount: number;
+  inactivePlayingCount: number;
+  bothPlayingCount: number;
+  memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit?: number };
+}
+
+export interface LongRunHandle {
+  getLongRunSummary: () => LongRunSummary;
 }
 
 interface Counters {
@@ -111,7 +128,7 @@ function readMemory(): MemorySnap | undefined {
   }
 }
 
-export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
+export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): LongRunHandle {
   // React state 를 stale closure 없이 읽도록 매 렌더 갱신
   const inputsRef = useRef(inputs);
   inputsRef.current = inputs;
@@ -125,10 +142,15 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
     bothPlayingCount: 0,
     lastTrackId: null,
   });
+  // Phase 4-2 — Dashboard 가 폴링해서 읽어가는 startedAt / active flag
+  const startedAtRef = useRef<number>(0);
+  const activeRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!isEnabled()) return; // flag OFF → interval 생성 0
     const startedAt = performance.now();
+    startedAtRef.current = startedAt;
+    activeRef.current = true;
     const startedAtIso = new Date().toISOString();
     audioDebugWarn('[audio:longrun:start]', {
       startedAtIso,
@@ -222,10 +244,29 @@ export function useAudioLongRunDiagnostics(inputs: LongRunHarnessInputs): void {
     return () => {
       window.clearInterval(tickId);
       window.clearInterval(summaryId);
+      activeRef.current = false;
       audioDebugWarn('[audio:longrun:cleanup]', {
         elapsedMs: Math.round(performance.now() - startedAt),
         finalCounters: { ...countersForCleanup },
       });
     };
   }, []);
+
+  const getLongRunSummary = useCallback((): LongRunSummary => {
+    const c = countersRef.current;
+    return {
+      active: activeRef.current,
+      startedAtMs: startedAtRef.current,
+      elapsedMs: activeRef.current ? Math.round(performance.now() - startedAtRef.current) : 0,
+      ticks: c.ticks,
+      trackTransitions: c.trackTransitions,
+      healthIssueCount: c.healthIssueCount,
+      sinkMismatchCount: c.sinkMismatchCount,
+      inactivePlayingCount: c.inactivePlayingCount,
+      bothPlayingCount: c.bothPlayingCount,
+      memory: readMemory(),
+    };
+  }, []);
+
+  return { getLongRunSummary };
 }
