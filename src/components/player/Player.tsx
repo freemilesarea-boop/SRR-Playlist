@@ -677,6 +677,10 @@ export default function Player() {
     getCrossfading: () => crossfading,
     getForceCompleteCrossfade: () => forceCompleteCrossfadeRef.current,
     ensureSinkReady,
+    // Phase 4-1 autoplay hotfix — Recovery Manager 가 사용자 재생 의도 확인.
+    // playing=false 이면 어떤 recovery 경로도 active.play() 호출 X + 이미 재생
+    // 중이면 강제 pause. UI 와 DOM 상태 sync.
+    getPlayingExpected: () => playing,
   });
   // Phase 4-1 — 다른 handler 에서 recoverAudio 를 stable ref 로 접근
   recoverAudioRef.current = recoverAudio;
