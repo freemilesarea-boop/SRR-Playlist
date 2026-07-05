@@ -11,6 +11,7 @@ import type {
   RecoveryHistoryEntry, RecoverySummary, RecoveryReason,
 } from '@/hooks/useAudioRecoveryManager';
 import type { LongRunSummary } from '@/hooks/useAudioLongRunDiagnostics';
+import type { LifecycleSnapshot } from '@/hooks/useAudioLifecycleAudit';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 
 export interface DashboardInputs {
@@ -25,12 +26,15 @@ export interface DashboardInputs {
   getRecoverySummary: () => RecoverySummary;
   getRecoveryHistory: () => RecoveryHistoryEntry[];
   getLongRunSummary: () => LongRunSummary;
+  // Phase 5-1 (optional · flag OFF 세션에는 필요 없으므로 nullable)
+  getLifecycleSummary?: () => LifecycleSnapshot;
 }
 
 interface DashboardSnapshot {
   recovery: RecoverySummary;
   history: RecoveryHistoryEntry[];
   longRun: LongRunSummary;
+  lifecycle: LifecycleSnapshot | null;
   audio: {
     activeIdx: 0 | 1;
     playing: boolean;
@@ -69,6 +73,7 @@ function createDashboardSnapshot(inputs: DashboardInputs): DashboardSnapshot {
     recovery: inputs.getRecoverySummary(),
     history: inputs.getRecoveryHistory(),
     longRun: inputs.getLongRunSummary(),
+    lifecycle: inputs.getLifecycleSummary ? inputs.getLifecycleSummary() : null,
     audio: {
       activeIdx,
       playing: inputs.getPlaying(),
@@ -147,7 +152,7 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
   if (!enabled) return null;
   if (!snapshot) return null;
 
-  const { recovery, history, longRun, audio } = snapshot;
+  const { recovery, history, longRun, audio, lifecycle } = snapshot;
 
   return (
     <div
@@ -243,6 +248,30 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
             <Row k="Active vol" v={audio.activeVolume.toFixed(2)} />
             <Row k="Inactive vol" v={audio.inactiveVolume.toFixed(2)} tone="dim" />
           </Section>
+
+          {/* Lifecycle / Memory (Phase 5-1) */}
+          {lifecycle && (
+            <Section title={`Lifecycle & Memory${lifecycle.potentialLeaks.length > 0 ? ' ⚠' : ''}`}>
+              <Row k="Elapsed" v={fmtMs(lifecycle.elapsedMs)} />
+              <Row k="Mounted audio" v={String(lifecycle.mountedAudioCount)} tone={lifecycle.mountedAudioCount === 2 ? 'success' : 'warning'} />
+              <Row k="Active obj" v={shortId(lifecycle.activeAudioObjectId)} />
+              <Row k="Inactive obj" v={shortId(lifecycle.inactiveAudioObjectId)} tone="dim" />
+              <Row k="rAF active" v={lifecycle.rAFActive ? 'yes' : 'no'} tone={lifecycle.rAFActive && !lifecycle.crossfadeInProgress ? 'danger' : 'dim'} />
+              <Row k="Timeout active" v={lifecycle.timeoutActive ? 'yes' : 'no'} tone={lifecycle.timeoutActive && !lifecycle.crossfadeInProgress ? 'danger' : 'dim'} />
+              <Row k="LongRun active" v={lifecycle.longRunActive ? 'ON' : 'off'} tone={lifecycle.longRunActive ? 'success' : 'dim'} />
+              <Row k="Dashboard active" v={lifecycle.dashboardActive ? 'yes' : 'no'} tone={lifecycle.dashboardActive ? 'success' : 'dim'} />
+              <Row k="Heap used" v={fmtMemMB(lifecycle.heapUsedBytes)} tone={lifecycle.heapUsedBytes === 0 ? 'dim' : undefined} />
+              <Row k="Heap growth" v={fmtMemMB(lifecycle.heapGrowthFromStartBytes)} tone={lifecycle.heapGrowthFromStartBytes > 150 * 1024 * 1024 ? 'danger' : lifecycle.heapGrowthFromStartBytes > 50 * 1024 * 1024 ? 'warning' : 'dim'} />
+              <Row k="Listener attach" v={String(lifecycle.listenerAttachCount)} />
+              <Row k="Listener detach" v={String(lifecycle.listenerDetachCount)} />
+              <Row k="Listener diff" v={String(lifecycle.listenerDiff)} tone={lifecycle.listenerDiff > 4 ? 'danger' : lifecycle.listenerDiff > 0 ? 'warning' : 'success'} />
+              {lifecycle.potentialLeaks.length > 0 && (
+                <div style={{ marginTop: 4, padding: '3px 6px', background: 'rgba(255, 90, 90, 0.15)', borderRadius: 3, color: '#f88', fontSize: 10 }}>
+                  ⚠ {lifecycle.potentialLeaks.join(' · ')}
+                </div>
+              )}
+            </Section>
+          )}
 
           {/* Recovery History */}
           <Section title={`Recovery History (${history.length})`}>

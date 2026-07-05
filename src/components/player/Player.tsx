@@ -24,6 +24,7 @@ import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useAudioSinkGuardian } from '@/hooks/useAudioSinkGuardian';
 import { useAudioLongRunDiagnostics } from '@/hooks/useAudioLongRunDiagnostics';
 import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRecoveryManager';
+import { useAudioLifecycleAudit } from '@/hooks/useAudioLifecycleAudit';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
@@ -460,6 +461,11 @@ export default function Player() {
   //             실제 함수는 useAudioRecoveryManager 후 대입.
   const recoverAudioRef = useRef<((reason: RecoveryReason, detail?: Record<string, unknown>) => Promise<void>) | null>(null);
 
+  // Phase 5-1 — Lifecycle Audit 용 counter (Phase 3-1 native listener useEffect
+  //             attach/detach 시 증가). flag OFF 이면 값 그대로 · 부작용 없음.
+  const listenerAttachCountRef = useRef<number>(0);
+  const listenerDetachCountRef = useRef<number>(0);
+
   // ============================================================
   // Phase 3-2 — Audio Engine Health Monitor
   // ============================================================
@@ -674,6 +680,23 @@ export default function Player() {
   });
   // Phase 4-1 — 다른 handler 에서 recoverAudio 를 stable ref 로 접근
   recoverAudioRef.current = recoverAudio;
+
+  // Phase 5-1 — Memory Leak Detection & Lifecycle Audit.
+  // flag ON (audioDebug 또는 audioLongRun) 이면 60초 tick 으로 snapshot + leak
+  // warning. flag OFF 이면 no-op. Dashboard 폴링용 getLifecycleSummary 반환.
+  const { getLifecycleSummary } = useAudioLifecycleAudit({
+    audioARef,
+    audioBRef,
+    getActiveIdx: () => activeIdx,
+    getCrossfading: () => crossfading,
+    getCrossfadeStartedAtMs: () => crossfadeStartedAtRef.current,
+    getLongRunActive: () => getLongRunSummary().active,
+    getDashboardActive: () => document.querySelector('[data-audio-diagnostics-dashboard]') !== null,
+    getRafActive: () => crossfadeRafRef.current !== null,
+    getTimeoutActive: () => crossfadeTimeoutRef.current !== null,
+    getListenerAttachCount: () => listenerAttachCountRef.current,
+    getListenerDetachCount: () => listenerDetachCountRef.current,
+  });
 
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
@@ -1408,15 +1431,23 @@ export default function Player() {
         };
         el.addEventListener(ev, fn);
         handlers.push({ el, ev, fn });
+        // Phase 5-1 — attach counter
+        listenerAttachCountRef.current += 1;
       });
     };
     attach(a, 'A');
     attach(b, 'B');
     return () => {
-      handlers.forEach(({ el, ev, fn }) => el.removeEventListener(ev, fn));
+      handlers.forEach(({ el, ev, fn }) => {
+        el.removeEventListener(ev, fn);
+        // Phase 5-1 — detach counter
+        listenerDetachCountRef.current += 1;
+      });
       audioDebugWarn('[audio:engine:cleanup] event listeners removed', {
         count: handlers.length,
         audioMountRevision,
+        totalAttach: listenerAttachCountRef.current,
+        totalDetach: listenerDetachCountRef.current,
       });
     };
     // crossfading 은 log 안에서만 쓰이는 snapshot 이므로 deps 로 안 넣어도 됨.
@@ -2147,6 +2178,7 @@ export default function Player() {
         getRecoverySummary={getRecoverySummary}
         getRecoveryHistory={getRecoveryHistory}
         getLongRunSummary={getLongRunSummary}
+        getLifecycleSummary={getLifecycleSummary}
       />
       <audio
         ref={setAudioBRef}
