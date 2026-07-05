@@ -14,6 +14,7 @@ import type { LongRunSummary } from '@/hooks/useAudioLongRunDiagnostics';
 import type { LifecycleSnapshot } from '@/hooks/useAudioLifecycleAudit';
 import type { SessionSummary } from '@/hooks/useAudioSessionState';
 import type { InvalidStateSummary } from '@/hooks/useAudioInvalidStateGuard';
+import type { BurnInSummary } from '@/hooks/useAudioBurnInCertification';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 
 export interface DashboardInputs {
@@ -34,6 +35,10 @@ export interface DashboardInputs {
   getSessionSummary?: () => SessionSummary;
   // Phase 6-2 Invalid State Guard (optional · 상위 호환).
   getInvalidStateSummary?: () => InvalidStateSummary;
+  // Phase 6-3 Burn-in Certification (optional · 상위 호환).
+  getBurnInSummary?: () => BurnInSummary;
+  /** Dashboard tick 에서 호출 · 10분 throttle + status 전이 시 pass/fail 로그. */
+  maybeLogBurnInSummary?: (reason: string) => void;
 }
 
 interface DashboardSnapshot {
@@ -43,6 +48,7 @@ interface DashboardSnapshot {
   lifecycle: LifecycleSnapshot | null;
   session: SessionSummary | null;
   invalidState: InvalidStateSummary | null;
+  burnIn: BurnInSummary | null;
   audio: {
     activeIdx: 0 | 1;
     playing: boolean;
@@ -84,6 +90,7 @@ function createDashboardSnapshot(inputs: DashboardInputs): DashboardSnapshot {
     lifecycle: inputs.getLifecycleSummary ? inputs.getLifecycleSummary() : null,
     session: inputs.getSessionSummary ? inputs.getSessionSummary() : null,
     invalidState: inputs.getInvalidStateSummary ? inputs.getInvalidStateSummary() : null,
+    burnIn: inputs.getBurnInSummary ? inputs.getBurnInSummary() : null,
     audio: {
       activeIdx,
       playing: inputs.getPlaying(),
@@ -149,6 +156,9 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
         activeSinkId: snap.audio.activeSinkId,
         desiredSinkId: snap.audio.desiredSinkId,
       });
+      // Phase 6-3 — burn-in summary log (10분 throttle + status 전이 시 즉시).
+      // 내부에서 자체 throttle → 새 setInterval 필요 없음.
+      try { props.maybeLogBurnInSummary?.('dashboard-tick'); } catch { /* silent */ }
     };
     tick();
     const iv = window.setInterval(tick, 1000);
@@ -162,7 +172,7 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
   if (!enabled) return null;
   if (!snapshot) return null;
 
-  const { recovery, history, longRun, audio, lifecycle, session, invalidState } = snapshot;
+  const { recovery, history, longRun, audio, lifecycle, session, invalidState, burnIn } = snapshot;
 
   return (
     <div
@@ -232,6 +242,45 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
                   })()}
                 </div>
               )}
+            </Section>
+          )}
+
+          {/* Phase 6-3 — Burn-in Certification (longRun 활성 시만 유의미) */}
+          {burnIn && longRun.active && (
+            <Section title={`Certification ${burnIn.status === 'pass' ? '✓' : burnIn.status === 'fail' ? '✗' : ''}`}>
+              <Row
+                k="Status"
+                v={burnIn.status}
+                tone={
+                  burnIn.status === 'pass' ? 'success' :
+                  burnIn.status === 'fail' ? 'danger' :
+                  burnIn.status === 'running' ? 'warning' :
+                  'dim'
+                }
+              />
+              <Row k="Target" v={`${burnIn.targetHours}h`} />
+              <Row k="Progress" v={`${burnIn.progressPct.toFixed(1)}%`} tone={burnIn.progressPct >= 100 ? 'success' : undefined} />
+              <Row k="Elapsed" v={fmtMs(burnIn.elapsedMs)} />
+              <Row k="Recoveries" v={`${burnIn.metrics.recoveries} (fail ${burnIn.metrics.failedRecoveries})`} tone={burnIn.metrics.failedRecoveries > 0 ? 'warning' : 'dim'} />
+              <Row k="Escalations" v={String(burnIn.metrics.escalations)} tone={burnIn.metrics.escalations > 0 ? 'danger' : 'dim'} />
+              <Row k="Invalid states" v={`${burnIn.metrics.invalidStates} (corrected ${burnIn.metrics.correctedInvalidStates})`} tone={burnIn.metrics.invalidStates > 0 ? 'warning' : 'dim'} />
+              <Row k="Listener diff" v={String(burnIn.metrics.listenerDiff)} tone={burnIn.metrics.listenerDiff > 4 ? 'danger' : burnIn.metrics.listenerDiff > 0 ? 'warning' : 'success'} />
+              <Row k="Heap growth" v={fmtMemMB(burnIn.metrics.heapGrowthBytes)} tone={burnIn.metrics.heapGrowthBytes > 150 * 1024 * 1024 ? 'danger' : burnIn.metrics.heapGrowthBytes > 50 * 1024 * 1024 ? 'warning' : 'dim'} />
+              <Row k="Health rate" v={`${burnIn.metrics.healthIssueRatePerHour.toFixed(2)}/h`} tone={burnIn.metrics.healthIssueRatePerHour > 1 ? 'danger' : burnIn.metrics.healthIssueRatePerHour > 0.5 ? 'warning' : 'dim'} />
+              <Row k="Track transitions" v={String(burnIn.metrics.trackTransitions)} />
+              {burnIn.failReasons.length > 0 && (
+                <div style={{ marginTop: 4, padding: '3px 6px', background: 'rgba(255, 90, 90, 0.15)', borderRadius: 3, color: '#f88', fontSize: 10 }}>
+                  ✗ {burnIn.failReasons.join(' · ')}
+                </div>
+              )}
+              {burnIn.warnings.length > 0 && (
+                <div style={{ marginTop: 4, padding: '3px 6px', background: 'rgba(255, 200, 90, 0.15)', borderRadius: 3, color: '#fdb', fontSize: 10 }}>
+                  ⚠ {burnIn.warnings.join(' · ')}
+                </div>
+              )}
+              <div style={{ marginTop: 4, opacity: 0.55, fontSize: 9.5 }}>
+                Console: <code>__audioBurnIn()</code> → JSON dump
+              </div>
             </Section>
           )}
 
