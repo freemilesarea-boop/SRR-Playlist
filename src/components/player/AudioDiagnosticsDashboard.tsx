@@ -15,6 +15,7 @@ import type { LifecycleSnapshot } from '@/hooks/useAudioLifecycleAudit';
 import type { SessionSummary } from '@/hooks/useAudioSessionState';
 import type { InvalidStateSummary } from '@/hooks/useAudioInvalidStateGuard';
 import type { BurnInSummary } from '@/hooks/useAudioBurnInCertification';
+import { useAudioDiagnosticsStore } from '@/store/audioDiagnosticsStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 
 export interface DashboardInputs {
@@ -159,6 +160,21 @@ export function AudioDiagnosticsDashboard(props: DashboardInputs): JSX.Element |
       // Phase 6-3 — burn-in summary log (10분 throttle + status 전이 시 즉시).
       // 내부에서 자체 throttle → 새 setInterval 필요 없음.
       try { props.maybeLogBurnInSummary?.('dashboard-tick'); } catch { /* silent */ }
+      // Phase 7-1 — Admin panel 이 read-only subscribe 하는 store 에 snapshot publish.
+      // Debug OFF 세션에서는 이 함수 자체가 실행되지 않으므로 자동 no-op.
+      try {
+        useAudioDiagnosticsStore.getState().publish({
+          publishedAt: performance.now(),
+          recovery: snap.recovery,
+          history: snap.history,
+          longRun: snap.longRun,
+          lifecycle: snap.lifecycle,
+          session: snap.session,
+          invalidState: snap.invalidState,
+          burnIn: snap.burnIn,
+          audio: snap.audio,
+        });
+      } catch { /* silent */ }
     };
     tick();
     const iv = window.setInterval(tick, 1000);

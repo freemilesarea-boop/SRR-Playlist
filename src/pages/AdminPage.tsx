@@ -64,6 +64,7 @@ const PromotionCodes = lazy(() => import('@/components/admin/PromotionCodes'));
 const AutoPlaylistManager = lazy(() => import('@/components/admin/AutoPlaylistManager'));
 const AudioReencodePanel = lazy(() => import('@/components/admin/AudioReencodePanel'));
 const AudioDiagnosticPanel = lazy(() => import('@/components/admin/AudioDiagnosticPanel'));
+const AudioEngineDiagnosticsPanel = lazy(() => import('@/components/admin/AudioEngineDiagnosticsPanel'));
 const MetadataViolationsList = lazy(() => import('@/components/admin/MetadataViolationsList'));
 const UploadAuditPanel = lazy(() => import('@/components/admin/UploadAuditPanel'));
 const AiCurationPanel = lazy(() => import('@/components/admin/AiCurationPanel'));
@@ -154,6 +155,7 @@ type Tab =
   | 'deleted-tracks'
   | 'audio-reencode'
   | 'audio-diagnostics'
+  | 'audio-engine-diagnostics'
   | 'metadata-violations'
   | 'upload-audit'
   | 'ai-curation'
@@ -218,6 +220,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'deleted-tracks', label: '삭제 음원', icon: <Trash2 size={14} /> },
   { key: 'audio-reencode', label: '오디오 변환(iOS)', icon: <Smartphone size={14} /> },
   { key: 'audio-diagnostics', label: '오디오 진단', icon: <Stethoscope size={14} /> },
+  { key: 'audio-engine-diagnostics', label: '오디오 엔진 진단', icon: <Activity size={14} />, superOnly: true },
   { key: 'metadata-violations', label: '메타데이터 위반 의심', icon: <AlertTriangle size={14} /> },
   { key: 'upload-audit', label: '업로드/스토리지 점검', icon: <HardDrive size={14} /> },
   { key: 'ai-curation', label: 'AI 큐레이션', icon: <Sparkles size={14} /> },
@@ -266,6 +269,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'auto-playlists',
       'audio-reencode',
       'audio-diagnostics',
+      'audio-engine-diagnostics',
       'metadata-violations',
       'upload-audit',
       'ai-curation',
@@ -614,6 +618,7 @@ export default function AdminPage() {
           {tab === 'deleted-tracks' && <ArtistTrackManagementList removedView />}
           {tab === 'audio-reencode' && <AudioReencodePanel />}
           {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
+          {tab === 'audio-engine-diagnostics' && <AudioEngineDiagnosticsPanel />}
           {tab === 'metadata-violations' && <MetadataViolationsList />}
           {tab === 'upload-audit' && <UploadAuditPanel />}
           {tab === 'ai-curation' && <AiCurationPanel />}
