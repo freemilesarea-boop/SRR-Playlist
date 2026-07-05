@@ -27,6 +27,7 @@ import { useAudioRecoveryManager, type RecoveryReason } from '@/hooks/useAudioRe
 import { useAudioLifecycleAudit } from '@/hooks/useAudioLifecycleAudit';
 import { useAudioSessionState, type AudioSessionState } from '@/hooks/useAudioSessionState';
 import { useAudioInvalidStateGuard } from '@/hooks/useAudioInvalidStateGuard';
+import { useAudioBurnInCertification, type BurnInSummary } from '@/hooks/useAudioBurnInCertification';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
@@ -854,6 +855,28 @@ export default function Player() {
     getListenerAttachCount: () => listenerAttachCountRef.current,
     getListenerDetachCount: () => listenerDetachCountRef.current,
   });
+
+  // Phase 6-3 — 24h Burn-in Certification.
+  // 순수 계산 hook · 신규 interval / polling 0. Dashboard 1초 tick 에서 폴링.
+  // 로그는 10분 throttle + status 전이 시 즉시 pass/fail (audioDebugWarn gate).
+  const { getBurnInSummary, maybeLogSummary: maybeLogBurnInSummary } = useAudioBurnInCertification({
+    getLongRunSummary,
+    getLifecycleSummary,
+    getRecoverySummary,
+    getInvalidStateSummary,
+    getSessionSummary,
+  });
+  // Phase 6-3 — 운영자 콘솔 진단 helper (`window.__audioBurnIn()`).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const w = window as unknown as { __audioBurnIn?: () => BurnInSummary | null };
+    w.__audioBurnIn = () => {
+      try { return getBurnInSummary(); } catch { return null; }
+    };
+    return () => {
+      try { delete (w as { __audioBurnIn?: () => BurnInSummary | null }).__audioBurnIn; } catch { /* noop */ }
+    };
+  }, [getBurnInSummary]);
 
   // 메타데이터(loadedmetadata) 로딩 타임아웃 — duration 0:00 으로 멈춰있으면 재생 불가로 처리.
   const metaTimerRef = useRef<number | null>(null);
@@ -2537,6 +2560,8 @@ export default function Player() {
         getLifecycleSummary={getLifecycleSummary}
         getSessionSummary={getSessionSummary}
         getInvalidStateSummary={getInvalidStateSummary}
+        getBurnInSummary={getBurnInSummary}
+        maybeLogBurnInSummary={maybeLogBurnInSummary}
       />
       <audio
         ref={setAudioBRef}
