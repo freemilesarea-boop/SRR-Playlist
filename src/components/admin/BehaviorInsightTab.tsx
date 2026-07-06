@@ -104,7 +104,7 @@ export default function BehaviorInsightTab() {
           <div className="text-2xl font-bold text-rose-300">{demotions.length}</div>
           <div className="text-[10px] text-ink-dim">score ≤ 30 · conf ≥ 0.30</div>
         </div>
-        <div className="rounded bg-blue-500/10 p-3">
+        <div className="rounded bg-blue-500/20 p-3">
           <div className="text-[10px] uppercase text-ink-dim">avg boost</div>
           <div className="text-2xl font-bold text-blue-500">{avg.toFixed(2)}</div>
           <div className="text-[10px] text-ink-dim">{stats.min === Infinity ? '—' : `${stats.min.toFixed(1)} ~ ${stats.max.toFixed(1)}`}</div>
@@ -188,7 +188,7 @@ export default function BehaviorInsightTab() {
                     </td>
                     <td className="px-2 py-1.5">
                       <button onClick={() => setEditorTrackId(r.track_id)}
-                        className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-semibold text-indigo-500">
+                        className="inline-flex items-center gap-1 rounded bg-indigo-500/25 px-2 py-0.5 font-semibold text-indigo-500">
                         <ExternalLink size={10} />
                       </button>
                     </td>
@@ -259,7 +259,7 @@ function CandidatePanel({
                 <td className="px-2 py-1.5 text-right tabular-nums text-ink-mute">{r.current_placement_count}</td>
                 <td className="px-2 py-1.5">
                   <button onClick={() => onEdit(r.track_id)}
-                    className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-semibold text-indigo-500">
+                    className="inline-flex items-center gap-1 rounded bg-indigo-500/25 px-2 py-0.5 font-semibold text-indigo-500">
                     <ExternalLink size={10} />
                   </button>
                 </td>

@@ -177,7 +177,7 @@ export default function BusinessPage() {
           aria-pressed={isPlaying}
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
             isPlaying
-              ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30 hover:bg-emerald-500/25'
+              ? 'bg-emerald-500/25 text-emerald-200 ring-emerald-400/30 hover:bg-emerald-500/25'
               : 'bg-bg-card text-ink-dim ring-line/10 hover:bg-bg-hover hover:text-ink'
           } disabled:opacity-50`}
           title={isPlaying ? '클릭하면 매장 모드 종료' : '클릭하면 현재 시간대 음악 시작'}

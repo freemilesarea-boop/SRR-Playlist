@@ -571,9 +571,9 @@ export default function ArtistBatchUploadForm({
       <AudioQcGuideCard />
       {quota && (
         <div className={`flex items-center justify-between rounded-xl p-3 text-[11px] leading-relaxed ring-1 ${
-          quota.remaining === 0 ? 'bg-rose-500/10 text-rose-700 ring-rose-400/20'
-            : quota.remaining <= 5 ? 'bg-amber-500/10 text-amber-700 ring-amber-400/20'
-            : 'bg-emerald-500/10 text-emerald-700 ring-emerald-400/20'
+          quota.remaining === 0 ? 'bg-rose-500/20 text-rose-700 ring-rose-400/20'
+            : quota.remaining <= 5 ? 'bg-amber-500/20 text-amber-700 ring-amber-400/20'
+            : 'bg-emerald-500/20 text-emerald-700 ring-emerald-400/20'
         }`}>
           <div>
             <b>이번 달 등록 한도</b>
@@ -589,13 +589,13 @@ export default function ArtistBatchUploadForm({
         </div>
       )}
       {trust && trust.tier !== 'high' && (
-        <div className={`rounded-xl p-3 text-[11px] leading-relaxed ${trust.tier === 'low' ? 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-400/20' : 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-400/20'}`}>
+        <div className={`rounded-xl p-3 text-[11px] leading-relaxed ${trust.tier === 'low' ? 'bg-rose-500/20 text-rose-700 ring-1 ring-rose-400/20' : 'bg-amber-500/20 text-amber-700 ring-1 ring-amber-400/20'}`}>
           <b>메타데이터 정확도 안내 (신뢰도 {trust.trust_score})</b>
           <p className="mt-0.5">{trust.guidance}</p>
         </div>
       )}
       {recovery && (
-        <div className="rounded-xl bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-700 ring-1 ring-amber-400/30 dark:text-amber-200">
+        <div className="rounded-xl bg-amber-500/20 p-3 text-[11px] leading-relaxed text-amber-700 ring-1 ring-amber-400/30 dark:text-amber-200">
           <b>이전 업로드가 완료되지 않았어요.</b>
           <p className="mt-0.5">
             서버 확인 결과 {recovery.registered}곡은 정상 등록됐고, 다음 {recovery.pending.length}곡은 미완료 상태예요:
@@ -612,7 +612,7 @@ export default function ArtistBatchUploadForm({
         </div>
       )}
       {integrityWarn && (
-        <div className="rounded-xl bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-700 ring-1 ring-rose-400/30 dark:text-rose-200">
+        <div className="rounded-xl bg-rose-500/20 p-3 text-[11px] leading-relaxed text-rose-700 ring-1 ring-rose-400/30 dark:text-rose-200">
           <b>⚠ 업로드 무결성 경고</b>
           <p className="mt-0.5">{integrityWarn}</p>
         </div>
@@ -815,7 +815,7 @@ export default function ArtistBatchUploadForm({
                       onClick={() => removeRow(t.id)}
                       disabled={submitting}
                       aria-label="제거"
-                      className="rounded p-1 text-ink-dim hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                      className="rounded p-1 text-ink-dim hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
                     >
                       <X size={14} />
                     </button>
@@ -957,7 +957,7 @@ export default function ArtistBatchUploadForm({
           <button
             type="button"
             onClick={() => void retryFailed()}
-            className="w-full rounded-xl bg-amber-500/15 py-2.5 text-sm font-bold text-amber-700 ring-1 ring-amber-400/30 hover:bg-amber-500/25 dark:text-amber-200"
+            className="w-full rounded-xl bg-amber-500/25 py-2.5 text-sm font-bold text-amber-700 ring-1 ring-amber-400/30 hover:bg-amber-500/25 dark:text-amber-200"
           >
             실패한 {failedCount}곡만 재시도
           </button>
@@ -999,7 +999,7 @@ function StatusBadge({ status, trackCode }: { status: TrackStatus; trackCode?: s
     return (
       <span
         title={trackCode ?? '성공'}
-        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"
+        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"
       >
         <CheckCircle2 size={10} /> 성공
       </span>
@@ -1007,21 +1007,21 @@ function StatusBadge({ status, trackCode }: { status: TrackStatus; trackCode?: s
   }
   if (status === 'failed') {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/25 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">
         <AlertCircle size={10} /> 실패
       </span>
     );
   }
   if (status === 'uploading') {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sky-500/25 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300">
         <Loader2 size={10} className="animate-spin" /> 업로드 중
       </span>
     );
   }
   if (status === 'queued') {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
         대기
       </span>
     );

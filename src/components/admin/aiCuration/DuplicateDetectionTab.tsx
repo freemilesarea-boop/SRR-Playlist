@@ -205,7 +205,7 @@ export default function DuplicateDetectionTab() {
             <div className="rounded bg-rose-500/25 p-2"><div className="text-[10px] text-ink-dim">실패 (총)</div><div className="text-lg font-bold text-rose-300">{fpSummary.total_failed}</div></div>
             <div className="rounded bg-amber-500/25 p-2"><div className="text-[10px] text-ink-dim">재시도 가능</div><div className="text-lg font-bold text-amber-300">{fpSummary.total_retryable}</div></div>
             <div className="rounded bg-gray-500/10 p-2"><div className="text-[10px] text-ink-dim">재시도 소진</div><div className="text-lg font-bold text-gray-500">{fpSummary.total_exhausted}</div></div>
-            <div className="rounded bg-blue-500/10 p-2"><div className="text-[10px] text-ink-dim">미시도</div><div className="text-lg font-bold text-blue-500">{fpSummary.pending_never_attempted}</div></div>
+            <div className="rounded bg-blue-500/20 p-2"><div className="text-[10px] text-ink-dim">미시도</div><div className="text-lg font-bold text-blue-500">{fpSummary.pending_never_attempted}</div></div>
           </div>
         ) : (
           <p className="mt-2 text-xs text-ink-dim">상태 로딩 중…</p>

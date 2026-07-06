@@ -250,10 +250,10 @@ export default function EmbeddingTab() {
                 <li key={j.id} className="flex items-baseline justify-between gap-2 rounded bg-bg-soft px-2 py-0.5">
                   <span className="truncate">
                     <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
-                      j.status === 'done' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                      : j.status === 'error' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                      : j.status === 'dispatched' ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
-                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      j.status === 'done' ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                      : j.status === 'error' ? 'bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                      : j.status === 'dispatched' ? 'bg-sky-500/25 text-sky-700 dark:text-sky-300'
+                      : 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
                     }`}>{j.status}</span>
                     <span className="text-ink-mute">[{j.source}]</span>{' '}
                     <span className="text-ink">{j.track_title ?? j.track_id.slice(0, 8)}</span>

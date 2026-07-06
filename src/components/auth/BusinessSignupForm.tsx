@@ -294,7 +294,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
           disabled={verifying || bizVerified}
           className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
             bizVerified
-              ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
+              ? 'bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/30'
               : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
           }`}
         >
@@ -336,7 +336,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
             disabled={salesAgentChecking || !salesAgentCode.trim() || !!salesAgent}
             className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
               salesAgent
-                ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
+                ? 'bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/30'
                 : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
             }`}
           >

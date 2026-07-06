@@ -36,16 +36,16 @@ export default function TrackQcBadge({
 
   const score = qcScore ?? 0;
   let label = '낮음';
-  let tone = 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300';
+  let tone = 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300';
   let Icon = AlertCircle;
   if (score >= 90) {
-    label = '우수'; tone = 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300';
+    label = '우수'; tone = 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300';
     Icon = ShieldCheck;
   } else if (score >= 80) {
-    label = '양호'; tone = 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-300';
+    label = '양호'; tone = 'bg-sky-100 text-sky-900 dark:bg-sky-500/25 dark:text-sky-300';
     Icon = Activity;
   } else if (score >= 70) {
-    label = '보통'; tone = 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200';
+    label = '보통'; tone = 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/25 dark:text-yellow-200';
     Icon = AlertTriangle;
   }
 

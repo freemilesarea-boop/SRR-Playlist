@@ -222,7 +222,7 @@ export default function PayoutIntakeForm({ open, onClose, onSubmitted }: Props) 
               {idDoc ? idDoc.name : '파일 선택…'}
             </span>
             {idDoc && (
-              <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+              <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
                 {(idDoc.size / 1024 / 1024).toFixed(1)}MB
               </span>
             )}

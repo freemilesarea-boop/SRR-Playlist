@@ -34,18 +34,18 @@ function fmtDate(s: string | null | undefined): string {
 
 const STATUS_TONE: Record<string, string> = {
   // visibility_status
-  pending_review: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  approved: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+  pending_review: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  approved: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
   hidden: 'bg-ink/10 text-ink-dim',
   // 0075 — release_status 톤
   draft: 'bg-ink/10 text-ink-dim',
-  submitted: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  review_pending: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
-  changes_requested: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  scheduled: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
-  released: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  removed: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+  submitted: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  review_pending: 'bg-sky-100 text-sky-900 dark:bg-sky-500/25 dark:text-sky-200',
+  changes_requested: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  scheduled: 'bg-sky-100 text-sky-900 dark:bg-sky-500/25 dark:text-sky-200',
+  released: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  removed: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -65,9 +65,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const PAYOUT_TONE: Record<string, string> = {
-  verified: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  pending: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+  verified: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  pending: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
 };
 
 export default function ArtistTrackManagementList({ removedView = false }: { removedView?: boolean } = {}) {
@@ -437,7 +437,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
           <button
             onClick={() => setDelModal(true)}
             disabled={selected.size === 0}
-            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/15 dark:text-red-300"
+            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/25 dark:text-red-300"
           >
             <Trash2 size={12} /> 선택 처리 (삭제/공개중단)
           </button>
@@ -584,7 +584,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                           <button
                             onClick={() => void restoreTrack(r.track_id)}
                             disabled={restoreBusyId === r.track_id}
-                            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/25 dark:text-emerald-300"
                             title="검수/발매 흐름으로 복구"
                           >
                             {restoreBusyId === r.track_id ? <Loader2 size={12} className="animate-spin" /> : '복구'}

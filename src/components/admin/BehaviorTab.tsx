@@ -154,7 +154,7 @@ export default function BehaviorTab() {
                   </td>
                   <td className="px-2 py-1.5">
                     <button onClick={() => setEditorTrackId(o.track_id)}
-                      className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-semibold text-indigo-500">
+                      className="inline-flex items-center gap-1 rounded bg-indigo-500/25 px-2 py-0.5 font-semibold text-indigo-500">
                       <ExternalLink size={10} /> 편집기
                     </button>
                   </td>

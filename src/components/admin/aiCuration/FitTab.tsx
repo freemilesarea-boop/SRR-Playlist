@@ -151,7 +151,7 @@ export default function FitTab() {
                       <span className="rounded bg-bg-soft px-1.5 py-0.5 font-mono">manual {manual}</span>
                     )}
                     {aiBoost > 0 && (
-                      <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-violet-300">
+                      <span className="rounded bg-violet-500/25 px-1.5 py-0.5 font-mono text-violet-300">
                         +AI {aiBoost} (g{r.ai_genre_score ?? 0}/m{r.ai_mood_score ?? 0}/s{r.ai_store_score ?? 0})
                       </span>
                     )}

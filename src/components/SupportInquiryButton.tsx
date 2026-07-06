@@ -58,7 +58,7 @@ export default function SupportInquiryButton({
       case 'icon':
         return 'rounded-full p-2 text-ink-mute hover:bg-bg-hover';
       case 'alert':
-        return 'inline-flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-500 hover:bg-rose-500/25';
+        return 'inline-flex items-center gap-1.5 rounded-lg bg-rose-500/25 px-3 py-1.5 text-xs font-bold text-rose-500 hover:bg-rose-500/25';
       case 'nav':
         return 'inline-flex items-center gap-1.5 rounded-lg bg-bg-card px-3 py-2 text-sm font-semibold hover:bg-bg-hover';
       case 'chip':

@@ -137,7 +137,7 @@ export default function RevenueManagement() {
                             ? 'bg-emerald-500/25 text-emerald-200'
                             : r.status === 'refunded'
                               ? 'bg-rose-500/25 text-red-200'
-                              : 'bg-yellow-500/15 text-yellow-200'
+                              : 'bg-yellow-500/25 text-yellow-200'
                         }`}
                       >
                         {STATUS_LABEL[r.status] ?? r.status}

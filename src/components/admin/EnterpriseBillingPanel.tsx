@@ -564,7 +564,7 @@ function InvoiceDetailModal({
 
 function KV({ label, value, highlight = false }: { label: string; value: React.ReactNode; highlight?: boolean }) {
   return (
-    <div className={`rounded-lg p-2 ring-1 ${highlight ? 'bg-violet-500/10 ring-violet-400/30' : 'bg-bg-deep/40 ring-line/10'}`}>
+    <div className={`rounded-lg p-2 ring-1 ${highlight ? 'bg-violet-500/20 ring-violet-400/30' : 'bg-bg-deep/40 ring-line/10'}`}>
       <div className="text-[10px] uppercase tracking-wider text-ink-mute">{label}</div>
       <div className={`mt-0.5 truncate ${highlight ? 'text-base font-extrabold text-ink' : 'text-xs font-semibold text-ink'}`}>
         {value}

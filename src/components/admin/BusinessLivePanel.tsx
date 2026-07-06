@@ -26,9 +26,9 @@ const EVENT_TONE: Record<string, string> = {
   player_error: 'bg-rose-500/20 text-rose-300',
   muted: 'bg-ink/15 text-ink-mute',
   volume_low: 'bg-ink/10 text-ink-mute',
-  like: 'bg-pink-500/15 text-pink-500',
-  unlike: 'bg-pink-500/10 text-pink-500/70',
-  replay: 'bg-violet-500/15 text-violet-500',
+  like: 'bg-pink-500/25 text-pink-500',
+  unlike: 'bg-pink-500/20 text-pink-500/70',
+  replay: 'bg-violet-500/25 text-violet-500',
 };
 
 const NULL_BUSINESS_ID = '00000000-0000-0000-0000-000000000000';

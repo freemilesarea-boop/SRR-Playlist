@@ -91,7 +91,7 @@ export default function SalesPartnersPage() {
     <div className="mx-auto max-w-3xl px-5 pb-24 pt-10 sm:pt-14">
       {/* Hero */}
       <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600/15 via-violet-500/5 to-transparent p-7 ring-1 ring-violet-400/20 sm:p-10">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-600 dark:text-violet-300">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/25 px-3 py-1 text-xs font-semibold text-violet-600 dark:text-violet-300">
           <Handshake size={13} /> 영업 파트너스 지원
         </span>
         <h1 className="mt-4 text-2xl font-extrabold leading-snug sm:text-3xl">
@@ -126,7 +126,7 @@ export default function SalesPartnersPage() {
           <Bullet>기본 수수료율은 관리자 승인 후 개별 안내</Bullet>
           <Bullet>실제 지급은 관리자 검수 및 정산 확정 후 진행</Bullet>
         </ul>
-        <p className="mt-3 rounded-xl bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-700 ring-1 ring-amber-400/20 dark:text-amber-200">
+        <p className="mt-3 rounded-xl bg-amber-500/20 p-3 text-[12px] leading-relaxed text-amber-700 ring-1 ring-amber-400/20 dark:text-amber-200">
           ※ 수수료율과 정산 조건은 파트너 승인 후 개별 계약/안내에 따라 달라질 수 있습니다.
         </p>
       </Section>

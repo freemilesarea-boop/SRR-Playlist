@@ -114,7 +114,7 @@ export default function GuardrailDashboardTab() {
                 <span className="min-w-0 flex-1 truncate"><b>{t.title ?? '(제목없음)'}</b> · <span className="text-ink-dim">{t.artist ?? ''}</span> · {t.main_genre ?? '-'}</span>
                 <span className="shrink-0 text-rose-300">차단 {t.hard_stores}</span>
                 <span className="hidden shrink-0 truncate text-[10px] text-ink-dim sm:block" title={(t.blocked_stores ?? []).join(', ')}>{(t.blocked_stores ?? []).slice(0, 4).map((s) => STORE_LABELS[s] ?? s).join(',')}</span>
-                <button onClick={() => setMetaModal({ track_id: t.track_id, title: t.title })} className="shrink-0 rounded bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">메타 수정</button>
+                <button onClick={() => setMetaModal({ track_id: t.track_id, title: t.title })} className="shrink-0 rounded bg-indigo-500/25 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">메타 수정</button>
               </li>
             ))}
           </ul>

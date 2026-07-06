@@ -179,9 +179,9 @@ export default function TrackQcDetailModal({ trackId, trackTitle, onClose }: Pro
 
 function OverallVerdict({ verdict, score }: { verdict: QcVerdict; score?: number }) {
   const meta: Record<QcVerdict, { tone: string; label: string; Icon: typeof ShieldCheck }> = {
-    ok:      { tone: 'bg-emerald-500/10 ring-emerald-500/30 text-emerald-700 dark:text-emerald-300', label: '권장 기준 통과', Icon: ShieldCheck },
-    warning: { tone: 'bg-amber-500/10 ring-amber-500/30 text-amber-700 dark:text-amber-300',        label: '일부 항목 주의 — 마스터링 점검 권장', Icon: AlertTriangle },
-    fail:    { tone: 'bg-red-500/10 ring-red-500/30 text-red-700 dark:text-red-300',                 label: '권장 기준 미달 — 재마스터링 권장', Icon: AlertCircle },
+    ok:      { tone: 'bg-emerald-500/20 ring-emerald-500/30 text-emerald-700 dark:text-emerald-300', label: '권장 기준 통과', Icon: ShieldCheck },
+    warning: { tone: 'bg-amber-500/20 ring-amber-500/30 text-amber-700 dark:text-amber-300',        label: '일부 항목 주의 — 마스터링 점검 권장', Icon: AlertTriangle },
+    fail:    { tone: 'bg-red-500/20 ring-red-500/30 text-red-700 dark:text-red-300',                 label: '권장 기준 미달 — 재마스터링 권장', Icon: AlertCircle },
     unknown: { tone: 'bg-bg-card ring-line/10 text-ink-mute',                                         label: '판정 불가 — 일부 지표 결측', Icon: Activity },
   };
   const m = meta[verdict];

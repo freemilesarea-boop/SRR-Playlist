@@ -78,7 +78,7 @@ export default function AuthResetPasswordPage() {
         </div>
 
         {done ? (
-          <div className="flex items-start gap-2 rounded-xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-200">
+          <div className="flex items-start gap-2 rounded-xl border border-green-500/40 bg-green-500/20 p-4 text-sm text-green-200">
             <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
             <div>
               비밀번호가 변경됐어요.<br />
@@ -88,7 +88,7 @@ export default function AuthResetPasswordPage() {
         ) : !ready && !error ? (
           <div className="text-center text-sm text-ink-mute">링크 확인 중이에요…</div>
         ) : error && !ready ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+          <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/20 p-3 text-sm text-red-200">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <div>{error}</div>
           </div>

@@ -110,7 +110,7 @@ export default function InAppBrowserWarningModal({
           </button>
         </div>
 
-        <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-3 text-xs text-ink ring-1 ring-amber-500/30">
+        <div className="space-y-2 rounded-xl bg-amber-500/20 px-3 py-3 text-xs text-ink ring-1 ring-amber-500/30">
           <p className="leading-relaxed">
             현재 앱 내 브라우저에서는 Google 로그인이 차단될 수 있습니다.
           </p>

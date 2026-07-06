@@ -26,11 +26,11 @@ const ALLOWED_ARTIST_STATUSES: ReadonlySet<SettlementStatus> = new Set<Settlemen
 
 const STATUS_TONE: Record<SettlementStatus, string> = {
   pending: 'bg-ink/10 text-ink-dim',  // 노출 안 됨 — 안전 default
-  carried_over: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  payable: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
-  paid: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  held: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
-  disputed: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+  carried_over: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  payable: 'bg-sky-100 text-sky-900 dark:bg-sky-500/25 dark:text-sky-200',
+  paid: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  held: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/25 dark:text-yellow-200',
+  disputed: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
 };
 
 const STATUS_LABEL: Record<SettlementStatus, string> = {

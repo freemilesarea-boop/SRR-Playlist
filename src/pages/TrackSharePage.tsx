@@ -193,7 +193,7 @@ export default function TrackSharePage() {
       </div>
 
       {!playable && (
-        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl bg-yellow-500/10 p-3 text-xs ring-1 ring-yellow-500/30 sm:mx-6">
+        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl bg-yellow-500/20 p-3 text-xs ring-1 ring-yellow-500/30 sm:mx-6">
           <AlertCircle size={14} className="mt-0.5 shrink-0 text-yellow-300" />
           <span className="text-ink-mute">샘플 음원이 아직 없어요. 운영자가 업로드 후 재생됩니다.</span>
         </div>

@@ -111,7 +111,7 @@ export function GuardrailBadges({ trackId, ready }: { trackId: string; ready: bo
             </div>
           )}
           {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-300">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] text-amber-200 ring-1 ring-amber-400/50">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
-          {warn.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-yellow-600">주의:</span>{warn.map((w) => <span key={w.store_key} className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] text-yellow-700">{STORE_LABELS[w.store_key] ?? w.store_key}</span>)}</div>}
+          {warn.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-yellow-600">주의:</span>{warn.map((w) => <span key={w.store_key} className="rounded bg-yellow-500/25 px-1.5 py-0.5 text-[10px] text-yellow-700">{STORE_LABELS[w.store_key] ?? w.store_key}</span>)}</div>}
         </div>
       )}
     </div>

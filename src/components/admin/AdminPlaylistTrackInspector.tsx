@@ -207,7 +207,7 @@ export default function AdminPlaylistTrackInspector({ playlistId }: Props) {
                               </button>
                             )}
                             <button onClick={() => void doRecompute(t)} title="재계산"
-                              className="rounded bg-indigo-500/15 p-1 text-indigo-500 hover:bg-indigo-500/25">
+                              className="rounded bg-indigo-500/25 p-1 text-indigo-500 hover:bg-indigo-500/25">
                               <Calculator size={10} />
                             </button>
                           </>

@@ -191,7 +191,7 @@ export default function ResultsTab({ reviewOnly = false }: { reviewOnly?: boolea
                     <RefreshCw size={12} /> 재분석
                   </button>
                   <button onClick={() => setEditorTrackId(r.track_id)}
-                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-500 hover:bg-indigo-500/25">
+                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/25 px-2.5 py-1.5 text-xs font-semibold text-indigo-500 hover:bg-indigo-500/25">
                     <Sparkles size={12} /> AI 메타/배치 관리
                   </button>
                 </div>

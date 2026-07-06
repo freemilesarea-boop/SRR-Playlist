@@ -249,7 +249,7 @@ export default function LoginPage() {
         </div>
 
         {!isSupabaseConfigured && (
-          <div className="flex items-start gap-2 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+          <div className="flex items-start gap-2 rounded-xl border border-yellow-500/40 bg-yellow-500/20 p-3 text-xs text-yellow-200">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <div>
               Supabase 환경 변수가 설정되지 않았어요. <br />

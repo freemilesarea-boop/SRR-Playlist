@@ -516,7 +516,7 @@ function SettlementProfileCard({
       </p>
 
       {existing?.settlement_status === 'rejected' && existing?.rejection_reason && (
-        <div className="mt-2 rounded bg-rose-500/15 px-3 py-2 text-xs text-rose-300">
+        <div className="mt-2 rounded bg-rose-500/25 px-3 py-2 text-xs text-rose-300">
           <XCircle size={11} className="inline mr-1" />
           반려 사유: {existing.rejection_reason}
         </div>
@@ -844,7 +844,7 @@ function SettlementPreviewCard({
         <h3 className="text-sm font-bold flex items-center gap-1.5">
           <Wallet size={14} className="text-emerald-300" /> 예상 정산금 (이번 달)
         </h3>
-        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+        <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
           예상치
         </span>
       </div>

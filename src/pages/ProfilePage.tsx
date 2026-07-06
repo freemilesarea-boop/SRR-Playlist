@@ -390,7 +390,7 @@ function WithdrawConfirmModal({
         className="w-full max-w-md space-y-4 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-red-300">
             <AlertTriangle size={18} />
           </span>
           <div>
@@ -694,7 +694,7 @@ function ArtistManagementCard({
     // account_type=artist 인데 프로필이 없는 비정상 케이스 → 등록/문의 (버튼 유지)
     state = {
       label: '등록 필요',
-      tone: 'bg-yellow-500/15 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-yellow-200',
       icon: <AlertTriangle size={11} />,
       cta: '아티스트 등록 신청',
       note: '아티스트 정보가 저장되지 않았어요. 등록을 이어서 진행하거나 고객센터로 문의해주세요.',
@@ -702,7 +702,7 @@ function ArtistManagementCard({
   } else if (artistProfile.approval_status === 'pending') {
     state = {
       label: '검토 중',
-      tone: 'bg-yellow-500/15 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-yellow-200',
       icon: <Clock size={11} />,
       cta: '진행 상태 보기',
       note: '관리자 승인 검토 중이에요. 평균 1영업일 이내 처리됩니다.',
@@ -710,7 +710,7 @@ function ArtistManagementCard({
   } else if (artistProfile.approval_status === 'rejected') {
     state = {
       label: '승인 거절됨',
-      tone: 'bg-red-500/15 text-red-300',
+      tone: 'bg-red-500/25 text-red-300',
       icon: <XCircle size={11} />,
       cta: '거절 사유 확인',
       note: '승인이 거절됐어요. 사유를 확인하고 재신청할 수 있어요.',
@@ -724,14 +724,14 @@ function ArtistManagementCard({
     state = signed
       ? {
           label: '승인 완료',
-          tone: 'bg-emerald-500/15 text-emerald-300',
+          tone: 'bg-emerald-500/25 text-emerald-300',
           icon: <CheckCircle2 size={11} />,
           cta: '아티스트 관리',
           note: '내 음원 업로드, 정산 계좌, 스트리밍 현황을 관리해요.',
         }
       : {
           label: '승인 완료',
-          tone: 'bg-emerald-500/15 text-emerald-300',
+          tone: 'bg-emerald-500/25 text-emerald-300',
           icon: <CheckCircle2 size={11} />,
           cta: '계약서 확인하기',
           note: '승인이 완료됐어요. 음원 유통 계약서를 확인·서명하면 음원 업로드가 시작돼요.',

@@ -29,7 +29,7 @@ export default function TrialBanner() {
 
   if (status === 'expired') {
     return (
-      <div className="mx-auto mb-3 flex max-w-[1500px] flex-wrap items-center gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/25">
+      <div className="mx-auto mb-3 flex max-w-[1500px] flex-wrap items-center gap-3 rounded-2xl bg-amber-500/20 px-4 py-3 ring-1 ring-amber-500/25">
         <Crown size={18} className="shrink-0 text-amber-500" />
         <span className="flex-1 text-sm font-semibold text-amber-600">
           무료 체험이 종료되었어요. 계속 매장에서 재생하려면 구독이 필요합니다.
@@ -53,7 +53,7 @@ export default function TrialBanner() {
   return (
     <div
       className={`mx-auto mb-3 flex max-w-[1500px] flex-wrap items-center gap-3 rounded-2xl px-4 py-3 ring-1 ${
-        urgent ? 'bg-rose-500/10 ring-rose-500/25' : 'bg-accent/10 ring-accent/25'
+        urgent ? 'bg-rose-500/20 ring-rose-500/25' : 'bg-accent/10 ring-accent/25'
       }`}
     >
       <Clock size={18} className={`shrink-0 ${urgent ? 'text-rose-500' : 'text-accent'}`} />

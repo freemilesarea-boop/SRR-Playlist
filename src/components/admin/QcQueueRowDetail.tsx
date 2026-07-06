@@ -157,7 +157,7 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
             {isCurrent && playing ? <><Pause size={12} /> 일시정지</> : <><Play size={12} /> 미리듣기</>}
           </button>
           <button onClick={() => setEditingMeta(true)}
-            className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-1 text-[11px] font-semibold text-indigo-500">
+            className="inline-flex items-center gap-1 rounded bg-indigo-500/25 px-2 py-1 text-[11px] font-semibold text-indigo-500">
             <Edit size={10} /> 메타 편집
           </button>
         </div>
@@ -257,7 +257,7 @@ export default function QcQueueRowDetail({ queueId, trackId, onChanged, onResolv
                       )}
                       <button onClick={() => void recompute(p.playlist_id)}
                         disabled={busy}
-                        className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-500 disabled:opacity-50">
+                        className="inline-flex items-center gap-1 rounded bg-indigo-500/25 px-2 py-0.5 text-[10px] font-semibold text-indigo-500 disabled:opacity-50">
                         <Calculator size={9} /> 재계산
                       </button>
                     </div>

@@ -254,7 +254,7 @@ export default function SupportInquiriesPanel() {
                       <span className="truncate">{r.user_email ?? '—'}</span>
                       {r.user_role && <span className="rounded bg-bg-card px-1 py-0.5 font-mono">{r.user_role}</span>}
                       {r.wants_kakao_contact && <span className="rounded bg-yellow-500/20 px-1 py-0.5 text-yellow-500">카톡</span>}
-                      {r.attachment_count > 0 && <span className="rounded bg-violet-500/15 px-1 py-0.5 text-violet-400">첨부 {r.attachment_count}</span>}
+                      {r.attachment_count > 0 && <span className="rounded bg-violet-500/25 px-1 py-0.5 text-violet-400">첨부 {r.attachment_count}</span>}
                     </div>
                   </button>
                 </li>

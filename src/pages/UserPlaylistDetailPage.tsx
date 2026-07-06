@@ -267,7 +267,7 @@ function SortableTrack({ track, onRemove, onPlay }: { track: DetailTrack; onRemo
         </div>
       </button>
       {playable && <AddToPlaylistButton trackId={track.id} variant="bare" size={16} />}
-      <button onClick={onRemove} className="rounded-md p-2 text-red-300 hover:bg-red-500/10" aria-label="제거">
+      <button onClick={onRemove} className="rounded-md p-2 text-red-300 hover:bg-red-500/20" aria-label="제거">
         <Trash2 size={15} />
       </button>
     </li>
@@ -348,7 +348,7 @@ function EditModal({
           <button onClick={() => void save()} disabled={busy} className="btn-primary flex-1 py-2.5 text-sm">{busy ? '저장 중…' : '저장'}</button>
         </div>
         {confirmDelete ? (
-          <div className="flex items-center gap-2 rounded-xl bg-red-500/10 p-3">
+          <div className="flex items-center gap-2 rounded-xl bg-red-500/20 p-3">
             <span className="flex-1 text-xs text-red-200">정말 삭제할까요? 되돌릴 수 없어요.</span>
             <button onClick={() => setConfirmDelete(false)} disabled={busy} className="text-xs text-ink-mute">취소</button>
             <button onClick={() => void remove()} disabled={busy} className="rounded-full bg-red-500/90 px-3 py-1.5 text-xs font-bold text-white">삭제</button>
