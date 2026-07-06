@@ -309,11 +309,18 @@ export function formatSettlementMonth(yyyyMmDd: string): string {
   return yyyyMmDd.slice(0, 7);
 }
 
+/**
+ * Phase 3-1A — DB enum 은 유지 · 관리자/HQ 화면 label 만 정리.
+ * pending   → 정산 생성 (draft)
+ * approved  → 확정      (confirmed)
+ * paid      → 지급완료  (paid)
+ * cancelled → 보류      (held)
+ */
 export const SETTLEMENT_STATUS_LABEL: Record<EnterpriseMonthlySettlementStatus, string> = {
-  pending: '대기',
-  approved: '승인됨',
-  paid: '지급완료',
-  cancelled: '취소됨',
+  pending:   '정산 생성',
+  approved:  '확정',
+  paid:      '지급완료',
+  cancelled: '보류',
 };
 
 /** 0390 — 정산에 적용된 단가/수수료 출처 라벨 (관리자/HQ 화면 배지용) */

@@ -38,7 +38,7 @@ import {
 import {
   adminListEnterpriseAccounts, type EnterpriseAccount,
 } from '@/lib/api/enterpriseAccountsApi';
-import { currentMonthFirstDay } from '@/lib/api/enterpriseMonthlySettlementApi';
+import { currentMonthFirstDay, SETTLEMENT_STATUS_LABEL, type EnterpriseMonthlySettlementStatus } from '@/lib/api/enterpriseMonthlySettlementApi';
 
 // ============================================================================
 // Utils
@@ -439,7 +439,7 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
                     <td className="px-2 py-1 text-right">{fmtMoney(r.monthly_store_price)}</td>
                     <td className="px-2 py-1 text-right">{r.commission_rate}%</td>
                     <td className="px-2 py-1 text-right font-bold">{fmtMoney(r.total_commission)}</td>
-                    <td className="px-2 py-1"><AdminBadge tone={r.status === 'paid' ? 'success' : r.status === 'cancelled' ? 'danger' : 'info'} variant="subtle">{r.status.toUpperCase()}</AdminBadge></td>
+                    <td className="px-2 py-1"><AdminBadge tone={r.status === 'paid' ? 'success' : r.status === 'cancelled' ? 'danger' : 'info'} variant="subtle">{SETTLEMENT_STATUS_LABEL[r.status as EnterpriseMonthlySettlementStatus] ?? r.status}</AdminBadge></td>
                     <td className="px-2 py-1 text-ink-mute">{r.rate_source ?? '—'}</td>
                     <td className="px-2 py-1 text-right">
                       <AdminButton
