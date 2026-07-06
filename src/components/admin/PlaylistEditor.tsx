@@ -206,12 +206,12 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
       {/* 협업 lock 배너 — 다른 사용자가 활성 편집 중일 때 경고 */}
       {!lock.loading && lock.otherUser && (
         <div className="flex items-start gap-2.5 rounded-2xl bg-yellow-500/20 p-3 ring-1 ring-yellow-500/30">
-          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 text-yellow-200">!</span>
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 text-slate-900 dark:text-yellow-200">!</span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-yellow-100">
+            <p className="text-xs font-semibold text-slate-900 dark:text-yellow-100">
               <b>{lock.otherUser.nickname}</b> 님이 지금 편집 중이에요
             </p>
-            <p className="mt-0.5 text-[11px] text-yellow-200/85">
+            <p className="mt-0.5 text-[11px] text-slate-700 dark:text-yellow-200/85">
               마지막 활동{' '}
               {(() => {
                 const diff = Math.max(
@@ -226,7 +226,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
           </div>
           <button
             onClick={() => void lock.forceTakeover()}
-            className="shrink-0 rounded-full bg-yellow-500/20 px-3 py-1.5 text-[11px] font-semibold text-yellow-100 ring-1 ring-yellow-300/30 hover:bg-yellow-500/30"
+            className="shrink-0 rounded-full bg-yellow-500/20 px-3 py-1.5 text-[11px] font-semibold text-slate-900 dark:text-yellow-100 ring-1 ring-yellow-300/30 hover:bg-yellow-500/30"
           >
             그래도 편집
           </button>

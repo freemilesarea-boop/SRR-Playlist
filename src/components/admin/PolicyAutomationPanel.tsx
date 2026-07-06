@@ -1301,11 +1301,11 @@ function AutomationHeroKpi({ kpi, runs }: { kpi: PolicyAutomationKpi; runs: Poli
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((item) => {
         const cls =
-          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-emerald-100' }
-          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-amber-100' }
-          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-rose-100' }
-          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-sky-100' }
-          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-violet-100' };
+          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-slate-900 dark:text-emerald-100' }
+          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-slate-900 dark:text-amber-100' }
+          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-slate-900 dark:text-rose-100' }
+          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-slate-900 dark:text-sky-100' }
+          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-slate-900 dark:text-violet-100' };
         return (
           <div
             key={item.label}
@@ -1390,9 +1390,9 @@ function AutomationCenterSection({
     <div className="space-y-3">
       {/* Section header */}
       <div className="flex items-center gap-2">
-        <Bot size={14} className="text-violet-200" />
+        <Bot size={14} className="text-slate-900 dark:text-violet-200" />
         <h2 className="text-[13px] font-black text-ink">Automation Center</h2>
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50">
           <Sparkles size={9} /> BETA
         </span>
         <span className="text-[10px] text-ink-mute">자동 스케줄 · 자동 배포 · 자동 검증 · 자동 복구 · Rule-based · LLM 미사용</span>
@@ -1462,9 +1462,9 @@ function AutomationHealthCenter({
   kpi: PolicyAutomationKpi;
   summary: { total: number; success: number; failed: number; upcoming: number };
 }) {
-  const healthTone = health.tone === 'success' ? 'bg-emerald-500/25 ring-emerald-500/45 text-emerald-100'
-                   : health.tone === 'warning' ? 'bg-amber-500/25   ring-amber-500/45   text-amber-100'
-                   :                             'bg-rose-500/25    ring-rose-500/45    text-rose-100';
+  const healthTone = health.tone === 'success' ? 'bg-emerald-500/25 ring-emerald-500/45 text-slate-900 dark:text-emerald-100'
+                   : health.tone === 'warning' ? 'bg-amber-500/25   ring-amber-500/45   text-slate-900 dark:text-amber-100'
+                   :                             'bg-rose-500/25    ring-rose-500/45    text-slate-900 dark:text-rose-100';
   const successRate = kpi.recent_7d_runs > 0 ? Math.round(((kpi.recent_7d_runs - kpi.failed_runs_7d) / kpi.recent_7d_runs) * 100) : 100;
 
   return (
@@ -1501,10 +1501,10 @@ function HealthMiniAuto({ label, value, tone, icon }: {
   tone: 'success' | 'warning' | 'danger' | 'info';
   icon: JSX.Element;
 }) {
-  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100' }
-            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100' }
-            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100' }
-            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-sky-100' };
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-slate-900 dark:text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-slate-900 dark:text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-slate-900 dark:text-rose-100' }
+            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-slate-900 dark:text-sky-100' };
   return (
     <div className={`rounded-xl p-2.5 ring-1 ${cls.bg} ${cls.ring}`}>
       <p className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider ${cls.text}`}>
@@ -1574,22 +1574,22 @@ function AiAutomationInsightCard({
 
   return (
     <AdminCardAuto title={<span className="flex items-center gap-2"><Bot size={13} /> AI Automation Insight
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50">
         <Sparkles size={9} /> BETA
       </span>
     </span>} subtitle="Rule-based · LLM 미사용">
       {insights.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
-          <Bot size={22} className="text-emerald-200" />
-          <p className="text-[11px] font-bold text-emerald-100">이상 신호가 없습니다.</p>
+          <Bot size={22} className="text-slate-900 dark:text-emerald-200" />
+          <p className="text-[11px] font-bold text-slate-900 dark:text-emerald-100">이상 신호가 없습니다.</p>
         </div>
       ) : (
         <ul className="space-y-1.5">
           {insights.map((i) => {
-            const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
-                      : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
-                      : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
-                      :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+            const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-slate-900 dark:text-emerald-100' }
+                      : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-slate-900 dark:text-amber-100' }
+                      : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-slate-900 dark:text-rose-100' }
+                      :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-slate-900 dark:text-sky-100' };
             return (
               <li key={i.key} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
                 <div className="flex items-start gap-2">
@@ -1653,10 +1653,10 @@ function AutomationSummaryCard({
 }
 
 function SummaryStatAuto({ label, value, tone }: { label: string; value: number; tone: 'success' | 'warning' | 'danger' | 'info' }) {
-  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100' }
-            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100' }
-            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100' }
-            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-sky-100' };
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-slate-900 dark:text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-slate-900 dark:text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-slate-900 dark:text-rose-100' }
+            :                      { bg: 'bg-sky-500/25',     ring: 'ring-sky-500/45',     text: 'text-slate-900 dark:text-sky-100' };
   return (
     <div className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
       <p className={`text-[9.5px] font-bold uppercase tracking-wider ${cls.text}`}>{label}</p>
@@ -1708,15 +1708,15 @@ function RecoveryRecommendationCard({
     >
       {items.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
-          <CheckCircle2 size={22} className="text-emerald-200" />
-          <p className="text-[11px] font-bold text-emerald-100">복구 필요 항목이 없습니다.</p>
+          <CheckCircle2 size={22} className="text-slate-900 dark:text-emerald-200" />
+          <p className="text-[11px] font-bold text-slate-900 dark:text-emerald-100">복구 필요 항목이 없습니다.</p>
         </div>
       ) : (
         <ul className="space-y-1.5">
           {items.map((i) => {
             const cls = i.tone === 'danger'
-              ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-rose-100' }
-              : { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-amber-100' };
+              ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-slate-900 dark:text-rose-100' }
+              : { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-slate-900 dark:text-amber-100' };
             return (
               <li key={i.key} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
                 <div className="flex items-start gap-1.5">
@@ -1777,7 +1777,7 @@ function ScheduledJobsCard({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-mono text-[10.5px] tabular-nums text-ink">{at}</p>
-                    <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-100 ring-1 ring-emerald-500/45">
+                    <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-500/45">
                       <Play size={9} /> 활성
                     </span>
                   </div>
@@ -1831,10 +1831,10 @@ function QueueSectionAuto({ label, tone, items, emptyText }: {
   label: string; tone: 'success' | 'warning' | 'danger' | 'info';
   items: PolicyAutomationRun[]; emptyText: string;
 }) {
-  const cls = tone === 'success' ? { text: 'text-emerald-200', chip: 'bg-emerald-500/25 text-emerald-100 ring-emerald-500/45' }
-            : tone === 'warning' ? { text: 'text-amber-200',   chip: 'bg-amber-500/25 text-amber-100 ring-amber-500/45' }
-            : tone === 'danger'  ? { text: 'text-rose-200',    chip: 'bg-rose-500/25 text-rose-100 ring-rose-500/45' }
-            :                      { text: 'text-sky-200',     chip: 'bg-sky-500/25 text-sky-100 ring-sky-500/45' };
+  const cls = tone === 'success' ? { text: 'text-slate-900 dark:text-emerald-200', chip: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-emerald-500/45' }
+            : tone === 'warning' ? { text: 'text-slate-900 dark:text-amber-200',   chip: 'bg-amber-500/25 text-slate-900 dark:text-amber-100 ring-amber-500/45' }
+            : tone === 'danger'  ? { text: 'text-slate-900 dark:text-rose-200',    chip: 'bg-rose-500/25 text-slate-900 dark:text-rose-100 ring-rose-500/45' }
+            :                      { text: 'text-slate-900 dark:text-sky-200',     chip: 'bg-sky-500/25 text-slate-900 dark:text-sky-100 ring-sky-500/45' };
   return (
     <div>
       <p className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${cls.text}`}>{label}</p>
@@ -1906,10 +1906,10 @@ function AutomationTimelineCard({ runs }: { runs: PolicyAutomationRun[] }) {
                        : e.tone === 'warning' ? 'bg-amber-500'
                        : e.tone === 'danger'  ? 'bg-rose-500'
                        :                        'bg-sky-500';
-            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-emerald-100'
-                       : e.tone === 'warning' ? 'bg-amber-500/40   text-amber-100'
-                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-rose-100'
-                       :                        'bg-sky-500/40     text-sky-100';
+            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-slate-900 dark:text-emerald-100'
+                       : e.tone === 'warning' ? 'bg-amber-500/40   text-slate-900 dark:text-amber-100'
+                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-slate-900 dark:text-rose-100'
+                       :                        'bg-sky-500/40     text-slate-900 dark:text-sky-100';
             return (
               <li key={e.key} className="flex items-stretch gap-2">
                 <span className="w-14 shrink-0 pt-1 text-right font-mono text-[10px] tabular-nums text-ink-mute">
@@ -1970,15 +1970,15 @@ function RetryQueueCard({
     >
       {items.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
-          <CheckCircle2 size={22} className="text-emerald-200" />
-          <p className="text-[11px] font-bold text-emerald-100">재시도 대기 없음.</p>
+          <CheckCircle2 size={22} className="text-slate-900 dark:text-emerald-200" />
+          <p className="text-[11px] font-bold text-slate-900 dark:text-emerald-100">재시도 대기 없음.</p>
         </div>
       ) : (
         <ul className="space-y-1.5">
           {items.map(({ r, priority }) => {
-            const cls = priority === 'P1' ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-rose-100', chip: 'bg-rose-500/40 text-rose-50' }
-                      : priority === 'P2' ? { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-amber-100', chip: 'bg-amber-500/40 text-amber-50' }
-                      :                     { bg: 'bg-sky-500/20',    ring: 'ring-sky-500/40',    text: 'text-sky-100',    chip: 'bg-sky-500/40 text-sky-50' };
+            const cls = priority === 'P1' ? { bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', text: 'text-slate-900 dark:text-rose-100', chip: 'bg-rose-500/40 text-slate-900 dark:text-rose-50' }
+                      : priority === 'P2' ? { bg: 'bg-amber-500/20', ring: 'ring-amber-500/40', text: 'text-slate-900 dark:text-amber-100', chip: 'bg-amber-500/40 text-slate-900 dark:text-amber-50' }
+                      :                     { bg: 'bg-sky-500/20',    ring: 'ring-sky-500/40',    text: 'text-slate-900 dark:text-sky-100',    chip: 'bg-sky-500/40 text-slate-900 dark:text-sky-50' };
             return (
               <li key={r.id} className={`rounded-lg p-2 ring-1 ${cls.bg} ${cls.ring}`}>
                 <div className="flex items-center justify-between gap-2">

@@ -1439,11 +1439,11 @@ function OpsHeroKpi({ overview }: { overview: PolicyDeploymentOverview }) {
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((item) => {
         const cls =
-          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-emerald-100' }
-          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-amber-100' }
-          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-rose-100' }
-          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-sky-100' }
-          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-violet-100' };
+          item.tone === 'success'  ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-400/50', chip: 'bg-emerald-500/40 text-slate-900 dark:text-emerald-100' }
+          : item.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-400/50',   chip: 'bg-amber-500/40 text-slate-900 dark:text-amber-100' }
+          : item.tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-400/50',    chip: 'bg-rose-500/40 text-slate-900 dark:text-rose-100' }
+          : item.tone === 'info'    ? { bg: 'bg-sky-500/25',     ring: 'ring-sky-400/50',     chip: 'bg-sky-500/40 text-slate-900 dark:text-sky-100' }
+          :                            { bg: 'bg-violet-500/25', ring: 'ring-violet-400/50', chip: 'bg-violet-500/40 text-slate-900 dark:text-violet-100' };
         return (
           <div
             key={item.label}
@@ -1523,9 +1523,9 @@ function OpsProgressCard({ overview }: { overview: PolicyDeploymentOverview }) {
 function ProgressStat({ label, value, tone, icon }: {
   label: string; value: number; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: JSX.Element;
 }) {
-  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
-            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
-            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
+  const cls = tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/40', text: 'text-slate-900 dark:text-emerald-100' }
+            : tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/40',   text: 'text-slate-900 dark:text-amber-100' }
+            : tone === 'danger'  ? { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/40',    text: 'text-slate-900 dark:text-rose-100' }
             :                      { bg: 'bg-bg-card',        ring: 'ring-line/15',        text: 'text-ink-mute' };
   return (
     <div className={`rounded-md p-1.5 ring-1 ${cls.bg} ${cls.ring}`}>
@@ -1564,9 +1564,9 @@ function DeploymentHealthCard({
   overview: PolicyDeploymentOverview; kpi: PolicyDeploymentKpi | null;
 }) {
   const h = computeDeploymentHealth(overview, kpi);
-  const cls = h.tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-emerald-100', icon: <CheckCircle2 size={16} /> }
-            : h.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-amber-100',   icon: <AlertCircle size={16} /> }
-            :                        { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-rose-100',    icon: <Siren size={16} className="animate-pulse" /> };
+  const cls = h.tone === 'success' ? { bg: 'bg-emerald-500/25', ring: 'ring-emerald-500/45', text: 'text-slate-900 dark:text-emerald-100', icon: <CheckCircle2 size={16} /> }
+            : h.tone === 'warning' ? { bg: 'bg-amber-500/25',   ring: 'ring-amber-500/45',   text: 'text-slate-900 dark:text-amber-100',   icon: <AlertCircle size={16} /> }
+            :                        { bg: 'bg-rose-500/25',    ring: 'ring-rose-500/45',    text: 'text-slate-900 dark:text-rose-100',    icon: <Siren size={16} className="animate-pulse" /> };
   return (
     <div className={`rounded-xl p-3 ring-1 ${cls.bg} ${cls.ring}`}>
       <div className="flex items-center gap-2">
@@ -1604,8 +1604,8 @@ function FailedStoresMiniPanel({
       {loading ? <AdminSkeleton variant="block" />
         : top.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
-            <CheckCircle2 size={22} className="text-emerald-200" />
-            <p className="text-[12px] font-bold text-emerald-100">실패 매장이 없습니다.</p>
+            <CheckCircle2 size={22} className="text-slate-900 dark:text-emerald-200" />
+            <p className="text-[12px] font-bold text-slate-900 dark:text-emerald-100">실패 매장이 없습니다.</p>
           </div>
         ) : (
           <ul className="space-y-1.5">
@@ -1615,7 +1615,7 @@ function FailedStoresMiniPanel({
                 <li key={`${r.deployment_id}:${r.store_id}`} className="rounded-lg bg-rose-500/20 p-2 ring-1 ring-rose-500/40">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-[11.5px] font-bold text-rose-100">{r.store_name}</p>
+                      <p className="truncate text-[11.5px] font-bold text-slate-900 dark:text-rose-100">{r.store_name}</p>
                       <p className="mt-0.5 text-[10px] text-ink-mute truncate">
                         {cat ? `${cat.ko} · ` : ''}{r.deployment_name ?? '이름 없는 배포'}
                       </p>
@@ -1623,7 +1623,7 @@ function FailedStoresMiniPanel({
                     <button
                       type="button"
                       onClick={() => onOpenDetail(r.deployment_id)}
-                      className="shrink-0 inline-flex items-center gap-1 rounded-md bg-rose-500/40 px-2 py-1 text-[10px] font-bold text-rose-50 ring-1 ring-rose-400/60 transition hover:bg-rose-500/50 hover:shadow-sm"
+                      className="shrink-0 inline-flex items-center gap-1 rounded-md bg-rose-500/40 px-2 py-1 text-[10px] font-bold text-slate-900 dark:text-rose-50 ring-1 ring-rose-400/60 transition hover:bg-rose-500/50 hover:shadow-sm"
                     >
                       상세 <ArrowRight size={9} />
                     </button>
@@ -1707,10 +1707,10 @@ function DeploymentTimelineCard({ rows }: { rows: PolicyDeployment[] }) {
                        : e.tone === 'danger'  ? 'bg-rose-500'
                        : e.tone === 'info'    ? 'bg-sky-500'
                        :                        'bg-ink-mute';
-            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-emerald-100'
-                       : e.tone === 'warning' ? 'bg-amber-500/40   text-amber-100'
-                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-rose-100'
-                       : e.tone === 'info'    ? 'bg-sky-500/40     text-sky-100'
+            const chip = e.tone === 'success' ? 'bg-emerald-500/40 text-slate-900 dark:text-emerald-100'
+                       : e.tone === 'warning' ? 'bg-amber-500/40   text-slate-900 dark:text-amber-100'
+                       : e.tone === 'danger'  ? 'bg-rose-500/40    text-slate-900 dark:text-rose-100'
+                       : e.tone === 'info'    ? 'bg-sky-500/40     text-slate-900 dark:text-sky-100'
                        :                        'bg-bg-hover       text-ink-mute';
             return (
               <li key={e.key} className="flex items-stretch gap-2">
@@ -1758,15 +1758,15 @@ function DeploymentQueueCard({
     >
       {queue.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 rounded-lg bg-emerald-500/25 py-4 text-center ring-1 ring-emerald-500/45">
-          <CheckCircle2 size={22} className="text-emerald-200" />
-          <p className="text-[12px] font-bold text-emerald-100">진행 중인 배포가 없습니다.</p>
+          <CheckCircle2 size={22} className="text-slate-900 dark:text-emerald-200" />
+          <p className="text-[12px] font-bold text-slate-900 dark:text-emerald-100">진행 중인 배포가 없습니다.</p>
         </div>
       ) : (
         <ul className="space-y-1.5">
           {queue.map((r) => {
             const meta = DEPLOYMENT_STATUS_META[r.status];
-            const cls = r.status === 'running' ? { bg: 'bg-sky-500/25',    ring: 'ring-sky-500/45',    text: 'text-sky-100' }
-                      : r.status === 'pending' ? { bg: 'bg-amber-500/25', ring: 'ring-amber-500/45', text: 'text-amber-100' }
+            const cls = r.status === 'running' ? { bg: 'bg-sky-500/25',    ring: 'ring-sky-500/45',    text: 'text-slate-900 dark:text-sky-100' }
+                      : r.status === 'pending' ? { bg: 'bg-amber-500/25', ring: 'ring-amber-500/45', text: 'text-slate-900 dark:text-amber-100' }
                       :                          { bg: 'bg-bg-card',      ring: 'ring-line/15',      text: 'text-ink' };
             const done = r.success_count + r.failed_count + r.skipped_count;
             const targetTotal = r.target_store_count || 0;
@@ -1780,7 +1780,7 @@ function DeploymentQueueCard({
                       <AdminBadge tone={meta.tone} variant="subtle">{meta.ko}</AdminBadge>
                       {/* spec 6 — Policy Version chip */}
                       {r.policy_version_number != null && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-bg-card px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-violet-200 ring-1 ring-violet-400/40">
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-bg-card px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-slate-900 dark:text-violet-200 ring-1 ring-violet-400/40">
                           v{r.policy_version_number}
                         </span>
                       )}
@@ -1870,7 +1870,7 @@ function AiDeploymentInsight({
   return (
     <AdminCard
       title={<span className="flex items-center gap-2"><Bot size={13} /> AI 배포 인사이트
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-100 ring-1 ring-violet-400/50">
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50">
           <Sparkles size={9} /> BETA
         </span>
       </span>}
@@ -1878,10 +1878,10 @@ function AiDeploymentInsight({
     >
       <ul className="space-y-1.5">
         {insights.map((i) => {
-          const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-emerald-100' }
-                    : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-amber-100' }
-                    : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-rose-100' }
-                    :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-sky-100' };
+          const cls = i.tone === 'success' ? { bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40', text: 'text-slate-900 dark:text-emerald-100' }
+                    : i.tone === 'warning' ? { bg: 'bg-amber-500/20',   ring: 'ring-amber-500/40',   text: 'text-slate-900 dark:text-amber-100' }
+                    : i.tone === 'danger'  ? { bg: 'bg-rose-500/20',    ring: 'ring-rose-500/40',    text: 'text-slate-900 dark:text-rose-100' }
+                    :                        { bg: 'bg-sky-500/20',     ring: 'ring-sky-500/40',     text: 'text-slate-900 dark:text-sky-100' };
           return (
             <li key={i.key} className={`rounded-lg p-2.5 ring-1 ${cls.bg} ${cls.ring}`}>
               <div className="flex items-start gap-2">

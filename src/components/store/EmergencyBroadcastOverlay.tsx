@@ -265,7 +265,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
       )}
 
       {debug && error && (
-        <div className="fixed bottom-24 left-1/2 z-[130] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-rose-200">
+        <div className="fixed bottom-24 left-1/2 z-[130] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
           <AlertCircle size={10} className="inline mr-1" />
           emergency poll error: {error}
         </div>

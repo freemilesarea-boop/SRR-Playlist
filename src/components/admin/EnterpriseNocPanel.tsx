@@ -37,10 +37,10 @@ const SEVERITY_META: Record<NocSeverity, { ko: string; tone: AdminToneName; icon
 };
 
 const HEALTH_TONE: Record<NocStoreHealth['health_tone'], string> = {
-  green:  'bg-emerald-500/25 text-emerald-200 ring-emerald-400/50',
-  yellow: 'bg-amber-500/25  text-amber-200    ring-amber-400/50',
-  orange: 'bg-orange-500/25 text-orange-200   ring-orange-400/50',
-  red:    'bg-rose-500/25   text-rose-200     ring-rose-400/50',
+  green:  'bg-emerald-500/25 text-slate-900 dark:text-emerald-200 ring-emerald-400/50',
+  yellow: 'bg-amber-500/25  text-slate-900 dark:text-amber-200    ring-amber-400/50',
+  orange: 'bg-orange-500/25 text-slate-900 dark:text-orange-200   ring-orange-400/50',
+  red:    'bg-rose-500/25   text-slate-900 dark:text-rose-200     ring-rose-400/50',
 };
 
 const fmtDt = (s: string | null | undefined) =>

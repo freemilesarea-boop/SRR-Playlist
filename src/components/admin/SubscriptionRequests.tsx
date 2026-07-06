@@ -29,10 +29,10 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 const STATUS_STYLE: Record<Status, string> = {
-  pending: 'bg-yellow-500/25 text-yellow-200',
-  contacted: 'bg-sky-500/25 text-sky-200',
-  approved: 'bg-emerald-500/25 text-emerald-200',
-  rejected: 'bg-rose-500/25 text-red-200',
+  pending: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200',
+  contacted: 'bg-sky-500/25 text-slate-900 dark:text-sky-200',
+  approved: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200',
+  rejected: 'bg-rose-500/25 text-slate-900 dark:text-red-200',
   cancelled: 'bg-bg-hover text-ink-dim',
 };
 

@@ -215,7 +215,7 @@ export default function PlacementAuditPanel() {
                     <span className={
                       'rounded-full px-2 py-0.5 text-[10px] font-bold ' +
                       (r.decision === 'approve' ? 'bg-emerald-500/25 text-emerald-300'
-                       : r.decision === 'keep' ? 'bg-slate-500/15 text-slate-300'
+                       : r.decision === 'keep' ? 'bg-slate-500/15 text-slate-500 dark:text-slate-300'
                        : 'bg-rose-500/25 text-rose-300')
                     }>
                       {r.decision === 'approve' ? '승인됨' : r.decision === 'keep' ? '유지됨' : '삭제됨'}
@@ -232,7 +232,7 @@ export default function PlacementAuditPanel() {
         <p className="mb-1 font-semibold text-ink">결정 가이드</p>
         <ul className="space-y-0.5">
           <li>• <span className="font-mono text-emerald-300">승인</span> — AI 의심은 오탐. 배치 유지 + 학습 데이터로 마크 (precision 측정에 사용).</li>
-          <li>• <span className="font-mono text-slate-300">유지</span> — 일단 그대로 둠 (예: 검토 보류 / 추후 결정).</li>
+          <li>• <span className="font-mono text-slate-500 dark:text-slate-300">유지</span> — 일단 그대로 둠 (예: 검토 보류 / 추후 결정).</li>
           <li>• <span className="font-mono text-rose-300">삭제</span> — playlist_tracks 에서 실제 제거 + 플래그 'remove' 마크.</li>
         </ul>
         <p className="mt-2">
@@ -311,7 +311,7 @@ function ExplainModal({ data, onClose }: { data: PlacementExplanation; onClose: 
     auto_place: { text: '✓ 자동 배치', tone: 'bg-emerald-500/25 text-emerald-300' },
     skip_gate_failed: { text: '⚠️ 최소 게이트 실패', tone: 'bg-amber-500/25 text-amber-300' },
     skip_blocked: { text: '🚫 Block 룰 매치', tone: 'bg-rose-500/25 text-rose-300' },
-    skip_below_threshold: { text: '✕ Threshold 미달', tone: 'bg-slate-500/15 text-slate-300' },
+    skip_below_threshold: { text: '✕ Threshold 미달', tone: 'bg-slate-500/15 text-slate-500 dark:text-slate-300' },
   };
 
   const dialogRef = useRef<HTMLDivElement>(null);

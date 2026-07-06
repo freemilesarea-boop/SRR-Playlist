@@ -55,8 +55,8 @@ export default function HighRiskTab() {
               <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                 {r.low_trust && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">trust {r.trust_score}</span>}
                 {r.guardrail_hard && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">차단 {r.hard_stores}매장</span>}
-                {r.ai_mismatch_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-200">AI 불일치 {Math.round((r.mismatch_score ?? 0) * 100)}%</span>}
-                {r.embedding_disagree_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-200">임베딩 불일치</span>}
+                {r.ai_mismatch_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-slate-900 dark:text-amber-200">AI 불일치 {Math.round((r.mismatch_score ?? 0) * 100)}%</span>}
+                {r.embedding_disagree_high && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-slate-900 dark:text-amber-200">임베딩 불일치</span>}
                 {r.lufs_boundary && (
                   <span title="오디오 품질 게이트(0210) 결과 reject — TP>+0.3 또는 clipping 또는 분석 실패"
                     className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">품질 REJECT</span>

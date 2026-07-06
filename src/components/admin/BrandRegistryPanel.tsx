@@ -460,7 +460,7 @@ function BrandRegistryFormModal({
       <div className="space-y-3 text-[12px]">
         {/* 브랜드 식별 */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-200">브랜드 식별</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">브랜드 식별</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <label className="text-[11px] text-ink-mute">브랜드명 *
               <input className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
@@ -487,7 +487,7 @@ function BrandRegistryFormModal({
 
         {/* 사업자 정보 */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">사업자 정보</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">사업자 정보</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <label className="text-[11px] text-ink-mute">사업자명 *
               <input className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
@@ -522,7 +522,7 @@ function BrandRegistryFormModal({
 
         {/* 기본 계약값 */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">기본 계약값 (자동 계약 생성 시 사용)</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-200">기본 계약값 (자동 계약 생성 시 사용)</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <label className="text-[11px] text-ink-mute">월 이용료 (₩)
               <input type="number" min={0} className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"

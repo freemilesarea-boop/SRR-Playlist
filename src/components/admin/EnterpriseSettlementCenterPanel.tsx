@@ -144,7 +144,7 @@ export default function EnterpriseSettlementCenterPanel() {
               onClick={() => setView(v)}
               className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold ring-1 transition-colors ${
                 view === v
-                  ? 'bg-violet-500/25 text-violet-100 ring-violet-400/50'
+                  ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-violet-400/50'
                   : 'bg-bg-card text-ink-mute ring-line/20 hover:bg-bg-hover'
               }`}
             >
@@ -329,7 +329,7 @@ function ContractSnapshotModal({
     >
       <div className="space-y-3 text-[12px]">
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-200">계약 기본</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">계약 기본</p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
             <dt className="text-ink-mute">브랜드</dt>       <dd className="text-ink font-medium">{contract.enterprise_name ?? '—'}</dd>
             <dt className="text-ink-mute">계약번호</dt>     <dd className="font-mono">{contract.contract_no}</dd>
@@ -340,7 +340,7 @@ function ContractSnapshotModal({
           </dl>
         </div>
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">기간/자동갱신</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">기간/자동갱신</p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
             <dt className="text-ink-mute">시작일</dt>       <dd>{fmtDate(contract.start_date)}</dd>
             <dt className="text-ink-mute">종료일</dt>       <dd>{fmtDate(contract.end_date)}</dd>
@@ -349,7 +349,7 @@ function ContractSnapshotModal({
           </dl>
         </div>
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">정산 조건</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-200">정산 조건</p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
             <dt className="text-ink-mute">정산방식</dt>     <dd>{contract.settlement_method ?? 'monthly'}</dd>
             <dt className="text-ink-mute">매장 단가</dt>    <dd>{fmtMoney(contract.monthly_store_price)}</dd>
@@ -361,8 +361,8 @@ function ContractSnapshotModal({
         </div>
         {suspendedAt && (
           <div className="rounded-xl bg-amber-500/20 p-3 ring-1 ring-amber-500/50">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-100">SUSPENDED</p>
-            <p className="mt-1 text-amber-50">{fmtDate(suspendedAt)} — {suspendedReason ?? '(사유 없음)'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-amber-100">SUSPENDED</p>
+            <p className="mt-1 text-slate-900 dark:text-amber-50">{fmtDate(suspendedAt)} — {suspendedReason ?? '(사유 없음)'}</p>
           </div>
         )}
       </div>
@@ -513,7 +513,7 @@ function SettlementSnapshotModal({
 
         {/* 계약 식별 */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">
             <Handshake size={12} /> 계약 식별
           </p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
@@ -530,7 +530,7 @@ function SettlementSnapshotModal({
 
         {/* 정산 조건 (freeze 값) */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-200">
             <Wallet size={12} /> 정산 조건 (freeze)
           </p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
@@ -562,7 +562,7 @@ function SettlementSnapshotModal({
 
         {/* 생성 정보 */}
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">
             <Calendar size={12} /> 생성 정보
           </p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
@@ -650,7 +650,7 @@ function GenerateSettlementModal({
         <p className="font-semibold text-ink">아래 조건으로 월 정산을 생성합니다. 기존 계산식은 변경하지 않습니다.</p>
 
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-200">1. Enterprise 선택</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">1. Enterprise 선택</p>
           <select
             className="mt-2 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
             value={selectedEa}
@@ -664,7 +664,7 @@ function GenerateSettlementModal({
         </div>
 
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">2. 청구월 선택</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">2. 청구월 선택</p>
           <input
             type="month"
             className="mt-2 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
@@ -675,7 +675,7 @@ function GenerateSettlementModal({
 
         {selectedEa && (
           <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">3. 적용 계약 Snapshot 미리보기</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-200">3. 적용 계약 Snapshot 미리보기</p>
             {loading ? <p className="mt-2 text-ink-mute">조회 중…</p> : preview ? (
               <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
                 <dt className="text-ink-mute">계약번호</dt>     <dd className="font-mono">{preview.contract_no}</dd>
@@ -691,7 +691,7 @@ function GenerateSettlementModal({
           </div>
         )}
 
-        <div className="rounded-xl bg-amber-500/20 p-3 text-[11px] text-amber-50 ring-1 ring-amber-500/50">
+        <div className="rounded-xl bg-amber-500/20 p-3 text-[11px] text-slate-900 dark:text-amber-50 ring-1 ring-amber-500/50">
           실행 후 취소 불가. 결과는 audit log에 자동 기록됩니다. 매장수·예상 금액은 서버 계산 후 확정됩니다.
         </div>
       </div>
@@ -870,7 +870,7 @@ function EmailModal({
     >
       <div className="space-y-3 text-[12px]">
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-200">대상 청구서</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">대상 청구서</p>
           <p className="mt-1">{fmtMonth(invoice.billing_month)} · {invoice.enterprise_name ?? '—'} · {fmtMoney(invoice.total_amount, invoice.currency)}</p>
         </div>
         <div className="grid grid-cols-1 gap-2">
@@ -884,7 +884,7 @@ function EmailModal({
           </label>
         </div>
         <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">발송 이력 (재발송 이력 포함)</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">발송 이력 (재발송 이력 포함)</p>
           {histLoading ? <p className="mt-2 text-ink-mute text-[11px]">조회 중…</p> : history.length === 0 ? (
             <p className="mt-2 text-ink-mute text-[11px]">이력 없음</p>
           ) : (

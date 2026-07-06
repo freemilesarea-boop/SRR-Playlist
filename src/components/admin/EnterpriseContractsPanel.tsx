@@ -625,7 +625,7 @@ function ContractDetailModal({
           <div className="rounded-xl bg-bg-deep/40 p-3 ring-1 ring-line/10">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-[11px] font-bold uppercase tracking-wider text-ink-mute">첨부파일 ({detail.files.length})</div>
-              <label className="inline-flex items-center gap-1 cursor-pointer rounded-md bg-violet-500/25 px-2 py-1 text-[11px] font-bold text-violet-200 hover:bg-violet-500/35">
+              <label className="inline-flex items-center gap-1 cursor-pointer rounded-md bg-violet-500/25 px-2 py-1 text-[11px] font-bold text-slate-900 dark:text-violet-200 hover:bg-violet-500/35">
                 <Upload size={11} />
                 {busy ? '업로드 중…' : '파일 추가'}
                 <input type="file" hidden accept={CONTRACT_ALLOWED_MIME.join(',')}

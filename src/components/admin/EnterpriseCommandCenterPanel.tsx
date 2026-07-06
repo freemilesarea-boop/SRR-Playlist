@@ -199,7 +199,7 @@ export default function EnterpriseCommandCenterPanel() {
 // ============================================================================
 function LiveBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100 ring-1 ring-emerald-400/50">
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/50">
       <span className="relative flex h-1.5 w-1.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-75"></span>
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300"></span>
@@ -260,10 +260,10 @@ function HeroKpi({ kpi }: { kpi: CommandCenterKpi | null }) {
         >
           <div className="flex items-start justify-between">
             <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${
-              item.tone === 'success'  ? 'bg-emerald-500/40 text-emerald-100'
-              : item.tone === 'warning' ? 'bg-amber-500/40 text-amber-100'
-              : item.tone === 'danger'  ? 'bg-rose-500/40 text-rose-100'
-              :                           'bg-violet-500/40 text-violet-100'
+              item.tone === 'success'  ? 'bg-emerald-500/40 text-slate-900 dark:text-emerald-100'
+              : item.tone === 'warning' ? 'bg-amber-500/40 text-slate-900 dark:text-amber-100'
+              : item.tone === 'danger'  ? 'bg-rose-500/40 text-slate-900 dark:text-rose-100'
+              :                           'bg-violet-500/40 text-slate-900 dark:text-violet-100'
             }`}>
               {item.icon}
             </span>
@@ -554,7 +554,7 @@ function BrandOverviewGrid({
               onClick={() => setFilter(c.key)}
               className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
                 filter === c.key
-                  ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/50'
+                  ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50'
                   : 'bg-bg-card text-ink-mute ring-1 ring-line/15 hover:text-ink hover:ring-line/25'
               }`}
             >
@@ -614,9 +614,9 @@ function BrandOverviewGrid({
                       : 'bg-rose-500/25 ring-rose-400/50'
                     }`}>
                       <p className={`text-[9px] font-bold uppercase tracking-wider ${
-                        health.tone === 'success' ? 'text-emerald-100'
-                        : health.tone === 'warning' ? 'text-amber-100'
-                        : 'text-rose-100'
+                        health.tone === 'success' ? 'text-slate-900 dark:text-emerald-100'
+                        : health.tone === 'warning' ? 'text-slate-900 dark:text-amber-100'
+                        : 'text-slate-900 dark:text-rose-100'
                       }`}>Health</p>
                       <p className="tabular-nums text-[14px] font-black leading-tight text-ink">{score}</p>
                     </div>
@@ -641,11 +641,11 @@ function BrandOverviewGrid({
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                     <div className="flex justify-between">
                       <span className="text-ink-mute">미납</span>
-                      <span className={b.unpaid_count > 0 ? 'text-rose-200 font-bold' : 'text-ink'}>{b.unpaid_count} 건</span>
+                      <span className={b.unpaid_count > 0 ? 'text-slate-900 dark:text-rose-200 font-bold' : 'text-ink'}>{b.unpaid_count} 건</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-ink-mute">미납 금액</span>
-                      <span className={b.unpaid_amount > 0 ? 'text-rose-200 font-bold' : 'text-ink'}>{fmtMoney(b.unpaid_amount)}</span>
+                      <span className={b.unpaid_amount > 0 ? 'text-slate-900 dark:text-rose-200 font-bold' : 'text-ink'}>{fmtMoney(b.unpaid_amount)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-ink-mute">다음 청구</span>
@@ -663,7 +663,7 @@ function BrandOverviewGrid({
                       {b.manager_name ? `👤 ${b.manager_name}` : ''}
                       {b.manager_email ? <span className="ml-1">· {b.manager_email}</span> : ''}
                     </p>
-                    <div className="inline-flex items-center gap-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-violet-200 opacity-70 group-hover:opacity-100 transition-opacity">
+                    <div className="inline-flex items-center gap-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200 opacity-70 group-hover:opacity-100 transition-opacity">
                       관리
                       <ArrowRight size={11} />
                     </div>
@@ -709,9 +709,9 @@ function SummaryStrip({ kpi, alerts }: { kpi: CommandCenterKpi | null; alerts: C
         : 'bg-emerald-500/20 ring-emerald-500/40'
     }`}>
       <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${
-        effectiveOverall === 'critical' ? 'text-rose-100'
-        : effectiveOverall === 'warning' ? 'text-amber-100'
-        : 'text-emerald-100'
+        effectiveOverall === 'critical' ? 'text-slate-900 dark:text-rose-100'
+        : effectiveOverall === 'warning' ? 'text-slate-900 dark:text-amber-100'
+        : 'text-slate-900 dark:text-emerald-100'
       }`}>
         {effectiveOverall === 'critical' ? <Siren size={12} className="animate-pulse" />
           : effectiveOverall === 'warning' ? <AlertTriangle size={12} />
@@ -721,20 +721,20 @@ function SummaryStrip({ kpi, alerts }: { kpi: CommandCenterKpi | null; alerts: C
       {!kpi ? (
         <span className="text-[11px] text-ink-mute">지표 계산 중…</span>
       ) : segments.length === 0 ? (
-        <span className="text-[11px] font-semibold text-emerald-100">전체 정상 운영 · 처리할 장애 없음</span>
+        <span className="text-[11px] font-semibold text-slate-900 dark:text-emerald-100">전체 정상 운영 · 처리할 장애 없음</span>
       ) : (
         segments.map((s, i) => (
           <span key={s.label} className="inline-flex items-center gap-1 text-[11px]">
             {i > 0 && <span className="text-ink-dim">·</span>}
             <span className={
-              s.tone === 'danger'  ? 'text-rose-100 font-semibold'
-              : s.tone === 'warning' ? 'text-amber-100 font-semibold'
-              : 'text-sky-100'
+              s.tone === 'danger'  ? 'text-slate-900 dark:text-rose-100 font-semibold'
+              : s.tone === 'warning' ? 'text-slate-900 dark:text-amber-100 font-semibold'
+              : 'text-slate-900 dark:text-sky-100'
             }>{s.label}</span>
             <span className={`tabular-nums font-bold ${
-              s.tone === 'danger'  ? 'text-rose-100'
-              : s.tone === 'warning' ? 'text-amber-100'
-              : 'text-sky-100'
+              s.tone === 'danger'  ? 'text-slate-900 dark:text-rose-100'
+              : s.tone === 'warning' ? 'text-slate-900 dark:text-amber-100'
+              : 'text-slate-900 dark:text-sky-100'
             }`}>{s.count}</span>
             <span className="text-ink-mute">건</span>
           </span>
@@ -825,17 +825,17 @@ function NocDashboard({
             >
               <div className="flex items-center justify-between">
                 <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
-                  sev === 'healthy' ? 'bg-emerald-500/35 text-emerald-100'
-                  : sev === 'warning' ? 'bg-amber-500/40 text-amber-100'
-                  : 'bg-rose-500/40 text-rose-100'
+                  sev === 'healthy' ? 'bg-emerald-500/35 text-slate-900 dark:text-emerald-100'
+                  : sev === 'warning' ? 'bg-amber-500/40 text-slate-900 dark:text-amber-100'
+                  : 'bg-rose-500/40 text-slate-900 dark:text-rose-100'
                 }`}>{c.icon}</span>
                 <ExternalLink size={10} className="text-ink-mute opacity-50 group-hover:opacity-100 transition-opacity" />
               </div>
               <p className="mt-1.5 text-2xl font-black tabular-nums text-ink">{fmtNumber(c.value)}</p>
               <p className={`text-[10px] font-bold uppercase tracking-wider ${
-                sev === 'healthy' ? 'text-emerald-100'
-                : sev === 'warning' ? 'text-amber-100'
-                : 'text-rose-100'
+                sev === 'healthy' ? 'text-slate-900 dark:text-emerald-100'
+                : sev === 'warning' ? 'text-slate-900 dark:text-amber-100'
+                : 'text-slate-900 dark:text-rose-100'
               }`}>{c.label}</p>
             </button>
           );
@@ -855,9 +855,9 @@ function NocDashboard({
 // ============================================================================
 function PriorityBadge({ p }: { p: IncidentPriority }) {
   const tone =
-    p === 'P1' ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60'
-    : p === 'P2' ? 'bg-amber-500/40 text-amber-50 ring-amber-400/60'
-    : 'bg-sky-500/40 text-sky-50 ring-sky-400/60';
+    p === 'P1' ? 'bg-rose-500/40 text-slate-900 dark:text-rose-50 ring-rose-400/60'
+    : p === 'P2' ? 'bg-amber-500/40 text-slate-900 dark:text-amber-50 ring-amber-400/60'
+    : 'bg-sky-500/40 text-slate-900 dark:text-sky-50 ring-sky-400/60';
   return (
     <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ring-1 ${tone}`}>
       {p}
@@ -874,9 +874,9 @@ function IncidentQueueCard({ alerts, loading }: { alerts: CommandCenterAlert[]; 
       {loading ? <AdminSkeleton variant="block" />
         : alerts.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg bg-emerald-500/25 py-6 text-center ring-1 ring-emerald-500/45">
-            <CheckCircle2 size={28} className="text-emerald-200" />
-            <p className="text-[13px] font-bold text-emerald-100">현재 처리할 장애가 없습니다.</p>
-            <p className="text-[10px] text-emerald-200/80">전체 정상 운영 중</p>
+            <CheckCircle2 size={28} className="text-slate-900 dark:text-emerald-200" />
+            <p className="text-[13px] font-bold text-slate-900 dark:text-emerald-100">현재 처리할 장애가 없습니다.</p>
+            <p className="text-[10px] text-slate-700 dark:text-emerald-200/80">전체 정상 운영 중</p>
           </div>
         )
         : (
@@ -899,7 +899,7 @@ function IncidentQueueCard({ alerts, loading }: { alerts: CommandCenterAlert[]; 
                       <PriorityBadge p={priority} />
                       <div className="min-w-0">
                         <p className={`truncate text-[12px] font-bold ${
-                          priority === 'P1' ? 'text-rose-100' : priority === 'P2' ? 'text-amber-100' : 'text-sky-100'
+                          priority === 'P1' ? 'text-slate-900 dark:text-rose-100' : priority === 'P2' ? 'text-slate-900 dark:text-amber-100' : 'text-slate-900 dark:text-sky-100'
                         }`}>{a.label}</p>
                         <p className="text-[10px] text-ink-mute tabular-nums">{a.count} 건</p>
                       </div>
@@ -910,10 +910,10 @@ function IncidentQueueCard({ alerts, loading }: { alerts: CommandCenterAlert[]; 
                         onClick={() => navigateToTab(a.action_tab!)}
                         className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-1 transition hover:shadow-sm ${
                           priority === 'P1'
-                            ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60 hover:bg-rose-500/50'
+                            ? 'bg-rose-500/40 text-slate-900 dark:text-rose-50 ring-rose-400/60 hover:bg-rose-500/50'
                             : priority === 'P2'
-                            ? 'bg-amber-500/40 text-amber-50 ring-amber-400/60 hover:bg-amber-500/50'
-                            : 'bg-sky-500/40 text-sky-50 ring-sky-400/60 hover:bg-sky-500/50'
+                            ? 'bg-amber-500/40 text-slate-900 dark:text-amber-50 ring-amber-400/60 hover:bg-amber-500/50'
+                            : 'bg-sky-500/40 text-slate-900 dark:text-sky-50 ring-sky-400/60 hover:bg-sky-500/50'
                         }`}
                       >
                         {a.action_label ?? '이동'}
@@ -1055,7 +1055,7 @@ function BrandDetailSidebar({ brandId, onClose }: { brandId: string; onClose: ()
 
             {/* 계약 */}
             <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/15">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">계약</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-emerald-200">계약</p>
               {bundle.contract ? (
                 <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                   <dt className="text-ink-mute">계약번호</dt><dd className="font-mono">{bundle.contract.contract_no}</dd>
@@ -1074,7 +1074,7 @@ function BrandDetailSidebar({ brandId, onClose }: { brandId: string; onClose: ()
 
             {/* Billing */}
             <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/15">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">Billing (최근 5건)</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">Billing (최근 5건)</p>
               {bundle.recent_billing.length === 0
                 ? <p className="mt-1 text-ink-mute">청구 이력 없음</p>
                 : (
@@ -1095,7 +1095,7 @@ function BrandDetailSidebar({ brandId, onClose }: { brandId: string; onClose: ()
 
             {/* Settlement */}
             <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/15">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-200">Settlement (최근 5건)</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">Settlement (최근 5건)</p>
               {bundle.recent_settlements.length === 0
                 ? <p className="mt-1 text-ink-mute">정산 이력 없음</p>
                 : (
@@ -1136,7 +1136,7 @@ function BrandDetailSidebar({ brandId, onClose }: { brandId: string; onClose: ()
 
             {/* Recent activity */}
             <div className="rounded-lg bg-bg-card p-2.5 ring-1 ring-line/15">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200">최근 활동 (전체)</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-amber-200">최근 활동 (전체)</p>
               {bundle.recent_activity.length === 0
                 ? <p className="mt-1 text-ink-mute">이벤트 없음</p>
                 : (

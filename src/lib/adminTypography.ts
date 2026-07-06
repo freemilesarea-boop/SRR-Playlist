@@ -5,7 +5,7 @@
  *   <h1 className={adminTypography.heading.h1}>본사 계정 관리</h1>
  *   <p className={adminTypography.description}>설명 문구</p>
  *
- * 직접 text-zinc-300 / text-gray-400 등 hardcode 금지.
+ * 직접 text-slate-500 dark:text-zinc-300 / text-slate-500 dark:text-gray-400 등 hardcode 금지.
  * 신규 admin 컴포넌트는 이 객체에서 골라 쓰기.
  */
 

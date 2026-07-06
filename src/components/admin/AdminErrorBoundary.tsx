@@ -50,12 +50,12 @@ export default class AdminErrorBoundary extends Component<Props, State> {
       return (
         <div className="space-y-3 rounded-2xl bg-red-100 p-6 ring-1 ring-red-400/40 dark:bg-rose-500/20 dark:ring-rose-400/50">
           <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="mt-0.5 shrink-0 text-rose-200 dark:text-red-300" />
+            <AlertTriangle size={20} className="mt-0.5 shrink-0 text-slate-900 dark:text-rose-200 dark:text-red-300" />
             <div>
-              <h3 className="text-base font-bold text-rose-200 dark:text-red-200">
+              <h3 className="text-base font-bold text-slate-900 dark:text-rose-200 dark:text-red-200">
                 이 화면을 표시하는 중 오류가 발생했어요
               </h3>
-              <p className="mt-1 text-xs leading-relaxed text-rose-200/80 dark:text-ink-mute">
+              <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-rose-200/80 dark:text-ink-mute">
                 다른 탭은 정상 동작합니다. 아래 새로고침을 눌러 이 화면만 다시 시도해주세요.
               </p>
             </div>

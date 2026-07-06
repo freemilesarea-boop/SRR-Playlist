@@ -1089,7 +1089,7 @@ function SettlementReviewModal({
                   />
                   <div className="flex gap-2">
                     <button onClick={() => void onReject()} disabled={acting || !rejectReason.trim()}
-                      className="flex-1 rounded bg-rose-500/30 px-3 py-2 font-bold text-rose-200 disabled:opacity-30">
+                      className="flex-1 rounded bg-rose-500/30 px-3 py-2 font-bold text-slate-900 dark:text-rose-200 disabled:opacity-30">
                       반려 처리
                     </button>
                     <button onClick={() => { setRejectMode(false); setRejectReason(''); }}

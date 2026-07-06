@@ -226,7 +226,7 @@ export default function MembersList() {
                       </span>
                     )}
                     {m.account_type === 'artist' && m.plan_type === 'general_artist' && (
-                      <span className="ml-1 inline-flex rounded-full bg-zinc-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-300">
+                      <span className="ml-1 inline-flex rounded-full bg-zinc-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-zinc-300">
                         일반
                       </span>
                     )}
@@ -236,17 +236,17 @@ export default function MembersList() {
                       </span>
                     )}
                     {m.signup_completed === false && (
-                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] text-yellow-200">
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] text-slate-900 dark:text-yellow-200">
                         미완료
                       </span>
                     )}
                     {m.withdrawn_at && (
-                      <span className="ml-1 inline-flex rounded-full bg-rose-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-red-200">
+                      <span className="ml-1 inline-flex rounded-full bg-rose-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-slate-900 dark:text-red-200">
                         탈퇴
                       </span>
                     )}
                     {!m.withdrawn_at && m.has_cancel_scheduled && (
-                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-200">
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-slate-900 dark:text-yellow-200">
                         취소 예정
                       </span>
                     )}

@@ -13,7 +13,7 @@ const STATUS_KO: Record<ContractStatus, { ko: string; cls: string; icon: React.R
   active:     { ko: 'ACTIVE',   cls: 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200 ring-emerald-400/40', icon: <CheckCircle2 size={10} /> },
   expiring:   { ko: 'EXPIRING', cls: 'bg-amber-500/20 text-slate-900 dark:text-amber-200 ring-amber-400/40',  icon: <Clock size={10} /> },
   expired:    { ko: 'EXPIRED',  cls: 'bg-rose-500/20 text-slate-900 dark:text-rose-200 ring-rose-400/40',     icon: <AlertCircle size={10} /> },
-  terminated: { ko: '해지',     cls: 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40',     icon: <XCircle size={10} /> },
+  terminated: { ko: '해지',     cls: 'bg-zinc-500/20 text-slate-500 dark:text-zinc-300 ring-zinc-400/40',     icon: <XCircle size={10} /> },
 };
 
 const fmtKRW = (n: number | null | undefined) => n == null ? '—' : `${n.toLocaleString('ko-KR')}원`;

@@ -113,7 +113,7 @@ export default function BehaviorInsightTab() {
           <div className="text-[10px] uppercase text-ink-dim">boost 분포</div>
           <div className="text-[11px] mt-1">
             <span className="text-emerald-300">+{stats.positive}</span> ·{' '}
-            <span className="text-gray-400">={stats.zero}</span> ·{' '}
+            <span className="text-slate-500 dark:text-gray-400">={stats.zero}</span> ·{' '}
             <span className="text-rose-300">−{stats.negative}</span>
           </div>
           <div className="text-[10px] text-ink-dim">{comparison.length} 트랙</div>
