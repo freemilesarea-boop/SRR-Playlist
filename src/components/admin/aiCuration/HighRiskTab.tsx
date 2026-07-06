@@ -71,7 +71,7 @@ export default function HighRiskTab() {
                     className="rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 disabled:opacity-50">문제 없음</button>
                 )}
                 <button onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} disabled={busyId === r.track_id}
-                  className="rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">메타 수정/승인</button>
+                  className="rounded-lg bg-indigo-500/25 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">메타 수정/승인</button>
                 <button onClick={() => void copyNotice(r.owner_user_id)} className="rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover">업로더 안내문구 복사</button>
               </div>
             </li>

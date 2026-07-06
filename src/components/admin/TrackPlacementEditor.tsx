@@ -462,7 +462,7 @@ function PreviewTab({
           <div className="text-[10px] text-ink-dim">유지</div>
           <div className="text-2xl font-bold text-emerald-300">{preview.keep_count}</div>
         </div>
-        <div className="rounded bg-blue-500/10 p-2">
+        <div className="rounded bg-blue-500/20 p-2">
           <div className="text-[10px] text-ink-dim">신규 후보</div>
           <div className="text-2xl font-bold text-blue-500">{preview.new_candidate_count}</div>
         </div>

@@ -236,7 +236,7 @@ export default function MembersList() {
                       </span>
                     )}
                     {m.signup_completed === false && (
-                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] text-yellow-200">
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] text-yellow-200">
                         미완료
                       </span>
                     )}
@@ -246,7 +246,7 @@ export default function MembersList() {
                       </span>
                     )}
                     {!m.withdrawn_at && m.has_cancel_scheduled && (
-                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-200">
+                      <span className="ml-1 inline-flex rounded-full bg-yellow-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-200">
                         취소 예정
                       </span>
                     )}

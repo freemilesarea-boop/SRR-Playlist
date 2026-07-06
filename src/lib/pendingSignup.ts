@@ -24,6 +24,14 @@ interface PendingProfile {
   // 0054 — 사업자 가입 시 영업인 코드 연결
   sales_agent_id?: string;
   sales_agent_code?: string;
+  // 긴급 HF2 — 회원가입 중 본인인증 결과 (verifyIdentityNow).
+  // IndividualSignupForm / ArtistSignupForm 이 pendingProfile 에 저장,
+  // applyPendingSignupOnLogin 이 users 테이블에 반영한다.
+  identity_verified?: boolean;
+  identity_provider?: string | null;
+  identity_verified_at?: string | null;
+  identity_ci?: string | null;
+  identity_di?: string | null;
 }
 
 interface PendingArtistFields {
@@ -116,6 +124,20 @@ export async function applyPendingSignupOnLogin(
 
   try {
     // 1) public.users 업데이트
+    // 긴급 HF2 — identity_* 필드는 pendingProfile 에 verified=true 로 저장된 경우에만
+    // update 에 포함한다. false/undefined 시엔 DB 의 기존 값(관리자가 수동 세팅했을 수도 있음)
+    // 을 절대 덮어쓰지 않는다. 이미 true 인 사용자가 재로그인해 apply 가 재실행되어도
+    // 안전.
+    const identityPatch = p.profile.identity_verified === true
+      ? {
+          identity_verified: true as const,
+          identity_provider: p.profile.identity_provider ?? null,
+          identity_verified_at: p.profile.identity_verified_at ?? new Date().toISOString(),
+          identity_ci: p.profile.identity_ci ?? null,
+          identity_di: p.profile.identity_di ?? null,
+        }
+      : {};
+
     const { error: uErr } = await supabase
       .from('users')
       .update({
@@ -134,6 +156,7 @@ export async function applyPendingSignupOnLogin(
               sales_agent_code: p.profile.sales_agent_code ?? null,
             }
           : {}),
+        ...identityPatch,
       })
       .eq('id', userId);
     if (uErr) {

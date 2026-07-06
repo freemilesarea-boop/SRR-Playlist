@@ -12,7 +12,7 @@ const STATUS_LABEL: Record<SalesPartnerStatus, string> = {
   submitted: '신규', reviewing: '검토중', contacted: '연락함', approved: '승인', rejected: '반려',
 };
 const STATUS_TONE: Record<SalesPartnerStatus, string> = {
-  submitted: 'bg-violet-500/15 text-violet-600',
+  submitted: 'bg-violet-500/25 text-violet-600',
   reviewing: 'bg-amber-500/25 text-amber-300',
   contacted: 'bg-sky-500/25 text-sky-300',
   approved: 'bg-emerald-500/25 text-emerald-300',

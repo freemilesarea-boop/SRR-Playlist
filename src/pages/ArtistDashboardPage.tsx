@@ -288,7 +288,7 @@ function ArtistPlanCard({ plan }: { plan: ArtistPlanInfo }) {
 function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   if (!artist) {
     return (
-      <div className="rounded-2xl bg-yellow-500/10 p-4 ring-1 ring-yellow-500/30">
+      <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
         <p className="text-sm font-bold text-yellow-200">아티스트 프로필이 없습니다</p>
         <p className="mt-1 text-xs text-yellow-100/80">
           회원가입 시 아티스트 정보가 저장되지 않았을 수 있어요. 고객센터로 문의해주세요.
@@ -298,7 +298,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   }
   if (artist.approval_status === 'pending') {
     return (
-      <div className="rounded-2xl bg-yellow-500/10 p-4 ring-1 ring-yellow-500/30">
+      <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
         <p className="flex items-center gap-2 text-sm font-bold text-yellow-200">
           <Clock size={14} /> 관리자 승인 대기 중입니다
         </p>
@@ -327,7 +327,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
     );
   }
   return (
-    <div className="rounded-2xl bg-emerald-500/10 p-4 ring-1 ring-emerald-500/30">
+    <div className="rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-500/30">
       <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
         <CheckCircle2 size={14} /> 승인 완료
       </p>
@@ -466,7 +466,7 @@ function VerifiedPayoutSummary({ payout }: { payout: PayoutAccount | null }) {
   if (!payout) return null;
   const masked = maskAccountNumber(payout.account_number);
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/30">
+    <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/20 p-3 ring-1 ring-emerald-500/30">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
         <Wallet size={14} />
       </span>
@@ -1031,7 +1031,7 @@ function SettlementHoldCard({
   const isDisabled = primary.variant === 'disabled';
 
   return (
-    <div className="space-y-3 rounded-2xl bg-amber-500/10 p-4 ring-1 ring-amber-500/30">
+    <div className="space-y-3 rounded-2xl bg-amber-500/20 p-4 ring-1 ring-amber-500/30">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
           <Wallet size={16} />
@@ -1476,7 +1476,7 @@ function ArtistUploadForm({
         const miss = missingList();
         if (miss.length === 0) return null;
         return (
-          <div className="rounded-xl bg-red-100 p-3 text-[12px] text-red-900 ring-1 ring-red-400/30 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20">
+          <div className="rounded-xl bg-red-100 p-3 text-[12px] text-red-900 ring-1 ring-red-400/30 dark:bg-red-500/20 dark:text-red-300 dark:ring-red-400/20">
             <p className="font-bold">아래 필수 항목을 입력해야 음원 유통 신청이 가능합니다.</p>
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {miss.map((m) => (
@@ -1604,7 +1604,7 @@ function MyTrackRow({
         {canDelete && (
           <button
             onClick={onDelete}
-            className="rounded-md p-1.5 text-ink-dim hover:bg-red-500/10 hover:text-red-300"
+            className="rounded-md p-1.5 text-ink-dim hover:bg-red-500/20 hover:text-red-300"
             aria-label="삭제"
             title="삭제 (심사 대기 상태에서만)"
           >

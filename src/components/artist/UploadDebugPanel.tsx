@@ -73,14 +73,14 @@ export default function UploadDebugPanel() {
 
           {record.done && (
             record.ok ? (
-              <div className={`rounded-lg p-2 ${record.error ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>
+              <div className={`rounded-lg p-2 ${record.error ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'}`}>
                 <p className="font-bold">✅ 업로드 완료</p>
                 <p>track id: <span className="font-mono">{record.trackId ?? '—'}</span></p>
                 <p>cover_url: {record.coverUrl ? '있음' : '없음(NULL)'} · release_status: {record.releaseStatus ?? '—'}</p>
                 {record.error && <p className="mt-0.5">⚠️ {record.error}</p>}
               </div>
             ) : (
-              <div className="rounded-lg bg-red-500/10 p-2 text-red-700 dark:text-red-300">
+              <div className="rounded-lg bg-red-500/20 p-2 text-red-700 dark:text-red-300">
                 <p className="font-bold">❌ 업로드 실패</p>
                 <p className="whitespace-pre-wrap break-all">{record.error ?? '원인 불명'}</p>
               </div>

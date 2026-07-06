@@ -26,11 +26,11 @@ function fmtDate(s: string | null): string {
 
 const STATUS_TONE: Record<SettlementStatus, string> = {
   pending: 'bg-ink/10 text-ink-dim',
-  carried_over: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  payable: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
-  paid: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  held: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
-  disputed: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+  carried_over: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  payable: 'bg-sky-100 text-sky-900 dark:bg-sky-500/25 dark:text-sky-200',
+  paid: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  held: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/25 dark:text-yellow-200',
+  disputed: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
 };
 
 const STATUS_LABEL: Record<SettlementStatus, string> = {
@@ -43,10 +43,10 @@ const STATUS_LABEL: Record<SettlementStatus, string> = {
 };
 
 const PAYOUT_STATUS_TONE: Record<NonNullable<AdminSettlementRow['payout_account_status']>, string> = {
-  ready: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
-  verified_partial: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  pending: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
-  missing: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-200',
+  ready: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
+  verified_partial: 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  pending: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/25 dark:text-yellow-200',
+  missing: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-200',
 };
 
 const PAYOUT_STATUS_LABEL: Record<NonNullable<AdminSettlementRow['payout_account_status']>, string> = {
@@ -252,21 +252,21 @@ export default function ArtistSettlementsList() {
                     </span>
                     {(r.version ?? 1) > 1 && (
                       <span
-                        className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200"
+                        className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-900 dark:bg-indigo-500/25 dark:text-indigo-200"
                         title={`재생성 ${(r.version ?? 1) - 1}회 — 상세에서 이전 version 조회 가능`}
                       >
                         v{r.version}
                       </span>
                     )}
                     {r.is_manual_carryover && (
-                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200"
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900 dark:bg-amber-500/25 dark:text-amber-200"
                             title={`수동 이월 → ${r.carried_over_to_month ?? '?'}`}>
                         수동
                       </span>
                     )}
                     {/* X6.29: paid 는 다음 달 이월 제외 */}
                     {r.status === 'paid' && (
-                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300"
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300"
                             title="지급완료 — 다음 달 정산에 이월되지 않음">
                         이월 대상 아님
                       </span>
@@ -285,7 +285,7 @@ export default function ArtistSettlementsList() {
                       {carryoverEligible(r) && r.merged_into_settlement_id == null && (
                         <button
                           onClick={() => setCarryoverRow(r)}
-                          className="rounded p-1.5 text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
+                          className="rounded p-1.5 text-amber-600 hover:bg-amber-500/20 dark:text-amber-300"
                           title="이월 신청 — 다음 달로 넘기기"
                         >
                           <ArrowRightCircle size={14} />
@@ -295,7 +295,7 @@ export default function ArtistSettlementsList() {
                       {markPaidEligible(r) && (
                         <button
                           onClick={() => setDetailId(r.id)}
-                          className="rounded p-1.5 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
+                          className="rounded p-1.5 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-300"
                           title="지급완료 처리 — 상세에서 확인 후 진행"
                         >
                           <Check size={14} />

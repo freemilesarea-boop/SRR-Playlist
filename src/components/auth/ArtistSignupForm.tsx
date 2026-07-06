@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Mic2, CheckCircle2, UserCheck, GraduationCap, Music2 } from 'lucide-react';
+import { Mic2, CheckCircle2, UserCheck, GraduationCap, Music2, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
+import { verifyIdentityNow, type IdentityVerificationResult } from '@/lib/identityVerification';
 import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
@@ -34,6 +35,10 @@ export default function ArtistSignupForm({ onDone }: Props) {
   const [salesAgent, setSalesAgent] = useState<VerifiedSalesAgent | null>(null);
   const [salesAgentError, setSalesAgentError] = useState<string | null>(null);
   const [salesAgentChecking, setSalesAgentChecking] = useState(false);
+  // 긴급 HF2 — 본인인증 (verifyIdentityNow — MVP mock, IndividualSignupForm 과 동일 흐름).
+  // 필수: 정산 지급을 위해 아티스트 계정에도 identity_verified=true 가 저장되어야 함.
+  const [identity, setIdentity] = useState<IdentityVerificationResult | null>(null);
+  const [identityVerifying, setIdentityVerifying] = useState(false);
 
   function validate(): string | null {
     if (!realName.trim()) return '이름을 입력해주세요';
@@ -47,7 +52,22 @@ export default function ArtistSignupForm({ onDone }: Props) {
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
+    // 긴급 HF2 — 아티스트 정산 지급 요건. identity 미체크 시 대시보드에서 다시 요청 UI 노출됨.
+    if (!identity?.ok) return '본인인증을 완료해주세요';
     return null;
+  }
+
+  async function handleIdentityVerification() {
+    setIdentityVerifying(true);
+    try {
+      const res = await verifyIdentityNow({ name: realName });
+      setIdentity(res);
+      if (res.ok) toast.success('본인인증 상태 확인됨 (MVP mock)');
+    } catch (e) {
+      toast.error(friendlyError(e, '본인인증 확인 실패'));
+    } finally {
+      setIdentityVerifying(false);
+    }
   }
 
   async function handleSalesAgentVerify() {
@@ -116,6 +136,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
       // localStorage 백업 — 트리거 미적용 환경 또는 첫 로그인 시 재적용용.
       // 추천인 코드는 profile.sales_agent_id/code 로 저장 → applyPendingSignupOnLogin
       // 의 users.update 가 자동 동기화.
+      // 긴급 HF2 — identity_* 5개 필드도 profile 에 포함 (verified=true 인 경우에만).
       try {
         localStorage.setItem(
           'srr-pending-signup',
@@ -134,6 +155,15 @@ export default function ArtistSignupForm({ onDone }: Props) {
                 ? {
                     sales_agent_id: verifiedAgent.id,
                     sales_agent_code: verifiedAgent.code,
+                  }
+                : {}),
+              ...(identity?.ok
+                ? {
+                    identity_verified: true,
+                    identity_provider: identity.provider ?? null,
+                    identity_verified_at: identity.verified_at ?? null,
+                    identity_ci: identity.ci ?? null,
+                    identity_di: identity.di ?? null,
                   }
                 : {}),
             },
@@ -160,16 +190,27 @@ export default function ArtistSignupForm({ onDone }: Props) {
       if (sess.session?.user?.id) {
         hasSession = true;
         const uid = sess.session.user.id;
+        // 긴급 HF2 — 이메일 인증 OFF 환경: sales_agent + identity 를 즉시 반영.
+        // identity_* 는 verified=true 인 경우에만 포함 (기존 값 clobber 방지 — pendingSignup 과 동일 정책).
+        const patch: Record<string, unknown> = {};
         if (verifiedAgent) {
-          const { error: agErr } = await supabase
+          patch.sales_agent_id = verifiedAgent.id;
+          patch.sales_agent_code = verifiedAgent.code;
+        }
+        if (identity?.ok) {
+          patch.identity_verified = true;
+          patch.identity_provider = identity.provider ?? null;
+          patch.identity_verified_at = identity.verified_at ?? new Date().toISOString();
+          patch.identity_ci = identity.ci ?? null;
+          patch.identity_di = identity.di ?? null;
+        }
+        if (Object.keys(patch).length > 0) {
+          const { error: pErr } = await supabase
             .from('users')
-            .update({
-              sales_agent_id: verifiedAgent.id,
-              sales_agent_code: verifiedAgent.code,
-            })
+            .update(patch)
             .eq('id', uid);
-          if (agErr && import.meta.env.DEV) {
-            console.warn('[artist-signup] sales_agent update failed:', agErr);
+          if (pErr && import.meta.env.DEV) {
+            console.warn('[artist-signup] users.update failed:', pErr);
           }
         }
       } else {
@@ -221,6 +262,42 @@ export default function ArtistSignupForm({ onDone }: Props) {
         <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" className="input" />
       </Field>
 
+      {/* 긴급 HF2 — 본인인증 (아티스트 정산 지급 요건).
+          외부 NICE/KCB/토스 연동 전 임시 flow: verifyIdentityNow (MVP mock) 사용.
+          UI 문구는 "상태 확인" 으로 명시 — "완료" 로 위장하지 않는다. */}
+      <Field
+        label="본인인증 *"
+        hint="정산 지급을 위한 본인 명의 확인. 정식 인증(NICE/KCB/카카오)은 준비 중이며, 지금은 임시 확인 단계입니다."
+      >
+        <button
+          type="button"
+          onClick={handleIdentityVerification}
+          disabled={identityVerifying || !!identity?.ok || !realName.trim()}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            identity?.ok
+              ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50'
+              : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/30'
+          }`}
+        >
+          {identity?.ok ? <CheckCircle2 size={14} /> : <ShieldCheck size={14} />}
+          {identity?.ok
+            ? '본인인증 상태 확인됨 (임시)'
+            : identityVerifying
+              ? '확인 중…'
+              : '본인인증 상태 확인하기'}
+        </button>
+        {!identity?.ok && !realName.trim() && (
+          <p className="mt-1 text-[11px] text-amber-100">
+            먼저 상단의 이름을 입력해주세요.
+          </p>
+        )}
+        {identity?.ok && (
+          <p className="mt-1 text-[11px] text-emerald-100">
+            임시 확인은 MVP mock 흐름입니다. 정식 본인인증 연동 후 다시 확인이 필요할 수 있어요.
+          </p>
+        )}
+      </Field>
+
       {/* 아티스트 가입 코드 + 플랜 안내 */}
       <hr className="border-line/10" />
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">아티스트 가입 코드 *</p>
@@ -267,8 +344,8 @@ export default function ArtistSignupForm({ onDone }: Props) {
             disabled={salesAgentChecking || !salesAgentCode.trim() || !!salesAgent}
             className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
               salesAgent
-                ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
-                : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
+                ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50'
+                : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/25'
             }`}
           >
             {salesAgent ? <CheckCircle2 size={14} /> : <UserCheck size={14} />}
@@ -280,11 +357,11 @@ export default function ArtistSignupForm({ onDone }: Props) {
         )}
         {/* 검증 완료된 경우에만 — 서버가 반환한 plan_type 으로 안내. 코드 자체는 표시 안 함. */}
         {salesAgent && salesAgent.plan_type === 'student_artist' && (
-          <div className="mt-2 rounded-lg bg-emerald-500/10 p-2.5 ring-1 ring-emerald-500/20">
-            <p className="text-[11px] font-bold text-emerald-300">
+          <div className="mt-2 rounded-lg bg-emerald-500/25 p-2.5 ring-1 ring-emerald-400/40">
+            <p className="text-[11px] font-bold text-emerald-100">
               ✓ 수강생 아티스트 PRO 인증 완료
             </p>
-            <p className="mt-0.5 text-[10px] text-ink-mute">
+            <p className="mt-0.5 text-[10px] text-emerald-50/90">
               월 50곡 유통 · 플리 제작 / 큐레이터 신청 가능
             </p>
           </div>
@@ -353,7 +430,7 @@ function PlanCompareCard({
 }) {
   const ring = active
     ? tone === 'emerald'
-      ? 'ring-emerald-400/60 bg-emerald-500/10'
+      ? 'ring-emerald-400/60 bg-emerald-500/20'
       : 'ring-accent/60 bg-accent/10'
     : 'ring-line/10 bg-bg-card';
   const accent = tone === 'emerald' ? 'text-emerald-300' : 'text-ink-mute';

@@ -98,9 +98,9 @@ export function planHintFromServer(
 
 export const PLAN_BADGE_TONE: Record<string, string> = {
   general_artist: 'bg-zinc-500/15 text-zinc-300 ring-zinc-500/30',
-  student_artist: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
-  admin: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
-  legacy_student: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  student_artist: 'bg-emerald-500/25 text-emerald-300 ring-emerald-500/30',
+  admin: 'bg-violet-500/25 text-violet-300 ring-violet-500/30',
+  legacy_student: 'bg-amber-500/25 text-amber-300 ring-amber-500/30',
   legacy: 'bg-ink/5 text-ink-mute ring-line/20',
 };
 

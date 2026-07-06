@@ -21,7 +21,7 @@ const ACTION_TONE: Record<FeedbackAction, string> = {
   admin_excluded:      'bg-rose-500/20 text-rose-300',
   admin_review_needed: 'bg-amber-500/25 text-amber-300',
   admin_approved:      'bg-emerald-500/25 text-emerald-300',
-  metadata_corrected:  'bg-indigo-500/15 text-indigo-400',
+  metadata_corrected:  'bg-indigo-500/25 text-indigo-400',
 };
 
 const ACTION_ICON: Record<FeedbackAction, typeof Ban> = {

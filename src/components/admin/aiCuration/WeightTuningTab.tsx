@@ -264,9 +264,9 @@ export default function WeightTuningTab() {
           <h4 className="text-sm font-bold">진단 (지난 {diag?.window_days ?? 30}일)</h4>
           {diag && (
             <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              diag.confidence === 'high' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-              : diag.confidence === 'medium' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-              : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+              diag.confidence === 'high' ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+              : diag.confidence === 'medium' ? 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
+              : 'bg-rose-500/25 text-rose-700 dark:text-rose-300'
             }`}>
               신뢰도 {diag.confidence === 'high' ? '높음' : diag.confidence === 'medium' ? '중간' : '낮음'}
               {' '}(샘플 {diag.sample_size})
@@ -303,7 +303,7 @@ export default function WeightTuningTab() {
           </div>
         )}
         {diag && diag.sample_size < 50 && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-2 text-[11px] text-amber-800 ring-1 ring-amber-400/30 dark:text-amber-200">
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/20 p-2 text-[11px] text-amber-800 ring-1 ring-amber-400/30 dark:text-amber-200">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
             <span>샘플이 50곡 미만이라 통계 신뢰도가 낮아요. 가중치 변경을 권장하지 않습니다. (track_behavior_scores window_days=30, play_count≥5 조건)</span>
           </div>
@@ -317,7 +317,7 @@ export default function WeightTuningTab() {
             <Sparkles size={14} className="text-accent" />
             <h4 className="text-sm font-bold">알고리즘 제안 가중치</h4>
             {suggest.high_drift && (
-              <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+              <span className="ml-2 rounded-full bg-amber-500/25 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
                 변동 큼 (max drift {suggest.max_drift?.toFixed(2)})
               </span>
             )}
@@ -486,9 +486,9 @@ export default function WeightTuningTab() {
                 <li key={r.id} className="flex items-baseline justify-between rounded bg-bg-soft px-2 py-0.5">
                   <span>
                     <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
-                      r.status === 'approved' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                      : r.status === 'rejected' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                      : r.status === 'expired' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      r.status === 'approved' ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                      : r.status === 'rejected' ? 'bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                      : r.status === 'expired' ? 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
                       : 'bg-ink/10 text-ink-dim'
                     }`}>{r.status}</span>
                     N={r.sample_size}
@@ -616,9 +616,9 @@ export default function WeightTuningTab() {
                 <div className="flex items-baseline justify-between">
                   <span>
                     <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
-                      r.error ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                      : r.finished_at ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      r.error ? 'bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                      : r.finished_at ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
                     }`}>{r.error ? 'error' : r.finished_at ? 'done' : 'running'}</span>
                     {r.triggered_by}
                     {r.result && (
@@ -662,10 +662,10 @@ export default function WeightTuningTab() {
                 <div className="flex items-baseline justify-between">
                   <span>
                     <span className={`mr-1 inline-block rounded px-1 text-[9px] font-bold ${
-                      j.status === 'done' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                      : j.status === 'running' ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
-                      : j.status === 'error' ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      j.status === 'done' ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                      : j.status === 'running' ? 'bg-sky-500/25 text-sky-700 dark:text-sky-300'
+                      : j.status === 'error' ? 'bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                      : 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
                     }`}>{j.status}</span>
                     <span className="font-mono text-ink">{j.scope}</span>
                     <span className="ml-1 text-ink-mute">[{j.trigger_source ?? '?'}]</span>

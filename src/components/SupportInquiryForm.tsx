@@ -144,7 +144,7 @@ export default function SupportInquiryForm({
         </div>
 
         {!isLoggedIn && (
-          <div className="mb-3 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-500">
+          <div className="mb-3 rounded-xl bg-amber-500/20 p-3 text-xs text-amber-500">
             문의를 보내려면 로그인이 필요합니다.
           </div>
         )}
@@ -152,7 +152,7 @@ export default function SupportInquiryForm({
         {/* X6.2.11 — 폼 제출 성공 후 카톡 유도 단계 */}
         {submittedDraft ? (
           <div className="space-y-3 text-xs">
-            <div className="rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/30">
+            <div className="rounded-xl bg-emerald-500/20 p-3 ring-1 ring-emerald-500/30">
               <p className="text-[12px] font-bold text-emerald-500">✓ 문의가 접수되었습니다</p>
               <p className="mt-1 text-[11px] text-ink-mute">
                 운영팀 이메일에 자동으로 전달됐어요. 더 빠른 답변을 원하면 카톡으로도 보내주세요.

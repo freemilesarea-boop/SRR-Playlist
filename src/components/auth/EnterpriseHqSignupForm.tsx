@@ -187,7 +187,7 @@ export default function EnterpriseHqSignupForm({
             disabled={verifying || verified !== null || !brandName.trim() || !inviteCode.trim()}
             className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
               verified !== null
-                ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30'
+                ? 'bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/30'
                 : 'bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/20'
             }`}
           >

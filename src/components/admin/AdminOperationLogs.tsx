@@ -16,7 +16,7 @@ import Alert from '@/components/Alert';
 const LEVEL_META: Record<LogLevel, { label: string; tone: string; icon: React.ReactNode }> = {
   info: { label: 'info', tone: 'bg-ink/10 text-ink-mute', icon: <Info size={11} /> },
   success: { label: 'success', tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={11} /> },
-  warning: { label: 'warning', tone: 'bg-yellow-500/15 text-yellow-200', icon: <AlertTriangle size={11} /> },
+  warning: { label: 'warning', tone: 'bg-yellow-500/25 text-yellow-200', icon: <AlertTriangle size={11} /> },
   error: { label: 'error', tone: 'bg-rose-500/25 text-red-300', icon: <AlertCircle size={11} /> },
 };
 

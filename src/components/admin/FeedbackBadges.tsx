@@ -17,7 +17,7 @@ const ACTION_META: Record<FeedbackAction, {
   admin_excluded:      { label: '제외', tone: 'bg-rose-500/20 text-rose-300', Icon: Ban, priority: 1 },
   admin_review_needed: { label: '검토', tone: 'bg-amber-500/25 text-amber-300', Icon: AlertTriangle, priority: 2 },
   admin_approved:      { label: '승인', tone: 'bg-emerald-500/25 text-emerald-300', Icon: CheckCircle2, priority: 3 },
-  metadata_corrected:  { label: '메타 수정', tone: 'bg-indigo-500/15 text-indigo-400', Icon: FileEdit, priority: 4 },
+  metadata_corrected:  { label: '메타 수정', tone: 'bg-indigo-500/25 text-indigo-400', Icon: FileEdit, priority: 4 },
 };
 
 export function isHardSkip(action: FeedbackAction): boolean {

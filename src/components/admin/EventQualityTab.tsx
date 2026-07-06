@@ -362,7 +362,7 @@ export default function EventQualityTab() {
               {dualSummary.skip_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">skip Δ≥0.2: {dualSummary.skip_drift_count}</span>}
               {dualSummary.play_count_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">plays Δ≥30%: {dualSummary.play_count_drift_count}</span>}
               {dualSummary.v2_missing_count > 0 && <span className="rounded bg-gray-500/15 px-1.5 py-0.5 font-bold text-gray-400">v2 missing: {dualSummary.v2_missing_count}</span>}
-              {dualSummary.v1_missing_count > 0 && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 font-bold text-blue-500">v1 missing: {dualSummary.v1_missing_count}</span>}
+              {dualSummary.v1_missing_count > 0 && <span className="rounded bg-blue-500/25 px-1.5 py-0.5 font-bold text-blue-500">v1 missing: {dualSummary.v1_missing_count}</span>}
             </div>
             <p className="mt-2 text-[11px] text-ink-dim">
               <b>Cutover 조건</b>: v2 이벤트 7일+ 누적 / track당 평균 play_count 충분 / drift_high 원인 확인 / like·replay·player_error 정상 누적.

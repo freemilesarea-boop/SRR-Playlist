@@ -346,7 +346,7 @@ export default function SubscriptionPage() {
             </a>
             <button
               onClick={cancelPending}
-              className="inline-flex items-center gap-1 rounded-md bg-bg-card px-3 py-1.5 text-xs text-ink-mute hover:bg-red-500/15 hover:text-red-200"
+              className="inline-flex items-center gap-1 rounded-md bg-bg-card px-3 py-1.5 text-xs text-ink-mute hover:bg-red-500/25 hover:text-red-200"
             >
               신청 취소
             </button>
@@ -579,7 +579,7 @@ function CancelConfirmModal({
         className="w-full max-w-md space-y-4 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-red-300">
             <AlertTriangle size={18} />
           </span>
           <div>

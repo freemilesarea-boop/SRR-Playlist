@@ -75,7 +75,7 @@ export default function PushNotificationToggle({
             on
               ? 'bg-accent/15 text-accent'
               : blocked
-                ? 'bg-red-500/10 text-red-300'
+                ? 'bg-red-500/20 text-red-300'
                 : 'bg-ink/10 text-ink-mute'
           }`}
         >

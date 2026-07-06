@@ -176,7 +176,7 @@ function StoreTypeRow({ row, applying, onApply }: {
             <span className="rounded bg-bg-card px-1.5 py-0.5 font-mono text-[10px]">{row.current_suitable_store ?? '(빈 값)'}</span>
             <ArrowRight size={11} className="text-ink-dim" />
             <span className="text-ink-mute">AI</span>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isMatch ? 'bg-emerald-500/25 text-emerald-300' : 'bg-violet-500/15 text-violet-300'}`}>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${isMatch ? 'bg-emerald-500/25 text-emerald-300' : 'bg-violet-500/25 text-violet-300'}`}>
               {top1 ?? '—'}
             </span>
             <span className={`font-mono text-[10px] ${confTone}`}>

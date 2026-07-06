@@ -1304,7 +1304,7 @@ function CreateDeploymentModal({
                         <li key={p.policy_id}>
                           <button type="button" onClick={() => onSelect(p)}
                             className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-bg-hover ${
-                              selected?.policy_id === p.policy_id ? 'bg-violet-500/10' : ''
+                              selected?.policy_id === p.policy_id ? 'bg-violet-500/20' : ''
                             }`}>
                             <div className="flex w-full items-center gap-2">
                               <span className="flex-1 truncate font-semibold text-ink">{p.policy_name}</span>

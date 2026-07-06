@@ -116,7 +116,7 @@ export default function FranchiseHqDashboardPage() {
       </header>
 
       {state.error && (
-        <div className="flex items-center gap-2 rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-500 ring-1 ring-rose-500/20">
+        <div className="flex items-center gap-2 rounded-2xl bg-rose-500/20 px-4 py-3 text-sm text-rose-500 ring-1 ring-rose-500/20">
           <AlertCircle size={16} /> {state.error}
         </div>
       )}

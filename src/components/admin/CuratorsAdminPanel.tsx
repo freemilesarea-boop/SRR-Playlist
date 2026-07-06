@@ -241,7 +241,7 @@ export default function CuratorsAdminPanel() {
                       <div className="font-semibold">{r.display_name}</div>
                       {(r.is_verified || r.is_featured) && (
                         <div className="mt-0.5 flex gap-1 text-[10px]">
-                          {r.is_verified && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-blue-500">verified</span>}
+                          {r.is_verified && <span className="rounded bg-blue-500/25 px-1.5 py-0.5 text-blue-500">verified</span>}
                           {r.is_featured && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">featured</span>}
                         </div>
                       )}

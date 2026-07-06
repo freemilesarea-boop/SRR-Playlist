@@ -304,7 +304,7 @@ function ContractView({
 
 function ContractSummaryCard({ markdown }: { markdown: string }) {
   return (
-    <section className="rounded-2xl bg-sky-100 px-4 py-3 ring-1 ring-sky-400/30 dark:bg-sky-500/10 dark:ring-sky-400/25">
+    <section className="rounded-2xl bg-sky-100 px-4 py-3 ring-1 ring-sky-400/30 dark:bg-sky-500/20 dark:ring-sky-400/25">
       <div className="flex items-center gap-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-200 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">
           <ShieldCheck size={14} />

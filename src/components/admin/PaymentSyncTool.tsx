@@ -33,7 +33,7 @@ import { toast } from '@/store/toastStore';
 
 const STATUS_LABEL: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
   matched: { label: '연결 완료', tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={11} /> },
-  unmatched: { label: '미매칭', tone: 'bg-yellow-500/15 text-yellow-200', icon: <Clock size={11} /> },
+  unmatched: { label: '미매칭', tone: 'bg-yellow-500/25 text-yellow-200', icon: <Clock size={11} /> },
   failed: { label: '실패', tone: 'bg-rose-500/25 text-red-300', icon: <XCircle size={11} /> },
 };
 
@@ -410,7 +410,7 @@ export default function PaymentSyncTool() {
                   );
                 await load();
               }}
-              className="rounded-md bg-yellow-500/15 px-2 text-[11px] font-semibold text-yellow-200 hover:bg-yellow-500/25"
+              className="rounded-md bg-yellow-500/25 px-2 text-[11px] font-semibold text-yellow-200 hover:bg-yellow-500/25"
               title="webhook state=64 미도착 케이스 — order_no 로 강제 paid 전환"
             >
               order_no 강제완료
@@ -585,10 +585,10 @@ export default function PaymentSyncTool() {
 //   state=70/71 → 환불
 const STATE_LABEL: Record<number, { label: string; tone: string }> = {
   1: { label: '요청수신', tone: 'bg-ink/10 text-ink-mute' },
-  4: { label: '승인대기', tone: 'bg-yellow-500/15 text-yellow-200' },
+  4: { label: '승인대기', tone: 'bg-yellow-500/25 text-yellow-200' },
   8: { label: '결제취소', tone: 'bg-rose-500/25 text-red-300' },
   9: { label: '환불', tone: 'bg-rose-500/25 text-red-300' },
-  10: { label: '입금대기', tone: 'bg-blue-500/15 text-blue-200' },
+  10: { label: '입금대기', tone: 'bg-blue-500/25 text-blue-200' },
   32: { label: '결제취소', tone: 'bg-rose-500/25 text-red-300' },
   64: { label: '결제완료', tone: 'bg-emerald-500/25 text-emerald-300' },
   70: { label: '환불', tone: 'bg-rose-500/25 text-red-300' },
@@ -821,7 +821,7 @@ function WebhookRow({
             <button
               onClick={onForce}
               disabled={busy}
-              className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
+              className="rounded-md bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
               title="예외 처리용. 일반 결제는 자동 처리됨 — 자동 처리 실패 시에만 사용."
             >
               강제승인
@@ -929,7 +929,7 @@ function UnmatchedRow({
   return (
     <li className="space-y-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-yellow-200">
           <Clock size={9} /> 미매칭
         </span>
         <p className="font-mono text-xs">{row.payapp_mul_no}</p>
