@@ -163,7 +163,7 @@ export default function FranchiseHqDashboardPage() {
                 {d.active_policies.map((p) => (
                   <div key={p.id} className="flex items-center gap-2 rounded bg-bg-soft px-3 py-2 text-xs">
                     <span className="font-bold">{p.name}</span>
-                    {p.is_default && <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-400/40">기본</span>}
+                    {p.is_default && <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40">기본</span>}
                     <span className="ml-auto text-[10px] text-ink-dim">
                       {p.effective_from ? new Date(p.effective_from).toLocaleDateString('ko-KR') : '—'}
                       {' ~ '}
@@ -270,9 +270,9 @@ function Kpi({
 }
 
 function PlayerStatusBadge({ status, isOffline }: { status: string; isOffline: boolean }) {
-  if (isOffline) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-rose-100 ring-1 ring-rose-400/40"><WifiOff size={10} /> 오프라인</span>;
-  const cls = status === 'playing' ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40'
-    : status === 'paused' ? 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40'
+  if (isOffline) return <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-slate-900 dark:text-rose-100 ring-1 ring-rose-400/40"><WifiOff size={10} /> 오프라인</span>;
+  const cls = status === 'playing' ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40'
+    : status === 'paused' ? 'bg-amber-500/25 text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40'
     : 'bg-ink/15 text-ink ring-1 ring-line/20';
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>{status}</span>;
 }

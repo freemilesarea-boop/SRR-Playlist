@@ -349,7 +349,7 @@ function EditModal({
         </div>
         {confirmDelete ? (
           <div className="flex items-center gap-2 rounded-xl bg-red-500/20 p-3">
-            <span className="flex-1 text-xs text-red-200">정말 삭제할까요? 되돌릴 수 없어요.</span>
+            <span className="flex-1 text-xs text-slate-900 dark:text-red-200">정말 삭제할까요? 되돌릴 수 없어요.</span>
             <button onClick={() => setConfirmDelete(false)} disabled={busy} className="text-xs text-ink-mute">취소</button>
             <button onClick={() => void remove()} disabled={busy} className="rounded-full bg-red-500/90 px-3 py-1.5 text-xs font-bold text-white">삭제</button>
           </div>

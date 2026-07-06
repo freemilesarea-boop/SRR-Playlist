@@ -57,7 +57,7 @@ export default function PlaylistCard({
             <div
               className={`absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur-md ${
                 noAudio
-                  ? 'bg-yellow-500/30 text-yellow-50 ring-1 ring-yellow-300/40'
+                  ? 'bg-yellow-500/30 text-slate-900 dark:text-yellow-50 ring-1 ring-yellow-300/40'
                   : 'bg-black/40 text-white'
               }`}
             >

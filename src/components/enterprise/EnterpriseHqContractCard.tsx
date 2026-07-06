@@ -10,9 +10,9 @@ import {
 
 const STATUS_KO: Record<ContractStatus, { ko: string; cls: string; icon: React.ReactNode }> = {
   draft:      { ko: '준비 중',  cls: 'bg-zinc-500/20 text-zinc-200 ring-zinc-400/40',     icon: <Clock size={10} /> },
-  active:     { ko: 'ACTIVE',   cls: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40', icon: <CheckCircle2 size={10} /> },
-  expiring:   { ko: 'EXPIRING', cls: 'bg-amber-500/20 text-amber-200 ring-amber-400/40',  icon: <Clock size={10} /> },
-  expired:    { ko: 'EXPIRED',  cls: 'bg-rose-500/20 text-rose-200 ring-rose-400/40',     icon: <AlertCircle size={10} /> },
+  active:     { ko: 'ACTIVE',   cls: 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200 ring-emerald-400/40', icon: <CheckCircle2 size={10} /> },
+  expiring:   { ko: 'EXPIRING', cls: 'bg-amber-500/20 text-slate-900 dark:text-amber-200 ring-amber-400/40',  icon: <Clock size={10} /> },
+  expired:    { ko: 'EXPIRED',  cls: 'bg-rose-500/20 text-slate-900 dark:text-rose-200 ring-rose-400/40',     icon: <AlertCircle size={10} /> },
   terminated: { ko: '해지',     cls: 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40',     icon: <XCircle size={10} /> },
 };
 
@@ -46,7 +46,7 @@ export default function EnterpriseHqContractCard() {
       {loading ? (
         <div className="mt-3 h-32 animate-pulse rounded-xl bg-bg-deep" />
       ) : error ? (
-        <div className="mt-3 rounded bg-rose-500/20 px-3 py-2 text-[11px] text-rose-200">
+        <div className="mt-3 rounded bg-rose-500/20 px-3 py-2 text-[11px] text-slate-900 dark:text-rose-200">
           <AlertCircle size={11} className="inline mr-1" /> {error}
         </div>
       ) : !data ? null : data.active_contract ? (
@@ -76,7 +76,7 @@ export default function EnterpriseHqContractCard() {
             </div>
 
             {data.active_contract.days_to_end != null && data.active_contract.days_to_end <= 30 && data.active_contract.days_to_end >= 0 && (
-              <div className="rounded bg-amber-500/20 px-3 py-2 text-[11px] text-amber-200 ring-1 ring-amber-400/40">
+              <div className="rounded bg-amber-500/20 px-3 py-2 text-[11px] text-slate-900 dark:text-amber-200 ring-1 ring-amber-400/40">
                 <Clock size={11} className="inline mr-1" />
                 계약 종료까지 D-{data.active_contract.days_to_end}일 남았습니다.
               </div>

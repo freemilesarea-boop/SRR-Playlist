@@ -285,7 +285,7 @@ function FallbackBanner({ standalone = false }: { standalone?: boolean }) {
     <>
       <Sparkles size={12} className="mt-0.5 shrink-0 text-yellow-300" />
       <span>
-        아직 충분한 재생 기록이 없어서 <span className="text-yellow-200">추천 트랙</span>을 먼저
+        아직 충분한 재생 기록이 없어서 <span className="text-slate-900 dark:text-yellow-200">추천 트랙</span>을 먼저
         보여드려요. 곡을 30초 이상 들으면 차트에 반영됩니다.
       </span>
     </>

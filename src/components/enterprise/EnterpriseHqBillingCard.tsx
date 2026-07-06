@@ -13,11 +13,11 @@ import {
 
 const STATUS_KO: Record<BillingInvoiceStatus, { ko: string; cls: string }> = {
   draft:     { ko: '준비 중',  cls: 'bg-zinc-500/20 text-zinc-200 ring-zinc-400/40' },
-  issued:    { ko: '발행 완료', cls: 'bg-blue-500/20 text-blue-200 ring-blue-400/40' },
-  paid:      { ko: '입금 완료', cls: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' },
-  overdue:   { ko: '미납',     cls: 'bg-rose-500/20 text-rose-200 ring-rose-400/40' },
+  issued:    { ko: '발행 완료', cls: 'bg-blue-500/20 text-slate-900 dark:text-blue-200 ring-blue-400/40' },
+  paid:      { ko: '입금 완료', cls: 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200 ring-emerald-400/40' },
+  overdue:   { ko: '미납',     cls: 'bg-rose-500/20 text-slate-900 dark:text-rose-200 ring-rose-400/40' },
   cancelled: { ko: '취소',     cls: 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40' },
-  failed:    { ko: '실패',     cls: 'bg-rose-500/20 text-rose-200 ring-rose-400/40' },
+  failed:    { ko: '실패',     cls: 'bg-rose-500/20 text-slate-900 dark:text-rose-200 ring-rose-400/40' },
 };
 
 const fmtKRW = (n: number) => `${n.toLocaleString('ko-KR')}원`;
@@ -50,7 +50,7 @@ export default function EnterpriseHqBillingCard() {
       {loading ? (
         <div className="mt-3 h-24 animate-pulse rounded-xl bg-bg-deep" />
       ) : error ? (
-        <div className="mt-3 rounded bg-rose-500/20 px-3 py-2 text-[11px] text-rose-200">
+        <div className="mt-3 rounded bg-rose-500/20 px-3 py-2 text-[11px] text-slate-900 dark:text-rose-200">
           <AlertCircle size={11} className="inline mr-1" /> {error}
         </div>
       ) : !data ? null : (

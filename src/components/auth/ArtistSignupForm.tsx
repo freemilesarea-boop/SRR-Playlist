@@ -275,7 +275,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
           disabled={identityVerifying || !!identity?.ok || !realName.trim()}
           className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
             identity?.ok
-              ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50'
+              ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/50'
               : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/30'
           }`}
         >
@@ -287,12 +287,12 @@ export default function ArtistSignupForm({ onDone }: Props) {
               : '본인인증 상태 확인하기'}
         </button>
         {!identity?.ok && !realName.trim() && (
-          <p className="mt-1 text-[11px] text-amber-100">
+          <p className="mt-1 text-[11px] text-slate-900 dark:text-amber-100">
             먼저 상단의 이름을 입력해주세요.
           </p>
         )}
         {identity?.ok && (
-          <p className="mt-1 text-[11px] text-emerald-100">
+          <p className="mt-1 text-[11px] text-slate-900 dark:text-emerald-100">
             임시 확인은 MVP mock 흐름입니다. 정식 본인인증 연동 후 다시 확인이 필요할 수 있어요.
           </p>
         )}
@@ -344,7 +344,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
             disabled={salesAgentChecking || !salesAgentCode.trim() || !!salesAgent}
             className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
               salesAgent
-                ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50'
+                ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/50'
                 : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/25'
             }`}
           >
@@ -358,10 +358,10 @@ export default function ArtistSignupForm({ onDone }: Props) {
         {/* 검증 완료된 경우에만 — 서버가 반환한 plan_type 으로 안내. 코드 자체는 표시 안 함. */}
         {salesAgent && salesAgent.plan_type === 'student_artist' && (
           <div className="mt-2 rounded-lg bg-emerald-500/25 p-2.5 ring-1 ring-emerald-400/40">
-            <p className="text-[11px] font-bold text-emerald-100">
+            <p className="text-[11px] font-bold text-slate-900 dark:text-emerald-100">
               ✓ 수강생 아티스트 PRO 인증 완료
             </p>
-            <p className="mt-0.5 text-[10px] text-emerald-50/90">
+            <p className="mt-0.5 text-[10px] text-slate-700 dark:text-emerald-50/90">
               월 50곡 유통 · 플리 제작 / 큐레이터 신청 가능
             </p>
           </div>

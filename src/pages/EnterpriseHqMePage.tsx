@@ -636,7 +636,7 @@ function DocumentUpload({
         <FileText size={12} className="shrink-0 text-ink-mute" />
         <span className="truncate">{label}</span>
         {isUploaded ? (
-          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] text-emerald-100 ring-1 ring-emerald-400/40">
+          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40">
             <CheckCircle2 size={10} /> 등록됨
           </span>
         ) : (
@@ -715,9 +715,9 @@ function PaymentSettingsCard({
 function StatusBadge({ status }: { status: 'unregistered' | 'reviewing' | 'approved' | 'rejected' }) {
   const map = {
     unregistered: { label: SETTLEMENT_STATUS_LABEL.unregistered, tone: 'bg-ink/15 text-ink ring-1 ring-line/20', icon: <AlertTriangle size={10} /> },
-    reviewing:    { label: SETTLEMENT_STATUS_LABEL.reviewing,    tone: 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40', icon: <ClockIcon size={10} /> },
-    approved:     { label: SETTLEMENT_STATUS_LABEL.approved,     tone: 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40', icon: <CheckCircle2 size={10} /> },
-    rejected:     { label: SETTLEMENT_STATUS_LABEL.rejected,     tone: 'bg-rose-500/25 text-rose-100 ring-1 ring-rose-400/40', icon: <XCircle size={10} /> },
+    reviewing:    { label: SETTLEMENT_STATUS_LABEL.reviewing,    tone: 'bg-amber-500/25 text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40', icon: <ClockIcon size={10} /> },
+    approved:     { label: SETTLEMENT_STATUS_LABEL.approved,     tone: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40', icon: <CheckCircle2 size={10} /> },
+    rejected:     { label: SETTLEMENT_STATUS_LABEL.rejected,     tone: 'bg-rose-500/25 text-slate-900 dark:text-rose-100 ring-1 ring-rose-400/40', icon: <XCircle size={10} /> },
   } as const;
   const v = map[status];
   return (
@@ -825,7 +825,7 @@ function SettlementPreviewCard({
           <h3 className="text-sm font-bold flex items-center gap-1.5">
             <Wallet size={14} className="text-emerald-300" /> 예상 정산금
           </h3>
-          <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-400/40">
+          <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40">
             준비중
           </span>
         </div>

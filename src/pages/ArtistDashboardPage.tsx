@@ -61,9 +61,9 @@ import type { LucideIcon } from 'lucide-react';
 
 // 긴급 hotfix — /15 alpha + text-*-200 는 WCAG AA fail. /25 + text-*-100 으로 강화.
 const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIcon }> = {
-  pending_review: { label: '심사 대기', tone: 'bg-yellow-500/25 text-yellow-100 ring-1 ring-yellow-400/40', Icon: Clock },
-  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40', Icon: CheckCircle2 },
-  rejected: { label: '거절됨', tone: 'bg-red-500/25 text-red-100 ring-1 ring-red-400/40', Icon: XCircle },
+  pending_review: { label: '심사 대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-100 ring-1 ring-yellow-400/40', Icon: Clock },
+  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40', Icon: CheckCircle2 },
+  rejected: { label: '거절됨', tone: 'bg-red-500/25 text-slate-900 dark:text-red-100 ring-1 ring-red-400/40', Icon: XCircle },
   hidden: { label: '숨김', tone: 'bg-ink/15 text-ink ring-1 ring-line/20', Icon: EyeOff },
 };
 
@@ -269,7 +269,7 @@ function ArtistPlanCard({ plan }: { plan: ArtistPlanInfo }) {
             <div className="flex items-center gap-1.5">
               <h2 className="text-sm font-bold">{plan.plan_label}</h2>
               {isPro && (
-                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-emerald-200">
+                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-slate-900 dark:text-emerald-200">
                   VERIFIED
                 </span>
               )}
@@ -289,8 +289,8 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   if (!artist) {
     return (
       <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
-        <p className="text-sm font-bold text-yellow-200">아티스트 프로필이 없습니다</p>
-        <p className="mt-1 text-xs text-yellow-100/80">
+        <p className="text-sm font-bold text-slate-900 dark:text-yellow-200">아티스트 프로필이 없습니다</p>
+        <p className="mt-1 text-xs text-slate-700 dark:text-yellow-100/80">
           회원가입 시 아티스트 정보가 저장되지 않았을 수 있어요. 고객센터로 문의해주세요.
         </p>
       </div>
@@ -299,10 +299,10 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   if (artist.approval_status === 'pending') {
     return (
       <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
-        <p className="flex items-center gap-2 text-sm font-bold text-yellow-200">
+        <p className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-yellow-200">
           <Clock size={14} /> 관리자 승인 대기 중입니다
         </p>
-        <p className="mt-1 text-xs text-yellow-100/80">
+        <p className="mt-1 text-xs text-slate-700 dark:text-yellow-100/80">
           승인이 완료되면 음원 등록이 가능합니다. 평균 1영업일 이내 처리됩니다.
         </p>
       </div>
@@ -331,7 +331,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
       <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
         <CheckCircle2 size={14} /> 승인 완료
       </p>
-      <p className="mt-1 text-xs text-emerald-100/80">
+      <p className="mt-1 text-xs text-slate-700 dark:text-emerald-100/80">
         음원을 업로드할 수 있어요. 업로드한 곡은 관리자 검수 후 공개됩니다.
       </p>
     </div>
@@ -471,8 +471,8 @@ function VerifiedPayoutSummary({ payout }: { payout: PayoutAccount | null }) {
         <Wallet size={14} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-emerald-200">정산 계좌 확인 완료</p>
-        <p className="truncate text-[11px] text-emerald-100/80">
+        <p className="text-xs font-semibold text-slate-900 dark:text-emerald-200">정산 계좌 확인 완료</p>
+        <p className="truncate text-[11px] text-slate-700 dark:text-emerald-100/80">
           {payout.bank_name} · {masked} · {payout.account_holder}
         </p>
       </div>
@@ -706,9 +706,9 @@ function PayoutAccountSection({
 
   const statusBadge =
     status === 'rejected'
-      ? { label: '반려됨', tone: 'bg-red-500/25 text-red-100 ring-1 ring-red-400/40' }
+      ? { label: '반려됨', tone: 'bg-red-500/25 text-slate-900 dark:text-red-100 ring-1 ring-red-400/40' }
       : status === 'pending'
-        ? { label: '확인 대기 중', tone: 'bg-yellow-500/25 text-yellow-100 ring-1 ring-yellow-400/40' }
+        ? { label: '확인 대기 중', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-100 ring-1 ring-yellow-400/40' }
         : null;
 
   return (
@@ -1037,13 +1037,13 @@ function SettlementHoldCard({
           <Wallet size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-amber-100">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-amber-100">
             정산 보류 중
-            <span className="rounded-full bg-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-50">
+            <span className="rounded-full bg-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-amber-50">
               지급 대기
             </span>
           </h2>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/80">
+          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-700 dark:text-amber-100/80">
             아래 사유가 해결되면 다음 정산 회차에 자동 지급됩니다.
             정산금은 <strong>소멸되지 않고 누적</strong>됩니다.
           </p>
@@ -1062,7 +1062,7 @@ function SettlementHoldCard({
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wider text-ink-dim">보류 회차</p>
-          <p className="mt-0.5 font-mono text-lg font-bold text-amber-200">
+          <p className="mt-0.5 font-mono text-lg font-bold text-slate-900 dark:text-amber-200">
             {status.held_settlement_count}회
           </p>
         </div>
@@ -1076,7 +1076,7 @@ function SettlementHoldCard({
       {/* 보류 사유 체크리스트 */}
       {uniqueReasons.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-100/70">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-amber-100/70">
             보류 사유 ({uniqueReasons.length})
           </p>
           <ul className="space-y-1.5">
@@ -1084,7 +1084,7 @@ function SettlementHoldCard({
               const meta = HOLD_REASON_LABEL[r];
               return (
                 <li key={r} className="flex items-start gap-2 rounded-lg bg-bg-card/60 p-2.5 ring-1 ring-line/10">
-                  <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-[10px] font-bold text-amber-200">
+                  <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-[10px] font-bold text-slate-900 dark:text-amber-200">
                     !
                   </span>
                   <div>
@@ -1105,7 +1105,7 @@ function SettlementHoldCard({
         aria-disabled={isDisabled}
         className={
           isDisabled
-            ? 'inline-flex w-full items-center justify-center rounded-full bg-amber-500/25 px-4 py-2.5 text-xs font-semibold text-amber-100 ring-1 ring-amber-400/50 cursor-default'
+            ? 'inline-flex w-full items-center justify-center rounded-full bg-amber-500/25 px-4 py-2.5 text-xs font-semibold text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/50 cursor-default'
             : 'btn-primary w-full py-2.5 text-xs'
         }
       >

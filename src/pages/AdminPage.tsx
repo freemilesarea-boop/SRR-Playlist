@@ -520,7 +520,7 @@ export default function AdminPage() {
                     onClick={() => selectEnterpriseSubgroup(sg.key)}
                     className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       isActive
-                        ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/50'
+                        ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50'
                         : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
                     }`}
                   >

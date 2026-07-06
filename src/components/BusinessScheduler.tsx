@@ -368,7 +368,7 @@ export default function BusinessScheduler() {
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-extrabold tracking-tight">매장 자동 스케줄러</h2>
               {!isBusinessPlan && (
-                <span className="rounded-full bg-yellow-500/25 px-2 py-0.5 text-[10px] font-bold text-yellow-200 ring-1 ring-yellow-300/30">
+                <span className="rounded-full bg-yellow-500/25 px-2 py-0.5 text-[10px] font-bold text-slate-900 dark:text-yellow-200 ring-1 ring-yellow-300/30">
                   사업자 플랜
                 </span>
               )}
@@ -463,7 +463,7 @@ export default function BusinessScheduler() {
         </header>
 
         {hasLegacyOnly && (
-          <div className="rounded-xl bg-yellow-500/20 p-3 text-[11px] text-yellow-200 ring-1 ring-yellow-400/30">
+          <div className="rounded-xl bg-yellow-500/20 p-3 text-[11px] text-slate-900 dark:text-yellow-200 ring-1 ring-yellow-400/30">
             ⚠️ 기존에 만든 시간대 {schedules.length}개가 있어요. 저장하면 모두 새 3개 슬롯(오전·오후·저녁)으로 교체됩니다.
           </div>
         )}

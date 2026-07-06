@@ -85,7 +85,7 @@ export default function StorePlayerPage() {
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
-              online ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'
+              online ? 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200' : 'bg-red-500/20 text-slate-900 dark:text-red-200'
             }`}
           >
             {online ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -93,7 +93,7 @@ export default function StorePlayerPage() {
           </span>
           {franchiseSync.policy?.has_franchise_policy && (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200"
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-slate-900 dark:text-indigo-200"
               title={`본사 정책: ${franchiseSync.policy.policy_name ?? ''} · 슬롯: ${franchiseSync.policy.matched_slot?.slot_name ?? '—'}`}
             >
               <Sparkles size={12} /> 본사 정책 자동 동기화
