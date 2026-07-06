@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
+import EnterpriseHqNotificationBell from '@/components/enterprise/EnterpriseHqNotificationBell';
 import {
   getMyEnterpriseOpsKpi,
   getMyEnterpriseOpsStores,
@@ -91,7 +92,7 @@ function PageHeader() {
       >
         <ArrowLeft size={18} />
       </Link>
-      <div>
+      <div className="flex-1 min-w-0">
         <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
           <Radio size={20} className="text-accent" /> 운영 관제
         </h1>
@@ -99,6 +100,7 @@ function PageHeader() {
           자기 브랜드 매장의 실시간 상태를 확인하고 정책 재동기화까지 즉시 조치할 수 있어요.
         </p>
       </div>
+      <EnterpriseHqNotificationBell className="bg-bg-card hover:bg-bg-hover" />
     </header>
   );
 }
