@@ -20,9 +20,11 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { supabase } from '@/lib/supabase';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
+import { verifyIdentityNow } from '@/lib/identityVerification';
 import Alert from '@/components/Alert';
 import CuratorProfileEditor from '@/components/CuratorProfileEditor';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
@@ -57,6 +59,7 @@ export default function ProfilePage() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
   const [payoutVerified, setPayoutVerified] = useState<boolean | null>(null);
+  const [verifyingIdentity, setVerifyingIdentity] = useState(false);
   const location = useLocation();
 
   // Phase 1-7 — enterprise HQ / 매장 역할 판별 (RPC 1회 호출).
@@ -105,6 +108,51 @@ export default function ProfilePage() {
       document.removeEventListener('visibilitychange', onVis);
     };
   }, [refreshProfile]);
+
+  /**
+   * HF3 — 본인인증 CTA 핸들러.
+   * 기존 코드는 CTA 를 SupportInquiryButton 으로 연결해 "문의 모달" 이 열리는 버그가 있었음.
+   * MVP mock (verifyIdentityNow) 로 검증 → users.update → refreshProfile 순으로 정상화.
+   * 정식 NICE/KCB/토스 연동 전까지 IndividualSignupForm/ArtistSignupForm 과 동일 흐름.
+   */
+  async function handleVerifyIdentity() {
+    if (!user?.id) {
+      toast.error('로그인 정보를 확인할 수 없어요.');
+      return;
+    }
+    setVerifyingIdentity(true);
+    try {
+      const res = await verifyIdentityNow({
+        name: profile?.nickname ?? undefined,
+      });
+      if (!res.ok) {
+        toast.error('본인인증에 실패했어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      const { error } = await supabase
+        .from('users')
+        .update({
+          identity_verified: true,
+          identity_provider: res.provider ?? null,
+          identity_verified_at: res.verified_at ?? new Date().toISOString(),
+          identity_ci: res.ci ?? null,
+          identity_di: res.di ?? null,
+        })
+        .eq('id', user.id);
+      if (error) {
+
+        console.error('[identity] users.update failed:', error);
+        toast.error('본인인증 정보 저장에 실패했어요.');
+        return;
+      }
+      toast.success('본인인증이 완료됐어요.');
+      await refreshProfile();
+    } catch (e) {
+      toast.error(friendlyError(e, '본인인증 실패'));
+    } finally {
+      setVerifyingIdentity(false);
+    }
+  }
 
   // 아티스트가 아닌 사용자는 payout API 가 데이터 없이 정상 응답 → payoutVerified=false 로 안전 fallback.
   // 이 값은 IdentityVerificationSection 의 3-state 분기 (미완료 / 정산정보만 남음 / 준비 완료) 에 쓰인다.
@@ -197,6 +245,8 @@ export default function ProfilePage() {
         <IdentityVerificationSection
           identityVerified={profile?.identity_verified === true}
           payoutVerified={payoutVerified}
+          verifying={verifyingIdentity}
+          onVerify={handleVerifyIdentity}
         />
       )}
 
@@ -439,8 +489,13 @@ function WithdrawConfirmModal({
  *   · sky CTA:    bg-sky-500 text-white → 4.7:1
  */
 function IdentityVerificationSection({
-  identityVerified, payoutVerified,
-}: { identityVerified: boolean; payoutVerified: boolean | null }) {
+  identityVerified, payoutVerified, verifying, onVerify,
+}: {
+  identityVerified: boolean;
+  payoutVerified: boolean | null;
+  verifying: boolean;
+  onVerify: () => void;
+}) {
   // State C — 인증 + 정산정보 모두 완료
   if (identityVerified && payoutVerified === true) {
     return (
@@ -565,13 +620,17 @@ function IdentityVerificationSection({
             </span>
           </div>
           <div className="shrink-0 sm:self-center">
-            <SupportInquiryButton
-              variant="nav"
-              label="본인인증 진행하기"
-              defaultType="계정/로그인 문의"
-              context={{ topic: 'identity_verification', source: 'profile_section' }}
-              className="!w-full !bg-amber-400 !text-amber-950 hover:!bg-amber-300 sm:!w-auto"
-            />
+            {/* HF3 — 본인인증 진행하기 CTA. SupportInquiryButton 을 사용하면 문의 모달이 열리는
+                버그가 있었어서 verifyIdentityNow (MVP mock) 를 직접 호출하는 button 으로 교체. */}
+            <button
+              type="button"
+              onClick={onVerify}
+              disabled={verifying}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-bold text-amber-950 shadow-sm hover:bg-amber-300 disabled:opacity-60 sm:w-auto"
+            >
+              <ShieldCheck size={14} />
+              {verifying ? '확인 중…' : '본인인증 진행하기'}
+            </button>
           </div>
         </div>
       </div>
