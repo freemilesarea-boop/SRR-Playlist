@@ -1,24 +1,28 @@
 /**
- * AudioEngineDiagnosticsPanel — Phase 7-1 Admin Audio Engine Diagnostics.
+ * AudioEngineDiagnosticsPanel — Phase 7-1 · Phase 7-2 QA Hardening.
  *
  * 목적:
  *   Player 내부 Debug Overlay 로 확인하던 audio engine 진단 정보를 관리자
- *   전용 패널로 승격. 브라우저 세션 로컬 · super admin 전용 · read-only.
+ *   전용 패널로 승격 + 운영 QA 정확도를 강화. 브라우저 세션 로컬 · super
+ *   admin 전용 · read-only.
  *
  * 특징:
  *   • DB / API 사용 안 함 · Player 재생 로직 무변경
  *   • Player Dashboard 가 발행한 snapshot 을 subscribe 하여 표시
- *   • Debug/LongRun/BurnIn target 토글 (localStorage)
- *   • JSON 복사 도구 (`__audioBurnIn()` 폴백)
+ *   • Debug/LongRun/BurnIn target 토글 (localStorage) · 두 종류 preset
+ *   • QA Checklist (7 항목) · snapshot stale 감지
+ *   • 3 종 JSON 복사 (Burn-in / Full snapshot / localStorage flags)
  *
  * 사용법:
- *   1. Controls 에서 audioDebug / audioLongRun 켜기
+ *   1. Controls 에서 "Debug QA preset" 클릭 (또는 각 flag 개별 토글)
  *   2. 매장 플레이어(StorePlayer) 를 열고 새로고침
- *   3. Player Debug Overlay 가 snapshot 을 publish → 이 패널에서 read-only 표시
+ *   3. Player Dashboard 가 snapshot 을 publish → 이 패널에서 read-only 표시
+ *   4. QA 완료 후 "Production quiet preset" 으로 flag 해제
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
   Activity, RefreshCw, ClipboardCopy, Trash2, Play, Info,
+  CheckCircle2, XCircle, ShieldOff, Wand2,
 } from 'lucide-react';
 import { audioDebugWarn } from '@/lib/audioDebug';
 import { useAudioDiagnosticsStore } from '@/store/audioDiagnosticsStore';
@@ -29,6 +33,8 @@ import type { BurnInSummary } from '@/hooks/useAudioBurnInCertification';
 const KEY_DEBUG = 'deudda.audioDebug';
 const KEY_LONGRUN = 'deudda.audioLongRun';
 const KEY_BURNIN_HOURS = 'deudda.audioBurnInHours';
+/** Snapshot 이 이 값보다 오래되면 stale 로 간주 (Dashboard 는 1s tick 이므로 3s 여유). */
+const SNAPSHOT_STALE_MS = 3000;
 
 function readFlag(key: string): boolean {
   try {
@@ -73,6 +79,13 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
   const [longRunOn, setLongRunOn] = useState<boolean>(() => readFlag(KEY_LONGRUN));
   const [burnInHours, setBurnInHours] = useState<'12' | '24'>(() => readBurnInHours());
   const [burnInJsonPreview, setBurnInJsonPreview] = useState<string>('');
+  // Phase 7-2 — snapshot age 표시용 소량 tick (패널 mount 시에만 · unmount 시 정리).
+  // 새 audio interval 아님 · Player 로직과 무관.
+  const [nowTick, setNowTick] = useState<number>(() => performance.now());
+  useEffect(() => {
+    const iv = window.setInterval(() => setNowTick(performance.now()), 1000);
+    return () => window.clearInterval(iv);
+  }, []);
 
   useEffect(() => {
     audioDebugWarn('[audio:admin-diagnostics:mount]', {
@@ -81,6 +94,26 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Phase 7-2 — snapshot 상태 3-state 판정.
+  const snapshotAgeMs = snapshot ? nowTick - snapshot.publishedAt : Infinity;
+  const snapshotStale = snapshot !== null && snapshotAgeMs > SNAPSHOT_STALE_MS;
+  const snapshotFresh = snapshot !== null && !snapshotStale;
+  const anyFlagOn = debugOn || longRunOn;
+  const hasWindowBurnIn = typeof window !== 'undefined' &&
+    typeof (window as unknown as { __audioBurnIn?: unknown }).__audioBurnIn === 'function';
+
+  // Phase 7-2 — [audio:admin-diagnostics:qa-check] 는 상태가 변할 때만 log.
+  useEffect(() => {
+    audioDebugWarn('[audio:admin-diagnostics:qa-check]', {
+      debugOn, longRunOn, burnInHours,
+      hasSnapshot: !!snapshot,
+      snapshotStale,
+      hasWindowBurnIn,
+      quietMode: !anyFlagOn,
+    });
+    // nowTick 은 의도적으로 dep 에서 제외 — 매초 log 폭주 방지.
+  }, [debugOn, longRunOn, burnInHours, snapshot, snapshotStale, hasWindowBurnIn, anyFlagOn]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -126,6 +159,30 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
     if (typeof window !== 'undefined') window.location.reload();
   };
 
+  // Phase 7-2 — Preset: Debug QA (audioDebug + audioLongRun + burnInHours=24).
+  const applyQAPreset = () => {
+    try {
+      window.localStorage.setItem(KEY_DEBUG, '1');
+      window.localStorage.setItem(KEY_LONGRUN, '1');
+      window.localStorage.setItem(KEY_BURNIN_HOURS, '24');
+    } catch { /* silent */ }
+    setDebugOn(true); setLongRunOn(true); setBurnInHours('24');
+    audioDebugWarn('[audio:admin-diagnostics:preset]', { kind: 'debug-qa', apply: { audioDebug: '1', audioLongRun: '1', audioBurnInHours: '24' } });
+    toast.success('Debug QA preset 적용. 매장 플레이어 세션을 새로고침해 주세요.');
+  };
+  // Phase 7-2 — Preset: Production quiet (audioDebug + audioLongRun 제거).
+  // audioBurnInHours 는 로그를 유발하지 않으므로 유지 (기존 정책 유지).
+  const applyProductionQuietPreset = () => {
+    try {
+      window.localStorage.removeItem(KEY_DEBUG);
+      window.localStorage.removeItem(KEY_LONGRUN);
+    } catch { /* silent */ }
+    setDebugOn(false); setLongRunOn(false);
+    resetSnapshot();
+    audioDebugWarn('[audio:admin-diagnostics:preset]', { kind: 'production-quiet', apply: { audioDebug: 'removed', audioLongRun: 'removed', audioBurnInHours: 'kept' } });
+    toast.success('Production quiet preset 적용. 새로고침 후 콘솔이 조용해집니다.');
+  };
+
   const buildBurnInJson = useCallback((): string | null => {
     // 우선순위 1: 현재 브라우저 세션의 window.__audioBurnIn() (Player 가 열려 있으면 즉시 최신).
     try {
@@ -149,6 +206,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
     try {
       await navigator.clipboard.writeText(json);
       audioDebugWarn('[audio:admin-diagnostics:copy]', { bytes: json.length });
+      audioDebugWarn('[audio:admin-diagnostics:export]', { kind: 'burnin', bytes: json.length });
       toast.success('Burn-in JSON 을 클립보드에 복사했어요.');
     } catch {
       // Fallback — 화면에 표시.
@@ -160,6 +218,67 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
     const json = buildBurnInJson();
     setBurnInJsonPreview(json ?? '');
     if (!json) toast.warning('아직 burn-in 데이터가 없어요.');
+  };
+
+  // Phase 7-2 — Full diagnostics snapshot JSON.
+  const buildFullSnapshotJson = useCallback((): string | null => {
+    if (!snapshot) return null;
+    return JSON.stringify(
+      { ...snapshot, snapshotAgeMs: nowTick - snapshot.publishedAt, snapshotStale, capturedAtTick: nowTick },
+      null, 2,
+    );
+  }, [snapshot, nowTick, snapshotStale]);
+
+  const onCopyFullSnapshot = async () => {
+    const json = buildFullSnapshotJson();
+    if (!json) {
+      toast.warning('Snapshot 이 없어요. Debug 를 켜고 매장 플레이어를 열어 주세요.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(json);
+      audioDebugWarn('[audio:admin-diagnostics:export]', { kind: 'full-snapshot', bytes: json.length });
+      toast.success('Full snapshot JSON 을 복사했어요.');
+    } catch {
+      setBurnInJsonPreview(json);
+      toast.warning('클립보드 접근 실패 · 아래에서 수동 복사해 주세요.');
+    }
+  };
+
+  // Phase 7-2 — localStorage diagnostics flags JSON.
+  const buildFlagsJson = useCallback((): string => {
+    let raw: { audioDebug: string | null; audioLongRun: string | null; audioBurnInHours: string | null } = {
+      audioDebug: null, audioLongRun: null, audioBurnInHours: null,
+    };
+    try {
+      raw = {
+        audioDebug: window.localStorage.getItem(KEY_DEBUG),
+        audioLongRun: window.localStorage.getItem(KEY_LONGRUN),
+        audioBurnInHours: window.localStorage.getItem(KEY_BURNIN_HOURS),
+      };
+    } catch { /* silent */ }
+    return JSON.stringify({
+      keys: { KEY_DEBUG, KEY_LONGRUN, KEY_BURNIN_HOURS },
+      values: raw,
+      derived: {
+        debugOn: raw.audioDebug === '1',
+        longRunOn: raw.audioLongRun === '1',
+        burnInHours: raw.audioBurnInHours === '24' ? '24' : '12',
+        quietMode: raw.audioDebug !== '1' && raw.audioLongRun !== '1',
+      },
+    }, null, 2);
+  }, []);
+
+  const onCopyFlags = async () => {
+    const json = buildFlagsJson();
+    try {
+      await navigator.clipboard.writeText(json);
+      audioDebugWarn('[audio:admin-diagnostics:export]', { kind: 'flags', bytes: json.length });
+      toast.success('Diagnostics flags JSON 을 복사했어요.');
+    } catch {
+      setBurnInJsonPreview(json);
+      toast.warning('클립보드 접근 실패 · 아래에서 수동 복사해 주세요.');
+    }
   };
 
   return (
@@ -174,10 +293,62 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
         DB / API 없이 브라우저 세션 로컬 상태만 사용. Debug OFF 세션에는 무영향.
       </p>
 
+      {/* Phase 7-2 — QA Checklist */}
+      <section className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4 space-y-2">
+        <div className="text-sm font-medium text-neutral-100">QA Checklist</div>
+        <ChecklistRow ok={debugOn} label="audioDebug ON" hint="콘솔 진단 로그 · Debug Overlay 활성" />
+        <ChecklistRow ok={longRunOn} label="audioLongRun ON" hint="LongRun · Burn-in Certification 활성" />
+        <ChecklistRow
+          ok
+          label={`audioBurnInHours 감지 = ${burnInHours}`}
+          hint={burnInHours === '24' ? '24h target 저장됨' : '12h target 저장됨 (기본값 또는 명시)'}
+          neutralOk
+        />
+        <ChecklistRow
+          ok={snapshotFresh}
+          label={snapshot ? (snapshotStale ? 'Player snapshot stale' : 'Player snapshot 수신 중') : 'Player snapshot 없음'}
+          hint={snapshot ? `Last publish ${fmtTs(snapshot.publishedAt)} · age ${fmtMs(snapshotAgeMs)} · stale > ${fmtMs(SNAPSHOT_STALE_MS)}` : anyFlagOn ? '매장 플레이어를 열고 새로고침해 주세요.' : 'audioDebug 또는 audioLongRun 을 켠 뒤 매장 플레이어를 여세요.'}
+        />
+        <ChecklistRow
+          ok={hasWindowBurnIn}
+          label="__audioBurnIn() 사용 가능"
+          hint={hasWindowBurnIn ? 'Player 세션이 같은 브라우저 세션에 등록되어 있음.' : '동일 브라우저에서 매장 플레이어가 열려 있어야 등록됨.'}
+        />
+        <ChecklistRow
+          ok={!anyFlagOn}
+          label="Production quiet 상태"
+          hint={anyFlagOn ? 'Debug/LongRun 이 켜져 있어요. QA 종료 시 Production quiet preset 을 적용하세요.' : '콘솔 조용 · Dashboard/패널 침묵 상태.'}
+          neutralOk
+        />
+        <ChecklistRow
+          ok
+          label="Last snapshot age"
+          hint={snapshot ? `${fmtMs(snapshotAgeMs)} (${snapshotStale ? 'STALE' : 'fresh'})` : 'no snapshot'}
+          neutralOk
+        />
+      </section>
+
       {/* Controls */}
       <section className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-neutral-100">
           <span>Controls</span>
+        </div>
+        {/* Phase 7-2 — Preset buttons */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={applyQAPreset}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${adminTones.success.buttonSolid}`}
+          >
+            <Wand2 size={13} /> Debug QA preset (debug + longRun + 24h)
+          </button>
+          <button
+            type="button"
+            onClick={applyProductionQuietPreset}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${adminTones.neutral.buttonSolid}`}
+          >
+            <ShieldOff size={13} /> Production quiet preset (flag off)
+          </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm text-neutral-200">
@@ -228,11 +399,24 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
 
       {/* Snapshot */}
       {!snapshot ? (
-        <section className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4 text-sm text-neutral-400">
-          아직 Player Debug Overlay 로부터 snapshot 을 받지 못했어요. audioDebug 를 켜고 매장 플레이어를 여신 뒤
-          이 페이지를 새로고침하면 자동으로 표시됩니다.
+        <section className={`rounded-lg border p-4 text-sm ${
+          !anyFlagOn ? 'border-neutral-800 bg-neutral-950/60 text-neutral-400'
+          : 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+        }`}>
+          {!anyFlagOn ? (
+            <>Debug/LongRun 이 꺼져 있어요. 위 <b>Debug QA preset</b> 을 적용하거나 개별 toggle 후 새로고침해 주세요.</>
+          ) : (
+            <>flag 는 켜져 있지만 아직 Player Debug Overlay 로부터 snapshot 을 받지 못했어요.
+              같은 브라우저에서 <b>매장 플레이어(StorePlayer)</b> 를 여신 뒤 새로고침해 주세요.</>
+          )}
         </section>
-      ) : (
+      ) : snapshotStale ? (
+        <section className="rounded-lg border border-amber-500/40 bg-amber-500/20 p-4 text-sm text-amber-100 space-y-1">
+          <div>Snapshot 이 <b>stale</b> 상태입니다. (age {fmtMs(snapshotAgeMs)} &gt; {fmtMs(SNAPSHOT_STALE_MS)})</div>
+          <div className="text-xs opacity-80">매장 플레이어 탭이 닫혔거나 백그라운드일 수 있어요. 아래 정보는 마지막 발행 기준.</div>
+        </section>
+      ) : null}
+      {snapshot && (
         <>
           {/* Current Session */}
           {snapshot.session && (
@@ -362,7 +546,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
 
       {/* Export */}
       <section className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-4 space-y-3">
-        <div className="text-sm font-medium text-neutral-100">Export (Burn-in JSON)</div>
+        <div className="text-sm font-medium text-neutral-100">Export</div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -373,10 +557,24 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
           </button>
           <button
             type="button"
-            onClick={onShowBurnInJson}
+            onClick={onCopyFullSnapshot}
             className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${adminTones.info.buttonGhost}`}
           >
-            <Play size={13} /> JSON 미리보기
+            <ClipboardCopy size={13} /> Full snapshot JSON 복사
+          </button>
+          <button
+            type="button"
+            onClick={onCopyFlags}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${adminTones.info.buttonGhost}`}
+          >
+            <ClipboardCopy size={13} /> Diagnostics flags 복사
+          </button>
+          <button
+            type="button"
+            onClick={onShowBurnInJson}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${adminTones.neutral.buttonGhost}`}
+          >
+            <Play size={13} /> Burn-in JSON 미리보기
           </button>
         </div>
         {burnInJsonPreview && (
@@ -402,6 +600,29 @@ function KV({ k, v, tone = 'neutral' }: { k: string; v: string; tone?: 'success'
     <div className="flex items-center justify-between gap-3 text-xs">
       <span className="text-neutral-400">{k}</span>
       <span className={`font-mono ${cls}`}>{v}</span>
+    </div>
+  );
+}
+
+/**
+ * Phase 7-2 — QA Checklist row.
+ * ok      : true 시 ✓ · false 시 ✗ 아이콘 표시
+ * neutralOk : true 시 ok=true 여도 info tone 으로만 표시 (정보성 항목)
+ */
+function ChecklistRow({ ok, label, hint, neutralOk = false }: {
+  ok: boolean; label: string; hint: string; neutralOk?: boolean;
+}): JSX.Element {
+  const iconCls = ok
+    ? (neutralOk ? adminTones.info.icon : adminTones.success.icon)
+    : adminTones.warning.icon;
+  const Icon = ok ? CheckCircle2 : XCircle;
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <Icon size={14} className={`${iconCls} mt-0.5 shrink-0`} />
+      <div className="min-w-0">
+        <div className="text-neutral-100">{label}</div>
+        <div className="text-neutral-500 text-[11px]">{hint}</div>
+      </div>
     </div>
   );
 }
