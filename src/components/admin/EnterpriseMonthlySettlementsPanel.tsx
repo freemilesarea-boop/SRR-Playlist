@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   RefreshCw, AlertCircle, Wallet, Play, ThumbsUp, BadgeCheck, X, Ban,
   FileText, CheckCircle2, XCircle, Clock as ClockIcon, AlertTriangle,
-  Lock, ScrollText,
+  Lock, ScrollText, ArrowRight, Coins, CircleDot,
 } from 'lucide-react';
 import {
   adminGenerateEnterpriseMonthlySettlement,
@@ -28,6 +28,7 @@ import {
   type EnterpriseMonthlySettlementDetail,
   type EnterpriseMonthlySettlementItem,
   type SettlementRateSource,
+  type CarryoverChainLink,
 } from '@/lib/api/enterpriseMonthlySettlementApi';
 import { toast } from '@/store/toastStore';
 import {
@@ -287,6 +288,8 @@ function DetailModal({
   const [error, setError] = useState<string | null>(null);
   const [settlement, setSettlement] = useState<EnterpriseMonthlySettlementDetail | null>(null);
   const [items, setItems] = useState<EnterpriseMonthlySettlementItem[]>([]);
+  const [carryoverSource, setCarryoverSource] = useState<CarryoverChainLink | null>(null);
+  const [carryoverChild, setCarryoverChild] = useState<CarryoverChainLink | null>(null);
   const [acting, setActing] = useState(false);
   const [paidMode, setPaidMode] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
@@ -301,6 +304,8 @@ function DetailModal({
       const r = await adminGetEnterpriseMonthlySettlement(settlementId);
       setSettlement(r.settlement);
       setItems(r.items);
+      setCarryoverSource(r.carryover_source ?? null);
+      setCarryoverChild(r.carryover_child ?? null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -396,6 +401,13 @@ function DetailModal({
                 </dl>
                 {/* 0390 — 적용 계약 Snapshot 검증 카드 (생성 시점 고정, read-only) */}
                 <ContractSnapshotCard settlement={settlement} />
+                {/* Phase 3-2 — 이월(Carryover) chain 카드 (chain 이 있거나 미달인 경우만 노출) */}
+                <CarryoverChainCard
+                  settlement={settlement}
+                  source={carryoverSource}
+                  child={carryoverChild}
+                />
+
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-ink-dim">
                   <KV k="생성" v={new Date(settlement.generated_at).toLocaleString('ko-KR')} />
                   {settlement.approved_at && <KV k="승인" v={new Date(settlement.approved_at).toLocaleString('ko-KR')} />}
@@ -455,21 +467,24 @@ function DetailModal({
 
             {/* approved */}
             {settlement.status === 'approved' && !paidMode && !cancelMode && (() => {
-              // Phase 3-1B — minimum_payout gate 안내.
-              // 서버 (0399 admin_mark_paid_*) 가 실제 차단하지만 사용자 경험을 위해 UI 에서도 사전 차단.
+              // Phase 3-2 — effective_total(= total + previous_carryover) 기준으로 gate 판정.
+              // 서버 (0400 admin_mark_paid_*) 가 실제 차단하지만 UI 도 사전 차단하여 UX 혼란 방지.
               const min = settlement.minimum_payout ?? 0;
               const total = settlement.total_commission ?? 0;
-              const belowMinimum = min > 0 && total < min;
+              const prev = settlement.previous_carryover ?? 0;
+              const effective = total + prev;
+              const belowMinimum = min > 0 && effective < min;
               return (
                 <>
                   {belowMinimum && (
                     <div className="rounded-md bg-amber-500/25 ring-1 ring-amber-400/50 p-2.5 text-[11px] text-slate-900 dark:text-amber-100 flex items-start gap-2">
                       <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-300" />
                       <div>
-                        <div className="font-bold">최소정산금 미달</div>
+                        <div className="font-bold">최소정산금 미달 — 자동 이월 예정</div>
                         <div className="mt-0.5 opacity-90">
-                          이번 달 정산금이 최소정산금 ({min.toLocaleString('ko-KR')}원) 보다 낮아 지급완료 처리할 수 없습니다.
-                          보류 처리 후 다음 정산으로 이월하거나 별도 정책을 적용하세요.
+                          누적 정산금 <span className="font-mono">{effective.toLocaleString('ko-KR')}</span>원이
+                          최소정산금 <span className="font-mono">{min.toLocaleString('ko-KR')}</span>원 미만이어서 지급완료 처리할 수 없습니다.
+                          다음 달 정산 생성 시 이 금액이 자동으로 이월되어 누적 정산금이 최소정산금을 넘는 달에 자동 지급됩니다.
                         </div>
                       </div>
                     </div>
@@ -617,6 +632,128 @@ function ContractSnapshotCard({ settlement }: { settlement: EnterpriseMonthlySet
           ? ' 위 조건은 적용 당시 계약 snapshot 이며 이후 계약 수정과 무관하게 고정됩니다.'
           : ' 활성 계약이 없어 정산 프로필/기본값 기준으로 계산되었습니다.'}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Phase 3-2 — 이월(Carryover) chain 카드 (Admin, read-only).
+ *
+ * 이 카드는 다음 세 가지 값을 한 화면에서 확인할 수 있게 한다:
+ *   1) 지난 chain 에서 넘어온 이월액 (previous_carryover)
+ *   2) 이번 달 정산금 (total_commission)
+ *   3) 누적 정산금 = 지급 판단 기준 (effective_total)
+ * 그리고 chain 의 이전/다음 정산 링크 및 최소정산금 gate 상태를 시각적으로 보여준다.
+ *
+ * chain 도 이월도 없고 최소정산금도 미달이 아닌 정산은 카드를 표시하지 않아 노이즈를 없앤다.
+ */
+function CarryoverChainCard({
+  settlement,
+  source,
+  child,
+}: {
+  settlement: EnterpriseMonthlySettlementDetail;
+  source: CarryoverChainLink | null;
+  child: CarryoverChainLink | null;
+}) {
+  const prev = settlement.previous_carryover ?? 0;
+  const total = settlement.total_commission ?? 0;
+  const effective = total + prev;
+  const min = settlement.minimum_payout ?? 0;
+  const belowMinimum = min > 0 && effective < min;
+  const gap = belowMinimum ? min - effective : 0;
+
+  // chain 도 없고 이월도 없고 미달도 아니면 완전히 숨긴다.
+  if (!source && !child && prev === 0 && !belowMinimum) return null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-900 dark:text-amber-200">
+          <Coins size={12} /> 이월(Carryover) chain
+        </p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-bg-deep px-2 py-0.5 text-[9px] text-ink-dim ring-1 ring-line/20">
+          <Lock size={9} /> 서버 자동 관리 · 읽기 전용
+        </span>
+      </div>
+
+      {/* 금액 3분할 */}
+      <dl className="grid grid-cols-3 gap-2 text-[11px]">
+        <KV k="이월 (지난 달)" v={`${prev.toLocaleString('ko-KR')}원`} mono />
+        <KV k="이번 달 정산금" v={`${total.toLocaleString('ko-KR')}원`} mono />
+        <KV
+          k="누적 정산금"
+          v={`${effective.toLocaleString('ko-KR')}원`}
+          highlight
+          mono
+        />
+      </dl>
+
+      {/* 미달 gap 표시 */}
+      {belowMinimum && (
+        <div className="mt-2 flex items-start gap-1.5 rounded bg-amber-500/25 px-2 py-1.5 text-[10px] text-slate-900 dark:text-amber-100">
+          <AlertTriangle size={11} className="mt-0.5 shrink-0 text-amber-300" />
+          <div>
+            최소정산금 {min.toLocaleString('ko-KR')}원까지 <span className="font-bold">{gap.toLocaleString('ko-KR')}원 부족</span>.
+            다음 달 정산 생성 시 자동으로 이월되어 누적됩니다.
+          </div>
+        </div>
+      )}
+      {!belowMinimum && min > 0 && (
+        <div className="mt-2 flex items-start gap-1.5 rounded bg-emerald-500/25 px-2 py-1.5 text-[10px] text-slate-900 dark:text-emerald-200">
+          <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-emerald-300" />
+          <div>
+            누적 정산금이 최소정산금 {min.toLocaleString('ko-KR')}원을 넘어 지급 가능한 상태입니다.
+          </div>
+        </div>
+      )}
+
+      {/* chain link visualization */}
+      {(source || child) && (
+        <div className="mt-3 flex items-center gap-2 text-[10px]">
+          <ChainLinkNode link={source} label="이전" />
+          <ArrowRight size={11} className="shrink-0 text-amber-300" />
+          <div className="rounded bg-amber-500/20 px-2 py-1 font-bold text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40">
+            <div className="text-[9px] text-amber-300/80">현재</div>
+            <div className="font-mono tabular-nums">{formatSettlementMonth(settlement.settlement_month)}</div>
+            <div className="mt-0.5 font-mono tabular-nums text-[10px]">{effective.toLocaleString('ko-KR')}원</div>
+          </div>
+          <ArrowRight size={11} className="shrink-0 text-amber-300" />
+          <ChainLinkNode link={child} label="다음" />
+        </div>
+      )}
+
+      <p className="mt-2 text-[10px] leading-relaxed text-ink-dim">
+        서버는 지급 시 chain 을 recursive 로 traversal 하여 모든 조상 정산의 <code className="font-mono">carryover_applied</code> 를
+        <code className="font-mono"> true</code> 로 갱신합니다. 감사 로그: <code className="font-mono">carryover_created</code> /
+        <code className="font-mono"> carryover_applied</code>.
+      </p>
+    </div>
+  );
+}
+
+function ChainLinkNode({ link, label }: { link: CarryoverChainLink | null; label: string }) {
+  if (!link) {
+    return (
+      <div className="rounded border border-dashed border-ink-dim/30 bg-bg-deep/40 px-2 py-1 text-ink-dim">
+        <div className="text-[9px]">{label}</div>
+        <div className="text-[10px]">—</div>
+      </div>
+    );
+  }
+  const applied = link.carryover_applied;
+  return (
+    <div className={`rounded bg-bg-deep px-2 py-1 ring-1 ${
+      applied ? 'ring-emerald-400/40 text-slate-900 dark:text-emerald-200' : 'ring-line/20 text-ink'
+    }`}>
+      <div className="flex items-center gap-1 text-[9px] text-ink-dim">
+        <CircleDot size={8} /> {label}
+      </div>
+      <div className="font-mono tabular-nums">{formatSettlementMonth(link.settlement_month)}</div>
+      <div className="mt-0.5 font-mono tabular-nums text-[10px]">
+        {link.effective_total.toLocaleString('ko-KR')}원
+        {applied && <span className="ml-1 text-emerald-300">✓지급</span>}
+      </div>
     </div>
   );
 }
