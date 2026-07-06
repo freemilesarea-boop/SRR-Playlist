@@ -183,6 +183,17 @@ function HqDetailModal({
                   지급 참조: <span className="font-mono">{settlement.payment_reference}</span>
                 </p>
               )}
+              {/* Phase 3-1B — 최소정산금 미달 안내 (HQ read-only) */}
+              {(() => {
+                const min = settlement.minimum_payout ?? 0;
+                const total = settlement.total_commission ?? 0;
+                if (min <= 0 || total >= min || settlement.status === 'paid') return null;
+                return (
+                  <p className="mt-2 text-[10px] text-amber-300">
+                    ⚠ 최소정산금 ({min.toLocaleString('ko-KR')}원) 미달 — 이번 달은 지급되지 않고 다음 정산으로 이월될 수 있어요.
+                  </p>
+                );
+              })()}
             </div>
 
             <div className="rounded-lg bg-bg-deep p-3">
