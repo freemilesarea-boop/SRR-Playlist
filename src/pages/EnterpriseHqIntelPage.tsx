@@ -47,6 +47,7 @@ import {
   monthlyReportToCsv,
   downloadCsv,
   downloadJson,
+  downloadEnterpriseIntelPdf,
   firstOfMonth,
   INSIGHT_SEVERITY_LABEL,
   EXEC_TONE_LABEL,
@@ -777,9 +778,9 @@ function TrendSection() {
 
 function MonthlyReportSection() {
   const [month, setMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
-  const [downloading, setDownloading] = useState<'csv' | 'json' | null>(null);
+  const [downloading, setDownloading] = useState<'csv' | 'json' | 'pdf' | null>(null);
 
-  const onDownload = async (kind: 'csv' | 'json') => {
+  const onDownloadCsvJson = async (kind: 'csv' | 'json') => {
     if (!month) {
       toast.error('월을 선택해주세요.');
       return;
@@ -801,6 +802,22 @@ function MonthlyReportSection() {
     }
   };
 
+  const onDownloadPdf = async () => {
+    if (!month) {
+      toast.error('월을 선택해주세요.');
+      return;
+    }
+    setDownloading('pdf');
+    try {
+      await downloadEnterpriseIntelPdf(month);
+      toast.success(`brand-report-${month}.pdf 다운로드됨.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   return (
     <section className="rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
       <div className="flex flex-wrap items-center gap-2">
@@ -809,7 +826,7 @@ function MonthlyReportSection() {
         </h2>
       </div>
       <p className="mt-1 text-[11px] text-ink-mute">
-        정산 · 매장별 상태 · 이벤트 카운트를 파일로 저장할 수 있어요. (PDF 는 곧 지원 예정)
+        정산 · 매장별 상태 · 이벤트 카운트를 CSV/JSON 으로, 요약 리포트를 PDF 로 저장할 수 있어요.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
@@ -818,14 +835,21 @@ function MonthlyReportSection() {
           className="rounded bg-bg-deep px-2 py-1.5 text-xs tabular-nums"
         />
         <button
-          onClick={() => void onDownload('csv')}
+          onClick={() => void onDownloadPdf()}
+          disabled={downloading !== null}
+          className="inline-flex items-center gap-1 rounded bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-50"
+        >
+          <Download size={12} /> {downloading === 'pdf' ? '생성 중…' : 'PDF 다운로드'}
+        </button>
+        <button
+          onClick={() => void onDownloadCsvJson('csv')}
           disabled={downloading !== null}
           className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
         >
           <Download size={12} /> CSV 다운로드
         </button>
         <button
-          onClick={() => void onDownload('json')}
+          onClick={() => void onDownloadCsvJson('json')}
           disabled={downloading !== null}
           className="inline-flex items-center gap-1 rounded bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-50"
         >

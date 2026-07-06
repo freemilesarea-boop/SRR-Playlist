@@ -383,6 +383,49 @@ export function downloadJson(filename: string, obj: unknown) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Phase 3-4b — Monthly PDF Report 다운로드.
+ * generate-enterprise-intel-report Edge Function 호출 · PDF bytes 를 Blob 으로 받아
+ * 브라우저 다운로드 트리거.
+ *
+ * @param yyyyMm 'YYYY-MM' (예: '2026-07')
+ */
+export async function downloadEnterpriseIntelPdf(yyyyMm: string): Promise<void> {
+  if (!/^\d{4}-\d{2}$/.test(yyyyMm)) {
+    throw new Error('month 는 YYYY-MM 형식이어야 해요.');
+  }
+  const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+  if (sessErr) throw new Error(sessErr.message);
+  const token = session?.access_token;
+  if (!token) throw new Error('로그인 세션을 찾을 수 없어요. 다시 로그인해주세요.');
+
+  const { data, error } = await supabase.functions.invoke<Blob>(
+    'generate-enterprise-intel-report',
+    {
+      body: { month: yyyyMm },
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (error) {
+    console.error('[hq-intel] pdf failed', error);
+    // functions.invoke 는 non-2xx 응답 시 error 를 만들고 data 도 함께 반환 (파싱 실패 케이스).
+    // Edge Fn 이 JSON 오류를 반환한 경우 message 에 이미 담겨 옴.
+    throw new Error(error.message || 'PDF 생성에 실패했어요.');
+  }
+  if (!(data instanceof Blob)) {
+    throw new Error('PDF 응답 형식이 올바르지 않아요.');
+  }
+
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `brand-report-${yyyyMm}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // =============================================================================
 // UI helpers
 // =============================================================================
