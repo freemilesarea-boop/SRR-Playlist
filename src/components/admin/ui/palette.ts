@@ -65,16 +65,18 @@ export const adminPalette: Record<AdminToneName, AdminSolidTone> = {
     softText:     'text-emerald-200',
   },
   warning: {
-    badgeSolid:   'bg-amber-500 text-white',
+    // 긴급 hotfix — amber-500 위 white 는 2.15:1 (WCAG AA fail). amber-950 로 뒤집어 ~10:1 확보.
+    // hover 상태도 amber-400 로 완화해 시각적 밝기 유지.
+    badgeSolid:   'bg-amber-500 text-amber-950',
     badgeSubtle:  'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50',
-    buttonSolid:  'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700',
-    buttonSubtle: 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25',
-    buttonGhost:  'text-amber-300 hover:bg-amber-500/15',
-    buttonOutline:'border border-amber-400/50 text-amber-200 hover:bg-amber-500/15',
-    icon:         'text-amber-300',
-    softBg:       'bg-amber-500/15',
-    softRing:     'ring-1 ring-amber-400/40',
-    softText:     'text-amber-200',
+    buttonSolid:  'bg-amber-500 text-amber-950 hover:bg-amber-400 active:bg-amber-600',
+    buttonSubtle: 'bg-amber-500/25 text-amber-100 hover:bg-amber-500/35',
+    buttonGhost:  'text-amber-200 hover:bg-amber-500/20',
+    buttonOutline:'border border-amber-400/60 text-amber-100 hover:bg-amber-500/20',
+    icon:         'text-amber-200',
+    softBg:       'bg-amber-500/20',
+    softRing:     'ring-1 ring-amber-400/50',
+    softText:     'text-amber-100',
   },
   danger: {
     badgeSolid:   'bg-red-600 text-white',
