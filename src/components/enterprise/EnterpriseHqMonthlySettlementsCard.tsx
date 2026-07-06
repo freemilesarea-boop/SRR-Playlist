@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Wallet, RefreshCw, AlertCircle, X, FileText, CheckCircle2, XCircle,
-  Clock as ClockIcon, ThumbsUp, AlertTriangle,
+  Clock as ClockIcon, ThumbsUp, AlertTriangle, Coins, ArrowRight, CircleDot,
 } from 'lucide-react';
 import {
   getMyEnterpriseMonthlySettlements,
@@ -21,6 +21,7 @@ import {
   type HqEnterpriseMonthlySettlementDetail,
   type EnterpriseMonthlySettlementItem,
   type EnterpriseMonthlySettlementStatus,
+  type CarryoverChainLink,
 } from '@/lib/api/enterpriseMonthlySettlementApi';
 
 export default function EnterpriseHqMonthlySettlementsCard() {
@@ -92,6 +93,11 @@ export default function EnterpriseHqMonthlySettlementsCard() {
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold tabular-nums">
                     {r.total_commission.toLocaleString('ko-KR')}원
+                    {(r.previous_carryover ?? 0) > 0 && (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-500/25 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:text-amber-200">
+                        <Coins size={8} /> 이월 +{(r.previous_carryover ?? 0).toLocaleString('ko-KR')}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] text-ink-mute">
                     활성 {r.active_store_count}개 × {r.per_store_commission.toLocaleString('ko-KR')}원
@@ -119,6 +125,8 @@ function HqDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [settlement, setSettlement] = useState<HqEnterpriseMonthlySettlementDetail | null>(null);
   const [items, setItems] = useState<EnterpriseMonthlySettlementItem[]>([]);
+  const [carryoverSource, setCarryoverSource] = useState<CarryoverChainLink | null>(null);
+  const [carryoverChild, setCarryoverChild] = useState<CarryoverChainLink | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +135,8 @@ function HqDetailModal({
       const r = await getMyEnterpriseMonthlySettlementItems(settlementId);
       setSettlement(r.settlement);
       setItems(r.items);
+      setCarryoverSource(r.carryover_source ?? null);
+      setCarryoverChild(r.carryover_child ?? null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -183,17 +193,12 @@ function HqDetailModal({
                   지급 참조: <span className="font-mono">{settlement.payment_reference}</span>
                 </p>
               )}
-              {/* Phase 3-1B — 최소정산금 미달 안내 (HQ read-only) */}
-              {(() => {
-                const min = settlement.minimum_payout ?? 0;
-                const total = settlement.total_commission ?? 0;
-                if (min <= 0 || total >= min || settlement.status === 'paid') return null;
-                return (
-                  <p className="mt-2 text-[10px] text-amber-300">
-                    ⚠ 최소정산금 ({min.toLocaleString('ko-KR')}원) 미달 — 이번 달은 지급되지 않고 다음 정산으로 이월될 수 있어요.
-                  </p>
-                );
-              })()}
+              {/* Phase 3-2 — Carryover chain (HQ read-only) */}
+              <HqCarryoverChainCard
+                settlement={settlement}
+                source={carryoverSource}
+                child={carryoverChild}
+              />
             </div>
 
             <div className="rounded-lg bg-bg-deep p-3">
@@ -222,6 +227,118 @@ function HqDetailModal({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 3-2 — HQ 용 이월(Carryover) chain 카드 (read-only, 친절한 copy).
+ *
+ * HQ 사용자가 궁금해할 세 가지에 답한다:
+ *   1) 이번 달 정산금이 왜 이만큼인지 (이월된 금액 포함)
+ *   2) 최소정산금을 언제 넘길 것으로 예상되는지
+ *   3) 지금까지의 이월 흐름이 어떻게 이어져 왔는지
+ */
+function HqCarryoverChainCard({
+  settlement,
+  source,
+  child,
+}: {
+  settlement: HqEnterpriseMonthlySettlementDetail;
+  source: CarryoverChainLink | null;
+  child: CarryoverChainLink | null;
+}) {
+  const prev = settlement.previous_carryover ?? 0;
+  const total = settlement.total_commission ?? 0;
+  const effective = total + prev;
+  const min = settlement.minimum_payout ?? 0;
+  const belowMinimum = min > 0 && effective < min && settlement.status !== 'paid';
+  const gap = belowMinimum ? min - effective : 0;
+
+  // 이월도 chain 도 없고 미달도 아니면 완전히 숨긴다 (노이즈 방지)
+  if (!source && !child && prev === 0 && !belowMinimum) return null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/5 p-2.5">
+      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-slate-900 dark:text-amber-200">
+        <Coins size={11} /> 이월 정산 흐름
+      </p>
+
+      <dl className="grid grid-cols-3 gap-2 text-[11px]">
+        <div>
+          <dt className="text-[10px] text-ink-dim">지난 달에서 이월</dt>
+          <dd className="mt-0.5 font-mono tabular-nums">{prev.toLocaleString('ko-KR')}원</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] text-ink-dim">이번 달 정산금</dt>
+          <dd className="mt-0.5 font-mono tabular-nums">{total.toLocaleString('ko-KR')}원</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] text-ink-dim">누적 정산금</dt>
+          <dd className="mt-0.5 font-mono tabular-nums font-bold text-emerald-300">
+            {effective.toLocaleString('ko-KR')}원
+          </dd>
+        </div>
+      </dl>
+
+      {belowMinimum && (
+        <p className="mt-2 flex items-start gap-1.5 rounded bg-amber-500/25 px-2 py-1.5 text-[10px] text-slate-900 dark:text-amber-100">
+          <AlertTriangle size={11} className="mt-0.5 shrink-0 text-amber-300" />
+          <span>
+            최소정산금 <span className="font-mono">{min.toLocaleString('ko-KR')}</span>원까지
+            <span className="font-bold"> {gap.toLocaleString('ko-KR')}원 남음</span>.
+            이번 달은 지급되지 않지만 이 금액은 <span className="font-bold">다음 달로 자동 이월</span>되어
+            누적 정산금이 최소정산금을 넘는 달에 자동으로 지급됩니다.
+          </span>
+        </p>
+      )}
+
+      {!belowMinimum && prev > 0 && settlement.status !== 'paid' && (
+        <p className="mt-2 flex items-start gap-1.5 rounded bg-emerald-500/25 px-2 py-1.5 text-[10px] text-slate-900 dark:text-emerald-200">
+          <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-emerald-300" />
+          <span>
+            지난 달 이월분과 이번 달 정산금의 합계가 최소정산금을 넘어 지급 가능한 상태입니다.
+          </span>
+        </p>
+      )}
+
+      {(source || child) && (
+        <div className="mt-2 flex items-center gap-1.5 text-[10px]">
+          <HqChainNode link={source} label="지난" />
+          <ArrowRight size={10} className="shrink-0 text-amber-300" />
+          <div className="rounded bg-amber-500/25 px-2 py-1 font-bold text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40">
+            <div className="text-[9px] text-amber-300/80">현재</div>
+            <div className="font-mono tabular-nums">
+              {formatSettlementMonth(settlement.settlement_month)}
+            </div>
+          </div>
+          <ArrowRight size={10} className="shrink-0 text-amber-300" />
+          <HqChainNode link={child} label="다음" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HqChainNode({ link, label }: { link: CarryoverChainLink | null; label: string }) {
+  if (!link) {
+    return (
+      <div className="rounded border border-dashed border-ink-dim/30 bg-bg-deep/40 px-2 py-1 text-ink-dim">
+        <div className="text-[9px]">{label}</div>
+        <div className="text-[10px]">—</div>
+      </div>
+    );
+  }
+  const applied = link.carryover_applied;
+  return (
+    <div className={`rounded bg-bg-deep px-2 py-1 ring-1 ${
+      applied ? 'ring-emerald-400/40 text-slate-900 dark:text-emerald-200' : 'ring-line/20 text-ink'
+    }`}>
+      <div className="flex items-center gap-1 text-[9px] text-ink-dim">
+        <CircleDot size={7} /> {label}
+      </div>
+      <div className="font-mono tabular-nums">{formatSettlementMonth(link.settlement_month)}</div>
+      {applied && <div className="text-[9px] text-emerald-300">✓지급 완료</div>}
     </div>
   );
 }

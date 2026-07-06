@@ -39,7 +39,35 @@ export interface SettlementContractSnapshot {
   rate_source: SettlementRateSource | null;
 }
 
-export interface EnterpriseMonthlySettlementRow extends SettlementContractSnapshot {
+/**
+ * Phase 3-2 — Carryover chain snapshot (모든 정산 row 에 포함).
+ *   · previous_carryover              : 이 정산 생성 시점에 이전 chain 에서 넘어온 금액
+ *   · carryover_amount                : 이 정산이 다음 달 chain 으로 넘긴 금액 snapshot (source 인 경우)
+ *   · carryover_source_settlement_id  : 이전 chain 정산 id (있으면 chain 링크)
+ *   · carryover_applied               : chain 이 지급으로 종결되었는지
+ *   · effective_total                 : total_commission + previous_carryover
+ */
+export interface SettlementCarryoverSnapshot {
+  previous_carryover: number;
+  carryover_amount: number;
+  carryover_source_settlement_id: string | null;
+  carryover_applied: boolean;
+  effective_total: number;
+}
+
+/** Phase 3-2 — chain link mini-summary (source/child 양방향, admin/HQ 공통) */
+export interface CarryoverChainLink {
+  id: string;
+  settlement_month: string;
+  status: EnterpriseMonthlySettlementStatus;
+  total_commission: number;
+  previous_carryover: number;
+  effective_total: number;
+  carryover_applied: boolean;
+}
+
+export interface EnterpriseMonthlySettlementRow
+  extends SettlementContractSnapshot, SettlementCarryoverSnapshot {
   id: string;
   enterprise_account_id: string;
   enterprise_name: string;
@@ -73,7 +101,8 @@ export interface EnterpriseMonthlySettlementItem {
   reason: string | null;
 }
 
-export interface EnterpriseMonthlySettlementDetail extends SettlementContractSnapshot {
+export interface EnterpriseMonthlySettlementDetail
+  extends SettlementContractSnapshot, SettlementCarryoverSnapshot {
   id: string;
   enterprise_account_id: string;
   enterprise_name: string;
@@ -95,7 +124,8 @@ export interface EnterpriseMonthlySettlementDetail extends SettlementContractSna
 }
 
 // HQ 쪽 — 본인 본사만, manager 정보 제외
-export interface HqEnterpriseMonthlySettlementRow extends SettlementContractSnapshot {
+export interface HqEnterpriseMonthlySettlementRow
+  extends SettlementContractSnapshot, SettlementCarryoverSnapshot {
   id: string;
   settlement_month: string;
   active_store_count: number;
@@ -110,7 +140,8 @@ export interface HqEnterpriseMonthlySettlementRow extends SettlementContractSnap
   payment_reference: string | null;
 }
 
-export interface HqEnterpriseMonthlySettlementDetail extends SettlementContractSnapshot {
+export interface HqEnterpriseMonthlySettlementDetail
+  extends SettlementContractSnapshot, SettlementCarryoverSnapshot {
   id: string;
   settlement_month: string;
   active_store_count: number;
@@ -136,6 +167,12 @@ export interface AdminGenerateResultDetail {
   settlement_id?: string;
   active_store_count?: number;
   total_commission?: number;
+  /** Phase 3-2 — 이번 정산 생성 시 반영된 이월액 (없으면 0) */
+  previous_carryover?: number;
+  /** Phase 3-2 — effective_total = total_commission + previous_carryover */
+  effective_total?: number;
+  /** Phase 3-2 — chain source (이전 미지급 정산 id, 없으면 null) */
+  carryover_source_settlement_id?: string | null;
 }
 
 export interface AdminGenerateResult {
@@ -143,6 +180,8 @@ export interface AdminGenerateResult {
   settlement_month: string;
   created: number;
   skipped: number;
+  /** Phase 3-2 — 이번 생성에서 이월 chain 이 연결된 정산 수 */
+  carryover_created?: number;
   details: AdminGenerateResultDetail[];
 }
 
@@ -192,6 +231,10 @@ export interface AdminGetResult {
   success: boolean;
   settlement: EnterpriseMonthlySettlementDetail;
   items: EnterpriseMonthlySettlementItem[];
+  /** Phase 3-2 — chain source mini-summary (없으면 null) */
+  carryover_source: CarryoverChainLink | null;
+  /** Phase 3-2 — chain child mini-summary (다음 달로 이어진 정산, 없으면 null) */
+  carryover_child: CarryoverChainLink | null;
 }
 
 export async function adminGetEnterpriseMonthlySettlement(
@@ -226,7 +269,16 @@ export async function adminMarkPaidEnterpriseMonthlySettlement(
   settlementId: string,
   paymentReference: string,
   adminNote?: string | null,
-): Promise<{ success: boolean; settlement_id: string; status: 'paid'; paid_at: string }> {
+): Promise<{
+  success: boolean;
+  settlement_id: string;
+  status: 'paid';
+  paid_at: string;
+  /** Phase 3-2 — effective_total = total_commission + previous_carryover (지급된 금액) */
+  effective_total?: number;
+  /** Phase 3-2 — 지급으로 종결된 chain 길이 (source 없으면 0) */
+  chain_length?: number;
+}> {
   const { data, error } = await supabase.rpc('admin_mark_paid_enterprise_monthly_settlement', {
     p_settlement_id: settlementId,
     p_payment_reference: paymentReference,
@@ -236,7 +288,10 @@ export async function adminMarkPaidEnterpriseMonthlySettlement(
     console.error('[ems] mark paid failed', error);
     throw new Error(error.message || '지급완료 처리에 실패했습니다.');
   }
-  return data as { success: boolean; settlement_id: string; status: 'paid'; paid_at: string };
+  return data as {
+    success: boolean; settlement_id: string; status: 'paid'; paid_at: string;
+    effective_total?: number; chain_length?: number;
+  };
 }
 
 export async function adminCancelEnterpriseMonthlySettlement(
@@ -277,6 +332,10 @@ export async function getMyEnterpriseMonthlySettlementItems(
   success: boolean;
   settlement: HqEnterpriseMonthlySettlementDetail;
   items: EnterpriseMonthlySettlementItem[];
+  /** Phase 3-2 — chain source mini-summary (없으면 null) */
+  carryover_source: CarryoverChainLink | null;
+  /** Phase 3-2 — chain child mini-summary (없으면 null) */
+  carryover_child: CarryoverChainLink | null;
 }> {
   const { data, error } = await supabase.rpc('get_my_enterprise_monthly_settlement_items', {
     p_settlement_id: settlementId,
@@ -289,6 +348,8 @@ export async function getMyEnterpriseMonthlySettlementItems(
     success: boolean;
     settlement: HqEnterpriseMonthlySettlementDetail;
     items: EnterpriseMonthlySettlementItem[];
+    carryover_source: CarryoverChainLink | null;
+    carryover_child: CarryoverChainLink | null;
   };
 }
 
