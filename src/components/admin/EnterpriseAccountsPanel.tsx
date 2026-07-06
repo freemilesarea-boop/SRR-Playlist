@@ -883,6 +883,9 @@ function SettlementReviewModal({
   const [error, setError] = useState<string | null>(null);
   const [businessLicensePath, setBusinessLicensePath] = useState<string | null>(null);
   const [bankbookPath, setBankbookPath] = useState<string | null>(null);
+  // Phase 1-10 마무리 — 이번 달 예상 정산금 미리보기용 활성 매장 수.
+  // 기존 admin_get_enterprise_invite_summary RPC 재사용 (store_count = fs.status='active').
+  const [activeStoreCount, setActiveStoreCount] = useState<number | null>(null);
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [acting, setActing] = useState(false);
@@ -891,13 +894,15 @@ function SettlementReviewModal({
     setLoading(true);
     setError(null);
     try {
-      const [summary, docs] = await Promise.all([
+      const [summary, docs, invite] = await Promise.all([
         adminGetEnterpriseSettlement(target.id),
         adminGetEnterpriseDocuments(target.id),
+        adminGetEnterpriseInviteSummary(target.id).catch(() => null),
       ]);
       setData(summary);
       setBusinessLicensePath(docs.business_license_path);
       setBankbookPath(docs.bankbook_path);
+      setActiveStoreCount(invite?.store_count ?? null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1009,6 +1014,7 @@ function SettlementReviewModal({
               currentMinimumPayout={settlement?.minimum_payout ?? 0}
               currentCommissionRate={settlement?.commission_rate ?? 20}
               currentMonthlyStorePrice={settlement?.monthly_store_price ?? 4900}
+              activeStoreCount={activeStoreCount ?? 0}
               onSaved={() => { void load(); onReviewed(); }}
             />
 
@@ -1130,13 +1136,15 @@ function SettlementStatusInline({ status }: { status: 'unregistered' | 'reviewin
 
 function PaymentSettingsEditor({
   enterpriseAccountId, currentMethod, currentMinimumPayout,
-  currentCommissionRate, currentMonthlyStorePrice, onSaved,
+  currentCommissionRate, currentMonthlyStorePrice, activeStoreCount, onSaved,
 }: {
   enterpriseAccountId: string;
   currentMethod: SettlementMethod;
   currentMinimumPayout: number;
   currentCommissionRate: number;
   currentMonthlyStorePrice: number;
+  /** Phase 1-10 마무리 — 이번 달 예상 정산금 계산용 활성 매장 수. 미제공 시 0. */
+  activeStoreCount: number;
   onSaved: () => void;
 }) {
   const [method, setMethod] = useState<SettlementMethod>(currentMethod);
@@ -1253,6 +1261,11 @@ function PaymentSettingsEditor({
         매장당 정산금 미리보기: {(priceValid ? priceNum : 0).toLocaleString('ko-KR')}원 ×
         {' '}{rateValid ? rateNum : 0}% =
         {' '}<b className="text-emerald-300">{previewPerStore.toLocaleString('ko-KR')}원</b> / 매장
+      </p>
+      {/* Phase 1-10 마무리 — 이번 달 예상 정산금 (활성 매장 × 매장당 정산금) */}
+      <p className="mt-1 text-[10px] text-ink-dim">
+        이번 달 예상 정산금: 활성 매장 {activeStoreCount.toLocaleString('ko-KR')}개 × {previewPerStore.toLocaleString('ko-KR')}원 =
+        {' '}<b className="text-emerald-300">{(activeStoreCount * previewPerStore).toLocaleString('ko-KR')}원</b>
       </p>
       <button
         type="button"
