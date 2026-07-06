@@ -147,7 +147,7 @@ export default function IndividualSignupForm({ onDone }: Props) {
           disabled={verifying || verified}
           className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
             verified
-              ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50'
+              ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/50'
               : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/25'
           }`}
         >

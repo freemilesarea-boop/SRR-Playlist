@@ -122,18 +122,18 @@ export default function AudioOutputSection() {
         </div>
         <div className="rounded-2xl bg-amber-500/25 p-4 ring-1 ring-amber-500/40">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-amber-100" aria-hidden>
+            <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-slate-900 dark:text-amber-100" aria-hidden>
               <AlertTriangle size={16} />
             </span>
             <div className="min-w-0">
-              <p className="text-[13px] font-bold text-amber-100">
+              <p className="text-[13px] font-bold text-slate-900 dark:text-amber-100">
                 이 브라우저는 출력 장치 선택을 지원하지 않습니다.
               </p>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-amber-50/85">
+              <p className="mt-1 text-[11.5px] leading-relaxed text-slate-700 dark:text-amber-50/85">
                 Chrome / Edge / Electron 환경에서만 USB DAC · HDMI · 외부 앰프 등을 매장 스피커 전용 출력으로 지정할 수 있습니다.
                 Safari · Firefox 는 브라우저 정책상 미지원 — 크롬 계열 브라우저에서 재접속해 주세요.
               </p>
-              <p className="mt-1 text-[10.5px] text-amber-50/70">
+              <p className="mt-1 text-[10.5px] text-slate-700 dark:text-amber-50/70">
                 자동으로 브라우저 기본 출력 장치를 사용합니다.
               </p>
             </div>
@@ -191,10 +191,10 @@ export default function AudioOutputSection() {
         {needPermission && (
           <div className="mt-2 rounded-xl bg-sky-500/20 p-2.5 ring-1 ring-sky-500/40">
             <div className="flex items-start gap-2">
-              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-sky-200" />
+              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-slate-900 dark:text-sky-200" />
               <div className="min-w-0 flex-1">
-                <p className="text-[11.5px] font-bold text-sky-100">장치 이름을 표시하려면 권한이 필요합니다.</p>
-                <p className="mt-0.5 text-[10.5px] leading-relaxed text-sky-50/85">
+                <p className="text-[11.5px] font-bold text-slate-900 dark:text-sky-100">장치 이름을 표시하려면 권한이 필요합니다.</p>
+                <p className="mt-0.5 text-[10.5px] leading-relaxed text-slate-700 dark:text-sky-50/85">
                   브라우저 정책상 마이크 권한을 임시로 확인한 후에만 스피커/USB 이름이 노출됩니다. 마이크는 실제로 사용하지 않습니다.
                 </p>
               </div>
@@ -202,7 +202,7 @@ export default function AudioOutputSection() {
                 type="button"
                 onClick={() => void onRequestPermission()}
                 disabled={permBusy}
-                className="shrink-0 rounded-md bg-sky-500/40 px-2.5 py-1 text-[10.5px] font-bold text-sky-50 ring-1 ring-sky-400/60 transition hover:bg-sky-500/50 disabled:opacity-60"
+                className="shrink-0 rounded-md bg-sky-500/40 px-2.5 py-1 text-[10.5px] font-bold text-slate-900 dark:text-sky-50 ring-1 ring-sky-400/60 transition hover:bg-sky-500/50 disabled:opacity-60"
               >
                 {permBusy ? '요청 중…' : '권한 허용'}
               </button>
@@ -250,12 +250,12 @@ export default function AudioOutputSection() {
           {activeIsComms && (
             <div className="mt-1.5 rounded-lg bg-amber-500/20 p-2 ring-1 ring-amber-500/40">
               <div className="flex items-start gap-1.5">
-                <PhoneCall size={12} className="mt-0.5 shrink-0 text-amber-200" />
+                <PhoneCall size={12} className="mt-0.5 shrink-0 text-slate-900 dark:text-amber-200" />
                 <div className="min-w-0 text-[10.5px] leading-relaxed">
-                  <p className="font-bold text-amber-100">
+                  <p className="font-bold text-slate-900 dark:text-amber-100">
                     커뮤니케이션 장치는 통화/알림용 장치입니다.
                   </p>
-                  <p className="mt-0.5 text-amber-50/85">
+                  <p className="mt-0.5 text-slate-700 dark:text-amber-50/85">
                     매장 BGM 출력에는 권장하지 않습니다. 새로고침 시 같은 물리 장치의 일반 출력으로 자동 보정됩니다.
                   </p>
                 </div>
@@ -282,8 +282,8 @@ export default function AudioOutputSection() {
             onClick={onTest}
             className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold ring-1 transition ${
               testing
-                ? 'bg-rose-500/40 text-rose-50 ring-rose-400/60 hover:bg-rose-500/50'
-                : 'bg-emerald-500/40 text-emerald-50 ring-emerald-400/60 hover:bg-emerald-500/50'
+                ? 'bg-rose-500/40 text-slate-900 dark:text-rose-50 ring-rose-400/60 hover:bg-rose-500/50'
+                : 'bg-emerald-500/40 text-slate-900 dark:text-emerald-50 ring-emerald-400/60 hover:bg-emerald-500/50'
             }`}
           >
             <Volume2 size={11} /> {testing ? '중지' : '테스트'}
@@ -291,7 +291,7 @@ export default function AudioOutputSection() {
         </div>
 
         {testError && (
-          <p className="mt-2 rounded-md bg-rose-500/25 px-2 py-1 text-[10.5px] text-rose-100 ring-1 ring-rose-500/45">
+          <p className="mt-2 rounded-md bg-rose-500/25 px-2 py-1 text-[10.5px] text-slate-900 dark:text-rose-100 ring-1 ring-rose-500/45">
             테스트음 실패: {testError}
           </p>
         )}
@@ -356,7 +356,7 @@ function ActionBtn({ icon, label, onClick, disabled }: {
       disabled={disabled}
       className="inline-flex items-center justify-start gap-1.5 rounded-lg bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold text-ink ring-1 ring-line/20 transition hover:bg-bg-hover hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      <span className="text-violet-200">{icon}</span>
+      <span className="text-slate-900 dark:text-violet-200">{icon}</span>
       <span className="truncate">{label}</span>
     </button>
   );
@@ -401,10 +401,10 @@ function DiagnosticsCard({
       <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-mute">Diagnostics (read-only)</p>
       <dl className="grid grid-cols-1 gap-x-3 gap-y-1 text-[10.5px] sm:grid-cols-2">
         {rows.map((r) => {
-          const cls = r.tone === 'success' ? 'text-emerald-200'
-                    : r.tone === 'warning' ? 'text-amber-200'
-                    : r.tone === 'danger'  ? 'text-rose-200'
-                    : r.tone === 'info'    ? 'text-sky-200'
+          const cls = r.tone === 'success' ? 'text-slate-900 dark:text-emerald-200'
+                    : r.tone === 'warning' ? 'text-slate-900 dark:text-amber-200'
+                    : r.tone === 'danger'  ? 'text-slate-900 dark:text-rose-200'
+                    : r.tone === 'info'    ? 'text-slate-900 dark:text-sky-200'
                     : 'text-ink';
           return (
             <div key={r.label} className="flex items-center justify-between gap-2">
@@ -436,27 +436,27 @@ function connectionBadge(status: AudioConnectionStatus): ConnectionBadgeVisual {
     case 'connected':
       return {
         label: '연결됨', bg: 'bg-emerald-500/20', ring: 'ring-emerald-500/40',
-        chip: 'bg-emerald-500/30 text-emerald-100 ring-emerald-500/45',
-        dot: 'text-emerald-300', textLabel: 'text-emerald-100',
+        chip: 'bg-emerald-500/30 text-slate-900 dark:text-emerald-100 ring-emerald-500/45',
+        dot: 'text-emerald-300', textLabel: 'text-slate-900 dark:text-emerald-100',
       };
     case 'disconnected':
       return {
         label: '장치 제거', bg: 'bg-rose-500/20', ring: 'ring-rose-500/40',
-        chip: 'bg-rose-500/30 text-rose-100 ring-rose-500/45',
-        dot: 'text-rose-300', textLabel: 'text-rose-100',
+        chip: 'bg-rose-500/30 text-slate-900 dark:text-rose-100 ring-rose-500/45',
+        dot: 'text-rose-300', textLabel: 'text-slate-900 dark:text-rose-100',
       };
     case 'unsupported':
       return {
         label: '미지원', bg: 'bg-amber-500/20', ring: 'ring-amber-500/40',
-        chip: 'bg-amber-500/30 text-amber-100 ring-amber-500/45',
-        dot: 'text-amber-300', textLabel: 'text-amber-100',
+        chip: 'bg-amber-500/30 text-slate-900 dark:text-amber-100 ring-amber-500/45',
+        dot: 'text-amber-300', textLabel: 'text-slate-900 dark:text-amber-100',
       };
     case 'default':
     default:
       return {
         label: '기본 출력', bg: 'bg-amber-500/20', ring: 'ring-amber-500/40',
-        chip: 'bg-amber-500/30 text-amber-100 ring-amber-500/45',
-        dot: 'text-amber-300', textLabel: 'text-amber-100',
+        chip: 'bg-amber-500/30 text-slate-900 dark:text-amber-100 ring-amber-500/45',
+        dot: 'text-amber-300', textLabel: 'text-slate-900 dark:text-amber-100',
       };
   }
 }

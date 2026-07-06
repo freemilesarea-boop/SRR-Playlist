@@ -78,7 +78,7 @@ export default function FeaturedHero({ playlist, badge, playableCount, totalCoun
               <Play size={16} fill="currentColor" /> 바로 재생
             </span>
             {noAudio && (
-              <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-[11px] text-yellow-100 ring-1 ring-yellow-300/30">
+              <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-[11px] text-slate-900 dark:text-yellow-100 ring-1 ring-yellow-300/30">
                 음원 준비중
               </span>
             )}

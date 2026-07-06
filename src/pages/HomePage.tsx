@@ -197,7 +197,7 @@ export default function HomePage() {
       </header>
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/20 p-3 text-xs text-red-200">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/20 p-3 text-xs text-slate-900 dark:text-red-200">
           데이터를 불러오지 못했어요: {error}
         </div>
       )}

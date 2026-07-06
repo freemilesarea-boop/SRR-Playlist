@@ -289,10 +289,10 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 function StatusBadge({ sub, risk }: { sub: string | null; risk: { level: 'risk' | 'warn' | 'ok'; reason: string | null } }) {
-  if (risk.level === 'risk') return <Badge cls="bg-rose-500/25 text-rose-100 ring-1 ring-rose-400/40" title={risk.reason ?? undefined}>⚠ {risk.reason}</Badge>;
-  if (risk.level === 'warn') return <Badge cls="bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40" title={risk.reason ?? undefined}>{risk.reason}</Badge>;
-  if (sub === 'active') return <Badge cls="bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40">정상 이용중</Badge>;
-  if (sub === 'pending') return <Badge cls="bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40">결제 대기</Badge>;
+  if (risk.level === 'risk') return <Badge cls="bg-rose-500/25 text-slate-900 dark:text-rose-100 ring-1 ring-rose-400/40" title={risk.reason ?? undefined}>⚠ {risk.reason}</Badge>;
+  if (risk.level === 'warn') return <Badge cls="bg-amber-500/25 text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40" title={risk.reason ?? undefined}>{risk.reason}</Badge>;
+  if (sub === 'active') return <Badge cls="bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40">정상 이용중</Badge>;
+  if (sub === 'pending') return <Badge cls="bg-amber-500/25 text-slate-900 dark:text-amber-100 ring-1 ring-amber-400/40">결제 대기</Badge>;
   return <Badge cls="bg-ink/15 text-ink ring-1 ring-line/20">{sub ?? '비활성'}</Badge>;
 }
 function Badge({ cls, title, children }: { cls: string; title?: string; children: React.ReactNode }) {

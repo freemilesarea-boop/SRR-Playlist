@@ -485,7 +485,7 @@ function WithdrawConfirmModal({
  *
  * 색상 대비 WCAG AA:
  *   · amber CTA:  bg-amber-400/90 text-amber-950 hover:bg-amber-300 → text ≥ 6:1
- *   · emerald bg: bg-emerald-500/20 text-emerald-100 → 4.6:1 이상
+ *   · emerald bg: bg-emerald-500/20 text-slate-900 dark:text-emerald-100 → 4.6:1 이상
  *   · sky CTA:    bg-sky-500 text-white → 4.7:1
  */
 function IdentityVerificationSection({
@@ -497,6 +497,9 @@ function IdentityVerificationSection({
   onVerify: () => void;
 }) {
   // State C — 인증 + 정산정보 모두 완료
+  // UIC hotfix — 밝은 배경(라이트 테마)에서 흰색 text 가 안 보이는 문제 fix.
+  // bg 는 light-native (bg-emerald-50 border-emerald-200) + dark 는 기존 alpha overlay 유지.
+  // text 는 slate 계층 (제목 950 · 본문 900 · 설명 700) + dark 는 emerald-50/100 유지.
   if (identityVerified && payoutVerified === true) {
     return (
       <section id="identity-verification" className="space-y-2 scroll-mt-4">
@@ -504,16 +507,16 @@ function IdentityVerificationSection({
           <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
           <p className="text-[11px] text-ink-mute">정산 지급 준비 상태</p>
         </div>
-        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-400/50">
+        <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 dark:bg-emerald-500/20 dark:ring-1 dark:ring-emerald-400/50 dark:border-transparent">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/40 text-emerald-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/40 dark:text-emerald-50"
             aria-hidden
           >
             <ShieldCheck size={20} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-extrabold text-emerald-50">정산 준비 완료</p>
-            <p className="mt-1 text-sm font-medium text-emerald-100">
+            <p className="text-base font-extrabold text-slate-950 dark:text-emerald-50">정산 준비 완료</p>
+            <p className="mt-1 text-sm font-medium text-slate-900 dark:text-emerald-100">
               본인인증과 정산정보 등록이 모두 완료되었습니다.
             </p>
           </div>
@@ -530,29 +533,29 @@ function IdentityVerificationSection({
           <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
           <p className="text-[11px] text-ink-mute">정산 지급을 위한 계좌·정산정보</p>
         </div>
-        <div className="rounded-2xl bg-sky-500/20 p-4 ring-1 ring-sky-400/50">
+        <div className="rounded-2xl bg-sky-50 border border-sky-200 p-4 dark:bg-sky-500/20 dark:ring-1 dark:ring-sky-400/50 dark:border-transparent">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <span
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-500/40 text-sky-50 sm:h-10 sm:w-10"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/40 dark:text-sky-50 sm:h-10 sm:w-10"
               aria-hidden
             >
               <ShieldCheck size={22} />
             </span>
             <div className="min-w-0 flex-1 space-y-2">
-              <h3 className="text-lg font-extrabold leading-tight tracking-tight text-sky-50 sm:text-xl">
+              <h3 className="text-lg font-extrabold leading-tight tracking-tight text-slate-950 dark:text-sky-50 sm:text-xl">
                 정산정보 등록이 필요합니다
               </h3>
-              <p className="text-sm font-semibold leading-relaxed text-sky-100">
+              <p className="text-sm font-semibold leading-relaxed text-slate-900 dark:text-sky-100">
                 본인인증은 완료되었어요. 정산을 받기 위해 계좌 및 정산정보를 등록해주세요.
               </p>
-              <p className="text-[12px] leading-relaxed text-sky-50/85">
+              <p className="text-[12px] leading-relaxed text-slate-700 dark:text-sky-50/85">
                 등록한 계좌 정보는 정산 지급 외 용도로 사용되지 않으며 관계 법령에 따라 안전하게 보관됩니다.
               </p>
             </div>
             <div className="shrink-0 sm:self-center">
               <Link
                 to="/artist#payout-account"
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-sky-400 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-sky-500 sm:w-auto"
               >
                 정산정보 등록하기
                 <ChevronRight size={14} />
@@ -572,16 +575,16 @@ function IdentityVerificationSection({
           <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
           <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
         </div>
-        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-400/50">
+        <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 dark:bg-emerald-500/20 dark:ring-1 dark:ring-emerald-400/50 dark:border-transparent">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/40 text-emerald-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/40 dark:text-emerald-50"
             aria-hidden
           >
             <ShieldCheck size={20} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-extrabold text-emerald-50">본인인증 완료</p>
-            <p className="mt-1 text-sm font-medium text-emerald-100">
+            <p className="text-base font-extrabold text-slate-950 dark:text-emerald-50">본인인증 완료</p>
+            <p className="mt-1 text-sm font-medium text-slate-900 dark:text-emerald-100">
               정산 지급 요건 중 본인인증 단계가 확인됐어요.
             </p>
           </div>
@@ -597,25 +600,25 @@ function IdentityVerificationSection({
         <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
         <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
       </div>
-      <div className="rounded-2xl bg-amber-500/25 p-4 ring-1 ring-amber-400/60">
+      <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 dark:bg-amber-500/25 dark:ring-1 dark:ring-amber-400/60 dark:border-transparent">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <span
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-500/40 text-amber-50 sm:h-10 sm:w-10"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/40 dark:text-amber-50 sm:h-10 sm:w-10"
             aria-hidden
           >
             <ShieldAlert size={22} />
           </span>
           <div className="min-w-0 flex-1 space-y-2">
-            <h3 className="text-lg font-extrabold leading-tight tracking-tight text-amber-50 sm:text-xl">
+            <h3 className="text-lg font-extrabold leading-tight tracking-tight text-slate-950 dark:text-amber-50 sm:text-xl">
               본인인증이 필요합니다
             </h3>
-            <p className="text-sm font-semibold leading-relaxed text-amber-100">
+            <p className="text-sm font-semibold leading-relaxed text-slate-900 dark:text-amber-100">
               정산을 받기 위해 본인인증을 먼저 완료해주세요.
             </p>
-            <p className="text-[12px] leading-relaxed text-amber-50/85">
+            <p className="text-[12px] leading-relaxed text-slate-700 dark:text-amber-50/85">
               운영팀 검수를 통해 처리되며 평균 1영업일 내 처리됩니다.
             </p>
-            <span className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1 text-[10px] font-medium text-ink-mute ring-1 ring-line/15">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/70 border border-slate-200 px-2.5 py-1 text-[10px] font-medium text-slate-700 dark:bg-bg-soft dark:border-transparent dark:text-ink-mute dark:ring-1 dark:ring-line/15">
               자동 본인인증(NICE/KCB/카카오) 준비 중
             </span>
           </div>
@@ -753,7 +756,7 @@ function ArtistManagementCard({
     // account_type=artist 인데 프로필이 없는 비정상 케이스 → 등록/문의 (버튼 유지)
     state = {
       label: '등록 필요',
-      tone: 'bg-yellow-500/25 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200',
       icon: <AlertTriangle size={11} />,
       cta: '아티스트 등록 신청',
       note: '아티스트 정보가 저장되지 않았어요. 등록을 이어서 진행하거나 고객센터로 문의해주세요.',
@@ -761,7 +764,7 @@ function ArtistManagementCard({
   } else if (artistProfile.approval_status === 'pending') {
     state = {
       label: '검토 중',
-      tone: 'bg-yellow-500/25 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200',
       icon: <Clock size={11} />,
       cta: '진행 상태 보기',
       note: '관리자 승인 검토 중이에요. 평균 1영업일 이내 처리됩니다.',
@@ -817,7 +820,7 @@ function ArtistManagementCard({
           </div>
           <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{state.note}</p>
           {state.syncNote && (
-            <p className="mt-1.5 flex items-start gap-1 text-[11px] leading-relaxed text-yellow-200/90">
+            <p className="mt-1.5 flex items-start gap-1 text-[11px] leading-relaxed text-slate-700 dark:text-yellow-200/90">
               <AlertTriangle size={11} className="mt-0.5 shrink-0" />
               {state.syncNote}
             </p>
