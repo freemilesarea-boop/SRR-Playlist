@@ -454,20 +454,41 @@ function DetailModal({
             )}
 
             {/* approved */}
-            {settlement.status === 'approved' && !paidMode && !cancelMode && (
-              <div className="flex gap-2">
-                <AdminButton tone="success" variant="subtle" size="lg" fullWidth
-                  leftIcon={<BadgeCheck size={12} />}
-                  onClick={() => setPaidMode(true)} disabled={acting}>
-                  지급완료 처리
-                </AdminButton>
-                <AdminButton tone="danger" variant="subtle" size="lg" fullWidth
-                  leftIcon={<Ban size={12} />}
-                  onClick={() => setCancelMode(true)} disabled={acting}>
-                  취소
-                </AdminButton>
-              </div>
-            )}
+            {settlement.status === 'approved' && !paidMode && !cancelMode && (() => {
+              // Phase 3-1B — minimum_payout gate 안내.
+              // 서버 (0399 admin_mark_paid_*) 가 실제 차단하지만 사용자 경험을 위해 UI 에서도 사전 차단.
+              const min = settlement.minimum_payout ?? 0;
+              const total = settlement.total_commission ?? 0;
+              const belowMinimum = min > 0 && total < min;
+              return (
+                <>
+                  {belowMinimum && (
+                    <div className="rounded-md bg-amber-500/25 ring-1 ring-amber-400/50 p-2.5 text-[11px] text-amber-100 flex items-start gap-2">
+                      <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-300" />
+                      <div>
+                        <div className="font-bold">최소정산금 미달</div>
+                        <div className="mt-0.5 opacity-90">
+                          이번 달 정산금이 최소정산금 ({min.toLocaleString('ko-KR')}원) 보다 낮아 지급완료 처리할 수 없습니다.
+                          보류 처리 후 다음 정산으로 이월하거나 별도 정책을 적용하세요.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <AdminButton tone="success" variant="subtle" size="lg" fullWidth
+                      leftIcon={<BadgeCheck size={12} />}
+                      onClick={() => setPaidMode(true)} disabled={acting || belowMinimum}>
+                      지급완료 처리
+                    </AdminButton>
+                    <AdminButton tone="danger" variant="subtle" size="lg" fullWidth
+                      leftIcon={<Ban size={12} />}
+                      onClick={() => setCancelMode(true)} disabled={acting}>
+                      보류
+                    </AdminButton>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* paid */}
             {settlement.status === 'paid' && (
