@@ -220,7 +220,7 @@ export default function PlaylistPage() {
 
       {/* No-audio banner */}
       {totalCount > 0 && !hasAnyPlayable && (
-        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl bg-yellow-500/10 p-3 text-xs ring-1 ring-yellow-500/30 sm:mx-6">
+        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl bg-yellow-500/20 p-3 text-xs ring-1 ring-yellow-500/30 sm:mx-6">
           <AlertCircle size={14} className="mt-0.5 shrink-0 text-yellow-300" />
           <div className="flex-1 leading-relaxed text-ink-mute">
             <p className="text-yellow-200">아직 재생할 수 있는 음원이 없어요</p>

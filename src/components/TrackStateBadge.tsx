@@ -18,8 +18,8 @@ export default function TrackStateBadge({ state, variant = 'pill', className = '
   const Icon = state === 'processing' ? Loader2 : AlertCircle;
   const tone =
     state === 'processing'
-      ? 'bg-blue-500/15 text-blue-200 ring-blue-300/30'
-      : 'bg-yellow-500/15 text-yellow-200 ring-yellow-300/30';
+      ? 'bg-blue-500/25 text-blue-200 ring-blue-300/30'
+      : 'bg-yellow-500/25 text-yellow-200 ring-yellow-300/30';
 
   if (variant === 'icon') {
     return (

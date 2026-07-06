@@ -88,7 +88,7 @@ export default function BusinessReactionTab() {
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, () => restoreBusinessExclusion(r.id), '복구됨')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">복구</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, () => ignoreBusinessExclusion(r.id), '무시 처리')} className="rounded bg-ink/5 px-2 py-1 font-semibold text-ink-mute disabled:opacity-40">무시</button>
                     <button disabled={busyId === r.id} onClick={() => void act(r.id, async () => { await applyAiMetadataAndRecompute(r.track_id, { autoResolve: false }); }, 'AI 메타 재적용 완료')} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 재적용</button>
-                    <button disabled={busyId === r.id} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정</button>
+                    <button disabled={busyId === r.id} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })} className="rounded bg-indigo-500/25 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정</button>
                     {!r.store_group_key && r.playlist_store_key.startsWith('cafe') && (
                       <button disabled={busyId === r.id} onClick={() => void act(r.id, () => excludeTrackGroup(r.track_id, 'cafe'), '카페 그룹 전체 제외')} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">카페그룹 전체 제외</button>
                     )}

@@ -360,8 +360,8 @@ function StatusBadge({ status }: { status: EnterpriseAccountStatus }) {
 
 function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
   const map: Record<EnterpriseAccountRole, { ko: string; cls: string }> = {
-    owner:              { ko: '본사 최고관리자',  cls: 'bg-purple-500/15 text-purple-300' },
-    admin:              { ko: '본사 관리자',      cls: 'bg-indigo-500/15 text-indigo-300' },
+    owner:              { ko: '본사 최고관리자',  cls: 'bg-purple-500/25 text-purple-300' },
+    admin:              { ko: '본사 관리자',      cls: 'bg-indigo-500/25 text-indigo-300' },
     enterprise_manager: { ko: '본사 담당자',      cls: 'bg-sky-500/25 text-sky-300' },
     viewer:             { ko: '조회 전용',        cls: 'bg-ink/15 text-ink-mute' },
   };

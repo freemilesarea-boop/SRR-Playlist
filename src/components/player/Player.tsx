@@ -2788,7 +2788,7 @@ export default function Player() {
                 {/* X6.72 — 매장 모드 1-click 제외 (business 플랜만, 클라이언트 가드는 컴포넌트 내부) */}
                 <BusinessExcludeButton trackId={current.id} variant="expanded" />
                 {!playable && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/25 px-2 py-1 text-[11px] text-yellow-200 ring-1 ring-yellow-300/30">
                     <AlertCircle size={11} /> 음원 준비중
                   </span>
                 )}

@@ -168,7 +168,7 @@ export default function RereviewTab() {
         <span className="mx-1 h-3 w-px bg-line" />
         <button disabled={busy || selected.size === 0} onClick={() => void bulkApplyMeta()} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
         <button disabled={busy || selected.size === 0} onClick={() => void bulkRemoveConflicts()} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">충돌 매장 태그 제거</button>
-        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
+        <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'request_fix')} className="rounded bg-orange-500/25 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
         <button disabled={busy || selected.size === 0} onClick={() => void act(selIds, 'no_problem')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">문제 없음</button>
       </div>
 
@@ -185,7 +185,7 @@ export default function RereviewTab() {
                     <b className="truncate">{r.title ?? '(제목없음)'}</b>
                     <span className="text-ink-dim">{r.artist ?? ''} · {r.release_status}</span>
                     {r.trust_score < 50 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">trust {r.trust_score}</span>}
-                    {r.needs_fix && <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">수정요청</span>}
+                    {r.needs_fix && <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">수정요청</span>}
                     {r.disposition && <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] text-ink-mute">{r.disposition}</span>}
                   </div>
                   <p className="mt-1 text-[11px] font-medium text-amber-300">{r.problem_summary}</p>
@@ -204,14 +204,14 @@ export default function RereviewTab() {
 
               <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
                 <button disabled={busy} onClick={() => void applyMetaOne(r.track_id)} className="rounded bg-accent/15 px-2 py-1 font-semibold text-accent disabled:opacity-40">AI 메타 적용 + 재평가</button>
-                <button disabled={busy} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} className="rounded bg-indigo-500/15 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정/승인</button>
+                <button disabled={busy} onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: canApproveStatus(r.release_status) })} className="rounded bg-indigo-500/25 px-2 py-1 font-semibold text-indigo-600 disabled:opacity-40">메타 수정/승인</button>
                 {(r.blocked_declared_stores ?? []).map((sk) => (
                   <span key={sk} className="inline-flex items-center gap-0.5">
                     <button disabled={busy} onClick={() => void act([r.track_id], 'remove_declared_store', sk)} className="rounded bg-amber-500/25 px-2 py-1 font-semibold text-amber-300 disabled:opacity-40">{storeLabel(sk)} 태그 제거</button>
                     <button disabled={busy} onClick={() => void act([r.track_id], 'exclude_store', sk)} className="rounded bg-rose-500/25 px-2 py-1 font-semibold text-rose-300 disabled:opacity-40">{storeLabel(sk)} 제외</button>
                   </span>
                 ))}
-                <button disabled={busy} onClick={() => void act([r.track_id], 'request_fix')} className="rounded bg-orange-500/15 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
+                <button disabled={busy} onClick={() => void act([r.track_id], 'request_fix')} className="rounded bg-orange-500/25 px-2 py-1 font-semibold text-orange-600 disabled:opacity-40">수정 요청</button>
                 <button disabled={busy} onClick={() => void act([r.track_id], 'no_problem')} className="rounded bg-emerald-500/25 px-2 py-1 font-semibold text-emerald-300 disabled:opacity-40">문제 없음</button>
               </div>
 

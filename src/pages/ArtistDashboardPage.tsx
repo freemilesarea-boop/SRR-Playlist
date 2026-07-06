@@ -59,11 +59,12 @@ import {
 
 import type { LucideIcon } from 'lucide-react';
 
+// 긴급 hotfix — /15 alpha + text-*-200 는 WCAG AA fail. /25 + text-*-100 으로 강화.
 const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIcon }> = {
-  pending_review: { label: '심사 대기', tone: 'bg-yellow-500/15 text-yellow-200', Icon: Clock },
-  approved: { label: '승인됨', tone: 'bg-emerald-500/15 text-emerald-300', Icon: CheckCircle2 },
-  rejected: { label: '거절됨', tone: 'bg-red-500/15 text-red-300', Icon: XCircle },
-  hidden: { label: '숨김', tone: 'bg-ink/10 text-ink-mute', Icon: EyeOff },
+  pending_review: { label: '심사 대기', tone: 'bg-yellow-500/25 text-yellow-100 ring-1 ring-yellow-400/40', Icon: Clock },
+  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40', Icon: CheckCircle2 },
+  rejected: { label: '거절됨', tone: 'bg-red-500/25 text-red-100 ring-1 ring-red-400/40', Icon: XCircle },
+  hidden: { label: '숨김', tone: 'bg-ink/15 text-ink ring-1 ring-line/20', Icon: EyeOff },
 };
 
 export default function ArtistDashboardPage() {
@@ -287,7 +288,7 @@ function ArtistPlanCard({ plan }: { plan: ArtistPlanInfo }) {
 function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   if (!artist) {
     return (
-      <div className="rounded-2xl bg-yellow-500/10 p-4 ring-1 ring-yellow-500/30">
+      <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
         <p className="text-sm font-bold text-yellow-200">아티스트 프로필이 없습니다</p>
         <p className="mt-1 text-xs text-yellow-100/80">
           회원가입 시 아티스트 정보가 저장되지 않았을 수 있어요. 고객센터로 문의해주세요.
@@ -297,7 +298,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
   }
   if (artist.approval_status === 'pending') {
     return (
-      <div className="rounded-2xl bg-yellow-500/10 p-4 ring-1 ring-yellow-500/30">
+      <div className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-500/30">
         <p className="flex items-center gap-2 text-sm font-bold text-yellow-200">
           <Clock size={14} /> 관리자 승인 대기 중입니다
         </p>
@@ -326,7 +327,7 @@ function ApprovalStatusCard({ artist }: { artist: ArtistProfile | null }) {
     );
   }
   return (
-    <div className="rounded-2xl bg-emerald-500/10 p-4 ring-1 ring-emerald-500/30">
+    <div className="rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-500/30">
       <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
         <CheckCircle2 size={14} /> 승인 완료
       </p>
@@ -465,7 +466,7 @@ function VerifiedPayoutSummary({ payout }: { payout: PayoutAccount | null }) {
   if (!payout) return null;
   const masked = maskAccountNumber(payout.account_number);
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/10 p-3 ring-1 ring-emerald-500/30">
+    <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/20 p-3 ring-1 ring-emerald-500/30">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
         <Wallet size={14} />
       </span>
@@ -705,9 +706,9 @@ function PayoutAccountSection({
 
   const statusBadge =
     status === 'rejected'
-      ? { label: '반려됨', tone: 'bg-red-500/15 text-red-300' }
+      ? { label: '반려됨', tone: 'bg-red-500/25 text-red-100 ring-1 ring-red-400/40' }
       : status === 'pending'
-        ? { label: '확인 대기 중', tone: 'bg-yellow-500/15 text-yellow-200' }
+        ? { label: '확인 대기 중', tone: 'bg-yellow-500/25 text-yellow-100 ring-1 ring-yellow-400/40' }
         : null;
 
   return (
@@ -1030,7 +1031,7 @@ function SettlementHoldCard({
   const isDisabled = primary.variant === 'disabled';
 
   return (
-    <div className="space-y-3 rounded-2xl bg-amber-500/10 p-4 ring-1 ring-amber-500/30">
+    <div className="space-y-3 rounded-2xl bg-amber-500/20 p-4 ring-1 ring-amber-500/30">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
           <Wallet size={16} />
@@ -1104,7 +1105,7 @@ function SettlementHoldCard({
         aria-disabled={isDisabled}
         className={
           isDisabled
-            ? 'inline-flex w-full items-center justify-center rounded-full bg-amber-500/15 px-4 py-2.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-500/20 cursor-default'
+            ? 'inline-flex w-full items-center justify-center rounded-full bg-amber-500/25 px-4 py-2.5 text-xs font-semibold text-amber-100 ring-1 ring-amber-400/50 cursor-default'
             : 'btn-primary w-full py-2.5 text-xs'
         }
       >
@@ -1475,7 +1476,7 @@ function ArtistUploadForm({
         const miss = missingList();
         if (miss.length === 0) return null;
         return (
-          <div className="rounded-xl bg-red-100 p-3 text-[12px] text-red-900 ring-1 ring-red-400/30 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20">
+          <div className="rounded-xl bg-red-100 p-3 text-[12px] text-red-900 ring-1 ring-red-400/30 dark:bg-red-500/20 dark:text-red-300 dark:ring-red-400/20">
             <p className="font-bold">아래 필수 항목을 입력해야 음원 유통 신청이 가능합니다.</p>
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {miss.map((m) => (
@@ -1603,7 +1604,7 @@ function MyTrackRow({
         {canDelete && (
           <button
             onClick={onDelete}
-            className="rounded-md p-1.5 text-ink-dim hover:bg-red-500/10 hover:text-red-300"
+            className="rounded-md p-1.5 text-ink-dim hover:bg-red-500/20 hover:text-red-300"
             aria-label="삭제"
             title="삭제 (심사 대기 상태에서만)"
           >
@@ -1821,16 +1822,16 @@ function ArtistAudioHealthBadge({
 }) {
   if (status === 'ok') {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900 ring-1 ring-emerald-500/40 dark:text-emerald-100 dark:ring-emerald-400/40">
         🎵 정상
       </span>
     );
   }
   const map = {
-    unreachable: { label: '음원 접근 불가', tone: 'bg-red-500/15 text-red-700 dark:text-red-300' },
-    wrong_mime:  { label: '음원 형식 확인 필요', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
-    empty:       { label: '파일 크기 오류', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
-    error:       { label: '검사 실패', tone: 'bg-red-500/15 text-red-700 dark:text-red-300' },
+    unreachable: { label: '음원 접근 불가', tone: 'bg-red-500/25 text-red-900 ring-1 ring-red-500/40 dark:text-red-100 dark:ring-red-400/40' },
+    wrong_mime:  { label: '음원 형식 확인 필요', tone: 'bg-amber-500/25 text-amber-900 ring-1 ring-amber-500/40 dark:text-amber-100 dark:ring-amber-400/40' },
+    empty:       { label: '파일 크기 오류', tone: 'bg-amber-500/25 text-amber-900 ring-1 ring-amber-500/40 dark:text-amber-100 dark:ring-amber-400/40' },
+    error:       { label: '검사 실패', tone: 'bg-red-500/25 text-red-900 ring-1 ring-red-500/40 dark:text-red-100 dark:ring-red-400/40' },
   } as const;
   const m = (map as Record<string, { label: string; tone: string }>)[status];
   if (!m) return null;

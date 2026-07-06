@@ -71,8 +71,8 @@ export default function FlowTab() {
                   <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                     {p.rough_transitions > 0 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">거친 전환 {p.rough_transitions}</span>}
                     {p.repetitive_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">단조 {p.repetitive_count}</span>}
-                    {p.drop_shock_count > 0 && <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-orange-600">급락 {p.drop_shock_count}</span>}
-                    {p.mood_collision_count > 0 && <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-600">무드충돌 {p.mood_collision_count}</span>}
+                    {p.drop_shock_count > 0 && <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-orange-600">급락 {p.drop_shock_count}</span>}
+                    {p.mood_collision_count > 0 && <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-purple-600">무드충돌 {p.mood_collision_count}</span>}
                     {p.fatigue_index > 0 && <span className="rounded bg-rose-500/25 px-1.5 py-0.5 text-rose-300">피로 -{p.fatigue_index}</span>}
                     {p.monotony_index > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-amber-300">단조 -{p.monotony_index}</span>}
                   </div>

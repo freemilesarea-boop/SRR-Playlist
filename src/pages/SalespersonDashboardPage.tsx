@@ -110,7 +110,7 @@ export default function SalespersonDashboardPage() {
             <p className="text-2xl font-extrabold text-accent">{won(summary.month_commission)}</p>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setRiskOnly((v) => !v)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition ${riskOnly ? 'bg-rose-500/15 text-rose-500' : 'bg-bg-soft text-ink-mute hover:bg-bg-hover'}`}>⚠ 위험만</button>
+            <button onClick={() => setRiskOnly((v) => !v)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition ${riskOnly ? 'bg-rose-500/25 text-rose-500' : 'bg-bg-soft text-ink-mute hover:bg-bg-hover'}`}>⚠ 위험만</button>
             <button onClick={() => void downloadExcel()} className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover"><Download size={12} /> Excel</button>
             <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover"><RefreshCw size={12} /> 새로고침</button>
           </div>
@@ -119,7 +119,7 @@ export default function SalespersonDashboardPage() {
 
       {/* 위험 경고 배너 */}
       {riskStores.length > 0 && (
-        <button onClick={() => setRiskOnly(true)} className="flex w-full items-center gap-3 rounded-2xl bg-rose-500/10 px-4 py-3 text-left ring-1 ring-rose-500/20 transition hover:bg-rose-500/15">
+        <button onClick={() => setRiskOnly(true)} className="flex w-full items-center gap-3 rounded-2xl bg-rose-500/20 px-4 py-3 text-left ring-1 ring-rose-500/20 transition hover:bg-rose-500/25">
           <AlertTriangle size={18} className="shrink-0 text-rose-500" />
           <span className="flex-1 text-sm font-semibold text-rose-600">관리 필요 매장 {riskStores.length}곳 — 재생 급감·결제 문제 등</span>
           <ChevronRight size={16} className="text-rose-400" />
@@ -289,11 +289,11 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 function StatusBadge({ sub, risk }: { sub: string | null; risk: { level: 'risk' | 'warn' | 'ok'; reason: string | null } }) {
-  if (risk.level === 'risk') return <Badge cls="bg-rose-500/15 text-rose-500" title={risk.reason ?? undefined}>⚠ {risk.reason}</Badge>;
-  if (risk.level === 'warn') return <Badge cls="bg-amber-500/15 text-amber-500" title={risk.reason ?? undefined}>{risk.reason}</Badge>;
-  if (sub === 'active') return <Badge cls="bg-emerald-500/15 text-emerald-500">정상 이용중</Badge>;
-  if (sub === 'pending') return <Badge cls="bg-amber-500/15 text-amber-500">결제 대기</Badge>;
-  return <Badge cls="bg-ink/10 text-ink-mute">{sub ?? '비활성'}</Badge>;
+  if (risk.level === 'risk') return <Badge cls="bg-rose-500/25 text-rose-100 ring-1 ring-rose-400/40" title={risk.reason ?? undefined}>⚠ {risk.reason}</Badge>;
+  if (risk.level === 'warn') return <Badge cls="bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40" title={risk.reason ?? undefined}>{risk.reason}</Badge>;
+  if (sub === 'active') return <Badge cls="bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40">정상 이용중</Badge>;
+  if (sub === 'pending') return <Badge cls="bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40">결제 대기</Badge>;
+  return <Badge cls="bg-ink/15 text-ink ring-1 ring-line/20">{sub ?? '비활성'}</Badge>;
 }
 function Badge({ cls, title, children }: { cls: string; title?: string; children: React.ReactNode }) {
   return <span title={title} className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{children}</span>;

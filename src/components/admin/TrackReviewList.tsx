@@ -34,10 +34,10 @@ type ActionKind = 'approve' | 'reject' | 'changes';
 
 const PAYOUT_TONE: Record<string, string> = {
   verified:
-    'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300',
+    'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300',
   pending:
-    'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
-  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/15 dark:text-red-300',
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200',
+  rejected: 'bg-red-100 text-red-900 dark:bg-red-500/25 dark:text-red-300',
 };
 
 const PAYOUT_LABEL: Record<string, string> = {
@@ -373,14 +373,14 @@ export default function TrackReviewList() {
           <button
             onClick={() => setBulk('approve')}
             disabled={selected.size === 0 || bulkBusy}
-            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-40 dark:bg-emerald-500/15 dark:text-emerald-300"
+            className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-40 dark:bg-emerald-500/25 dark:text-emerald-300"
           >
             <Check size={11} /> 선택 승인
           </button>
           <button
             onClick={() => setBulk('reject')}
             disabled={selected.size === 0 || bulkBusy}
-            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/15 dark:text-red-300"
+            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1.5 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-40 dark:bg-red-500/25 dark:text-red-300"
           >
             <X size={11} /> 선택 거절
           </button>
@@ -474,7 +474,7 @@ export default function TrackReviewList() {
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/25 dark:text-amber-200">
                         심사 대기
                       </span>
                       <span
@@ -493,10 +493,10 @@ export default function TrackReviewList() {
                               : 'AI 메타 일치 시 빠른 승인 가능'}
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                             r.owner_trust_tier === 'low'
-                              ? 'bg-rose-100 text-rose-900 dark:bg-rose-500/15 dark:text-rose-300'
+                              ? 'bg-rose-100 text-rose-900 dark:bg-rose-500/25 dark:text-rose-300'
                               : r.owner_trust_tier === 'medium'
-                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
-                                : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-300'
                           }`}
                         >
                           신뢰도 {r.owner_trust_score ?? 100}
@@ -519,7 +519,7 @@ export default function TrackReviewList() {
                       <Tag
                         label="매장"
                         value={r.suitable_store}
-                        tone="bg-sky-100 text-sky-900 dark:bg-blue-500/15 dark:text-blue-200"
+                        tone="bg-sky-100 text-sky-900 dark:bg-blue-500/25 dark:text-blue-200"
                       />
                     )}
                   </div>
@@ -625,7 +625,7 @@ export default function TrackReviewList() {
                   )}
 
                   {!canApprove && (
-                    <p className="rounded bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-900 dark:bg-red-500/15 dark:text-red-300">
+                    <p className="rounded bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-900 dark:bg-red-500/25 dark:text-red-300">
                       ⚠ 필수값 누락: {missingMeta.join(', ')} — 보완 전까지 승인 불가
                     </p>
                   )}
@@ -634,7 +634,7 @@ export default function TrackReviewList() {
                     <button
                       onClick={() => setMetaModal({ track_id: r.track_id, title: r.title })}
                       disabled={busyId === r.track_id}
-                      className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25"
+                      className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-500/25 dark:text-indigo-300 dark:hover:bg-indigo-500/25"
                     >
                       <Pencil size={11} /> 메타 수정/승인
                     </button>
@@ -642,21 +642,21 @@ export default function TrackReviewList() {
                       onClick={() => setModal({ kind: 'approve', track: r })}
                       disabled={busyId === r.track_id || !canApprove}
                       title={canApprove ? undefined : `필수값 누락: ${missingMeta.join(', ')}`}
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/25 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
                     >
                       <Check size={11} /> 승인
                     </button>
                     <button
                       onClick={() => setModal({ kind: 'reject', track: r })}
                       disabled={busyId === r.track_id}
-                      className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
+                      className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-900 hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/25 dark:text-red-300 dark:hover:bg-red-500/25"
                     >
                       <X size={11} /> 거절·삭제
                     </button>
                     <button
                       onClick={() => setModal({ kind: 'changes', track: r })}
                       disabled={busyId === r.track_id}
-                      className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-50 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
+                      className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-50 dark:bg-amber-500/25 dark:text-amber-200 dark:hover:bg-amber-500/25"
                     >
                       <MessageSquareWarning size={11} /> 수정 요청
                     </button>
@@ -999,10 +999,10 @@ function computeQualityGrade(lufs: number | null, tp: number | null, clipping: b
 
 function GradeChip({ grade }: { grade: 'pass' | 'warning' | 'reject' }) {
   const cfg = grade === 'pass'
-    ? { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300', icon: '✓', label: 'Pass' }
+    ? { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/25 dark:text-emerald-300', icon: '✓', label: 'Pass' }
     : grade === 'warning'
       ? { cls: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200', icon: '!', label: 'Warning' }
-      : { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300', icon: '✕', label: 'Reject' };
+      : { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-500/25 dark:text-rose-300', icon: '✕', label: 'Reject' };
   return (
     <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${cfg.cls}`}>
       {cfg.icon} 품질 {cfg.label}
@@ -1016,8 +1016,8 @@ function DiagChip({ ok, label }: { ok: boolean; label: string }) {
     <span
       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${
         ok
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
-          : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/25 dark:text-emerald-300'
+          : 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200'
       }`}
     >
       {ok ? '✓' : '⏳'} {label}
@@ -1066,8 +1066,8 @@ function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }
             remove.similarity_pct >= 75
               ? 'bg-rose-100 text-rose-900 ring-rose-300/40 dark:bg-rose-500/20 dark:text-rose-200 dark:ring-rose-400/30'
               : remove.similarity_pct >= 65
-                ? 'bg-amber-100 text-amber-900 ring-amber-300/40 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-400/30'
-                : 'bg-orange-100 text-orange-900 ring-orange-300/40 dark:bg-orange-500/15 dark:text-orange-200'
+                ? 'bg-amber-100 text-amber-900 ring-amber-300/40 dark:bg-amber-500/25 dark:text-amber-200 dark:ring-amber-400/30'
+                : 'bg-orange-100 text-orange-900 ring-orange-300/40 dark:bg-orange-500/25 dark:text-orange-200'
           }`}
           title={`AI 예측: ${remove.predicted_reason_display ?? remove.predicted_reason_key} 와 ${remove.similarity_pct.toFixed(0)}% 유사 (학습 샘플 ${remove.cluster_sample_count ?? '?'}곡)`}
         >
@@ -1079,7 +1079,7 @@ function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }
         return (
           <span
             key={`${p.predicted_decision}-${p.store_type}`}
-            className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900 ring-1 ring-violet-300/40 dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-400/30"
+            className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900 ring-1 ring-violet-300/40 dark:bg-violet-500/25 dark:text-violet-200 dark:ring-violet-400/30"
             title={`AI 예측: ${storeName} 매장 부적합 cluster (${p.predicted_reason_display ?? p.predicted_reason_key}) 와 ${p.similarity_pct.toFixed(0)}% 유사 (학습 샘플 ${p.cluster_sample_count ?? '?'}곡)`}
           >
             <Store size={9} /> {storeName} 부적합 {p.similarity_pct.toFixed(0)}%
@@ -1088,7 +1088,7 @@ function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }
       })}
       {approve && approve.similarity_pct >= 60 && (
         <span
-          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-300/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-400/30"
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-300/40 dark:bg-emerald-500/25 dark:text-emerald-200 dark:ring-emerald-400/30"
           title={`AI 예측: 통과 cluster 와 ${approve.similarity_pct.toFixed(0)}% 유사`}
         >
           <Brain size={9} /> 통과 가능 {approve.similarity_pct.toFixed(0)}%

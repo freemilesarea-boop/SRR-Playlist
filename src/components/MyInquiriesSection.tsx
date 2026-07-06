@@ -24,9 +24,9 @@ const STATUS_ICON: Record<InquiryStatus, typeof MessageSquare> = {
 };
 
 const STATUS_TONE: Record<InquiryStatus, string> = {
-  open: 'bg-amber-500/15 text-amber-500',
-  in_progress: 'bg-sky-500/15 text-sky-500',
-  resolved: 'bg-emerald-500/15 text-emerald-500',
+  open: 'bg-amber-500/25 text-amber-500',
+  in_progress: 'bg-sky-500/25 text-sky-500',
+  resolved: 'bg-emerald-500/25 text-emerald-500',
   closed: 'bg-ink/15 text-ink-mute',
 };
 

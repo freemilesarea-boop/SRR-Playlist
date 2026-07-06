@@ -923,7 +923,7 @@ function AdminTrackRow({
           </p>
         </div>
 
-        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${playable ? 'bg-emerald-500/25 text-emerald-200' : 'bg-yellow-500/15 text-yellow-200'}`}>
+        <span className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${playable ? 'bg-emerald-500/25 text-emerald-200' : 'bg-yellow-500/25 text-yellow-200'}`}>
           {playable ? '재생가능' : '음원 없음'}
         </span>
 

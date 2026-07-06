@@ -21,22 +21,22 @@ export type AlertTone = 'warning' | 'error' | 'success' | 'info';
 
 const tones: Record<AlertTone, { box: string; icon: LucideIcon; iconColor: string }> = {
   warning: {
-    box: 'bg-amber-100 text-amber-900 ring-amber-400/40 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30',
+    box: 'bg-amber-100 text-amber-900 ring-amber-400/40 dark:bg-amber-500/25 dark:text-amber-100 dark:ring-amber-400/30',
     icon: AlertTriangle,
     iconColor: 'text-amber-700 dark:text-amber-300',
   },
   error: {
-    box: 'bg-red-100 text-red-900 ring-red-400/40 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-400/30',
+    box: 'bg-red-100 text-red-900 ring-red-400/40 dark:bg-red-500/25 dark:text-red-100 dark:ring-red-400/30',
     icon: AlertCircle,
     iconColor: 'text-red-700 dark:text-red-300',
   },
   success: {
-    box: 'bg-emerald-100 text-emerald-900 ring-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-400/30',
+    box: 'bg-emerald-100 text-emerald-900 ring-emerald-400/40 dark:bg-emerald-500/25 dark:text-emerald-100 dark:ring-emerald-400/30',
     icon: CheckCircle2,
     iconColor: 'text-emerald-700 dark:text-emerald-300',
   },
   info: {
-    box: 'bg-sky-100 text-sky-900 ring-sky-400/40 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-400/30',
+    box: 'bg-sky-100 text-sky-900 ring-sky-400/40 dark:bg-sky-500/25 dark:text-sky-100 dark:ring-sky-400/30',
     icon: Info,
     iconColor: 'text-sky-700 dark:text-sky-300',
   },

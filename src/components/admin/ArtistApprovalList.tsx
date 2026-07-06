@@ -18,7 +18,7 @@ interface ArtistRow {
 }
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
-  pending: { label: '심사 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
+  pending: { label: '심사 대기', tone: 'bg-yellow-500/25 text-yellow-200' },
   approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
   rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
 };

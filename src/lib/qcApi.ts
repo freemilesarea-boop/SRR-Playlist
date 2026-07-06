@@ -97,16 +97,16 @@ export async function adminRetryPendingQc(limit = 50): Promise<number> {
 const UNKNOWN_TONE = 'text-ink-mute bg-bg-soft ring-line/10';
 
 export const GRADE_TONE: Record<QcGrade, string> = {
-  A: 'text-emerald-400 bg-emerald-500/15 ring-emerald-500/30',
-  B: 'text-sky-400 bg-sky-500/15 ring-sky-500/30',
-  C: 'text-amber-400 bg-amber-500/15 ring-amber-500/30',
-  D: 'text-rose-400 bg-rose-500/15 ring-rose-500/30',
+  A: 'text-emerald-400 bg-emerald-500/25 ring-emerald-500/30',
+  B: 'text-sky-400 bg-sky-500/25 ring-sky-500/30',
+  C: 'text-amber-400 bg-amber-500/25 ring-amber-500/30',
+  D: 'text-rose-400 bg-rose-500/25 ring-rose-500/30',
 };
 
 export const RISK_TONE: Record<QcRiskLevel, string> = {
-  LOW: 'text-emerald-400 bg-emerald-500/10 ring-emerald-500/20',
-  MEDIUM: 'text-sky-400 bg-sky-500/10 ring-sky-500/20',
-  HIGH: 'text-amber-400 bg-amber-500/15 ring-amber-500/30',
+  LOW: 'text-emerald-400 bg-emerald-500/20 ring-emerald-500/20',
+  MEDIUM: 'text-sky-400 bg-sky-500/20 ring-sky-500/20',
+  HIGH: 'text-amber-400 bg-amber-500/25 ring-amber-500/30',
   CRITICAL: 'text-rose-400 bg-rose-500/20 ring-rose-500/40',
 };
 

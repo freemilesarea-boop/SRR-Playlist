@@ -37,7 +37,7 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 ];
 
 const STATUS_TONE: Record<IntakeStatus, { label: string; tone: string }> = {
-  pending: { label: '확인 대기', tone: 'bg-yellow-500/15 text-yellow-200' },
+  pending: { label: '확인 대기', tone: 'bg-yellow-500/25 text-yellow-200' },
   approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
   rejected: { label: '반려됨', tone: 'bg-rose-500/25 text-red-300' },
   needs_revision: { label: '보완 요청', tone: 'bg-amber-500/25 text-amber-300' },

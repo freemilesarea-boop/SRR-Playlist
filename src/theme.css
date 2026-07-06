@@ -25,8 +25,8 @@
   --color-accent:       123 63 242;
   --color-accent-soft:  142 88 255;
   --color-ink:          245 245 245;
-  --color-ink-mute:     160 160 160;
-  --color-ink-dim:      92 92 92;
+  --color-ink-mute:     176 176 176;
+  --color-ink-dim:      150 150 150;
   --color-border:       255 255 255;
 }
 
@@ -39,7 +39,7 @@
   --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
   --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
   --color-accent: 142 88 255; --color-accent-soft: 123 63 242;
-  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-ink: 245 245 245; --color-ink-mute: 176 176 176; --color-ink-dim: 150 150 150;
   --color-border: 255 255 255;
 }
 
@@ -47,7 +47,7 @@
   --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
   --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
   --color-accent: 135 78 250; --color-accent-soft: 123 63 242;
-  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-ink: 245 245 245; --color-ink-mute: 176 176 176; --color-ink-dim: 150 150 150;
   --color-border: 255 255 255;
 }
 
@@ -55,7 +55,7 @@
   --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
   --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
   --color-accent: 123 63 242; --color-accent-soft: 110 50 232;
-  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-ink: 245 245 245; --color-ink-mute: 176 176 176; --color-ink-dim: 150 150 150;
   --color-border: 255 255 255;
 }
 
@@ -63,7 +63,7 @@
   --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
   --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
   --color-accent: 138 70 250; --color-accent-soft: 123 63 242;
-  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-ink: 245 245 245; --color-ink-mute: 176 176 176; --color-ink-dim: 150 150 150;
   --color-border: 255 255 255;
 }
 
@@ -71,7 +71,7 @@
   --color-bg: 10 10 10; --color-bg-soft: 5 5 5;
   --color-surface: 17 17 17; --color-surface-soft: 22 22 22;
   --color-accent: 123 63 242; --color-accent-soft: 110 50 232;
-  --color-ink: 245 245 245; --color-ink-mute: 160 160 160; --color-ink-dim: 92 92 92;
+  --color-ink: 245 245 245; --color-ink-mute: 176 176 176; --color-ink-dim: 150 150 150;
   --color-border: 255 255 255;
 }
 

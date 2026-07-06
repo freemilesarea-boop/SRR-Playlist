@@ -638,7 +638,7 @@ function PayoutStatusBadge({
       label: 'PII 미완료',
     },
     pending: {
-      tone: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/15 dark:text-yellow-200',
+      tone: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-500/25 dark:text-yellow-200',
       label: '심사 대기',
     },
   };

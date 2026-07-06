@@ -33,8 +33,10 @@ import { useThemeStore } from '@/store/themeStore';
 import {
   fetchMyArtistProfile,
   fetchArtistUploadEligibility,
+  fetchMyPayoutAccountMasked,
   type ArtistProfile,
   type UploadEligibility,
+  type PayoutAccountMasked,
 } from '@/lib/artistApi';
 import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
 import PushNotificationToggle from '@/components/PushNotificationToggle';
@@ -50,10 +52,11 @@ import {
 import { getTimeSlotLabel, type ThemeMode } from '@/lib/timeTheme';
 
 export default function ProfilePage() {
-  const { profile, user, signOut } = useAuthStore();
+  const { profile, user, signOut, refreshProfile } = useAuthStore();
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
+  const [payoutVerified, setPayoutVerified] = useState<boolean | null>(null);
   const location = useLocation();
 
   // Phase 1-7 — enterprise HQ / 매장 역할 판별 (RPC 1회 호출).
@@ -86,6 +89,36 @@ export default function ProfilePage() {
       .catch(() => { /* 비영업인 — 무시 */ });
     return () => { alive = false; };
   }, []);
+
+  // 긴급 hotfix — profile 캐시 stale 로 인해 identity_verified=true 로 이미 갱신된 사용자에게도
+  // "본인인증 요청" 카드가 계속 노출되는 문제 (사용자 로그아웃-재로그인 없이는 반영 안 됨).
+  // ProfilePage mount + 창 포커스 복귀 시 users row 를 다시 읽어 캐시를 최신화한다.
+  // refreshProfile 은 사일런트 (실패해도 기존 profile 유지) 라 UX 회귀 없음.
+  useEffect(() => {
+    void refreshProfile();
+    const onFocus = () => { void refreshProfile(); };
+    const onVis = () => { if (document.visibilityState === 'visible') void refreshProfile(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [refreshProfile]);
+
+  // 아티스트가 아닌 사용자는 payout API 가 데이터 없이 정상 응답 → payoutVerified=false 로 안전 fallback.
+  // 이 값은 IdentityVerificationSection 의 3-state 분기 (미완료 / 정산정보만 남음 / 준비 완료) 에 쓰인다.
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    fetchMyPayoutAccountMasked()
+      .then((masked: PayoutAccountMasked | null) => {
+        if (!alive) return;
+        setPayoutVerified(masked?.verification_status === 'verified');
+      })
+      .catch(() => { if (alive) setPayoutVerified(null); });
+    return () => { alive = false; };
+  }, [user?.id]);
 
   async function handleConfirmWithdraw() {
     setWithdrawing(true);
@@ -161,7 +194,10 @@ export default function ProfilePage() {
           enterpriseRole.loading 동안에도 깜빡임 방지 위해 false fallback (기존 동작 유지). */}
       {(enterpriseRole.loading
         || (!enterpriseRole.role.is_hq && !enterpriseRole.storeInfo.is_store)) && (
-        <IdentityVerificationSection identityVerified={profile?.identity_verified === true} />
+        <IdentityVerificationSection
+          identityVerified={profile?.identity_verified === true}
+          payoutVerified={payoutVerified}
+        />
       )}
 
       {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
@@ -354,7 +390,7 @@ function WithdrawConfirmModal({
         className="w-full max-w-md space-y-4 rounded-t-3xl bg-bg-soft p-5 ring-1 ring-line/15 sm:rounded-3xl"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-300">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-red-300">
             <AlertTriangle size={18} />
           </span>
           <div>
@@ -387,12 +423,93 @@ function WithdrawConfirmModal({
 }
 
 /**
- * X6.18 — 본인인증 섹션.
- * 정산 보류 카드의 "본인인증 하러가기" CTA 의 scroll target.
- * MVP: 운영팀 문의 안내 (NICE/KCB/토스 정식 연동은 별도 작업).
+ * 긴급 hotfix — 본인인증 섹션 3-state 분기.
+ *
+ *   State A. identityVerified=false                  → 본인인증 진행 CTA (amber)
+ *   State B. identityVerified=true & payoutVerified=false → 정산정보 등록 CTA (sky)
+ *   State C. identityVerified=true & payoutVerified=true  → 준비 완료 (emerald, CTA 없음)
+ *
+ * payoutVerified 는 null 인 경우(로딩/조회 실패) 안전 fallback 으로 State B/C 를 State C 로 병합
+ * (정산정보 등록 CTA 를 잘못 노출하지 않기 위함). 아티스트가 아닌 사용자는 payout 이 없으므로
+ * payoutVerified=false 가 되는데, 이 화면은 identity/settlement 준비도만 안내하므로 문제 없음.
+ *
+ * 색상 대비 WCAG AA:
+ *   · amber CTA:  bg-amber-400/90 text-amber-950 hover:bg-amber-300 → text ≥ 6:1
+ *   · emerald bg: bg-emerald-500/20 text-emerald-100 → 4.6:1 이상
+ *   · sky CTA:    bg-sky-500 text-white → 4.7:1
  */
-function IdentityVerificationSection({ identityVerified }: { identityVerified: boolean }) {
-  // X6.19: 가독성 개선 — 제목 강조, 색상 대비 WCAG AA, 모바일 줄바꿈, 문의 CTA.
+function IdentityVerificationSection({
+  identityVerified, payoutVerified,
+}: { identityVerified: boolean; payoutVerified: boolean | null }) {
+  // State C — 인증 + 정산정보 모두 완료
+  if (identityVerified && payoutVerified === true) {
+    return (
+      <section id="identity-verification" className="space-y-2 scroll-mt-4">
+        <div className="px-1">
+          <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
+          <p className="text-[11px] text-ink-mute">정산 지급 준비 상태</p>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-400/50">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/40 text-emerald-50"
+            aria-hidden
+          >
+            <ShieldCheck size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-extrabold text-emerald-50">정산 준비 완료</p>
+            <p className="mt-1 text-sm font-medium text-emerald-100">
+              본인인증과 정산정보 등록이 모두 완료되었습니다.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // State B — 인증 완료 · 정산정보 미완료 (payoutVerified === false 로 확정된 경우에만)
+  if (identityVerified && payoutVerified === false) {
+    return (
+      <section id="identity-verification" className="space-y-2 scroll-mt-4">
+        <div className="px-1">
+          <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
+          <p className="text-[11px] text-ink-mute">정산 지급을 위한 계좌·정산정보</p>
+        </div>
+        <div className="rounded-2xl bg-sky-500/20 p-4 ring-1 ring-sky-400/50">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <span
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-500/40 text-sky-50 sm:h-10 sm:w-10"
+              aria-hidden
+            >
+              <ShieldCheck size={22} />
+            </span>
+            <div className="min-w-0 flex-1 space-y-2">
+              <h3 className="text-lg font-extrabold leading-tight tracking-tight text-sky-50 sm:text-xl">
+                정산정보 등록이 필요합니다
+              </h3>
+              <p className="text-sm font-semibold leading-relaxed text-sky-100">
+                본인인증은 완료되었어요. 정산을 받기 위해 계좌 및 정산정보를 등록해주세요.
+              </p>
+              <p className="text-[12px] leading-relaxed text-sky-50/85">
+                등록한 계좌 정보는 정산 지급 외 용도로 사용되지 않으며 관계 법령에 따라 안전하게 보관됩니다.
+              </p>
+            </div>
+            <div className="shrink-0 sm:self-center">
+              <Link
+                to="/artist#payout-account"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-sky-400 sm:w-auto"
+              >
+                정산정보 등록하기
+                <ChevronRight size={14} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // 하이브리드 안전판: payoutVerified 로딩 중(null) 이면서 identity 만 완료면 완료 배너만 노출 (CTA 없음)
   if (identityVerified) {
     return (
       <section id="identity-verification" className="space-y-2 scroll-mt-4">
@@ -400,16 +517,16 @@ function IdentityVerificationSection({ identityVerified }: { identityVerified: b
           <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
           <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
         </div>
-        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/10 p-4 ring-1 ring-emerald-500/30">
+        <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/20 p-4 ring-1 ring-emerald-400/50">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/25 text-emerald-200"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/40 text-emerald-50"
             aria-hidden
           >
             <ShieldCheck size={20} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-extrabold text-emerald-100">본인인증 완료</p>
-            <p className="mt-1 text-sm text-emerald-50/90">
+            <p className="text-base font-extrabold text-emerald-50">본인인증 완료</p>
+            <p className="mt-1 text-sm font-medium text-emerald-100">
               정산 지급 요건 중 본인인증 단계가 확인됐어요.
             </p>
           </div>
@@ -418,53 +535,42 @@ function IdentityVerificationSection({ identityVerified }: { identityVerified: b
     );
   }
 
+  // State A — 인증 미완료
   return (
     <section id="identity-verification" className="space-y-2 scroll-mt-4">
       <div className="px-1">
         <h2 className="text-sm font-bold tracking-tight">본인인증</h2>
         <p className="text-[11px] text-ink-mute">정산 지급을 위한 본인 명의 확인</p>
       </div>
-      <div className="rounded-2xl bg-amber-500/15 p-4 ring-1 ring-amber-500/40">
+      <div className="rounded-2xl bg-amber-500/25 p-4 ring-1 ring-amber-400/60">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          {/* 좌측 아이콘 */}
           <span
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-amber-100 sm:h-10 sm:w-10"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-500/40 text-amber-50 sm:h-10 sm:w-10"
             aria-hidden
           >
             <ShieldAlert size={22} />
           </span>
-
-          {/* 본문 */}
           <div className="min-w-0 flex-1 space-y-2">
-            {/* 1. 제목 — 크고 진하게 */}
             <h3 className="text-lg font-extrabold leading-tight tracking-tight text-amber-50 sm:text-xl">
-              본인인증이 필요해요
+              본인인증이 필요합니다
             </h3>
-
-            {/* 2. 핵심 문구 — accent 톤 강조 */}
             <p className="text-sm font-semibold leading-relaxed text-amber-100">
-              정산금을 지급받기 위해 본인인증이 필요합니다.
+              정산을 받기 위해 본인인증을 먼저 완료해주세요.
             </p>
-
-            {/* 3. 부가 설명 — 보조 톤 */}
-            <p className="text-[12px] leading-relaxed text-ink-mute">
+            <p className="text-[12px] leading-relaxed text-amber-50/85">
               운영팀 검수를 통해 처리되며 평균 1영업일 내 처리됩니다.
             </p>
-
-            {/* 4. 준비중 배지 */}
             <span className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-2.5 py-1 text-[10px] font-medium text-ink-mute ring-1 ring-line/15">
               자동 본인인증(NICE/KCB/카카오) 준비 중
             </span>
           </div>
-
-          {/* 5. CTA — 데스크탑 우측, 모바일 하단 full-width */}
           <div className="shrink-0 sm:self-center">
             <SupportInquiryButton
               variant="nav"
-              label="본인인증 요청하기"
+              label="본인인증 진행하기"
               defaultType="계정/로그인 문의"
               context={{ topic: 'identity_verification', source: 'profile_section' }}
-              className="!w-full !bg-amber-500 !text-amber-950 hover:!bg-amber-400 sm:!w-auto"
+              className="!w-full !bg-amber-400 !text-amber-950 hover:!bg-amber-300 sm:!w-auto"
             />
           </div>
         </div>
@@ -588,7 +694,7 @@ function ArtistManagementCard({
     // account_type=artist 인데 프로필이 없는 비정상 케이스 → 등록/문의 (버튼 유지)
     state = {
       label: '등록 필요',
-      tone: 'bg-yellow-500/15 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-yellow-200',
       icon: <AlertTriangle size={11} />,
       cta: '아티스트 등록 신청',
       note: '아티스트 정보가 저장되지 않았어요. 등록을 이어서 진행하거나 고객센터로 문의해주세요.',
@@ -596,7 +702,7 @@ function ArtistManagementCard({
   } else if (artistProfile.approval_status === 'pending') {
     state = {
       label: '검토 중',
-      tone: 'bg-yellow-500/15 text-yellow-200',
+      tone: 'bg-yellow-500/25 text-yellow-200',
       icon: <Clock size={11} />,
       cta: '진행 상태 보기',
       note: '관리자 승인 검토 중이에요. 평균 1영업일 이내 처리됩니다.',
@@ -604,7 +710,7 @@ function ArtistManagementCard({
   } else if (artistProfile.approval_status === 'rejected') {
     state = {
       label: '승인 거절됨',
-      tone: 'bg-red-500/15 text-red-300',
+      tone: 'bg-red-500/25 text-red-300',
       icon: <XCircle size={11} />,
       cta: '거절 사유 확인',
       note: '승인이 거절됐어요. 사유를 확인하고 재신청할 수 있어요.',
@@ -618,14 +724,14 @@ function ArtistManagementCard({
     state = signed
       ? {
           label: '승인 완료',
-          tone: 'bg-emerald-500/15 text-emerald-300',
+          tone: 'bg-emerald-500/25 text-emerald-300',
           icon: <CheckCircle2 size={11} />,
           cta: '아티스트 관리',
           note: '내 음원 업로드, 정산 계좌, 스트리밍 현황을 관리해요.',
         }
       : {
           label: '승인 완료',
-          tone: 'bg-emerald-500/15 text-emerald-300',
+          tone: 'bg-emerald-500/25 text-emerald-300',
           icon: <CheckCircle2 size={11} />,
           cta: '계약서 확인하기',
           note: '승인이 완료됐어요. 음원 유통 계약서를 확인·서명하면 음원 업로드가 시작돼요.',

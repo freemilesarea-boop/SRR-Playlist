@@ -252,7 +252,7 @@ export default function MetadataViolationsList() {
                     <div className="text-ink-dim">
                       평균 청취 {row.avg_played_before_skip ?? '-'}초 · 최근 {fmtTime(row.last_detected_at)}
                     </div>
-                    <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${songWide ? 'bg-rose-500/25 text-rose-300' : 'bg-indigo-500/15 text-indigo-600'}`}>
+                    <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${songWide ? 'bg-rose-500/25 text-rose-300' : 'bg-indigo-500/25 text-indigo-600'}`}>
                       {songWide ? '곡 자체 문제 의심 (전반적 스킵)' : '메타 불일치 의심 (이 플리 한정)'}
                     </div>
                   </div>

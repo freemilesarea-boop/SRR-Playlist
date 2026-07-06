@@ -826,7 +826,7 @@ function DangerButton({
       title={disabled && disabledReason ? disabledReason : undefined}
       className={`group flex flex-col items-start gap-1 rounded-xl bg-bg-card p-3 text-left ring-1 transition disabled:opacity-40 disabled:pointer-events-none ${
         tone === 'ok'
-          ? 'ring-green-500/30 hover:bg-green-500/10 hover:ring-green-500/50'
+          ? 'ring-green-500/30 hover:bg-green-500/20 hover:ring-green-500/50'
           : 'ring-rose-500/50 hover:bg-rose-500/20 hover:ring-red-500/50'
       }`}
     >

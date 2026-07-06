@@ -205,7 +205,7 @@ export default function PlaylistEditor({ playlistId, allTracks, onClose, variant
 
       {/* 협업 lock 배너 — 다른 사용자가 활성 편집 중일 때 경고 */}
       {!lock.loading && lock.otherUser && (
-        <div className="flex items-start gap-2.5 rounded-2xl bg-yellow-500/10 p-3 ring-1 ring-yellow-500/30">
+        <div className="flex items-start gap-2.5 rounded-2xl bg-yellow-500/20 p-3 ring-1 ring-yellow-500/30">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 text-yellow-200">!</span>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-yellow-100">
