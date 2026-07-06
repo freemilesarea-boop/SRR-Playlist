@@ -17,7 +17,7 @@ import {
   Building2, RefreshCw, AlertCircle, ArrowLeft, Store, MapPin, Save,
   Key, CheckCircle2, Sparkles, Banknote, FileText, Upload, AlertTriangle,
   Clock as ClockIcon, XCircle, Wallet, Copy, Link2, BarChart3, TrendingUp,
-  PauseCircle, PowerOff,
+  PauseCircle, PowerOff, Activity,
 } from 'lucide-react';
 import {
   getMyEnterpriseDashboard, upsertMyEnterpriseBusinessProfileV2,
@@ -147,6 +147,23 @@ function DashboardContent({
           )}
         </div>
       </section>
+
+      {/* Phase 3-3 — 운영 관제 진입 CTA */}
+      <Link
+        to="/enterprise/ops"
+        className="group flex items-center gap-3 rounded-2xl bg-sky-50 border border-sky-200 p-4 ring-1 ring-sky-200 transition hover:bg-sky-100 dark:bg-sky-500/20 dark:border-transparent dark:ring-sky-400/40 dark:hover:bg-sky-500/25"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/40 dark:text-sky-50" aria-hidden>
+          <Activity size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-extrabold text-slate-950 dark:text-sky-50">운영 관제</p>
+          <p className="text-[12px] text-slate-700 dark:text-sky-100">
+            소속 매장의 실시간 상태 · 정책 재동기화까지 한 화면에서 관리해요.
+          </p>
+        </div>
+        <ArrowLeft size={16} className="rotate-180 text-slate-700 dark:text-sky-100 transition group-hover:translate-x-0.5" />
+      </Link>
 
       {/* KPI */}
       <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
