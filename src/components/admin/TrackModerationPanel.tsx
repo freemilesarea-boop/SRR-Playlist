@@ -47,14 +47,14 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'bg-ink/10 text-ink-dim',
-  submitted: 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
-  review_pending: 'bg-sky-100 text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
-  changes_requested: 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
-  approved: 'bg-sky-100 text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
-  scheduled: 'bg-sky-100 text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
-  released: 'bg-emerald-100 text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
-  rejected: 'bg-red-100 text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
-  removed: 'bg-red-100 text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
+  submitted: 'bg-amber-100 text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
+  review_pending: 'bg-sky-100 text-slate-900 dark:text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
+  changes_requested: 'bg-amber-100 text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
+  approved: 'bg-sky-100 text-slate-900 dark:text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
+  scheduled: 'bg-sky-100 text-slate-900 dark:text-sky-200 dark:bg-sky-500/25 dark:text-sky-200',
+  released: 'bg-emerald-100 text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
+  rejected: 'bg-red-100 text-slate-900 dark:text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
+  removed: 'bg-red-100 text-slate-900 dark:text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
 };
 
 interface Props {
@@ -428,7 +428,7 @@ export default function TrackModerationPanel({
               type="button"
               onClick={() => void doRequeue(true)}
               disabled={busy || !emailJobs?.some((j) => j.status === 'failed')}
-              className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/25 disabled:opacity-30 dark:text-amber-200"
+              className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/25 disabled:opacity-30 dark:text-amber-200"
             >
               실패만
             </button>
@@ -459,10 +459,10 @@ export default function TrackModerationPanel({
                 <span
                   className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
                     j.status === 'sent'
-                      ? 'bg-emerald-100 text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200'
+                      ? 'bg-emerald-100 text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200'
                       : j.status === 'failed'
-                        ? 'bg-red-100 text-rose-200 dark:bg-rose-500/25 dark:text-red-200'
-                        : 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200'
+                        ? 'bg-red-100 text-slate-900 dark:text-rose-200 dark:bg-rose-500/25 dark:text-red-200'
+                        : 'bg-amber-100 text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200'
                   }`}
                 >
                   {j.status}
@@ -470,7 +470,7 @@ export default function TrackModerationPanel({
                 <span className="text-ink-mute">{j.kind}</span>
                 <span className="truncate text-ink">{j.recipient_email}</span>
                 <span className="text-ink-dim">attempts={j.attempts}</span>
-                {j.last_error && <p className="basis-full text-rose-200 dark:text-red-300">{j.last_error}</p>}
+                {j.last_error && <p className="basis-full text-slate-900 dark:text-rose-200 dark:text-red-300">{j.last_error}</p>}
               </li>
             ))}
           </ul>
@@ -496,9 +496,9 @@ function ActionBtn({
   children: React.ReactNode;
 }) {
   const toneClass = {
-    success: 'bg-emerald-500/25 text-emerald-200 ring-emerald-400/50 hover:bg-emerald-500/25 dark:text-emerald-200',
-    warning: 'bg-amber-500/25 text-amber-200 ring-amber-400/50 hover:bg-amber-500/25 dark:text-amber-200',
-    error: 'bg-rose-500/25 text-rose-200 ring-rose-400/50 hover:bg-red-500/25 dark:text-red-200',
+    success: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200 ring-emerald-400/50 hover:bg-emerald-500/25 dark:text-emerald-200',
+    warning: 'bg-amber-500/25 text-slate-900 dark:text-amber-200 ring-amber-400/50 hover:bg-amber-500/25 dark:text-amber-200',
+    error: 'bg-rose-500/25 text-slate-900 dark:text-rose-200 ring-rose-400/50 hover:bg-red-500/25 dark:text-red-200',
     neutral: 'bg-bg-card text-ink-mute ring-line/10 hover:bg-bg-hover hover:text-ink',
   }[tone];
   return (

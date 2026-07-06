@@ -36,7 +36,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   CRITICAL: 'bg-rose-600 text-white',
   HIGH: 'bg-rose-500/20 text-rose-300',
   MEDIUM: 'bg-amber-500/20 text-amber-300',
-  LOW: 'bg-gray-500/20 text-gray-400',
+  LOW: 'bg-gray-500/20 text-slate-500 dark:text-gray-400',
 };
 
 export default function StoreGenrePolicyTab() {
@@ -260,7 +260,7 @@ function RulesInner() {
                       </div>
                     </div>
                     <button onClick={() => void toggle(rule)} disabled={busy}
-                      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold ${rule.is_allowed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
+                      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold ${rule.is_allowed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-slate-500 dark:text-gray-400'} disabled:opacity-50`}>
                       {rule.is_allowed ? 'ON' : 'OFF'}
                     </button>
                   </div>
@@ -377,7 +377,7 @@ function ViolationsInner() {
                       r.status === 'open' ? 'bg-rose-500/20 text-rose-300' :
                       r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-300' :
                       r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' :
-                      'bg-gray-500/20 text-gray-400'
+                      'bg-gray-500/20 text-slate-500 dark:text-gray-400'
                     }`}>{r.status}</span>
                   </td>
                   <td className="px-2 py-1.5">

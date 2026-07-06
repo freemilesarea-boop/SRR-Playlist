@@ -434,7 +434,7 @@ export default function MemberDetail({
                     <p>접근: 로그인·서비스 이용 차단됨</p>
                     {(!data.user.pii_masked_at ||
                       (data.user.membership_tier && data.user.membership_tier !== 'free')) && (
-                      <p className="font-semibold text-amber-200">
+                      <p className="font-semibold text-slate-900 dark:text-amber-200">
                         일부 상태가 누락됐어요. 아래 Danger Zone 의 “탈퇴 상태 정리 / 마스킹 재실행”으로
                         보정하세요. (정산/계약/결제·음원 이력은 보존됩니다)
                       </p>
@@ -832,7 +832,7 @@ function DangerButton({
     >
       <span
         className={`flex items-center gap-1.5 text-xs font-bold ${
-          tone === 'ok' ? 'text-green-300' : 'text-red-200'
+          tone === 'ok' ? 'text-green-300' : 'text-slate-900 dark:text-red-200'
         }`}
       >
         {icon} {label}

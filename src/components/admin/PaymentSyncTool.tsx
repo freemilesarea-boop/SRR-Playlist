@@ -33,7 +33,7 @@ import { toast } from '@/store/toastStore';
 
 const STATUS_LABEL: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
   matched: { label: '연결 완료', tone: 'bg-emerald-500/25 text-emerald-300', icon: <CheckCircle2 size={11} /> },
-  unmatched: { label: '미매칭', tone: 'bg-yellow-500/25 text-yellow-200', icon: <Clock size={11} /> },
+  unmatched: { label: '미매칭', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200', icon: <Clock size={11} /> },
   failed: { label: '실패', tone: 'bg-rose-500/25 text-red-300', icon: <XCircle size={11} /> },
 };
 
@@ -162,24 +162,24 @@ export default function PaymentSyncTool() {
       {/* RPC 호출 실패 배너 — 정확한 실패 RPC 이름 + postgres 에러 메시지 노출 */}
       {rpcErrors.length > 0 && (
         <div className="rounded-2xl bg-red-100 p-4 ring-2 ring-red-400/60 dark:bg-rose-500/20 dark:ring-red-500/50">
-          <p className="text-sm font-bold text-rose-200 dark:text-red-200">
+          <p className="text-sm font-bold text-slate-900 dark:text-rose-200 dark:text-red-200">
             진단용 RPC 가 실패했어요 ({rpcErrors.length}건)
           </p>
-          <p className="mt-1 text-[11px] text-rose-200/85 dark:text-red-100/85">
+          <p className="mt-1 text-[11px] text-slate-700 dark:text-rose-200/85 dark:text-red-100/85">
             DB 마이그레이션(0026~0039) 이 운영 DB 에 적용되지 않았거나 시그니처가 맞지 않습니다.
             아래 정확한 RPC 이름과 postgres 에러 메시지를 확인 후 누락된 마이그레이션을 적용하세요.
           </p>
           <ul className="mt-2 space-y-2">
             {rpcErrors.map((e, i) => (
               <li key={i} className="rounded-md bg-red-200/70 p-2 ring-1 ring-red-400/50 dark:bg-rose-500/25 dark:ring-rose-500/50">
-                <p className="font-mono text-[11px] font-bold text-rose-200 dark:text-red-200">{e.name}</p>
-                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-[10px] text-rose-200/85 dark:text-red-100/85">
+                <p className="font-mono text-[11px] font-bold text-slate-900 dark:text-rose-200 dark:text-red-200">{e.name}</p>
+                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-[10px] text-slate-700 dark:text-rose-200/85 dark:text-red-100/85">
                   {e.message}
                 </pre>
               </li>
             ))}
           </ul>
-          <details className="mt-2 text-[11px] text-red-100/80">
+          <details className="mt-2 text-[11px] text-slate-700 dark:text-red-100/80">
             <summary className="cursor-pointer">해결 방법</summary>
             <ol className="mt-1 list-decimal space-y-0.5 pl-4">
               <li>GitHub Actions → 'DB · 추천 메타데이터 시드 적용' 워크플로 실행</li>
@@ -269,7 +269,7 @@ export default function PaymentSyncTool() {
                 </div>
                 {/* 정상 보류 (state=4 승인대기) 건은 RPC 호출 생략 — 별도 안내 */}
                 {(autoResult.skipped_pending ?? 0) > 0 && (
-                  <p className="mt-2 rounded bg-sky-100 px-2 py-1.5 text-[11px] text-sky-200 dark:bg-sky-500/20 dark:text-sky-200">
+                  <p className="mt-2 rounded bg-sky-100 px-2 py-1.5 text-[11px] text-slate-900 dark:text-sky-200 dark:bg-sky-500/20 dark:text-sky-200">
                     ℹ️ 정상 보류(승인대기 state=4, approval_no 없음) webhook{' '}
                     <span className="font-semibold">{autoResult.skipped_pending}건</span>은 처리
                     대상에서 제외했어요. PayApp 가 결제완료 webhook 을 보내면 자동 활성화됩니다.
@@ -277,13 +277,13 @@ export default function PaymentSyncTool() {
                 )}
                 {typeof autoResult.pending_total === 'number' &&
                   autoResult.pending_total > (autoResult.scanned ?? 0) + (autoResult.skipped_pending ?? 0) && (
-                    <p className="mt-2 rounded bg-sky-100 px-2 py-1.5 text-[11px] text-sky-200 dark:bg-sky-500/20 dark:text-sky-200">
+                    <p className="mt-2 rounded bg-sky-100 px-2 py-1.5 text-[11px] text-slate-900 dark:text-sky-200 dark:bg-sky-500/20 dark:text-sky-200">
                       ℹ️ 기간 내 미처리 webhook 이 총 {autoResult.pending_total}건이지만 한 번에
                       최대 500건만 처리합니다. 한 번 더 실행하세요.
                     </p>
                   )}
                 {autoResult.hint && (
-                  <p className="mt-2 rounded bg-amber-100 px-2 py-1.5 text-[11px] text-amber-200 dark:bg-amber-500/20 dark:text-amber-200">
+                  <p className="mt-2 rounded bg-amber-100 px-2 py-1.5 text-[11px] text-slate-900 dark:text-amber-200 dark:bg-amber-500/20 dark:text-amber-200">
                     💡 {autoResult.hint}
                   </p>
                 )}
@@ -314,12 +314,12 @@ export default function PaymentSyncTool() {
               </>
             ) : (
               <div className="space-y-2 text-xs">
-                <p className="font-bold text-rose-200 dark:text-red-200">Webhook 재처리 실패</p>
-                <p className="font-mono text-rose-200 dark:text-red-300">{autoResult.error}</p>
+                <p className="font-bold text-slate-900 dark:text-rose-200 dark:text-red-200">Webhook 재처리 실패</p>
+                <p className="font-mono text-slate-900 dark:text-rose-200 dark:text-red-300">{autoResult.error}</p>
                 {autoResult.missing_env && autoResult.missing_env.length > 0 && (
                   <div className="rounded-md bg-bg-deep/60 p-2">
-                    <p className="font-semibold text-rose-200 dark:text-red-200">누락된 환경변수:</p>
-                    <ul className="mt-1 space-y-0.5 font-mono text-rose-200 dark:text-red-300">
+                    <p className="font-semibold text-slate-900 dark:text-rose-200 dark:text-red-200">누락된 환경변수:</p>
+                    <ul className="mt-1 space-y-0.5 font-mono text-slate-900 dark:text-rose-200 dark:text-red-300">
                       {autoResult.missing_env.map((e) => (
                         <li key={e}>· {e}</li>
                       ))}
@@ -331,12 +331,12 @@ export default function PaymentSyncTool() {
                   </div>
                 )}
                 {autoResult.details && (
-                  <p className="rounded bg-bg-deep/60 p-2 font-mono text-rose-200 dark:text-red-300">
+                  <p className="rounded bg-bg-deep/60 p-2 font-mono text-slate-900 dark:text-rose-200 dark:text-red-300">
                     details: {autoResult.details}
                   </p>
                 )}
                 {autoResult.hint && (
-                  <p className="rounded bg-amber-100 p-2 text-amber-200 dark:bg-amber-500/20 dark:text-amber-200">
+                  <p className="rounded bg-amber-100 p-2 text-slate-900 dark:text-amber-200 dark:bg-amber-500/20 dark:text-amber-200">
                     💡 {autoResult.hint}
                   </p>
                 )}
@@ -410,7 +410,7 @@ export default function PaymentSyncTool() {
                   );
                 await load();
               }}
-              className="rounded-md bg-yellow-500/25 px-2 text-[11px] font-semibold text-yellow-200 hover:bg-yellow-500/25"
+              className="rounded-md bg-yellow-500/25 px-2 text-[11px] font-semibold text-slate-900 dark:text-yellow-200 hover:bg-yellow-500/25"
               title="webhook state=64 미도착 케이스 — order_no 로 강제 paid 전환"
             >
               order_no 강제완료
@@ -585,10 +585,10 @@ export default function PaymentSyncTool() {
 //   state=70/71 → 환불
 const STATE_LABEL: Record<number, { label: string; tone: string }> = {
   1: { label: '요청수신', tone: 'bg-ink/10 text-ink-mute' },
-  4: { label: '승인대기', tone: 'bg-yellow-500/25 text-yellow-200' },
+  4: { label: '승인대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200' },
   8: { label: '결제취소', tone: 'bg-rose-500/25 text-red-300' },
   9: { label: '환불', tone: 'bg-rose-500/25 text-red-300' },
-  10: { label: '입금대기', tone: 'bg-blue-500/25 text-blue-200' },
+  10: { label: '입금대기', tone: 'bg-blue-500/25 text-slate-900 dark:text-blue-200' },
   32: { label: '결제취소', tone: 'bg-rose-500/25 text-red-300' },
   64: { label: '결제완료', tone: 'bg-emerald-500/25 text-emerald-300' },
   70: { label: '환불', tone: 'bg-rose-500/25 text-red-300' },
@@ -821,7 +821,7 @@ function WebhookRow({
             <button
               onClick={onForce}
               disabled={busy}
-              className="rounded-md bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
+              className="rounded-md bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-yellow-200 hover:bg-yellow-500/25 disabled:opacity-50"
               title="예외 처리용. 일반 결제는 자동 처리됨 — 자동 처리 실패 시에만 사용."
             >
               강제승인
@@ -929,7 +929,7 @@ function UnmatchedRow({
   return (
     <li className="space-y-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-yellow-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/25 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-yellow-200">
           <Clock size={9} /> 미매칭
         </span>
         <p className="font-mono text-xs">{row.payapp_mul_no}</p>
@@ -1089,7 +1089,7 @@ function ManualSyncForm({ onSynced }: { onSynced: () => void | Promise<void> }) 
         </Field>
       </div>
       {lastError && (
-        <p className="rounded-md bg-red-100 px-2 py-1.5 text-[11px] text-rose-200 dark:bg-rose-500/20 dark:text-red-300">{lastError}</p>
+        <p className="rounded-md bg-red-100 px-2 py-1.5 text-[11px] text-slate-900 dark:text-rose-200 dark:bg-rose-500/20 dark:text-red-300">{lastError}</p>
       )}
       <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
         {busy ? '동기화 중…' : '수동 동기화 실행'}
@@ -1198,7 +1198,7 @@ function SubscriptionCancelBackfill({ onCompleted }: { onCompleted: () => void |
           {busy === 'apply' ? '적용 중…' : '백필 적용'}
         </button>
       </div>
-      {err && <p className="rounded-md bg-red-100 px-2 py-1.5 text-[11px] text-rose-200 dark:bg-rose-500/20 dark:text-red-300">{err}</p>}
+      {err && <p className="rounded-md bg-red-100 px-2 py-1.5 text-[11px] text-slate-900 dark:text-rose-200 dark:bg-rose-500/20 dark:text-red-300">{err}</p>}
       {result && (
         <div className="rounded-md bg-bg-deep/40 p-2 text-[11px]">
           <p className="text-ink-mute">

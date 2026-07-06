@@ -47,7 +47,7 @@ const FOOTER_BG = '#0F0F12';
 export default function Footer() {
   return (
     <footer
-      className="relative text-neutral-300"
+      className="relative text-slate-500 dark:text-neutral-300"
       style={{ backgroundColor: FOOTER_BG }}
     >
       {/* 상단 violet gradient divider */}
@@ -78,7 +78,7 @@ export default function Footer() {
               <BrandLogo size={36} className="transition-transform group-hover:scale-105" fallbackColorClass="text-white" />
               <span className="text-lg font-extrabold tracking-tight text-white">듣다</span>
             </Link>
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-neutral-400">
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-neutral-400">
               상황에 어울리는 음악, 흐르듯 자연스럽게.
               <br />
               매장 BGM과 감성 플레이리스트를 한 곳에서.
@@ -89,7 +89,7 @@ export default function Footer() {
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label="Instagram"
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/5 text-neutral-400 ring-1 ring-white/10 transition hover:bg-accent/15 hover:text-accent hover:ring-accent/30"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/5 text-slate-500 dark:text-neutral-400 ring-1 ring-white/10 transition hover:bg-accent/15 hover:text-accent hover:ring-accent/30"
               >
                 <Instagram size={15} />
               </a>
@@ -114,7 +114,7 @@ export default function Footer() {
               {COMPANY_INFO.map((c) => (
                 <div key={c.label} className="flex flex-wrap gap-x-2">
                   <dt className="shrink-0 text-neutral-500">{c.label}</dt>
-                  <dd className="text-neutral-400">{c.value}</dd>
+                  <dd className="text-slate-500 dark:text-neutral-400">{c.value}</dd>
                 </div>
               ))}
             </dl>
@@ -153,7 +153,7 @@ function FooterSection({
                   href={it.href}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-sm text-neutral-400 transition-colors duration-smooth hover:text-accent"
+                  className="text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
                 >
                   {it.label}
                 </a>
@@ -164,7 +164,7 @@ function FooterSection({
             <li key={it.label}>
               <Link
                 to={it.href}
-                className="text-sm text-neutral-400 transition-colors duration-smooth hover:text-accent"
+                className="text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
               >
                 {it.label}
               </Link>

@@ -42,7 +42,7 @@ const SEVERITY_COLOR: Record<QcSeverity, string> = {
   CRITICAL: 'bg-rose-600 text-white',
   HIGH: 'bg-rose-500/20 text-rose-300',
   MEDIUM: 'bg-amber-500/20 text-amber-300',
-  LOW: 'bg-gray-500/20 text-gray-400',
+  LOW: 'bg-gray-500/20 text-slate-500 dark:text-gray-400',
 };
 const ISSUE_LABEL: Record<string, string> = {
   placement_rock_in_lounge: 'Rock 부적합 배치',
@@ -386,7 +386,7 @@ function QcQueueInner() {
             <Check size={11} /> 해결 ({selected.size})
           </button>
           <button onClick={() => void bulkResolve('dismissed')} disabled={busy}
-            className="inline-flex items-center gap-1 rounded bg-gray-500/15 px-2 py-1 font-bold text-gray-400 disabled:opacity-50">
+            className="inline-flex items-center gap-1 rounded bg-gray-500/15 px-2 py-1 font-bold text-slate-500 dark:text-gray-400 disabled:opacity-50">
             <X size={11} /> 무시 ({selected.size})
           </button>
         </div>
@@ -455,7 +455,7 @@ function QcQueueInner() {
                       r.status === 'open' ? 'bg-rose-500/20 text-rose-300' :
                       r.status === 'reviewing' ? 'bg-amber-500/20 text-amber-300' :
                       r.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' :
-                      'bg-gray-500/20 text-gray-400'
+                      'bg-gray-500/20 text-slate-500 dark:text-gray-400'
                     }`}>{r.status}</span>
                     {r.assigned_to_name && (
                       <div className="text-[10px] text-ink-dim/80">{r.assigned_to_name}</div>
@@ -487,7 +487,7 @@ function QcQueueInner() {
                             <Check size={10} /> 해결
                           </button>
                           <button onClick={() => void dismiss(r.id)} disabled={busy}
-                            className="inline-flex items-center gap-1 rounded bg-gray-500/15 px-2 py-0.5 font-semibold text-gray-400 disabled:opacity-50">
+                            className="inline-flex items-center gap-1 rounded bg-gray-500/15 px-2 py-0.5 font-semibold text-slate-500 dark:text-gray-400 disabled:opacity-50">
                             <X size={10} /> 무시
                           </button>
                         </>
@@ -690,7 +690,7 @@ function QcAuditModal({ row, onClose }: { row: QcQueueRowFull; onClose: () => vo
 function Stat({ label, v, color }: { label: string; v: number; color: string }) {
   const colorMap: Record<string, string> = {
     rose: 'text-rose-300', amber: 'text-amber-300',
-    emerald: 'text-emerald-300', gray: 'text-gray-400',
+    emerald: 'text-emerald-300', gray: 'text-slate-500 dark:text-gray-400',
   };
   return (
     <div className="rounded bg-bg-deep p-2">
@@ -777,7 +777,7 @@ function QcRulesInner() {
           <h3 className="text-sm font-bold">QC 룰 관리 ({rules.length})</h3>
           <div className="flex gap-2 text-xs">
             <span className="rounded bg-emerald-500/20 px-2 py-1 text-emerald-300">활성 {totalActive}</span>
-            <span className="rounded bg-gray-500/10 px-2 py-1 text-gray-400">비활성 {rules.length - totalActive}</span>
+            <span className="rounded bg-gray-500/10 px-2 py-1 text-slate-500 dark:text-gray-400">비활성 {rules.length - totalActive}</span>
             <span className="rounded bg-rose-500/20 px-2 py-1 text-rose-300">현재 open {totalOpenAll}</span>
             <button onClick={() => { setShowAudit((v) => !v); if (!showAudit) void loadAudit(); }}
               className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 hover:bg-bg-hover">
@@ -839,7 +839,7 @@ function QcRulesInner() {
                 <tr key={rule.id} className="border-b border-line/10">
                   <td className="px-2 py-2 w-12">
                     <button onClick={() => void toggleActive(rule)} disabled={busy}
-                      className={`rounded px-2 py-1 text-[10px] font-bold ${rule.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'} disabled:opacity-50`}>
+                      className={`rounded px-2 py-1 text-[10px] font-bold ${rule.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-slate-500 dark:text-gray-400'} disabled:opacity-50`}>
                       {rule.is_active ? 'ON' : 'OFF'}
                     </button>
                   </td>

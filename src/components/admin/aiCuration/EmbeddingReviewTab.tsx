@@ -95,7 +95,7 @@ export default function EmbeddingReviewTab() {
                     ) : (
                       <div className="space-y-3">
                         {cmp.suspected_issues.length > 0 && (
-                          <div className="rounded-lg bg-amber-500/25 p-2 text-[11px] text-amber-200 ring-1 ring-amber-400/50">
+                          <div className="rounded-lg bg-amber-500/25 p-2 text-[11px] text-slate-900 dark:text-amber-200 ring-1 ring-amber-400/50">
                             ⚠ {cmp.suspected_issues.map((i) => ISSUE_LABELS[i] ?? i).join(' · ')}
                             {cmp.suspected_issues.includes('gym_false_positive') && <p className="mt-0.5">휴리스틱은 헬스장으로 보지만, 임베딩은 라운지/카페 계열에 더 가깝습니다.</p>}
                           </div>
@@ -132,7 +132,7 @@ export default function EmbeddingReviewTab() {
                           <button onClick={() => void act(() => markEmbeddingReviewed(r.track_id), '문제 없음 처리', r.track_id)} disabled={busy}
                             className="rounded-lg bg-emerald-500/25 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50">문제 없음</button>
                           <button onClick={() => void act(() => markEmbeddingReanalysisNeeded(r.track_id), '재분석 필요로 표시(다음 export 포함)', r.track_id)} disabled={busy}
-                            className="rounded-lg bg-amber-500/25 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-50">재분석 필요</button>
+                            className="rounded-lg bg-amber-500/25 px-2.5 py-1.5 text-xs font-semibold text-slate-900 dark:text-amber-200 hover:bg-amber-500/20 disabled:opacity-50">재분석 필요</button>
                           {cmp.embedding_top5[0] && (
                             <button onClick={() => void act(() => addStoreSeedCandidate(r.track_id, cmp.embedding_top5[0].store_key), `${cmp.embedding_top5[0].store_key} seed 후보 등록`, r.track_id)} disabled={busy}
                               className="rounded-lg bg-bg-soft/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50">seed 후보({STORE_LABELS[cmp.embedding_top5[0].store_key] ?? cmp.embedding_top5[0].store_key})</button>

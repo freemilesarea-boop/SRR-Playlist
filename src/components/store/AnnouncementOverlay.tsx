@@ -506,7 +506,7 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       )}
 
       {debugEnabled() && error && (
-        <div className="fixed bottom-16 left-1/2 z-[120] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-rose-200">
+        <div className="fixed bottom-16 left-1/2 z-[120] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
           announcement poll error: {error}
         </div>
       )}

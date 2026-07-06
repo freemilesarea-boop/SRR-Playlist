@@ -288,7 +288,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
         <Activity size={16} className={adminTones.info.icon} />
         <h2 className="text-base font-semibold text-neutral-100">오디오 엔진 진단 (Audio Engine Diagnostics)</h2>
       </div>
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-slate-500 dark:text-neutral-400">
         매장 플레이어의 Recovery / Health / Session / Invalid State / Burn-in 상태를 관리자 전용으로 확인.
         DB / API 없이 브라우저 세션 로컬 상태만 사용. Debug OFF 세션에는 무영향.
       </p>
@@ -387,7 +387,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
             <Trash2 size={13} /> 진단 flag 초기화
           </button>
         </div>
-        <div className="rounded-md border border-neutral-800 bg-neutral-900/50 p-2.5 text-xs text-neutral-400 flex items-start gap-2">
+        <div className="rounded-md border border-neutral-800 bg-neutral-900/50 p-2.5 text-xs text-slate-500 dark:text-neutral-400 flex items-start gap-2">
           <Info size={13} className={`${adminTones.info.icon} mt-0.5 shrink-0`} />
           <div>
             <div>1. audioDebug + audioLongRun 을 켠 뒤 새로고침.</div>
@@ -400,8 +400,8 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
       {/* Snapshot */}
       {!snapshot ? (
         <section className={`rounded-lg border p-4 text-sm ${
-          !anyFlagOn ? 'border-neutral-800 bg-neutral-950/60 text-neutral-400'
-          : 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+          !anyFlagOn ? 'border-neutral-800 bg-neutral-950/60 text-slate-500 dark:text-neutral-400'
+          : 'border-amber-500/40 bg-amber-500/20 text-slate-900 dark:text-amber-100'
         }`}>
           {!anyFlagOn ? (
             <>Debug/LongRun 이 꺼져 있어요. 위 <b>Debug QA preset</b> 을 적용하거나 개별 toggle 후 새로고침해 주세요.</>
@@ -411,7 +411,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
           )}
         </section>
       ) : snapshotStale ? (
-        <section className="rounded-lg border border-amber-500/40 bg-amber-500/20 p-4 text-sm text-amber-100 space-y-1">
+        <section className="rounded-lg border border-amber-500/40 bg-amber-500/20 p-4 text-sm text-slate-900 dark:text-amber-100 space-y-1">
           <div>Snapshot 이 <b>stale</b> 상태입니다. (age {fmtMs(snapshotAgeMs)} &gt; {fmtMs(SNAPSHOT_STALE_MS)})</div>
           <div className="text-xs opacity-80">매장 플레이어 탭이 닫혔거나 백그라운드일 수 있어요. 아래 정보는 마지막 발행 기준.</div>
         </section>
@@ -529,7 +529,7 @@ export default function AudioEngineDiagnosticsPanel(): JSX.Element {
             ) : (
               <div className="space-y-1 max-h-72 overflow-y-auto">
                 {snapshot.history.slice().reverse().map((h, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 text-xs text-neutral-300">
+                  <div key={i} className="flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-neutral-300">
                     <span className="text-neutral-500 min-w-16">{fmtTs(h.ts)}</span>
                     <span className="flex-1">{h.reason}</span>
                     <span className={h.outcome === 'success' ? adminTones.success.text : h.outcome === 'failed' ? adminTones.danger.text : adminTones.neutral.textMute}>
@@ -598,7 +598,7 @@ function KV({ k, v, tone = 'neutral' }: { k: string; v: string; tone?: 'success'
     : adminTones.neutral.text;
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="text-neutral-400">{k}</span>
+      <span className="text-slate-500 dark:text-neutral-400">{k}</span>
       <span className={`font-mono ${cls}`}>{v}</span>
     </div>
   );

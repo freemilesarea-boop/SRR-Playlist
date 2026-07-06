@@ -102,7 +102,7 @@ export function GuardrailBadges({ trackId, ready }: { trackId: string; ready: bo
             <div className="flex flex-wrap items-center gap-1">
               <span className="text-[10px] font-bold text-rose-300">차단:</span>
               {blocked.map((b) => (
-                <span key={b.store_key} className="inline-flex items-center gap-1 rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-200 ring-1 ring-rose-400/50"
+                <span key={b.store_key} className="inline-flex items-center gap-1 rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-rose-200 ring-1 ring-rose-400/50"
                   title={b.gr.violations.map((v) => v.reason).join(', ')}>
                   {STORE_LABELS[b.store_key] ?? b.store_key}
                   <button onClick={() => void override(b.store_key)} className="ml-0.5 rounded bg-rose-500/20 px-1 text-[9px] hover:bg-rose-500/30">override</button>
@@ -110,7 +110,7 @@ export function GuardrailBadges({ trackId, ready }: { trackId: string; ready: bo
               ))}
             </div>
           )}
-          {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-300">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] text-amber-200 ring-1 ring-amber-400/50">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
+          {soft.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-amber-300">감점:</span>{soft.map((s) => <span key={s.store_key} className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] text-slate-900 dark:text-amber-200 ring-1 ring-amber-400/50">{STORE_LABELS[s.store_key] ?? s.store_key}</span>)}</div>}
           {warn.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] font-bold text-yellow-600">주의:</span>{warn.map((w) => <span key={w.store_key} className="rounded bg-yellow-500/25 px-1.5 py-0.5 text-[10px] text-yellow-700">{STORE_LABELS[w.store_key] ?? w.store_key}</span>)}</div>}
         </div>
       )}

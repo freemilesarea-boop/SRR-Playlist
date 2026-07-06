@@ -90,7 +90,7 @@ export default function UploadIntegrityPanel() {
             <ul className="space-y-2">
               {legacy.map((g, gi) => (
                 <li key={gi} className="rounded-lg bg-amber-500/5 p-3 text-[10px] ring-1 ring-amber-500/50">
-                  <p className="font-semibold text-amber-200">의심 {g.n}곡 · {g.duration}s · {g.audio_content_length}B</p>
+                  <p className="font-semibold text-slate-900 dark:text-amber-200">의심 {g.n}곡 · {g.duration}s · {g.audio_content_length}B</p>
                   <ul className="mt-1 space-y-0.5 text-ink-mute">
                     {g.tracks.map((t) => <li key={t.track_id}>· {t.title ?? '?'} <span className="text-ink-dim">({t.filename ?? ''} · {dt(t.created_at)})</span></li>)}
                   </ul>

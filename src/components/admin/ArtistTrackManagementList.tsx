@@ -611,7 +611,7 @@ export default function ArtistTrackManagementList({ removedView = false }: { rem
                         </button>
                         <button
                           onClick={() => setMetaModal({ track_id: r.track_id, title: r.title, canApprove: APPROVABLE_RS.includes(r.release_status ?? '') })}
-                          className="inline-flex items-center gap-1 rounded-md bg-indigo-500/25 px-2 py-1 text-[11px] font-semibold text-indigo-200 ring-1 ring-indigo-400/40 hover:bg-indigo-500/35"
+                          className="inline-flex items-center gap-1 rounded-md bg-indigo-500/25 px-2 py-1 text-[11px] font-semibold text-slate-900 dark:text-indigo-200 ring-1 ring-indigo-400/40 hover:bg-indigo-500/35"
                           title="메타 수정 + (가능 시)승인"
                         >
                           메타/승인

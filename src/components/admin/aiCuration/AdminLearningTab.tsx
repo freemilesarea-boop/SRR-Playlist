@@ -42,7 +42,7 @@ function decisionLabel(type: string): { label: string; tone: string } {
   switch (type) {
     case 'approve': return { label: '통과', tone: 'bg-emerald-500/25 text-emerald-300' };
     case 'remove': return { label: '탈락', tone: 'bg-rose-500/25 text-rose-300' };
-    case 'exclude_store': return { label: '매장 제외', tone: 'bg-amber-500/25 text-amber-200' };
+    case 'exclude_store': return { label: '매장 제외', tone: 'bg-amber-500/25 text-slate-900 dark:text-amber-200' };
     case 'rereview': return { label: '재검수', tone: 'bg-sky-500/25 text-sky-300' };
     default: return { label: type, tone: 'bg-ink/5 text-ink-mute' };
   }

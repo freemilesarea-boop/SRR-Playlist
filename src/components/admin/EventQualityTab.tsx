@@ -361,7 +361,7 @@ export default function EventQualityTab() {
               {dualSummary.completion_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">완료 Δ≥0.2: {dualSummary.completion_drift_count}</span>}
               {dualSummary.skip_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">skip Δ≥0.2: {dualSummary.skip_drift_count}</span>}
               {dualSummary.play_count_drift_count > 0 && <span className="rounded bg-amber-500/25 px-1.5 py-0.5 font-bold text-amber-300">plays Δ≥30%: {dualSummary.play_count_drift_count}</span>}
-              {dualSummary.v2_missing_count > 0 && <span className="rounded bg-gray-500/15 px-1.5 py-0.5 font-bold text-gray-400">v2 missing: {dualSummary.v2_missing_count}</span>}
+              {dualSummary.v2_missing_count > 0 && <span className="rounded bg-gray-500/15 px-1.5 py-0.5 font-bold text-slate-500 dark:text-gray-400">v2 missing: {dualSummary.v2_missing_count}</span>}
               {dualSummary.v1_missing_count > 0 && <span className="rounded bg-blue-500/25 px-1.5 py-0.5 font-bold text-blue-500">v1 missing: {dualSummary.v1_missing_count}</span>}
             </div>
             <p className="mt-2 text-[11px] text-ink-dim">
@@ -412,7 +412,7 @@ export default function EventQualityTab() {
                     <td className="px-2 py-1">
                       <div className="flex flex-wrap gap-1">
                         {r.issue_flags.map((f) => (
-                          <span key={f} className={`rounded px-1 text-[10px] font-bold ${f.includes('missing') ? 'bg-gray-500/20 text-gray-400' : 'bg-amber-500/25 text-amber-300'}`}>
+                          <span key={f} className={`rounded px-1 text-[10px] font-bold ${f.includes('missing') ? 'bg-gray-500/20 text-slate-500 dark:text-gray-400' : 'bg-amber-500/25 text-amber-300'}`}>
                             {f}
                           </span>
                         ))}

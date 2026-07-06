@@ -21,7 +21,7 @@ function taxLabel(t: string): string {
 }
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
-  pending: { label: '확인 대기', tone: 'bg-yellow-500/25 text-yellow-200' },
+  pending: { label: '확인 대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200' },
   verified: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
   rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
 };

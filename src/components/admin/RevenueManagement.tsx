@@ -134,10 +134,10 @@ export default function RevenueManagement() {
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           r.status === 'paid'
-                            ? 'bg-emerald-500/25 text-emerald-200'
+                            ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200'
                             : r.status === 'refunded'
-                              ? 'bg-rose-500/25 text-red-200'
-                              : 'bg-yellow-500/25 text-yellow-200'
+                              ? 'bg-rose-500/25 text-slate-900 dark:text-red-200'
+                              : 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200'
                         }`}
                       >
                         {STATUS_LABEL[r.status] ?? r.status}

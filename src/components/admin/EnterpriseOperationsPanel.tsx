@@ -316,8 +316,8 @@ export default function EnterpriseOperationsPanel() {
             </div>
 
             {cron.last_error && (
-              <div className="mt-3 rounded-xl bg-rose-500/25 p-2.5 text-[11px] text-rose-100 ring-1 ring-rose-500/40">
-                <b className="text-rose-50">마지막 오류:</b> <span className="font-mono">{cron.last_error}</span>
+              <div className="mt-3 rounded-xl bg-rose-500/25 p-2.5 text-[11px] text-slate-900 dark:text-rose-100 ring-1 ring-rose-500/40">
+                <b className="text-slate-900 dark:text-rose-50">마지막 오류:</b> <span className="font-mono">{cron.last_error}</span>
               </div>
             )}
 
@@ -728,7 +728,7 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
           onClose={() => setConfirming(null)}
           title={
             <span className="flex items-center gap-2">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/40">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500/20 text-slate-900 dark:text-violet-200 ring-1 ring-violet-400/40">
                 {confirming.icon}
               </span>
               <span className="text-base font-bold text-ink">{confirming.label}</span>
@@ -753,7 +753,7 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
 
             {/* 실행 내용 */}
             <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-violet-200">
                 <PlayCircle size={12} /> 실행 내용
               </p>
               <p className="mt-1.5 text-[12px] leading-relaxed text-ink">{confirming.description}</p>
@@ -761,7 +761,7 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
 
             {/* 영향 범위 */}
             <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-sky-200">
                 <Target size={12} /> 영향 범위
               </p>
               <p className="mt-1.5 text-[12px] font-medium text-ink">{confirming.scope}</p>
@@ -769,13 +769,13 @@ function QuickActionsCard({ onAfterAction }: { onAfterAction: () => void }) {
 
             {/* 주의사항 */}
             <div className="rounded-xl bg-amber-500/25 p-3 ring-1 ring-amber-500/50">
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-100">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-amber-100">
                 <AlertTriangle size={12} /> 주의사항
               </p>
-              <ul className="mt-1.5 space-y-1 text-[12px] leading-relaxed text-amber-50">
-                <li className="flex gap-1.5"><span className="text-amber-300">•</span>실행 후 <b className="text-amber-50">취소 불가</b>.</li>
+              <ul className="mt-1.5 space-y-1 text-[12px] leading-relaxed text-slate-900 dark:text-amber-50">
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>실행 후 <b className="text-slate-900 dark:text-amber-50">취소 불가</b>.</li>
                 <li className="flex gap-1.5"><span className="text-amber-300">•</span>실패해도 다른 Quick Action 에 영향 없음.</li>
-                <li className="flex gap-1.5"><span className="text-amber-300">•</span>결과는 <b className="text-amber-50">audit log</b> 에 자동 기록됩니다.</li>
+                <li className="flex gap-1.5"><span className="text-amber-300">•</span>결과는 <b className="text-slate-900 dark:text-amber-50">audit log</b> 에 자동 기록됩니다.</li>
                 <li className="flex gap-1.5"><span className="text-amber-300">•</span>10초 debounce 적용 — 실행 직후 재클릭은 차단됩니다.</li>
               </ul>
             </div>

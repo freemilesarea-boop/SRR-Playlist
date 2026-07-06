@@ -32,17 +32,17 @@ function fmtDate(s: string | null | undefined): string {
 const STATUS_LABEL: Record<ContractStatus, { label: string; tone: string; icon: React.ReactNode }> = {
   pending_signature: {
     label: '서명 대기',
-    tone: 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
+    tone: 'bg-amber-100 text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
     icon: <Clock size={11} />,
   },
   signed: {
     label: '서명 완료',
-    tone: 'bg-emerald-100 text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
+    tone: 'bg-emerald-100 text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
     icon: <CheckCircle2 size={11} />,
   },
   rejected: {
     label: '거절됨',
-    tone: 'bg-red-100 text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
+    tone: 'bg-red-100 text-slate-900 dark:text-rose-200 dark:bg-rose-500/25 dark:text-red-300',
     icon: <XCircle size={11} />,
   },
   expired: {
@@ -546,7 +546,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
                     type="button"
                     onClick={() => void handleRequeue(true)}
                     disabled={busy || emailLoading}
-                    className="rounded-md bg-amber-500/25 px-2 py-1 text-[11px] font-semibold text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/25 disabled:opacity-50 dark:text-amber-200"
+                    className="rounded-md bg-amber-500/25 px-2 py-1 text-[11px] font-semibold text-slate-900 dark:text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/25 disabled:opacity-50 dark:text-amber-200"
                   >
                     실패만 재발송
                   </button>
@@ -598,7 +598,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
                           </span>
                         )}
                         {j.last_error && (
-                          <p className="basis-full text-[10px] leading-snug text-rose-200 dark:text-red-300">
+                          <p className="basis-full text-[10px] leading-snug text-slate-900 dark:text-rose-200 dark:text-red-300">
                             {j.last_error}
                           </p>
                         )}
@@ -635,7 +635,7 @@ function ContractDetailModal({ row, onClose }: { row: AdminContractRow; onClose:
                             <span className="text-ink-dim">attempts={e.attempts}</span>
                           )}
                           {e.error && (
-                            <p className="basis-full pl-2 text-rose-200 dark:text-red-300">
+                            <p className="basis-full pl-2 text-slate-900 dark:text-rose-200 dark:text-red-300">
                               {e.error}
                             </p>
                           )}
@@ -717,7 +717,7 @@ function DispatchHealthBanner({
       <Alert tone="success" title="메일 발송 준비 완료">
         <p>
           Resend FROM: <span className="font-mono">{env.resend_from}</span>
-          {env.resend_from_is_fallback ? <span className="text-amber-200 dark:text-amber-300"> (fallback)</span> : null}
+          {env.resend_from_is_fallback ? <span className="text-slate-900 dark:text-amber-200 dark:text-amber-300"> (fallback)</span> : null}
           {' · '}
           도메인:{' '}
           <span className="font-mono">
@@ -782,27 +782,27 @@ function DispatchHealthBanner({
 function EmailJobBadge({ status }: { status: ContractEmailJob['status'] }) {
   if (status === 'sent') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200">
         <CheckCircle2 size={10} /> 발송
       </span>
     );
   }
   if (status === 'failed') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-rose-200 dark:bg-rose-500/25 dark:text-red-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-rose-200 dark:bg-rose-500/25 dark:text-red-200">
         <XCircle size={10} /> 실패
       </span>
     );
   }
   if (status === 'sending') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-200 dark:bg-sky-500/25 dark:text-sky-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-sky-200 dark:bg-sky-500/25 dark:text-sky-200">
         진행
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-200 dark:bg-amber-500/25 dark:text-amber-200">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200">
       <Clock size={10} /> 대기
     </span>
   );

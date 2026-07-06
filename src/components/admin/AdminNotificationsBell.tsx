@@ -22,9 +22,9 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
 const SEV_TONE: Record<string, string> = {
-  info: 'bg-sky-500/25 text-sky-200 dark:text-sky-300 ring-sky-400/50',
-  warning: 'bg-amber-500/25 text-amber-200 dark:text-amber-300 ring-amber-400/50',
-  error: 'bg-rose-500/25 text-rose-200 dark:text-red-300 ring-rose-400/50',
+  info: 'bg-sky-500/25 text-slate-900 dark:text-sky-200 dark:text-sky-300 ring-sky-400/50',
+  warning: 'bg-amber-500/25 text-slate-900 dark:text-amber-200 dark:text-amber-300 ring-amber-400/50',
+  error: 'bg-rose-500/25 text-slate-900 dark:text-rose-200 dark:text-red-300 ring-rose-400/50',
 };
 
 function SevIcon({ sev }: { sev: AdminNotification['severity'] }) {

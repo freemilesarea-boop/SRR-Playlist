@@ -541,7 +541,7 @@ function PoliciesTab({
         <span>등록된 배포 플레이리스트가 연결된 매장에 자동 동기화되며, 자동 음악 스케줄의 선택 목록으로 노출됩니다.</span>
         <div className="flex flex-wrap items-center gap-1">
           <button onClick={() => setShowFromPlaylist(true)}
-            className="inline-flex items-center gap-1 rounded bg-violet-500/20 px-2 py-1 font-bold text-violet-200 hover:bg-violet-500/30">
+            className="inline-flex items-center gap-1 rounded bg-violet-500/20 px-2 py-1 font-bold text-slate-900 dark:text-violet-200 hover:bg-violet-500/30">
             <Music size={11} /> 기존 플레이리스트에서 등록
           </button>
           <button onClick={() => { setEditPolicy(null); setShowBuilder(true); }}

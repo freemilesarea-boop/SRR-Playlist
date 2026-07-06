@@ -463,7 +463,7 @@ function DetailModal({
               return (
                 <>
                   {belowMinimum && (
-                    <div className="rounded-md bg-amber-500/25 ring-1 ring-amber-400/50 p-2.5 text-[11px] text-amber-100 flex items-start gap-2">
+                    <div className="rounded-md bg-amber-500/25 ring-1 ring-amber-400/50 p-2.5 text-[11px] text-slate-900 dark:text-amber-100 flex items-start gap-2">
                       <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-300" />
                       <div>
                         <div className="font-bold">최소정산금 미달</div>
@@ -587,7 +587,7 @@ function ContractSnapshotCard({ settlement }: { settlement: EnterpriseMonthlySet
   return (
     <div className="mt-3 rounded-lg border border-violet-400/30 bg-violet-500/5 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="flex items-center gap-1.5 text-[11px] font-bold text-violet-200">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-900 dark:text-violet-200">
           <ScrollText size={12} /> 적용 계약 Snapshot
         </p>
         <span className="inline-flex items-center gap-1 rounded-full bg-bg-deep px-2 py-0.5 text-[9px] text-ink-dim ring-1 ring-line/20">
@@ -628,10 +628,10 @@ function RateSourceBadge({ source, contractNo }: {
 }) {
   if (!source) return <span className="text-ink-dim">—</span>;
   const cls = source === 'contract'
-    ? 'bg-violet-500/20 text-violet-200 ring-violet-400/40'
+    ? 'bg-violet-500/20 text-slate-900 dark:text-violet-200 ring-violet-400/40'
     : source === 'profile'
-      ? 'bg-sky-500/20 text-sky-200 ring-sky-400/40'
-      : 'bg-zinc-500/20 text-zinc-300 ring-zinc-400/40';
+      ? 'bg-sky-500/20 text-slate-900 dark:text-sky-200 ring-sky-400/40'
+      : 'bg-zinc-500/20 text-slate-500 dark:text-zinc-300 ring-zinc-400/40';
   return (
     <span
       title={contractNo ? `계약 ${contractNo}` : undefined}

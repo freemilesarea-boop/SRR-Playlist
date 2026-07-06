@@ -393,7 +393,7 @@ export default function ArtistSettlementDetail({
                         <td className="px-3 py-2 font-mono text-[10px]">{it.track_code}</td>
                         <td className="px-3 py-2">{it.track_title}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-ink-mute">{raw.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-rose-200 dark:text-red-300">
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-900 dark:text-rose-200 dark:text-red-300">
                           {excluded > 0 ? `-${excluded.toLocaleString()}` : '0'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{eligible.toLocaleString()}</td>
@@ -470,7 +470,7 @@ export default function ArtistSettlementDetail({
                           <td className="px-3 py-2 font-mono">
                             v{v.version}
                             {v.is_current && (
-                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300">
+                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300">
                                 현재
                               </span>
                             )}
@@ -630,11 +630,11 @@ function PayoutStatusBadge({
 }) {
   const meta: Record<typeof status, { tone: string; label: string }> = {
     ready: {
-      tone: 'bg-emerald-100 text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
+      tone: 'bg-emerald-100 text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300',
       label: '정산 가능 (PII 완료)',
     },
     verified_partial: {
-      tone: 'bg-amber-100 text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
+      tone: 'bg-amber-100 text-slate-900 dark:text-amber-200 dark:bg-amber-500/25 dark:text-amber-200',
       label: 'PII 미완료',
     },
     pending: {
@@ -725,7 +725,7 @@ function ConfirmModal({
               onChange={(e) => setForcePii(e.target.checked)}
             />
             <span className="text-ink">
-              <strong className="text-rose-200 dark:text-red-300">PII 미완료 override</strong> — 본인 인증 / 정산 계좌 정보가
+              <strong className="text-slate-900 dark:text-rose-200 dark:text-red-300">PII 미완료 override</strong> — 본인 인증 / 정산 계좌 정보가
               완료되지 않은 정산을 강제로 지급완료 처리합니다. (audit 기록됨)
             </span>
           </label>
