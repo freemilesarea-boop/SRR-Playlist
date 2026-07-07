@@ -20,6 +20,7 @@
 - [2. Design Principles & Constraints](#2-design-principles--constraints)
 - [3. Layer 1 · Signal Layer](#3-layer-1--signal-layer)
 - [4. Layer 2 · Curation Core (Daily Auto-Curation)](#4-layer-2--curation-core-daily-auto-curation)
+  - [4.10 New Track Exposure Algorithm](#410-new-track-exposure-algorithm-phase-3-6a-설계-반영--3-6b3-7-확장-구현)
 - [5. Layer 3 · Context Layer](#5-layer-3--context-layer)
 - [6. Layer 2 확장 · Discovery Layer](#6-layer-2-확장--discovery-layer)
 - [7. Layer 4 · Creation Layer](#7-layer-4--creation-layer)
@@ -206,6 +207,11 @@
 - Signed factors (F7/F8/F9) 는 감점 · 절댓값 처리
 - Cache: `track_ai_scores` (TTL 24h)
 
+**Overlay Adjustment** (Phase 3-6a · §4.10 참조):
+- 12-factor base score 위에 신규 곡 보호 · 저성과 감점 5 factor overlay
+- `_ai_apply_freshness_adjustment(base_score, playlist_id, track_id) → numeric`
+- base score 는 변경 없음 · 튜닝 독립 유지
+
 **Phase 3-6b 확장** (Engine ②):
 - `_ai_compute_track_score_v2(playlist_id, track_id) → numeric`
 - 업종별 가중치 우선 · 없으면 global fallback
@@ -351,6 +357,178 @@ run_daily_auto_curation()
 **Admin UI**:
 - 매장 bulk switch · 감사 로그 기록
 
+### 4.10 New Track Exposure Algorithm (Phase 3-6a 설계 반영 · 3-6b/3-7 확장 구현)
+
+**설계안** · 실제 SQL / migration / 코드 미작성 · Phase 3-6a Migration 0405 (score) 계획에 5개 보정 factor 반영.
+
+#### 4.10.1 Problem Statement
+
+- 신규 음원은 재생 이력 · 좋아요 · 완청률 데이터가 **없거나 극소**
+- §4.2 12-factor AI Score 는 F1(fit) 을 제외한 대부분 factor 가 **행동 signal 기반** → 신규 곡은 구조적으로 저평가
+- 결과: 기존 인기곡/검증곡이 rotation add 후보를 독점 · **신규 아티스트/발매곡이 매장에 노출되지 않는 콜드스타트 문제**
+- 그러나 검증 없이 대량 배포도 위험 (품질 미확인 · 매장 UX 저해 · 좋아요/스킵 데이터 오염)
+- 해결: **신규 곡을 보호적으로 노출** + **일부 매장 테스트** + **성과 기준 통과 시 확산** 3단계 프레임
+
+#### 4.10.2 신규 음원 판정 조건 (Protection Criteria)
+
+**AND 조건** (모두 충족 시 "신규 음원" 판정):
+
+| 조건 | 기본값 | 근거 컬럼 · 계산 |
+|---|---|---|
+| Recency | `released_at >= now() - '30 days'` | `tracks.released_at` (업종별 override 가능) |
+| Play count | `total_play_count < N_min_plays` (기본 100) | `store_now_playing` aggregate 또는 별도 카운터 |
+| Store exposure | `store_exposure_count < N_min_stores` (기본 20) | 이 곡을 재생한 unique store 수 |
+| Signal insufficient | `like + dislike + skip 합 < N_min_signals` (기본 30) | `store_track_reactions` + `business_early_skip_events` |
+
+**exposure_status enum** (제안 · Phase 3-6a `tracks.exposure_status text default 'new'`):
+- `'new'` — 위 조건 충족 · 자동 보정 활성
+- `'growing'` — Play count 100~500 · 데이터 축적 중
+- `'validated'` — 충분한 signal · 정상 factor 만 사용
+- `'promoted'` — Test pool 통과 · 전체 확산 허용
+- `'hold'` — Admin 수동 hold (일시 정지)
+- `'blacklist'` — Admin 영구 차단 (rotation 후보 완전 제외)
+- `'review'` — Admin 리뷰 대기
+
+#### 4.10.3 Minimum Exposure Policy
+
+**핵심 원칙 5가지**:
+1. **업종/무드/장르 guardrail 통과 시 일정 노출 보장** (Engine ② Industry Profile 참조)
+2. **전체 매장 대량 배포 금지** (첫 주 exposure_ratio ≤ 15%)
+3. **일부 적합 매장 test pool 우선 검증** (§6.1 Engine ④ 연동)
+4. **자동 확산은 admin approval 필수** (§4.10.7)
+5. **성과 기준 미달 시 자동 확산 차단** (poor_reaction / high_skip penalty)
+
+**노출 상한 (기본 안 · playlists.industry_slug 별 override 가능)**:
+
+| 판정 상태 | 첫 주 exposure 상한 | 재평가 주기 |
+|---|---|---|
+| `new` | 15% 매장 · playlist slot 10% | 매일 rotation |
+| `growing` | 40% 매장 · playlist slot 10~15% | 주 1회 status 재평가 |
+| `validated` | 제한 없음 · 정상 factor 로 경쟁 | — |
+| `promoted` | 우선 노출 (top add 후보) | — |
+| `hold` / `blacklist` | 0% (완전 제외) | admin action 대기 |
+
+#### 4.10.4 Playlist Composition Ratio (기본 안)
+
+**Rotation Engine (§4.3) 이 add 결정 시 카테고리별 slot 예약**:
+
+| 카테고리 | 기본 비율 | 판정 기준 |
+|---|---|---|
+| **Stable** | **70%** | `exposure_status='validated'` · 완청률 상위 · 안정적 |
+| **Growth** | **20%** | Engine ⑧ 내부 trend 상위 · 상승중 · `growing` 포함 |
+| **New/Test** | **10%** | `exposure_status='new'` · 이 알고리즘의 보호 슬롯 |
+
+**업종별 override 예시** (Phase 3-6b Industry Profile 확장):
+
+| 업종 | Stable | Growth | New/Test | 근거 |
+|---|---|---|---|---|
+| 카페 | 65% | 25% | 10% | 트렌디 · 회전 필요 |
+| 헬스 | 60% | 30% | 10% | 신곡 반응 좋음 (energetic) |
+| 병원/클리닉 | 85% | 10% | 5% | 안정성 최우선 · 실험 최소 |
+| 와인바 | 80% | 15% | 5% | 무드 유지 우선 |
+| 펍 | 65% | 25% | 10% | 다양성 필요 |
+| 오피스 | 75% | 20% | 5% | 방해 최소 |
+
+**실행 방법 (Phase 3-6a)**:
+- Rotation Engine (§4.3) 이 add 후보 pool 을 3 category 로 분류
+- 각 category 에서 상위 score N 개 선정 (총 add_target 만족 후 stop)
+- New/Test slot 채울 후보 부족 시 다른 category 로 자동 채움 (신곡 없어도 rotation 지속)
+
+#### 4.10.5 AI Score 보정 공식 (Phase 3-6a 신규 5 factor)
+
+**§4.2 12-factor 위에 overlay 적용** · 신규 함수 `_ai_apply_freshness_adjustment(base_score, playlist_id, track_id) → numeric` (계획).
+
+| 보정 factor | 방향 | 조건 · 공식 | 기본 상한 |
+|---|---|---|---|
+| **freshness_boost** | + | `released_at` 이내 14일: linear `+8` → 30일: `+3` → 30일 초과: `0` | +8 |
+| **minimum_exposure_boost** | + | `store_exposure_count < N_min_stores` 시 `+5` (충족 시 0) | +5 |
+| **insufficient_data_boost** | + | `total_signals < N_min_signals` 시 `+3` (충족 시 0) | +3 |
+| **poor_reaction_penalty** | − | 좋아요 < 싫어요 AND (좋아요 + 싫어요) ≥ 10 시 `-10` | -10 |
+| **high_skip_penalty** | − | 스킵률 ≥ 60% AND 재생수 ≥ 20 시 `-15` | -15 |
+
+**최종 조정 score**:
+```
+adjusted_score = base_score
+               + freshness_boost
+               + minimum_exposure_boost
+               + insufficient_data_boost
+               + poor_reaction_penalty     (음수)
+               + high_skip_penalty          (음수)
+             clamped to [0, 100]
+```
+
+**중요 원칙**:
+- 보정은 **overlay** — 12-factor base score 는 변경 안 됨 · 튜닝 독립성 유지
+- Boost 3개는 **콜드스타트 극복** 목적 · 데이터 축적 시 자동 소멸 (조건 미충족 → 0)
+- Penalty 2개는 **품질 하한** 목적 · 신규 곡도 성과 나쁘면 즉시 감점 · 무한 노출 방지
+- `factors jsonb` 에 5 보정값 각각 저장 (dashboard 표시 · 튜닝 근거)
+
+#### 4.10.6 Test Pool 연동 (Phase 3-6b/3-7 확장)
+
+**Phase 별 분산 구현**:
+
+| Phase | 구현 범위 |
+|---|---|
+| **3-6a** | 보정 5 factor · playlist composition slot 10% · `exposure_status` 컬럼 · 자동 exposure 상한 |
+| **3-6b** | `track_test_assignments` schema · 테스트 매장 선정 로직 · 최소 재생 수 확보 targeting |
+| **3-7** | 성과 판정 자동화 · promoted/rejected 자동 확산 · §6.1 Engine ④ 완전 통합 |
+| **3-8+** | Self Learning 이 freshness/exposure boost weight 자동 조정 제안 (§8.2) |
+
+**Phase 3-6b 테스트 매장 선정 기준 (설계 안)**:
+- Industry 매칭 (Engine ②) 우선
+- 최근 30일 rotation 정상 참여 (실패 매장 제외)
+- Auto ON 매장 (opt-out 매장은 test pool 대상 아님)
+- 브랜드 · 지역 다양성 (특정 프랜차이즈 편중 방지)
+- 랜덤 5% 샘플 (Engine ⑨ A/B pilot 방식과 동일)
+
+**Phase 3-7 성과 판정 기준 (설계 안)**:
+- 최소 impressions: 100 재생
+- 완청률 ≥ 70% AND 좋아요 > 싫어요 → `promoted` (전체 확산 허용)
+- 완청률 < 30% OR 스킵률 > 60% → `rejected` (`hold` 이동 · admin 리뷰)
+- 애매하면 (`inconclusive`) 다음 주 재테스트
+
+#### 4.10.7 Admin Safety Rules
+
+**신규 음원 자동 확산은 admin approval 필수 · 다음 상태 관리 · rollback 가능**.
+
+**Admin RPC 계획 (Phase 3-6a)**:
+- `admin_set_track_exposure_status(track_id, status, reason)` — `'hold'`/`'blacklist'`/`'review'` 강제 전환
+- `admin_reset_track_exposure(track_id)` — 상태 초기화 · rollback
+- `admin_list_new_tracks_exposure()` — 대시보드용 · 현재 노출 상태 · 성과 · exposure 매장 수
+- `admin_bulk_hold_tracks(track_ids[], reason)` — 긴급 대량 hold
+- `admin_approve_track_promotion(track_id)` — 수동 승격 (test pool 통과 대기 중 강제)
+
+**Audit** (`track_exposure_events` 신규 · Phase 3-6a):
+```
+- track_id · from_status · to_status · changed_by · actor_type · reason · created_at
+- 모든 status 전환 이력 저장 · rollback 대상
+```
+
+**Rollback 시나리오**:
+1. 실수로 blacklist 한 곡 → `admin_reset_track_exposure` → `new` 로 복귀
+2. Promoted 곡이 성과 저하 → `admin_set_track_exposure_status('hold')` → 즉시 rotation 후보 제외
+3. Admin approval 없이 자동 promoted 되어야 할 곡이 hold 상태 → `admin_approve_track_promotion` → 수동 승격
+
+#### 4.10.8 Phase 분리 요약
+
+| Phase | New Track Exposure 관련 스코프 |
+|---|---|
+| **3-6a** | ① 5 보정 factor · ② `exposure_status` 컬럼 · ③ playlist composition slot 10% · ④ Admin 상태 관리 RPC · ⑤ audit 테이블 · ⑥ freshness_boost decay 곡선 · ⑦ 상한 (첫 주 15%) |
+| **3-6b** | ① `track_test_assignments` schema · ② 테스트 매장 선정 · ③ Industry Profile 통합 · ④ 업종별 composition ratio override |
+| **3-7** | ① 성과 기반 자동 promotion · ② `rejected` 자동 hold · ③ 판정 주기 (weekly cron) · ④ §6.1 Engine ④ 완전 통합 |
+| **3-8+** | Self Learning 이 5 보정 factor 의 상한/조건을 자동 조정 제안 (admin approval 필요 · §8.2) |
+
+#### 4.10.9 기존 시스템과의 통합 · 충돌 방지
+
+- **§4.2 12-factor** — Overlay 방식 · base score 무변경 · 튜닝 독립
+- **§4.3 Rotation Engine** — add 후보 pool 을 3 category 로 분류 후 slot 별 채움
+- **§4.7 Daily Audit** — `playlist_rotation_events.score_breakdown` 에 5 보정값 추가 저장
+- **§4.8 Rollback** — `track_exposure_events` 도 rollback 대상 (별도 rollback RPC)
+- **§5.1 Industry Profile** — 업종별 composition ratio 및 5 보정 factor 상한 override
+- **§6.1 Engine ④ Test Pool** — Phase 3-6b/3-7 확장 · `exposure_status` 를 upstream 신호로 사용
+- **§8.2 Self Learning** — Phase 3-8+ · 5 보정 factor 상한/조건 튜닝 (proposal 만 · admin approval)
+- **회귀 위험 0** — 기존 12-factor 변경 없음 · overlay 추가 · `exposure_status` 컬럼은 nullable + default 'new'
+
 ---
 
 ## 5. Layer 3 · Context Layer
@@ -459,6 +637,13 @@ Rotation 시:
 - `run_weekly_test_pool_evaluation()` (weekly cron)
 - `admin_manual_promote_track(track_id)` (강제 승격)
 - `admin_list_test_pool()`
+
+**§4.10 New Track Exposure Algorithm 과 관계**:
+- **Phase 3-6a** (§4.10): AI Score 보정 5 factor · `exposure_status` 컬럼 · playlist composition slot 10%
+- **Phase 3-6b** (본 섹션 · 확장): `track_test_assignments` schema · 테스트 매장 선정 · RPC
+- **Phase 3-7** (본 섹션 · 완성): 성과 기반 자동 promoted/rejected · `_ai_evaluate_test_batch` 로 `exposure_status` 자동 전환
+- upstream: §4.10 `exposure_status='new'` 트랙이 Test Pool enroll 대상
+- downstream: Test Pool 판정 결과가 `exposure_status`(promoted/rejected/hold) 로 반영 → §4.3 Rotation candidate pool 필터링
 
 ### 6.2 Engine ⑤ Playlist Performance Ranking (Phase 3-7)
 
@@ -753,38 +938,51 @@ Rotation 시: trending_now 트랙 +5 boost
 
 ### 🔴 Phase 3-6a — Rotation Core (즉시 착수 대상 · 3주)
 
-**목표**: 매일 07:00 KST · 모든 매장 auto default · rotation (add/remove/cap 150) · manual toggle · daily audit · rollback
+**목표**: 매일 07:00 KST · 모든 매장 auto default · rotation (add/remove/cap 150) · manual toggle · daily audit · rollback · **신곡 exposure 보호 (콜드스타트 극복)**
 
 **포함**:
 - L2 Curation Core (§4)
 - Data model (5 신규 테이블 + ALTER)
 - 12-factor AI Score (global)
+- **New Track Exposure Algorithm 설계 반영** (§4.10 · Phase 3-6a 스코프):
+  - 5개 AI Score 보정 factor (freshness/exposure/data/reaction/skip)
+  - `tracks.exposure_status` 컬럼 + audit 테이블
+  - Playlist composition slot (stable 70 / growth 20 / new-test 10)
+  - 첫 주 exposure 상한 15%
+  - Admin 상태 관리 RPC (hold/blacklist/reset/approve) + rollback
 - Rotation engine + version bump + queue refresh
 - Daily audit + snapshot + rollback
 - Admin Dashboard (기본 · §10.1)
 - HQ Dashboard (기본 · §11.1)
 - Vercel cron · store manual toggle
 
-**포함 안 함**: 모든 상위 엔진 (Context/Discovery/Creation/Meta)
+**포함 안 함**: `track_test_assignments` schema (Phase 3-6b) · 자동 promotion/rejection (Phase 3-7) · 모든 상위 엔진 (Context/Discovery/Creation/Meta)
 
 ### 🟠 Phase 3-6b — Context Layer v1 (Rotation 안정 확인 후 · 2주)
 
-**목표**: 업종별 AI 프로필 + 이벤트/공휴일 자동 반영
+**목표**: 업종별 AI 프로필 + 이벤트/공휴일 자동 반영 · **Test Pool schema 신설 (자동 판정은 없음)**
 
 **포함**:
 - Engine ② Industry AI Profile (§5.1)
 - Engine ③ Event & Holiday Engine · calendar only (§5.2)
 - Admin Industry/Event Panel
 - `_ai_compute_track_score_v2` (industry-aware)
+- **Test Pool schema 신설** (§4.10.6 · §6.1 확장):
+  - `track_test_assignments` 테이블 · 테스트 매장 선정 로직 (RPC)
+  - 업종별 composition ratio override (industry_ai_profiles.factor_weights 확장)
+  - 자동 promotion/rejection 은 없음 (admin 수동 트리거만)
 
-**포함 안 함**: Region · Trend · Test Pool · Weather API
+**포함 안 함**: Region · Internal Trend · 자동 성과 판정 · Weather API
 
 ### 🟡 Phase 3-7 — Analytics Layer (3-6b 안정 후 · 4주 · 데이터 4주+ 축적)
 
-**목표**: 성과 기반 자동 확산 · 지역 · 신곡 A/B
+**목표**: 성과 기반 자동 확산 · 지역 · 신곡 A/B · **Test Pool 자동 판정 완성**
 
 **포함**:
-- Engine ④ New Track Test Pool (§6.1)
+- Engine ④ New Track Test Pool 완성 (§6.1):
+  - `_ai_evaluate_test_batch` 자동 성과 판정
+  - `exposure_status` 자동 전환 (new → promoted / rejected → hold)
+  - Weekly cron `run_weekly_test_pool_evaluation`
 - Engine ⑤ Playlist Performance Ranking (§6.2)
 - Engine ⑦ Region AI (§5.3)
 - Engine ⑧ Trend Engine (내부만 · §8.1)
@@ -966,6 +1164,26 @@ Rotation 시: trending_now 트랙 +5 boost
 | D14 | Score cache TTL | 6h / 12h / 24h | **24h** |
 | D15 | 첫 배포 Auto ON 대상 | 신규 매장만 / 기존 매장 포함 | **기존 매장 포함** (공지 필수) |
 
+### 16.1.1 New Track Exposure Algorithm (N 그룹 · §4.10 관련 · Phase 3-6a 착수 전)
+
+| # | 항목 | 옵션 | 추천 |
+|---|---|---|---|
+| N1 | 신규 판정 recency 기준 | 14일 / 30일 / 60일 | **30일** (기본 · 업종별 override) |
+| N2 | 최소 재생 수 임계 (N_min_plays) | 50 / 100 / 200 | **100** |
+| N3 | 최소 노출 매장 수 (N_min_stores) | 10 / 20 / 50 | **20** |
+| N4 | 최소 signal 합 (N_min_signals) | 20 / 30 / 50 | **30** |
+| N5 | Playlist composition 기본 비율 (stable/growth/new) | 70/20/10 / 60/25/15 / 80/15/5 | **70/20/10** (안전 시작 · 업종별 override) |
+| N6 | freshness_boost 상한 | +5 / +8 / +10 | **+8** (14일 max · 30일 +3 · 이후 0) |
+| N7 | minimum_exposure_boost | +3 / +5 / +8 | **+5** |
+| N8 | insufficient_data_boost | +2 / +3 / +5 | **+3** |
+| N9 | poor_reaction_penalty | -5 / -10 / -15 | **-10** (좋아요<싫어요 & N≥10) |
+| N10 | high_skip_penalty | -10 / -15 / -20 | **-15** (스킵률 ≥60% & 재생 ≥20) |
+| N11 | 첫 주 exposure 상한 (new 상태) | 10% / 15% / 20% 매장 | **15% 매장** |
+| N12 | exposure_status 기본값 | 'new' / 'untested' | **'new'** (즉시 알고리즘 적용) |
+| N13 | 기존 트랙 마이그레이션 시 초기 status | 'new' / 'validated' (자동 판정) | **'validated' 자동 판정** (기준 초과 트랙은 skip · 신규만 'new') |
+| N14 | Admin approval 없이 자동 promotion 허용? | Yes (3-7 auto) / No (수동만) | **No** (Phase 3-6a) → **Yes** (Phase 3-7 자동화) |
+| N15 | Blacklist / hold audit 보관 기간 | 90일 / 1년 / 무제한 | **무제한** (컴플라이언스 대비) |
+
 ### 16.2 3-6a 이후 (E 그룹)
 
 | # | 항목 | 추천 |
@@ -1048,6 +1266,7 @@ Rotation 시: trending_now 트랙 +5 boost
 ## 문서 이력
 
 - **v1.0** (initial) · Phase 3-6a Daily Auto-Curation Core + AI Music OS 10 engines 확장 통합
+- **v1.1** · §4.10 New Track Exposure Algorithm 신설 · §4.2/§6.1/§12/§16 cross-ref · §16.1.1 (N1~N15 결정 항목) 추가
 - 향후 Phase 별 update · v2.0 (Phase 3-6a 착수 시점) · v3.0 (Phase 3-7 착수 시점) 등
 
 **작성 원칙**: 이 문서는 "무엇을 · 왜 · 언제 · 어떻게" 를 담고, **실제 SQL/코드는 착수 시점에 별도 파일로 생성**한다. 문서 수정만으로 실제 시스템 변경은 발생하지 않는다.
