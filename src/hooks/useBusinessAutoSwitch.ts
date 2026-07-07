@@ -54,7 +54,8 @@ export function useBusinessAutoSwitch() {
     if (!current?.playlist_id) return;
     setTracksLoading(true);
     let alive = true;
-    fetchPlaylistTracks(current.playlist_id)
+    // 0404 (HOTFIX-A): 매장 컨텍스트 (userId === storeId) 전달 → guardrail hard_block 제외
+    fetchPlaylistTracks(current.playlist_id, userId)
       .then((tracks) => {
         if (!alive) return;
         const { playable } = filterPlayableTracks(tracks);
@@ -76,7 +77,7 @@ export function useBusinessAutoSwitch() {
       })
       .finally(() => { if (alive) setTracksLoading(false); });
     return () => { alive = false; };
-  }, [current?.playlist_id, current?.slot_name, setCurrentTracks, setTracksLoading, setTracksError]);
+  }, [current?.playlist_id, current?.slot_name, userId, setCurrentTracks, setTracksLoading, setTracksError]);
 
   // businessMode ON + current 변경 → 자동 큐 교체.
   //
@@ -94,7 +95,8 @@ export function useBusinessAutoSwitch() {
     let alive = true;
     (async () => {
       try {
-        const tracks = await fetchPlaylistTracks(targetPlaylistId);
+        // 0404 (HOTFIX-A): 매장 컨텍스트 (userId === storeId) 전달 → guardrail hard_block 제외
+        const tracks = await fetchPlaylistTracks(targetPlaylistId, userId);
         const playable = filterPlayableTracks(tracks).playable;
         if (!alive) return;
         if (!useBusinessStore.getState().businessMode) return;
