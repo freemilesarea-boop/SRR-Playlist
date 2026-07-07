@@ -35,6 +35,7 @@ import {
 } from 'recharts';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
+import EnterpriseHqNotificationBell from '@/components/enterprise/EnterpriseHqNotificationBell';
 import {
   getMyEnterpriseIntelKpi,
   getMyEnterpriseIntelHealthScore,
@@ -108,7 +109,7 @@ function PageHeader() {
       >
         <ArrowLeft size={18} />
       </Link>
-      <div>
+      <div className="flex-1 min-w-0">
         <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
           <BarChart3 size={20} className="text-accent" /> 브랜드 인텔리전스
         </h1>
@@ -116,6 +117,7 @@ function PageHeader() {
           브랜드 전체 운영 현황 · 성과 · 리스크를 한눈에.
         </p>
       </div>
+      <EnterpriseHqNotificationBell className="bg-bg-card hover:bg-bg-hover" />
     </header>
   );
 }

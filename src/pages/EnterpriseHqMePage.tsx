@@ -17,7 +17,7 @@ import {
   Building2, RefreshCw, AlertCircle, ArrowLeft, Store, MapPin, Save,
   Key, CheckCircle2, Sparkles, Banknote, FileText, Upload, AlertTriangle,
   Clock as ClockIcon, XCircle, Wallet, Copy, Link2, BarChart3, TrendingUp,
-  PauseCircle, PowerOff, Activity, ChevronRight,
+  PauseCircle, PowerOff, Activity, ChevronRight, Bell,
 } from 'lucide-react';
 import {
   getMyEnterpriseDashboard, upsertMyEnterpriseBusinessProfileV2,
@@ -148,8 +148,8 @@ function DashboardContent({
         </div>
       </section>
 
-      {/* Phase 3-3 + 3-4 — 운영 관제 · 브랜드 인텔리전스 진입 CTA */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Phase 3-3 + 3-4 + 3-5 — 운영 관제 · 브랜드 인텔리전스 · 알림센터 진입 CTA */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <Link
           to="/enterprise/ops"
           className="group flex items-center gap-3 rounded-2xl bg-sky-50 border border-sky-200 p-4 ring-1 ring-sky-200 transition hover:bg-sky-100 dark:bg-sky-500/20 dark:border-transparent dark:ring-sky-400/40 dark:hover:bg-sky-500/25"
@@ -180,6 +180,22 @@ function DashboardContent({
             </p>
           </div>
           <ChevronRight size={16} className="text-slate-700 dark:text-violet-100 transition group-hover:translate-x-0.5" />
+        </Link>
+
+        <Link
+          to="/enterprise/notifications"
+          className="group flex items-center gap-3 rounded-2xl bg-rose-50 border border-rose-200 p-4 ring-1 ring-rose-200 transition hover:bg-rose-100 dark:bg-rose-500/20 dark:border-transparent dark:ring-rose-400/40 dark:hover:bg-rose-500/25"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-500/40 dark:text-rose-50" aria-hidden>
+            <Bell size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold text-slate-950 dark:text-rose-50">알림센터</p>
+            <p className="text-[12px] text-slate-700 dark:text-rose-100">
+              장애 · 정책 · 정산 알림 · 자동 스캔.
+            </p>
+          </div>
+          <ChevronRight size={16} className="text-slate-700 dark:text-rose-100 transition group-hover:translate-x-0.5" />
         </Link>
       </div>
 
