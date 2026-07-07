@@ -819,13 +819,6 @@ declare
   v_settlement record;
   v_paid_blocked record;
   v_now_playing_missing boolean;
-
-  procedure incr(k text) as $incr$
-  begin
-    -- outer scope 변수 접근을 위해 nested block 대신 helper 로직을 inline 처리
-    -- 실제로는 inline update 사용 (아래 CASE 참조)
-  end;
-  $incr$ language plpgsql;
 begin
   if v_ea_id is null then raise exception 'forbidden: not an enterprise HQ admin'; end if;
 
