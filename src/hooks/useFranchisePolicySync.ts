@@ -75,7 +75,7 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
           // MVP: 큐가 비어있거나 첫 진입이면 즉시 적용, 아니면 대기
           const isInitial = lastAppliedKeyRef.current === null || queueLength === 0;
           if (isInitial) {
-            await applyPolicyPlaylist(p, setQueue);
+            await applyPolicyPlaylist(p, setQueue, storeId);
             lastAppliedKeyRef.current = key;
           } else {
             // 다음 곡 변경 시점에 적용되도록 마킹 (아래 별도 effect 에서 처리)
@@ -114,7 +114,7 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
     if (pendingPolicyRef.current && currentTrackId) {
       const pending = pendingPolicyRef.current;
       console.info('[franchise] swapping playlist for new policy at next track boundary');
-      void applyPolicyPlaylist(pending, setQueue).then(() => {
+      void applyPolicyPlaylist(pending, setQueue, storeId).then(() => {
         lastAppliedKeyRef.current = makeKey(pending);
         pendingPolicyRef.current = null;
       });
@@ -128,13 +128,15 @@ export function useFranchisePolicySync({ storeId, enabled }: UseFranchisePolicyS
 }
 
 // 정책의 playlist 를 큐로 적용 — 기존 daily seed shuffle / shuffle / repeat 유지
+// 0404 (HOTFIX-A): storeId 전달 → store guardrail hard_block 자동 제외
 async function applyPolicyPlaylist(
   p: StoreActiveMusicPolicy,
   setQueue: ReturnType<typeof usePlayerStore.getState>['setQueue'],
+  storeId: string,
 ): Promise<void> {
   if (!p.matched_slot?.playlist_id || !p.playlist) return;
   try {
-    const tracks = await fetchPlaylistTracks(p.matched_slot.playlist_id);
+    const tracks = await fetchPlaylistTracks(p.matched_slot.playlist_id, storeId);
     const playable = filterPlayableTracks(tracks).playable;
     if (playable.length === 0) {
       console.warn('[franchise] policy playlist has no playable tracks', { playlistId: p.matched_slot.playlist_id });

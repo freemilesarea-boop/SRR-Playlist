@@ -45,10 +45,19 @@ function isPublicPlayableTrack(t: PlayableCheckTrack | null | undefined): boolea
   return true;
 }
 
-export async function fetchPlaylistTracks(playlistId: string): Promise<TrackRow[]> {
+export async function fetchPlaylistTracks(
+  playlistId: string,
+  storeId?: string | null,
+): Promise<TrackRow[]> {
   // 0182 — 서버 RPC 가 사업자 early_skip 자동제외(store_key scope) + 재생가능 필터를 적용해
   // order_index 순으로 반환한다. (playlist_tracks 물리삭제 없음 — 조회 시 exclusion layer)
-  const { data, error } = await supabase.rpc('get_playlist_tracks', { p_playlist_id: playlistId });
+  //
+  // 0404 (HOTFIX-A) — storeId 전달 시 오버로드 시그니처 호출 → 매장 store guardrail
+  // hard_block 트랙을 재생 직전에 제외. storeId 없으면 기존 동작 (PlaylistPage/Editor 회귀 0).
+  const args = storeId
+    ? { p_playlist_id: playlistId, p_store_id: storeId }
+    : { p_playlist_id: playlistId };
+  const { data, error } = await supabase.rpc('get_playlist_tracks', args);
   if (error) throw error;
   const tracks = ((data ?? []) as TrackRow[])
     .filter(Boolean)

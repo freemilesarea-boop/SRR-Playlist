@@ -70,7 +70,8 @@ export function useStartBusinessMode() {
         if (current?.id === scheduleId && cached && cached.length > 0) {
           playable = cached;
         } else {
-          const tracks = await fetchPlaylistTracks(playlistId);
+          // 0404 (HOTFIX-A): 매장 컨텍스트 (userId === storeId) 전달 → guardrail hard_block 제외
+          const tracks = await fetchPlaylistTracks(playlistId, userId);
           playable = filterPlayableTracks(tracks).playable;
         }
 
@@ -83,7 +84,8 @@ export function useStartBusinessMode() {
             originalPl?.daypart ?? null,
           ).catch(() => null);
           if (candidate && candidate.playlist_id !== playlistId) {
-            const fbTracks = await fetchPlaylistTracks(candidate.playlist_id);
+            // 0404 (HOTFIX-A): fallback playlist 도 guardrail hard_block 제외
+            const fbTracks = await fetchPlaylistTracks(candidate.playlist_id, userId);
             const fbPlayable = filterPlayableTracks(fbTracks).playable;
             if (fbPlayable.length > 0) {
               playable = fbPlayable;
