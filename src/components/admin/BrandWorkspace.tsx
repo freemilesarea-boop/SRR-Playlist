@@ -1,0 +1,593 @@
+// Phase ENT-OS-2 — Brand Workspace.
+// Enterprise OS 안에서 Brand 를 독립 운영 단위로 승격: 좌측 Summary + 우측 Navigation.
+// 섹션: Overview / Music / Playlist / Media / Player / AI / History.
+// Playlist 는 영속 엔진(0409): manual/auto · version · clone · soft-delete. AI 생성은 Stub.
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Copy, Plus, Trash2, ExternalLink, Image as ImageIcon, ListMusic, Music2, Sparkles,
+  Power, CopyPlus, RefreshCw, History as HistoryIcon, Radio, Gauge, LayoutDashboard,
+} from 'lucide-react';
+import { AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard, AdminModal } from '@/components/admin/ui';
+import type { AdminToneName } from '@/components/admin/ui';
+import { adminTones } from '@/lib/adminTones';
+import { toast } from '@/store/toastStore';
+import {
+  adminGetBrandWorkspace, adminCreateBrandPlaylist, adminUpdateBrandPlaylist,
+  adminCloneBrandPlaylist, adminDeleteBrandPlaylist, adminRegenerateBrandPlaylist,
+  type BrandWorkspace as BrandWorkspaceData, type BrandPlaylistRow, type BrandPlaylistType,
+  type BrandWorkspaceMediaAsset,
+} from '@/lib/api/brandWorkspaceApi';
+import { adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia } from '@/lib/api/brandPlayerApi';
+import { uploadBrandMedia } from '@/lib/brandMediaUpload';
+import BrandSignage from '@/components/brand/BrandSignage';
+
+type Section = 'overview' | 'music' | 'playlist' | 'media' | 'player' | 'ai' | 'history';
+const NAV: ReadonlyArray<{ key: Section; label: string; icon: React.ReactNode }> = [
+  { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
+  { key: 'music', label: 'Music', icon: <Music2 size={14} /> },
+  { key: 'playlist', label: 'Playlist', icon: <ListMusic size={14} /> },
+  { key: 'media', label: 'Media', icon: <ImageIcon size={14} /> },
+  { key: 'player', label: 'Player', icon: <Radio size={14} /> },
+  { key: 'ai', label: 'AI', icon: <Sparkles size={14} /> },
+  { key: 'history', label: 'History', icon: <HistoryIcon size={14} /> },
+];
+
+export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: string; onBrandChanged?: () => void }) {
+  const [section, setSection] = useState<Section>('overview');
+  const [data, setData] = useState<BrandWorkspaceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setData(await adminGetBrandWorkspace(brandId)); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Workspace 조회 실패'); }
+    finally { setLoading(false); }
+  }, [brandId]);
+  useEffect(() => { void load(); }, [load]);
+
+  const reload = useCallback(async () => { await load(); onBrandChanged?.(); }, [load, onBrandChanged]);
+
+  if (loading && !data) return <AdminSkeleton variant="block" rows={8} />;
+  if (error) return <AdminAlert tone="danger" title="조회 실패" description={error} action={<AdminButton size="sm" onClick={() => void load()}>재시도</AdminButton>} />;
+  if (!data) return null;
+
+  const b = data.brand; const o = data.overview;
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
+      {/* ── 좌: Brand Summary ── */}
+      <aside className="space-y-3">
+        <AdminCard>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-base font-bold text-ink">{b.name}</p>
+              <p className="mt-0.5 truncate text-[11px] text-ink-mute">{b.enterprise_name ?? '본사 미연결'}</p>
+            </div>
+            <AdminBadge tone={b.status === 'active' ? 'success' : 'neutral'}>{b.status === 'active' ? '활성' : '비활성'}</AdminBadge>
+          </div>
+          {b.industry_type && <p className="mt-1 text-[11px] text-ink-dim">{b.industry_type}</p>}
+
+          <div className="mt-3 flex items-center gap-3 rounded-xl bg-bg p-3">
+            <Gauge size={22} className={healthColor(o.health_score)} />
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-ink-dim">Health Score</p>
+              <p className={`text-xl font-extrabold ${healthColor(o.health_score)}`}>{o.health_score}<span className="text-xs text-ink-dim"> / 100</span></p>
+            </div>
+          </div>
+
+          <dl className="mt-3 space-y-1.5">
+            <SummaryRow k="연결 매장" v={String(o.connected_store_count)} />
+            <SummaryRow k="연결 지역" v={String(o.connected_region_count)} />
+            <SummaryRow k="플레이어 세션" v={String(o.player_session_count)} />
+            <SummaryRow k="이미지" v={`${o.active_media_count}/${o.media_count}`} />
+            <SummaryRow k="플레이리스트" v={String(o.playlist_count)} />
+            <SummaryRow k="재생 가능 트랙" v={String(o.available_track_count)} />
+          </dl>
+        </AdminCard>
+      </aside>
+
+      {/* ── 우: Navigation + Section ── */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-1 rounded-2xl bg-bg-card p-1 text-xs">
+          {NAV.map((n) => (
+            <button key={n.key} onClick={() => setSection(n.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold transition ${section === n.key ? 'bg-accent text-black' : 'text-ink-mute hover:bg-bg-hover'}`}>
+              {n.icon} {n.label}
+            </button>
+          ))}
+        </div>
+
+        {section === 'overview' && <OverviewSection d={data} />}
+        {section === 'music' && <MusicSection d={data} />}
+        {section === 'playlist' && <PlaylistSection d={data} reload={reload} />}
+        {section === 'media' && <MediaSection d={data} reload={reload} />}
+        {section === 'player' && <PlayerSection d={data} />}
+        {section === 'ai' && <AiSection d={data} />}
+        {section === 'history' && <HistorySection d={data} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Overview ─────────────────────────────────────────────────────────
+function OverviewSection({ d }: { d: BrandWorkspaceData }) {
+  const b = d.brand; const o = d.overview;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <AdminStatCard label="연결 매장" value={String(o.connected_store_count)} />
+        <AdminStatCard label="플레이어 세션" value={String(o.player_session_count)} tone={o.player_session_count > 0 ? 'info' : 'neutral'} />
+        <AdminStatCard label="플레이리스트" value={String(o.playlist_count)} />
+        <AdminStatCard label="이미지(활성)" value={String(o.active_media_count)} tone={o.active_media_count > 0 ? 'success' : 'neutral'} />
+      </div>
+      <AdminCard title="브랜드 정보">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+          <KV k="Brand Name" v={b.name} />
+          <KV k="Enterprise" v={b.enterprise_name} />
+          <KV k="Industry" v={b.industry_type} />
+          <KV k="Status" v={b.status} />
+          <KV k="Created" v={fmt(b.created_at)} />
+          <KV k="Updated" v={fmt(b.updated_at)} />
+          <KV k="Music Policy" v={o.music_policy_set ? '설정됨' : '기본값'} />
+          <KV k="AI Profile" v={o.ai_profile_set ? '설정됨' : '미설정'} />
+          <KV k="Health Score" v={`${o.health_score} / 100`} />
+          <KV k="brand_id" v={b.id} copy mono abbrev />
+        </dl>
+        {b.description && <p className="mt-2 rounded bg-bg px-2 py-1.5 text-xs text-ink-mute">{b.description}</p>}
+      </AdminCard>
+    </div>
+  );
+}
+
+// ── Music (brand 음악 정책, 조회) ────────────────────────────────────
+function MusicSection({ d }: { d: BrandWorkspaceData }) {
+  const ai = d.ai_profile;
+  return (
+    <AdminCard title="브랜드 음악 정책" subtitle="플레이어 자동 생성의 기준. 편집은 '브랜드 플레이어' 메뉴에서.">
+      {!ai ? (
+        <AdminEmpty title="음악 정책 없음" description="브랜드 기본값으로 자동 생성됩니다." />
+      ) : (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+          <KV k="선호 장르" v={csvOrDash(ai.preferred_genres)} />
+          <KV k="차단 장르" v={csvOrDash(ai.blocked_genres)} />
+          <KV k="선호 무드" v={csvOrDash(ai.preferred_moods)} />
+          <KV k="차단 무드" v={csvOrDash(ai.blocked_moods)} />
+          <KV k="에너지" v={`${ai.energy_min ?? '—'} ~ ${ai.energy_max ?? '—'}`} />
+          <KV k="보컬 정책" v={ai.vocal_policy} />
+          <KV k="자동 플리 생성" v={ai.auto_generate_enabled ? '사용' : '미사용'} />
+        </dl>
+      )}
+    </AdminCard>
+  );
+}
+
+// ── Playlist (영속 엔진 CRUD) ────────────────────────────────────────
+function PlaylistSection({ d, reload }: { d: BrandWorkspaceData; reload: () => Promise<void> }) {
+  const [creating, setCreating] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const ps = d.playlist_summary;
+
+  async function act(id: string, fn: () => Promise<unknown>, ok: string) {
+    setBusy(id);
+    try { await fn(); toast.success(ok); await reload(); }
+    catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-4 gap-2">
+        <AdminStatCard label="전체" value={String(ps.total)} />
+        <AdminStatCard label="활성" value={String(ps.active)} tone="success" />
+        <AdminStatCard label="Manual" value={String(ps.manual)} tone="neutral" />
+        <AdminStatCard label="Auto" value={String(ps.auto)} tone="info" />
+      </div>
+
+      <AdminCard
+        title={`플레이리스트 (${d.playlists.length})`}
+        subtitle="Manual = 직접 큐레이션 · Auto = 브랜드 정책 기반 자동 생성. 버전/복제/비활성/soft-delete 지원."
+        action={
+          <div className="flex gap-1.5">
+            <AdminButton size="sm" variant="subtle" tone="neutral" leftIcon={<Sparkles size={13} />} onClick={() => setAiOpen(true)}>AI 생성</AdminButton>
+            <AdminButton size="sm" tone="primary" leftIcon={<Plus size={13} />} onClick={() => setCreating(true)}>새 플레이리스트</AdminButton>
+          </div>
+        }
+      >
+        {d.playlists.length === 0 ? (
+          <AdminEmpty icon={<ListMusic size={22} />} title="플레이리스트 없음" description="Auto(정책 기반) 또는 Manual 플레이리스트를 생성하세요." />
+        ) : (
+          <div className="space-y-2">
+            {d.playlists.map((p) => (
+              <PlaylistRow key={p.id} p={p} busy={busy === p.id}
+                onStatus={() => act(p.id, () => adminUpdateBrandPlaylist({ playlistId: p.id, status: p.status === 'active' ? 'inactive' : 'active' }), '상태를 변경했어요')}
+                onClone={() => act(p.id, () => adminCloneBrandPlaylist(p.id), '복제했어요')}
+                onRegen={() => act(p.id, () => adminRegenerateBrandPlaylist(p.id), '재생성했어요')}
+                onDelete={() => { if (confirm(`"${p.name}" 플레이리스트를 삭제할까요? (soft delete)`)) void act(p.id, () => adminDeleteBrandPlaylist(p.id, true), '삭제했어요'); }}
+              />
+            ))}
+          </div>
+        )}
+      </AdminCard>
+
+      {creating && <CreatePlaylistModal brandId={d.brand.id} onClose={() => setCreating(false)} onCreated={async () => { setCreating(false); await reload(); }} />}
+      {aiOpen && <AiPlaylistStubModal onClose={() => setAiOpen(false)} industry={d.brand.industry_type} />}
+    </div>
+  );
+}
+
+function PlaylistRow({ p, busy, onStatus, onClone, onRegen, onDelete }: {
+  p: BrandPlaylistRow; busy: boolean;
+  onStatus: () => void; onClone: () => void; onRegen: () => void; onDelete: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-line/20 bg-bg p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-sm font-bold text-ink">{p.name}</span>
+            <AdminBadge tone={p.type === 'auto' ? 'info' : 'neutral'}>{p.type === 'auto' ? 'Auto' : 'Manual'}</AdminBadge>
+            <AdminBadge tone={p.status === 'active' ? 'success' : 'neutral'}>{p.status === 'active' ? '활성' : '비활성'}</AdminBadge>
+            <span className="text-[11px] text-ink-dim">v{p.version}</span>
+          </div>
+          {p.description && <p className="mt-0.5 truncate text-[11px] text-ink-mute">{p.description}</p>}
+          <p className="mt-0.5 text-[11px] text-ink-dim">Track {p.track_count} · 생성 {fmt(p.created_at)} · 수정 {fmt(p.updated_at)}</p>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <AdminButton size="sm" variant="ghost" tone="neutral" disabled={busy} leftIcon={<Power size={12} />} onClick={onStatus}>{p.status === 'active' ? '비활성' : '활성'}</AdminButton>
+        <AdminButton size="sm" variant="ghost" tone="neutral" disabled={busy} leftIcon={<CopyPlus size={12} />} onClick={onClone}>복제</AdminButton>
+        {p.type === 'auto' && <AdminButton size="sm" variant="ghost" tone="info" disabled={busy} leftIcon={<RefreshCw size={12} />} onClick={onRegen}>재생성</AdminButton>}
+        <AdminButton size="sm" variant="ghost" tone="danger" disabled={busy} leftIcon={<Trash2 size={12} />} onClick={onDelete}>삭제</AdminButton>
+      </div>
+    </div>
+  );
+}
+
+function CreatePlaylistModal({ brandId, onClose, onCreated }: { brandId: string; onClose: () => void; onCreated: () => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [type, setType] = useState<BrandPlaylistType>('auto');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!name.trim()) { toast.error('이름을 입력해주세요'); return; }
+    setSaving(true);
+    try {
+      const r = await adminCreateBrandPlaylist({ brandId, name: name.trim(), description: desc.trim() || null, type });
+      toast.success(`생성했어요 (트랙 ${r.track_count})`);
+      await onCreated();
+    } catch (e) { toast.error(`생성 실패: ${(e as Error).message}`); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <AdminModal open onClose={onClose} title="새 플레이리스트" size="md"
+      footer={<><AdminButton tone="neutral" variant="subtle" onClick={onClose}>취소</AdminButton><AdminButton tone="primary" onClick={() => void submit()} disabled={saving}>{saving ? '생성 중…' : '생성'}</AdminButton></>}>
+      <div className="space-y-3">
+        <Field label="이름 *"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 오전 브런치" maxLength={120} /></Field>
+        <Field label="설명"><textarea className={inputCls} rows={2} value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={300} /></Field>
+        <Field label="유형">
+          <div className="flex gap-2">
+            <TypeChip active={type === 'auto'} onClick={() => setType('auto')} title="Auto" desc="정책 기반 자동 생성" />
+            <TypeChip active={type === 'manual'} onClick={() => setType('manual')} title="Manual" desc="직접 큐레이션 (빈 상태)" />
+          </div>
+        </Field>
+        <p className="text-[11px] text-ink-dim">
+          {type === 'auto'
+            ? 'Auto: 브랜드 음악 정책으로 즉시 채워집니다. 이후 "재생성"으로 갱신.'
+            : 'Manual: 빈 플레이리스트로 생성됩니다. 트랙 편집기는 후속 Phase.'}
+        </p>
+      </div>
+    </AdminModal>
+  );
+}
+
+function TypeChip({ active, onClick, title, desc }: { active: boolean; onClick: () => void; title: string; desc: string }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`flex-1 rounded-xl border px-3 py-2 text-left transition ${active ? 'border-accent bg-accent/10' : 'border-line/25 bg-bg hover:border-line/40'}`}>
+      <p className={`text-sm font-bold ${active ? 'text-ink' : 'text-ink-mute'}`}>{title}</p>
+      <p className="text-[11px] text-ink-dim">{desc}</p>
+    </button>
+  );
+}
+
+// AI Playlist Builder — Stub UI (후속 AI Music OS 연결)
+function AiPlaylistStubModal({ onClose, industry }: { onClose: () => void; industry: string | null }) {
+  return (
+    <AdminModal open onClose={onClose} title="AI Playlist Builder" size="md"
+      footer={<><AdminButton tone="neutral" variant="subtle" onClick={onClose}>닫기</AdminButton><AdminButton tone="primary" disabled leftIcon={<Sparkles size={14} />}>AI 생성 (후속)</AdminButton></>}>
+      <AdminAlert tone="info" className="mb-3" title="후속 AI Music OS 연결 예정"
+        description="아래 입력은 미리보기입니다. 실제 AI 생성은 다음 Phase에서 Playlist Engine 위에 연결됩니다." />
+      <div className="grid grid-cols-2 gap-3 opacity-70">
+        <Field label="업종"><input className={inputCls} defaultValue={industry ?? ''} disabled /></Field>
+        <Field label="분위기"><input className={inputCls} placeholder="calm, warm" disabled /></Field>
+        <Field label="장르"><input className={inputCls} placeholder="jazz, lofi" disabled /></Field>
+        <Field label="기피 장르"><input className={inputCls} placeholder="edm, metal" disabled /></Field>
+        <Field label="BPM"><input className={inputCls} placeholder="70 ~ 110" disabled /></Field>
+        <Field label="Energy"><input className={inputCls} placeholder="0.2 ~ 0.7" disabled /></Field>
+        <Field label="Vocal"><input className={inputCls} placeholder="prefer_instrumental" disabled /></Field>
+        <Field label="시간대"><input className={inputCls} placeholder="09:00 ~ 12:00" disabled /></Field>
+      </div>
+      <div className="mt-3 rounded-lg border border-dashed border-line/30 bg-bg p-3 text-center text-xs text-ink-dim">
+        Playlist Preview · 예상 Track 수 · 예상 분위기 — 후속 Phase
+      </div>
+    </AdminModal>
+  );
+}
+
+// ── Media ────────────────────────────────────────────────────────────
+function MediaSection({ d, reload }: { d: BrandWorkspaceData; reload: () => Promise<void> }) {
+  const [uploading, setUploading] = useState(false);
+  const brandId = d.brand.id;
+  const assets = d.media;
+
+  async function onPickImage(file: File) {
+    setUploading(true);
+    try {
+      const up = await uploadBrandMedia(brandId, file);
+      if (!up.ok || !up.url) { toast.error(up.error || '업로드 실패'); return; }
+      await adminAddBrandMedia({ brandId, imageUrl: up.url, displayDurationSeconds: 10 });
+      toast.success('이미지를 추가했어요'); await reload();
+    } catch (e) { toast.error(`이미지 추가 실패: ${(e as Error).message}`); }
+    finally { setUploading(false); }
+  }
+  async function toggle(m: BrandWorkspaceMediaAsset) {
+    try { await adminUpdateBrandMedia({ assetId: m.id, status: m.status === 'active' ? 'inactive' : 'active' }); await reload(); }
+    catch (e) { toast.error(`수정 실패: ${(e as Error).message}`); }
+  }
+  async function remove(id: string) {
+    if (!confirm('이 이미지를 삭제할까요?')) return;
+    try { await adminDeleteBrandMedia(id); toast.success('삭제했어요'); await reload(); }
+    catch (e) { toast.error(`삭제 실패: ${(e as Error).message}`); }
+  }
+
+  const preview = assets.filter((m) => (m.status ?? 'active') === 'active')
+    .map((m) => ({ id: m.id, title: m.title, image_url: m.image_url, display_duration_seconds: m.display_duration_seconds ?? 10 }));
+
+  return (
+    <AdminCard
+      title={`이미지·사이니지 (${assets.length})`}
+      subtitle="순서대로 노출. jpg/png/webp, 10MB 이하. (Video/HTML/YouTube 는 후속)"
+      action={
+        <label className="cursor-pointer">
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void onPickImage(f); e.currentTarget.value = ''; }} />
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black">
+            <Plus size={13} /> {uploading ? '업로드 중…' : '이미지 추가'}
+          </span>
+        </label>
+      }
+    >
+      {assets.length === 0 ? (
+        <AdminEmpty icon={<ImageIcon size={22} />} title="이미지 없음" description="이미지를 추가하면 플레이어에서 순차 노출됩니다." />
+      ) : (
+        <div className="space-y-2">
+          {assets.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 rounded-lg border border-line/20 bg-bg p-2">
+              <img src={m.image_url} alt={m.title ?? ''} className="h-12 w-16 shrink-0 rounded object-cover" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-ink">{m.title || '(제목 없음)'}</p>
+                <p className="text-[11px] text-ink-dim">{m.asset_type} · 노출 {m.display_duration_seconds ?? '—'}초 · 순서 {m.sort_order ?? '—'}</p>
+              </div>
+              <AdminBadge tone={(m.status ?? 'active') === 'active' ? 'success' : 'neutral'}>{(m.status ?? 'active') === 'active' ? '표시' : '숨김'}</AdminBadge>
+              <AdminButton size="sm" variant="ghost" tone={m.status === 'active' ? 'neutral' : 'success'} onClick={() => void toggle(m)}>{m.status === 'active' ? '숨김' : '표시'}</AdminButton>
+              <AdminButton size="sm" variant="ghost" tone="danger" onClick={() => void remove(m.id)}><Trash2 size={13} /></AdminButton>
+            </div>
+          ))}
+        </div>
+      )}
+      {preview.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-[11px] font-semibold text-ink-dim">플레이어 미리보기</p>
+          <BrandSignage items={preview} brandName={d.brand.name} className="h-48 w-full rounded-lg" />
+        </div>
+      )}
+    </AdminCard>
+  );
+}
+
+// ── Player ───────────────────────────────────────────────────────────
+function PlayerSection({ d }: { d: BrandWorkspaceData }) {
+  const p = d.player; const code = p.store_invite_code;
+  const sum = p.session_summary;
+  return (
+    <div className="space-y-3">
+      <AdminCard title="매장 진입 코드" subtitle="매장은 이 코드만 입력하면 자동으로 브랜드 플레이어에 진입합니다.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-ink-dim">Store Invite Code</p>
+            {code ? (
+              <div className="mt-0.5 flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-bg px-2 py-1.5 font-mono text-sm font-bold text-ink">{code}</code>
+                <button type="button" title="복사" onClick={() => doCopy(code)} className="rounded bg-bg p-1.5 hover:bg-bg-hover"><Copy size={12} /></button>
+              </div>
+            ) : <p className="mt-0.5 rounded bg-bg px-2 py-1.5 text-xs text-ink-dim">본사 미연결 · 코드 없음</p>}
+          </div>
+          <div className="flex items-end">
+            <AdminButton size="sm" variant="subtle" tone="neutral" leftIcon={<ExternalLink size={13} />} onClick={() => window.open('/brand', '_blank', 'noopener')}>/brand 열기</AdminButton>
+          </div>
+        </div>
+      </AdminCard>
+
+      <div className="grid grid-cols-3 gap-2">
+        <AdminStatCard label="누적 세션" value={String(sum.total)} />
+        <AdminStatCard label="활성(10분)" value={String(sum.active_recent)} tone={sum.active_recent > 0 ? 'success' : 'neutral'} />
+        <AdminStatCard label="24h" value={String(sum.last_24h)} />
+      </div>
+
+      <AdminCard title="현재 재생">
+        {p.now_playing ? (
+          <div className="text-sm text-ink">
+            <span className="font-semibold">{p.now_playing.title ?? '(제목 없음)'}</span>
+            {p.now_playing.artist && <span className="text-ink-mute"> · {p.now_playing.artist}</span>}
+            <span className="ml-2 text-[11px] text-ink-dim">{fmt(p.now_playing.last_seen_at)}</span>
+          </div>
+        ) : <p className="text-xs text-ink-dim">현재 재생 중인 세션 없음</p>}
+      </AdminCard>
+
+      <AdminCard title="세션">
+        {p.sessions.length === 0 ? (
+          <AdminEmpty title="세션 기록 없음" description="아직 이 브랜드로 진입한 플레이어가 없습니다." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead className="text-ink-dim"><tr>
+                <th className="px-2 py-1 text-left">최근 접속</th><th className="px-2 py-1 text-left">재생 시작</th>
+                <th className="px-2 py-1 text-left">현재곡</th><th className="px-2 py-1 text-left">User-Agent</th>
+              </tr></thead>
+              <tbody>
+                {p.sessions.map((s) => (
+                  <tr key={s.id} className="border-t border-line/10 align-top">
+                    <td className="px-2 py-1.5 whitespace-nowrap text-ink">{fmt(s.last_seen_at)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-ink-dim">{fmt(s.playback_started_at)}</td>
+                    <td className="px-2 py-1.5">{s.current_track_id ? <InlineCopy value={s.current_track_id} /> : <span className="text-ink-dim">—</span>}</td>
+                    <td className="px-2 py-1.5 max-w-[220px] truncate text-ink-mute" title={s.user_agent ?? ''}>{s.user_agent ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminCard>
+    </div>
+  );
+}
+
+// ── AI (read-only profile) ───────────────────────────────────────────
+function AiSection({ d }: { d: BrandWorkspaceData }) {
+  const ai = d.ai_profile;
+  return (
+    <div className="space-y-3">
+      <AdminAlert tone="info" title="Brand AI Profile (Read Only)"
+        description="현재는 브랜드 음악 정책 기반 조회입니다. Weather/Holiday/Schedule/Auto Rotation 규칙은 후속 AI Music OS에서 저장·사용됩니다." />
+      {!ai ? (
+        <AdminEmpty title="AI Profile 없음" description="브랜드 음악 정책이 설정되면 표시됩니다." />
+      ) : (
+        <>
+          <AdminCard title="음악 프로파일">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+              <KV k="업종" v={ai.industry_type} />
+              <KV k="Preferred Genres" v={csvOrDash(ai.preferred_genres)} />
+              <KV k="Blocked Genres" v={csvOrDash(ai.blocked_genres)} />
+              <KV k="Preferred Mood" v={csvOrDash(ai.preferred_moods)} />
+              <KV k="Blocked Mood" v={csvOrDash(ai.blocked_moods)} />
+              <KV k="Target Energy" v={`${ai.energy_min ?? '—'} ~ ${ai.energy_max ?? '—'}`} />
+              <KV k="Target Vocal" v={ai.vocal_policy} />
+              <KV k="Auto Playlist" v={ai.auto_generate_enabled ? '사용' : '미사용'} />
+            </dl>
+          </AdminCard>
+          <AdminCard title="자동화 규칙 (후속)">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+              <KV k="Target BPM" v={null} />
+              <KV k="Weather Rule" v={null} />
+              <KV k="Holiday Rule" v={null} />
+              <KV k="Schedule Rule" v={null} />
+              <KV k="Auto Media" v={null} />
+              <KV k="Auto Rotation" v={null} />
+            </dl>
+            <p className="mt-2 text-[11px] text-ink-dim">후속 AI Music OS Phase에서 저장·적용됩니다.</p>
+          </AdminCard>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── History ──────────────────────────────────────────────────────────
+function HistorySection({ d }: { d: BrandWorkspaceData }) {
+  return (
+    <AdminCard title={`변경 이력 (최근 ${d.history.length})`} subtitle="브랜드 생성·정책·이미지·플레이리스트·플레이어 활동.">
+      {d.history.length === 0 ? <AdminEmpty title="이력 없음" /> : (
+        <div className="space-y-1.5">
+          {d.history.map((h) => (
+            <div key={h.id} className="flex items-start justify-between gap-2 border-b border-line/5 pb-1.5">
+              <div className="min-w-0">
+                <AdminBadge tone={actionTone(h.action)}>{h.action}</AdminBadge>
+                {h.metadata && <span className="ml-2 text-[11px] text-ink-dim">{summarizeMeta(h.metadata)}</span>}
+              </div>
+              <span className="shrink-0 text-[11px] text-ink-dim">{fmt(h.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminCard>
+  );
+}
+
+// ── helpers ──────────────────────────────────────────────────────────
+function SummaryRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between text-[11px]">
+      <span className="text-ink-dim">{k}</span>
+      <span className="font-semibold text-ink">{v}</span>
+    </div>
+  );
+}
+
+function KV({ k, v, copy, mono, abbrev }: { k: string; v: string | null | undefined; copy?: boolean; mono?: boolean; abbrev?: boolean }) {
+  const val = v ?? '—';
+  const shown = abbrev && v && v.length > 12 ? `${v.slice(0, 8)}…` : val;
+  return (
+    <div className="flex items-start justify-between gap-2 border-b border-line/5 pb-1">
+      <span className="shrink-0 text-[11px] text-ink-dim">{k}</span>
+      <span className="flex items-center gap-1 text-right">
+        <span className={`text-xs text-ink ${mono ? 'font-mono' : ''}`}>{shown}</span>
+        {copy && v && <button type="button" title="복사" onClick={() => doCopy(v)} className="rounded p-0.5 text-ink-dim hover:bg-bg-hover hover:text-ink"><Copy size={11} /></button>}
+      </span>
+    </div>
+  );
+}
+
+function InlineCopy({ value }: { value: string }) {
+  return (
+    <button type="button" title={value} onClick={() => doCopy(value)} className="inline-flex items-center gap-1 font-mono text-ink-dim hover:text-ink">
+      {value.slice(0, 8)}… <Copy size={10} />
+    </button>
+  );
+}
+
+function actionTone(action: string): AdminToneName {
+  if (action.includes('delete')) return 'danger';
+  if (action.includes('create') || action.includes('clone')) return 'success';
+  if (action.startsWith('playlist')) return 'info';
+  return 'neutral';
+}
+
+function summarizeMeta(meta: Record<string, unknown>): string {
+  const bits: string[] = [];
+  if (meta.name) bits.push(String(meta.name));
+  if (meta.type) bits.push(String(meta.type));
+  if (meta.track_count != null) bits.push(`트랙 ${meta.track_count}`);
+  if (meta.version != null) bits.push(`v${meta.version}`);
+  if (meta.status) bits.push(String(meta.status));
+  return bits.join(' · ');
+}
+
+function healthColor(score: number): string {
+  const tone: 'success' | 'warning' | 'danger' = score >= 80 ? 'success' : score >= 50 ? 'warning' : 'danger';
+  return adminTones[tone].text;
+}
+
+function csvOrDash(arr: string[] | null | undefined): string | null {
+  const list = (arr ?? []).filter(Boolean);
+  return list.length ? list.join(', ') : null;
+}
+
+function doCopy(v: string) {
+  void navigator.clipboard?.writeText(v).then(() => toast.success('복사됨')).catch(() => toast.error('복사 실패'));
+}
+
+function fmt(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+const inputCls = 'w-full rounded-lg border border-line/25 bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent/50';
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (<label className="block space-y-1"><span className="text-[11px] font-semibold text-ink-mute">{label}</span>{children}</label>);
+}
