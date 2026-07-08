@@ -13,8 +13,9 @@ import {
   RefreshCw, Plus, Search, X, AlertCircle, Building2,
   CheckCircle2, Mail, Phone, Pencil, Trash2, Power,
   Key, Copy, RotateCw, Wallet, FileText, Download, ThumbsUp, ThumbsDown,
-  Save,
+  Save, Eye,
 } from 'lucide-react';
+import EnterpriseDetailModal from '@/components/admin/EnterpriseDetailModal';
 import {
   adminGetEnterpriseSettlement,
   adminGetEnterpriseDocuments,
@@ -77,7 +78,12 @@ export default function EnterpriseAccountsPanel() {
   const [deleteTarget, setDeleteTarget] = useState<EnterpriseAccount | null>(null);
   const [inviteTarget, setInviteTarget] = useState<EnterpriseAccount | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<EnterpriseAccount | null>(null);
+  const [detailTarget, setDetailTarget] = useState<EnterpriseAccount | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 딥링크: /admin?tab=enterprise-accounts&enterpriseId=xxx → 해당 본사 상세 자동 오픈
+  const [pendingDetailId, setPendingDetailId] = useState<string | null>(() => {
+    try { return new URLSearchParams(window.location.search).get('enterpriseId'); } catch { return null; }
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,6 +110,13 @@ export default function EnterpriseAccountsPanel() {
   }, [search, statusFilter, roleFilter, offset]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // 딥링크 enterpriseId 가 현재 목록에 있으면 상세 자동 오픈
+  useEffect(() => {
+    if (!pendingDetailId) return;
+    const match = rows.find((r) => r.id === pendingDetailId);
+    if (match) { setDetailTarget(match); setPendingDetailId(null); }
+  }, [pendingDetailId, rows]);
 
   // 검색/필터 변경 시 offset 리셋
   const onSearchChange = (v: string) => { setSearch(v); setOffset(0); };
@@ -253,6 +266,7 @@ export default function EnterpriseAccountsPanel() {
                     <td className="px-3 py-2 text-right">
                       <RowActions
                         row={r} busy={busyId === r.id}
+                        onDetail={() => setDetailTarget(r)}
                         onEdit={() => setEditTarget(r)}
                         onInvite={() => setInviteTarget(r)}
                         onSettlement={() => setSettlementTarget(r)}
@@ -339,6 +353,12 @@ export default function EnterpriseAccountsPanel() {
           onClose={() => setSettlementTarget(null)}
           onReviewed={() => { void load(); }} />
       )}
+      {detailTarget && (
+        <EnterpriseDetailModal
+          enterpriseId={detailTarget.id}
+          enterpriseName={detailTarget.enterprise_name}
+          onClose={() => setDetailTarget(null)} />
+      )}
     </div>
   );
 }
@@ -372,9 +392,10 @@ function RoleBadge({ role }: { role: EnterpriseAccountRole }) {
 // last_login 표시는 LastLoginBadge (@/components/admin/ui) 사용 — 디자인 시스템 v2 (PR #197 helper 대체).
 
 function RowActions({
-  row, busy, onEdit, onInvite, onSettlement, onSetStatus, onDelete,
+  row, busy, onDetail, onEdit, onInvite, onSettlement, onSetStatus, onDelete,
 }: {
   row: EnterpriseAccount; busy: boolean;
+  onDetail: () => void;
   onEdit: () => void;
   onInvite: () => void;
   onSettlement: () => void;
@@ -383,6 +404,11 @@ function RowActions({
 }) {
   return (
     <div className="inline-flex items-center gap-1">
+      <button onClick={onDetail}
+        title="상세보기"
+        className="rounded bg-indigo-500/20 p-1 hover:bg-indigo-500/30">
+        <Eye size={11} className="text-indigo-300" />
+      </button>
       <button onClick={onSettlement} disabled={busy}
         title="정산 검토"
         className="rounded bg-emerald-500/20 p-1 hover:bg-emerald-500/30 disabled:opacity-50">
