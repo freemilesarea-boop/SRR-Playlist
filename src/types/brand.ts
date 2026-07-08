@@ -12,7 +12,8 @@ export interface BrandListItem {
   status: BrandStatus;
   industry_type: string | null;
   description: string | null;
-  code_hint: string | null;
+  enterprise_account_id: string | null;
+  enterprise_name: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -58,7 +59,10 @@ export interface BrandDetail {
     status: BrandStatus;
     industry_type: string | null;
     description: string | null;
-    code_hint: string | null;
+    enterprise_account_id: string | null;
+    enterprise_name: string | null;
+    /** 연결 본사의 매장 코드(참고 표시용, read-only). 브랜드 코드 아님. */
+    store_invite_code: string | null;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
@@ -67,12 +71,13 @@ export interface BrandDetail {
   media: BrandMediaAsset[];
 }
 
-/** verify_brand_code 성공 응답 */
-export interface BrandVerifyResult {
+/** verify_store_code 응답 — 매장 코드 → 연결 브랜드 */
+export interface StoreVerifyResult {
   success: boolean;
   error?: string;
   brand_id?: string;
-  brand_name?: string;
+  /** 연결 본사명 (표시용) */
+  store_label?: string;
   session_token?: string;
   expires_at?: string;
 }
@@ -85,9 +90,9 @@ export interface BrandPlayerConfig {
   playlist: TrackRow[];
 }
 
-/** brand code 검증 실패 사유 → 사용자 메시지 매핑 */
-export const BRAND_VERIFY_ERROR_MESSAGES: Record<string, string> = {
-  empty_code: '브랜드 코드를 입력해주세요.',
-  invalid_code: '브랜드 코드가 올바르지 않아요. 다시 확인해주세요.',
-  inactive_brand: '현재 사용할 수 없는 브랜드예요. 본사 또는 관리자에게 문의해주세요.',
+/** 매장 코드 검증 실패 사유 → 사용자 메시지 매핑 */
+export const STORE_VERIFY_ERROR_MESSAGES: Record<string, string> = {
+  empty_code: '매장 코드를 입력해주세요.',
+  invalid_code: '매장 코드가 올바르지 않아요. 다시 확인해주세요.',
+  brand_not_linked: '브랜드 플레이어가 아직 연결되지 않았습니다. 본사 또는 관리자에게 문의하세요.',
 };
