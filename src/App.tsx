@@ -57,6 +57,8 @@ const EnterpriseHqIntelPage = lazyWithRetry(() => import('@/pages/EnterpriseHqIn
 const EnterpriseHqNotificationsPage = lazyWithRetry(() => import('@/pages/EnterpriseHqNotificationsPage'));
 const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylistsPage'));
 const CuratorsListPage = lazyWithRetry(() => import('@/pages/CuratorsListPage'));
+const BrandPage = lazyWithRetry(() => import('@/pages/BrandPage'));
+const BrandPlayerPage = lazyWithRetry(() => import('@/pages/BrandPlayerPage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -253,6 +255,8 @@ export default function App() {
                 <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
                 <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
                 <Route path="/business/player" element={<RequireAuth><StorePlayerPage /></RequireAuth>} />
+                <Route path="/brand" element={<RequireAuth><BrandPage /></RequireAuth>} />
+                <Route path="/brand/player/:brandId" element={<RequireAuth><BrandPlayerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

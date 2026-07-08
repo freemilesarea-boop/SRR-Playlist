@@ -99,6 +99,7 @@ const EnterpriseCommandCenterPanel = lazy(() => import('@/components/admin/Enter
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
+const BrandPlayerPanel = lazy(() => import('@/components/admin/BrandPlayerPanel'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -173,11 +174,13 @@ type Tab =
   | 'admins'
   | 'upload-integrity'
   | 'recommendation'
-  | 'brand';
+  | 'brand'
+  | 'brand-player';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'business-live', label: '매장 실시간', icon: <Activity size={14} /> },
+  { key: 'brand-player', label: '브랜드 플레이어', icon: <StoreIcon size={14} />, superOnly: true },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
@@ -244,7 +247,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
 type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
 
 const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
-  { key: '운영', tabs: ['dashboard', 'business-live', 'support-inquiries'] },
+  { key: '운영', tabs: ['dashboard', 'business-live', 'brand-player', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
   { key: '엔터프라이즈', tabs: ['enterprise-command-center', 'enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
   { key: '매출/결제', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
@@ -560,6 +563,7 @@ export default function AdminPage() {
         {tab === 'dashboard' && <Dashboard />}
         <Suspense fallback={<TabSkeleton />}>
           {tab === 'business-live' && <BusinessLivePanel />}
+          {tab === 'brand-player' && <BrandPlayerPanel />}
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
           {tab === 'curators' && <CuratorsAdminPanel />}
