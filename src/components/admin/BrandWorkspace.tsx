@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Copy, Plus, Trash2, ExternalLink, Image as ImageIcon, ListMusic, Music2, Sparkles,
   Power, CopyPlus, RefreshCw, History as HistoryIcon, Radio, Gauge, LayoutDashboard,
+  SlidersHorizontal, PlayCircle, CheckCircle2, XCircle,
 } from 'lucide-react';
 import { AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard, AdminModal } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
@@ -17,17 +18,23 @@ import {
   type BrandWorkspace as BrandWorkspaceData, type BrandPlaylistRow, type BrandPlaylistType,
   type BrandWorkspaceMediaAsset,
 } from '@/lib/api/brandWorkspaceApi';
+import {
+  adminGetBrandHealth, adminListBrandRuntimeRules, adminCreateBrandRuntimeRule,
+  adminUpdateBrandRuntimeRule, adminDeleteBrandRuntimeRule, adminPreviewBrandRuntime,
+  type BrandHealth, type BrandRuntimeRule, type RuntimePreview,
+} from '@/lib/api/brandRuntimeApi';
 import { adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia } from '@/lib/api/brandPlayerApi';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import BrandSignage from '@/components/brand/BrandSignage';
 
-type Section = 'overview' | 'music' | 'playlist' | 'media' | 'player' | 'ai' | 'history';
+type Section = 'overview' | 'music' | 'playlist' | 'media' | 'player' | 'runtime' | 'ai' | 'history';
 const NAV: ReadonlyArray<{ key: Section; label: string; icon: React.ReactNode }> = [
   { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
   { key: 'music', label: 'Music', icon: <Music2 size={14} /> },
   { key: 'playlist', label: 'Playlist', icon: <ListMusic size={14} /> },
   { key: 'media', label: 'Media', icon: <ImageIcon size={14} /> },
   { key: 'player', label: 'Player', icon: <Radio size={14} /> },
+  { key: 'runtime', label: 'Runtime', icon: <SlidersHorizontal size={14} /> },
   { key: 'ai', label: 'AI', icon: <Sparkles size={14} /> },
   { key: 'history', label: 'History', icon: <HistoryIcon size={14} /> },
 ];
@@ -35,12 +42,16 @@ const NAV: ReadonlyArray<{ key: Section; label: string; icon: React.ReactNode }>
 export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: string; onBrandChanged?: () => void }) {
   const [section, setSection] = useState<Section>('overview');
   const [data, setData] = useState<BrandWorkspaceData | null>(null);
+  const [health, setHealth] = useState<BrandHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setData(await adminGetBrandWorkspace(brandId)); }
+    try {
+      const [ws, h] = await Promise.all([adminGetBrandWorkspace(brandId), adminGetBrandHealth(brandId)]);
+      setData(ws); setHealth(h);
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Workspace 조회 실패'); }
     finally { setLoading(false); }
   }, [brandId]);
@@ -53,6 +64,7 @@ export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: s
   if (!data) return null;
 
   const b = data.brand; const o = data.overview;
+  const scoreVal = health?.score ?? o.health_score;
 
   return (
     <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
@@ -69,10 +81,10 @@ export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: s
           {b.industry_type && <p className="mt-1 text-[11px] text-ink-dim">{b.industry_type}</p>}
 
           <div className="mt-3 flex items-center gap-3 rounded-xl bg-bg p-3">
-            <Gauge size={22} className={healthColor(o.health_score)} />
+            <Gauge size={22} className={healthColor(scoreVal)} />
             <div>
               <p className="text-[10px] uppercase tracking-wider text-ink-dim">Health Score</p>
-              <p className={`text-xl font-extrabold ${healthColor(o.health_score)}`}>{o.health_score}<span className="text-xs text-ink-dim"> / 100</span></p>
+              <p className={`text-xl font-extrabold ${healthColor(scoreVal)}`}>{scoreVal}<span className="text-xs text-ink-dim"> / 100</span></p>
             </div>
           </div>
 
@@ -98,11 +110,12 @@ export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: s
           ))}
         </div>
 
-        {section === 'overview' && <OverviewSection d={data} />}
+        {section === 'overview' && <OverviewSection d={data} health={health} />}
         {section === 'music' && <MusicSection d={data} />}
         {section === 'playlist' && <PlaylistSection d={data} reload={reload} />}
         {section === 'media' && <MediaSection d={data} reload={reload} />}
         {section === 'player' && <PlayerSection d={data} />}
+        {section === 'runtime' && <RuntimeSection d={data} reload={reload} />}
         {section === 'ai' && <AiSection d={data} />}
         {section === 'history' && <HistorySection d={data} />}
       </div>
@@ -111,7 +124,7 @@ export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: s
 }
 
 // ── Overview ─────────────────────────────────────────────────────────
-function OverviewSection({ d }: { d: BrandWorkspaceData }) {
+function OverviewSection({ d, health }: { d: BrandWorkspaceData; health: BrandHealth | null }) {
   const b = d.brand; const o = d.overview;
   return (
     <div className="space-y-3">
@@ -121,6 +134,11 @@ function OverviewSection({ d }: { d: BrandWorkspaceData }) {
         <AdminStatCard label="플레이리스트" value={String(o.playlist_count)} />
         <AdminStatCard label="이미지(활성)" value={String(o.active_media_count)} tone={o.active_media_count > 0 ? 'success' : 'neutral'} />
       </div>
+      {health && (
+        <AdminCard title={`Health Checks (${health.score}/100)`} subtitle="Runtime 운영 준비 상태.">
+          <HealthChecks health={health} />
+        </AdminCard>
+      )}
       <AdminCard title="브랜드 정보">
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
           <KV k="Brand Name" v={b.name} />
@@ -456,6 +474,350 @@ function PlayerSection({ d }: { d: BrandWorkspaceData }) {
   );
 }
 
+// ── Runtime (Decision Engine) ────────────────────────────────────────
+const RULE_TYPES = ['default', 'time', 'daypart', 'weekday', 'weather', 'season', 'holiday', 'campaign', 'emergency'] as const;
+const WEATHERS = ['', 'clear', 'cloudy', 'rain', 'snow', 'storm'];
+const SEASONS = ['', 'spring', 'summer', 'autumn', 'winter'];
+const WEEKDAYS = ['', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const DAYPARTS = ['', 'dawn', 'morning', 'afternoon', 'evening', 'night'];
+const STORE_STATUSES = ['', 'open', 'closed'];
+
+function RuntimeSection({ d, reload }: { d: BrandWorkspaceData; reload: () => Promise<void> }) {
+  const brandId = d.brand.id;
+  const [rules, setRules] = useState<BrandRuntimeRule[]>([]);
+  const [loadingRules, setLoadingRules] = useState(true);
+  const [editing, setEditing] = useState<BrandRuntimeRule | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const loadRules = useCallback(async () => {
+    setLoadingRules(true);
+    try { setRules(await adminListBrandRuntimeRules(brandId, false)); }
+    catch (e) { toast.error(`규칙 조회 실패: ${(e as Error).message}`); }
+    finally { setLoadingRules(false); }
+  }, [brandId]);
+  useEffect(() => { void loadRules(); }, [loadRules]);
+
+  const afterChange = useCallback(async () => { await loadRules(); await reload(); }, [loadRules, reload]);
+
+  async function act(id: string, fn: () => Promise<unknown>, ok: string) {
+    setBusy(id);
+    try { await fn(); toast.success(ok); await afterChange(); }
+    catch (e) { toast.error(`실패: ${(e as Error).message}`); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div className="space-y-3">
+      <AdminAlert tone="info" title="Runtime Decision Engine"
+        description="규칙(priority·conditions)으로 지금 어떤 Playlist/Media 가 선택될지 결정합니다. 날씨·공휴일은 아래 Simulation 값(수동)으로 미리봅니다. 실제 player 자동 적용은 후속 Phase." />
+
+      <RuntimeSimulation brandId={brandId} />
+
+      <AdminCard
+        title={`Runtime Rules (${rules.length})`}
+        subtitle="priority 높은 규칙 우선 · 동일 priority면 최신 수정 우선 · 매칭 없으면 default→활성 플리→자동생성 fallback."
+        action={<AdminButton size="sm" tone="primary" leftIcon={<Plus size={13} />} onClick={() => setCreating(true)}>규칙 생성</AdminButton>}
+      >
+        {loadingRules ? <AdminSkeleton variant="block" rows={4} />
+          : rules.length === 0 ? <AdminEmpty icon={<SlidersHorizontal size={22} />} title="규칙 없음" description="default 규칙부터 만들어 기본 Playlist를 지정하세요." />
+          : (
+            <div className="space-y-2">
+              {rules.map((r) => (
+                <div key={r.id} className="rounded-lg border border-line/20 bg-bg p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate text-sm font-bold text-ink">{r.name}</span>
+                        <AdminBadge tone="info">{r.rule_type}</AdminBadge>
+                        <AdminBadge tone={r.status === 'active' ? 'success' : 'neutral'}>{r.status === 'active' ? '활성' : '비활성'}</AdminBadge>
+                        <span className="text-[11px] font-semibold text-ink-dim">priority {r.priority}</span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-ink-mute">
+                        {r.playlist_name ? `▶ ${r.playlist_name}` : '▶ (playlist 없음)'}
+                        {r.media_title ? ` · 🖼 ${r.media_title}` : ''}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-ink-dim">조건: {conditionSummary(r.conditions)} · 기간: {rangeSummary(r.starts_at, r.ends_at)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <AdminButton size="sm" variant="ghost" tone="neutral" disabled={busy === r.id} onClick={() => setEditing(r)}>수정</AdminButton>
+                    <AdminButton size="sm" variant="ghost" tone="neutral" disabled={busy === r.id} leftIcon={<Power size={12} />}
+                      onClick={() => act(r.id, () => adminUpdateBrandRuntimeRule({ ruleId: r.id, status: r.status === 'active' ? 'inactive' : 'active' }), '상태를 변경했어요')}>
+                      {r.status === 'active' ? '비활성' : '활성'}
+                    </AdminButton>
+                    <AdminButton size="sm" variant="ghost" tone="danger" disabled={busy === r.id} leftIcon={<Trash2 size={12} />}
+                      onClick={() => { if (confirm(`"${r.name}" 규칙을 삭제할까요? (soft delete)`)) void act(r.id, () => adminDeleteBrandRuntimeRule(r.id, true), '삭제했어요'); }}>
+                      삭제
+                    </AdminButton>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+      </AdminCard>
+
+      {(creating || editing) && (
+        <RuntimeRuleModal
+          brandId={brandId} rule={editing} playlists={d.playlists} media={d.media}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSaved={async () => { setCreating(false); setEditing(null); await afterChange(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RuntimeSimulation({ brandId }: { brandId: string }) {
+  const [dt, setDt] = useState('');
+  const [daypart, setDaypart] = useState('');
+  const [weather, setWeather] = useState('');
+  const [season, setSeason] = useState('');
+  const [weekday, setWeekday] = useState('');
+  const [holiday, setHoliday] = useState('');
+  const [storeStatus, setStoreStatus] = useState('');
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<RuntimePreview | null>(null);
+
+  function buildContext(): Record<string, unknown> {
+    const c: Record<string, unknown> = {};
+    if (dt) c.datetime = dt;
+    if (daypart) c.daypart = daypart;
+    if (weather) c.weather = weather;
+    if (season) c.season = season;
+    if (weekday) c.weekday = weekday;
+    if (holiday) c.is_holiday = holiday === 'true';
+    if (storeStatus) c.store_status = storeStatus;
+    return c;
+  }
+
+  async function run() {
+    setRunning(true);
+    try { setResult(await adminPreviewBrandRuntime(brandId, buildContext())); }
+    catch (e) { toast.error(`preview 실패: ${(e as Error).message}`); }
+    finally { setRunning(false); }
+  }
+
+  return (
+    <AdminCard title="Runtime Simulation" subtitle="컨텍스트를 입력하고 어떤 Playlist가 선택되는지 미리봅니다. (날씨/공휴일 수동 값)"
+      action={<AdminButton size="sm" tone="primary" leftIcon={<PlayCircle size={14} />} disabled={running} onClick={() => void run()}>{running ? 'Preview 중…' : 'Preview Runtime'}</AdminButton>}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Field label="날짜/시간"><input type="datetime-local" className={inputSm} value={dt} onChange={(e) => setDt(e.target.value)} /></Field>
+        <Field label="daypart"><SelectSm value={daypart} onChange={setDaypart} options={DAYPARTS} /></Field>
+        <Field label="weather"><SelectSm value={weather} onChange={setWeather} options={WEATHERS} /></Field>
+        <Field label="season"><SelectSm value={season} onChange={setSeason} options={SEASONS} /></Field>
+        <Field label="weekday"><SelectSm value={weekday} onChange={setWeekday} options={WEEKDAYS} /></Field>
+        <Field label="holiday"><SelectSm value={holiday} onChange={setHoliday} options={['', 'false', 'true']} /></Field>
+        <Field label="store_status"><SelectSm value={storeStatus} onChange={setStoreStatus} options={STORE_STATUSES} /></Field>
+      </div>
+      {result && <RuntimePreviewResult r={result} />}
+    </AdminCard>
+  );
+}
+
+function RuntimePreviewResult({ r }: { r: RuntimePreview }) {
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-line/20 bg-bg p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold text-ink-dim">선택 결과</span>
+        {r.fallback_used
+          ? <AdminBadge tone="warning">fallback · {r.fallback_reason}</AdminBadge>
+          : <AdminBadge tone="success">rule 매칭</AdminBadge>}
+        <span className="text-xs text-ink-dim">평가시각 {fmt(r.evaluated_at)}</span>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg bg-bg-card p-2">
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">Selected Rule</p>
+          <p className="text-sm font-bold text-ink">{r.selected_rule?.name ?? '— 규칙 없음 —'}</p>
+          {r.selected_rule && <p className="text-[11px] text-ink-dim">{r.selected_rule.rule_type} · priority {r.selected_rule.priority}</p>}
+        </div>
+        <div className="rounded-lg bg-bg-card p-2">
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">Selected Playlist</p>
+          <p className="text-sm font-bold text-ink">{r.selected_playlist?.name ?? '—'}</p>
+          {r.selected_playlist && <p className="text-[11px] text-ink-dim">{r.selected_playlist.type} · {r.selected_playlist.track_count}곡</p>}
+        </div>
+        <div className="rounded-lg bg-bg-card p-2">
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">Selected Media</p>
+          <p className="text-sm font-bold text-ink">{r.selected_media?.title ?? '—'}</p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[11px] font-semibold text-ink-dim">Explanation</p>
+        <ol className="space-y-0.5">
+          {r.explanation.map((e, i) => <li key={i} className="text-[11px] text-ink-mute">• {e}</li>)}
+        </ol>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 text-[11px] font-semibold text-ink-dim">Matched Rules ({r.matched_rules.length})</p>
+          {r.matched_rules.length === 0 ? <p className="text-[11px] text-ink-dim">없음</p> : (
+            <ul className="space-y-0.5">
+              {r.matched_rules.map((m) => (
+                <li key={m.id} className="text-[11px] text-ink-mute">{m.name} <span className="text-ink-dim">({m.rule_type}, p{m.priority})</span></li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <p className="mb-1 text-[11px] font-semibold text-ink-dim">Queue Preview ({r.queue_preview.length})</p>
+          {r.queue_preview.length === 0 ? <p className="text-[11px] text-ink-dim">없음</p> : (
+            <ol className="space-y-0.5">
+              {r.queue_preview.map((t, i) => (
+                <li key={t.id} className="truncate text-[11px] text-ink-mute">{i + 1}. {t.title ?? '(제목 없음)'}{t.artist ? ` · ${t.artist}` : ''}</li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[11px] font-semibold text-ink-dim">Health ({r.health.score}/100)</p>
+        <HealthChecks health={r.health} compact />
+      </div>
+    </div>
+  );
+}
+
+function RuntimeRuleModal({ brandId, rule, playlists, media, onClose, onSaved }: {
+  brandId: string; rule: BrandRuntimeRule | null;
+  playlists: BrandWorkspaceData['playlists']; media: BrandWorkspaceData['media'];
+  onClose: () => void; onSaved: () => Promise<void>;
+}) {
+  const isEdit = !!rule;
+  const [name, setName] = useState(rule?.name ?? '');
+  const [ruleType, setRuleType] = useState(rule?.rule_type ?? 'default');
+  const [priority, setPriority] = useState(String(rule?.priority ?? 50));
+  const [playlistId, setPlaylistId] = useState(rule?.playlist_id ?? '');
+  const [mediaId, setMediaId] = useState(rule?.media_asset_id ?? '');
+  const c = (rule?.conditions ?? {}) as Record<string, unknown>;
+  const [weather, setWeather] = useState(String(c.weather ?? ''));
+  const [season, setSeason] = useState(String(c.season ?? ''));
+  const [weekday, setWeekday] = useState(String(c.weekday ?? ''));
+  const [daypart, setDaypart] = useState(String(c.daypart ?? ''));
+  const [holiday, setHoliday] = useState(c.is_holiday === undefined ? '' : String(c.is_holiday));
+  const [storeStatus, setStoreStatus] = useState(String(c.store_status ?? ''));
+  const [status, setStatus] = useState<'active' | 'inactive'>(rule?.status ?? 'active');
+  const [saving, setSaving] = useState(false);
+
+  function buildConditions(): Record<string, unknown> {
+    const cond: Record<string, unknown> = {};
+    if (weather) cond.weather = weather;
+    if (season) cond.season = season;
+    if (weekday) cond.weekday = weekday;
+    if (daypart) cond.daypart = daypart;
+    if (holiday) cond.is_holiday = holiday === 'true';
+    if (storeStatus) cond.store_status = storeStatus;
+    return cond;
+  }
+
+  async function submit() {
+    if (!name.trim()) { toast.error('이름을 입력해주세요'); return; }
+    const prio = Number(priority) || 50;
+    setSaving(true);
+    try {
+      if (isEdit && rule) {
+        await adminUpdateBrandRuntimeRule({
+          ruleId: rule.id, name: name.trim(), ruleType, priority: prio,
+          playlistId: playlistId || null, clearPlaylist: !playlistId,
+          mediaAssetId: mediaId || null, clearMedia: !mediaId,
+          conditions: buildConditions(), status,
+        });
+        toast.success('규칙을 수정했어요');
+      } else {
+        await adminCreateBrandRuntimeRule({
+          brandId, name: name.trim(), ruleType, priority: prio,
+          playlistId: playlistId || null, mediaAssetId: mediaId || null,
+          conditions: buildConditions(), status,
+        });
+        toast.success('규칙을 생성했어요');
+      }
+      await onSaved();
+    } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <AdminModal open onClose={onClose} title={isEdit ? '규칙 수정' : '새 Runtime 규칙'} size="md"
+      footer={<><AdminButton tone="neutral" variant="subtle" onClick={onClose}>취소</AdminButton><AdminButton tone="primary" onClick={() => void submit()} disabled={saving}>{saving ? '저장 중…' : '저장'}</AdminButton></>}>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="이름 *"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} /></Field>
+          <Field label="priority"><input type="number" className={inputCls} value={priority} onChange={(e) => setPriority(e.target.value)} /></Field>
+          <Field label="rule_type"><SelectCls value={ruleType} onChange={setRuleType} options={[...RULE_TYPES]} /></Field>
+          <Field label="status">
+            <SelectCls value={status} onChange={(v) => setStatus(v as 'active' | 'inactive')} options={['active', 'inactive']} />
+          </Field>
+          <Field label="연결 Playlist">
+            <select className={inputCls} value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
+              <option value="">— 없음 (fallback) —</option>
+              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
+            </select>
+          </Field>
+          <Field label="연결 Media">
+            <select className={inputCls} value={mediaId} onChange={(e) => setMediaId(e.target.value)}>
+              <option value="">— 없음 —</option>
+              {media.map((m) => <option key={m.id} value={m.id}>{m.title || '(제목 없음)'}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <p className="pt-1 text-[11px] font-semibold text-ink-dim">조건 (비우면 무시 · 모두 비우면 항상 매칭 = default)</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Field label="weather"><SelectSm value={weather} onChange={setWeather} options={WEATHERS} /></Field>
+          <Field label="season"><SelectSm value={season} onChange={setSeason} options={SEASONS} /></Field>
+          <Field label="weekday"><SelectSm value={weekday} onChange={setWeekday} options={WEEKDAYS} /></Field>
+          <Field label="daypart"><SelectSm value={daypart} onChange={setDaypart} options={DAYPARTS} /></Field>
+          <Field label="holiday"><SelectSm value={holiday} onChange={setHoliday} options={['', 'false', 'true']} /></Field>
+          <Field label="store_status"><SelectSm value={storeStatus} onChange={setStoreStatus} options={STORE_STATUSES} /></Field>
+        </div>
+        <p className="text-[11px] text-ink-dim">campaign/emergency 등 기간 기반 규칙의 시작/종료 일시는 후속 UI에서 확장됩니다. (RPC는 이미 지원)</p>
+      </div>
+    </AdminModal>
+  );
+}
+
+function HealthChecks({ health, compact }: { health: BrandHealth; compact?: boolean }) {
+  return (
+    <div className={compact ? 'grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4' : 'grid grid-cols-1 gap-1.5 sm:grid-cols-2'}>
+      {health.checks.map((c) => (
+        <div key={c.key} className="flex items-center gap-1.5 text-[11px]">
+          {c.passed ? <CheckCircle2 size={13} className={adminTones.success.icon} /> : <XCircle size={13} className={adminTones.danger.icon} />}
+          <span className="text-ink-mute">{c.label}</span>
+          {c.detail && !compact && <span className="ml-auto text-ink-dim">{c.detail}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SelectSm({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: readonly string[] }) {
+  return (
+    <select className={inputSm} value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o} value={o}>{o === '' ? '— 무시 —' : o}</option>)}
+    </select>
+  );
+}
+function SelectCls({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: readonly string[] }) {
+  return (
+    <select className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
+function conditionSummary(cond: Record<string, unknown> | null | undefined): string {
+  const entries = Object.entries(cond ?? {});
+  if (entries.length === 0) return '항상(default)';
+  return entries.map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('|') : String(v)}`).join(', ');
+}
+function rangeSummary(startsAt: string | null, endsAt: string | null): string {
+  if (!startsAt && !endsAt) return '상시';
+  return `${startsAt ? fmt(startsAt) : '~'} → ${endsAt ? fmt(endsAt) : '~'}`;
+}
+
 // ── AI (read-only profile) ───────────────────────────────────────────
 function AiSection({ d }: { d: BrandWorkspaceData }) {
   const ai = d.ai_profile;
@@ -588,6 +950,7 @@ function fmt(iso: string | null | undefined): string {
 }
 
 const inputCls = 'w-full rounded-lg border border-line/25 bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent/50';
+const inputSm = 'w-full rounded border border-line/25 bg-bg px-2 py-1 text-xs text-ink outline-none focus:border-accent/50';
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (<label className="block space-y-1"><span className="text-[11px] font-semibold text-ink-mute">{label}</span>{children}</label>);
 }
