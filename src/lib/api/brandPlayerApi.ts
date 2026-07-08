@@ -2,16 +2,19 @@
 // 모든 접근은 0405 의 SECURITY DEFINER RPC 경유 (brand_* 테이블 direct 접근 없음).
 import { supabase } from '@/lib/supabase';
 import type {
-  BrandListItem, BrandDetail, BrandVerifyResult, BrandPlayerConfig,
+  BrandListItem, BrandDetail, StoreVerifyResult, BrandPlayerConfig,
   BrandVocalPolicy,
 } from '@/types/brand';
 
 // ── 사용자(매장) 경로 ────────────────────────────────────────────────
-/** 브랜드 코드 검증 → 세션 토큰 발급. 실패 시 success=false + error 코드. */
-export async function verifyBrandCode(code: string): Promise<BrandVerifyResult> {
-  const { data, error } = await supabase.rpc('verify_brand_code', { p_code: code });
+/**
+ * 매장 코드(Store Invite Code) 검증 → 본사 조회 → 연결 브랜드 → 세션 토큰 발급.
+ * 실패 시 success=false + error(empty_code/invalid_code/brand_not_linked).
+ */
+export async function verifyStoreCode(code: string): Promise<StoreVerifyResult> {
+  const { data, error } = await supabase.rpc('verify_store_code', { p_store_code: code });
   if (error) throw error;
-  return data as BrandVerifyResult;
+  return data as StoreVerifyResult;
 }
 
 /** 브랜드 플레이어 config (brand + policy + media + generated playlist). */
@@ -51,17 +54,29 @@ export async function adminGetBrand(id: string): Promise<BrandDetail> {
   return data as BrandDetail;
 }
 
-/** 생성 → 평문 코드 1회 반환. */
+/** 브랜드 생성 (사용자 코드 없음). 선택적으로 연결 본사 지정. */
 export async function adminCreateBrand(input: {
   name: string; industryType?: string | null; description?: string | null;
-}): Promise<{ success: boolean; id: string; code: string; code_hint: string }> {
+  enterpriseAccountId?: string | null;
+}): Promise<{ success: boolean; id: string }> {
   const { data, error } = await supabase.rpc('admin_create_brand', {
     p_name: input.name,
     p_industry_type: input.industryType ?? null,
     p_description: input.description ?? null,
+    p_enterprise_account_id: input.enterpriseAccountId ?? null,
   });
   if (error) throw error;
-  return data as { success: boolean; id: string; code: string; code_hint: string };
+  return data as { success: boolean; id: string };
+}
+
+/** 브랜드 ↔ 본사 연결/해제 (null 이면 해제). 본사당 active 브랜드 1개. */
+export async function adminSetBrandEnterprise(brandId: string, enterpriseId: string | null): Promise<{ success: boolean }> {
+  const { data, error } = await supabase.rpc('admin_set_brand_enterprise', {
+    p_brand_id: brandId,
+    p_enterprise_id: enterpriseId,
+  });
+  if (error) throw error;
+  return data as { success: boolean };
 }
 
 export async function adminUpdateBrand(input: {
@@ -83,13 +98,6 @@ export async function adminSetBrandDeleted(id: string, deleted: boolean): Promis
   const { data, error } = await supabase.rpc('admin_set_brand_deleted', { p_id: id, p_deleted: deleted });
   if (error) throw error;
   return data as { success: boolean };
-}
-
-/** 코드 재발급 → 새 평문 코드 1회 반환. 기존 코드/세션 무효화. */
-export async function adminRegenerateBrandCode(id: string): Promise<{ success: boolean; code: string; code_hint: string }> {
-  const { data, error } = await supabase.rpc('admin_regenerate_brand_code', { p_id: id });
-  if (error) throw error;
-  return data as { success: boolean; code: string; code_hint: string };
 }
 
 export async function adminUpsertBrandMusicPolicy(input: {

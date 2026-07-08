@@ -1,16 +1,18 @@
-// Phase BRAND-1 — 관리자 "브랜드 플레이어" 패널.
-// 브랜드 CRUD + 코드 발급/재발급 + 음악정책 + 이미지 사이니지 관리 + 미리보기.
-// 서버 RPC(_is_super_admin) 가 최종 권한 판정. 이미지/삭제 실패 처리 포함.
+// 관리자 "브랜드 플레이어" 패널.
+// 브랜드는 관리자 내부 객체 — 사용자 코드 없음. 본사(Enterprise)에 1:1 연결.
+// 매장은 본사 Store Invite Code 로 진입 → 연결 브랜드 로드.
+// CRUD + 본사 연결 + 음악정책 + 이미지 사이니지 + 미리보기.
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, KeyRound, Copy, Image as ImageIcon, Trash2, Power, Eye } from 'lucide-react';
+import { Plus, RefreshCw, Building2, Image as ImageIcon, Trash2, Power, Eye, Link2 } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminButton, AdminBadge, AdminAlert, AdminEmpty, AdminSkeleton, AdminModal, AdminStatCard,
 } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
 import {
   adminListBrands, adminGetBrand, adminCreateBrand, adminUpdateBrand, adminSetBrandDeleted,
-  adminRegenerateBrandCode, adminUpsertBrandMusicPolicy, adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia,
+  adminSetBrandEnterprise, adminUpsertBrandMusicPolicy, adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia,
 } from '@/lib/api/brandPlayerApi';
+import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import BrandSignage from '@/components/brand/BrandSignage';
 import type { BrandListItem, BrandDetail, BrandVocalPolicy } from '@/types/brand';
@@ -27,7 +29,6 @@ export default function BrandPlayerPanel() {
   const [err, setErr] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [revealCode, setRevealCode] = useState<{ name: string; code: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -48,19 +49,8 @@ export default function BrandPlayerPanel() {
     finally { setBusy(null); }
   }
 
-  async function regenerate(b: BrandListItem) {
-    if (!confirm(`${b.name} 브랜드 코드를 재발급할까요? 기존 코드와 접속 세션이 즉시 무효화됩니다.`)) return;
-    setBusy(b.id);
-    try {
-      const r = await adminRegenerateBrandCode(b.id);
-      setRevealCode({ name: b.name, code: r.code });
-      await load();
-    } catch (e) { toast.error(`재발급 실패: ${(e as Error).message}`); }
-    finally { setBusy(null); }
-  }
-
   async function remove(b: BrandListItem) {
-    if (!confirm(`${b.name} 브랜드를 삭제할까요? (soft delete — 접속 불가 처리)`)) return;
+    if (!confirm(`${b.name} 브랜드를 삭제할까요? (soft delete — 매장 진입 불가 처리)`)) return;
     setBusy(b.id);
     try { await adminSetBrandDeleted(b.id, true); toast.success('삭제했어요'); await load(); }
     catch (e) { toast.error(`삭제 실패: ${(e as Error).message}`); }
@@ -70,7 +60,7 @@ export default function BrandPlayerPanel() {
   return (
     <AdminSection
       title="브랜드 플레이어"
-      description="프랜차이즈/브랜드 전용 음악 + 이미지 사이니지 플레이어. 브랜드 생성 시 발급되는 코드를 매장에 전달하세요."
+      description="브랜드는 관리자 내부 객체입니다. 각 브랜드를 본사(Enterprise)에 연결하면, 그 본사의 매장 코드로 매장이 진입해 브랜드 음악·사이니지를 재생합니다."
       action={
         <div className="flex gap-2">
           <AdminButton tone="neutral" variant="subtle" size="sm" leftIcon={<RefreshCw size={14} />} onClick={() => void load()}>새로고침</AdminButton>
@@ -81,8 +71,8 @@ export default function BrandPlayerPanel() {
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <AdminStatCard label="전체 브랜드" value={String(rows.length)} />
         <AdminStatCard label="활성" value={String(rows.filter((r) => r.status === 'active').length)} tone="success" />
-        <AdminStatCard label="비활성" value={String(rows.filter((r) => r.status !== 'active').length)} tone="neutral" />
-        <AdminStatCard label="이미지 등록 브랜드" value={String(rows.filter((r) => (r.active_media_count ?? 0) > 0).length)} tone="info" />
+        <AdminStatCard label="본사 연결됨" value={String(rows.filter((r) => r.enterprise_account_id).length)} tone="info" />
+        <AdminStatCard label="이미지 등록" value={String(rows.filter((r) => (r.active_media_count ?? 0) > 0).length)} tone="neutral" />
       </div>
 
       {loading ? (
@@ -90,7 +80,7 @@ export default function BrandPlayerPanel() {
       ) : err ? (
         <AdminAlert tone="danger" title="조회 실패" description={err} />
       ) : rows.length === 0 ? (
-        <AdminEmpty icon={<ImageIcon size={26} />} title="등록된 브랜드가 없어요" description="새 브랜드를 생성하면 접속 코드가 발급됩니다." action={<AdminButton tone="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setCreating(true)}>새 브랜드</AdminButton>} />
+        <AdminEmpty icon={<ImageIcon size={26} />} title="등록된 브랜드가 없어요" description="새 브랜드를 생성하고 본사에 연결하세요." action={<AdminButton tone="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setCreating(true)}>새 브랜드</AdminButton>} />
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((b) => (
@@ -98,9 +88,14 @@ export default function BrandPlayerPanel() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-ink">{b.name}</p>
-                  <p className="mt-0.5 text-[11px] text-ink-mute">{b.industry_type || '업종 미지정'} · 코드 {b.code_hint || '—'}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-mute">{b.industry_type || '업종 미지정'}</p>
                 </div>
                 <AdminBadge tone={b.status === 'active' ? 'success' : 'neutral'}>{b.status === 'active' ? '활성' : '비활성'}</AdminBadge>
+              </div>
+              <div className="mt-2">
+                {b.enterprise_account_id
+                  ? <AdminBadge tone="info"><Building2 size={10} /> {b.enterprise_name ?? '본사'}</AdminBadge>
+                  : <AdminBadge tone="warning">본사 미연결</AdminBadge>}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-ink-dim">
                 <span className="rounded bg-bg-hover px-1.5 py-0.5">이미지 {b.active_media_count ?? 0}</span>
@@ -110,7 +105,6 @@ export default function BrandPlayerPanel() {
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <AdminButton size="sm" variant="subtle" tone="primary" leftIcon={<Eye size={13} />} onClick={() => setDetailId(b.id)}>상세/편집</AdminButton>
-                <AdminButton size="sm" variant="subtle" tone="warning" leftIcon={<KeyRound size={13} />} disabled={busy === b.id} onClick={() => void regenerate(b)}>코드 재발급</AdminButton>
                 <AdminButton size="sm" variant="ghost" tone="neutral" leftIcon={<Power size={13} />} disabled={busy === b.id} onClick={() => void toggleStatus(b)}>{b.status === 'active' ? '비활성화' : '활성화'}</AdminButton>
                 <AdminButton size="sm" variant="ghost" tone="danger" leftIcon={<Trash2 size={13} />} disabled={busy === b.id} onClick={() => void remove(b)}>삭제</AdminButton>
               </div>
@@ -120,52 +114,54 @@ export default function BrandPlayerPanel() {
       )}
 
       {creating && (
-        <CreateBrandModal
-          onClose={() => setCreating(false)}
-          onCreated={(name, code) => { setCreating(false); setRevealCode({ name, code }); void load(); }}
-        />
+        <CreateBrandModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void load(); }} />
       )}
       {detailId && (
         <BrandDetailModal brandId={detailId} onClose={() => setDetailId(null)} onChanged={() => void load()} />
-      )}
-      {revealCode && (
-        <CodeRevealModal name={revealCode.name} code={revealCode.code} onClose={() => setRevealCode(null)} />
       )}
     </AdminSection>
   );
 }
 
-// ── 코드 노출 (1회) ──────────────────────────────────────────────────
-function CodeRevealModal({ name, code, onClose }: { name: string; code: string; onClose: () => void }) {
+// ── 본사 선택 (연결) ─────────────────────────────────────────────────
+function useEnterpriseOptions() {
+  const [opts, setOpts] = useState<EnterpriseAccount[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void adminListEnterpriseAccounts({ limit: 200, offset: 0 })
+      .then((r) => { if (alive) setOpts(r.data); })
+      .catch(() => { /* silent — 선택 안 함 유지 */ });
+    return () => { alive = false; };
+  }, []);
+  return opts;
+}
+
+function EnterpriseSelect({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+  const opts = useEnterpriseOptions();
   return (
-    <AdminModal open onClose={onClose} title="브랜드 접속 코드" size="sm"
-      footer={<AdminButton tone="primary" onClick={onClose}>확인</AdminButton>}>
-      <div className="space-y-3 text-center">
-        <p className="text-sm text-ink-mute">{name}</p>
-        <div className="flex items-center justify-center gap-2 rounded-xl border border-line/30 bg-bg-hover px-4 py-4">
-          <span className="text-2xl font-extrabold tracking-[0.2em] text-ink">{code}</span>
-          <AdminButton size="sm" variant="subtle" tone="neutral" leftIcon={<Copy size={13} />}
-            onClick={() => { void navigator.clipboard?.writeText(code); toast.success('복사했어요'); }}>복사</AdminButton>
-        </div>
-        <AdminAlert tone="warning" description="이 코드는 지금만 표시됩니다. 매장에 전달 후 안전하게 보관하세요. 분실 시 재발급이 필요합니다." />
-      </div>
-    </AdminModal>
+    <select className={inputCls} value={value ?? ''} disabled={disabled}
+      onChange={(e) => onChange(e.target.value || null)}>
+      <option value="">— 연결 안 함 —</option>
+      {opts.map((o) => <option key={o.id} value={o.id}>{o.enterprise_name}</option>)}
+    </select>
   );
 }
 
 // ── 생성 ─────────────────────────────────────────────────────────────
-function CreateBrandModal({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string, code: string) => void }) {
+function CreateBrandModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('');
   const [industry, setIndustry] = useState('');
   const [desc, setDesc] = useState('');
+  const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit() {
     if (!name.trim()) { toast.error('브랜드명을 입력해주세요'); return; }
     setSaving(true);
     try {
-      const r = await adminCreateBrand({ name: name.trim(), industryType: industry.trim() || null, description: desc.trim() || null });
-      onCreated(name.trim(), r.code);
+      await adminCreateBrand({ name: name.trim(), industryType: industry.trim() || null, description: desc.trim() || null, enterpriseAccountId: enterpriseId });
+      toast.success('브랜드를 생성했어요');
+      onCreated();
     } catch (e) { toast.error(`생성 실패: ${(e as Error).message}`); }
     finally { setSaving(false); }
   }
@@ -174,29 +170,31 @@ function CreateBrandModal({ onClose, onCreated }: { onClose: () => void; onCreat
     <AdminModal open onClose={onClose} title="새 브랜드" size="md"
       footer={<><AdminButton tone="neutral" variant="subtle" onClick={onClose}>취소</AdminButton><AdminButton tone="primary" onClick={() => void submit()} disabled={saving}>{saving ? '생성 중…' : '생성'}</AdminButton></>}>
       <div className="space-y-3">
-        <Field label="브랜드명 *"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 카페 드득" maxLength={80} /></Field>
+        <Field label="브랜드명 *"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 루베르 브랜드 플레이어" maxLength={80} /></Field>
         <Field label="업종"><input className={inputCls} value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="예: 카페 / 와인바 / 병원" maxLength={50} /></Field>
         <Field label="설명"><textarea className={inputCls} value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} maxLength={300} /></Field>
-        <p className="text-[11px] text-ink-dim">생성 시 접속 코드가 자동 발급되며 1회만 표시됩니다.</p>
+        <Field label="연결 본사 (Enterprise)"><EnterpriseSelect value={enterpriseId} onChange={setEnterpriseId} /></Field>
+        <p className="text-[11px] text-ink-dim">본사에 연결하면 그 본사의 매장 코드로 매장이 이 브랜드 플레이어에 진입합니다. 본사당 브랜드 1개.</p>
       </div>
     </AdminModal>
   );
 }
 
-// ── 상세/편집 (brand + policy + media) ───────────────────────────────
+// ── 상세/편집 ────────────────────────────────────────────────────────
 function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; onClose: () => void; onChanged: () => void }) {
   const [detail, setDetail] = useState<BrandDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
+  const [savingLink, setSavingLink] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // policy form
   const [pref, setPref] = useState(''); const [block, setBlock] = useState('');
   const [prefM, setPrefM] = useState(''); const [blockM, setBlockM] = useState('');
   const [eMin, setEMin] = useState(''); const [eMax, setEMax] = useState('');
   const [vocal, setVocal] = useState<BrandVocalPolicy>('any');
   const [autoGen, setAutoGen] = useState(true);
+  const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -209,10 +207,20 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
       setEMin(p?.energy_min != null ? String(p.energy_min) : ''); setEMax(p?.energy_max != null ? String(p.energy_max) : '');
       setVocal((p?.vocal_policy as BrandVocalPolicy) ?? 'any');
       setAutoGen(p?.auto_generate_enabled ?? true);
+      setEnterpriseId(d.brand.enterprise_account_id);
     } catch (e) { setErr(e instanceof Error ? e.message : '조회 실패'); }
     finally { setLoading(false); }
   }, [brandId]);
   useEffect(() => { void reload(); }, [reload]);
+
+  async function saveLink() {
+    setSavingLink(true);
+    try {
+      await adminSetBrandEnterprise(brandId, enterpriseId);
+      toast.success('본사 연결을 저장했어요'); await reload(); onChanged();
+    } catch (e) { toast.error(`연결 실패: ${(e as Error).message}`); }
+    finally { setSavingLink(false); }
+  }
 
   async function savePolicy() {
     setSavingPolicy(true);
@@ -262,6 +270,23 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
         : err ? <AdminAlert tone="danger" title="조회 실패" description={err} />
         : detail && (
           <div className="space-y-5">
+            {/* 본사 연결 */}
+            <AdminCard title="연결 본사 (Enterprise)" subtitle="매장은 이 본사의 매장 코드(Store Invite Code)로 진입합니다.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="연결 본사"><EnterpriseSelect value={enterpriseId} onChange={setEnterpriseId} disabled={savingLink} /></Field>
+                <Field label="매장 코드 (본사 · 참고)">
+                  <div className={`${inputCls} flex items-center justify-between`}>
+                    <span className="font-mono">{detail.brand.store_invite_code ?? '— 본사 미연결 —'}</span>
+                    {detail.brand.store_invite_code && (
+                      <button type="button" className="text-ink-dim hover:text-ink"
+                        onClick={() => { void navigator.clipboard?.writeText(detail.brand.store_invite_code!).then(() => toast.success('복사됨')); }}>복사</button>
+                    )}
+                  </div>
+                </Field>
+              </div>
+              <div className="mt-3"><AdminButton tone="primary" size="sm" leftIcon={<Link2 size={13} />} onClick={() => void saveLink()} disabled={savingLink}>{savingLink ? '저장 중…' : '연결 저장'}</AdminButton></div>
+            </AdminCard>
+
             {/* 음악 정책 */}
             <AdminCard title="음악 정책" subtitle="차단 장르/무드는 강하게 제외, 선호는 가중치. 곡 부족 시 안전 fallback.">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -317,7 +342,6 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                 </div>
               )}
 
-              {/* 미리보기 */}
               {previewItems.length > 0 && (
                 <div className="mt-3">
                   <p className="mb-1.5 text-[11px] font-semibold text-ink-dim">플레이어 미리보기</p>
