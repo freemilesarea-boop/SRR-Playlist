@@ -190,3 +190,116 @@ export async function adminGetEnterpriseDetail(enterpriseId: string): Promise<En
   }
   return data as EnterpriseDetail;
 }
+
+// ── Phase ENT-OS-1 — Enterprise OS 통합 조회 (0408) ───────────────────
+// 본사 1곳 = 브랜드/이미지/플레이어 세션까지 한 번에. 조회 전용, super_admin.
+export interface EntOsEnterprise {
+  id: string;
+  enterprise_name: string;
+  manager_name: string | null;
+  manager_email: string | null;
+  manager_phone: string | null;
+  role: string | null;
+  status: string;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  hq_invite_code: string | null;
+  store_invite_code: string | null;
+}
+
+export interface EntOsBrand {
+  id: string;
+  name: string;
+  enterprise_account_id: string | null;
+  status: string;
+  industry_type: string | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+  media_count: number;
+  active_media_count: number;
+  playlist_track_count: number;
+  connected_store_count: number;
+}
+
+export interface EntOsBrandMusicPolicy {
+  preferred_genres: string[] | null;
+  blocked_genres: string[] | null;
+  preferred_moods: string[] | null;
+  blocked_moods: string[] | null;
+  energy_min: number | null;
+  energy_max: number | null;
+  vocal_policy: string | null;
+  auto_generate_enabled: boolean | null;
+}
+
+export interface EntOsBrandMediaAsset {
+  id: string;
+  asset_type: string;
+  title: string | null;
+  image_url: string;
+  display_duration_seconds: number | null;
+  sort_order: number | null;
+  status: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface EntOsBrandSession {
+  id: string;
+  last_seen_at: string | null;
+  playback_started_at: string | null;
+  user_agent: string | null;
+  current_track_id: string | null;
+  created_at: string;
+  user_id: string | null;
+}
+
+export interface EntOsBrandSessionSummary {
+  total: number;
+  active_recent: number;
+  last_24h: number;
+}
+
+export interface EntOsMusicPolicy {
+  id: string;
+  name: string | null;
+  status: string | null;
+  is_default: boolean | null;
+  source_type: string | null;
+  track_count_snapshot: number | null;
+  effective_from: string | null;
+  latest_version: number | null;
+}
+
+export interface EnterpriseOsDetail {
+  enterprise: EntOsEnterprise;
+  brand: EntOsBrand | null;
+  brand_music_policy: EntOsBrandMusicPolicy | null;
+  brand_media_assets: EntOsBrandMediaAsset[];
+  brand_player_sessions: EntOsBrandSession[];
+  brand_session_summary: EntOsBrandSessionSummary;
+  store_summary: EntDetailStoreSummary;
+  stores: Array<Pick<EntDetailStore,
+    'store_id' | 'store_name' | 'store_status' | 'region_name' | 'player_status' |
+    'last_seen_at' | 'active_version_number' | 'current_track_title' | 'device_model' |
+    'playback_error' | 'business_category'>>;
+  enterprise_music_policy: EntOsMusicPolicy[];
+  contract: EntDetailContract | null;
+  settlements: EntDetailSettlement[];
+  audit_logs: EntDetailAuditLog[];
+}
+
+/** 관리자 전용 본사 OS 통합 조회 (브랜드/이미지/플레이어 포함). */
+export async function adminGetEnterpriseOsDetail(enterpriseId: string): Promise<EnterpriseOsDetail> {
+  const { data, error } = await supabase.rpc('admin_get_enterprise_os_detail', { p_enterprise_id: enterpriseId });
+  if (error) {
+    console.error('[enterpriseDetailApi] admin_get_enterprise_os_detail failed', error);
+    throw error;
+  }
+  return data as EnterpriseOsDetail;
+}
