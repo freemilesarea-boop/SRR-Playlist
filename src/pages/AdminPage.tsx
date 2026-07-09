@@ -57,6 +57,7 @@ const BrandSettingsPanel = lazy(() => import('@/components/admin/BrandSettingsPa
 const MembersList = lazy(() => import('@/components/admin/MembersList'));
 const StreamingAnalytics = lazy(() => import('@/components/admin/StreamingAnalytics'));
 const StreamingV2Panel = lazy(() => import('@/components/admin/StreamingV2Panel'));
+const SettlementV2Panel = lazy(() => import('@/components/admin/SettlementV2Panel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -142,6 +143,7 @@ type Tab =
   | 'free-trials'
   | 'streaming'
   | 'streaming-v2'
+  | 'settlement-v2'
   | 'revenue'
   | 'subscriptions'
   | 'promotions'
@@ -209,6 +211,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
   { key: 'streaming-v2', label: '스트리밍 v2 (Shadow)', icon: <Headphones size={14} />, superOnly: true },
+  { key: 'settlement-v2', label: '정산 v2 (Shadow)', icon: <Wallet size={14} />, superOnly: true },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'promotions', label: '프로모션', icon: <Ticket size={14} /> },
@@ -253,7 +256,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
   { key: '운영', tabs: ['dashboard', 'business-live', 'brand-player', 'support-inquiries'] },
   { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
   { key: '엔터프라이즈', tabs: ['enterprise-command-center', 'enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
-  { key: '매출/결제', tabs: ['streaming', 'streaming-v2', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
+  { key: '매출/결제', tabs: ['streaming', 'streaming-v2', 'settlement-v2', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
   {
     key: '아티스트',
     tabs: [
@@ -609,6 +612,7 @@ export default function AdminPage() {
           {tab === 'free-trials' && <FreeTrialsPanel />}
           {tab === 'streaming' && <StreamingAnalytics />}
           {tab === 'streaming-v2' && <StreamingV2Panel />}
+          {tab === 'settlement-v2' && <SettlementV2Panel />}
           {tab === 'revenue' && <RevenueManagement />}
           {tab === 'subscriptions' && <SubscriptionRequests />}
           {tab === 'promotions' && <PromotionCodes />}
