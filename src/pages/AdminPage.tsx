@@ -65,6 +65,7 @@ const PredictionCalibrationPanel = lazy(() => import('@/components/admin/Predict
 const AiExperimentPanel = lazy(() => import('@/components/admin/AiExperimentPanel'));
 const AiReinforcementPanel = lazy(() => import('@/components/admin/AiReinforcementPanel'));
 const AiDecisionCenterPanel = lazy(() => import('@/components/admin/AiDecisionCenterPanel'));
+const AiDecisionFeedbackPanel = lazy(() => import('@/components/admin/AiDecisionFeedbackPanel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -192,6 +193,7 @@ type Tab =
   | 'ai-experiments'
   | 'ai-reinforcement'
   | 'ai-decision'
+  | 'ai-decision-feedback'
   | 'brand'
   | 'brand-player';
 
@@ -265,6 +267,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-experiments', label: 'AI Experiments (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-reinforcement', label: 'AI Reinforcement (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-decision', label: 'AI Decision Center (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-decision-feedback', label: 'AI Decision Feedback (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
   { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
@@ -318,6 +321,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'ai-experiments',
       'ai-reinforcement',
       'ai-decision',
+      'ai-decision-feedback',
       'upload-integrity',
     ],
   },
@@ -680,6 +684,7 @@ export default function AdminPage() {
           {tab === 'ai-experiments' && <AiExperimentPanel />}
           {tab === 'ai-reinforcement' && <AiReinforcementPanel />}
           {tab === 'ai-decision' && <AiDecisionCenterPanel />}
+          {tab === 'ai-decision-feedback' && <AiDecisionFeedbackPanel />}
           {tab === 'upload-integrity' && <UploadIntegrityPanel />}
           {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
