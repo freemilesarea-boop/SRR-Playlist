@@ -67,6 +67,7 @@ const AiReinforcementPanel = lazy(() => import('@/components/admin/AiReinforceme
 const AiDecisionCenterPanel = lazy(() => import('@/components/admin/AiDecisionCenterPanel'));
 const AiDecisionFeedbackPanel = lazy(() => import('@/components/admin/AiDecisionFeedbackPanel'));
 const AiDecisionAnalyticsPanel = lazy(() => import('@/components/admin/AiDecisionAnalyticsPanel'));
+const AiObservabilityPanel = lazy(() => import('@/components/admin/AiObservabilityPanel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -196,6 +197,7 @@ type Tab =
   | 'ai-decision'
   | 'ai-decision-feedback'
   | 'ai-decision-analytics'
+  | 'ai-observability'
   | 'brand'
   | 'brand-player';
 
@@ -271,6 +273,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-decision', label: 'AI Decision Center (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-decision-feedback', label: 'AI Decision Feedback (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-decision-analytics', label: 'AI Decision Analytics (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-observability', label: 'AI Observability (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
   { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
@@ -326,6 +329,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'ai-decision',
       'ai-decision-feedback',
       'ai-decision-analytics',
+      'ai-observability',
       'upload-integrity',
     ],
   },
@@ -690,6 +694,7 @@ export default function AdminPage() {
           {tab === 'ai-decision' && <AiDecisionCenterPanel />}
           {tab === 'ai-decision-feedback' && <AiDecisionFeedbackPanel />}
           {tab === 'ai-decision-analytics' && <AiDecisionAnalyticsPanel />}
+          {tab === 'ai-observability' && <AiObservabilityPanel />}
           {tab === 'upload-integrity' && <UploadIntegrityPanel />}
           {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
