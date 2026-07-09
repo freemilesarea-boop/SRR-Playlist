@@ -37,6 +37,7 @@ import { formatTime } from '@/lib/format';
 import { isPlayableUrl } from '@/lib/audio';
 import { gradientStyle } from '@/lib/cover';
 import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/analytics';
+import { safeRecordStreamV2, safeHeartbeatV2 } from '@/lib/streamingV2Api';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import { captureBusinessError } from '@/lib/sentry';
 import {
@@ -944,6 +945,8 @@ export default function Player() {
       player_volume: volume,
       player_muted: volume === 0,
     });
+    // ALGO-2A — v2 shadow (flag OFF 기본 · fire-and-forget · v1 무관)
+    void safeRecordStreamV2({ trackId: current.id, eventType: 'play_started', playlistId: playlist?.id ?? null, volume, muted: volume === 0 });
     // AI 큐레이션 behavior — play 이벤트(정산 stream_events 와 분리). 카탈로그 플리에서만.
     if (playlistContext?.type === 'catalog') {
       void recordPlayEvent({ trackId: current.id, playlistId: playlistContext.id, eventType: 'play', duration: current.duration ?? null, anonId: getAnonymousId() });
@@ -1056,6 +1059,8 @@ export default function Player() {
         player_volume: volume,
         player_muted: volume === 0,
       });
+      // ALGO-2A — v2 shadow play_30s (fire-and-forget)
+      void safeRecordStreamV2({ trackId: current.id, eventType: 'play_30s', playlistId: playlist?.id ?? null, volume, muted: volume === 0, listenedSeconds: Math.floor(currentTime) });
     }
     // volume 의도적 제외 — milestone 은 30초 도달 시만 1회 트리거 (볼륨 변경마다 재계산 X)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1069,6 +1074,25 @@ export default function Player() {
       void pushRecentlyPlayed(current.id, userId, Math.floor(currentTime));
     }
   }, [currentTime, current, userId]);
+
+  // ALGO-2A — v2 shadow heartbeat (10s interval, flag OFF/세션없음 시 no-op, cleanup 필수)
+  useEffect(() => {
+    const tid = current?.id;
+    if (!tid) return;
+    const iv = window.setInterval(() => {
+      const a = activeRef();
+      const vol = a ? a.volume : volume;
+      void safeHeartbeatV2({
+        trackId: tid,
+        position: a?.currentTime ?? 0,
+        playing: usePlayerStore.getState().playing,
+        volume: vol,
+        muted: (a?.muted ?? false) || vol === 0,
+      });
+    }, 10000);
+    return () => window.clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id]);
 
   useEffect(() => {
     if (!current || !playable || !playing) return;
@@ -2296,6 +2320,8 @@ export default function Player() {
         player_volume: volume,
         player_muted: volume === 0,
       });
+      // ALGO-2A — v2 shadow play_completed (fire-and-forget)
+      void safeRecordStreamV2({ trackId: current.id, eventType: 'play_completed', playlistId: playlist?.id ?? null, volume, muted: volume === 0, listenedSeconds: Math.floor(duration || currentTime || 0) });
       // X4.3 — playback_events_v2 play_complete (자연 종료, parallel layer)
       void logPlaybackEventV2({
         trackId: current.id, eventType: 'play_complete',
