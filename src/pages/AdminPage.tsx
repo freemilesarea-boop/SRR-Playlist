@@ -62,6 +62,7 @@ const ExposurePanel = lazy(() => import('@/components/admin/ExposurePanel'));
 const LearningMemoryPanel = lazy(() => import('@/components/admin/LearningMemoryPanel'));
 const PredictionPanel = lazy(() => import('@/components/admin/PredictionPanel'));
 const PredictionCalibrationPanel = lazy(() => import('@/components/admin/PredictionCalibrationPanel'));
+const AiExperimentPanel = lazy(() => import('@/components/admin/AiExperimentPanel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -186,6 +187,7 @@ type Tab =
   | 'learning-memory'
   | 'prediction'
   | 'prediction-calibration'
+  | 'ai-experiments'
   | 'brand'
   | 'brand-player';
 
@@ -256,6 +258,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'learning-memory', label: 'Learning Memory (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'prediction', label: 'AI Prediction (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'prediction-calibration', label: 'Prediction Calibration (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-experiments', label: 'AI Experiments (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
   { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
@@ -306,6 +309,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'learning-memory',
       'prediction',
       'prediction-calibration',
+      'ai-experiments',
       'upload-integrity',
     ],
   },
@@ -665,6 +669,7 @@ export default function AdminPage() {
           {tab === 'learning-memory' && <LearningMemoryPanel />}
           {tab === 'prediction' && <PredictionPanel />}
           {tab === 'prediction-calibration' && <PredictionCalibrationPanel />}
+          {tab === 'ai-experiments' && <AiExperimentPanel />}
           {tab === 'upload-integrity' && <UploadIntegrityPanel />}
           {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
