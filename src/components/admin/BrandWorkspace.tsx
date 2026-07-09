@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Copy, Plus, Trash2, ExternalLink, Image as ImageIcon, ListMusic, Music2, Sparkles,
   Power, CopyPlus, RefreshCw, History as HistoryIcon, Radio, Gauge, LayoutDashboard,
-  SlidersHorizontal, PlayCircle, CheckCircle2, XCircle,
+  SlidersHorizontal, PlayCircle, CheckCircle2, XCircle, ListOrdered, Hammer, Eye,
 } from 'lucide-react';
 import { AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard, AdminModal } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
@@ -23,18 +23,23 @@ import {
   adminUpdateBrandRuntimeRule, adminDeleteBrandRuntimeRule, adminPreviewBrandRuntime,
   type BrandHealth, type BrandRuntimeRule, type RuntimePreview,
 } from '@/lib/api/brandRuntimeApi';
+import {
+  adminPreviewBrandQueue, adminBuildBrandQueue, adminListBrandQueues, adminGetBrandQueue,
+  QUEUE_STRATEGIES, type QueueStrategy, type QueuePreview, type QueueRunListItem, type QueueDetail,
+} from '@/lib/api/brandQueueApi';
 import { adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia } from '@/lib/api/brandPlayerApi';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import BrandSignage from '@/components/brand/BrandSignage';
 
-type Section = 'overview' | 'music' | 'playlist' | 'media' | 'player' | 'runtime' | 'ai' | 'history';
+type Section = 'overview' | 'music' | 'playlist' | 'runtime' | 'queue' | 'media' | 'player' | 'ai' | 'history';
 const NAV: ReadonlyArray<{ key: Section; label: string; icon: React.ReactNode }> = [
   { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
   { key: 'music', label: 'Music', icon: <Music2 size={14} /> },
   { key: 'playlist', label: 'Playlist', icon: <ListMusic size={14} /> },
+  { key: 'runtime', label: 'Runtime', icon: <SlidersHorizontal size={14} /> },
+  { key: 'queue', label: 'Queue', icon: <ListOrdered size={14} /> },
   { key: 'media', label: 'Media', icon: <ImageIcon size={14} /> },
   { key: 'player', label: 'Player', icon: <Radio size={14} /> },
-  { key: 'runtime', label: 'Runtime', icon: <SlidersHorizontal size={14} /> },
   { key: 'ai', label: 'AI', icon: <Sparkles size={14} /> },
   { key: 'history', label: 'History', icon: <HistoryIcon size={14} /> },
 ];
@@ -116,6 +121,7 @@ export default function BrandWorkspace({ brandId, onBrandChanged }: { brandId: s
         {section === 'media' && <MediaSection d={data} reload={reload} />}
         {section === 'player' && <PlayerSection d={data} />}
         {section === 'runtime' && <RuntimeSection d={data} reload={reload} />}
+        {section === 'queue' && <QueueSection d={data} reload={reload} />}
         {section === 'ai' && <AiSection d={data} />}
         {section === 'history' && <HistorySection d={data} />}
       </div>
@@ -816,6 +822,198 @@ function conditionSummary(cond: Record<string, unknown> | null | undefined): str
 function rangeSummary(startsAt: string | null, endsAt: string | null): string {
   if (!startsAt && !endsAt) return '상시';
   return `${startsAt ? fmt(startsAt) : '~'} → ${endsAt ? fmt(endsAt) : '~'}`;
+}
+
+// ── Queue (Track Ordering Engine) ────────────────────────────────────
+const STRATEGY_LABEL: Record<QueueStrategy, string> = {
+  balanced_shuffle: 'Balanced Shuffle', sequential: 'Sequential', weighted: 'Weighted',
+};
+
+function QueueSection({ d, reload }: { d: BrandWorkspaceData; reload: () => Promise<void> }) {
+  const brandId = d.brand.id;
+  const [playlistId, setPlaylistId] = useState('');
+  const [strategy, setStrategy] = useState<QueueStrategy>('balanced_shuffle');
+  const [limit, setLimit] = useState('100');
+  const [preview, setPreview] = useState<QueuePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [runs, setRuns] = useState<QueueRunListItem[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(true);
+  const [detail, setDetail] = useState<QueueDetail | null>(null);
+
+  const loadRuns = useCallback(async () => {
+    setLoadingRuns(true);
+    try { setRuns(await adminListBrandQueues(brandId)); }
+    catch (e) { toast.error(`queue 조회 실패: ${(e as Error).message}`); }
+    finally { setLoadingRuns(false); }
+  }, [brandId]);
+  useEffect(() => { void loadRuns(); }, [loadRuns]);
+
+  const opts = () => ({ playlistId: playlistId || null, strategy, limit: Number(limit) || 100 });
+
+  async function doPreview() {
+    setPreviewing(true);
+    try { setPreview(await adminPreviewBrandQueue(brandId, opts())); }
+    catch (e) { toast.error(`preview 실패: ${(e as Error).message}`); }
+    finally { setPreviewing(false); }
+  }
+  async function doBuild() {
+    setBuilding(true);
+    try {
+      const r = await adminBuildBrandQueue(brandId, opts());
+      toast.success(`Queue 생성 (트랙 ${r.stats.returned})`);
+      setPreview({ ...r, seed: r.queue_run.seed ?? '', source_playlist_id: r.queue_run.playlist_id, runtime_rule_id: r.queue_run.runtime_rule_id, strategy: r.queue_run.strategy, fallback_used: r.stats.fallback_used });
+      await loadRuns(); await reload();
+    } catch (e) { toast.error(`build 실패: ${(e as Error).message}`); }
+    finally { setBuilding(false); }
+  }
+  async function openDetail(id: string) {
+    try { setDetail(await adminGetBrandQueue(id)); }
+    catch (e) { toast.error(`상세 조회 실패: ${(e as Error).message}`); }
+  }
+
+  return (
+    <div className="space-y-3">
+      <AdminAlert tone="info" title="Queue Engine — Track Ordering"
+        description="Runtime 이 선택한 Playlist 를 재생 순서(Track Queue)로 변환합니다. Player 강제 연동은 후속 Phase — 지금은 생성/미리보기 중심." />
+
+      <AdminCard title="Queue Builder" subtitle="playlist(미지정 시 Runtime 자동 선택) + strategy 로 재생 순서를 생성합니다.">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Field label="Playlist">
+            <select className={inputCls} value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
+              <option value="">— Runtime 자동 선택 —</option>
+              {d.playlists.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
+            </select>
+          </Field>
+          <Field label="Strategy">
+            <select className={inputCls} value={strategy} onChange={(e) => setStrategy(e.target.value as QueueStrategy)}>
+              {QUEUE_STRATEGIES.map((s) => <option key={s} value={s}>{STRATEGY_LABEL[s]}</option>)}
+            </select>
+          </Field>
+          <Field label="Limit"><input type="number" className={inputCls} value={limit} min={1} max={500} onChange={(e) => setLimit(e.target.value)} /></Field>
+          <div className="flex items-end gap-1.5">
+            <AdminButton size="sm" variant="subtle" tone="neutral" leftIcon={<Eye size={13} />} disabled={previewing} onClick={() => void doPreview()}>{previewing ? '…' : 'Preview'}</AdminButton>
+            <AdminButton size="sm" tone="primary" leftIcon={<Hammer size={13} />} disabled={building} onClick={() => void doBuild()}>{building ? '…' : 'Build'}</AdminButton>
+          </div>
+        </div>
+        {preview && <QueuePreviewResult p={preview} />}
+      </AdminCard>
+
+      <AdminCard title={`Queue Runs (${runs.length})`} subtitle="최근 생성된 Queue (최대 30).">
+        {loadingRuns ? <AdminSkeleton variant="block" rows={3} />
+          : runs.length === 0 ? <AdminEmpty icon={<ListOrdered size={22} />} title="Queue 없음" description="Build 로 첫 Queue 를 생성하세요." />
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead className="text-ink-dim"><tr>
+                  <th className="px-2 py-1 text-left">생성</th><th className="px-2 py-1 text-left">strategy</th>
+                  <th className="px-2 py-1 text-right">트랙</th><th className="px-2 py-1 text-left">playlist</th>
+                  <th className="px-2 py-1 text-left">status</th><th className="px-2 py-1 text-left"></th>
+                </tr></thead>
+                <tbody>
+                  {runs.map((q) => (
+                    <tr key={q.id} className="border-t border-line/10">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-ink-dim">{fmt(q.created_at)}</td>
+                      <td className="px-2 py-1.5"><AdminBadge tone="info">{q.strategy}</AdminBadge></td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-ink">{q.track_count}</td>
+                      <td className="px-2 py-1.5 text-ink-mute">{q.playlist_name ?? (q.reason ? `(${q.reason})` : '—')}</td>
+                      <td className="px-2 py-1.5"><AdminBadge tone="neutral">{q.status}</AdminBadge></td>
+                      <td className="px-2 py-1.5"><AdminButton size="sm" variant="ghost" tone="primary" onClick={() => void openDetail(q.id)}>상세</AdminButton></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </AdminCard>
+
+      {detail && <QueueDetailModal detail={detail} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+function QueuePreviewResult({ p }: { p: QueuePreview }) {
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-line/20 bg-bg p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold text-ink-dim">결과</span>
+        <AdminBadge tone="info">{p.strategy}</AdminBadge>
+        {p.fallback_used && <AdminBadge tone="warning">fallback</AdminBadge>}
+        <span className="text-[11px] text-ink-dim">
+          {p.stats.returned}/{p.stats.total_candidates}곡 · artist {p.stats.distinct_artists} · genre {p.stats.distinct_genres} · mood {p.stats.distinct_moods}
+        </span>
+      </div>
+      <div>
+        <p className="mb-1 text-[11px] font-semibold text-ink-dim">Explanation</p>
+        <ol className="space-y-0.5">{p.explanation.map((e, i) => <li key={i} className="text-[11px] text-ink-mute">• {e}</li>)}</ol>
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 bg-bg text-ink-dim"><tr>
+            <th className="px-2 py-1 text-left">#</th><th className="px-2 py-1 text-left">Title</th>
+            <th className="px-2 py-1 text-left">Artist</th><th className="px-2 py-1 text-left">Genre</th>
+            <th className="px-2 py-1 text-left">Mood</th><th className="px-2 py-1 text-left">Source</th>
+          </tr></thead>
+          <tbody>
+            {p.tracks.map((t, i) => (
+              <tr key={`${t.track_id}-${i}`} className="border-t border-line/10">
+                <td className="px-2 py-1 text-ink-dim">{i + 1}</td>
+                <td className="px-2 py-1 text-ink">{t.title ?? '—'}</td>
+                <td className="px-2 py-1 text-ink-mute">{t.artist ?? '—'}</td>
+                <td className="px-2 py-1 text-ink-mute">{t.genre ?? '—'}</td>
+                <td className="px-2 py-1 text-ink-mute">{t.mood ?? '—'}</td>
+                <td className="px-2 py-1 text-ink-dim">{t.source_reason ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function QueueDetailModal({ detail, onClose }: { detail: QueueDetail; onClose: () => void }) {
+  const q = detail.queue_run;
+  return (
+    <AdminModal open onClose={onClose} title={`Queue · ${q.strategy}`} size="xl"
+      footer={<AdminButton tone="neutral" variant="subtle" onClick={onClose}>닫기</AdminButton>}>
+      <div className="space-y-3">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+          <KV k="strategy" v={q.strategy} />
+          <KV k="트랙 수" v={String(q.track_count)} />
+          <KV k="status" v={q.status} />
+          <KV k="reason" v={q.reason} />
+          <KV k="seed" v={q.seed} mono abbrev />
+          <KV k="생성" v={fmt(q.created_at)} />
+          <KV k="queue_run_id" v={q.id} copy mono abbrev />
+          <KV k="playlist_id" v={q.playlist_id} copy mono abbrev />
+        </dl>
+        <div className="max-h-[50vh] overflow-y-auto">
+          <table className="w-full text-[11px]">
+            <thead className="sticky top-0 bg-bg-card text-ink-dim"><tr>
+              <th className="px-2 py-1 text-left">#</th><th className="px-2 py-1 text-left">Title</th>
+              <th className="px-2 py-1 text-left">Artist</th><th className="px-2 py-1 text-left">Genre</th>
+              <th className="px-2 py-1 text-left">Mood</th><th className="px-2 py-1 text-right">BPM</th>
+              <th className="px-2 py-1 text-left">Source</th>
+            </tr></thead>
+            <tbody>
+              {detail.tracks.map((t) => (
+                <tr key={`${t.track_id}-${t.sort_order}`} className="border-t border-line/10">
+                  <td className="px-2 py-1 text-ink-dim">{t.sort_order + 1}</td>
+                  <td className="px-2 py-1 text-ink">{t.title ?? '—'}</td>
+                  <td className="px-2 py-1 text-ink-mute">{t.artist ?? '—'}</td>
+                  <td className="px-2 py-1 text-ink-mute">{t.genre ?? '—'}</td>
+                  <td className="px-2 py-1 text-ink-mute">{t.mood ?? '—'}</td>
+                  <td className="px-2 py-1 text-right text-ink-mute">{t.bpm ?? '—'}</td>
+                  <td className="px-2 py-1 text-ink-dim">{t.source_reason ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminModal>
+  );
 }
 
 // ── AI (read-only profile) ───────────────────────────────────────────
