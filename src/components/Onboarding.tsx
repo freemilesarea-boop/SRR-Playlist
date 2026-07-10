@@ -26,7 +26,11 @@ function modeFromAccountType(accountType: string | undefined | null): Mode | nul
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { profile, loading } = useAuthStore();
+  // WEB-OPT-5 — Onboarding 은 App 최상단에 항상 마운트된다(App.tsx). selector 없는
+  //   전체 store 구독 시 session/user/isAuthReady/isProfileReady/profileError 등 관련 없는
+  //   auth 변화마다 리렌더됐다. 실제로 쓰는 두 필드만 구독하도록 축소.
+  const profile = useAuthStore((s) => s.profile);
+  const loading = useAuthStore((s) => s.loading);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
   const { canInstall, prompt } = useInstallPrompt();
 
