@@ -15,6 +15,7 @@
 import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from 'react';
 import { BUILD_ID, isAppCacheName, isChunkLoadError } from '@/lib/bootRecovery';
 import { captureBootFailure } from '@/lib/sentry';
+import { recordError } from '@/lib/telemetry/collect';
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; resetKey: number; errorCount: number; isChunk: boolean }
@@ -59,6 +60,8 @@ export default class RootErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
     this.setState((s) => ({ errorCount: s.errorCount + 1 }));
+    // WEB-OPT-11 — Runtime Telemetry 에 React 오류 기록(메시지 sanitize·bounded buffer). 실패 무해.
+    try { recordError(isChunkLoadError(error) ? 'chunk-load' : 'react', error); } catch { /* noop */ }
     // Sentry 로 최소 진단 전송(토큰/개인정보 없음). 실패해도 앱에 영향 없음.
     try {
       void captureBootFailure(error, {

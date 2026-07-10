@@ -14,6 +14,7 @@ import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
 import AppShell from '@/components/AppShell';
+import { useRouteTelemetry } from '@/lib/telemetry';
 import FloatingSupportButton from '@/components/FloatingSupportButton';
 import { LogoMark } from '@/components/Logo';
 
@@ -123,6 +124,7 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useRouteTelemetry(); // WEB-OPT-11 — route-change timing (dwell) + current-route attribution
   const init = useAuthStore((s) => s.init);
   const authUser = useAuthStore((s) => s.user);
   const authProfile = useAuthStore((s) => s.profile);
