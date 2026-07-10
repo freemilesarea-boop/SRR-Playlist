@@ -3,8 +3,9 @@
 // 이미지 사이니지는 BrandSignage 가 독립 DOM 으로 처리 → audio remount 없음.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2, Minimize2 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
+import { toast } from '@/store/toastStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
@@ -43,6 +44,54 @@ export default function BrandPlayerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const queuedBrandRef = useRef<string | null>(null); // 이 브랜드로 큐 세팅했는지
+
+  // Presentation Fullscreen: 저장 이미지만 전체화면 노출 (음악·audio element 불변, 전역 <Player> 그대로 재생).
+  // presentation=chrome 숨김, fallback=Fullscreen API 미지원/거부 시 CSS 기반 뷰포트 덮기.
+  const [presentation, setPresentation] = useState(false);
+  const [fallback, setFallback] = useState(false);
+  const presentationRef = useRef<HTMLDivElement | null>(null);
+
+  const enterPresentation = useCallback(async () => {
+    const el = presentationRef.current;
+    if (el && typeof el.requestFullscreen === 'function') {
+      try {
+        await el.requestFullscreen();
+        setFallback(false);
+        setPresentation(true);
+        return;
+      } catch { /* Fullscreen 거부 → CSS fallback */ }
+    }
+    // Fullscreen API 미지원/거부: CSS 기반 presentation (완전한 OS 전체화면은 불가)
+    setFallback(true);
+    setPresentation(true);
+    toast.info('브라우저 전체화면을 사용할 수 없어 화면 내 프레젠테이션 모드로 표시합니다. ESC로 종료하세요.');
+  }, []);
+
+  const exitPresentation = useCallback(() => {
+    if (!fallback && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => { /* fullscreenchange 가 상태 동기화 */ });
+      return; // fullscreenchange 핸들러가 presentation=false 처리
+    }
+    setPresentation(false);
+    setFallback(false);
+  }, [fallback]);
+
+  // 브라우저 자체 ESC 종료 등 외부 fullscreen 상태 변화 동기화 (native 모드)
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && !fallback) { setPresentation(false); }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [fallback]);
+
+  // CSS fallback presentation 은 브라우저 ESC 가 없으므로 keydown 으로 종료 제공
+  useEffect(() => {
+    if (!presentation || !fallback) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPresentation(false); setFallback(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [presentation, fallback]);
 
   // 매장/키오스크 모드: crossfade off + wake lock (전역) — store player 와 동일
   useEffect(() => {
@@ -144,9 +193,9 @@ export default function BrandPlayerPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-black text-white">
-      {/* 상단 최소 바 */}
-      <header className="flex items-center justify-between gap-3 px-5 py-3">
+    <div className="fixed inset-0 z-[90] flex flex-col bg-black text-white" data-presentation-mode={presentation}>
+      {/* 상단 최소 바 (presentation 모드에서 숨김) */}
+      <header className={`flex items-center justify-between gap-3 px-5 py-3 ${presentation ? 'hidden' : ''}`}>
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1">
             <Sparkles size={12} className="text-accent" /> {config?.brand.name ?? '브랜드'}
@@ -163,17 +212,32 @@ export default function BrandPlayerPage() {
         </button>
       </header>
 
-      {/* 사이니지 (화면 대부분) */}
-      <div className="relative flex-1 overflow-hidden">
+      {/* 사이니지 (화면 대부분) — presentation 진입 시 이 컨테이너만 Fullscreen 대상.
+          audio 는 전역 <Player> 소유 → fullscreen/chrome 토글이 audio element 에 영향 없음. */}
+      <div
+        ref={presentationRef}
+        className={`relative overflow-hidden bg-black ${presentation && fallback ? 'fixed inset-0 z-[100]' : 'flex-1'}`}
+      >
         <BrandSignage
           items={config?.media ?? []}
           brandName={config?.brand.name ?? '브랜드'}
           className="absolute inset-0 h-full w-full"
+          chromeHidden={presentation}
         />
+        {/* presentation 종료 affordance — 평소 투명, hover/focus/tap 시 노출 (chrome 방해 최소화) */}
+        {presentation && (
+          <button
+            onClick={exitPresentation}
+            aria-label="전체화면 종료"
+            className="absolute right-4 top-4 z-[110] inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white opacity-0 backdrop-blur transition-opacity hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+          >
+            <Minimize2 size={14} /> 전체화면 종료 (ESC)
+          </button>
+        )}
       </div>
 
-      {/* 하단 음악 상태 + 컨트롤 (작게) */}
-      <footer className="flex items-center gap-4 border-t border-white/10 bg-black/60 px-5 py-3 backdrop-blur">
+      {/* 하단 음악 상태 + 컨트롤 (작게) — presentation 모드에서 숨김 */}
+      <footer className={`flex items-center gap-4 border-t border-white/10 bg-black/60 px-5 py-3 backdrop-blur ${presentation ? 'hidden' : ''}`}>
         <div className="min-w-0 flex-1">
           {hasQueue && current ? (
             <>
@@ -195,16 +259,26 @@ export default function BrandPlayerPage() {
             {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="ml-0.5" />}
           </button>
           <button onClick={next} aria-label="다음 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"><SkipForward size={18} fill="currentColor" /></button>
+          {/* Presentation Fullscreen 진입 — 저장 이미지만 전체화면. 음악은 계속 재생. */}
+          <button
+            onClick={() => void enterPresentation()}
+            aria-label="전체화면 (이미지 프레젠테이션)"
+            aria-pressed={presentation}
+            title="저장된 이미지만 전체화면으로 표시 (음악 계속 재생)"
+            className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"
+          >
+            <Maximize2 size={18} />
+          </button>
         </div>
       </footer>
 
-      {/* autoplay 차단 대비: 큐는 있는데 정지 상태면 큰 시작 버튼 오버레이 */}
-      {hasQueue && !playing && (
+      {/* autoplay 차단 대비: 큐는 있는데 정지 상태면 큰 시작 버튼 오버레이 (presentation 모드에서 숨김) */}
+      {!presentation && hasQueue && !playing && (
         <button onClick={() => play()} className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-accent px-6 py-3 text-sm font-bold text-black shadow-lg hover:bg-accent/90">
           ▶ 재생 시작 / 다시 재생
         </button>
       )}
-      {wakeLockSupported && !wakeLockActive && playing && (
+      {!presentation && wakeLockSupported && !wakeLockActive && playing && (
         <p className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/60">화면 꺼짐 방지 대기 중…</p>
       )}
     </div>
