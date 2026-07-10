@@ -292,7 +292,7 @@ export default function PlaylistPage() {
         >
           <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full ring-1 ring-line/15">
             {curator.profile_image_url ? (
-              <img src={curator.profile_image_url} alt={curator.display_name} className="h-full w-full object-cover" />
+              <img src={curator.profile_image_url} alt={curator.display_name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-ink/5 text-sm font-bold">
                 {curator.display_name.slice(0, 1)}
@@ -347,7 +347,7 @@ export default function PlaylistPage() {
               </div>
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-card">
                 {t.cover_url ? (
-                  <img src={t.cover_url} alt="" className="h-full w-full object-cover" />
+                  <img src={t.cover_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-ink-dim">
                     <Music size={14} />
