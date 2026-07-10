@@ -57,6 +57,7 @@ export default function AutoCover({
         src={imageUrl as string}
         alt={`${title} 앨범 커버`}
         loading="lazy"
+        decoding="async"
         className={`h-full w-full object-cover ${className}`}
         onError={() => {
           if (import.meta.env.DEV) {

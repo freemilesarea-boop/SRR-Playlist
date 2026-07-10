@@ -437,7 +437,7 @@ export default function TrackReviewList() {
                     />
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-bg-hover">
                       {r.cover_url ? (
-                        <img src={r.cover_url} alt="" className="h-full w-full object-cover" />
+                        <img src={r.cover_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-ink-dim">
                           <Music size={14} />

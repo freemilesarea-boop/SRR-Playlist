@@ -117,7 +117,7 @@ export default function QcReviewQueuePanel() {
                   >
                     <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-soft">
                       {r.cover_url && (
-                        <img src={r.cover_url} alt="" className="h-full w-full object-cover" />
+                        <img src={r.cover_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">

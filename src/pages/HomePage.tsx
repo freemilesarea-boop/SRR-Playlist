@@ -308,6 +308,8 @@ export default function HomePage() {
                     <img
                       src={c.profile_image_url}
                       alt={c.display_name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (

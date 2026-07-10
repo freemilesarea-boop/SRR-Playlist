@@ -168,7 +168,7 @@ export default function ContentManagement() {
               <li key={p.id} className="flex items-center gap-3 p-3 hover:bg-bg-hover">
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-accent-soft/40 to-black">
                   {p.thumbnail_url ? (
-                    <img src={p.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                    <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-ink-dim">
                       <ListMusic size={14} />
@@ -895,7 +895,7 @@ function AdminTrackRow({
           title={playable ? '재생' : '재생 불가'}
         >
           {track.cover_url ? (
-            <img src={track.cover_url} alt="" className="h-full w-full object-cover" />
+            <img src={track.cover_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-bg-hover text-ink-dim">
               <Music size={14} />
