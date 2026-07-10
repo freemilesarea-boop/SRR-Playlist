@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { initSentry, captureServiceWorkerRecovery } from './lib/sentry';
-import { initTelemetry } from './lib/telemetry';
+import { initTelemetry, initTelemetryTransport } from './lib/telemetry';
 import { purgeBadAudioCaches } from './lib/swCache';
 import { redirectToProductionIfNeeded } from './lib/productionRedirect';
 import RootErrorBoundary from './components/RootErrorBoundary';
@@ -20,6 +20,10 @@ void initSentry();
 // WEB-OPT-11 — Runtime Telemetry (RUM) 초기화. 네이티브 PerformanceObserver 기반, 클라이언트
 //   측 bounded ring buffer 에만 수집(외부 전송·DB 없음). 실패해도 앱 부팅에 영향 없도록 내부 guard.
 initTelemetry();
+
+// WEB-OBS-1 — Server transport for persistent RUM. Honors kill switch (VITE_TELEMETRY_*), defers
+//   all work to idle, and can never throw → boot is never blocked or delayed by telemetry.
+initTelemetryTransport();
 
 // WEB-OPT-2 — index.html watchdog 이 남긴 긴급 복구 로그가 있으면 이번 로드에서 1회 Sentry 보고 후 정리.
 // (watchdog 은 bundle/Sentry 로드 전에 실행되므로, 복구 후 재부팅 시점에 여기서 보고한다.)

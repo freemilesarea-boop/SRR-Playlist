@@ -16,12 +16,19 @@ export {
   recordInteraction,
   recordError,
   sampleMemory,
+  getDeviceProfile,
 } from './collect';
 export type {
   TelemetrySnapshot, DeviceProfile, VitalSample, LongTaskSample, ApiSample,
   RouteSample, InteractionSample, ErrorSample, MemorySample, ApiKind, ErrorKind,
 } from './collect';
 export type { Rating, VitalName, ApiSeverity } from './aggregate';
+
+// WEB-OBS-1 — server transport (persistent RUM). Separate from collection so the kill switch can
+// disable transmission without touching the WEB-OPT-11 session collector/dashboard.
+export { initTelemetryTransport, stopTelemetryTransport, getTransportHealth } from './transport';
+export { getTelemetryConfig } from './config';
+export type { TransportHealth } from './transportCore';
 
 /**
  * Records route-change telemetry. Mount once under the Router. On each pathname change it logs
