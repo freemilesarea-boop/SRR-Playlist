@@ -27,22 +27,33 @@ export default function ContentManagement() {
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
 
+  // WEB-OPT-6 — AI 메타(최대 1500행)는 tracks 서브탭에서만 사용된다. 기본 서브탭이
+  //   'playlists' 이므로, 이전에는 콘텐츠관리 진입/포커스마다 불필요하게 대용량 AI 조회를
+  //   함께 실행했다. AI 조회를 분리해 tracks 탭 활성일 때만 수행한다(playlists/tracks
+  //   목록 조회 및 mutation 후 refresh 의미는 그대로 유지).
+  async function refreshAiTracks() {
+    const aiTs = await listAdminTracksWithAi(1500).catch((e) => {
+      console.warn('[ContentManagement] listAdminTracksWithAi failed — AI 메타 컬럼 비활성:', e);
+      return [] as AdminTrackWithAi[];
+    });
+    setAiTracks(aiTs);
+  }
+
   async function refresh() {
-    const [pls, trs, aiTs] = await Promise.all([
-      fetchPlaylists(),
-      fetchTracks(),
-      listAdminTracksWithAi(1500).catch((e) => {
-        console.warn('[ContentManagement] listAdminTracksWithAi failed — AI 메타 컬럼 비활성:', e);
-        return [] as AdminTrackWithAi[];
-      }),
-    ]);
+    const [pls, trs] = await Promise.all([fetchPlaylists(), fetchTracks()]);
     setPlaylists(pls);
     setTracks(trs);
-    setAiTracks(aiTs);
+    // tracks 탭이 활성일 때만 AI 메타 갱신 — 곡 mutation(삭제/수정/업로드) 후 정합성 유지.
+    if (subTab === 'tracks') await refreshAiTracks();
   }
 
   // 재로그인 / 새로고침 / 탭 복귀 시 항상 DB 에서 최신 fetch
   useFreshFetch(refresh, []);
+
+  // tracks 서브탭으로 전환 시 AI 메타를 지연 로드(진입 전에는 조회하지 않음).
+  useEffect(() => {
+    if (subTab === 'tracks') void refreshAiTracks();
+  }, [subTab]);
 
   async function createPlaylist(form: {
     title: string;
@@ -72,7 +83,9 @@ export default function ContentManagement() {
         time_slot: (form.time_slot as PlaylistRow['time_slot']) || null,
         created_by_user_id: form.created_by_user_id,
       })
-      .select('*')
+      // WEB-OPT-6 — insert 반환 row 에서 실제로 쓰는 건 id 뿐(setEditingPlaylistId).
+      //   select('*') → select('id') 로 축소(응답 의미 불변).
+      .select('id')
       .single();
     if (error) {
       toast.error(`생성 실패: ${error.message}`);
