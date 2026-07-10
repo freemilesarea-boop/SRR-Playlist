@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { QrCode, ChevronDown } from 'lucide-react';
 import type { PlaylistRow } from '@/types/db';
 import { playlistShareUrl } from '@/lib/shareApi';
-import QRCodeModal from '@/components/QRCodeModal';
+// WEB-OPT-3 — QR 모달(→ react-qr-code)은 열 때만 로드.
+const QRCodeModal = lazy(() => import('@/components/QRCodeModal'));
 
 export default function BusinessQRSection({
   playlists,
@@ -76,14 +77,16 @@ export default function BusinessQRSection({
       </div>
 
       {qrOpen && selected && (
-        <QRCodeModal
-          url={playlistShareUrl(selected.id)}
-          title={selected.title}
-          subtitle="지금 이 매장에서 흐르는 음악"
-          targetType="business_qr"
-          targetId={selected.id}
-          onClose={() => setQrOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <QRCodeModal
+            url={playlistShareUrl(selected.id)}
+            title={selected.title}
+            subtitle="지금 이 매장에서 흐르는 음악"
+            targetType="business_qr"
+            targetId={selected.id}
+            onClose={() => setQrOpen(false)}
+          />
+        </Suspense>
       )}
     </section>
   );

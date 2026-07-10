@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Share2, QrCode } from 'lucide-react';
 import { performShare, logShareEvent, type ShareTargetType } from '@/lib/shareApi';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import { isKakaoConfigured, shareTrackToKakao, sharePlaylistToKakao } from '@/lib/kakao';
-import QRCodeModal from './QRCodeModal';
+// WEB-OPT-3 — QR 모달(→ react-qr-code)은 QR 버튼을 눌러 열 때만 로드.
+// ShareButton 은 Player 등 공용으로 import 되므로, 정적 import 시 react-qr-code 가 공용 chunk 에 유입됨.
+const QRCodeModal = lazy(() => import('./QRCodeModal'));
 
 interface Props {
   title: string;
@@ -122,13 +124,15 @@ export default function ShareButton({
           )}
         </div>
         {qrOpen && (
-          <QRCodeModal
-            url={url}
-            title={title}
-            targetType={targetType}
-            targetId={targetId ?? null}
-            onClose={() => setQrOpen(false)}
-          />
+          <Suspense fallback={null}>
+            <QRCodeModal
+              url={url}
+              title={title}
+              targetType={targetType}
+              targetId={targetId ?? null}
+              onClose={() => setQrOpen(false)}
+            />
+          </Suspense>
         )}
       </>
     );
@@ -145,13 +149,15 @@ export default function ShareButton({
           <Share2 size={12} /> 공유
         </button>
         {qrOpen && (
-          <QRCodeModal
-            url={url}
-            title={title}
-            targetType={targetType}
-            targetId={targetId ?? null}
-            onClose={() => setQrOpen(false)}
-          />
+          <Suspense fallback={null}>
+            <QRCodeModal
+              url={url}
+              title={title}
+              targetType={targetType}
+              targetId={targetId ?? null}
+              onClose={() => setQrOpen(false)}
+            />
+          </Suspense>
         )}
       </>
     );
@@ -170,13 +176,15 @@ export default function ShareButton({
         <Share2 size={14} />
       </button>
       {qrOpen && (
-        <QRCodeModal
-          url={url}
-          title={title}
-          targetType={targetType}
-          targetId={targetId ?? null}
-          onClose={() => setQrOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <QRCodeModal
+            url={url}
+            title={title}
+            targetType={targetType}
+            targetId={targetId ?? null}
+            onClose={() => setQrOpen(false)}
+          />
+        </Suspense>
       )}
     </>
   );

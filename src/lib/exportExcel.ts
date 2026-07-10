@@ -1,4 +1,6 @@
-import writeXlsxFile from 'write-excel-file/browser';
+// WEB-OPT-3 — write-excel-file 은 실제 export 실행(downloadXlsx 호출) 시점에만 dynamic import.
+//   (type-only import 는 컴파일 시 완전 제거되어 런타임 번들에 포함되지 않음.)
+//   이전에는 값 import 가 top-level 이라 SalespersonDashboardPage lazy chunk 진입 시 함께 로드됐다.
 import type { Row, SheetData } from 'write-excel-file/browser';
 
 export type XlsxCellValue = string | number | null | undefined;
@@ -30,5 +32,7 @@ export async function downloadXlsx(
     ),
   );
   const data: SheetData = [headerRow, ...dataRows];
+  // click-time lazy load — 버튼을 누르기 전에는 라이브러리를 다운로드하지 않는다.
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
   await writeXlsxFile(data).toFile(fileName);
 }

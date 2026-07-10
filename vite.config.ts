@@ -101,12 +101,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
+        // WEB-OPT-3 — recharts 를 manualChunks 에서 제거.
+        //   object-form manualChunks 로 recharts 를 단일 vendor chunk 로 강제하면,
+        //   recharts 를 쓰는 여러 lazy route(Dashboard/Artist/Salesperson/EnterpriseHqIntel)가
+        //   그 공용 vendor chunk 를 공유하면서 Rollup 이 이를 "entry 의 static import"로 hoist →
+        //   ~412KB 가 초기 로딩(entry + modulepreload)에 eager 유입되던 원인(WEB-OPT-1 확인).
+        //   규칙을 제거하면 Rollup 기본 code-split 이 recharts 를 async(lazy) route chunk 안에 유지 →
+        //   차트 route 진입 시에만 다운로드. (react/supabase 는 초기 필수, icons/dnd 는 공용 → 유지)
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
           dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           icons: ['lucide-react'],
-          recharts: ['recharts'],
         },
       },
     },
