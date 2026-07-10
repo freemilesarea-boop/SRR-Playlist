@@ -39,7 +39,9 @@ interface Props {
 export default function EnterpriseBrandSignupForm({
   onDone, initialBrandName = '', initialBrandCode = '',
 }: Props) {
-  const { signUpWithPassword } = useAuthStore();
+  // WEB-OPT-5 — action 만 필요 → action selector 로 축소.
+  //   전체 store 구독 시 focus 마다 refreshProfile 이 profile 참조를 갱신해 폼이 불필요하게 리렌더됨.
+  const signUpWithPassword = useAuthStore((s) => s.signUpWithPassword);
 
   const [brandName, setBrandName] = useState(initialBrandName);
   const [brandCode, setBrandCode] = useState(initialBrandCode);

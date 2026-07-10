@@ -11,7 +11,8 @@ interface Props {
 }
 
 export default function IndividualSignupForm({ onDone }: Props) {
-  const { signUpWithPassword } = useAuthStore();
+  // WEB-OPT-5 — action 만 필요 → action selector 로 축소 (focus 시 profile 갱신 리렌더 방지).
+  const signUpWithPassword = useAuthStore((s) => s.signUpWithPassword);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');

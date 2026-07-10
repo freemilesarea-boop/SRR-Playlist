@@ -18,7 +18,8 @@ interface Props {
 }
 
 export default function BusinessSignupForm({ onDone }: Props) {
-  const { signUpWithPassword } = useAuthStore();
+  // WEB-OPT-5 — action 만 필요 → action selector 로 축소 (focus 시 profile 갱신 리렌더 방지).
+  const signUpWithPassword = useAuthStore((s) => s.signUpWithPassword);
   // 개인 정보
   const [fullName, setFullName] = useState('');
   const [birthDate, setBirthDate] = useState('');
