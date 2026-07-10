@@ -9,6 +9,7 @@
  *
  * 호출: main.tsx 에서 1회 initSentry() 만 호출 — DSN 없으면 silent skip
  */
+import { buildBootDiag } from '@/lib/bootRecovery';
 
 // 동적 import 로 SDK 가 사용되지 않을 때 번들에서 빠지도록
 let initialized = false;
@@ -62,6 +63,8 @@ export async function initSentry(opts?: { userRole?: string | null }): Promise<v
     Sentry.init({
       dsn,
       environment: env ?? 'production',
+      // WEB-OPT-2 — 배포(build) 단위로 오류를 묶기 위한 release. 부팅 실패를 특정 배포에 귀속.
+      release: (import.meta.env.VITE_BUILD_ID as string | undefined) || undefined,
       // 베타 단계 — 모든 transaction 수집 (운영 시 0.1 등으로 낮춤)
       tracesSampleRate: 0.1,
       // PII 자동 수집 비활성 (이메일/IP 등)
@@ -158,4 +161,56 @@ export async function captureBusinessError(
   } catch {
     // noop
   }
+}
+
+// ── WEB-OPT-2 부팅/복구 진단 ─────────────────────────────────────────
+// 공통: DSN 없거나 dev 면 no-op. 정상 부팅에는 아무 이벤트도 보내지 않음(장애/복구만).
+// 기록 금지: access/refresh token, 이메일, 사용자 id 원문, API 응답 본문, 곡/signed URL.
+async function captureRecovery(
+  kind: 'boot_failure' | 'chunk_load_failure' | 'sw_recovery',
+  err: unknown,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
+    if (!dsn || !import.meta.env.PROD) return;
+    const Sentry = await import('@sentry/react');
+    const diag = buildBootDiag({
+      path: typeof location !== 'undefined' ? location.pathname : '/',
+      online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      hasController:
+        typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+          ? !!navigator.serviceWorker.controller
+          : null,
+      attempt: typeof extra?.attempt === 'number' ? (extra.attempt as number) : undefined,
+      reason: typeof extra?.reason === 'string' ? (extra.reason as string) : undefined,
+    });
+    Sentry.withScope((s) => {
+      s.setTag('recovery_kind', kind);
+      s.setTag('build_id', diag.build);
+      s.setTag('online', String(diag.online));
+      s.setTag('sw_controller', String(diag.hasController));
+      s.setLevel(kind === 'sw_recovery' ? 'warning' : 'error');
+      s.setFingerprint(['web-opt-2', kind, diag.build]);
+      // pathname 만 담긴 diag + 마스킹된 extra(민감 키 제거) — 토큰/PII 없음.
+      s.setExtras({ ...diag, ...(extra ? deepMask(extra) : {}) });
+      if (err instanceof Error) Sentry.captureException(err);
+      else Sentry.captureMessage(`${kind}: ${String(err ?? kind)}`, kind === 'sw_recovery' ? 'warning' : 'error');
+    });
+  } catch {
+    // noop — 진단 실패가 앱에 영향 주지 않음
+  }
+}
+
+/** 앱 최상단 렌더 실패(RootErrorBoundary) 진단. */
+export function captureBootFailure(err: unknown, extra?: Record<string, unknown>): Promise<void> {
+  return captureRecovery('boot_failure', err, extra);
+}
+/** dynamic import(chunk) 실패 진단(lazyWithRetry). */
+export function captureChunkLoadFailure(err: unknown, extra?: Record<string, unknown>): Promise<void> {
+  return captureRecovery('chunk_load_failure', err, extra);
+}
+/** SW/캐시 긴급 복구 발생 진단(watchdog 이후 재부팅 시 보고). */
+export function captureServiceWorkerRecovery(extra?: Record<string, unknown>): Promise<void> {
+  return captureRecovery('sw_recovery', new Error('service_worker_recovery'), extra);
 }
