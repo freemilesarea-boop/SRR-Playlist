@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Headphones, Play, CheckCircle, Clock, Users, Music, ShieldCheck, ShieldOff, CalendarRange, Coins, Wallet } from 'lucide-react';
 import { fetchTrackAnalytics, type TrackAnalytics } from '@/lib/adminApi';
 import {
@@ -124,25 +124,36 @@ export default function StreamingAnalytics() {
     void loadEligible();
   }, [loadEligible]);
 
+  // WEB-OPT-8 — 집계·필터를 useMemo([rows, overview]) 로 캐싱. 이전에는 render body 에서
+  //   매 렌더(= cap 입력 등 키 입력마다)마다 rows/overview 전체를 6회 reduce + 3회 filter
+  //   했다(rows 는 상한 없는 track_analytics). 값은 동일, 계산만 캐싱(정합성 불변).
+  const {
+    totalPlays, totalCompletes, playedRows, avgSeconds, completionRate,
+    sumRaw, sumEligible, sumExcluded, eligibleRatio, sumListeners, sumTracks,
+  } = useMemo(() => {
+    const totalPlays = rows.reduce((s, r) => s + Number(r.plays), 0);
+    const totalCompletes = rows.reduce((s, r) => s + Number(r.completes), 0);
+    // 평균 재생시간: 재생이 있었던(plays>0) 트랙들만으로 분자·분모를 일치시킨다.
+    // (기존: 분자는 전체 합, 분모는 plays>0 개수 → 평균이 왜곡되고 0건일 때 NaN)
+    const playedRows = rows.filter((r) => r.plays > 0);
+    const avgSeconds = playedRows.length
+      ? playedRows.reduce((s, r) => s + Number(r.avg_seconds), 0) / playedRows.length
+      : 0;
+    const completionRate = totalPlays > 0 ? (totalCompletes / totalPlays) * 100 : 0;
+    // 0078 — 정산 기준 집계
+    const sumRaw = overview.reduce((s, d) => s + Number(d.total_streams), 0);
+    const sumEligible = overview.reduce((s, d) => s + Number(d.eligible_streams), 0);
+    const sumExcluded = sumRaw - sumEligible;
+    const eligibleRatio = sumRaw > 0 ? (sumEligible / sumRaw) * 100 : 0;
+    const sumListeners = overview.reduce((s, d) => s + Number(d.unique_listeners), 0);
+    const sumTracks = overview.reduce((m, d) => Math.max(m, Number(d.unique_tracks)), 0);
+    return {
+      totalPlays, totalCompletes, playedRows, avgSeconds, completionRate,
+      sumRaw, sumEligible, sumExcluded, eligibleRatio, sumListeners, sumTracks,
+    };
+  }, [rows, overview]);
+
   if (error) return <AdminErrorState error={error} onRetry={load} />;
-
-  const totalPlays = rows.reduce((s, r) => s + Number(r.plays), 0);
-  const totalCompletes = rows.reduce((s, r) => s + Number(r.completes), 0);
-  // 평균 재생시간: 재생이 있었던(plays>0) 트랙들만으로 분자·분모를 일치시킨다.
-  // (기존: 분자는 전체 합, 분모는 plays>0 개수 → 평균이 왜곡되고 0건일 때 NaN)
-  const playedRows = rows.filter((r) => r.plays > 0);
-  const avgSeconds = playedRows.length
-    ? playedRows.reduce((s, r) => s + Number(r.avg_seconds), 0) / playedRows.length
-    : 0;
-  const completionRate = totalPlays > 0 ? (totalCompletes / totalPlays) * 100 : 0;
-
-  // 0078 — 정산 기준 집계
-  const sumRaw = overview.reduce((s, d) => s + Number(d.total_streams), 0);
-  const sumEligible = overview.reduce((s, d) => s + Number(d.eligible_streams), 0);
-  const sumExcluded = sumRaw - sumEligible;
-  const eligibleRatio = sumRaw > 0 ? (sumEligible / sumRaw) * 100 : 0;
-  const sumListeners = overview.reduce((s, d) => s + Number(d.unique_listeners), 0);
-  const sumTracks = overview.reduce((m, d) => Math.max(m, Number(d.unique_tracks)), 0);
 
   return (
     <div className="space-y-6">
@@ -401,15 +412,14 @@ export default function StreamingAnalytics() {
                   </td>
                 </tr>
               )}
-              {!loading && rows.filter((r) => r.plays > 0).length === 0 && (
+              {!loading && playedRows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-xs text-ink-mute">
                     아직 재생된 곡이 없어요.
                   </td>
                 </tr>
               )}
-              {rows
-                .filter((r) => r.plays > 0)
+              {playedRows
                 .map((t) => (
                   <tr key={t.track_id} className="border-b border-line/10 hover:bg-bg-hover">
                     <td className="px-3 py-2.5 text-sm font-medium">{t.title}</td>
