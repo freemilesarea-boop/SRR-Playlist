@@ -53,22 +53,54 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!--
-      X6.52 — emergency SW/cache watchdog
-      배경: X6.49/X6.50 split 이후 새 chunk 명 변경. 모바일에서 stale SW 가
-      옛 chunk path 를 캐시 hit → 404 → blank screen 으로 stuck.
-      대처: 8초 안에 #root 에 children 이 없으면 SW unregister + cache clear 후 hard reload.
-      sessionStorage 로 1회만 실행 (무한 reload 방지).
-      이미 정상 렌더된 사용자는 영향 0 (children 있으면 noop).
+      WEB-OPT-2 — emergency SW/cache watchdog (build-scoped bounded recovery)
+      배경: 오래된 SW 가 구버전 index.html→죽은 chunk hash 를 반환하면 8초 뒤에도 React 가
+            mount 되지 못해 백지가 된다. (index.html precache 제외로 근본 차단하되, 최후 안전망 유지)
+      판정: React 가 mount 되면 RootErrorBoundary 가 documentElement[data-app-booted]=true 를 설정.
+            이 marker 또는 #root children 이 있으면 정상으로 보고 아무것도 하지 않는다.
+      복구: 같은 build(%BUILD_ID%)에서 최대 1회만 — 앱(workbox) 캐시만 삭제 + SW unregister + reload.
+            새 build 가 배포되면 키가 달라져 복구 재시도 가능. 무한 reload 없음.
+      보존: localStorage/sessionStorage 전체 삭제 금지, auth/player/설정 캐시 삭제 금지.
+            (오직 workbox/precache 계열 Cache Storage 만 정리 → 죽은 chunk 매핑 제거)
+      진단: 복구 시 최소 정보(build/path(pathname)/attempt/controller/online)를 sessionStorage 에 남겨
+            다음 로드에서 main.tsx 가 Sentry 로 1회 보고. 토큰/개인정보/URL 은 기록하지 않음.
     -->
     <script>
       (function () {
         if (!('serviceWorker' in navigator)) return;
-        if (sessionStorage.getItem('srr-emergency-recovered') === '1') return;
-        setTimeout(function () {
+        var BUILD_ID = '%BUILD_ID%';
+        var ATTEMPT_KEY = 'boot-recovery:' + BUILD_ID;
+        var MAX_ATTEMPTS = 1;
+        function booted() {
+          try {
+            if (document.documentElement.dataset.appBooted === 'true') return true;
+          } catch (e) {}
           var root = document.getElementById('root');
-          if (root && root.children.length > 0) return; // 정상
-          try { sessionStorage.setItem('srr-emergency-recovered', '1'); } catch (e) {}
-          console.warn('[watchdog] app did not mount in 8s — SW unregister + cache clear + reload');
+          return !!(root && root.children.length > 0);
+        }
+        setTimeout(function () {
+          if (booted()) return; // 정상 렌더 — noop
+          var prev = 0;
+          try { prev = parseInt(sessionStorage.getItem(ATTEMPT_KEY) || '0', 10) || 0; } catch (e) {}
+          if (prev >= MAX_ATTEMPTS) {
+            // 같은 build 에서 한도 초과 — 무한 reload 방지. 더 이상 복구 시도하지 않음.
+            console.warn('[watchdog] recovery budget exhausted for build', BUILD_ID);
+            return;
+          }
+          var attempt = prev + 1;
+          try { sessionStorage.setItem(ATTEMPT_KEY, String(attempt)); } catch (e) {}
+          // 진단 로그(민감정보 없음: pathname 만) — 다음 로드에서 main.tsx 가 Sentry 로 보고.
+          try {
+            sessionStorage.setItem('srr-recovery-log', JSON.stringify({
+              build: BUILD_ID,
+              path: (location && location.pathname) || '/',
+              attempt: attempt,
+              hasController: !!navigator.serviceWorker.controller,
+              online: (typeof navigator.onLine === 'boolean') ? navigator.onLine : null,
+              reason: 'watchdog_blank'
+            }));
+          } catch (e) {}
+          console.warn('[watchdog] app did not mount in 8s — app-cache purge + SW unregister + reload (attempt ' + attempt + ')');
           var p = Promise.resolve();
           try {
             p = navigator.serviceWorker.getRegistrations()
@@ -79,7 +111,9 @@
             if (typeof caches !== 'undefined') {
               p = p.then(function () {
                 return caches.keys().then(function (keys) {
-                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                  // 앱(workbox/precache) 캐시만 삭제 — 사용자 데이터/타 캐시는 보존.
+                  var appKeys = keys.filter(function (k) { return /workbox|srr|deudda|precache/i.test(k); });
+                  return Promise.all(appKeys.map(function (k) { return caches.delete(k); }));
                 });
               });
             }
