@@ -14,6 +14,8 @@ import { getBrandToken, clearBrandToken } from '@/lib/brandSession';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { useBrandPlayerHeartbeat } from '@/hooks/useBrandPlayerHeartbeat';
 import BrandSignage from '@/components/brand/BrandSignage';
+import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
+import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import type { BrandPlayerConfig } from '@/types/brand';
 import type { PlaylistRow } from '@/types/db';
 
@@ -167,6 +169,8 @@ export default function BrandPlayerPage() {
 
   const current = queue[index];
   const hasQueue = queue.length > 0;
+  // 사이니지 설정(전환효과/시간 + presentation 표시옵션). 레거시/null 은 default(fade/500/전부 off)로 정규화.
+  const signage = normalizeSignageSettings(config?.signage);
 
   // 세션 없음 → 리다이렉트 처리 중
   if (!token) return null;
@@ -223,7 +227,17 @@ export default function BrandPlayerPage() {
           brandName={config?.brand.name ?? '브랜드'}
           className="absolute inset-0 h-full w-full"
           chromeHidden={presentation}
+          transition={{ effect: signage.transition_effect, durationMs: signage.transition_duration_ms }}
+          showSlideDots={signage.show_slide_dots}
         />
+        {/* presentation 표시옵션 오버레이(브랜드명/현재곡/시계) — 전체화면에서만, 선택된 것만. */}
+        {presentation && (
+          <BrandPresentationOverlays
+            show={{ brandName: signage.show_brand_name, nowPlaying: signage.show_now_playing, clock: signage.show_clock }}
+            brandName={config?.brand.name ?? '브랜드'}
+            nowPlaying={current ? { title: current.title, artist: current.artist } : null}
+          />
+        )}
         {/* presentation 종료 affordance — 평소 투명, hover/focus/tap 시 노출 (chrome 방해 최소화) */}
         {presentation && (
           <button
