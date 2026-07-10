@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/brandPlayerApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
+import { isVideoAsset, formatMediaDuration, formatBytes, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES } from '@/lib/brandMediaType';
 import BrandSignage from '@/components/brand/BrandSignage';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import {
@@ -275,14 +276,24 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
     finally { setSavingSignage(false); }
   }
 
-  async function onPickImage(file: File) {
+  async function onPickMedia(file: File) {
     setUploading(true);
     try {
       const up = await uploadBrandMedia(brandId, file);
       if (!up.ok || !up.url) { toast.error(up.error || '업로드 실패'); return; }
-      await adminAddBrandMedia({ brandId, imageUrl: up.url, displayDurationSeconds: 10 });
-      toast.success('이미지를 추가했어요'); await reload(); onChanged();
-    } catch (e) { toast.error(`이미지 추가 실패: ${(e as Error).message}`); }
+      const isVideo = up.assetType === 'video';
+      await adminAddBrandMedia({
+        brandId, imageUrl: up.url, displayDurationSeconds: 10,
+        assetType: up.assetType ?? 'image', mimeType: up.mimeType ?? null,
+        mediaDurationSeconds: up.durationSeconds ?? null,
+      });
+      // 파일명/용량은 업로드 시점에만 확인 가능 → 토스트로 안내(재생시간/종류는 목록에 표시).
+      const sizeLabel = formatBytes(up.sizeBytes);
+      toast.success(isVideo
+        ? `동영상을 추가했어요 (${file.name} · ${sizeLabel}${up.durationSeconds ? ` · ${formatMediaDuration(up.durationSeconds)}` : ''})`
+        : `이미지를 추가했어요 (${file.name} · ${sizeLabel})`);
+      await reload(); onChanged();
+    } catch (e) { toast.error(`미디어 추가 실패: ${(e as Error).message}`); }
     finally { setUploading(false); }
   }
 
@@ -291,14 +302,17 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
     catch (e) { toast.error(`수정 실패: ${(e as Error).message}`); }
   }
   async function deleteMedia(assetId: string) {
-    if (!confirm('이 이미지를 삭제할까요?')) return;
+    if (!confirm('이 미디어를 삭제할까요?')) return;
     try { await adminDeleteBrandMedia(assetId); toast.success('삭제했어요'); await reload(); onChanged(); }
     catch (e) { toast.error(`삭제 실패: ${(e as Error).message}`); }
   }
 
   const media = detail?.media ?? [];
   const previewItems = media.filter((m) => (m.status ?? 'active') === 'active')
-    .map((m) => ({ id: m.id, title: m.title, image_url: m.image_url, display_duration_seconds: m.display_duration_seconds }));
+    .map((m) => ({
+      id: m.id, title: m.title, image_url: m.image_url, display_duration_seconds: m.display_duration_seconds,
+      asset_type: m.asset_type, mime_type: m.mime_type,
+    }));
 
   return (
     <AdminModal open onClose={onClose} title={detail?.brand.name ?? '브랜드 상세'} size="xl"
@@ -347,27 +361,44 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
               <div className="mt-3"><AdminButton tone="primary" size="sm" onClick={() => void savePolicy()} disabled={savingPolicy}>{savingPolicy ? '저장 중…' : '정책 저장'}</AdminButton></div>
             </AdminCard>
 
-            {/* 이미지 사이니지 */}
-            <AdminCard title="이미지 사이니지" subtitle="순서대로 노출 시간(초)만큼 표시 후 반복. jpg/png/webp, 10MB 이하."
+            {/* 이미지/동영상 사이니지 */}
+            <AdminCard title="사이니지 미디어 (이미지 · 동영상)" subtitle="순서대로 재생 후 반복. 이미지는 노출 시간(초)만큼, 동영상은 영상 종료까지. jpg/png/webp/gif(10MB), mp4/webm/mov(50MB)."
               action={
                 <label className="cursor-pointer">
-                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void onPickImage(f); e.currentTarget.value = ''; }} />
+                  <input type="file" accept={[...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES].join(',')} className="hidden" disabled={uploading}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void onPickMedia(f); e.currentTarget.value = ''; }} />
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-black">
-                    <Plus size={13} /> {uploading ? '업로드 중…' : '이미지 추가'}
+                    <Plus size={13} /> {uploading ? '업로드 중…' : '미디어 추가'}
                   </span>
                 </label>
               }>
               {media.length === 0 ? (
-                <AdminEmpty icon={<ImageIcon size={22} />} title="이미지 없음" description="이미지를 추가하면 플레이어에서 순차 노출됩니다." />
+                <AdminEmpty icon={<ImageIcon size={22} />} title="미디어 없음" description="이미지 또는 동영상을 추가하면 플레이어에서 순차 재생됩니다." />
               ) : (
                 <div className="space-y-2">
-                  {media.map((m) => (
+                  {media.map((m) => {
+                    const isVideo = isVideoAsset(m.asset_type, m.mime_type);
+                    return (
                     <div key={m.id} className="flex items-center gap-3 rounded-lg border border-line/20 bg-bg p-2">
-                      <img src={m.image_url} alt={m.title ?? ''} className="h-12 w-16 shrink-0 rounded object-cover" />
+                      <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded bg-black">
+                        {isVideo
+                          ? <video src={m.image_url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                          : <img src={m.image_url} alt={m.title ?? ''} className="h-full w-full object-cover" />}
+                        <span className={`absolute left-0.5 top-0.5 rounded px-1 text-[9px] font-bold leading-tight ${isVideo ? 'bg-violet-600 text-white' : 'bg-white/85 text-black'}`}>
+                          {isVideo ? 'VIDEO' : 'IMAGE'}
+                        </span>
+                        {isVideo && m.media_duration_seconds != null && (
+                          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[9px] font-semibold tabular-nums text-white">
+                            {formatMediaDuration(m.media_duration_seconds)}
+                          </span>
+                        )}
+                      </div>
                       <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
                         <input className={inputSm} defaultValue={m.title ?? ''} placeholder="제목" onBlur={(e) => { if (e.target.value !== (m.title ?? '')) void updateMedia(m.id, { title: e.target.value }); }} />
-                        <input className={inputSm} type="number" min={1} max={600} defaultValue={m.display_duration_seconds} title="노출 시간(초)" onBlur={(e) => { const v = Number(e.target.value); if (v && v !== m.display_duration_seconds) void updateMedia(m.id, { displayDurationSeconds: v }); }} />
+                        <input className={inputSm} type="number" min={1} max={600} defaultValue={m.display_duration_seconds}
+                          title={isVideo ? '동영상은 영상 종료까지 재생(이 값 미사용)' : '노출 시간(초)'}
+                          disabled={isVideo}
+                          onBlur={(e) => { const v = Number(e.target.value); if (v && v !== m.display_duration_seconds) void updateMedia(m.id, { displayDurationSeconds: v }); }} />
                         <input className={inputSm} type="number" defaultValue={m.sort_order} title="순서" onBlur={(e) => { const v = Number(e.target.value); if (v !== m.sort_order) void updateMedia(m.id, { sortOrder: v }); }} />
                         <div className="flex items-center gap-1">
                           <AdminButton size="sm" variant="ghost" tone={m.status === 'active' ? 'neutral' : 'success'} onClick={() => void updateMedia(m.id, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? '숨김' : '표시'}</AdminButton>
@@ -375,7 +406,8 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

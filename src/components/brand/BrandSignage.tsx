@@ -1,45 +1,41 @@
-// Phase BRAND-1 — 브랜드 이미지 사이니지.
-//   BRAND-PLAYER-UX-1: 전환 타이머 root-cause fix + presentation chrome.
-//   BRAND-PLAYER-UX-2: fade/crossfade 전환 + bounded preload(현재+다음) + 도트/카운터.
-// sort_order 순서대로 각 display_duration_seconds(초) 만큼 노출 후 다음, 마지막→첫번째 loop.
-// 오디오와 완전 독립된 DOM (audio element remount 유발 안 함).
-// 이미지 로드 실패 시 다음 이미지로 skip. 0개면 브랜드 기본 화면 fallback.
+// Phase BRAND-1 — 브랜드 이미지/동영상 사이니지.
+//   UX-1: 전환 타이머 root-cause fix + presentation chrome.
+//   UX-2: fade/crossfade 전환 + bounded preload + 도트/카운터.
+//   UX-3: 동영상(mp4/webm/mov) 지원 — image 는 유지시간, video 는 종료까지 재생 후 다음.
+// sort_order 순서대로: image → display_duration_seconds 후 다음 / video → onEnded 후 다음. 마지막→첫번째 loop.
+// 오디오와 완전 독립된 DOM. video 는 muted → 음악에 영향 없음(오디오 출력 금지).
+// 로드 실패 시 다음 슬라이드로 skip(전체 중단 금지). 0개면 브랜드 기본 화면 fallback.
 //
-// [핵심 분리] "이미지 유지 시간"(display_duration_seconds, 언제 넘길지)과
-//   "전환 애니메이션 시간"(transition.durationMs, 어떻게 넘길지)은 완전히 별개의 개념/타이머다.
+// [핵심 분리] image 유지 시간(display_duration_seconds) ≠ 전환 애니메이션 시간(transition.durationMs)
+//   ≠ video 재생 길이(자연 종료). video 는 길이를 억지로 자르지 않는다(타이머로 끊지 않음).
 //
-// [crossfade 방식] 이전 이미지를 아래 레이어(불투명)로 유지한 채, 새 이미지를 위에서 opacity 0→1 로
-//   fade-in 시키고 durationMs 후 아래 레이어 제거 → 검은 화면 깜빡임/레이아웃 이동 없음.
-//   effect='none' 또는 prefers-reduced-motion 이면 durationMs=0(즉시 전환).
-//
-// [DOM 이미지 개수 상한] 화면에 mount 되는 <img> 는 (위 1 + 아래 0~1 + 미리로드 1~2) = 최대 4개.
-//   이미지가 100장이어도 전부 DOM 에 렌더하지 않는다(메모리 증가 방지).
-import { useEffect, useRef, useState } from 'react';
+// [crossfade] 이전 미디어를 아래 레이어로 잠시 유지 + 새 미디어를 위에서 opacity 0→1 → 검은 깜빡임 없음.
+// [DOM 상한] 화면 mount 미디어 = 위 1 + 아래 0~1 + 미리로드 1~2 = 최대 ~4. 100개여도 전부 렌더 안 함.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageOff, Sparkles } from 'lucide-react';
 import { resolveSlideDurationMs, nextSlideIndex, normalizeSlideIndex, shouldRunSlideshow } from '@/lib/brandSlideshow';
 import { slidePreloadIndexes, slideProgressMode, DEFAULT_TRANSITION_MS } from '@/lib/brandSignageSettings';
-import type { SignageTransitionEffect } from '@/types/brand';
+import { isVideoAsset } from '@/lib/brandMediaType';
+import type { SignageTransitionEffect, BrandMediaType } from '@/types/brand';
 
 export interface SignageItem {
   id: string;
   title: string | null;
   image_url: string;
   display_duration_seconds: number;
+  asset_type?: BrandMediaType;
+  mime_type?: string | null;
 }
 
 interface Props {
   items: SignageItem[];
   brandName: string;
   className?: string;
-  /** presentation(전체화면) 모드: 이미지 외 chrome(캡션) 숨김 + 도트는 옵션에 따름 */
   chromeHidden?: boolean;
-  /** 전환 효과/시간 (미지정 시 fade/500ms). */
   transition?: { effect: SignageTransitionEffect; durationMs: number };
-  /** presentation 진행표시 opt-in. 일반 모드에서는 항상 표시(기존 UX 유지). */
   showSlideDots?: boolean;
 }
 
-/** 접근성: prefers-reduced-motion 이면 전환 애니메이션을 끈다(즉시 전환). */
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
@@ -57,15 +53,16 @@ export default function BrandSignage({
   items, brandName, className, chromeHidden = false, transition, showSlideDots = false,
 }: Props) {
   const [idx, setIdx] = useState(0);
-  // 로드 실패로 영구 제외된 이미지 id 집합
+  // 같은 인덱스로 재진입(단일 video 반복)해도 remount 되도록 하는 카운터
+  const [cycle, setCycle] = useState(0);
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
-  const timerRef = useRef<number | null>(null);
 
   const usable = items.filter((it) => !broken.has(it.id));
   const count = usable.length;
   const safeIdx = normalizeSlideIndex(idx, count);
   const cur = count > 0 ? usable[safeIdx] : null;
-  // 이미지 유지 시간(초, 관리자 저장값) → ms. 잘못된 값에만 안전 fallback. (전환 애니메이션 시간과 별개)
+  const curIsVideo = !!cur && isVideoAsset(cur.asset_type, cur.mime_type);
+  // image 유지 시간(초) → ms. video 는 사용 안 함(자연 종료로 전환).
   const curDurMs = cur ? resolveSlideDurationMs(cur.display_duration_seconds) : 0;
 
   const reduceMotion = usePrefersReducedMotion();
@@ -73,19 +70,22 @@ export default function BrandSignage({
   const rawFade = transition?.durationMs ?? DEFAULT_TRANSITION_MS;
   const fadeMs = effect === 'fade' && !reduceMotion ? Math.max(0, rawFade) : 0;
 
-  // crossfade: 직전 이미지를 아래 레이어로 잠시 유지(위 레이어 fade-in 동안 검은 배경 노출 방지)
   const [prevItem, setPrevItem] = useState<SignageItem | null>(null);
   const lastItemRef = useRef<SignageItem | null>(cur);
   const fadeClearRef = useRef<number | null>(null);
 
-  // items 목록이 바뀌면 index 리셋(out-of-range 정규화) + 진행 중 fade 정리
+  // 다음 슬라이드로 전환(순환 + remount 보장)
+  const advance = useCallback(() => {
+    setIdx((i) => nextSlideIndex(i, count));
+    setCycle((c) => c + 1);
+  }, [count]);
+
+  // items 변경 → 리셋
   useEffect(() => {
-    setIdx(0);
-    setPrevItem(null);
-    lastItemRef.current = null;
+    setIdx(0); setCycle(0); setPrevItem(null); lastItemRef.current = null;
   }, [items]);
 
-  // 현재 이미지가 바뀌면 직전 이미지를 아래 레이어로 유지 후 fadeMs 뒤 제거(crossfade 완료).
+  // 현재 미디어 변경 시 직전 미디어를 아래 레이어로 유지(fadeMs 후 제거)
   useEffect(() => {
     if (!cur) { lastItemRef.current = null; return; }
     const last = lastItemRef.current;
@@ -100,33 +100,26 @@ export default function BrandSignage({
 
   useEffect(() => () => { if (fadeClearRef.current) window.clearTimeout(fadeClearRef.current); }, []);
 
-  // 현재 이미지 유지 시간(display_duration_seconds) 후 다음으로 전환.
-  // dependency 는 primitive(safeIdx/count/curDurMs)만 — 부모 리렌더로 인한 타이머 재생성 방지.
-  // 이미지 0·1장이면 타이머를 만들지 않는다(2장 이상에서만 순환). 단일 타이머.
+  // 유지 타이머: image 일 때만. video 는 onEnded 가 전환을 담당(길이를 자르지 않음).
+  // 이미지 0·1장이면 타이머 없음. 단일 타이머.
   useEffect(() => {
+    if (!cur || curIsVideo) return;
     if (!shouldRunSlideshow(count)) return;
-    const id = window.setTimeout(() => {
-      setIdx((i) => nextSlideIndex(i, count));
-    }, curDurMs);
-    timerRef.current = id;
-    return () => {
-      window.clearTimeout(id);
-      if (timerRef.current === id) timerRef.current = null;
-    };
-  }, [safeIdx, count, curDurMs]);
+    const id = window.setTimeout(() => advance(), curDurMs);
+    return () => window.clearTimeout(id);
+  }, [safeIdx, count, curDurMs, curIsVideo, cur, advance]);
 
-  function handleError(id: string) {
+  const handleError = useCallback((id: string) => {
     setBroken((prev) => {
       if (prev.has(id)) return prev;
-      const nx = new Set(prev);
-      nx.add(id);
-      return nx;
+      const nx = new Set(prev); nx.add(id); return nx;
     });
-    // 깨진 이미지 → 다음으로 이동(전체 slideshow 중단 금지). 렌더에서 index 정규화됨.
+    // 깨진 미디어 → 다음으로(전체 중단 금지). 렌더에서 index 정규화.
     setIdx((i) => i + 1);
-  }
+    setCycle((c) => c + 1);
+  }, []);
 
-  // fallback: 사용할 이미지가 없음
+  // fallback: 사용할 미디어 없음
   if (count === 0 || !cur) {
     return (
       <div className={`flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-900 to-black text-white/80 ${className ?? ''}`}>
@@ -134,12 +127,12 @@ export default function BrandSignage({
           <>
             <Sparkles size={48} className="text-accent" />
             <p className="text-2xl font-extrabold tracking-tight">{brandName}</p>
-            <p className="text-sm text-white/50">브랜드 사이니지 이미지가 아직 등록되지 않았어요.</p>
+            <p className="text-sm text-white/50">브랜드 사이니지 미디어가 아직 등록되지 않았어요.</p>
           </>
         ) : (
           <>
             <ImageOff size={44} className="text-white/40" />
-            <p className="text-lg font-bold">이미지를 불러올 수 없어요</p>
+            <p className="text-lg font-bold">미디어를 불러올 수 없어요</p>
             <p className="text-sm text-white/50">{brandName}</p>
           </>
         )}
@@ -147,46 +140,58 @@ export default function BrandSignage({
     );
   }
 
-  // bounded preload: 현재 + 다음 1(장수 많으면 다음+1까지). URL 중복 제거는 인덱스 dedupe 로 보장.
   const preloadIdx = slidePreloadIndexes(safeIdx, count, count > 2);
   const preloadItems = preloadIdx.map((i) => usable[i]).filter(Boolean) as SignageItem[];
 
-  const progressMode = slideProgressMode(count); // 'none' | 'dots' | 'counter'
-  // 일반 모드: 기존 UX 대로 항상 진행표시. presentation: showSlideDots opt-in 일 때만.
+  const progressMode = slideProgressMode(count);
   const showProgress = progressMode !== 'none' && (chromeHidden ? showSlideDots : true);
+
+  const prevIsVideo = prevItem ? isVideoAsset(prevItem.asset_type, prevItem.mime_type) : false;
 
   return (
     <div className={`relative overflow-hidden bg-black ${className ?? ''}`}>
-      {/* 아래 레이어: 직전 이미지(불투명) — 위 레이어 fade-in 동안 검은 배경 방지. fadeMs 후 제거. */}
+      {/* 아래 레이어: 직전 미디어(불투명 유지) — fadeMs 후 제거 */}
       {prevItem && prevItem.id !== cur.id && (
-        <img
-          key={`prev-${prevItem.id}`}
-          src={prevItem.image_url}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-contain"
-          draggable={false}
-        />
+        prevIsVideo ? (
+          <video
+            key={`prev-${prevItem.id}`} src={prevItem.image_url}
+            muted playsInline preload="metadata" aria-hidden
+            className="absolute inset-0 h-full w-full bg-black object-contain"
+          />
+        ) : (
+          <img
+            key={`prev-${prevItem.id}`} src={prevItem.image_url} alt="" aria-hidden
+            className="absolute inset-0 h-full w-full object-contain" draggable={false}
+          />
+        )
       )}
-      {/* 위 레이어: 현재 이미지 — mount 시 opacity 0→1 로 fade-in(effect/duration 반영). */}
-      <CrossfadeImage
-        key={`cur-${cur.id}`}
+
+      {/* 위 레이어: 현재 미디어 — fade-in. video 는 종료 시 다음. */}
+      <CrossfadeMedia
+        key={`cur-${cur.id}-${cycle}`}
         item={cur}
         brandName={brandName}
         durationMs={fadeMs}
-        onError={() => handleError(cur.id)}
+        isVideo={curIsVideo}
+        onEnded={curIsVideo ? advance : undefined}
+        onFailed={() => handleError(cur.id)}
       />
-      {/* 미리로드(비가시): 다음 이미지 decode 만 유도. 화면에 보이지 않음. */}
+
+      {/* 미리로드(비가시): 다음 미디어 decode/metadata 만 유도 */}
       {preloadItems.map((p) => (
-        <img
-          key={`pre-${p.id}`}
-          src={p.image_url}
-          alt=""
-          aria-hidden
-          onError={() => handleError(p.id)}
-          className="pointer-events-none absolute h-px w-px opacity-0"
-          draggable={false}
-        />
+        isVideoAsset(p.asset_type, p.mime_type) ? (
+          <video
+            key={`pre-${p.id}`} src={p.image_url} muted preload="metadata" aria-hidden
+            onError={() => handleError(p.id)}
+            className="pointer-events-none absolute h-px w-px opacity-0"
+          />
+        ) : (
+          <img
+            key={`pre-${p.id}`} src={p.image_url} alt="" aria-hidden
+            onError={() => handleError(p.id)}
+            className="pointer-events-none absolute h-px w-px opacity-0" draggable={false}
+          />
+        )
       ))}
 
       {!chromeHidden && cur.title && (
@@ -195,7 +200,6 @@ export default function BrandSignage({
         </div>
       )}
 
-      {/* 진행표시: 2~19장 도트, 20장 이상 현재/전체 카운터. */}
       {showProgress && progressMode === 'dots' && (
         <div className="absolute bottom-4 right-4 flex gap-1.5">
           {usable.map((it, i) => (
@@ -215,14 +219,16 @@ export default function BrandSignage({
   );
 }
 
-/** 현재 이미지 레이어 — mount 다음 프레임에 opacity 1 로 전환하여 fade-in. durationMs=0 이면 즉시. */
-function CrossfadeImage({
-  item, brandName, durationMs, onError,
+/** 현재 미디어 레이어(image/video). mount 다음 프레임에 opacity 1 로 fade-in. video 는 muted 자동재생 후 onEnded. */
+function CrossfadeMedia({
+  item, brandName, durationMs, isVideo, onEnded, onFailed,
 }: {
   item: SignageItem;
   brandName: string;
   durationMs: number;
-  onError: () => void;
+  isVideo: boolean;
+  onEnded?: () => void;
+  onFailed: () => void;
 }) {
   const [shown, setShown] = useState(durationMs <= 0);
   useEffect(() => {
@@ -230,17 +236,41 @@ function CrossfadeImage({
     const r = requestAnimationFrame(() => setShown(true));
     return () => cancelAnimationFrame(r);
   }, [durationMs]);
+
+  const style = {
+    opacity: shown ? 1 : 0,
+    transition: durationMs > 0 ? `opacity ${durationMs}ms ease-in-out` : 'none',
+  } as const;
+
+  if (isVideo) {
+    return (
+      <video
+        src={item.image_url}
+        autoPlay
+        muted
+        playsInline
+        preload="metadata"
+        onEnded={onEnded}
+        onError={onFailed}
+        onLoadedMetadata={(e) => {
+          // muted 자동재생 보장 — 차단되면 skip(정지 방지). 길이는 자르지 않음.
+          const v = e.currentTarget;
+          const p = v.play();
+          if (p && typeof p.catch === 'function') p.catch(() => onFailed());
+        }}
+        className="absolute inset-0 h-full w-full bg-black object-contain"
+        style={style}
+      />
+    );
+  }
   return (
     <img
       src={item.image_url}
       alt={item.title ?? brandName}
-      onError={onError}
+      onError={onFailed}
       className="absolute inset-0 h-full w-full object-contain"
       draggable={false}
-      style={{
-        opacity: shown ? 1 : 0,
-        transition: durationMs > 0 ? `opacity ${durationMs}ms ease-in-out` : 'none',
-      }}
+      style={style}
     />
   );
 }

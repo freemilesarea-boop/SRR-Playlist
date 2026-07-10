@@ -55,10 +55,14 @@ export interface SignageSettings {
   show_slide_dots: boolean;
 }
 
+/** 사이니지 미디어 종류 (UX-3: 이미지 + 동영상). */
+export type BrandMediaType = 'image' | 'video';
+
 export interface BrandMediaAsset {
   id: string;
-  asset_type: 'image';
+  asset_type: BrandMediaType;
   title: string | null;
+  /** 저장 파일 URL (image 또는 video). 컬럼명은 레거시상 image_url 이지만 video URL 도 담는다. */
   image_url: string;
   display_duration_seconds: number;
   sort_order: number;
@@ -66,6 +70,12 @@ export interface BrandMediaAsset {
   ends_at?: string | null;
   status?: BrandStatus;
   created_at?: string;
+  /** UX-3: 업로드 MIME (image/* 또는 video/*). */
+  mime_type?: string | null;
+  /** UX-3: video 썸네일 URL(선택). null 이면 video 첫 프레임 사용. */
+  thumbnail_url?: string | null;
+  /** UX-3: video 재생 길이(초, 표시용). image 는 null. */
+  media_duration_seconds?: number | null;
 }
 
 /** admin_get_brand */
@@ -105,7 +115,9 @@ export interface StoreVerifyResult {
 export interface BrandPlayerConfig {
   brand: { id: string; name: string; industry_type: string | null };
   policy: Omit<BrandMusicPolicy, 'brand_id' | 'daypart_policy'> | null;
-  media: Array<Pick<BrandMediaAsset, 'id' | 'title' | 'image_url' | 'display_duration_seconds' | 'sort_order'>>;
+  media: Array<Pick<BrandMediaAsset,
+    'id' | 'title' | 'image_url' | 'display_duration_seconds' | 'sort_order'
+    | 'asset_type' | 'mime_type' | 'thumbnail_url' | 'media_duration_seconds'>>;
   /** 0452 이후 항상 포함(레거시는 default). */
   signage: SignageSettings;
   playlist: TrackRow[];
