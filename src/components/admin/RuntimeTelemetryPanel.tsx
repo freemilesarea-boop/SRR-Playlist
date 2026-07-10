@@ -3,14 +3,18 @@
 //   Data is THIS browser session only (client-side bounded ring buffers). Cross-user/historical
 //   aggregation requires a server sink (DB/RPC/edge) which is out of scope this phase.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, RefreshCw, Trash2, Gauge, AlertTriangle, Cpu, Timer } from 'lucide-react';
+import { Activity, RefreshCw, Trash2, Gauge, AlertTriangle, Cpu, Timer, Database, Send } from 'lucide-react';
 import { AdminCard, AdminStatCard, AdminSection, AdminBadge, AdminButton, AdminEmpty, type AdminToneName } from '@/components/admin/ui';
 import {
-  getTelemetrySnapshot, clearTelemetry, isTelemetryReady, type TelemetrySnapshot,
+  getTelemetrySnapshot, clearTelemetry, isTelemetryReady, getTransportHealth, getTelemetryConfig,
+  type TelemetrySnapshot,
 } from '@/lib/telemetry';
 import {
   durationStats, topSlowByKey, durationBuckets, classifyApiDuration, type Rating, type ApiSeverity,
 } from '@/lib/telemetry/aggregate';
+import RuntimeTelemetryServerHistory from '@/components/admin/RuntimeTelemetryServerHistory';
+
+type DashMode = 'session' | 'server';
 
 function ratingTone(r: Rating): AdminToneName {
   return r === 'good' ? 'success' : r === 'needs-improvement' ? 'warning' : 'danger';
@@ -23,6 +27,7 @@ function ms(n: number | null): string {
 }
 
 export default function RuntimeTelemetryPanel() {
+  const [mode, setMode] = useState<DashMode>('session');
   const [snap, setSnap] = useState<TelemetrySnapshot>(() => getTelemetrySnapshot());
   const [auto, setAuto] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -70,18 +75,37 @@ export default function RuntimeTelemetryPanel() {
             build <span className="font-mono text-ink-dim">{snap.buildId}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <AdminButton tone="neutral" variant="subtle" size="sm" onClick={refresh} leftIcon={<RefreshCw size={13} />}>
-            새로고침
-          </AdminButton>
-          <AdminButton tone={auto ? 'primary' : 'neutral'} variant={auto ? 'solid' : 'outline'} size="sm" onClick={() => setAuto((v) => !v)}>
-            자동 {auto ? 'ON' : 'OFF'}
-          </AdminButton>
-          <AdminButton tone="danger" variant="subtle" size="sm" onClick={() => { clearTelemetry(); refresh(); }} leftIcon={<Trash2 size={13} />}>
-            초기화
-          </AdminButton>
-        </div>
+        {mode === 'session' && (
+          <div className="flex items-center gap-2">
+            <AdminButton tone="neutral" variant="subtle" size="sm" onClick={refresh} leftIcon={<RefreshCw size={13} />}>
+              새로고침
+            </AdminButton>
+            <AdminButton tone={auto ? 'primary' : 'neutral'} variant={auto ? 'solid' : 'outline'} size="sm" onClick={() => setAuto((v) => !v)}>
+              자동 {auto ? 'ON' : 'OFF'}
+            </AdminButton>
+            <AdminButton tone="danger" variant="subtle" size="sm" onClick={() => { clearTelemetry(); refresh(); }} leftIcon={<Trash2 size={13} />}>
+              초기화
+            </AdminButton>
+          </div>
+        )}
       </header>
+
+      {/* Mode toggle — 현재 브라우저 세션(WEB-OPT-11) vs 서버 영속 히스토리(WEB-OBS-1) */}
+      <div className="flex items-center gap-1.5">
+        <AdminButton size="sm" tone={mode === 'session' ? 'primary' : 'neutral'} variant={mode === 'session' ? 'solid' : 'outline'}
+          onClick={() => setMode('session')} leftIcon={<Activity size={13} />}>
+          현재 세션
+        </AdminButton>
+        <AdminButton size="sm" tone={mode === 'server' ? 'primary' : 'neutral'} variant={mode === 'server' ? 'solid' : 'outline'}
+          onClick={() => setMode('server')} leftIcon={<Database size={13} />}>
+          서버 히스토리
+        </AdminButton>
+      </div>
+
+      {mode === 'server' && <RuntimeTelemetryServerHistory />}
+
+      {mode === 'session' && (<>
+      <TransportHealthCard />
 
       {!isTelemetryReady() && (
         <AdminCard>
@@ -221,9 +245,52 @@ export default function RuntimeTelemetryPanel() {
       </div>
 
       <p className="text-[10px] text-ink-dim">
-        ⓘ 이 대시보드는 <span className="font-semibold">현재 브라우저 세션</span>의 클라이언트 측 bounded buffer 만 표시합니다.
-        1h/24h/7d/30d 다중 사용자 집계 및 p95/p99 히스토리는 서버 sink(테이블/RPC/edge)가 필요하며 이번 Phase 범위 밖입니다.
+        ⓘ <span className="font-semibold">현재 세션</span> 탭은 이 브라우저 세션의 클라이언트 측 bounded buffer 만 표시합니다.
+        1h/24h/7d/30d 다중 사용자·릴리스·브라우저 집계와 p95/p99 히스토리는 <span className="font-semibold">서버 히스토리</span> 탭(영속 RUM)에서 확인하세요.
       </p>
+      </>)}
     </div>
+  );
+}
+
+/**
+ * Transport health — shows whether persistent RUM transmission is on and healthy for THIS session.
+ * Reads a cheap snapshot (no timers here; refreshes when the parent re-renders / auto is on). Never
+ * re-emits telemetry about telemetry (no self-referential loop).
+ */
+function TransportHealthCard() {
+  const cfg = getTelemetryConfig();
+  const h = getTransportHealth();
+  const off = !cfg.collectionEnabled || !cfg.transportEnabled;
+  return (
+    <AdminCard
+      title="Telemetry Transport"
+      subtitle="서버 영속 전송 상태(현재 세션) · sendBeacon 우선 · 실패는 앱에 전파되지 않음"
+      action={
+        <AdminBadge tone={off ? 'neutral' : 'success'}>
+          {off ? 'OFF (kill switch)' : `ON · ${cfg.environment}`}
+        </AdminBadge>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
+        {([
+          ['queued', h.queued], ['sent', h.sent], ['accepted', h.accepted],
+          ['rejected', h.rejected], ['dropped', h.dropped], ['retries', h.retries],
+        ] as Array<[string, number]>).map(([k, v]) => (
+          <div key={k} className="rounded-md bg-bg-deep/40 px-2 py-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-ink-dim">{k}</div>
+            <div className="tabular-nums text-ink">{v.toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-dim">
+        <AdminBadge tone="neutral"><Send size={10} className="mr-0.5" />{h.transportType}</AdminBadge>
+        <AdminBadge tone="neutral">batch {cfg.batchSize}</AdminBadge>
+        <AdminBadge tone="neutral">flush {Math.round(cfg.flushIntervalMs / 1000)}s</AdminBadge>
+        <AdminBadge tone="neutral">buffer {h.bufferCapacity}</AdminBadge>
+        <AdminBadge tone="neutral">sample {cfg.baseSampleRate}</AdminBadge>
+        {h.lastErrorCategory && <AdminBadge tone="warning">last err: {h.lastErrorCategory}</AdminBadge>}
+      </div>
+    </AdminCard>
   );
 }
