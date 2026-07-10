@@ -76,6 +76,7 @@ const AiReleaseManagerPanel = lazy(() => import('@/components/admin/AiReleaseMan
 const AiCanarySimulatorPanel = lazy(() => import('@/components/admin/AiCanarySimulatorPanel'));
 const RuntimeReadinessPanel = lazy(() => import('@/components/admin/RuntimeReadinessPanel'));
 const RuntimeApplyGatePanel = lazy(() => import('@/components/admin/RuntimeApplyGatePanel'));
+const RuntimeAuthorizationPanel = lazy(() => import('@/components/admin/RuntimeAuthorizationPanel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -214,6 +215,7 @@ type Tab =
   | 'ai-canary'
   | 'runtime-readiness'
   | 'runtime-apply-gate'
+  | 'runtime-authorization'
   | 'brand'
   | 'brand-player';
 
@@ -298,6 +300,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-canary', label: 'AI Canary Simulator (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'runtime-readiness', label: 'Runtime Readiness (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'runtime-apply-gate', label: 'Runtime Apply Gate (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'runtime-authorization', label: 'Runtime Authorization (Shadow)', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
   { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
@@ -361,6 +364,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'ai-canary',
       'runtime-readiness',
       'runtime-apply-gate',
+      'runtime-authorization',
       'upload-integrity',
     ],
   },
@@ -734,6 +738,7 @@ export default function AdminPage() {
           {tab === 'ai-canary' && <AiCanarySimulatorPanel />}
           {tab === 'runtime-readiness' && <RuntimeReadinessPanel />}
           {tab === 'runtime-apply-gate' && <RuntimeApplyGatePanel />}
+          {tab === 'runtime-authorization' && <RuntimeAuthorizationPanel />}
           {tab === 'upload-integrity' && <UploadIntegrityPanel />}
           {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
