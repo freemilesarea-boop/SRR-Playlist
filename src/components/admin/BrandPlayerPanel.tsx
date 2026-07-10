@@ -68,6 +68,13 @@ export default function BrandPlayerPanel() {
         </div>
       }
     >
+      <AdminAlert
+        tone="info"
+        className="mb-3"
+        title="브랜드는 Enterprise 상세 화면에서도 생성/관리할 수 있어요"
+        description="본사(Enterprise) 상세 → '브랜드' 탭에서 이 본사에 브랜드를 바로 생성하고, 이미지·플레이어·음악 정책을 한 흐름에서 관리할 수 있습니다. 이 목록은 전체 브랜드를 가로질러 보는 화면입니다."
+      />
+
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <AdminStatCard label="전체 브랜드" value={String(rows.length)} />
         <AdminStatCard label="활성" value={String(rows.filter((r) => r.status === 'active').length)} tone="success" />
