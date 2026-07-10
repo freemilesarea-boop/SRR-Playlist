@@ -11,6 +11,55 @@
 
 import { sanitizePath, BUILD_ID } from '@/lib/bootRecovery';
 import { rateVital, type Rating, type VitalName } from './aggregate';
+import type { TelemetryEventType, Severity } from './schema';
+
+// ---------------------------------------------------------------------------
+// WEB-OBS-1 — optional emit sink. The server transport registers a sink; the collector then
+// forwards a lightweight, PII-free "raw emit" for each sample IN ADDITION to its ring buffer push.
+// When no sink is registered (transport disabled / kill switch), collection behaves exactly as in
+// WEB-OPT-11 — the emit calls are no-ops. Emitting is a cheap object build + one function call; the
+// transport owns batching/sampling so this never blocks the main thread.
+// ---------------------------------------------------------------------------
+export interface RawTelemetryEmit {
+  type: TelemetryEventType;
+  payload: Record<string, unknown>;
+  route: string;
+  previousRoute: string | null;
+  durationMs: number | null;
+  severity: Severity;
+  /** Client epoch ms at capture. */
+  occurredAt: number;
+}
+
+type TelemetrySink = (e: RawTelemetryEmit) => void;
+let sink: TelemetrySink | null = null;
+
+/** Register (or clear with null) the transport sink. Idempotent; guarded so it can never throw. */
+export function setTelemetrySink(fn: TelemetrySink | null): void { sink = fn; }
+
+function epochNow(): number { try { return Date.now(); } catch { return 0; } }
+
+function emit(
+  type: TelemetryEventType,
+  payload: Record<string, unknown>,
+  severity: Severity,
+  durationMs: number | null,
+  previousRoute: string | null = null,
+): void {
+  if (!sink) return;
+  try {
+    sink({ type, payload, route: currentRoute, previousRoute, durationMs, severity, occurredAt: epochNow() });
+  } catch { /* a broken sink must never affect collection or the app */ }
+}
+
+function ratingSeverity(r: Rating): Severity {
+  return r === 'poor' ? 'critical' : r === 'needs-improvement' ? 'warn' : 'info';
+}
+function durationSeverity(ms: number): Severity {
+  if (ms >= 1000) return 'critical';
+  if (ms >= 200) return 'warn';
+  return 'info';
+}
 
 // ---------------------------------------------------------------------------
 // Sample shapes (all privacy-safe: no ids, tokens, emails, or free-form user text)
@@ -114,22 +163,26 @@ export function recordRouteChange(rawPath: string, durationMs: number | null): v
   const route = sanitizePath(rawPath);
   const prev = currentRoute;
   currentRoute = route;
-  routeRing.push({ route, prevRoute: prev === route ? null : prev, duration: durationMs, ts: now() });
+  const prevRoute = prev === route ? null : prev;
+  routeRing.push({ route, prevRoute, duration: durationMs, ts: now() });
+  emit('route', { duration: durationMs }, 'info', durationMs, prevRoute);
   sampleMemory();
 }
 
 export function recordInteraction(kind: string, durationMs: number): void {
   if (!Number.isFinite(durationMs) || durationMs < 0) return;
-  interactionRing.push({ kind: String(kind).slice(0, 32), duration: Math.round(durationMs), ts: now() });
+  const k = String(kind).slice(0, 32);
+  const dur = Math.round(durationMs);
+  interactionRing.push({ kind: k, duration: dur, ts: now() });
+  emit('interaction', { kind: k, duration: dur }, durationSeverity(dur), dur);
 }
 
 export function recordError(kind: ErrorKind, message: unknown): void {
-  errorRing.push({
-    kind,
-    message: sanitizeMessage(message instanceof Error ? message.message : String(message ?? 'error')),
-    route: currentRoute,
-    ts: now(),
-  });
+  const msg = sanitizeMessage(message instanceof Error ? message.message : String(message ?? 'error'));
+  errorRing.push({ kind, message: msg, route: currentRoute, ts: now() });
+  // Errors are NEVER sampled → severity critical for react/chunk, warn otherwise.
+  const severity: Severity = kind === 'react' || kind === 'chunk-load' ? 'critical' : 'warn';
+  emit('error', { kind, message: msg }, severity, null);
 }
 
 export function sampleMemory(): void {
@@ -137,7 +190,11 @@ export function sampleMemory(): void {
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
     if (!mem) return;
     const mb = (b: number) => Math.round(b / 1048576);
-    memoryRing.push({ usedMb: mb(mem.usedJSHeapSize), totalMb: mb(mem.totalJSHeapSize), limitMb: mb(mem.jsHeapSizeLimit), ts: now() });
+    const usedMb = mb(mem.usedJSHeapSize), totalMb = mb(mem.totalJSHeapSize), limitMb = mb(mem.jsHeapSizeLimit);
+    memoryRing.push({ usedMb, totalMb, limitMb, ts: now() });
+    const ratio = limitMb > 0 ? usedMb / limitMb : 0;
+    const severity: Severity = ratio >= 0.9 ? 'critical' : ratio >= 0.7 ? 'warn' : 'info';
+    emit('memory', { usedMb, totalMb, limitMb }, severity, null);
   } catch { /* unsupported */ }
 }
 
@@ -189,6 +246,7 @@ function pushVital(name: VitalName, value: number): void {
   const s: VitalSample = { name, value: Math.round(value * 1000) / 1000, rating: rateVital(name, value), ts: now() };
   latestVitals[name] = s;
   vitalsRing.push(s);
+  emit('vital', { name, value: s.value, rating: s.rating }, ratingSeverity(s.rating), name === 'CLS' ? null : Math.round(s.value));
 }
 
 function observe(type: string, cb: (entries: PerformanceEntryList) => void): void {
@@ -231,7 +289,11 @@ function wireObservers(): void {
   });
   // Long tasks
   observe('longtask', (entries) => {
-    for (const e of entries) longTaskRing.push({ duration: Math.round(e.duration), startTime: Math.round(e.startTime), route: currentRoute, ts: now() });
+    for (const e of entries) {
+      const duration = Math.round(e.duration), startTime = Math.round(e.startTime);
+      longTaskRing.push({ duration, startTime, route: currentRoute, ts: now() });
+      emit('longtask', { duration, startTime }, durationSeverity(duration), duration);
+    }
   });
   // API timing via resource entries (fetch/xhr only → the app's REST/RPC/Storage/Auth calls + /api)
   observe('resource', (entries) => {
@@ -240,7 +302,9 @@ function wireObservers(): void {
       if (r.initiatorType !== 'fetch' && r.initiatorType !== 'xmlhttprequest') continue;
       const { name, kind } = sanitizeUrl(r.name);
       const transfer = typeof r.transferSize === 'number' && r.transferSize > 0 ? Math.round(r.transferSize / 1024) : null;
-      apiRing.push({ name, kind, duration: Math.round(r.duration), transferKb: transfer, ts: now() });
+      const duration = Math.round(r.duration);
+      apiRing.push({ name, kind, duration, transferKb: transfer, ts: now() });
+      emit('api', { name, kind, duration, transferKb: transfer }, durationSeverity(duration), duration);
     }
   });
   // TTFB from the navigation entry
@@ -284,6 +348,9 @@ export function initTelemetry(): void {
 }
 
 export function isTelemetryReady(): boolean { return initialized; }
+
+/** Current device profile (PII-free). Used by the transport to build envelope device dimensions. */
+export function getDeviceProfile(): DeviceProfile | null { return deviceProfile; }
 
 // ---------------------------------------------------------------------------
 // Snapshot for the Admin dashboard (pull-based; cheap read of current buffers)
