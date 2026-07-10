@@ -7,12 +7,41 @@ import path from 'path';
 // 같은 빌드 안에서 한 번 평가되어 양쪽 모두 같은 값을 가짐.
 const BUILD_ID = Date.now().toString(36);
 
+// WEB-OPT-7 — 초기 라우트에서 즉시 사용하는 데이터 origin(Supabase REST/RPC/Storage)의
+//   TLS/DNS 연결을 HTML 파싱 시점에 미리 준비(preconnect)한다. index.html 에는 font CDN
+//   preconnect 만 있고, 정작 가장 먼저 호출되는 데이터 origin 은 누락되어 있었다.
+//   origin 은 Vite 가 번들에 baking 하는 것과 동일한 env 값에서 유도한다(환경별 정확).
+//   Vercel 은 빌드 시 프로젝트 env 를 process.env 로 노출하므로 여기서 읽는다.
+//   env 가 없으면(로컬 등) 아무 것도 주입하지 않는다(no-op).
+function safeOrigin(u?: string): string {
+  if (!u) return '';
+  try {
+    return new URL(u).origin;
+  } catch {
+    return '';
+  }
+}
+const SUPABASE_ORIGIN = safeOrigin(process.env.VITE_SUPABASE_URL);
+
 // WEB-OPT-2 — index.html 의 emergency watchdog 이 build 스코프 가드를 쓸 수 있도록
 // %BUILD_ID% placeholder 를 빌드 시 실제 BUILD_ID 로 치환한다. (index.html 은 precache 제외됨)
+// WEB-OPT-7 — 위 Supabase origin preconnect 도 함께 주입.
 const injectBuildIdIntoHtml = {
   name: 'srr-inject-build-id',
   transformIndexHtml(html: string) {
-    return html.replace(/%BUILD_ID%/g, BUILD_ID);
+    const out = html.replace(/%BUILD_ID%/g, BUILD_ID);
+    if (!SUPABASE_ORIGIN) return out;
+    // supabase-js fetch 는 cors + credential 없음 → anonymous 커넥션이므로 crossorigin preconnect 와 일치.
+    return {
+      html: out,
+      tags: [
+        {
+          tag: 'link',
+          attrs: { rel: 'preconnect', href: SUPABASE_ORIGIN, crossorigin: '' },
+          injectTo: 'head-prepend' as const,
+        },
+      ],
+    };
   },
 };
 
