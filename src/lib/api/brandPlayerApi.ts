@@ -127,7 +127,12 @@ export async function adminAddBrandMedia(input: {
   brandId: string; imageUrl: string; title?: string | null;
   displayDurationSeconds?: number; sortOrder?: number | null;
   startsAt?: string | null; endsAt?: string | null;
-}): Promise<{ success: boolean; id: string; sort_order: number }> {
+  /** UX-3: 'image' | 'video' (기본 image). */
+  assetType?: 'image' | 'video' | null;
+  mimeType?: string | null;
+  thumbnailUrl?: string | null;
+  mediaDurationSeconds?: number | null;
+}): Promise<{ success: boolean; id: string; sort_order: number; asset_type?: 'image' | 'video' }> {
   const { data, error } = await supabase.rpc('admin_add_brand_media', {
     p_brand_id: input.brandId,
     p_image_url: input.imageUrl,
@@ -136,9 +141,13 @@ export async function adminAddBrandMedia(input: {
     p_sort_order: input.sortOrder ?? null,
     p_starts_at: input.startsAt ?? null,
     p_ends_at: input.endsAt ?? null,
+    p_asset_type: input.assetType ?? 'image',
+    p_mime_type: input.mimeType ?? null,
+    p_thumbnail_url: input.thumbnailUrl ?? null,
+    p_media_duration_seconds: input.mediaDurationSeconds ?? null,
   });
   if (error) throw error;
-  return data as { success: boolean; id: string; sort_order: number };
+  return data as { success: boolean; id: string; sort_order: number; asset_type?: 'image' | 'video' };
 }
 
 export async function adminUpdateBrandMedia(input: {
