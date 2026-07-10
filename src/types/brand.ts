@@ -38,6 +38,23 @@ export interface BrandMusicPolicy {
   auto_generate_enabled: boolean;
 }
 
+/** 지원 이미지 전환 효과 (slide/zoom/kenburns 미지원). */
+export type SignageTransitionEffect = 'none' | 'fade';
+
+/**
+ * 브랜드 레벨 사이니지 설정 (0452 brand_signage_settings / _brand_signage_json).
+ * 행이 없는 레거시 브랜드는 서버가 default(fade/500/전부 off)로 채운다.
+ */
+export interface SignageSettings {
+  transition_effect: SignageTransitionEffect;
+  /** 전환 애니메이션 시간(ms, 0~2000). 이미지 유지 시간과 별개. */
+  transition_duration_ms: number;
+  show_brand_name: boolean;
+  show_now_playing: boolean;
+  show_clock: boolean;
+  show_slide_dots: boolean;
+}
+
 export interface BrandMediaAsset {
   id: string;
   asset_type: 'image';
@@ -69,6 +86,8 @@ export interface BrandDetail {
   };
   policy: BrandMusicPolicy | null;
   media: BrandMediaAsset[];
+  /** 0452 이후 항상 포함(레거시는 default). */
+  signage: SignageSettings;
 }
 
 /** verify_store_code 응답 — 매장 코드 → 연결 브랜드 */
@@ -87,6 +106,8 @@ export interface BrandPlayerConfig {
   brand: { id: string; name: string; industry_type: string | null };
   policy: Omit<BrandMusicPolicy, 'brand_id' | 'daypart_policy'> | null;
   media: Array<Pick<BrandMediaAsset, 'id' | 'title' | 'image_url' | 'display_duration_seconds' | 'sort_order'>>;
+  /** 0452 이후 항상 포함(레거시는 default). */
+  signage: SignageSettings;
   playlist: TrackRow[];
 }
 

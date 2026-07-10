@@ -3,7 +3,7 @@
 // 매장은 본사 Store Invite Code 로 진입 → 연결 브랜드 로드.
 // CRUD + 본사 연결 + 음악정책 + 이미지 사이니지 + 미리보기.
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Building2, Image as ImageIcon, Trash2, Power, Eye, Link2 } from 'lucide-react';
+import { Plus, RefreshCw, Building2, Image as ImageIcon, Trash2, Power, Eye, Link2, Monitor } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminButton, AdminBadge, AdminAlert, AdminEmpty, AdminSkeleton, AdminModal, AdminStatCard,
 } from '@/components/admin/ui';
@@ -11,11 +11,16 @@ import { toast } from '@/store/toastStore';
 import {
   adminListBrands, adminGetBrand, adminCreateBrand, adminUpdateBrand, adminSetBrandDeleted,
   adminSetBrandEnterprise, adminUpsertBrandMusicPolicy, adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia,
+  adminUpsertBrandSignageSettings,
 } from '@/lib/api/brandPlayerApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import BrandSignage from '@/components/brand/BrandSignage';
-import type { BrandListItem, BrandDetail, BrandVocalPolicy } from '@/types/brand';
+import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
+import {
+  normalizeSignageSettings, normalizeTransitionMs, MIN_TRANSITION_MS, MAX_TRANSITION_MS,
+} from '@/lib/brandSignageSettings';
+import type { BrandListItem, BrandDetail, BrandVocalPolicy, SignageTransitionEffect } from '@/types/brand';
 
 const VOCAL_LABELS: Record<BrandVocalPolicy, string> = {
   any: '제한 없음', vocal_ok: '보컬 허용', prefer_instrumental: '연주곡 선호', instrumental_only: '연주곡만',
@@ -196,6 +201,16 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
   const [autoGen, setAutoGen] = useState(true);
   const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
 
+  // 사이니지 표시 설정(전환효과/시간 + presentation 표시옵션) — 폼 상태.
+  const [sigEffect, setSigEffect] = useState<SignageTransitionEffect>('fade');
+  const [sigDur, setSigDur] = useState('500');
+  const [sigBrandName, setSigBrandName] = useState(false);
+  const [sigNowPlaying, setSigNowPlaying] = useState(false);
+  const [sigClock, setSigClock] = useState(false);
+  const [sigDots, setSigDots] = useState(false);
+  const [savingSignage, setSavingSignage] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
   const reload = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
@@ -208,6 +223,12 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
       setVocal((p?.vocal_policy as BrandVocalPolicy) ?? 'any');
       setAutoGen(p?.auto_generate_enabled ?? true);
       setEnterpriseId(d.brand.enterprise_account_id);
+      // signage: 레거시/null 은 default 로 정규화하여 로드.
+      const s = normalizeSignageSettings(d.signage);
+      setSigEffect(s.transition_effect);
+      setSigDur(String(s.transition_duration_ms));
+      setSigBrandName(s.show_brand_name); setSigNowPlaying(s.show_now_playing);
+      setSigClock(s.show_clock); setSigDots(s.show_slide_dots);
     } catch (e) { setErr(e instanceof Error ? e.message : '조회 실패'); }
     finally { setLoading(false); }
   }, [brandId]);
@@ -236,6 +257,22 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
       toast.success('음악 정책을 저장했어요'); onChanged();
     } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
     finally { setSavingPolicy(false); }
+  }
+
+  async function saveSignage() {
+    if (savingSignage) return; // 중복 저장 방지(버튼 disabled 와 이중 가드)
+    setSavingSignage(true);
+    try {
+      await adminUpsertBrandSignageSettings({
+        brandId,
+        transitionEffect: sigEffect,
+        transitionDurationMs: normalizeTransitionMs(sigDur),
+        showBrandName: sigBrandName, showNowPlaying: sigNowPlaying,
+        showClock: sigClock, showSlideDots: sigDots,
+      });
+      toast.success('사이니지 설정을 저장했어요'); await reload(); onChanged();
+    } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
+    finally { setSavingSignage(false); }
   }
 
   async function onPickImage(file: File) {
@@ -342,10 +379,65 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                 </div>
               )}
 
-              {previewItems.length > 0 && (
+            </AdminCard>
+
+            {/* 사이니지 표시 설정 + 매장 화면 미리보기 */}
+            <AdminCard title="디지털 사이니지 표시 설정" subtitle="이미지 전환 효과/시간과 전체화면(매장 화면) 표시 옵션. 표시 옵션은 기본 꺼짐이며 켠 항목만 전체화면에 나타납니다.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="전환 효과">
+                  <select className={inputCls} value={sigEffect} onChange={(e) => setSigEffect(e.target.value as SignageTransitionEffect)}>
+                    <option value="fade">부드러운 전환 (fade)</option>
+                    <option value="none">전환 없음 (즉시)</option>
+                  </select>
+                </Field>
+                <Field label={`전환 시간 (ms, ${MIN_TRANSITION_MS}~${MAX_TRANSITION_MS})`}>
+                  <input className={inputCls} type="number" min={MIN_TRANSITION_MS} max={MAX_TRANSITION_MS} step={50}
+                    value={sigDur} onChange={(e) => setSigDur(e.target.value)}
+                    disabled={sigEffect === 'none'} title="이미지 전환 애니메이션 시간(이미지 유지 시간과 별개)" />
+                </Field>
+              </div>
+              <p className="mt-1 text-[11px] text-ink-dim">전환 시간은 애니메이션 길이입니다 — 각 이미지의 노출(유지) 시간은 위 이미지 목록의 “노출 시간(초)”로 설정합니다.</p>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <ToggleChip label="브랜드명 표시" checked={sigBrandName} onChange={setSigBrandName} />
+                <ToggleChip label="현재 곡 표시" checked={sigNowPlaying} onChange={setSigNowPlaying} />
+                <ToggleChip label="시계 표시 (HH:mm)" checked={sigClock} onChange={setSigClock} />
+                <ToggleChip label="슬라이드 진행표시" checked={sigDots} onChange={setSigDots} />
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <AdminButton tone="primary" size="sm" onClick={() => void saveSignage()} disabled={savingSignage}>
+                  {savingSignage ? '저장 중…' : '표시 설정 저장'}
+                </AdminButton>
+                <AdminButton tone="neutral" variant="subtle" size="sm" leftIcon={<Monitor size={13} />} onClick={() => setShowPreview((v) => !v)}>
+                  {showPreview ? '미리보기 닫기' : '매장 화면 미리보기'}
+                </AdminButton>
+              </div>
+
+              {showPreview && (
                 <div className="mt-3">
-                  <p className="mb-1.5 text-[11px] font-semibold text-ink-dim">플레이어 미리보기</p>
-                  <BrandSignage items={previewItems} brandName={detail.brand.name} className="h-48 w-full rounded-lg" />
+                  <p className="mb-1.5 text-[11px] font-semibold text-ink-dim">
+                    매장 화면 미리보기 (전체화면과 동일한 렌더러 · 현재 설정 반영 · 음악/기록 없음)
+                  </p>
+                  {previewItems.length === 0 ? (
+                    <AdminEmpty icon={<Monitor size={22} />} title="표시할 이미지 없음" description="활성 이미지를 추가하면 매장 화면을 미리 볼 수 있어요." />
+                  ) : (
+                    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+                      <BrandSignage
+                        items={previewItems}
+                        brandName={detail.brand.name}
+                        className="absolute inset-0 h-full w-full"
+                        chromeHidden
+                        transition={{ effect: sigEffect, durationMs: normalizeTransitionMs(sigDur) }}
+                        showSlideDots={sigDots}
+                      />
+                      <BrandPresentationOverlays
+                        show={{ brandName: sigBrandName, nowPlaying: sigNowPlaying, clock: sigClock }}
+                        brandName={detail.brand.name}
+                        nowPlaying={{ title: '재생 중인 곡 (미리보기)', artist: '아티스트' }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </AdminCard>
@@ -360,4 +452,12 @@ const inputCls = 'w-full rounded-lg border border-line/25 bg-bg px-2.5 py-1.5 te
 const inputSm = 'w-full rounded border border-line/25 bg-bg px-2 py-1 text-xs text-ink outline-none focus:border-accent/50';
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (<label className="block space-y-1"><span className="text-[11px] font-semibold text-ink-mute">{label}</span>{children}</label>);
+}
+function ToggleChip({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold transition-colors ${checked ? 'border-accent/50 bg-accent/10 text-ink' : 'border-line/25 bg-bg text-ink-mute'}`}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="truncate">{label}</span>
+    </label>
+  );
 }

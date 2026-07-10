@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import type {
   BrandListItem, BrandDetail, StoreVerifyResult, BrandPlayerConfig,
-  BrandVocalPolicy,
+  BrandVocalPolicy, SignageTransitionEffect,
 } from '@/types/brand';
 
 // ── 사용자(매장) 경로 ────────────────────────────────────────────────
@@ -157,6 +157,33 @@ export async function adminUpdateBrandMedia(input: {
   });
   if (error) throw error;
   return data as { success: boolean };
+}
+
+/**
+ * 브랜드 사이니지 설정(전환효과/시간 + presentation 표시옵션) upsert.
+ * 서버(0452 admin_upsert_brand_signage_settings)가 _is_super_admin 최종 판정 + 값 정규화/clamp.
+ * null 인자는 기존 값 유지(부분 저장). 성공 시 정규화된 effect/duration 반환.
+ */
+export async function adminUpsertBrandSignageSettings(input: {
+  brandId: string;
+  transitionEffect?: SignageTransitionEffect | null;
+  transitionDurationMs?: number | null;
+  showBrandName?: boolean | null;
+  showNowPlaying?: boolean | null;
+  showClock?: boolean | null;
+  showSlideDots?: boolean | null;
+}): Promise<{ success: boolean; transition_effect: SignageTransitionEffect; transition_duration_ms: number }> {
+  const { data, error } = await supabase.rpc('admin_upsert_brand_signage_settings', {
+    p_brand_id: input.brandId,
+    p_transition_effect: input.transitionEffect ?? null,
+    p_transition_duration_ms: input.transitionDurationMs ?? null,
+    p_show_brand_name: input.showBrandName ?? null,
+    p_show_now_playing: input.showNowPlaying ?? null,
+    p_show_clock: input.showClock ?? null,
+    p_show_slide_dots: input.showSlideDots ?? null,
+  });
+  if (error) throw error;
+  return data as { success: boolean; transition_effect: SignageTransitionEffect; transition_duration_ms: number };
 }
 
 export async function adminDeleteBrandMedia(assetId: string): Promise<{ success: boolean }> {
