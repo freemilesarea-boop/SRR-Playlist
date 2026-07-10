@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import Alert from '@/components/Alert';
@@ -131,17 +131,28 @@ export default function LoginPage() {
   }, []);
 
   // 60초 쿨다운 타이머 — Supabase resend rate limit 회피 + 사용자 피드백.
+  // WEB-OPT-8 — interval id 를 ref 에 보관해 언마운트 시 정리(쿨다운 중 페이지 이탈 시
+  //   unmounted setState 방지). 재시작 시 직전 타이머도 먼저 제거.
+  const resendTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (resendTimerRef.current !== null) window.clearInterval(resendTimerRef.current);
+    };
+  }, []);
   function startResendCooldown() {
+    if (resendTimerRef.current !== null) window.clearInterval(resendTimerRef.current);
     setResendCooldown(60);
     const id = window.setInterval(() => {
       setResendCooldown((s) => {
         if (s <= 1) {
           window.clearInterval(id);
+          resendTimerRef.current = null;
           return 0;
         }
         return s - 1;
       });
     }, 1000);
+    resendTimerRef.current = id;
   }
 
   async function handleResend(targetEmail: string) {
