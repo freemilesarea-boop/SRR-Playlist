@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Play, GripVertical, Trash2, Pencil, Lock, Globe, X, Music2, Heart,
@@ -48,11 +48,18 @@ export default function UserPlaylistDetailPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
+  // WEB-OPT-6 — stale-response 가드. 플레이리스트 A→B 로 이동(route param id 변경) 시
+  //   A 요청이 아직 진행 중이면, 늦게 도착한 A 응답이 B 화면을 덮어쓸 수 있었다.
+  //   요청마다 시퀀스 id 를 부여해 최신 요청의 응답만 반영한다(정합성/권한 scope 불변).
+  const reqSeqRef = useRef(0);
+
   async function load() {
+    const seq = ++reqSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const d = await withTimeout(fetchUserPlaylistDetail(id), 12_000, '플레이리스트');
+      if (seq !== reqSeqRef.current) return; // 더 최신 요청이 시작됨 — stale 무시
       if (!d) {
         setError('플레이리스트를 찾을 수 없어요.');
         setData(null);
@@ -61,9 +68,10 @@ export default function UserPlaylistDetailPage() {
         setTracks(d.tracks);
       }
     } catch (e) {
+      if (seq !== reqSeqRef.current) return;
       setError(errorMessage(e));
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   fetchMemberList,
@@ -45,7 +45,13 @@ export default function MembersList() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
 
+  // WEB-OPT-6 — stale-response 가드. load 는 필터([plan,role,status])·검색(debounce)·
+  //   focus 세 경로에서 호출되므로, 느린 이전 응답이 더 최신 응답을 덮어쓸 수 있었다.
+  //   시퀀스 id 로 최신 요청의 응답만 반영한다(필터 결과·정렬 의미 불변).
+  const reqSeqRef = useRef(0);
+
   async function load() {
+    const seq = ++reqSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -55,11 +61,13 @@ export default function MembersList() {
         role: role || undefined,
         status: status || undefined,
       });
+      if (seq !== reqSeqRef.current) return; // 더 최신 요청이 시작됨 — stale 무시
       setRows(data);
     } catch (e) {
+      if (seq !== reqSeqRef.current) return;
       setError(classifyAdminError(e));
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }
 
