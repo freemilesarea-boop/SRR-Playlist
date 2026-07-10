@@ -1,6 +1,6 @@
 // Phase ENT-DETAIL-1 — 관리자 본사 상세 콘솔 (조회 전용, CS/운영용).
 // 탭: 개요 / 매장 / 계약·정산 / 음악·정책 / 로그. 코드/UUID 복사, 로딩·에러·empty 상태.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { AdminModal, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
@@ -24,11 +24,22 @@ export default function EnterpriseDetailModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // WEB-OPT-8 — stale-response 가드. enterpriseId 가 바뀌며 재조회될 때 이전 요청의
+  //   응답이 늦게 도착해 새 본사 데이터를 덮어쓰지 않도록 시퀀스 id 로 최신 요청만 반영.
+  const reqSeqRef = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++reqSeqRef.current;
     setLoading(true); setError(null);
-    try { setData(await adminGetEnterpriseDetail(enterpriseId)); }
-    catch (e) { setError(e instanceof Error ? e.message : '상세 조회 실패'); }
-    finally { setLoading(false); }
+    try {
+      const d = await adminGetEnterpriseDetail(enterpriseId);
+      if (seq !== reqSeqRef.current) return;
+      setData(d);
+    } catch (e) {
+      if (seq !== reqSeqRef.current) return;
+      setError(e instanceof Error ? e.message : '상세 조회 실패');
+    } finally {
+      if (seq === reqSeqRef.current) setLoading(false);
+    }
   }, [enterpriseId]);
   useEffect(() => { void load(); }, [load]);
 

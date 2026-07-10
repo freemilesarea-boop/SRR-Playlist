@@ -558,6 +558,16 @@ function AssetUploadModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // WEB-OPT-8 — 미리듣기 blob URL 은 file 당 1회만 생성하고 언마운트/파일변경 시 revoke.
+  //   이전에는 JSX 에서 URL.createObjectURL(file) 을 인라인 호출해 렌더(=제목 입력 등 키 입력)
+  //   마다 새 blob URL 이 생성되고 하나도 해제되지 않아 모달을 여는 동안 누적됐다.
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const onFile = (f: File | null) => {
     setErr(null);
     setFile(f);
@@ -672,7 +682,7 @@ function AssetUploadModal({
         {!isEdit && file && (
           <div className="rounded-lg bg-bg-deep/40 p-2 ring-1 ring-line/10">
             <div className="mb-1 text-[10px] uppercase tracking-wider text-ink-mute">미리듣기</div>
-            <audio src={URL.createObjectURL(file)} controls className="w-full" />
+            {previewUrl && <audio src={previewUrl} controls className="w-full" />}
           </div>
         )}
 

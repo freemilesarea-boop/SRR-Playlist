@@ -95,11 +95,16 @@ export default function ArtistSettlementDetail({
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
   const [versions, setVersions] = useState<SettlementVersionRow[]>([]);
 
+  // WEB-OPT-8 — stale-response 가드. settlementId 변경으로 재조회 시 이전 요청 응답이
+  //   늦게 도착해 새 정산 데이터를 덮어쓰지 않도록 시퀀스 id 로 최신 요청만 반영.
+  const reqSeqRef = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++reqSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
+      if (seq !== reqSeqRef.current) return;
       setData(d);
       // X6.45: 동일 (월, 아티스트) 의 version 이력 조회 (재생성 시 누적)
       try {
@@ -107,14 +112,17 @@ export default function ArtistSettlementDetail({
           d.settlement.settlement_month,
           d.settlement.artist_user_id,
         );
+        if (seq !== reqSeqRef.current) return;
         setVersions(vs);
       } catch {
+        if (seq !== reqSeqRef.current) return;
         setVersions([]);
       }
     } catch (e) {
+      if (seq !== reqSeqRef.current) return;
       setError(friendlyError(e));
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }, [settlementId]);
 
