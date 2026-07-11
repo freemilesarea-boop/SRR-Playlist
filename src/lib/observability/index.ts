@@ -13,4 +13,8 @@ export * from './risk';
 export * from './incident';
 export * from './releaseQuality';
 export * from './rootCause';
+export * from './blastRadius';
+export * from './recovery';
+export * from './playbook';
+export * from './operationalAdvisor';
 export * from './config';

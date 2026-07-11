@@ -62,6 +62,22 @@ export interface ObservabilityConfig {
   correlationEnabled: boolean;
   /** WEB-OBS-4 — show the service dependency graph section. */
   serviceGraphEnabled: boolean;
+  /** WEB-OBS-5 — show the Operations tab (advisor/playbook/blast/impact/recovery/lifecycle/escalation). */
+  operationalAdvisorEnabled: boolean;
+  /** WEB-OBS-5 — show the incident playbook section. */
+  playbookEnabled: boolean;
+  /** WEB-OBS-5 — show blast radius + impact. */
+  blastRadiusEnabled: boolean;
+  /** WEB-OBS-5 — show recovery tracking. */
+  recoveryTrackingEnabled: boolean;
+  /** WEB-OBS-5 — show incident lifecycle (suggested status). */
+  incidentLifecycleEnabled: boolean;
+  /** WEB-OBS-5 — show escalation recommendation. */
+  escalationEnabled: boolean;
+  /** WEB-OBS-5 — show the business-impact (availability) note. */
+  businessImpactEnabled: boolean;
+  /** WEB-OBS-5 — minimum recovery observation window (minutes) before a recovery verdict is shown. */
+  minRecoveryWindowMinutes: number;
 }
 
 let cached: ObservabilityConfig | null = null;
@@ -86,6 +102,14 @@ export function getObservabilityConfig(): ObservabilityConfig {
     timelineEnabled: envBool(env.VITE_OBSERVABILITY_TIMELINE_ENABLED, true),
     correlationEnabled: envBool(env.VITE_OBSERVABILITY_CORRELATION_ENABLED, true),
     serviceGraphEnabled: envBool(env.VITE_OBSERVABILITY_SERVICE_GRAPH_ENABLED, true),
+    operationalAdvisorEnabled: envBool(env.VITE_OBSERVABILITY_OPERATIONAL_ADVISOR_ENABLED, true),
+    playbookEnabled: envBool(env.VITE_OBSERVABILITY_PLAYBOOK_ENABLED, true),
+    blastRadiusEnabled: envBool(env.VITE_OBSERVABILITY_BLAST_RADIUS_ENABLED, true),
+    recoveryTrackingEnabled: envBool(env.VITE_OBSERVABILITY_RECOVERY_TRACKING_ENABLED, true),
+    incidentLifecycleEnabled: envBool(env.VITE_OBSERVABILITY_INCIDENT_LIFECYCLE_ENABLED, true),
+    escalationEnabled: envBool(env.VITE_OBSERVABILITY_ESCALATION_ENABLED, true),
+    businessImpactEnabled: envBool(env.VITE_OBSERVABILITY_BUSINESS_IMPACT_ENABLED, true),
+    minRecoveryWindowMinutes: envInt(env.VITE_OBSERVABILITY_MIN_RECOVERY_WINDOW_MINUTES, 30, 5, 1440),
   };
   return cached;
 }

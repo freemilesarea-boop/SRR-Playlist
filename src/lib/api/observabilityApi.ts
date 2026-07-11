@@ -25,7 +25,12 @@ import {
   explainIncident, serviceGraph, rootCauseConfidence,
   type ReleaseErrorProfile, type TimelineRelease, type RootCause, type Correlation,
   type CommitCorrelation, type TimelineEntry, type RollbackAdvice, type ServiceGraphView,
+  computeRecovery, computeBlastRadius, computeImpact, getPlaybook,
+  computeOperationalAdvice, computeEscalationDetail, deriveLifecycle,
+  type RecoveryResult, type BlastRadiusResult, type ImpactResult, type Playbook,
+  type OperationalAdvice, type EscalationResult, type LifecycleResult, type RootCauseCode,
 } from '@/lib/observability';
+import type { IncidentType } from '@/lib/observability';
 
 export type ObsWindow = '1h' | '24h' | '7d' | '30d';
 
@@ -364,6 +369,9 @@ export interface RootCauseBundle {
   rollback: RollbackAdvice | null;
   explanation: string[];
   serviceGraph: ServiceGraphView;
+  /** WEB-OBS-5: raw candidate/baseline error profiles for downstream blast-radius/impact composition. */
+  candidateProfile: ReleaseErrorProfile | null;
+  baselineProfile: ReleaseErrorProfile | null;
 }
 
 function profileToEngine(p: RcProfileRow): ReleaseErrorProfile {
@@ -408,7 +416,7 @@ export async function getRootCause(
   const graphEmpty = serviceGraph([]);
 
   if (!candRow) {
-    return { window, candidate: candName, baseline: baseName, confidence: null, causes: [], correlations: [], commitCorrelation: commit, timeline, rollback: null, explanation: ['후보 릴리스가 없어 원인을 분석할 수 없습니다 (NO DATA).'], serviceGraph: graphEmpty };
+    return { window, candidate: candName, baseline: baseName, confidence: null, causes: [], correlations: [], commitCorrelation: commit, timeline, rollback: null, explanation: ['후보 릴리스가 없어 원인을 분석할 수 없습니다 (NO DATA).'], serviceGraph: graphEmpty, candidateProfile: null, baselineProfile: null };
   }
   const cand = profileToEngine(candRow);
   const base = baseRow ? profileToEngine(baseRow) : null;
@@ -419,7 +427,122 @@ export async function getRootCause(
   const explanation = explainIncident(causes, rollback, confidence);
   const graph = serviceGraph(causes);
 
-  return { window, candidate: candName, baseline: baseName, confidence, causes, correlations, commitCorrelation: commit, timeline, rollback, explanation, serviceGraph: graph };
+  return { window, candidate: candName, baseline: baseName, confidence, causes, correlations, commitCorrelation: commit, timeline, rollback, explanation, serviceGraph: graph, candidateProfile: cand, baselineProfile: base };
+}
+
+// ── WEB-OBS-5: Operational Advisor, Blast Radius, Recovery ──────────────────
+interface RecoveryRow {
+  ok: boolean; window: ObsWindow; release: string; observation_window_minutes: number;
+  window_totals: { total_sessions: number; total_events: number };
+  earlier: { sessions: number; events: number; error_events: number; critical_events: number; chunk_sessions: number; api_p95: number | null; lcp_p75: number | null };
+  recent: { sessions: number; events: number; error_events: number; critical_events: number; chunk_sessions: number; api_p95: number | null; lcp_p75: number | null };
+  recent_series: Array<{ bucket: number; events: number; error_events: number; error_rate: number }>;
+}
+
+export interface IncidentRecovery {
+  release: string;
+  windowTotals: { totalSessions: number; totalEvents: number } | null;
+  recovery: RecoveryResult | null;
+}
+
+function bucketRate(n: number, d: number): number | null { return d > 0 ? n / d : null; }
+
+export async function getIncidentRecovery(
+  release: string, window: ObsWindow = '24h', environment: string | null = null,
+): Promise<IncidentRecovery> {
+  const { data, error } = await supabase.rpc('admin_incident_recovery', {
+    p_release: release, p_window: window, p_environment: environment,
+  });
+  if (error) rpcErr('admin_incident_recovery', error);
+  const res = (data ?? {}) as Partial<RecoveryRow>;
+  if (!res.ok || !res.recent || !res.earlier) return { release, windowTotals: null, recovery: null };
+  const e = res.earlier; const r = res.recent;
+  const recovery = computeRecovery({
+    earlier: { errorRate: bucketRate(e.error_events, e.events), criticalRate: bucketRate(e.critical_events, e.events), chunkRate: bucketRate(e.chunk_sessions, e.sessions), apiP95: e.api_p95, lcpP75: e.lcp_p75, sessions: e.sessions, events: e.events },
+    recent: { errorRate: bucketRate(r.error_events, r.events), criticalRate: bucketRate(r.critical_events, r.events), chunkRate: bucketRate(r.chunk_sessions, r.sessions), apiP95: r.api_p95, lcpP75: r.lcp_p75, sessions: r.sessions, events: r.events },
+    observationWindowMinutes: res.observation_window_minutes ?? 0,
+    recentSeries: (res.recent_series ?? []).map((b) => b.error_rate),
+  });
+  return { release, windowTotals: res.window_totals ? { totalSessions: res.window_totals.total_sessions, totalEvents: res.window_totals.total_events } : null, recovery };
+}
+
+const CAUSE_TO_INCIDENT: Partial<Record<RootCauseCode, IncidentType>> = {
+  RELEASE_ERROR_SPIKE: 'ERROR_SPIKE', CHUNK_DEPLOY: 'CHUNK_FAILURE_SPIKE', HYDRATION_MISMATCH: 'HYDRATION_ERROR_SPIKE',
+  BROWSER_SPECIFIC: 'BROWSER_SPECIFIC_FAILURE', ROUTE_CONCENTRATION: 'ROUTE_REGRESSION', API_LATENCY: 'API_REGRESSION',
+  MEMORY_PRESSURE: 'MEMORY_RISK', LONG_TASK: 'LONG_TASK_SPIKE', RUNTIME_ERROR: 'ERROR_SPIKE',
+};
+
+export interface OperationalIntelBundle {
+  release: string | null;
+  incidentType: IncidentType | null;
+  advice: OperationalAdvice | null;
+  playbook: Playbook | null;
+  blastRadius: BlastRadiusResult | null;
+  impact: ImpactResult | null;
+  recovery: RecoveryResult | null;
+  escalation: EscalationResult | null;
+  lifecycle: LifecycleResult | null;
+}
+
+/**
+ * Compose the operational picture from already-loaded analysis bundles + the recovery fetch. All
+ * verdicts are client-side, rule-based; NOTHING is executed. Returns nulls (→ NO DATA in the UI) when
+ * the candidate profile is missing.
+ */
+export function composeOperationalIntel(
+  rootCause: RootCauseBundle | null,
+  overview: OverviewResult | null,
+  gate: ReleaseGateBundle | null,
+  recovery: IncidentRecovery | null,
+): OperationalIntelBundle {
+  const profile = rootCause?.candidateProfile ?? null;
+  const release = rootCause?.candidate ?? null;
+  if (!profile) {
+    return { release, incidentType: null, advice: null, playbook: null, blastRadius: null, impact: null, recovery: recovery?.recovery ?? null, escalation: null, lifecycle: null };
+  }
+  const topCause = rootCause?.causes[0] ?? null;
+  const incidentType: IncidentType | null = topCause ? (CAUSE_TO_INCIDENT[topCause.code] ?? 'ERROR_SPIKE') : null;
+
+  const totalSessions = recovery?.windowTotals?.totalSessions ?? overview?.totals.sessions ?? null;
+  const errorRoutes = profile.byRoute.filter((r) => r.sessions > 0).map((r) => r.key);
+  const errorBrowsers = profile.byBrowser.filter((b) => b.errorSessions > 0).map((b) => b.browser);
+  const severeSessions = profile.chunkSessions + Math.min(profile.criticalEvents, profile.errorSessions);
+  const primaryScope = topCause?.browser ? `browser ${topCause.browser}` : topCause?.route ? `route ${topCause.route}` : release ? `release ${release}` : null;
+
+  const blastRadius = computeBlastRadius({
+    affectedSessions: profile.errorSessions, totalSessions, affectedEvents: profile.errorEvents,
+    totalEvents: recovery?.windowTotals?.totalEvents ?? overview?.totals.total_events ?? null,
+    affectedRoutes: errorRoutes, affectedBrowsers: errorBrowsers, affectedDevices: [], affectedReleases: release ? [release] : [],
+    severeSessions, browsers: profile.browsers, primaryScope,
+  });
+
+  const impact = computeImpact({
+    affectedSessions: profile.errorSessions, totalSessions, errorEvents: profile.errorEvents,
+    criticalErrors: profile.criticalEvents, chunkFailures: profile.chunkSessions, hydrationErrors: profile.hydrationSessions,
+    slowApiEvents: 0, timeoutEvents: null, memoryRiskSessions: profile.memoryRiskSessions,
+    affectedRoutes: errorRoutes, playerRouteAffected: errorRoutes.some((r) => r.includes('player')),
+    adminRouteAffected: errorRoutes.some((r) => r.includes('admin')), affectedBrowsers: errorBrowsers, affectedReleases: release ? [release] : [],
+  });
+
+  const errorRate = safeRatio(profile.errorEvents, profile.events);
+  const criticalRate = safeRatio(profile.criticalEvents, profile.events);
+  const chunkRate = safeRatio(profile.chunkSessions, profile.sessions);
+  const advisorInput = {
+    incidentType, topCauseCode: topCause?.code ?? null, topCauseRoute: topCause?.route ?? null,
+    rollbackStatus: rootCause?.rollback?.status ?? null, gateVerdict: gate?.gate?.verdict ?? null,
+    blastLevel: blastRadius.level, recoveryStatus: recovery?.recovery?.status ?? null,
+    confidence: rootCause?.confidence ?? 'INSUFFICIENT', affectedSessions: profile.errorSessions,
+    criticalRate, chunkRate, errorRate, recurring: recovery?.recovery?.recurrence ?? false, securityEvidence: false,
+  };
+
+  return {
+    release, incidentType,
+    advice: computeOperationalAdvice(advisorInput),
+    playbook: getPlaybook(incidentType),
+    blastRadius, impact, recovery: recovery?.recovery ?? null,
+    escalation: computeEscalationDetail(advisorInput),
+    lifecycle: deriveLifecycle(advisorInput),
+  };
 }
 
 // ── Incidents (composed from the three sources) ─────────────────────────────
