@@ -110,6 +110,7 @@ const OperationsGovernanceCenter = lazy(() => import('@/components/admin/Operati
 const UnifiedOperationsCenter = lazy(() => import('@/components/admin/UnifiedOperationsCenter'));
 const AiMusicOsDashboard = lazy(() => import('@/components/admin/AiMusicOsDashboard'));
 const AiPlaylistBuilderDashboard = lazy(() => import('@/components/admin/AiPlaylistBuilderDashboard'));
+const AiAdaptiveLearningDashboard = lazy(() => import('@/components/admin/AiAdaptiveLearningDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -195,7 +196,8 @@ type Tab =
   | 'ops-governance'
   | 'ops-center'
   | 'ai-music-os'
-  | 'ai-playlist-builder';
+  | 'ai-playlist-builder'
+  | 'ai-adaptive-learning';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -271,6 +273,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ops-center', label: '통합 운영 센터', icon: <LayoutDashboard size={14} />, superOnly: true },
   { key: 'ai-music-os', label: 'AI Music OS', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-playlist-builder', label: 'AI Playlist Builder', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-adaptive-learning', label: 'AI Adaptive Learning', icon: <Sparkles size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -317,7 +320,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder', 'ai-adaptive-learning'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -680,6 +683,7 @@ export default function AdminPage() {
           {tab === 'ops-center' && <UnifiedOperationsCenter />}
           {tab === 'ai-music-os' && <AiMusicOsDashboard />}
           {tab === 'ai-playlist-builder' && <AiPlaylistBuilderDashboard />}
+          {tab === 'ai-adaptive-learning' && <AiAdaptiveLearningDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>
