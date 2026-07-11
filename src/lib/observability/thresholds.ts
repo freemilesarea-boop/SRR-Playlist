@@ -194,3 +194,34 @@ export const RELEASE_CONF_HIGH_SESSIONS = 300;
 export const RELEASE_CONF_MEDIUM_SESSIONS = 80;
 export const RELEASE_CONF_MIN_EVENTS = 200;
 export const RELEASE_CONF_MIN_BROWSERS = 2;    // single-browser sample can't be HIGH confidence
+
+// ════════════════════════════════════════════════════════════════════════════
+// WEB-OBS-4 — Root Cause Analysis & Rollback Advisor
+// ════════════════════════════════════════════════════════════════════════════
+// Rule-based, explainable. A cause is only surfaced when it clears a concentration/affected-session
+// gate; below the gates → INSUFFICIENT_DATA. Commit CONTENT is never inspected — only release-id ↔
+// metric-change correlation from telemetry.
+
+/** A dimension (route/browser/kind) counts as "concentrated" when it holds this share of error sessions. */
+export const RC_ROUTE_CONCENTRATION = 0.5;   // ≥50% of error sessions on one route
+export const RC_BROWSER_CONCENTRATION = 0.6; // ≥60% of error sessions in one browser family
+/** Minimum affected sessions before a cause / correlation is trustworthy (else INSUFFICIENT_DATA). */
+export const RC_MIN_AFFECTED_SESSIONS = 3;
+/** An error-rate spike vs baseline needs BOTH: relative ratio AND absolute pp increase. */
+export const RC_ERROR_SPIKE_REL = 1.5;       // candidate ≥ 1.5× baseline error rate
+export const RC_ERROR_SPIKE_ABS = 0.02;      // AND ≥2pp absolute increase
+/** Correlation strength bands, on a 0..1 concentration/ratio score. */
+export const RC_CORR_STRONG = 0.7;
+export const RC_CORR_MODERATE = 0.4;
+// below MODERATE → WEAK; ~0 → NONE
+
+// ── Rollback Advisor thresholds ─────────────────────────────────────────────
+// BLOCK_RELEASE = do-not-promote (matches the gate hard floors). ROLLBACK_RECOMMENDED = already-live
+// regression severe enough to revert. WATCH = worth eyes. NO_ACTION = healthy.
+export const RB_BLOCK_CRITICAL_RATE = 0.02;  // ≥2% critical → BLOCK_RELEASE
+export const RB_BLOCK_CHUNK_RATE = 0.05;     // ≥5% chunk-fail sessions → BLOCK_RELEASE
+export const RB_ROLLBACK_ERROR_RATE = 0.1;   // ≥10% error rate → ROLLBACK_RECOMMENDED
+export const RB_ROLLBACK_ERROR_SPIKE_REL = 2.0; // OR ≥2× baseline error rate …
+export const RB_ROLLBACK_SPIKE_ABS = 0.05;   // … AND ≥5pp absolute increase (higher than the RC gate so a
+                                             //     multiple of a tiny baseline stays WATCH, not ROLLBACK)
+export const RB_WATCH_ERROR_RATE = 0.03;     // ≥3% error rate → WATCH
