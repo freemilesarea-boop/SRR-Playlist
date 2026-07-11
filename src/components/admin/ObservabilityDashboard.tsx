@@ -7,26 +7,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RefreshCw, AlertTriangle, Clock, Filter, Activity, GitCompareArrows, Route as RouteIcon,
-  Server, Bug, MonitorSmartphone, Siren, ShieldAlert, ShieldCheck,
+  Server, Bug, MonitorSmartphone, Siren, ShieldAlert, ShieldCheck, Search, Undo2, GitBranch, Network,
 } from 'lucide-react';
 import {
   AdminCard, AdminStatCard, AdminBadge, AdminButton, AdminEmpty, AdminSkeleton, AdminAlert, type AdminToneName,
 } from '@/components/admin/ui';
 import {
-  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, getReleaseGate, deriveIncidents,
-  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ReleaseGateBundle, type ObsWindow,
+  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, getReleaseGate, getRootCause, deriveIncidents,
+  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ReleaseGateBundle, type RootCauseBundle, type ObsWindow,
 } from '@/lib/api/observabilityApi';
 import {
   getObservabilityConfig, type HealthStatus, type MetricClassification, type Confidence,
   type IncidentSeverity, type Priority, type IncidentCandidate,
   type GateVerdict, type DeploymentReadiness, type QualityStatus, type GateReason, type BudgetItem,
+  type CorrStrength, type RollbackStatus, type TimelineHealth,
 } from '@/lib/observability';
 
-type ObsTab = 'overview' | 'gate' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
+type ObsTab = 'overview' | 'gate' | 'rootcause' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
 
 const TABS: Array<{ key: ObsTab; label: string; icon: JSX.Element }> = [
   { key: 'overview', label: 'Overview', icon: <Activity size={13} /> },
   { key: 'gate', label: 'Release Gate', icon: <ShieldCheck size={13} /> },
+  { key: 'rootcause', label: 'Root Cause', icon: <Search size={13} /> },
   { key: 'releases', label: 'Releases', icon: <GitCompareArrows size={13} /> },
   { key: 'routes', label: 'Routes', icon: <RouteIcon size={13} /> },
   { key: 'apis', label: 'APIs', icon: <Server size={13} /> },
@@ -82,6 +84,15 @@ function budgetLimit(i: BudgetItem): string {
   if (i.unit === 'ratio') return `${(i.budget * 100).toFixed(1)}%`;
   return String(i.budget);
 }
+function corrTone(s: CorrStrength): AdminToneName {
+  return s === 'STRONG' ? 'danger' : s === 'MODERATE' ? 'warning' : s === 'WEAK' ? 'info' : 'neutral';
+}
+function rollbackTone(s: RollbackStatus): AdminToneName {
+  return s === 'NO_ACTION' ? 'success' : s === 'WATCH' ? 'warning' : s === 'ROLLBACK_RECOMMENDED' ? 'danger' : s === 'BLOCK_RELEASE' ? 'danger' : 'neutral';
+}
+function tlHealthTone(h: TimelineHealth): AdminToneName {
+  return h === 'healthy' ? 'success' : h === 'degraded' ? 'warning' : h === 'critical' ? 'danger' : 'neutral';
+}
 
 interface LoadState {
   overview: OverviewResult | null;
@@ -89,6 +100,7 @@ interface LoadState {
   errors: ErrorsResult | null;
   incidents: IncidentCandidate[];
   gate: ReleaseGateBundle | null;
+  rootCause: RootCauseBundle | null;
 }
 
 export default function ObservabilityDashboard() {
@@ -100,7 +112,7 @@ export default function ObservabilityDashboard() {
   const [browser, setBrowser] = useState('');
   const [auto, setAuto] = useState(false);
 
-  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [], gate: null });
+  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [], gate: null, rootCause: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
@@ -114,11 +126,12 @@ export default function ObservabilityDashboard() {
     setError(null);
     const filters = { window: win, release: release || null, environment: environment || null, browser: browser || null };
     // Fail-open per source: allSettled so one RPC error doesn't blank the whole dashboard.
-    const [ov, rel, err, gt] = await Promise.allSettled([
+    const [ov, rel, err, gt, rc] = await Promise.allSettled([
       getObservabilityOverview(filters),
       cfg.releaseComparisonEnabled ? getReleaseComparison({ window: win, environment: environment || null }) : Promise.resolve(null),
       getObservabilityErrors(filters),
       cfg.releaseQualityEnabled ? getReleaseGate({ window: win, environment: environment || null }) : Promise.resolve(null),
+      cfg.rootCauseEnabled ? getRootCause({ window: win, environment: environment || null }) : Promise.resolve(null),
     ]);
     if (myReq !== reqSeq.current) return; // superseded
 
@@ -126,6 +139,7 @@ export default function ObservabilityDashboard() {
     const releaseRes = rel.status === 'fulfilled' ? rel.value : null;
     const errorsRes = err.status === 'fulfilled' ? err.value : null;
     const gateRes = gt.status === 'fulfilled' ? gt.value : null;
+    const rootCauseRes = rc.status === 'fulfilled' ? rc.value : null;
     const anyFail = ov.status === 'rejected' || err.status === 'rejected';
 
     if (!overview && anyFail) {
@@ -139,12 +153,12 @@ export default function ObservabilityDashboard() {
     const incidents = overview && cfg.incidentDetectionEnabled
       ? deriveIncidents(overview, errorsRes ?? { window: win, groups: [], byBrowser: [], browserAnomalies: [] }, releaseRes)
       : [];
-    setState({ overview, release: releaseRes, errors: errorsRes, incidents, gate: gateRes });
+    setState({ overview, release: releaseRes, errors: errorsRes, incidents, gate: gateRes, rootCause: rootCauseRes });
     setFetchedAt(new Date());
     setStale(false);
     if (anyFail) setError('일부 위젯을 불러오지 못했습니다(부분 표시).');
     if (!opts?.silent) setLoading(false);
-  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled, cfg.releaseQualityEnabled]);
+  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled, cfg.releaseQualityEnabled, cfg.rootCauseEnabled]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -245,6 +259,7 @@ export default function ObservabilityDashboard() {
         <>
           {tab === 'overview' && <OverviewTab data={state} />}
           {tab === 'gate' && <GateTab data={state} enabled={cfg.releaseQualityEnabled} gateEnabled={cfg.deploymentGateEnabled} budgetEnabled={cfg.performanceBudgetEnabled} enforce={cfg.budgetEnforcementEnabled} />}
+          {tab === 'rootcause' && <RootCauseTab data={state} enabled={cfg.rootCauseEnabled} rollbackEnabled={cfg.rollbackAdvisorEnabled} timelineEnabled={cfg.timelineEnabled} correlationEnabled={cfg.correlationEnabled} graphEnabled={cfg.serviceGraphEnabled} />}
           {tab === 'releases' && <ReleasesTab data={state} enabled={cfg.releaseComparisonEnabled} />}
           {tab === 'routes' && <RoutesTab data={state} />}
           {tab === 'apis' && <ApisTab data={state} />}
@@ -701,6 +716,142 @@ function GateTab({ data, enabled, gateEnabled, budgetEnabled, enforce }: {
           )}
         </AdminCard>
       </div>
+    </div>
+  );
+}
+
+// ── Root Cause (WEB-OBS-4) ───────────────────────────────────────────────────
+function RootCauseTab({ data, enabled, rollbackEnabled, timelineEnabled, correlationEnabled, graphEnabled }: {
+  data: LoadState; enabled: boolean; rollbackEnabled: boolean; timelineEnabled: boolean; correlationEnabled: boolean; graphEnabled: boolean;
+}) {
+  if (!enabled) return <AdminAlert tone="info" title="Root Cause 비활성화됨"><code className="font-mono text-[11px]">VITE_OBSERVABILITY_ROOT_CAUSE_ENABLED=false</code></AdminAlert>;
+  const rc = data.rootCause;
+  if (!rc || !rc.candidate) return <AdminEmpty title="분석할 릴리스가 없습니다 — NO DATA" description="최근 기간에 원인 분석 대상 릴리스가 없습니다." />;
+  const insufficient = rc.confidence === 'INSUFFICIENT' || rc.causes.length === 0;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <AdminBadge tone="primary">대상: <span className="font-mono">{rc.candidate}</span></AdminBadge>
+        <AdminBadge tone="neutral">기준: <span className="font-mono">{rc.baseline ?? '—'}</span></AdminBadge>
+        <AdminBadge tone={confTone(rc.confidence ?? 'INSUFFICIENT')}>confidence {rc.confidence}</AdminBadge>
+      </div>
+
+      {/* Incident explanation */}
+      <AdminCard title={<span className="flex items-center gap-2"><Search size={16} /> Incident Explanation</span>} subtitle="Rule 기반 자동 설명 · 추측 없음">
+        <ul className="space-y-1 text-xs text-ink-mute">
+          {rc.explanation.map((line, i) => <li key={i}>• {line}</li>)}
+        </ul>
+      </AdminCard>
+
+      {/* Rollback advisor */}
+      {rollbackEnabled && rc.rollback && (
+        <AdminCard title={<span className="flex items-center gap-2"><Undo2 size={16} /> Rollback Advisor</span>}
+          subtitle="권고만 표시 — 실제 롤백은 수행되지 않습니다"
+          action={<AdminBadge tone={rollbackTone(rc.rollback.status)}>{rc.rollback.status}</AdminBadge>}>
+          <ul className="space-y-1 text-[11px] text-ink-mute">
+            {rc.rollback.reasons.map((r, i) => <li key={i}>• {r}</li>)}
+          </ul>
+          <p className="mt-2 text-[10px] text-ink-dim">confidence {rc.rollback.confidence} · 근거: Error Rate / Chunk Failure / Critical / Regression / Confidence</p>
+        </AdminCard>
+      )}
+
+      {/* Root cause candidates */}
+      <AdminCard title="가장 가능성 높은 원인" subtitle="score 내림차순 · 각 원인은 evidence 포함">
+        {insufficient ? (
+          <AdminEmpty title="INSUFFICIENT_DATA" description="표본이 부족하거나 특정 원인이 집중되지 않아 단정할 수 없습니다." />
+        ) : (
+          <div className="space-y-2">
+            {rc.causes.map((c) => (
+              <div key={c.code} className="rounded-md border border-line/10 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-ink">{c.title}</span>
+                  <div className="flex items-center gap-1.5">
+                    <AdminBadge tone={c.score >= 70 ? 'danger' : c.score >= 50 ? 'warning' : 'neutral'}>score {c.score}</AdminBadge>
+                    <AdminBadge tone={confTone(c.confidence)}>{c.confidence}</AdminBadge>
+                  </div>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
+                  {c.release && <AdminBadge tone="neutral">release <span className="font-mono">{c.release}</span></AdminBadge>}
+                  {c.route && <AdminBadge tone="neutral">route <span className="font-mono">{c.route}</span></AdminBadge>}
+                  {c.browser && <AdminBadge tone="neutral">browser {c.browser}</AdminBadge>}
+                  <AdminBadge tone="neutral">affected {num(c.affectedSessions)} 세션</AdminBadge>
+                </div>
+                <ul className="mt-1 text-[11px] text-ink-mute">{c.evidence.map((e, i) => <li key={i}>— {e}</li>)}</ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </AdminCard>
+
+      {/* Evidence correlation */}
+      {correlationEnabled && (
+        <AdminCard title="Evidence Correlation" subtitle="규칙 기반 상관 강도(STRONG/MODERATE/WEAK/NONE)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-[11px] uppercase tracking-wider text-ink-dim">
+                {['Pair', 'strength', 'score', 'evidence'].map((h, i) => <th key={h} className={`px-2 py-1.5 ${i === 3 ? '' : i === 0 ? '' : 'text-right'}`}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {rc.correlations.map((c) => (
+                  <tr key={c.pair} className="border-t border-line/10">
+                    <td className="px-2 py-1.5">{c.pair}</td>
+                    <td className="px-2 py-1.5 text-right"><AdminBadge tone={corrTone(c.strength)}>{c.strength}</AdminBadge></td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-ink-dim">{c.scoreValue == null ? '—' : c.scoreValue}</td>
+                    <td className="px-2 py-1.5 text-[11px] text-ink-mute">{c.evidence}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </AdminCard>
+      )}
+
+      {/* Release timeline + commit correlation */}
+      {timelineEnabled && (
+        <AdminCard title={<span className="flex items-center gap-2"><GitBranch size={15} /> Release Timeline</span>} subtitle="Deploy → Health → Error(commit=build id, 내용 미조회)">
+          {rc.timeline.length === 0 ? <AdminEmpty title="타임라인 데이터 없음" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-[11px] uppercase tracking-wider text-ink-dim">
+                  {['Release', 'deploy', 'sessions', 'events', 'error rate', 'chunk', 'Δ vs prev', 'health'].map((h, i) => <th key={h} className={`px-2 py-1.5 ${i === 0 || i === 1 ? '' : 'text-right'}`}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {rc.timeline.map((t) => {
+                    const cc = rc.commitCorrelation.find((c) => c.release === t.release);
+                    return (
+                      <tr key={t.release} className="border-t border-line/10">
+                        <td className="px-2 py-1.5 font-mono text-[11px]">{t.release}</td>
+                        <td className="px-2 py-1.5 text-[10px] text-ink-dim">{t.deployAt ? new Date(t.deployAt).toLocaleString('ko-KR') : '—'}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{num(t.sessions)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{num(t.events)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{pct(t.errorRate, 2)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{t.chunkSessions}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-ink-dim">{cc?.errorRateDeltaVsPrev == null ? '—' : `${(cc.errorRateDeltaVsPrev * 100).toFixed(2)}pp`}</td>
+                        <td className="px-2 py-1.5 text-right"><AdminBadge tone={tlHealthTone(t.health)}>{t.health}</AdminBadge></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </AdminCard>
+      )}
+
+      {/* Service dependency graph */}
+      {graphEnabled && (
+        <AdminCard title={<span className="flex items-center gap-2"><Network size={15} /> Service Dependency Graph</span>} subtitle="정적 토폴로지 · 영향 노드 강조(표시 전용, 서비스 변경 없음)">
+          <div className="flex flex-wrap gap-1.5">
+            {rc.serviceGraph.nodes.map((n) => (
+              <AdminBadge key={n.id} tone={n.impacted ? 'danger' : 'neutral'}>{n.label}{n.impacted ? ' ⚠' : ''}</AdminBadge>
+            ))}
+          </div>
+          <p className="mt-2 font-mono text-[10px] text-ink-dim">
+            {rc.serviceGraph.edges.map((e) => `${e.from}→${e.to}`).join(' · ')}
+          </p>
+        </AdminCard>
+      )}
     </div>
   );
 }

@@ -52,6 +52,16 @@ export interface ObservabilityConfig {
   performanceBudgetEnabled: boolean;
   /** WEB-OBS-3 — when false, budget FAIL is reported as a WARNING (advisory) instead of a hard BLOCK. */
   budgetEnforcementEnabled: boolean;
+  /** WEB-OBS-4 — show the Root Cause tab (analysis/correlation/timeline/graph). OFF → disabled notice. */
+  rootCauseEnabled: boolean;
+  /** WEB-OBS-4 — compute the Rollback Advisor recommendation. OFF → advisor hidden (analysis stays). */
+  rollbackAdvisorEnabled: boolean;
+  /** WEB-OBS-4 — show the release timeline section. */
+  timelineEnabled: boolean;
+  /** WEB-OBS-4 — show evidence correlation section. */
+  correlationEnabled: boolean;
+  /** WEB-OBS-4 — show the service dependency graph section. */
+  serviceGraphEnabled: boolean;
 }
 
 let cached: ObservabilityConfig | null = null;
@@ -71,6 +81,11 @@ export function getObservabilityConfig(): ObservabilityConfig {
     deploymentGateEnabled: envBool(env.VITE_OBSERVABILITY_DEPLOYMENT_GATE_ENABLED, true),
     performanceBudgetEnabled: envBool(env.VITE_OBSERVABILITY_PERF_BUDGET_ENABLED, true),
     budgetEnforcementEnabled: envBool(env.VITE_OBSERVABILITY_BUDGET_ENFORCEMENT_ENABLED, true),
+    rootCauseEnabled: envBool(env.VITE_OBSERVABILITY_ROOT_CAUSE_ENABLED, true),
+    rollbackAdvisorEnabled: envBool(env.VITE_OBSERVABILITY_ROLLBACK_ADVISOR_ENABLED, true),
+    timelineEnabled: envBool(env.VITE_OBSERVABILITY_TIMELINE_ENABLED, true),
+    correlationEnabled: envBool(env.VITE_OBSERVABILITY_CORRELATION_ENABLED, true),
+    serviceGraphEnabled: envBool(env.VITE_OBSERVABILITY_SERVICE_GRAPH_ENABLED, true),
   };
   return cached;
 }
