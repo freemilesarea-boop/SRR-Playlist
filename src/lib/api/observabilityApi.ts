@@ -21,6 +21,10 @@ import {
   type ReleaseSignals, type ReleaseQualityResult, type PerfBudgetResult, type ReleaseGateResult,
   type Confidence,
   GATE_BLOCK_CRITICAL_ERROR_RATE, GATE_BLOCK_CHUNK_FAILURE_RATE,
+  analyzeRootCauses, correlateEvidence, commitCorrelation, buildTimeline, rollbackAdvisor,
+  explainIncident, serviceGraph, rootCauseConfidence,
+  type ReleaseErrorProfile, type TimelineRelease, type RootCause, type Correlation,
+  type CommitCorrelation, type TimelineEntry, type RollbackAdvice, type ServiceGraphView,
 } from '@/lib/observability';
 
 export type ObsWindow = '1h' | '24h' | '7d' | '30d';
@@ -333,6 +337,89 @@ export async function getReleaseGate(
   const gate = computeReleaseGate({ signals, quality, budget, confidence, regression });
 
   return { window, candidate: candName, baseline: baseName, releaseList: res.list ?? [], signals, quality, budget, confidence, regression, gate };
+}
+
+// ── WEB-OBS-4: Root Cause Analysis & Rollback Advisor ───────────────────────
+interface RcProfileRow {
+  release: string; sessions: number; events: number; browsers: number;
+  error_sessions: number; error_events: number; critical_events: number;
+  chunk_sessions: number; hydration_sessions: number; memory_risk_sessions: number;
+  long_task_events: number; api_p95: number | null; lcp_p75: number | null;
+  by_browser: Array<{ browser: string; error_sessions: number; total_sessions: number }>;
+  by_kind: Array<{ kind: string; sessions: number; count: number }>;
+  by_route: Array<{ key: string; sessions: number; count: number }>;
+}
+interface RcTimelineRow { release: string; first_seen: string | null; last_seen: string | null; sessions: number; events: number; error_events: number; chunk_sessions: number; }
+interface RootCauseResponse { ok: boolean; window: ObsWindow; candidate: string | null; baseline: string | null; profiles: Record<string, RcProfileRow>; timeline: RcTimelineRow[]; }
+
+export interface RootCauseBundle {
+  window: ObsWindow;
+  candidate: string | null;
+  baseline: string | null;
+  confidence: Confidence | null;
+  causes: RootCause[];
+  correlations: Correlation[];
+  commitCorrelation: CommitCorrelation[];
+  timeline: TimelineEntry[];
+  rollback: RollbackAdvice | null;
+  explanation: string[];
+  serviceGraph: ServiceGraphView;
+}
+
+function profileToEngine(p: RcProfileRow): ReleaseErrorProfile {
+  return {
+    release: p.release, sessions: p.sessions ?? 0, events: p.events ?? 0, browsers: p.browsers ?? 0,
+    errorSessions: p.error_sessions ?? 0, errorEvents: p.error_events ?? 0, criticalEvents: p.critical_events ?? 0,
+    chunkSessions: p.chunk_sessions ?? 0, hydrationSessions: p.hydration_sessions ?? 0,
+    memoryRiskSessions: p.memory_risk_sessions ?? 0, longTaskEvents: p.long_task_events ?? 0,
+    apiP95: p.api_p95, lcpP75: p.lcp_p75,
+    byBrowser: (p.by_browser ?? []).map((b) => ({ browser: b.browser, errorSessions: b.error_sessions, totalSessions: b.total_sessions })),
+    byKind: (p.by_kind ?? []).map((k) => ({ key: k.kind, sessions: k.sessions, count: k.count })),
+    byRoute: (p.by_route ?? []).map((r) => ({ key: r.key, sessions: r.sessions, count: r.count })),
+  };
+}
+
+/**
+ * Root Cause Analysis for the candidate release (auto-selected or specified) vs its baseline.
+ * All causes/correlations/timeline/rollback/explanation are computed client-side from the RPC
+ * aggregates against shared thresholds. Commit content is never fetched. When the candidate is
+ * absent or its sample is too small, the engine returns INSUFFICIENT_DATA (empty causes + advisory).
+ */
+export async function getRootCause(
+  f: { window?: ObsWindow; candidate?: string | null; baseline?: string | null; environment?: string | null } = {},
+): Promise<RootCauseBundle> {
+  const window = f.window ?? '7d';
+  const { data, error } = await supabase.rpc('admin_root_cause', {
+    p_window: window, p_release_candidate: f.candidate ?? null, p_release_baseline: f.baseline ?? null, p_environment: f.environment ?? null,
+  });
+  if (error) rpcErr('admin_root_cause', error);
+  const res = (data ?? {}) as Partial<RootCauseResponse>;
+  const profiles = res.profiles ?? {};
+  const candName = res.candidate ?? null;
+  const baseName = res.baseline ?? null;
+  const candRow = candName ? profiles[candName] : undefined;
+  const baseRow = baseName ? profiles[baseName] : undefined;
+
+  const timelineRows: TimelineRelease[] = (res.timeline ?? []).map((t) => ({
+    release: t.release, firstSeen: t.first_seen, lastSeen: t.last_seen, sessions: t.sessions, events: t.events, errorEvents: t.error_events, chunkSessions: t.chunk_sessions,
+  }));
+  const timeline = buildTimeline(timelineRows);
+  const commit = commitCorrelation(timelineRows);
+  const graphEmpty = serviceGraph([]);
+
+  if (!candRow) {
+    return { window, candidate: candName, baseline: baseName, confidence: null, causes: [], correlations: [], commitCorrelation: commit, timeline, rollback: null, explanation: ['후보 릴리스가 없어 원인을 분석할 수 없습니다 (NO DATA).'], serviceGraph: graphEmpty };
+  }
+  const cand = profileToEngine(candRow);
+  const base = baseRow ? profileToEngine(baseRow) : null;
+  const confidence = rootCauseConfidence({ sessions: cand.sessions, events: cand.events, browsers: cand.browsers });
+  const causes = analyzeRootCauses(cand, base);
+  const correlations = correlateEvidence(cand, base);
+  const rollback = rollbackAdvisor(cand, base);
+  const explanation = explainIncident(causes, rollback, confidence);
+  const graph = serviceGraph(causes);
+
+  return { window, candidate: candName, baseline: baseName, confidence, causes, correlations, commitCorrelation: commit, timeline, rollback, explanation, serviceGraph: graph };
 }
 
 // ── Incidents (composed from the three sources) ─────────────────────────────

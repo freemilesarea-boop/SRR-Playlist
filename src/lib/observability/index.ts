@@ -12,4 +12,5 @@ export * from './spike';
 export * from './risk';
 export * from './incident';
 export * from './releaseQuality';
+export * from './rootCause';
 export * from './config';
