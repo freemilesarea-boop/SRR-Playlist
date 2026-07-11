@@ -44,6 +44,14 @@ export interface ObservabilityConfig {
   minSessions: number;
   /** Minimum events before health verdicts are shown. */
   minSamples: number;
+  /** WEB-OBS-3 — show the Release Gate tab (quality/readiness/gate). OFF → tab shows disabled notice. */
+  releaseQualityEnabled: boolean;
+  /** WEB-OBS-3 — compute the deployment gate verdict. OFF → gate hidden, quality/budget still shown. */
+  deploymentGateEnabled: boolean;
+  /** WEB-OBS-3 — evaluate the performance budget. OFF → budget section shows disabled notice. */
+  performanceBudgetEnabled: boolean;
+  /** WEB-OBS-3 — when false, budget FAIL is reported as a WARNING (advisory) instead of a hard BLOCK. */
+  budgetEnforcementEnabled: boolean;
 }
 
 let cached: ObservabilityConfig | null = null;
@@ -59,6 +67,10 @@ export function getObservabilityConfig(): ObservabilityConfig {
     autoRefreshMs: envInt(env.VITE_OBSERVABILITY_AUTO_REFRESH_MS, 60_000, 15_000, 600_000),
     minSessions: envInt(env.VITE_OBSERVABILITY_MIN_SESSIONS, 5, 1, 10_000),
     minSamples: envInt(env.VITE_OBSERVABILITY_MIN_SAMPLES, 50, 1, 1_000_000),
+    releaseQualityEnabled: envBool(env.VITE_OBSERVABILITY_RELEASE_QUALITY_ENABLED, true),
+    deploymentGateEnabled: envBool(env.VITE_OBSERVABILITY_DEPLOYMENT_GATE_ENABLED, true),
+    performanceBudgetEnabled: envBool(env.VITE_OBSERVABILITY_PERF_BUDGET_ENABLED, true),
+    budgetEnforcementEnabled: envBool(env.VITE_OBSERVABILITY_BUDGET_ENFORCEMENT_ENABLED, true),
   };
   return cached;
 }
