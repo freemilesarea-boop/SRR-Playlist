@@ -104,6 +104,7 @@ const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPa
 const BrandPlayerPanel = lazy(() => import('@/components/admin/BrandPlayerPanel'));
 const RuntimeTelemetryPanel = lazy(() => import('@/components/admin/RuntimeTelemetryPanel'));
 const StoreFleetDashboard = lazy(() => import('@/components/admin/StoreFleetDashboard'));
+const StreamingQualityDashboard = lazy(() => import('@/components/admin/StreamingQualityDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -183,7 +184,8 @@ type Tab =
   | 'brand'
   | 'brand-player'
   | 'runtime-telemetry'
-  | 'store-fleet';
+  | 'store-fleet'
+  | 'streaming-quality';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -253,6 +255,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
   { key: 'runtime-telemetry', label: '런타임 텔레메트리', icon: <Activity size={14} />, superOnly: true },
   { key: 'store-fleet', label: '매장 Fleet 관제', icon: <Activity size={14} />, superOnly: true },
+  { key: 'streaming-quality', label: '스트리밍 품질', icon: <Activity size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -299,7 +302,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -656,6 +659,7 @@ export default function AdminPage() {
           {tab === 'admins' && <AdminUsersList />}
           {tab === 'runtime-telemetry' && <RuntimeTelemetryPanel />}
           {tab === 'store-fleet' && <StoreFleetDashboard />}
+          {tab === 'streaming-quality' && <StreamingQualityDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>

@@ -15,6 +15,9 @@
 import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
 import { toast } from '@/store/toastStore';
+// WEB-OBS-7 — Recovery outcome 관측 emit(완전 fail-open · await 안 함 · 복구 로직/조건 불변).
+import { recordStreamingQuality } from '@/lib/streamingQuality/emit';
+import type { SqReason } from '@/lib/streamingQuality/eventSchema';
 import type { AudioSessionState } from '@/hooks/useAudioSessionState';
 
 export type RecoveryReason =
@@ -316,6 +319,16 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
       : '[audio:recovery:skipped]',
       { reason, detail: outcomeDetail, historySize: historyRef.current.length, sessionState },
     );
+    // WEB-OBS-7 — Recovery 결과 관측 emit(완전 fail-open · 복구 로직/조건/카운터 불변).
+    // 실제 attempt(success/failed)만 기록. blocked-autoplay 등 skipped 는 제외.
+    try {
+      if (outcome === 'success' || outcome === 'failed') {
+        const SQ_REASON_SET = ['media-error', 'stalled', 'neither-playing', 'network-resume', 'visibility-resume', 'both-playing', 'sink-mismatch', 'crossfade-stuck', 'inactive-playing'];
+        const sqReason = (SQ_REASON_SET.includes(reason) ? reason : 'other') as SqReason;
+        recordStreamingQuality({ event_type: 'recovery_attempted', reason: sqReason, outcome: outcome === 'success' ? 'success' : 'failed' });
+        recordStreamingQuality({ event_type: outcome === 'success' ? 'recovery_succeeded' : 'recovery_failed', reason: sqReason, outcome: outcome === 'success' ? 'success' : 'failed' });
+      }
+    } catch { /* fail-open */ }
 
     // (3) escalation check — 10s window · 5회 이상 · 60s cooldown.
     // Phase 4-1 hotfix — skipped (blocked-autoplay 포함) 는 escalation 에서 제외
