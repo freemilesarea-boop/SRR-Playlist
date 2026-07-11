@@ -8,27 +8,33 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RefreshCw, AlertTriangle, Clock, Filter, Activity, GitCompareArrows, Route as RouteIcon,
   Server, Bug, MonitorSmartphone, Siren, ShieldAlert, ShieldCheck, Search, Undo2, GitBranch, Network,
+  ClipboardList, Target, HeartPulse, ArrowUpRight,
 } from 'lucide-react';
 import {
   AdminCard, AdminStatCard, AdminBadge, AdminButton, AdminEmpty, AdminSkeleton, AdminAlert, type AdminToneName,
 } from '@/components/admin/ui';
 import {
-  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, getReleaseGate, getRootCause, deriveIncidents,
-  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ReleaseGateBundle, type RootCauseBundle, type ObsWindow,
+  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, getReleaseGate, getRootCause,
+  getIncidentRecovery, composeOperationalIntel, deriveIncidents,
+  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ReleaseGateBundle, type RootCauseBundle,
+  type OperationalIntelBundle, type IncidentRecovery, type ObsWindow,
 } from '@/lib/api/observabilityApi';
 import {
   getObservabilityConfig, type HealthStatus, type MetricClassification, type Confidence,
   type IncidentSeverity, type Priority, type IncidentCandidate,
   type GateVerdict, type DeploymentReadiness, type QualityStatus, type GateReason, type BudgetItem,
   type CorrStrength, type RollbackStatus, type TimelineHealth,
+  type ActionCategory, type Urgency, type BlastRadiusLevel, type RecoveryStatus,
+  type EscalationTarget, type LifecycleStatus, type PlaybookStepStatus,
 } from '@/lib/observability';
 
-type ObsTab = 'overview' | 'gate' | 'rootcause' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
+type ObsTab = 'overview' | 'gate' | 'rootcause' | 'operations' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
 
 const TABS: Array<{ key: ObsTab; label: string; icon: JSX.Element }> = [
   { key: 'overview', label: 'Overview', icon: <Activity size={13} /> },
   { key: 'gate', label: 'Release Gate', icon: <ShieldCheck size={13} /> },
   { key: 'rootcause', label: 'Root Cause', icon: <Search size={13} /> },
+  { key: 'operations', label: 'Operations', icon: <ClipboardList size={13} /> },
   { key: 'releases', label: 'Releases', icon: <GitCompareArrows size={13} /> },
   { key: 'routes', label: 'Routes', icon: <RouteIcon size={13} /> },
   { key: 'apis', label: 'APIs', icon: <Server size={13} /> },
@@ -93,6 +99,30 @@ function rollbackTone(s: RollbackStatus): AdminToneName {
 function tlHealthTone(h: TimelineHealth): AdminToneName {
   return h === 'healthy' ? 'success' : h === 'degraded' ? 'warning' : h === 'critical' ? 'danger' : 'neutral';
 }
+function urgencyTone(u: Urgency): AdminToneName {
+  return u === 'CRITICAL' ? 'danger' : u === 'HIGH' ? 'warning' : u === 'MEDIUM' ? 'info' : 'neutral';
+}
+function actionTone(c: ActionCategory): AdminToneName {
+  if (c === 'ROLLBACK_RECOMMENDED' || c === 'PREPARE_ROLLBACK') return 'danger';
+  if (c === 'PAUSE_RELEASE' || c === 'HOLD_PROMOTION' || c.startsWith('ESCALATE')) return 'warning';
+  if (c === 'OBSERVE') return 'neutral';
+  return 'info';
+}
+function blastTone(l: BlastRadiusLevel): AdminToneName {
+  return l === 'CRITICAL' || l === 'WIDESPREAD' ? 'danger' : l === 'MODERATE' ? 'warning' : l === 'LIMITED' ? 'info' : 'neutral';
+}
+function recoveryTone(s: RecoveryStatus): AdminToneName {
+  return s === 'RECOVERED' ? 'success' : s === 'IMPROVING' ? 'info' : s === 'STABLE' ? 'warning' : s === 'REGRESSED' ? 'danger' : 'neutral';
+}
+function escalationTone(t: EscalationTarget): AdminToneName {
+  return t === 'NONE' ? 'neutral' : t === 'EXECUTIVE' || t === 'SECURITY' ? 'danger' : t === 'OPERATOR' ? 'info' : 'warning';
+}
+function lifecycleTone(s: LifecycleStatus): AdminToneName {
+  return s === 'RESOLVED' ? 'success' : s === 'MONITORING' ? 'info' : s === 'FALSE_POSITIVE' ? 'neutral' : s === 'MITIGATING' ? 'warning' : s === 'DETECTED' ? 'danger' : 'warning';
+}
+function stepTone(s: PlaybookStepStatus): AdminToneName {
+  return s === 'COMPLETED' ? 'success' : s === 'IN_PROGRESS' ? 'info' : s === 'BLOCKED' ? 'danger' : s === 'SKIPPED' ? 'warning' : 'neutral';
+}
 
 interface LoadState {
   overview: OverviewResult | null;
@@ -101,6 +131,7 @@ interface LoadState {
   incidents: IncidentCandidate[];
   gate: ReleaseGateBundle | null;
   rootCause: RootCauseBundle | null;
+  operations: OperationalIntelBundle | null;
 }
 
 export default function ObservabilityDashboard() {
@@ -112,7 +143,7 @@ export default function ObservabilityDashboard() {
   const [browser, setBrowser] = useState('');
   const [auto, setAuto] = useState(false);
 
-  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [], gate: null, rootCause: null });
+  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [], gate: null, rootCause: null, operations: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
@@ -153,12 +184,22 @@ export default function ObservabilityDashboard() {
     const incidents = overview && cfg.incidentDetectionEnabled
       ? deriveIncidents(overview, errorsRes ?? { window: win, groups: [], byBrowser: [], browserAnomalies: [] }, releaseRes)
       : [];
-    setState({ overview, release: releaseRes, errors: errorsRes, incidents, gate: gateRes, rootCause: rootCauseRes });
+
+    // WEB-OBS-5: operational intel needs the candidate release from root cause → sequential recovery fetch.
+    let operations: OperationalIntelBundle | null = null;
+    if (cfg.operationalAdvisorEnabled && rootCauseRes?.candidate) {
+      let recovery: IncidentRecovery | null = null;
+      try { recovery = await getIncidentRecovery(rootCauseRes.candidate, win === '1h' ? '24h' : win, environment || null); }
+      catch { /* fail-open: advisor still composes without recovery */ }
+      if (myReq !== reqSeq.current) return;
+      operations = composeOperationalIntel(rootCauseRes, overview, gateRes, recovery);
+    }
+    setState({ overview, release: releaseRes, errors: errorsRes, incidents, gate: gateRes, rootCause: rootCauseRes, operations });
     setFetchedAt(new Date());
     setStale(false);
     if (anyFail) setError('일부 위젯을 불러오지 못했습니다(부분 표시).');
     if (!opts?.silent) setLoading(false);
-  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled, cfg.releaseQualityEnabled, cfg.rootCauseEnabled]);
+  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled, cfg.releaseQualityEnabled, cfg.rootCauseEnabled, cfg.operationalAdvisorEnabled]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -260,6 +301,7 @@ export default function ObservabilityDashboard() {
           {tab === 'overview' && <OverviewTab data={state} />}
           {tab === 'gate' && <GateTab data={state} enabled={cfg.releaseQualityEnabled} gateEnabled={cfg.deploymentGateEnabled} budgetEnabled={cfg.performanceBudgetEnabled} enforce={cfg.budgetEnforcementEnabled} />}
           {tab === 'rootcause' && <RootCauseTab data={state} enabled={cfg.rootCauseEnabled} rollbackEnabled={cfg.rollbackAdvisorEnabled} timelineEnabled={cfg.timelineEnabled} correlationEnabled={cfg.correlationEnabled} graphEnabled={cfg.serviceGraphEnabled} />}
+          {tab === 'operations' && <OperationsTab data={state} cfg={cfg} />}
           {tab === 'releases' && <ReleasesTab data={state} enabled={cfg.releaseComparisonEnabled} />}
           {tab === 'routes' && <RoutesTab data={state} />}
           {tab === 'apis' && <ApisTab data={state} />}
@@ -852,6 +894,151 @@ function RootCauseTab({ data, enabled, rollbackEnabled, timelineEnabled, correla
           </p>
         </AdminCard>
       )}
+    </div>
+  );
+}
+
+// ── Operations (WEB-OBS-5) ───────────────────────────────────────────────────
+function OperationsTab({ data, cfg }: { data: LoadState; cfg: ReturnType<typeof getObservabilityConfig> }) {
+  if (!cfg.operationalAdvisorEnabled) return <AdminAlert tone="info" title="Operational Advisor 비활성화됨"><code className="font-mono text-[11px]">VITE_OBSERVABILITY_OPERATIONAL_ADVISOR_ENABLED=false</code></AdminAlert>;
+  const op = data.operations;
+  if (!op || !op.advice) {
+    return <AdminEmpty title="운영 권고 불가 — NO DATA / INSUFFICIENT_DATA" description={op?.release ? `${op.release}의 분석 데이터가 부족합니다.` : '분석 대상 릴리스가 없습니다.'} />;
+  }
+  const a = op.advice;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <AdminBadge tone="primary">대상: <span className="font-mono">{op.release}</span></AdminBadge>
+        {op.incidentType && <AdminBadge tone="neutral">{op.incidentType}</AdminBadge>}
+        <AdminBadge tone={confTone(a.confidence)}>confidence {a.confidence}</AdminBadge>
+        <AdminBadge tone="warning">권고 전용 · 자동 실행 없음</AdminBadge>
+      </div>
+
+      {/* Advisor headline */}
+      <AdminCard title={<span className="flex items-center gap-2"><ClipboardList size={16} /> 권장 조치(Operational Advisor)</span>}
+        subtitle="Rule 기반 · 승인 필요 · Production 조치는 수행되지 않습니다"
+        action={<div className="flex items-center gap-1.5"><AdminBadge tone={actionTone(a.recommendedAction)}>{a.recommendedAction}</AdminBadge><AdminBadge tone={urgencyTone(a.urgency)}>{a.urgency} · {a.actionPriority}</AdminBadge></div>}>
+        <p className="text-sm text-ink">{a.reason}</p>
+        {a.evidence.length > 0 && <ul className="mt-1 text-[11px] text-ink-mute">{a.evidence.map((e, i) => <li key={i}>— {e}</li>)}</ul>}
+        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+          <AdminBadge tone={a.safety.readOnly ? 'success' : 'warning'}>{a.safety.readOnly ? 'read-only' : 'production effect'}</AdminBadge>
+          <AdminBadge tone="neutral">approval required</AdminBadge>
+          <AdminBadge tone="neutral">automated: false</AdminBadge>
+          <AdminBadge tone={a.safety.riskLevel === 'high' ? 'danger' : a.safety.riskLevel === 'medium' ? 'warning' : 'neutral'}>risk {a.safety.riskLevel}</AdminBadge>
+          {a.escalationTarget !== 'NONE' && <AdminBadge tone={escalationTone(a.escalationTarget)}>escalate: {a.escalationTarget}</AdminBadge>}
+        </div>
+        {a.insufficientDataReason && <p className="mt-2 text-[11px] text-ink-mute">ⓘ {a.insufficientDataReason}</p>}
+        <p className="mt-2 text-[10px] text-ink-dim">{a.safetyWarning}</p>
+        {a.verificationSteps.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-semibold text-ink">Verification Checklist</p>
+            <ul className="space-y-0.5 text-[11px] text-ink-mute">{a.verificationSteps.map((s, i) => <li key={i}>☐ {s}</li>)}</ul>
+          </div>
+        )}
+      </AdminCard>
+
+      {/* Blast radius + Escalation + Lifecycle */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {cfg.blastRadiusEnabled && op.blastRadius && (
+          <AdminCard title={<span className="flex items-center gap-2"><Target size={15} /> Blast Radius</span>}
+            action={<AdminBadge tone={blastTone(op.blastRadius.level)}>{op.blastRadius.level}</AdminBadge>}>
+            <div className="space-y-1 text-xs">
+              <Field k="affected sessions" v={num(op.blastRadius.affectedSessions)} />
+              <Field k="total sessions" v={op.blastRadius.totalSessions == null ? '—' : num(op.blastRadius.totalSessions)} />
+              <Field k="impact rate" v={op.blastRadius.affectedSessionRate == null ? '— (denominator 없음)' : pct(op.blastRadius.affectedSessionRate, 2)} />
+              <Field k="affected routes" v={num(op.blastRadius.affectedRoutes)} />
+              <Field k="affected browsers" v={num(op.blastRadius.affectedBrowsers)} />
+              <Field k="affected releases" v={num(op.blastRadius.affectedReleases)} />
+              <Field k="primary scope" v={op.blastRadius.primaryScope ?? '—'} mono />
+              <Field k="confidence" v={op.blastRadius.confidence} />
+            </div>
+            <p className="mt-1 text-[10px] text-ink-dim">ⓘ Session ≠ 사용자 수(익명 세션).</p>
+          </AdminCard>
+        )}
+        {cfg.escalationEnabled && op.escalation && (
+          <AdminCard title={<span className="flex items-center gap-2"><ArrowUpRight size={15} /> Escalation</span>}
+            action={<AdminBadge tone={escalationTone(op.escalation.target)}>{op.escalation.target}</AdminBadge>}>
+            <ul className="space-y-0.5 text-[11px] text-ink-mute">{op.escalation.reasons.map((r, i) => <li key={i}>• {r}</li>)}</ul>
+            <p className="mt-2 text-[10px] text-ink-dim">SECURITY/EXECUTIVE는 실제 증거·광범위 장애에서만 사용.</p>
+          </AdminCard>
+        )}
+        {cfg.incidentLifecycleEnabled && op.lifecycle && (
+          <AdminCard title="Incident Lifecycle(제안)" action={<AdminBadge tone={lifecycleTone(op.lifecycle.suggestedStatus)}>{op.lifecycle.suggestedStatus}</AdminBadge>}>
+            <p className="text-[11px] text-ink-mute">{op.lifecycle.note}</p>
+            <p className="mt-2 text-[10px] text-ink-dim">상태는 운영자 소유 — 자동 RESOLVED/종료 없음(영속화는 다음 Phase).</p>
+          </AdminCard>
+        )}
+      </div>
+
+      {/* Impact */}
+      {cfg.blastRadiusEnabled && op.impact && (
+        <AdminCard title="Impact Analysis" subtitle="기술 영향 + 세션/라우트/브라우저/릴리스 · 비즈니스 영향 없음">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <AdminStatCard label="error events" value={num(op.impact.technical.errorEvents)} tone="neutral" />
+            <AdminStatCard label="critical" value={num(op.impact.technical.criticalErrors)} tone={op.impact.technical.criticalErrors > 0 ? 'danger' : 'success'} />
+            <AdminStatCard label="chunk fail" value={num(op.impact.technical.chunkFailures)} tone={op.impact.technical.chunkFailures > 0 ? 'warning' : 'success'} />
+            <AdminStatCard label="hydration" value={num(op.impact.technical.hydrationErrors)} tone={op.impact.technical.hydrationErrors > 0 ? 'warning' : 'success'} />
+            <AdminStatCard label="memory risk" value={num(op.impact.technical.memoryRiskSessions)} tone={op.impact.technical.memoryRiskSessions > 0 ? 'warning' : 'success'} />
+            <AdminStatCard label="session impact" value={op.impact.sessionImpact.rate == null ? '—' : pct(op.impact.sessionImpact.rate, 2)} tone="neutral" hint={`${num(op.impact.sessionImpact.affected)} 세션`} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+            <AdminBadge tone={op.impact.routeImpact.playerRouteAffected ? 'warning' : 'neutral'}>Player route {op.impact.routeImpact.playerRouteAffected ? '영향' : '정상'}</AdminBadge>
+            <AdminBadge tone={op.impact.routeImpact.adminRouteAffected ? 'warning' : 'neutral'}>Admin route {op.impact.routeImpact.adminRouteAffected ? '영향' : '정상'}</AdminBadge>
+            {cfg.businessImpactEnabled && <AdminBadge tone="neutral">{op.impact.businessImpact}</AdminBadge>}
+          </div>
+          {cfg.businessImpactEnabled && <p className="mt-1 text-[10px] text-ink-dim">ⓘ {op.impact.businessImpactNote}</p>}
+        </AdminCard>
+      )}
+
+      {/* Recovery */}
+      {cfg.recoveryTrackingEnabled && (
+        <AdminCard title={<span className="flex items-center gap-2"><HeartPulse size={15} /> Recovery Tracking</span>}
+          action={op.recovery ? <AdminBadge tone={recoveryTone(op.recovery.status)}>{op.recovery.status}</AdminBadge> : <AdminBadge tone="neutral">NO DATA</AdminBadge>}>
+          {!op.recovery ? <AdminEmpty title="복구 데이터 없음" description="관측 창/표본이 부족하거나 recovery RPC 응답이 없습니다." /> : (
+            <div className="space-y-1 text-xs">
+              <Field k="baseline error rate (incident)" v={op.recovery.baselineErrorRate == null ? '—' : pct(op.recovery.baselineErrorRate, 2)} />
+              <Field k="current error rate (recent)" v={op.recovery.currentErrorRate == null ? '—' : pct(op.recovery.currentErrorRate, 2)} />
+              <Field k="target" v={op.recovery.targetErrorRate == null ? '—' : pct(op.recovery.targetErrorRate, 2)} />
+              <Field k="observation window" v={`${op.recovery.observationWindowMinutes}분`} />
+              <Field k="recurrence" v={op.recovery.recurrence ? 'YES(재발)' : 'no'} />
+              <Field k="confidence" v={op.recovery.confidence} />
+              <Field k="operator close required" v={op.recovery.operatorCloseRequired ? 'YES' : 'no'} />
+              {op.recovery.reasons.map((r, i) => <p key={i} className="text-[11px] text-ink-mute">• {r}</p>)}
+              <p className="text-[10px] text-ink-dim">자동 복구 판정과 Incident 종료는 분리 — 실제 종료는 운영자 확인 필요.</p>
+            </div>
+          )}
+        </AdminCard>
+      )}
+
+      {/* Playbook */}
+      {cfg.playbookEnabled && op.playbook && (
+        <AdminCard title={<span className="flex items-center gap-2"><ClipboardList size={15} /> Incident Playbook — {op.playbook.title}</span>}
+          subtitle="표시 전용 체크리스트 · 모든 단계 destructive=false, automated=false">
+          <div className="space-y-2">
+            {op.playbook.steps.map((s) => (
+              <div key={s.stepOrder} className="rounded-md border border-line/10 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-ink">{s.stepOrder}. {s.title}</span>
+                  <AdminBadge tone={stepTone(s.status)}>{s.status}</AdminBadge>
+                </div>
+                <p className="mt-0.5 text-[11px] text-ink-mute">{s.description}</p>
+                <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-[10px] text-ink-dim sm:grid-cols-2">
+                  <span><b>목적:</b> {s.purpose}</span>
+                  <span><b>evidence:</b> {s.requiredEvidence}</span>
+                  <span><b>expected:</b> {s.expectedResult}</span>
+                  <span><b>stop:</b> {s.stopCondition || '—'}</span>
+                  <span><b>escalate:</b> {s.escalationCondition || '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      )}
+
+      <p className="text-[10px] text-ink-dim">
+        ⓘ 모든 조치는 권고이며 자동 실행되지 않습니다. 실제 Rollback/Deploy 중단/Release Block/DB 변경/외부 알림은 수행되지 않습니다.
+      </p>
     </div>
   );
 }
