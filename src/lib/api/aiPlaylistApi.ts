@@ -5,8 +5,9 @@
 
 import { supabase } from '@/lib/supabase';
 import {
-  computeStoreProfile, computeTrackProfile, computeCompatibility,
-  type StorePlayAggregate, type TrackMeta, type TrackPerformance,
+  computeStoreProfile, computeTrackProfile, computeCompatibility, simulatePlaylist,
+  type StorePlayAggregate, type StoreProfile, type TrackMeta, type TrackPerformance,
+  type TrackProfile, type Compatibility, type PlaylistSimulation,
 } from '@/lib/aiMusic';
 import {
   buildPlaylist, compareCandidates,
@@ -40,23 +41,34 @@ async function fetchRecentPlays(storeId: string, days = 7): Promise<Record<strin
   return res.ok ? (res.recentPlays ?? {}) : {};
 }
 
+interface PoolEntry { trackProfile: TrackProfile; compatibility: Compatibility; }
+interface AssembledPool {
+  pool: BuilderTrack[];
+  storeReady: boolean;
+  storeEnergyPreference: number | null;
+  store: StoreProfile | null;
+  byId: Map<string, PoolEntry>;
+}
+
 /** Assemble the BuilderTrack pool for a store (store profile + track compatibility + recent-play fatigue). */
-async function assemblePool(input: AiPlaylistBundleInput): Promise<{ pool: BuilderTrack[]; storeReady: boolean; storeEnergyPreference: number | null }> {
+async function assemblePool(input: AiPlaylistBundleInput): Promise<AssembledPool> {
   const [agg, rows, recent] = await Promise.all([
     fetchAggregate(input.storeId), fetchTrackRows(input.storeType), fetchRecentPlays(input.storeId),
   ]);
-  if (!agg) return { pool: [], storeReady: false, storeEnergyPreference: null };
+  if (!agg) return { pool: [], storeReady: false, storeEnergyPreference: null, store: null, byId: new Map() };
   const store = computeStoreProfile(agg);
+  const byId = new Map<string, PoolEntry>();
   const pool: BuilderTrack[] = rows.map((r) => {
     const tp = computeTrackProfile(r.meta, r.perf);
     const compat = computeCompatibility(store, tp, r.perf);
+    byId.set(r.meta.trackId, { trackProfile: tp, compatibility: compat });
     return {
       trackId: r.meta.trackId, title: r.meta.title, genre: r.meta.genre, mood: r.meta.mood, energy: r.meta.energy,
       instrumental: r.meta.instrumental, bpm: r.meta.bpm, compatScore: compat.score,
       learningScore: r.perf.learningScore, recentPlays7d: recent[r.meta.trackId] ?? 0,
     };
   });
-  return { pool, storeReady: store.status === 'READY', storeEnergyPreference: store.energyPreference };
+  return { pool, storeReady: store.status === 'READY', storeEnergyPreference: store.energyPreference, store, byId };
 }
 
 function toBuildInput(input: AiPlaylistBundleInput, pool: BuilderTrack[], storeReady: boolean, energyPref: number | null, strategy: BuildStrategy): PlaylistBuildInput {
@@ -70,6 +82,24 @@ function toBuildInput(input: AiPlaylistBundleInput, pool: BuilderTrack[], storeR
 export async function generateStorePlaylist(input: AiPlaylistBundleInput, strategy: BuildStrategy = 'BALANCED'): Promise<GeneratedPlaylist> {
   const { pool, storeReady, storeEnergyPreference } = await assemblePool(input);
   return buildPlaylist(toBuildInput(input, pool, storeReady, storeEnergyPreference, strategy));
+}
+
+/** Generate a proposal AND its AI-MUSIC-1 simulation (predicted skip/completion/etc.) — SIMULATION ONLY. */
+export async function generateWithSimulation(input: AiPlaylistBundleInput, strategy: BuildStrategy = 'BALANCED'): Promise<{ playlist: GeneratedPlaylist; simulation: PlaylistSimulation }> {
+  const asm = await assemblePool(input);
+  const playlist = buildPlaylist(toBuildInput(input, asm.pool, asm.storeReady, asm.storeEnergyPreference, strategy));
+  const store = asm.store;
+  if (!store || playlist.status !== 'READY') {
+    return { playlist, simulation: { storeId: input.storeId, status: 'INSUFFICIENT_DATA', predictedSkipRate: null, predictedCompletion: null, diversity: null, fatigueRisk: null, meanCompatibility: null, band: 'INSUFFICIENT_DATA', confidence: playlist.confidence.level, notes: ['생성 불가 — 시뮬레이션 없음'], simulationOnly: true } };
+  }
+  const tracks: TrackProfile[] = [];
+  const compatibilities: Compatibility[] = [];
+  for (const p of playlist.picks) {
+    const e = asm.byId.get(p.trackId);
+    if (e) { tracks.push(e.trackProfile); compatibilities.push(e.compatibility); }
+  }
+  const simulation = simulatePlaylist({ store, tracks, compatibilities, confidence: playlist.confidence.level });
+  return { playlist, simulation };
 }
 
 /** Build + compare A/B/C candidates for a store (SIMULATION ONLY). */
