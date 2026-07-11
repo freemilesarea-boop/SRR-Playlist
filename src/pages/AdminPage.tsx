@@ -106,6 +106,7 @@ const RuntimeTelemetryPanel = lazy(() => import('@/components/admin/RuntimeTelem
 const StoreFleetDashboard = lazy(() => import('@/components/admin/StoreFleetDashboard'));
 const StreamingQualityDashboard = lazy(() => import('@/components/admin/StreamingQualityDashboard'));
 const OperationsDashboardV2 = lazy(() => import('@/components/admin/OperationsDashboardV2'));
+const OperationsGovernanceCenter = lazy(() => import('@/components/admin/OperationsGovernanceCenter'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -187,7 +188,8 @@ type Tab =
   | 'runtime-telemetry'
   | 'store-fleet'
   | 'streaming-quality'
-  | 'ops-intelligence';
+  | 'ops-intelligence'
+  | 'ops-governance';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -259,6 +261,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'store-fleet', label: '매장 Fleet 관제', icon: <Activity size={14} />, superOnly: true },
   { key: 'streaming-quality', label: '스트리밍 품질', icon: <Activity size={14} />, superOnly: true },
   { key: 'ops-intelligence', label: '운영 인텔리전스', icon: <Activity size={14} />, superOnly: true },
+  { key: 'ops-governance', label: '운영 거버넌스', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -305,7 +308,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -664,6 +667,7 @@ export default function AdminPage() {
           {tab === 'store-fleet' && <StoreFleetDashboard />}
           {tab === 'streaming-quality' && <StreamingQualityDashboard />}
           {tab === 'ops-intelligence' && <OperationsDashboardV2 />}
+          {tab === 'ops-governance' && <OperationsGovernanceCenter />}
         </Suspense>
       </AdminErrorBoundary>
     </div>
