@@ -11,3 +11,4 @@ export { computeEscalation } from './escalation';
 export { analyzeChangeImpact } from './impact';
 export { buildEvidencePackage, evidenceToMarkdown, type EvidenceInput } from './evidence';
 export { buildExecutiveReport, buildGovernanceTimeline, type ExecReportInput } from './executiveReport';
+export { getOpsGovernanceConfig, __resetOpsGovernanceConfig, type OpsGovernanceConfig } from './config';
