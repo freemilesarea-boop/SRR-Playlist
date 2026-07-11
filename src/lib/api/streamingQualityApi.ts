@@ -9,9 +9,9 @@ import {
 
 export type SqWindow = '1h' | '24h' | '7d' | '30d';
 
-/** Raw per-scope row from _sqe_aggregate. */
-interface SqeRow {
-  scope: string; sessions: number;
+/** Raw per-scope row from _sqe_aggregate / _sqe_agg_scope (WEB-OBS-8 adds optional `stores`). */
+export interface SqeRow {
+  scope: string; sessions: number; stores?: number;
   startSuccess: number; startFailed: number; startAbandoned: number; startRequests: number;
   ttfaP50: number | null; ttfaP75: number | null; ttfaP95: number | null; ttfaSamples: number;
   crossfadeCompleted: number; crossfadeFallback: number; crossfadeAborted: number; crossfadeApplicable: boolean;
@@ -19,7 +19,7 @@ interface SqeRow {
   preloadReady: number; preloadFailed: number; recoveryAttempted: number; recoverySucceeded: number; recoveryFailed: number;
 }
 
-function rowToAggregate(r: SqeRow): QualityAggregate {
+export function rowToAggregate(r: SqeRow): QualityAggregate {
   return {
     scope: r.scope ?? 'FLEET', sessions: r.sessions ?? 0,
     startRequests: r.startRequests ?? 0, startSuccess: r.startSuccess ?? 0, startFailed: r.startFailed ?? 0, startAbandoned: r.startAbandoned ?? 0,
