@@ -39,6 +39,9 @@ import { gradientStyle } from '@/lib/cover';
 import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/analytics';
 import { safeRecordStreamV2, safeHeartbeatV2 } from '@/lib/streamingV2Api';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
+// WEB-OBS-7 — Streaming Quality: emit-only 계측 helper. 완전 fail-open · await 안 함 · 재생 흐름/제어
+// 불변(관측 전용). opt-in flag OFF 시 no-op. Player 동작(조건/return/state/retry/crossfade)을 바꾸지 않음.
+import { recordStreamingQuality } from '@/lib/streamingQuality/emit';
 import { captureBusinessError } from '@/lib/sentry';
 import {
   pushRecentlyPlayed,
@@ -597,6 +600,9 @@ export default function Player() {
   // • preloadTimeoutRef : preload 타임아웃 setTimeout handle (cleanup 용).
   const preloadedNextIdRef = useRef<string | null>(null);
   const preloadTimeoutRef = useRef<number | null>(null);
+  // WEB-OBS-7 — Streaming Quality 전용 ref (관측 전용). play_start 시각과 first-progress 처리 여부를
+  // 기록해 TTFA_APPROX(요청→최초 진행)를 계산. 재생 로직에는 사용/영향 없음.
+  const sqTtfaStartRef = useRef<{ trackId: string; ts: number; done: boolean } | null>(null);
 
   // per-issue 1초 cooldown
   const healthLastRecoveryRef = useRef<Map<HealthIssue, number>>(new Map());
@@ -964,6 +970,8 @@ export default function Player() {
       volume, muted: volume === 0,
       anonymousId: getAnonymousId(),
     });
+    // WEB-OBS-7 — TTFA_APPROX 시작 시각 기록(관측 전용, 재생 로직 영향 없음).
+    sqTtfaStartRef.current = { trackId: current.id, ts: performance.now(), done: false };
     if (priorStarts > 0) {
       // 같은 session 내 2번째 이상 재생 → replay 이벤트 (milestone 아니라 중복 제한 없음)
       void logPlaybackEventV2({
@@ -1548,6 +1556,11 @@ export default function Player() {
         elapsedMs: Math.round(performance.now() - startedAt),
         swapToIdx,
       });
+      // WEB-OBS-7 — Crossfade outcome emit(관측 전용, 재생 흐름 불변). reason→outcome 매핑만.
+      try {
+        const sqType = reason === 'raf' ? 'crossfade_completed' : reason === 'safety_timeout' ? 'crossfade_fallback' : 'crossfade_aborted';
+        recordStreamingQuality({ event_type: sqType, trackId: nextTrack.id, business_mode: businessMode, duration_ms: Math.round(performance.now() - startedAt), reason: (reason === 'raf' || reason === 'safety_timeout' || reason === 'recovery-manager' || reason === 'superseded') ? reason : 'other', outcome: reason === 'raf' ? 'success' : reason === 'safety_timeout' ? 'fallback' : 'aborted' });
+      } catch { /* fail-open */ }
       // 양쪽 audio 안전 처리 — 어떤 reason 이든 active 즉시 pause
       if (activeAudio) {
         activeAudio.pause();
@@ -1728,6 +1741,8 @@ export default function Player() {
         readyState: nextAudio.readyState,
         networkState: nextAudio.networkState,
       });
+      // WEB-OBS-7 — Preload ready emit(관측 전용).
+      try { recordStreamingQuality({ event_type: 'preload_ready', trackId: nextTrack.id, business_mode: businessMode, duration_ms: Math.round(performance.now() - startedAt), outcome: 'success' }); } catch { /* fail-open */ }
     };
     const onErrorEv = () => {
       if (done) return;
@@ -1738,6 +1753,8 @@ export default function Player() {
         elapsedMs: Math.round(performance.now() - startedAt),
         errCode: nextAudio.error?.code ?? null,
       });
+      // WEB-OBS-7 — Preload failed emit(관측 전용).
+      try { recordStreamingQuality({ event_type: 'preload_failed', trackId: nextTrack.id, business_mode: businessMode, duration_ms: Math.round(performance.now() - startedAt), outcome: 'failed', media_code: (nextAudio.error?.code ?? null) as never }); } catch { /* fail-open */ }
       // preload 실패 시 idempotent guard 해제 → 다음 preload trigger 에서 재시도 가능.
       // startCrossfade 는 나중에 자체 readiness 대기로 fallback.
       preloadedNextIdRef.current = null;
@@ -1921,6 +1938,16 @@ export default function Player() {
     if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
       lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
     }
+
+    // WEB-OBS-7 — TTFA_APPROX 종료: currentTime 최초 진행 시 1회 emit(관측 전용, 재생 흐름 불변).
+    // 실제 스피커 출력을 증명하지 않음(요청→최초 진행 근사). 완전 fail-open.
+    try {
+      const st = sqTtfaStartRef.current;
+      if (st && !st.done && st.trackId === nowTrackId && t > 0.05) {
+        st.done = true;
+        recordStreamingQuality({ event_type: 'first_progress', trackId: nowTrackId, business_mode: businessMode, duration_ms: nowTs - st.ts, outcome: 'progress' });
+      }
+    } catch { /* fail-open */ }
 
     setCurrentTime(t);
     accumulatePlaylistView(t);
@@ -2416,6 +2443,13 @@ export default function Player() {
         },
       });
     }
+    // WEB-OBS-7 — Media/Decoder error emit(관측 전용, 재생 흐름 불변). URL/제목 미포함 — 정규화 코드만.
+    try {
+      recordStreamingQuality({
+        event_type: 'media_error', trackId: current?.id ?? null, business_mode: businessMode, outcome: 'failed',
+        media_code: ((err?.code ?? 0) as never), network_state: target.networkState, ready_state: target.readyState,
+      });
+    } catch { /* fail-open */ }
 
     // NETWORK(코드2): 스트리밍 중간 끊김 → 자동 재시도.
     // X6.62: 매장모드 3회 (지수 백오프), 일반 사용자 1회.
