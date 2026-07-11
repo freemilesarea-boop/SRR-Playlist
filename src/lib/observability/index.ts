@@ -11,4 +11,5 @@ export * from './fingerprint';
 export * from './spike';
 export * from './risk';
 export * from './incident';
+export * from './releaseQuality';
 export * from './config';
