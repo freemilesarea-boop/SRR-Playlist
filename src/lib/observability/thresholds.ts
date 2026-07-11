@@ -225,3 +225,39 @@ export const RB_ROLLBACK_ERROR_SPIKE_REL = 2.0; // OR ≥2× baseline error rate
 export const RB_ROLLBACK_SPIKE_ABS = 0.05;   // … AND ≥5pp absolute increase (higher than the RC gate so a
                                              //     multiple of a tiny baseline stays WATCH, not ROLLBACK)
 export const RB_WATCH_ERROR_RATE = 0.03;     // ≥3% error rate → WATCH
+
+// ════════════════════════════════════════════════════════════════════════════
+// WEB-OBS-5 — Operational Advisor, Blast Radius & Recovery Tracking
+// ════════════════════════════════════════════════════════════════════════════
+// Recommendation + tracking only — no action is ever executed. Below the sample/session gates the
+// engine returns INSUFFICIENT_DATA; a small sample can never mint WIDESPREAD/CRITICAL or a confident
+// action.
+
+// ── Blast Radius level thresholds (on affected-session RATE, with concentration guards) ──
+export const BLAST_ISOLATED_MAX = 0.01;   // ≤1% of sessions → ISOLATED
+export const BLAST_LIMITED_MAX = 0.05;    // ≤5% → LIMITED
+export const BLAST_MODERATE_MAX = 0.15;   // ≤15% → MODERATE
+export const BLAST_WIDESPREAD_MAX = 0.4;  // ≤40% → WIDESPREAD; above → CRITICAL
+/** A blast-radius verdict needs at least this many affected sessions AND a known total (denominator). */
+export const BLAST_MIN_AFFECTED_SESSIONS = 5;
+export const BLAST_MIN_TOTAL_SESSIONS = 20;
+/** Critical also fires when a severe signal (critical/chunk) hits enough sessions regardless of rate. */
+export const BLAST_CRITICAL_SEVERE_SESSIONS = 25;
+
+// ── Recovery tracking ───────────────────────────────────────────────────────
+// Recovery is only judged over a real observation window with enough samples on BOTH the earlier and
+// recent sub-windows. One dip never means RECOVERED; recurrence re-opens the verdict.
+export const RECOVERY_MIN_WINDOW_MINUTES = 30;   // (ASSUMPTION) shorter → NOT_STARTED / INSUFFICIENT
+export const RECOVERY_MIN_SESSIONS_PER_BUCKET = 15;
+export const RECOVERY_MIN_EVENTS_PER_BUCKET = 60;
+/** Relative improvement of the primary error rate required to call IMPROVING/RECOVERED. */
+export const RECOVERY_IMPROVE_REL = 0.5;   // recent ≤ 50% of earlier → improving direction
+export const RECOVERY_RECOVERED_ABS = 0.02; // AND recent error rate ≤ 2% absolute → RECOVERED-eligible
+export const RECOVERY_REGRESS_REL = 1.25;  // recent ≥ 1.25× earlier → REGRESSED
+/** Recurrence: a fresh error spike after a dip within the recent buckets. */
+export const RECOVERY_RECURRENCE_MIN_RATE = 0.03;
+
+// ── Operational Advisor urgency bands (derived, not executed) ────────────────
+// Mapped from rollback status / gate verdict / severity — see operationalAdvisor.ts.
+export const ADVISOR_ESCALATE_AFFECTED_SESSIONS = 50; // ≥ → engineering escalation candidate
+export const ADVISOR_EXEC_BLAST_RATE = 0.4;           // WIDESPREAD/CRITICAL blast → exec-visibility candidate
