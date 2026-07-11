@@ -17,6 +17,10 @@ import {
   routeRiskScore, apiRiskScore, type RiskResult,
   buildIncidents, type IncidentCandidate,
   safeRatio,
+  computeReleaseQuality, checkPerformanceBudget, computeReleaseConfidence, computeReleaseGate,
+  type ReleaseSignals, type ReleaseQualityResult, type PerfBudgetResult, type ReleaseGateResult,
+  type Confidence,
+  GATE_BLOCK_CRITICAL_ERROR_RATE, GATE_BLOCK_CHUNK_FAILURE_RATE,
 } from '@/lib/observability';
 
 export type ObsWindow = '1h' | '24h' | '7d' | '30d';
@@ -212,6 +216,123 @@ export async function getObservabilityErrors(f: ObsFilters = {}): Promise<Errors
     byBrowser: res.by_browser ?? [],
     browserAnomalies: browserAnomalies(res.by_browser ?? []),
   };
+}
+
+// ── WEB-OBS-3: Release Gate (predictive regression) ─────────────────────────
+interface GateRow {
+  release: string; events: number; sessions: number; browsers: number;
+  first_seen: string | null; last_seen: string | null;
+  error_count: number; critical_count: number; chunk_sessions: number; hydration_sessions: number;
+  api_count: number; slow_api_count: number; api_p95: number | null;
+  route_count: number; slow_route_count: number; long_task_count: number; memory_risk_sessions: number;
+  lcp_p75: number | null; lcp_n: number; inp_p75: number | null; inp_n: number;
+  cls_p75: number | null; cls_n: number; ttfb_p75: number | null; ttfb_n: number;
+}
+interface ReleaseListItem { release: string; events: number; sessions: number; first_seen: string | null; last_seen: string | null; }
+interface GateResponse { ok: boolean; window: ObsWindow; candidate: string | null; baseline: string | null; releases: Record<string, GateRow>; list: ReleaseListItem[]; }
+
+export interface ReleaseGateBundle {
+  window: ObsWindow;
+  candidate: string | null;
+  baseline: string | null;
+  releaseList: ReleaseListItem[];
+  signals: ReleaseSignals | null;
+  quality: ReleaseQualityResult | null;
+  budget: PerfBudgetResult | null;
+  confidence: Confidence | null;
+  regression: ReleaseComparison | null;
+  gate: ReleaseGateResult | null;
+}
+
+function gateRowToSignals(row: GateRow, incidentCount: number): ReleaseSignals {
+  const sessions = row.sessions || 0;
+  const events = row.events || 0;
+  const rate = (n: number, d: number): number | null => (d > 0 ? n / d : null);
+  return {
+    release: row.release, sessions, events, browsers: row.browsers || 0,
+    errorRate: rate(row.error_count, events),
+    criticalErrorRate: rate(row.critical_count, events),
+    chunkFailureRate: rate(row.chunk_sessions, sessions),
+    hydrationErrorRate: rate(row.hydration_sessions, sessions),
+    slowRouteRate: rate(row.slow_route_count, row.route_count),
+    slowApiRate: rate(row.slow_api_count, row.api_count),
+    longTaskRate: sessions > 0 ? row.long_task_count / sessions : null,
+    memoryRiskRate: rate(row.memory_risk_sessions, sessions),
+    bootRecoveryFailureRate: null, // no boot-recovery telemetry channel yet
+    lcpP75: row.lcp_p75, inpP75: row.inp_p75, clsP75: row.cls_p75, ttfbP75: row.ttfb_p75,
+    apiP95: row.api_p95, incidentCount,
+  };
+}
+
+function gateRowToMetrics(row: GateRow): ReleaseMetrics {
+  const sessions = row.sessions || 0;
+  const events = row.events || 0;
+  const rate = (n: number, d: number, count: number): MetricSample => ({ value: d > 0 ? n / d : null, count });
+  return {
+    release: row.release, sessions, events,
+    metrics: {
+      errorRate: rate(row.error_count, events, events),
+      criticalErrorRate: rate(row.critical_count, events, events),
+      chunkFailureRate: rate(row.chunk_sessions, sessions, sessions),
+      hydrationErrorRate: rate(row.hydration_sessions, sessions, sessions),
+      slowApiRate: rate(row.slow_api_count, row.api_count, row.api_count),
+      slowRouteRate: rate(row.slow_route_count, row.route_count, row.route_count),
+      longTaskRate: { value: sessions > 0 ? row.long_task_count / sessions : null, count: sessions },
+      memoryRiskRate: rate(row.memory_risk_sessions, sessions, sessions),
+      lcpP75: { value: row.lcp_p75, count: row.lcp_n },
+      inpP75: { value: row.inp_p75, count: row.inp_n },
+      clsP75: { value: row.cls_p75, count: row.cls_n },
+      ttfbP75: { value: row.ttfb_p75, count: row.ttfb_n },
+    },
+  };
+}
+
+/**
+ * Fetch the candidate/baseline bundle from the gate RPC and run the full predictive engine.
+ * Returns everything the Release Gate UI needs; every verdict is computed client-side from shared
+ * thresholds. If the candidate release is absent, all engine fields are null (dashboard shows NO DATA).
+ */
+export async function getReleaseGate(
+  f: { window?: ObsWindow; candidate?: string | null; baseline?: string | null; environment?: string | null } = {},
+): Promise<ReleaseGateBundle> {
+  const window = f.window ?? '7d';
+  const { data, error } = await supabase.rpc('admin_release_gate', {
+    p_window: window, p_release_candidate: f.candidate ?? null, p_release_baseline: f.baseline ?? null, p_environment: f.environment ?? null,
+  });
+  if (error) rpcErr('admin_release_gate', error);
+  const res = (data ?? {}) as Partial<GateResponse>;
+  const releases = res.releases ?? {};
+  const candName = res.candidate ?? null;
+  const baseName = res.baseline ?? null;
+  const candRow = candName ? releases[candName] : undefined;
+  const baseRow = baseName ? releases[baseName] : undefined;
+
+  const empty: ReleaseGateBundle = {
+    window, candidate: candName, baseline: baseName, releaseList: res.list ?? [],
+    signals: null, quality: null, budget: null, confidence: null, regression: null, gate: null,
+  };
+  if (!candRow) return empty;
+
+  // Regression: candidate(B) vs baseline(A) — only when a baseline bundle exists.
+  const regression = baseRow ? compareReleases(gateRowToMetrics(baseRow), gateRowToMetrics(candRow)) : null;
+  const strongRegressions = (regression?.rows ?? []).filter((r) => r.classification === 'REGRESSED' && (r.confidence === 'HIGH' || r.confidence === 'MEDIUM')).length;
+
+  // Release-scoped incident count (explainable): active hard-signal count + strong regressions.
+  const preSignals = gateRowToSignals(candRow, 0);
+  const incidentCount =
+    ((preSignals.criticalErrorRate ?? 0) >= GATE_BLOCK_CRITICAL_ERROR_RATE ? 1 : 0) +
+    ((preSignals.chunkFailureRate ?? 0) >= GATE_BLOCK_CHUNK_FAILURE_RATE ? 1 : 0) +
+    (candRow.hydration_sessions >= 3 ? 1 : 0) +
+    (candRow.memory_risk_sessions >= 3 ? 1 : 0) +
+    strongRegressions;
+
+  const signals = gateRowToSignals(candRow, incidentCount);
+  const quality = computeReleaseQuality(signals);
+  const budget = checkPerformanceBudget(signals);
+  const confidence = computeReleaseConfidence(signals).level;
+  const gate = computeReleaseGate({ signals, quality, budget, confidence, regression });
+
+  return { window, candidate: candName, baseline: baseName, releaseList: res.list ?? [], signals, quality, budget, confidence, regression, gate };
 }
 
 // ── Incidents (composed from the three sources) ─────────────────────────────
