@@ -115,3 +115,82 @@ export const RISK_BAND_P0 = 80;
 export const RISK_BAND_P1 = 60;
 export const RISK_BAND_P2 = 35;
 // below P2 → P3
+
+// ════════════════════════════════════════════════════════════════════════════
+// WEB-OBS-3 — Predictive Regression Engine (Release Quality · Budget · Gate)
+// ════════════════════════════════════════════════════════════════════════════
+// These drive the pre-promotion verdict ("is THIS release risky?"). Everything is rule-based and
+// explainable — no ML. A release with too little data is INSUFFICIENT_DATA, never a fabricated PASS.
+
+// ── Release Quality Score component weights (sum = 100) ─────────────────────
+// Each component maps its current-release rate/value to a 0..1 goodness against its budget; a
+// no-data component contributes no penalty (weights renormalize over present components). Mirrors
+// the Health Score shape but scoped to ONE release and tuned for deploy-gating (errors weigh more).
+export const RELEASE_QUALITY_WEIGHTS = {
+  errorRate: 16,
+  criticalErrorRate: 16,
+  chunkFailureRate: 12,
+  hydrationErrorRate: 8,
+  slowRouteRate: 5,
+  slowApiRate: 8,
+  longTaskRate: 4,
+  lcpP75: 9,
+  inpP75: 6,
+  clsP75: 4,
+  ttfbP75: 3,
+  memoryRiskRate: 3,
+  bootRecoveryFailureRate: 2,
+  incidents: 4,
+} as const;
+
+// Release Quality status bands (0..100).
+export const QUALITY_BAND_EXCELLENT = 90;
+export const QUALITY_BAND_GOOD = 75;
+export const QUALITY_BAND_RISKY = 55;
+// below RISKY → POOR
+
+// ── Performance Budget (absolute ceilings — FAIL when exceeded) ─────────────
+// Latency/vital budgets reuse the web.dev "needs-improvement" upper edge (a p75 past it is a real
+// regression, not noise). Rate budgets are operational (ASSUMPTION, aligned with Health budgets).
+// Bundle budgets are BUILD-TIME artifact sizes (measured at build, not from telemetry) — flagged.
+export const PERF_BUDGET = {
+  // telemetry-derived (p75 / rates)
+  lcpP75Ms: 4000,
+  inpP75Ms: 500,
+  clsP75: 0.25,
+  ttfbP75Ms: 1800,
+  errorRate: 0.05,
+  criticalErrorRate: 0.01,
+  chunkFailureRate: 0.02,
+  hydrationErrorRate: 0.02,
+  slowApiRate: 0.2,
+  slowRouteRate: 0.2,
+  longTaskRate: 1.0,
+  memoryRiskRate: 0.1,
+  apiP95Ms: 1500,
+  // build-artifact (bytes, gzip) — measured at build time, see docs. Not enforced from telemetry.
+  initialJsGzipBytes: 140 * 1024,
+  lazyChunkGzipBytes: 120 * 1024,
+} as const;
+
+// ── Deployment Readiness bands (on the Release Quality score, before gate overrides) ──
+export const READINESS_READY_MIN = 85;
+export const READINESS_WATCH_MIN = 65;
+// below WATCH → BLOCKED (subject to confidence gating → INSUFFICIENT_DATA)
+
+// ── Release Gate hard-block rules ───────────────────────────────────────────
+// Any of these, on their own, force a BLOCK regardless of the composite score — the "do not promote"
+// conditions. Values chosen to match the Health hard-floors so the two engines never disagree.
+export const GATE_BLOCK_CRITICAL_ERROR_RATE = 0.02;
+export const GATE_BLOCK_CHUNK_FAILURE_RATE = 0.05;
+export const GATE_BLOCK_ERROR_RATE = 0.1;
+/** A regression this severe on any budgeted metric hard-blocks (in addition to the STABLE thresholds). */
+export const GATE_BLOCK_REGRESSED_METRICS = 3; // ≥3 metrics REGRESSED with ≥MEDIUM confidence → BLOCK
+
+// ── Release-level confidence gates (distinct from per-metric compare confidence) ──
+// A release verdict needs enough sessions AND events AND browser diversity to be trustworthy.
+export const RELEASE_CONF_MIN_SESSIONS = 20;   // below → INSUFFICIENT
+export const RELEASE_CONF_HIGH_SESSIONS = 300;
+export const RELEASE_CONF_MEDIUM_SESSIONS = 80;
+export const RELEASE_CONF_MIN_EVENTS = 200;
+export const RELEASE_CONF_MIN_BROWSERS = 2;    // single-browser sample can't be HIGH confidence

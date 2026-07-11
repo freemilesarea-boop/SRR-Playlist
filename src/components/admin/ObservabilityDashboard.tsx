@@ -7,24 +7,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RefreshCw, AlertTriangle, Clock, Filter, Activity, GitCompareArrows, Route as RouteIcon,
-  Server, Bug, MonitorSmartphone, Siren, ShieldAlert,
+  Server, Bug, MonitorSmartphone, Siren, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import {
   AdminCard, AdminStatCard, AdminBadge, AdminButton, AdminEmpty, AdminSkeleton, AdminAlert, type AdminToneName,
 } from '@/components/admin/ui';
 import {
-  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, deriveIncidents,
-  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ObsWindow,
+  getObservabilityOverview, getReleaseComparison, getObservabilityErrors, getReleaseGate, deriveIncidents,
+  type OverviewResult, type ReleaseCompareResult, type ErrorsResult, type ReleaseGateBundle, type ObsWindow,
 } from '@/lib/api/observabilityApi';
 import {
   getObservabilityConfig, type HealthStatus, type MetricClassification, type Confidence,
   type IncidentSeverity, type Priority, type IncidentCandidate,
+  type GateVerdict, type DeploymentReadiness, type QualityStatus, type GateReason, type BudgetItem,
 } from '@/lib/observability';
 
-type ObsTab = 'overview' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
+type ObsTab = 'overview' | 'gate' | 'releases' | 'routes' | 'apis' | 'errors' | 'devices' | 'incidents';
 
 const TABS: Array<{ key: ObsTab; label: string; icon: JSX.Element }> = [
   { key: 'overview', label: 'Overview', icon: <Activity size={13} /> },
+  { key: 'gate', label: 'Release Gate', icon: <ShieldCheck size={13} /> },
   { key: 'releases', label: 'Releases', icon: <GitCompareArrows size={13} /> },
   { key: 'routes', label: 'Routes', icon: <RouteIcon size={13} /> },
   { key: 'apis', label: 'APIs', icon: <Server size={13} /> },
@@ -60,12 +62,33 @@ function sevTone(s: IncidentSeverity): AdminToneName {
 function prioTone(p: Priority): AdminToneName {
   return p === 'P0' ? 'danger' : p === 'P1' ? 'warning' : p === 'P2' ? 'info' : p === 'P3' ? 'neutral' : 'neutral';
 }
+function verdictTone(v: GateVerdict): AdminToneName {
+  return v === 'PASS' ? 'success' : v === 'PASS_WITH_WARNING' ? 'warning' : v === 'BLOCK' ? 'danger' : 'neutral';
+}
+function readinessTone(r: DeploymentReadiness): AdminToneName {
+  return r === 'READY' ? 'success' : r === 'WATCH' ? 'warning' : r === 'BLOCKED' ? 'danger' : 'neutral';
+}
+function qualityTone(q: QualityStatus): AdminToneName {
+  return q === 'EXCELLENT' ? 'success' : q === 'GOOD' ? 'info' : q === 'RISKY' ? 'warning' : q === 'POOR' ? 'danger' : 'neutral';
+}
+function budgetVal(i: BudgetItem): string {
+  if (i.value == null) return '—';
+  if (i.unit === 'ms') return `${Math.round(i.value)}ms`;
+  if (i.unit === 'ratio') return `${(i.value * 100).toFixed(2)}%`;
+  return String(Math.round(i.value * 1000) / 1000);
+}
+function budgetLimit(i: BudgetItem): string {
+  if (i.unit === 'ms') return `${i.budget}ms`;
+  if (i.unit === 'ratio') return `${(i.budget * 100).toFixed(1)}%`;
+  return String(i.budget);
+}
 
 interface LoadState {
   overview: OverviewResult | null;
   release: ReleaseCompareResult | null;
   errors: ErrorsResult | null;
   incidents: IncidentCandidate[];
+  gate: ReleaseGateBundle | null;
 }
 
 export default function ObservabilityDashboard() {
@@ -77,7 +100,7 @@ export default function ObservabilityDashboard() {
   const [browser, setBrowser] = useState('');
   const [auto, setAuto] = useState(false);
 
-  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [] });
+  const [state, setState] = useState<LoadState>({ overview: null, release: null, errors: null, incidents: [], gate: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
@@ -91,16 +114,18 @@ export default function ObservabilityDashboard() {
     setError(null);
     const filters = { window: win, release: release || null, environment: environment || null, browser: browser || null };
     // Fail-open per source: allSettled so one RPC error doesn't blank the whole dashboard.
-    const [ov, rel, err] = await Promise.allSettled([
+    const [ov, rel, err, gt] = await Promise.allSettled([
       getObservabilityOverview(filters),
       cfg.releaseComparisonEnabled ? getReleaseComparison({ window: win, environment: environment || null }) : Promise.resolve(null),
       getObservabilityErrors(filters),
+      cfg.releaseQualityEnabled ? getReleaseGate({ window: win, environment: environment || null }) : Promise.resolve(null),
     ]);
     if (myReq !== reqSeq.current) return; // superseded
 
     const overview = ov.status === 'fulfilled' ? ov.value : null;
     const releaseRes = rel.status === 'fulfilled' ? rel.value : null;
     const errorsRes = err.status === 'fulfilled' ? err.value : null;
+    const gateRes = gt.status === 'fulfilled' ? gt.value : null;
     const anyFail = ov.status === 'rejected' || err.status === 'rejected';
 
     if (!overview && anyFail) {
@@ -114,12 +139,12 @@ export default function ObservabilityDashboard() {
     const incidents = overview && cfg.incidentDetectionEnabled
       ? deriveIncidents(overview, errorsRes ?? { window: win, groups: [], byBrowser: [], browserAnomalies: [] }, releaseRes)
       : [];
-    setState({ overview, release: releaseRes, errors: errorsRes, incidents });
+    setState({ overview, release: releaseRes, errors: errorsRes, incidents, gate: gateRes });
     setFetchedAt(new Date());
     setStale(false);
     if (anyFail) setError('일부 위젯을 불러오지 못했습니다(부분 표시).');
     if (!opts?.silent) setLoading(false);
-  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled]);
+  }, [win, release, environment, browser, cfg.releaseComparisonEnabled, cfg.incidentDetectionEnabled, cfg.releaseQualityEnabled]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -219,6 +244,7 @@ export default function ObservabilityDashboard() {
       ) : (
         <>
           {tab === 'overview' && <OverviewTab data={state} />}
+          {tab === 'gate' && <GateTab data={state} enabled={cfg.releaseQualityEnabled} gateEnabled={cfg.deploymentGateEnabled} budgetEnabled={cfg.performanceBudgetEnabled} enforce={cfg.budgetEnforcementEnabled} />}
           {tab === 'releases' && <ReleasesTab data={state} enabled={cfg.releaseComparisonEnabled} />}
           {tab === 'routes' && <RoutesTab data={state} />}
           {tab === 'apis' && <ApisTab data={state} />}
@@ -519,6 +545,162 @@ function IncidentsTab({ data, enabled }: { data: LoadState; enabled: boolean }) 
           </div>
         </AdminCard>
       ))}
+    </div>
+  );
+}
+
+// ── Release Gate (WEB-OBS-3) ─────────────────────────────────────────────────
+function GateTab({ data, enabled, gateEnabled, budgetEnabled, enforce }: {
+  data: LoadState; enabled: boolean; gateEnabled: boolean; budgetEnabled: boolean; enforce: boolean;
+}) {
+  if (!enabled) return <AdminAlert tone="info" title="Release Quality 비활성화됨"><code className="font-mono text-[11px]">VITE_OBSERVABILITY_RELEASE_QUALITY_ENABLED=false</code></AdminAlert>;
+  const g = data.gate;
+  if (!g || !g.gate || !g.signals || !g.quality || !g.budget) {
+    return <AdminEmpty title="Release Gate 판정 불가 — INSUFFICIENT_DATA / NO DATA"
+      description={g?.candidate ? `후보 릴리스 ${g.candidate}의 측정 데이터가 부족합니다.` : '최근 기간에 판정할 릴리스가 없습니다. Preview에서 앱을 사용하면 데이터가 쌓입니다.'} />;
+  }
+  const sig = g.signals;
+  const quality = g.quality;
+  const budget = g.budget;
+
+  // Budget-enforcement kill switch: when OFF, budget failures are advisory (warnings), not hard blocks.
+  const budgetBlocks = g.gate.blockingReasons.filter((r) => r.code === 'BUDGET_EXCEEDED');
+  const nonBudgetBlocks = g.gate.blockingReasons.filter((r) => r.code !== 'BUDGET_EXCEEDED');
+  const effectiveBlocks: GateReason[] = enforce ? g.gate.blockingReasons : nonBudgetBlocks;
+  const advisoryWarnings: GateReason[] = enforce ? g.gate.warnings : [...g.gate.warnings, ...budgetBlocks];
+  const displayVerdict: GateVerdict =
+    g.gate.verdict === 'INSUFFICIENT_DATA' ? 'INSUFFICIENT_DATA'
+      : effectiveBlocks.length > 0 ? 'BLOCK'
+        : (g.gate.verdict === 'BLOCK' && effectiveBlocks.length === 0) || advisoryWarnings.length > 0 ? 'PASS_WITH_WARNING'
+          : g.gate.verdict;
+
+  return (
+    <div className="space-y-5">
+      {/* Release selector context */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <AdminBadge tone="primary">후보(candidate): <span className="font-mono">{g.candidate ?? '—'}</span></AdminBadge>
+        <AdminBadge tone="neutral">기준(baseline): <span className="font-mono">{g.baseline ?? '—'}</span></AdminBadge>
+        <span className="text-ink-dim">최근 릴리스 {g.releaseList.length}개 · 자동 선택(최신 트래픽 순)</span>
+      </div>
+
+      {/* Verdict headline */}
+      {gateEnabled ? (
+        <AdminCard title={<span className="flex items-center gap-2"><ShieldCheck size={16} /> Release Gate 판정</span>}
+          subtitle="Rule 기반 · 설명 가능 · 표본 부족 시 INSUFFICIENT_DATA"
+          action={<AdminBadge tone={verdictTone(displayVerdict)}>{displayVerdict}</AdminBadge>}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <AdminStatCard label="Deployment Readiness" value={<AdminBadge tone={readinessTone(g.gate.readiness)}>{g.gate.readiness}</AdminBadge>} tone="neutral" />
+            <AdminStatCard label="Quality Score" value={quality.score == null ? '—' : String(quality.score)} tone={qualityTone(quality.status)} hint={quality.status} />
+            <AdminStatCard label="Confidence" value={<AdminBadge tone={confTone(g.confidence ?? 'INSUFFICIENT')}>{g.confidence}</AdminBadge>} tone="neutral" hint={`${num(sig.sessions)} 세션 · ${sig.browsers} 브라우저`} />
+            <AdminStatCard label="Budget" value={<AdminBadge tone={budget.overall === 'PASS' ? 'success' : budget.overall === 'FAIL' ? (enforce ? 'danger' : 'warning') : 'neutral'}>{budget.overall}</AdminBadge>} tone="neutral" hint={`${budget.failed} FAIL / ${budget.passed} PASS`} />
+          </div>
+
+          {effectiveBlocks.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1 text-xs font-semibold text-ink">Blocking Reasons</p>
+              <ul className="space-y-1 text-[11px]">
+                {effectiveBlocks.map((r, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-ink-mute">
+                    <ShieldAlert size={12} className="mt-0.5 shrink-0" />
+                    <span><span className="font-mono text-ink">{r.metric}</span> — {r.threshold} · <span className="text-ink-dim">현재</span> {r.evidence} <span className="text-ink-dim">[{r.code}]</span></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {advisoryWarnings.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1 text-xs font-semibold text-ink">Warnings{!enforce && budgetBlocks.length > 0 ? ' (budget 미강제 → 권고)' : ''}</p>
+              <ul className="space-y-1 text-[11px]">
+                {advisoryWarnings.map((r, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-ink-mute">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                    <span><span className="font-mono text-ink">{r.metric}</span> — {r.threshold} · {r.evidence} <span className="text-ink-dim">[{r.code}]</span></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {effectiveBlocks.length === 0 && advisoryWarnings.length === 0 && (
+            <p className="mt-3 text-[11px] text-ink-mute">차단·경고 사유 없음 — 예산 이내, 유의미한 회귀 없음.</p>
+          )}
+        </AdminCard>
+      ) : (
+        <AdminAlert tone="info" title="Deployment Gate 비활성화됨(판정 숨김)"><code className="font-mono text-[11px]">VITE_OBSERVABILITY_DEPLOYMENT_GATE_ENABLED=false</code> · 아래 Quality/Budget는 계속 표시됩니다.</AdminAlert>
+      )}
+
+      {/* Performance Budget */}
+      {budgetEnabled ? (
+        <AdminCard title="Performance Budget" subtitle={`절대 상한 · 초과 시 FAIL${enforce ? '(BLOCK)' : '(권고)'} · Web Vital 예산은 web.dev NI 상한`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-[11px] uppercase tracking-wider text-ink-dim">
+                {['Metric', 'value', 'budget', 'result'].map((h, i) => <th key={h} className={`px-2 py-1.5 ${i === 0 ? '' : 'text-right'}`}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {budget.items.map((it) => (
+                  <tr key={it.key} className="border-t border-line/10">
+                    <td className="px-2 py-1.5">{it.label}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{budgetVal(it)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-ink-dim">≤ {budgetLimit(it)}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      <AdminBadge tone={it.pass == null ? 'neutral' : it.pass ? 'success' : (enforce ? 'danger' : 'warning')}>
+                        {it.pass == null ? 'NO DATA' : it.pass ? 'PASS' : 'FAIL'}
+                      </AdminBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[10px] text-ink-dim">ⓘ Initial/Lazy JS 번들 예산은 빌드 시 측정값(텔레메트리 아님) — 문서 참조.</p>
+        </AdminCard>
+      ) : (
+        <AdminAlert tone="info" title="Performance Budget 비활성화됨"><code className="font-mono text-[11px]">VITE_OBSERVABILITY_PERF_BUDGET_ENABLED=false</code></AdminAlert>
+      )}
+
+      {/* Quality components + Regression summary */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <AdminCard title="Release Quality 구성요소" subtitle="가중 0..100 · 데이터 없는 항목은 무패널티">
+          <div className="flex flex-wrap gap-1.5">
+            {quality.components.filter((c) => c.score != null).map((c) => (
+              <AdminBadge key={c.key} tone={c.score! >= 0.8 ? 'success' : c.score! >= 0.5 ? 'warning' : 'danger'}>
+                {c.key} {Math.round((c.score ?? 0) * 100)}
+              </AdminBadge>
+            ))}
+          </div>
+          {quality.reasons.length > 0 && <ul className="mt-2 text-[11px] text-ink-mute">{quality.reasons.map((r, i) => <li key={i}>• {r}</li>)}</ul>}
+        </AdminCard>
+
+        <AdminCard title="Regression Budget (후보 vs 기준)" subtitle="abs+rel 임계 · confidence 포함">
+          {!g.regression ? <AdminEmpty title="비교 기준 릴리스 없음" description="baseline 릴리스가 없어 회귀를 계산할 수 없습니다." /> : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                <AdminBadge tone={g.regression.regressed > 0 ? 'danger' : 'success'}>회귀 {g.regression.regressed}</AdminBadge>
+                <AdminBadge tone={g.regression.improved > 0 ? 'success' : 'neutral'}>개선 {g.regression.improved}</AdminBadge>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-[11px] uppercase tracking-wider text-ink-dim">
+                    {['Metric', 'Δ abs', 'Δ rel', 'class', 'conf'].map((h, i) => <th key={h} className={`px-2 py-1 ${i === 0 ? '' : 'text-right'}`}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {g.regression.rows.filter((r) => r.classification !== 'INSUFFICIENT_DATA').slice(0, 12).map((r) => (
+                      <tr key={r.key} className="border-t border-line/10">
+                        <td className="px-2 py-1 text-[11px]">{r.label}</td>
+                        <td className="px-2 py-1 text-right tabular-nums text-[11px]">{r.absDelta == null ? '—' : (r.unit === 'ratio' ? `${(r.absDelta * 100).toFixed(2)}%` : Math.round(r.absDelta * 1000) / 1000)}</td>
+                        <td className="px-2 py-1 text-right tabular-nums text-[11px]">{r.relDelta == null ? '—' : `${(r.relDelta * 100).toFixed(0)}%`}</td>
+                        <td className="px-2 py-1 text-right"><AdminBadge tone={classTone(r.classification)}>{r.classification}</AdminBadge></td>
+                        <td className="px-2 py-1 text-right"><AdminBadge tone={confTone(r.confidence)}>{r.confidence}</AdminBadge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </AdminCard>
+      </div>
     </div>
   );
 }
