@@ -109,6 +109,7 @@ const OperationsDashboardV2 = lazy(() => import('@/components/admin/OperationsDa
 const OperationsGovernanceCenter = lazy(() => import('@/components/admin/OperationsGovernanceCenter'));
 const UnifiedOperationsCenter = lazy(() => import('@/components/admin/UnifiedOperationsCenter'));
 const AiMusicOsDashboard = lazy(() => import('@/components/admin/AiMusicOsDashboard'));
+const AiPlaylistBuilderDashboard = lazy(() => import('@/components/admin/AiPlaylistBuilderDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -193,7 +194,8 @@ type Tab =
   | 'ops-intelligence'
   | 'ops-governance'
   | 'ops-center'
-  | 'ai-music-os';
+  | 'ai-music-os'
+  | 'ai-playlist-builder';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -268,6 +270,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ops-governance', label: '운영 거버넌스', icon: <ShieldCheck size={14} />, superOnly: true },
   { key: 'ops-center', label: '통합 운영 센터', icon: <LayoutDashboard size={14} />, superOnly: true },
   { key: 'ai-music-os', label: 'AI Music OS', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-playlist-builder', label: 'AI Playlist Builder', icon: <Sparkles size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -314,7 +317,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -676,6 +679,7 @@ export default function AdminPage() {
           {tab === 'ops-governance' && <OperationsGovernanceCenter />}
           {tab === 'ops-center' && <UnifiedOperationsCenter />}
           {tab === 'ai-music-os' && <AiMusicOsDashboard />}
+          {tab === 'ai-playlist-builder' && <AiPlaylistBuilderDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>
