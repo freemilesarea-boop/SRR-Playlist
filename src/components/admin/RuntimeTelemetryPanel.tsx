@@ -3,7 +3,7 @@
 //   Data is THIS browser session only (client-side bounded ring buffers). Cross-user/historical
 //   aggregation requires a server sink (DB/RPC/edge) which is out of scope this phase.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, RefreshCw, Trash2, Gauge, AlertTriangle, Cpu, Timer, Database, Send } from 'lucide-react';
+import { Activity, RefreshCw, Trash2, Gauge, AlertTriangle, Cpu, Timer, Database, Send, LineChart } from 'lucide-react';
 import { AdminCard, AdminStatCard, AdminSection, AdminBadge, AdminButton, AdminEmpty, type AdminToneName } from '@/components/admin/ui';
 import {
   getTelemetrySnapshot, clearTelemetry, isTelemetryReady, getTransportHealth, getTelemetryConfig,
@@ -13,8 +13,9 @@ import {
   durationStats, topSlowByKey, durationBuckets, classifyApiDuration, type Rating, type ApiSeverity,
 } from '@/lib/telemetry/aggregate';
 import RuntimeTelemetryServerHistory from '@/components/admin/RuntimeTelemetryServerHistory';
+import ObservabilityDashboard from '@/components/admin/ObservabilityDashboard';
 
-type DashMode = 'session' | 'server';
+type DashMode = 'session' | 'server' | 'observability';
 
 function ratingTone(r: Rating): AdminToneName {
   return r === 'good' ? 'success' : r === 'needs-improvement' ? 'warning' : 'danger';
@@ -100,7 +101,13 @@ export default function RuntimeTelemetryPanel() {
           onClick={() => setMode('server')} leftIcon={<Database size={13} />}>
           서버 히스토리
         </AdminButton>
+        <AdminButton size="sm" tone={mode === 'observability' ? 'primary' : 'neutral'} variant={mode === 'observability' ? 'solid' : 'outline'}
+          onClick={() => setMode('observability')} leftIcon={<LineChart size={13} />}>
+          옵저버빌리티
+        </AdminButton>
       </div>
+
+      {mode === 'observability' && <ObservabilityDashboard />}
 
       {mode === 'server' && <RuntimeTelemetryServerHistory />}
 
