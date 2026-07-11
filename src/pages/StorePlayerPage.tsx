@@ -19,6 +19,9 @@ import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 // Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
 // StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
 import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
+// WEB-OBS-6 — 매장 플레이어 헬스 텔레메트리(관측 전용, opt-in). store 를 읽기만 하며 재생 로직/Player.tsx
+// 를 변경하지 않음. 완전 fail-open — 전송 실패가 재생에 영향 주지 않음. flag OFF 시 완전 no-op.
+import { useStorePlayerHealthTelemetry } from '@/hooks/useStorePlayerHealthTelemetry';
 // AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
 // GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
 // 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
@@ -67,6 +70,10 @@ export default function StorePlayerPage() {
   // Phase 1-3 — 매장 관제 heartbeat. /store/player 진입 시점부터 60s 주기 +
   // 트랙 변경 즉시 fire. heartbeat 실패는 silent (player 재생 절대 방해 X).
   useStoreHeartbeat({ storeId, enabled: !!storeId });
+
+  // WEB-OBS-6 — 관측 전용 헬스 텔레메트리. opt-in flag(VITE_FLEET_TELEMETRY_ENABLED) OFF 시 no-op.
+  // 재생/Queue/Scheduler/Audio 로직 무관 — store 스냅샷만 읽어 저비용 이벤트 emit.
+  useStorePlayerHealthTelemetry({ storeId, enabled: !!storeId });
 
   const current = queue[index];
   const upcoming =
