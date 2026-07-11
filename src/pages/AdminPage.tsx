@@ -103,6 +103,7 @@ const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInqui
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
 const BrandPlayerPanel = lazy(() => import('@/components/admin/BrandPlayerPanel'));
 const RuntimeTelemetryPanel = lazy(() => import('@/components/admin/RuntimeTelemetryPanel'));
+const StoreFleetDashboard = lazy(() => import('@/components/admin/StoreFleetDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -181,7 +182,8 @@ type Tab =
   | 'recommendation'
   | 'brand'
   | 'brand-player'
-  | 'runtime-telemetry';
+  | 'runtime-telemetry'
+  | 'store-fleet';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -250,6 +252,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
   { key: 'runtime-telemetry', label: '런타임 텔레메트리', icon: <Activity size={14} />, superOnly: true },
+  { key: 'store-fleet', label: '매장 Fleet 관제', icon: <Activity size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -296,7 +299,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -652,6 +655,7 @@ export default function AdminPage() {
           {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
           {tab === 'runtime-telemetry' && <RuntimeTelemetryPanel />}
+          {tab === 'store-fleet' && <StoreFleetDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>
