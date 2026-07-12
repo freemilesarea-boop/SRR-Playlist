@@ -35,6 +35,7 @@ import AdminErrorState from './AdminErrorState';
 import MemberStatsSection from './MemberStatsSection';
 import MemberGrowthSection from './MemberGrowthSection';
 import MemberFunnelSection from './MemberFunnelSection';
+import RevenueSection from './RevenueSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -118,6 +119,9 @@ export default function Dashboard() {
 
       {/* 회원 전환 퍼널 (퍼널 · 유형별 · 전환 변화 · Revenue) */}
       <MemberFunnelSection />
+
+      {/* Revenue Intelligence (Overview · Trend · Plans · Forecast · Top) */}
+      <RevenueSection />
 
       {/* 핵심 카드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
