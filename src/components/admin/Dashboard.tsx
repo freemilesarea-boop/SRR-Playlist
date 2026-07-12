@@ -34,6 +34,7 @@ import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
 import MemberStatsSection from './MemberStatsSection';
 import MemberGrowthSection from './MemberGrowthSection';
+import MemberFunnelSection from './MemberFunnelSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -114,6 +115,9 @@ export default function Dashboard() {
 
       {/* 회원 성장 (성장 KPI · 가입 추이 · 유형별 · 유료 전환 · 최근 가입) */}
       <MemberGrowthSection />
+
+      {/* 회원 전환 퍼널 (퍼널 · 유형별 · 전환 변화 · Revenue) */}
+      <MemberFunnelSection />
 
       {/* 핵심 카드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
