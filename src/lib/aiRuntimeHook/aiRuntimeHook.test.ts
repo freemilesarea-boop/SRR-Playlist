@@ -10,7 +10,7 @@ import {
   checkCurrentTrackPreservation, checkPlaybackStatePreservation, runFailOpen, evaluateGuardrails,
   buildEvidence, evaluateRollback, computeSingleStoreCertification, computeProductionCrReadiness,
   evaluateGoNoGo,
-  type IsolatedTestStore, type RuntimeHookInput, type RuntimePlaybackSnapshot, type BoundaryStateKnown,
+  type IsolatedTestStore, type RuntimeHookInput, type RuntimePlaybackSnapshot,
   type RuntimeHookFlags, type SingleStoreCertInput,
 } from './index';
 
