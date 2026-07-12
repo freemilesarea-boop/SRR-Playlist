@@ -14,9 +14,6 @@ import {
   Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -35,6 +32,7 @@ import {
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
+import MemberStatsSection from './MemberStatsSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -93,12 +91,6 @@ export default function Dashboard() {
     return <div className="p-6 text-sm text-ink-mute">대시보드 불러오는 중…</div>;
   }
 
-  const planData = [
-    { name: '무료', value: stats.free_users, color: '#737373' },
-    { name: '일반', value: stats.personal_users, color: '#a78bfa' },
-    { name: '사업자', value: stats.business_users, color: '#10b981' },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -115,6 +107,9 @@ export default function Dashboard() {
           오늘 집계 새로고침
         </button>
       </div>
+
+      {/* 회원 통계 (요약 · 결제 현황 · 플랜별 가입자 · 상태) */}
+      <MemberStatsSection />
 
       {/* 핵심 카드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -246,45 +241,6 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        <ChartPanel title="플랜별 구독자">
-          <div className="flex items-center gap-4">
-            <ResponsiveContainer width="55%" height={180}>
-              <PieChart>
-                <Pie
-                  data={planData}
-                  innerRadius={42}
-                  outerRadius={70}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {planData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: '#181818',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    fontSize: 11,
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <ul className="space-y-1.5 text-xs">
-              {planData.map((p) => (
-                <li key={p.name} className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ background: p.color }}
-                  />
-                  <span className="text-ink-mute">{p.name}</span>
-                  <span className="font-bold tabular-nums">{NUM(p.value)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </ChartPanel>
       </div>
 
       {/* Top tables */}
