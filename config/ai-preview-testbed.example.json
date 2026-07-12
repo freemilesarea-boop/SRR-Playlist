@@ -1,0 +1,23 @@
+{
+  "_comment": "AI-MUSIC-12 Preview testbed manifest EXAMPLE — secret-free template. NEVER commit real keys/URLs/store ids. Real values live ONLY in the Vercel Preview scope (not the repo). Copy to a non-committed location and fill placeholders for a future isolated-backend provisioning.",
+  "environment": "preview",
+  "project_ref_placeholder": "<preview-project-ref>",
+  "deployment_id_placeholder": "<preview-deployment-id>",
+  "testbed_enabled": false,
+  "kill_switch": true,
+  "max_sessions": 1,
+  "max_applications": 1,
+  "test_store_prefix": "INTERNAL_AI_CANARY_STORE_",
+  "fixture_prefix": "test-",
+  "expiry_days": 7,
+  "required_migrations": ["BASE", "0464", "0465", "0466", "0467", "0468", "0469", "0470"],
+  "cleanup_required": true,
+  "cleanup_tag": "AI_PREVIEW_TESTBED",
+  "production_project_ref_reject": "nsoesrvwkxqifjcxzvol",
+  "notes": [
+    "Preview scope ONLY — never change the Vercel Production scope.",
+    "Provision a separate Supabase Test Project (srr-playlist-preview) or a Supabase branch; do not reuse unrelated projects.",
+    "No production dump/data/auth/storage copy; build schema from migration source with empty data.",
+    "Backend creation, env binding, and migration apply are MANUAL and DEFERRED until cost/approval is confirmed."
+  ]
+}

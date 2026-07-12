@@ -119,6 +119,7 @@ const AiQueueAdapterLabDashboard = lazy(() => import('@/components/admin/AiQueue
 const AiRuntimeProofDashboard = lazy(() => import('@/components/admin/AiRuntimeProofDashboard'));
 const AiRuntimeBoundaryDashboard = lazy(() => import('@/components/admin/AiRuntimeBoundaryDashboard'));
 const AiPreviewTestbedDashboard = lazy(() => import('@/components/admin/AiPreviewTestbedDashboard'));
+const AiPreviewBackendDashboard = lazy(() => import('@/components/admin/AiPreviewBackendDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -213,7 +214,8 @@ type Tab =
   | 'ai-queue-adapter-lab'
   | 'ai-runtime-proof'
   | 'ai-runtime-boundary'
-  | 'ai-preview-testbed';
+  | 'ai-preview-testbed'
+  | 'ai-preview-backend';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -298,6 +300,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-runtime-proof', label: 'AI Runtime Proof', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-runtime-boundary', label: 'AI Runtime Boundary', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-preview-testbed', label: 'AI Preview Testbed', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-preview-backend', label: 'AI Preview Backend', icon: <Sparkles size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -344,7 +347,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder', 'ai-adaptive-learning', 'ai-experiments', 'ai-pilot-operations', 'ai-runtime-certification', 'ai-preview-canary', 'ai-queue-adapter-lab', 'ai-runtime-proof', 'ai-runtime-boundary', 'ai-preview-testbed'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder', 'ai-adaptive-learning', 'ai-experiments', 'ai-pilot-operations', 'ai-runtime-certification', 'ai-preview-canary', 'ai-queue-adapter-lab', 'ai-runtime-proof', 'ai-runtime-boundary', 'ai-preview-testbed', 'ai-preview-backend'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -716,6 +719,7 @@ export default function AdminPage() {
           {tab === 'ai-runtime-proof' && <AiRuntimeProofDashboard />}
           {tab === 'ai-runtime-boundary' && <AiRuntimeBoundaryDashboard />}
           {tab === 'ai-preview-testbed' && <AiPreviewTestbedDashboard />}
+          {tab === 'ai-preview-backend' && <AiPreviewBackendDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>
