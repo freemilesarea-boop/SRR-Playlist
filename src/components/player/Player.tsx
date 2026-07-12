@@ -42,6 +42,10 @@ import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 // WEB-OBS-7 — Streaming Quality: emit-only 계측 helper. 완전 fail-open · await 안 함 · 재생 흐름/제어
 // 불변(관측 전용). opt-in flag OFF 시 no-op. Player 동작(조건/return/state/retry/crossfade)을 바꾸지 않음.
 import { recordStreamingQuality } from '@/lib/streamingQuality/emit';
+// AI-MUSIC-10 — read-only runtime boundary observer (Preview, default OFF · Kill Switch ON). Fire-and-forget,
+// gated, fail-open publication of EXISTING state transitions to a SEPARATE observer store. Never controls the
+// player: with the observer disabled these calls return immediately and player behavior is identical.
+import { publishSession, publishPlayerState, publishCrossfade, publishAudioSwap, publishRecovery, publishPreload } from '@/lib/aiRuntimeBoundary';
 import { captureBusinessError } from '@/lib/sentry';
 import {
   pushRecentlyPlayed,
@@ -818,10 +822,12 @@ export default function Player() {
     // Promise 참조를 먼저 확보한 뒤 transition 을 기록해야 최신 flag 반영됨.
     const promise = recoverAudio(reason, detail);
     recordSessionTransition(`recovery:${reason}`);
+    publishRecovery('ATTEMPTING');   // AI-MUSIC-10 — read-only observe (recovery logic unchanged)
     try {
       await promise;
     } finally {
       recordSessionTransition(`recovery-end:${reason}`);
+      publishRecovery('RECOVERED');  // AI-MUSIC-10 — read-only observe: this recovery attempt ended
     }
   };
   // Phase 4-1 — 다른 handler 에서 recoverAudio 를 stable ref 로 접근
@@ -902,6 +908,28 @@ export default function Player() {
       clearMetaTimer();
     };
   }, []);
+
+  // AI-MUSIC-10 — Read-only runtime boundary observation (Preview, default OFF · Kill Switch ON).
+  // These effects are FULLY ADDITIVE and ISOLATED: they only READ existing state and call gated, fail-open
+  // publish helpers (a separate observer store). They add NO timeout/rAF/polling, touch NO existing logic, and
+  // never control the player. With the observer disabled every publish returns immediately, so player behavior
+  // is identical. paused mirrors !playing; ended/buffering/waiting/stalled are NOT observable here → false.
+  useEffect(() => { publishSession(pev2SessionRef.current); }, []);
+  useEffect(() => {
+    publishPlayerState({
+      playing, paused: !playing, ended: false, buffering: false, waiting: false, stalled: false,
+      currentTrackId: current?.id ?? null, currentIndex: index, queueLength: queue.length,
+      activeAudioIndex: activeIdx, inactiveAudioReady: preloadedNextIdRef.current !== null, nextTrackId: null,
+    });
+  }, [current?.id, index, playing, queue.length, activeIdx]);
+  useEffect(() => { publishCrossfade(crossfading ? 'ACTIVE' : 'IDLE', activeIdx); }, [crossfading, activeIdx]);
+  const boundaryPrevActiveIdxRef = useRef(activeIdx);
+  useEffect(() => {
+    if (boundaryPrevActiveIdxRef.current !== activeIdx) {
+      publishAudioSwap('COMPLETED', boundaryPrevActiveIdxRef.current, activeIdx);
+      boundaryPrevActiveIdxRef.current = activeIdx;
+    }
+  }, [activeIdx]);
 
   // 네트워크 끊김/복귀 처리 — offline 표시, online 복귀 시 재생 자동 재시도 (매장 무중단)
   useEffect(() => {
@@ -1743,6 +1771,7 @@ export default function Player() {
       });
       // WEB-OBS-7 — Preload ready emit(관측 전용).
       try { recordStreamingQuality({ event_type: 'preload_ready', trackId: nextTrack.id, business_mode: businessMode, duration_ms: Math.round(performance.now() - startedAt), outcome: 'success' }); } catch { /* fail-open */ }
+      publishPreload('READY', nextTrack.id);   // AI-MUSIC-10 — read-only observe (preload logic unchanged)
     };
     const onErrorEv = () => {
       if (done) return;
@@ -1755,6 +1784,7 @@ export default function Player() {
       });
       // WEB-OBS-7 — Preload failed emit(관측 전용).
       try { recordStreamingQuality({ event_type: 'preload_failed', trackId: nextTrack.id, business_mode: businessMode, duration_ms: Math.round(performance.now() - startedAt), outcome: 'failed', media_code: (nextAudio.error?.code ?? null) as never }); } catch { /* fail-open */ }
+      publishPreload('FAILED', nextTrack.id);   // AI-MUSIC-10 — read-only observe (preload logic unchanged)
       // preload 실패 시 idempotent guard 해제 → 다음 preload trigger 에서 재시도 가능.
       // startCrossfade 는 나중에 자체 readiness 대기로 fallback.
       preloadedNextIdRef.current = null;
