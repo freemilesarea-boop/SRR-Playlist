@@ -100,3 +100,28 @@ runs entirely in an isolated Preview environment against a single internal test 
 ## Approval required
 
 Operator + reviewer sign-off, kill switch ON at rest, and explicit activation for one session only.
+
+---
+
+## AI-MUSIC-12 status update — backend prerequisite NOT met (Hook execution still forbidden)
+
+The Single-Store Runtime Hook described in this CR **cannot be executed** yet. Its
+hard precondition — a verified isolated Preview backend (distinct Project Ref / DB /
+Auth / Storage from Production, `CONNECTED_ISOLATED`) — is **not satisfied**.
+
+AI-MUSIC-12 audited the infrastructure and concluded **`MANUAL_PROVISIONING_REQUIRED`**:
+the org is on the pro plan (branches are cost-bearing), no SRR-dedicated Preview/Test
+project exists, unrelated projects may not be reused, and no Vercel env-mutation
+capability is available. No backend was created, no env var was bound, and no migration
+was applied (Production migration head stays 0453).
+
+**Therefore, at the close of AI-MUSIC-12:**
+
+- Hook activation remains **FORBIDDEN** — kill switch ON at rest, `testbed_enabled=false`.
+- The Testbed Seeder **must not run** (no isolated backend to seed).
+- Production scope (Ref / DB / Auth / Storage / URL / Keys / env vars) is **untouched**.
+
+**Unblocking sequence:** follow the manual provisioning procedure in
+`AI-MUSIC-12-ISOLATED-PREVIEW-BACKEND.md` §4 → verify `CONNECTED_ISOLATED` → record
+readiness. Only then does AI-MUSIC-13 (Preview Testbed Seeding & Single-store Runtime
+Proof) become eligible, and only under this CR's per-session operator + reviewer sign-off.
