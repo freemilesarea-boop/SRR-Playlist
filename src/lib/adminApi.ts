@@ -745,6 +745,122 @@ export async function fetchBusinessRankings(): Promise<BusinessRankings> {
   };
 }
 
+// ── Streaming Intelligence (0477 + 기존 Observability 재사용) ──────────
+// 핵심: Store/Fleet/Playback Health · Quality · Incident · Heartbeat 계산을 새로 만들지
+// 않고 기존 WEB-OBS RPC 를 재사용한다(중복 구현 금지). 신규는 전역 재생 스냅샷/시계열만.
+// 재사용 RPC(프로덕션 존재): admin_noc_kpi · admin_now_playing_kpi · admin_stream_v2_health
+//   · admin_stream_v2_overview · admin_recent_player_errors · admin_noc_store_health_list.
+
+export interface StreamingSummary {
+  now_playing: number; online_players: number; offline_players: number; total_players: number;
+  online_cutoff_minutes: number;
+  today_streams: number; today_listen_seconds: number; avg_listen_seconds: number;
+  pb_start: number; pb_complete: number; pb_skip: number; pb_error: number;
+  heartbeat_total: number; heartbeat_sessions: number;
+  by_device: CountRow[]; by_browser: CountRow[];
+  support: Record<string, boolean>;
+  generated_at: string | null;
+}
+
+export const EMPTY_STREAMING_SUMMARY: StreamingSummary = {
+  now_playing: 0, online_players: 0, offline_players: 0, total_players: 0, online_cutoff_minutes: 5,
+  today_streams: 0, today_listen_seconds: 0, avg_listen_seconds: 0,
+  pb_start: 0, pb_complete: 0, pb_skip: 0, pb_error: 0, heartbeat_total: 0, heartbeat_sessions: 0,
+  by_device: [], by_browser: [], support: {}, generated_at: null,
+};
+
+export async function fetchStreamingSummary(): Promise<StreamingSummary> {
+  const { data, error } = await supabase.rpc('admin_streaming_summary');
+  if (error) throw error;
+  const d = (data as Partial<StreamingSummary> | null) ?? {};
+  return { ...EMPTY_STREAMING_SUMMARY, ...d, by_device: d.by_device ?? [], by_browser: d.by_browser ?? [], support: d.support ?? {} };
+}
+
+export type StreamingTimelineRange = '7d' | '30d' | '90d' | '12m';
+export interface StreamingTimelinePoint {
+  bucket: string; starts: number; completes: number; skips: number; errors: number; streams: number; listen_seconds: number;
+}
+export interface StreamingTimeline {
+  range: StreamingTimelineRange; unit: 'day' | 'month'; start: string | null; end: string | null;
+  points: StreamingTimelinePoint[]; generated_at: string | null;
+}
+const EMPTY_STREAMING_TIMELINE: StreamingTimeline = { range: '30d', unit: 'day', start: null, end: null, points: [], generated_at: null };
+export async function fetchStreamingTimeline(range: StreamingTimelineRange = '30d'): Promise<StreamingTimeline> {
+  const { data, error } = await supabase.rpc('admin_streaming_timeline', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<StreamingTimeline> | null) ?? {};
+  return { ...EMPTY_STREAMING_TIMELINE, ...d, points: d.points ?? [] };
+}
+
+// ── 기존 Observability RPC 재사용 (재계산 없음, 값 그대로 노출) ──────────
+// 각 fetcher 는 오류를 던지고 컴포넌트가 격리한다. 반환 형태는 원 RPC 문서 기준(loose).
+
+/** NOC/Fleet KPI — admin_noc_kpi() (0385). */
+export interface NocKpi {
+  total_stores: number; online_stores: number; offline_stores: number;
+  emergency_active: number; policy_failed: number; idle_24h: number;
+  heartbeat_errors: number; player_errors: number; today_incidents: number; today_recovered: number;
+  computed_at: string | null;
+}
+export async function fetchNocKpi(): Promise<NocKpi | null> {
+  const { data, error } = await supabase.rpc('admin_noc_kpi');
+  if (error) throw error;
+  return (data as NocKpi | null) ?? null;
+}
+
+/** Now Playing KPI — admin_now_playing_kpi() (0376). */
+export interface NowPlayingKpi {
+  total: number; playing: number; paused: number; stopped: number; offline: number;
+  error_count: number; recent_track_changes_5m: number; recent_track_changes_1m: number; computed_at: string | null;
+}
+export async function fetchNowPlayingKpi(): Promise<NowPlayingKpi | null> {
+  const { data, error } = await supabase.rpc('admin_now_playing_kpi');
+  if (error) throw error;
+  return (data as NowPlayingKpi | null) ?? null;
+}
+
+/** Streaming v2 Health — admin_stream_v2_health(scope,id,days) (0413). */
+export interface StreamV2Health {
+  overall_health: number | null; verified_rate: number | null; eligible_rate: number | null;
+  heartbeat_success_rate: number | null; fraud_rate: number | null; rejected_rate: number | null;
+  top_rejection_reasons?: Array<{ reason: string; count: number }>;
+}
+export async function fetchStreamV2Health(days = 30): Promise<StreamV2Health | null> {
+  const { data, error } = await supabase.rpc('admin_stream_v2_health', { p_scope: 'global', p_id: null, p_days: days });
+  if (error) throw error;
+  return (data as StreamV2Health | null) ?? null;
+}
+
+/** Streaming v2 Overview 퍼널 — admin_stream_v2_overview(days) (0413). */
+export interface StreamV2Overview {
+  raw: number; play_30s: number; verified: number; eligible: number; settlement_eligible: number;
+  rejected_breakdown?: Array<{ reason: string; count: number }>;
+  player_type_breakdown?: Array<{ player_type: string; count: number }>;
+}
+export async function fetchStreamV2Overview(days = 30): Promise<StreamV2Overview | null> {
+  const { data, error } = await supabase.rpc('admin_stream_v2_overview', { p_days: days });
+  if (error) throw error;
+  return (data as StreamV2Overview | null) ?? null;
+}
+
+/** 최근 Player 오류 — admin_recent_player_errors(days,limit) (0253). */
+export interface PlayerErrorRow { created_at?: string; track_id?: string; message?: string; [k: string]: unknown }
+export async function fetchRecentPlayerErrors(days = 30, limit = 20): Promise<PlayerErrorRow[]> {
+  const { data, error } = await supabase.rpc('admin_recent_player_errors', { p_days: days, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PlayerErrorRow[];
+}
+
+/** NOC 매장 Health 랭킹 — admin_noc_store_health_list(...) (0385). */
+export interface NocStoreHealthRow { store_id?: string; store_name?: string; score?: number; health_tone?: string; [k: string]: unknown }
+export async function fetchNocStoreHealth(limit = 20): Promise<NocStoreHealthRow[]> {
+  const { data, error } = await supabase.rpc('admin_noc_store_health_list', {
+    p_limit: limit, p_min_score: null, p_max_score: null, p_franchise_id: null,
+  });
+  if (error) throw error;
+  return (data ?? []) as NocStoreHealthRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
