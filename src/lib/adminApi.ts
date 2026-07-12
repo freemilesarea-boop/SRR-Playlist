@@ -564,6 +564,110 @@ export async function fetchRevenueForecast(): Promise<RevenueForecast> {
   return { ...EMPTY_REVENUE_FORECAST, ...((data as Partial<RevenueForecast> | null) ?? {}) };
 }
 
+// ── Artist Intelligence (0475) ────────────────────────────────────
+// 아티스트 Lifecycle(가입→승인→QC→유통→스트리밍→정산) 분석. 실제 데이터만 사용,
+// 없는 데이터는 supported=false. 정의는 0475 migration 주석 참고. 비율/단조 검증은
+// artistIntel.ts 순수 함수.
+
+export interface ArtistSummary {
+  total_artists: number; today_signups: number; month_signups: number;
+  pending: number; approved: number; rejected: number; active_artists: number;
+  first_upload: number; distributed: number; streaming: number;
+  settled: number; settle_paid: number;
+  avg_qc_score: number; avg_approval_hours: number;
+  generated_at: string | null;
+}
+
+export const EMPTY_ARTIST_SUMMARY: ArtistSummary = {
+  total_artists: 0, today_signups: 0, month_signups: 0, pending: 0, approved: 0,
+  rejected: 0, active_artists: 0, first_upload: 0, distributed: 0, streaming: 0,
+  settled: 0, settle_paid: 0, avg_qc_score: 0, avg_approval_hours: 0, generated_at: null,
+};
+
+export async function fetchArtistSummary(): Promise<ArtistSummary> {
+  const { data, error } = await supabase.rpc('admin_artist_summary');
+  if (error) throw error;
+  return { ...EMPTY_ARTIST_SUMMARY, ...((data as Partial<ArtistSummary> | null) ?? {}) };
+}
+
+export interface ArtistFunnel { steps: FunnelStep[]; generated_at: string | null }
+
+export async function fetchArtistFunnel(): Promise<ArtistFunnel> {
+  const { data, error } = await supabase.rpc('admin_artist_funnel');
+  if (error) throw error;
+  const d = (data as Partial<ArtistFunnel> | null) ?? {};
+  return { steps: d.steps ?? [], generated_at: d.generated_at ?? null };
+}
+
+export type ArtistGrowthRange = '7d' | '30d' | '90d' | '12m';
+
+export interface ArtistGrowthPoint {
+  bucket: string; new_artists: number; uploads: number; qc_passed: number;
+  distributed: number; streams: number; settlements: number;
+}
+
+export interface ArtistGrowth {
+  range: ArtistGrowthRange; unit: 'day' | 'month'; start: string | null; end: string | null;
+  points: ArtistGrowthPoint[]; generated_at: string | null;
+}
+
+const EMPTY_ARTIST_GROWTH: ArtistGrowth = {
+  range: '30d', unit: 'day', start: null, end: null, points: [], generated_at: null,
+};
+
+export async function fetchArtistGrowth(range: ArtistGrowthRange = '30d'): Promise<ArtistGrowth> {
+  const { data, error } = await supabase.rpc('admin_artist_growth', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<ArtistGrowth> | null) ?? {};
+  return { ...EMPTY_ARTIST_GROWTH, ...d, points: d.points ?? [] };
+}
+
+export interface CountRow { key: string; count: number }
+export interface ArtistBreakdown {
+  qc: {
+    approved: number; pending: number; queue_open: number; queue_resolved: number;
+    avg_score: number; avg_approval_hours: number; proc_time_supported: boolean;
+    top_reasons: Array<{ reason: string; count: number }>;
+    by_month: Array<{ bucket: string; approved: number }>;
+  };
+  tracks: {
+    total: number; today: number; month: number; pending_dist: number; released: number;
+    hidden: number; removed: number; avg_duration: number;
+    genre_dist: CountRow[]; bpm_dist: CountRow[]; bpm_coverage: number; key_supported: boolean;
+  };
+  streaming: { streamed_artists: number; no_stream_artists: number };
+  settlement: {
+    sum_net: number; sum_final_payout: number; sum_carryover: number;
+    held: number; pending: number; carried_over: number; paid: number;
+    avg_net: number; this_month: number; payout_supported: boolean;
+  };
+  support: Record<string, boolean>;
+  generated_at: string | null;
+}
+
+export async function fetchArtistBreakdown(): Promise<ArtistBreakdown> {
+  const { data, error } = await supabase.rpc('admin_artist_breakdown');
+  if (error) throw error;
+  return data as ArtistBreakdown;
+}
+
+export interface ArtistRankRow { artist?: string; genre?: string; value?: number; created_at?: string }
+export interface ArtistRankings {
+  top_streaming: ArtistRankRow[]; top_settlement: ArtistRankRow[]; top_upload: ArtistRankRow[];
+  top_genre: ArtistRankRow[]; top_new: ArtistRankRow[]; generated_at: string | null;
+}
+
+export async function fetchArtistRankings(): Promise<ArtistRankings> {
+  const { data, error } = await supabase.rpc('admin_artist_rankings');
+  if (error) throw error;
+  const d = (data as Partial<ArtistRankings> | null) ?? {};
+  return {
+    top_streaming: d.top_streaming ?? [], top_settlement: d.top_settlement ?? [],
+    top_upload: d.top_upload ?? [], top_genre: d.top_genre ?? [], top_new: d.top_new ?? [],
+    generated_at: d.generated_at ?? null,
+  };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
