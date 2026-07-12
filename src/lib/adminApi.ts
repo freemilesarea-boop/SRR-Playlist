@@ -246,6 +246,114 @@ export async function fetchMemberStats(): Promise<MemberStats> {
   return { ...EMPTY_MEMBER_STATS, ...((data as Partial<MemberStats> | null) ?? {}) };
 }
 
+// ── 회원 성장 대시보드 (0472) ─────────────────────────────────────
+// 성장 KPI / 시계열 / 최근 가입 — admin_member_stats(0471) 를 확장한다.
+// 정의는 admin_member_stats 와 일관(0472 migration 주석 참고). 오늘/이번달 등
+// 캘린더 경계는 KST(Asia/Seoul) 기준. 무료→유료 전환 이력 로그는 스키마에
+// 부재 → free_to_paid_history_supported=false 로 명시(임의 추정 금지).
+
+export type MomStatus = 'normal' | 'new_growth' | 'flat';
+
+export interface MemberGrowthKpis {
+  today_signups: number;
+  last_7d: number;
+  last_30d: number;
+  this_month: number;
+  last_month: number;
+  mom_growth_rate: number | null;   // 지난달 0 이면 null (Infinity/NaN 금지)
+  mom_status: MomStatus;
+  active_paid_members: number;
+  total_valid_members: number;
+  unpaid_users: number;
+  paid_conversion_rate: number;
+  general_conversion_rate: number;
+  business_conversion_rate: number;
+  general_total: number;
+  general_paid: number;
+  business_total: number;
+  business_paid: number;
+  last30_signups: number;
+  last30_paid: number;
+  last30_conversion_rate: number;
+  free_to_paid_history_supported: boolean;
+  free_to_paid_count: number | null;
+  generated_at: string | null;
+}
+
+export const EMPTY_MEMBER_GROWTH_KPIS: MemberGrowthKpis = {
+  today_signups: 0, last_7d: 0, last_30d: 0, this_month: 0, last_month: 0,
+  mom_growth_rate: null, mom_status: 'flat',
+  active_paid_members: 0, total_valid_members: 0, unpaid_users: 0,
+  paid_conversion_rate: 0, general_conversion_rate: 0, business_conversion_rate: 0,
+  general_total: 0, general_paid: 0, business_total: 0, business_paid: 0,
+  last30_signups: 0, last30_paid: 0, last30_conversion_rate: 0,
+  free_to_paid_history_supported: false, free_to_paid_count: null,
+  generated_at: null,
+};
+
+export async function fetchMemberGrowthKpis(): Promise<MemberGrowthKpis> {
+  const { data, error } = await supabase.rpc('admin_member_growth_kpis');
+  if (error) throw error;
+  return { ...EMPTY_MEMBER_GROWTH_KPIS, ...((data as Partial<MemberGrowthKpis> | null) ?? {}) };
+}
+
+export type MemberGrowthRange = '7d' | '30d' | '90d' | '12m';
+
+export interface MemberGrowthPoint {
+  bucket: string;        // 'YYYY-MM-DD' (day) 또는 월 첫날 (month)
+  new_total: number;
+  new_general: number;
+  new_business: number;
+  new_artist: number;
+  new_unknown: number;
+  cumulative: number;    // 해당 버킷 종료 시점까지의 누적 회원 수
+}
+
+export interface MemberGrowthSeries {
+  range: MemberGrowthRange;
+  unit: 'day' | 'month';
+  start: string | null;
+  end: string | null;
+  total_new: number;
+  unknown_total: number;
+  points: MemberGrowthPoint[];
+  generated_at: string | null;
+}
+
+const EMPTY_GROWTH_SERIES: MemberGrowthSeries = {
+  range: '30d', unit: 'day', start: null, end: null,
+  total_new: 0, unknown_total: 0, points: [], generated_at: null,
+};
+
+export async function fetchMemberGrowthSeries(range: MemberGrowthRange = '30d'): Promise<MemberGrowthSeries> {
+  const { data, error } = await supabase.rpc('admin_member_growth_series', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<MemberGrowthSeries> | null) ?? {};
+  return { ...EMPTY_GROWTH_SERIES, ...d, points: d.points ?? [] };
+}
+
+export type RecentMemberPayStatus = 'paid' | 'unpaid' | 'free';
+export type RecentMemberStatus = 'active' | 'email_unverified' | 'disabled' | 'withdrawn';
+
+export interface RecentMember {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  account_type: string | null;
+  membership_tier: string;
+  subscription_type: string;
+  pay_status: RecentMemberPayStatus;
+  email_verified: boolean;
+  status: RecentMemberStatus;
+  created_at: string;
+}
+
+export async function fetchRecentMembers(limit = 10): Promise<RecentMember[]> {
+  const { data, error } = await supabase.rpc('admin_recent_members', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RecentMember[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
