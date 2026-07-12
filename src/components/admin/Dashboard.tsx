@@ -37,6 +37,7 @@ import MemberGrowthSection from './MemberGrowthSection';
 import MemberFunnelSection from './MemberFunnelSection';
 import RevenueSection from './RevenueSection';
 import ArtistSection from './ArtistSection';
+import BusinessSection from './BusinessSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -126,6 +127,9 @@ export default function Dashboard() {
 
       {/* Artist Intelligence (Overview · Growth · QC · Tracks · Streaming · Settlement · Rankings) */}
       <ArtistSection />
+
+      {/* Business Intelligence (Overview · Growth · Brands · Stores · Players · Contracts · Health · Rankings) */}
+      <BusinessSection />
 
       {/* 핵심 카드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">

@@ -668,6 +668,83 @@ export async function fetchArtistRankings(): Promise<ArtistRankings> {
   };
 }
 
+// ── Business Intelligence (0476) ──────────────────────────────────
+// 사업자/브랜드/매장/Player/계약/운영 Lifecycle 분석. 희소 데이터 — 실제 값만
+// 사용하고 없는 데이터는 supported=false. 정의는 0476 migration 주석 참고.
+
+export interface BusinessSummary {
+  total_business: number; today_signups: number; month_signups: number;
+  active_business: number; inactive_business: number;
+  contract_supported: boolean; monthly_fee_default: number;
+  total_brands: number; active_brands: number; total_franchises: number; total_enterprises: number;
+  total_stores: number; business_stores: number; today_new_stores: number; month_new_stores: number;
+  total_players: number; online_players: number; offline_players: number;
+  heartbeat_players: number; playing_players: number; today_new_players: number;
+  online_cutoff_minutes: number; generated_at: string | null;
+}
+
+export const EMPTY_BUSINESS_SUMMARY: BusinessSummary = {
+  total_business: 0, today_signups: 0, month_signups: 0, active_business: 0, inactive_business: 0,
+  contract_supported: false, monthly_fee_default: 0, total_brands: 0, active_brands: 0,
+  total_franchises: 0, total_enterprises: 0, total_stores: 0, business_stores: 0,
+  today_new_stores: 0, month_new_stores: 0, total_players: 0, online_players: 0, offline_players: 0,
+  heartbeat_players: 0, playing_players: 0, today_new_players: 0, online_cutoff_minutes: 5, generated_at: null,
+};
+
+export async function fetchBusinessSummary(): Promise<BusinessSummary> {
+  const { data, error } = await supabase.rpc('admin_business_summary');
+  if (error) throw error;
+  return { ...EMPTY_BUSINESS_SUMMARY, ...((data as Partial<BusinessSummary> | null) ?? {}) };
+}
+
+export interface BusinessFunnel { steps: FunnelStep[]; generated_at: string | null }
+export async function fetchBusinessFunnel(): Promise<BusinessFunnel> {
+  const { data, error } = await supabase.rpc('admin_business_funnel');
+  if (error) throw error;
+  const d = (data as Partial<BusinessFunnel> | null) ?? {};
+  return { steps: d.steps ?? [], generated_at: d.generated_at ?? null };
+}
+
+export type BusinessGrowthRange = '7d' | '30d' | '90d' | '12m';
+export interface BusinessGrowthPoint { bucket: string; new_business: number; new_brands: number; new_stores: number; new_players: number }
+export interface BusinessGrowth {
+  range: BusinessGrowthRange; unit: 'day' | 'month'; start: string | null; end: string | null;
+  points: BusinessGrowthPoint[]; generated_at: string | null;
+}
+const EMPTY_BUSINESS_GROWTH: BusinessGrowth = { range: '30d', unit: 'day', start: null, end: null, points: [], generated_at: null };
+export async function fetchBusinessGrowth(range: BusinessGrowthRange = '30d'): Promise<BusinessGrowth> {
+  const { data, error } = await supabase.rpc('admin_business_growth', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<BusinessGrowth> | null) ?? {};
+  return { ...EMPTY_BUSINESS_GROWTH, ...d, points: d.points ?? [] };
+}
+
+export interface HealthComponent { key: string; label: string; score: number | null; available: boolean; detail: string }
+export interface BusinessHealth {
+  components: HealthComponent[]; excluded: string[]; players: number; generated_at: string | null;
+}
+export async function fetchBusinessHealth(): Promise<BusinessHealth> {
+  const { data, error } = await supabase.rpc('admin_business_health');
+  if (error) throw error;
+  const d = (data as Partial<BusinessHealth> | null) ?? {};
+  return { components: d.components ?? [], excluded: d.excluded ?? [], players: d.players ?? 0, generated_at: d.generated_at ?? null };
+}
+
+export interface BusinessRankRow { name?: string; value?: number; last_seen?: string | null }
+export interface BusinessRankings {
+  top_brand_stores: BusinessRankRow[]; top_brand_players: BusinessRankRow[]; recent_players: BusinessRankRow[];
+  support: Record<string, boolean>; generated_at: string | null;
+}
+export async function fetchBusinessRankings(): Promise<BusinessRankings> {
+  const { data, error } = await supabase.rpc('admin_business_rankings');
+  if (error) throw error;
+  const d = (data as Partial<BusinessRankings> | null) ?? {};
+  return {
+    top_brand_stores: d.top_brand_stores ?? [], top_brand_players: d.top_brand_players ?? [],
+    recent_players: d.recent_players ?? [], support: d.support ?? {}, generated_at: d.generated_at ?? null,
+  };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
