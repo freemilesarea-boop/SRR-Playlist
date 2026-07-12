@@ -193,6 +193,59 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   return { ...EMPTY_DASHBOARD_STATS, ...((data as Partial<DashboardStats> | null) ?? {}) };
 }
 
+// ── 회원 통계 (admin_member_stats) ────────────────────────────────
+// 총 회원(내부 admin 제외)을 3개의 정확한 파티션으로 집계한다:
+//   구분(account_type) · 결제(유료/무료/미결제) · 상태(활성/이메일미인증/정지/탈퇴).
+// 설계상 각 파티션 합계 = total_members. 자세한 집계 기준은 0471 migration 참고.
+export interface MemberStats {
+  total_members: number;
+  // ① 회원 구분
+  member_general: number;
+  member_business: number;
+  member_artist: number;
+  // ② 결제 현황
+  paid_users: number;
+  free_users: number;
+  unpaid_users: number;
+  // ③ 플랜별 가입자 (미결제 제외)
+  plan_free: number;
+  plan_individual: number;
+  plan_business: number;
+  // ④ 회원 상태
+  status_active: number;
+  status_email_unverified: number;
+  status_disabled: number;
+  status_withdrawn: number;
+  has_dormant_model: boolean;
+  generated_at: string | null;
+}
+
+export const EMPTY_MEMBER_STATS: MemberStats = {
+  total_members: 0,
+  member_general: 0,
+  member_business: 0,
+  member_artist: 0,
+  paid_users: 0,
+  free_users: 0,
+  unpaid_users: 0,
+  plan_free: 0,
+  plan_individual: 0,
+  plan_business: 0,
+  status_active: 0,
+  status_email_unverified: 0,
+  status_disabled: 0,
+  status_withdrawn: 0,
+  has_dormant_model: false,
+  generated_at: null,
+};
+
+export async function fetchMemberStats(): Promise<MemberStats> {
+  const { data, error } = await supabase.rpc('admin_member_stats');
+  if (error) throw error;
+  // RPC null 이어도 렌더가 깨지지 않도록 기본값 병합.
+  return { ...EMPTY_MEMBER_STATS, ...((data as Partial<MemberStats> | null) ?? {}) };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
