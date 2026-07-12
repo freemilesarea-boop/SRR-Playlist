@@ -354,6 +354,85 @@ export async function fetchRecentMembers(limit = 10): Promise<RecentMember[]> {
   return (data ?? []) as RecentMember[];
 }
 
+// ── 회원 전환 퍼널 (0473) ─────────────────────────────────────────
+// 방문→가입→인증→로그인→프로필→첫재생→무료→유료→사업자→매장→Player→Streaming
+// 각 step 은 실제 데이터 근거가 있을 때만 supported=true. 없는 데이터는 추정하지
+// 않고 supported=false(count=null)로 반환한다. 전환율/이탈률/단조성 검증은
+// memberFunnel.ts 순수 함수에서 계산. 자세한 근거는 0473 migration 주석 참고.
+
+export interface FunnelStep {
+  key: string;
+  label: string;
+  count: number | null;    // supported=false 이면 null
+  supported: boolean;
+  note?: string;
+}
+
+export type MemberFunnelRange = 'all' | 'today' | '7d' | '30d' | '90d' | '12m';
+
+export interface MemberFunnel {
+  range: MemberFunnelRange;
+  cohort_total: number;
+  steps: FunnelStep[];         // 메인 획득→수익화 체인 (단조)
+  engagement: FunnelStep[];    // 참여/운영 지표 (subset 아님 또는 미지원)
+  generated_at: string | null;
+}
+
+const EMPTY_FUNNEL: MemberFunnel = { range: 'all', cohort_total: 0, steps: [], engagement: [], generated_at: null };
+
+export async function fetchMemberFunnel(range: MemberFunnelRange = 'all'): Promise<MemberFunnel> {
+  const { data, error } = await supabase.rpc('admin_member_funnel', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<MemberFunnel> | null) ?? {};
+  return { ...EMPTY_FUNNEL, ...d, steps: d.steps ?? [], engagement: d.engagement ?? [] };
+}
+
+export interface MemberFunnelBreakdown {
+  segments: { artist: FunnelStep[]; business: FunnelStep[]; general: FunnelStep[] };
+  revenue: FunnelStep[];
+  generated_at: string | null;
+}
+
+export async function fetchMemberFunnelBreakdown(): Promise<MemberFunnelBreakdown> {
+  const { data, error } = await supabase.rpc('admin_member_funnel_breakdown');
+  if (error) throw error;
+  const d = (data as Partial<MemberFunnelBreakdown> | null) ?? {};
+  return {
+    segments: {
+      artist: d.segments?.artist ?? [],
+      business: d.segments?.business ?? [],
+      general: d.segments?.general ?? [],
+    },
+    revenue: d.revenue ?? [],
+    generated_at: d.generated_at ?? null,
+  };
+}
+
+export interface FunnelHistoryStep {
+  key: string;
+  label: string;
+  this: number;
+  prev: number;
+}
+
+export interface MemberFunnelHistory {
+  this_month_start: string | null;
+  prev_month_start: string | null;
+  steps: FunnelHistoryStep[];
+  generated_at: string | null;
+}
+
+const EMPTY_HISTORY: MemberFunnelHistory = {
+  this_month_start: null, prev_month_start: null, steps: [], generated_at: null,
+};
+
+export async function fetchMemberFunnelHistory(): Promise<MemberFunnelHistory> {
+  const { data, error } = await supabase.rpc('admin_member_funnel_history');
+  if (error) throw error;
+  const d = (data as Partial<MemberFunnelHistory> | null) ?? {};
+  return { ...EMPTY_HISTORY, ...d, steps: d.steps ?? [] };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
