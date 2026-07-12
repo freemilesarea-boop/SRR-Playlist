@@ -113,6 +113,7 @@ const AiPlaylistBuilderDashboard = lazy(() => import('@/components/admin/AiPlayl
 const AiAdaptiveLearningDashboard = lazy(() => import('@/components/admin/AiAdaptiveLearningDashboard'));
 const AiExperimentsDashboard = lazy(() => import('@/components/admin/AiExperimentsDashboard'));
 const AiPilotOperationsDashboard = lazy(() => import('@/components/admin/AiPilotOperationsDashboard'));
+const AiRuntimeCertificationDashboard = lazy(() => import('@/components/admin/AiRuntimeCertificationDashboard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -201,7 +202,8 @@ type Tab =
   | 'ai-playlist-builder'
   | 'ai-adaptive-learning'
   | 'ai-experiments'
-  | 'ai-pilot-operations';
+  | 'ai-pilot-operations'
+  | 'ai-runtime-certification';
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
@@ -280,6 +282,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'ai-adaptive-learning', label: 'AI Adaptive Learning', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-experiments', label: 'AI Experiments', icon: <Sparkles size={14} />, superOnly: true },
   { key: 'ai-pilot-operations', label: 'AI Pilot Operations', icon: <Sparkles size={14} />, superOnly: true },
+  { key: 'ai-runtime-certification', label: 'AI Runtime Certification', icon: <Sparkles size={14} />, superOnly: true },
 ];
 
 /** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
@@ -326,7 +329,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
       'upload-integrity',
     ],
   },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder', 'ai-adaptive-learning', 'ai-experiments', 'ai-pilot-operations'] },
+  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins', 'runtime-telemetry', 'store-fleet', 'streaming-quality', 'ops-intelligence', 'ops-governance', 'ops-center', 'ai-music-os', 'ai-playlist-builder', 'ai-adaptive-learning', 'ai-experiments', 'ai-pilot-operations', 'ai-runtime-certification'] },
 ];
 
 function groupOf(tab: Tab): Group {
@@ -692,6 +695,7 @@ export default function AdminPage() {
           {tab === 'ai-adaptive-learning' && <AiAdaptiveLearningDashboard />}
           {tab === 'ai-experiments' && <AiExperimentsDashboard />}
           {tab === 'ai-pilot-operations' && <AiPilotOperationsDashboard />}
+          {tab === 'ai-runtime-certification' && <AiRuntimeCertificationDashboard />}
         </Suspense>
       </AdminErrorBoundary>
     </div>

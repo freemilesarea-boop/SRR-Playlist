@@ -22,6 +22,7 @@ import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
 // WEB-OBS-6 — 매장 플레이어 헬스 텔레메트리(관측 전용, opt-in). store 를 읽기만 하며 재생 로직/Player.tsx
 // 를 변경하지 않음. 완전 fail-open — 전송 실패가 재생에 영향 주지 않음. flag OFF 시 완전 no-op.
 import { useStorePlayerHealthTelemetry } from '@/hooks/useStorePlayerHealthTelemetry';
+import { useShadowResolutionProbe } from '@/hooks/useShadowResolutionProbe';
 // AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
 // GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
 // 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
@@ -74,6 +75,15 @@ export default function StorePlayerPage() {
   // WEB-OBS-6 — 관측 전용 헬스 텔레메트리. opt-in flag(VITE_FLEET_TELEMETRY_ENABLED) OFF 시 no-op.
   // 재생/Queue/Scheduler/Audio 로직 무관 — store 스냅샷만 읽어 저비용 이벤트 emit.
   useStorePlayerHealthTelemetry({ storeId, enabled: !!storeId });
+
+  // AI-MUSIC-6 — Shadow Resolution Probe. 기본 OFF(모든 flag OFF 시 no-op). 기존 Resolver 가 확정한 playlist
+  // 결과를 사후 관찰만 하며, fire-and-forget·fail-open. setQueue/Queue/재생/폴링 무관 — 실제 재생에 사용 안함.
+  useShadowResolutionProbe({
+    storeId,
+    playlistId: playlist?.id ?? null,
+    source: franchiseSync.policy?.has_franchise_policy ? 'BRAND_ENTERPRISE' : 'STORE_PLAYLIST',
+    enabled: !!storeId,
+  });
 
   const current = queue[index];
   const upcoming =
