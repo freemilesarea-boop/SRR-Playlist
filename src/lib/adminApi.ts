@@ -861,6 +861,35 @@ export async function fetchNocStoreHealth(limit = 20): Promise<NocStoreHealthRow
   return (data ?? []) as NocStoreHealthRow[];
 }
 
+// ── Mission Control (0478 + 전면 재사용) ──────────────────────────
+// Mission Control 은 기존 Dashboard 의 통합 레이어다. Overview/Health/Timeline 은
+// 기존 fetcher(fetchMemberGrowthKpis·fetchRevenueKpis·fetchArtistSummary·
+// fetchBusinessSummary/Health·fetchStreamingSummary·fetchNocKpi·fetchNowPlayingKpi
+// ·fetchStreamV2Health 등)를 병렬 재사용한다(중복 KPI 계산 없음). 신규는 교차 도메인
+// 이벤트 피드(admin_mission_feed) 하나뿐. Alert 는 기존 admin_noc_active_alerts 재사용.
+
+export type MissionFeedKind =
+  | 'member_signup' | 'business_signup' | 'artist_signup' | 'artist_approved'
+  | 'qc_passed' | 'track_released' | 'subscription' | 'payment_paid' | 'settlement' | 'store_created';
+
+export interface MissionFeedItem { kind: MissionFeedKind; label: string; at: string; ref: string }
+export interface MissionFeed { items: MissionFeedItem[]; limit: number; generated_at: string | null }
+
+export async function fetchMissionFeed(limit = 30): Promise<MissionFeed> {
+  const { data, error } = await supabase.rpc('admin_mission_feed', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as Partial<MissionFeed> | null) ?? {};
+  return { items: d.items ?? [], limit: d.limit ?? limit, generated_at: d.generated_at ?? null };
+}
+
+/** Alert Center — 기존 admin_noc_active_alerts(limit,severity) 재사용. */
+export interface NocAlertRow { id?: string; title?: string; message?: string; severity?: string; created_at?: string; store_name?: string; category?: string; [k: string]: unknown }
+export async function fetchNocActiveAlerts(limit = 30, severity: string | null = null): Promise<NocAlertRow[]> {
+  const { data, error } = await supabase.rpc('admin_noc_active_alerts', { p_limit: limit, p_severity: severity });
+  if (error) throw error;
+  return (data ?? []) as NocAlertRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

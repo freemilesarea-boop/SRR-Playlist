@@ -39,6 +39,7 @@ import RevenueSection from './RevenueSection';
 import ArtistSection from './ArtistSection';
 import BusinessSection from './BusinessSection';
 import StreamingSection from './StreamingSection';
+import MissionControlSection from './MissionControlSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -113,6 +114,9 @@ export default function Dashboard() {
           오늘 집계 새로고침
         </button>
       </div>
+
+      {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
+      <MissionControlSection />
 
       {/* 회원 통계 (요약 · 결제 현황 · 플랜별 가입자 · 상태) */}
       <MemberStatsSection />
