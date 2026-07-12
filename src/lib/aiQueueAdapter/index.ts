@@ -11,4 +11,8 @@ export { evaluateBoundary } from './boundary';
 export { arbitrate } from './arbitration';
 export { evaluateFreshness, isFresh } from './freshness';
 export { createPending, canPendingTransition, transitionPending } from './pending';
+export { preserveCurrentTrack, preservePlaybackState } from './preservation';
+export { runHarness, allInvariantsHold } from './harness';
+export { simulateRace, type RaceInput } from './race';
+export { computeAdapterCertification, computePreviewHookReadiness } from './certification';
 export { getAiQueueAdapterConfig, __resetAiQueueAdapterConfig, type AiQueueAdapterConfig } from './config';
