@@ -433,6 +433,137 @@ export async function fetchMemberFunnelHistory(): Promise<MemberFunnelHistory> {
   return { ...EMPTY_HISTORY, ...d, steps: d.steps ?? [] };
 }
 
+// ── Revenue Intelligence (0474) ───────────────────────────────────
+// SaaS Revenue KPI(MRR/ARR/ARPU/ARPPU/Growth/Churn) + Trend + Breakdown + Forecast.
+// 매출 원천 = payment_orders(status=paid, refunded_at null, amount) — 기존
+// admin_daily_series 관례와 동일. 기존 admin_revenue_summary 는 무변경(별도 RPC).
+// 비율/정합성/포맷은 revenueIntel.ts 순수 함수. 정의는 0474 migration 주석 참고.
+
+export interface RevenueKpis {
+  today_revenue: number; yesterday_revenue: number; week_revenue: number;
+  month_revenue: number; last_month_revenue: number; year_revenue: number;
+  total_revenue: number; month_forecast: number;
+  mrr: number; arr: number;
+  revenue_growth_this: number; revenue_growth_prev: number;
+  subs_this_month: number; subs_last_month: number;
+  arpu: number; arppu_numerator: number; active_members: number; paying_users: number;
+  avg_payment_amount: number; paid_count: number;
+  new_payments: number; renewal_payments: number;
+  failed_payments: number; refund_count: number; refund_amount: number;
+  cancel_count: number; promo_count: number; unpaid_users: number;
+  active_subscriptions: number; ending_subscriptions: number; canceled_subscriptions: number;
+  generated_at: string | null;
+}
+
+export const EMPTY_REVENUE_KPIS: RevenueKpis = {
+  today_revenue: 0, yesterday_revenue: 0, week_revenue: 0, month_revenue: 0,
+  last_month_revenue: 0, year_revenue: 0, total_revenue: 0, month_forecast: 0,
+  mrr: 0, arr: 0, revenue_growth_this: 0, revenue_growth_prev: 0,
+  subs_this_month: 0, subs_last_month: 0, arpu: 0, arppu_numerator: 0,
+  active_members: 0, paying_users: 0, avg_payment_amount: 0, paid_count: 0,
+  new_payments: 0, renewal_payments: 0, failed_payments: 0, refund_count: 0,
+  refund_amount: 0, cancel_count: 0, promo_count: 0, unpaid_users: 0,
+  active_subscriptions: 0, ending_subscriptions: 0, canceled_subscriptions: 0,
+  generated_at: null,
+};
+
+export async function fetchRevenueKpis(): Promise<RevenueKpis> {
+  const { data, error } = await supabase.rpc('admin_revenue_kpis');
+  if (error) throw error;
+  return { ...EMPTY_REVENUE_KPIS, ...((data as Partial<RevenueKpis> | null) ?? {}) };
+}
+
+export type RevenueTrendRange = '7d' | '30d' | '90d' | '12m';
+
+export interface RevenueTrendPoint {
+  bucket: string;
+  revenue: number; payments: number;
+  new_payments: number; renewal_payments: number;
+  refunds: number; cancels: number; active_subs: number;
+}
+
+export interface RevenueTrend {
+  range: RevenueTrendRange; unit: 'day' | 'month';
+  start: string | null; end: string | null;
+  points: RevenueTrendPoint[]; total_revenue: number; generated_at: string | null;
+}
+
+const EMPTY_REVENUE_TREND: RevenueTrend = {
+  range: '30d', unit: 'day', start: null, end: null, points: [], total_revenue: 0, generated_at: null,
+};
+
+export async function fetchRevenueTrend(range: RevenueTrendRange = '30d'): Promise<RevenueTrend> {
+  const { data, error } = await supabase.rpc('admin_revenue_trend', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<RevenueTrend> | null) ?? {};
+  return { ...EMPTY_REVENUE_TREND, ...d, points: d.points ?? [] };
+}
+
+export interface RevenueBucketRow { key: string; count: number; revenue: number }
+export interface PlanAnalysisRow {
+  key: string; subs: number; active: number; canceled: number; revenue: number; avg_retention_days: number | null;
+}
+export interface TopPayerRow { user_id: string; email: string | null; revenue: number; payments: number }
+
+export interface RevenueBreakdown {
+  by_plan: RevenueBucketRow[];
+  by_type: RevenueBucketRow[];
+  by_period: { today: number; this_week: number; this_month: number; this_year: number; total: number };
+  plan_analysis: PlanAnalysisRow[];
+  churn: {
+    canceled: number; cancel_scheduled: number; failed_payments: number; refunds: number;
+    active: number; churn_numerator: number; churn_denominator: number;
+  };
+  top_payers: TopPayerRow[];
+  top_plan: { key: string; revenue: number } | null;
+  top_revenue_day: { day: string; revenue: number } | null;
+  top_count_day: { day: string; payments: number } | null;
+  revenue_funnel: FunnelStep[];
+  support: Record<string, boolean>;
+  generated_at: string | null;
+}
+
+export async function fetchRevenueBreakdown(): Promise<RevenueBreakdown> {
+  const { data, error } = await supabase.rpc('admin_revenue_breakdown');
+  if (error) throw error;
+  const d = (data as Partial<RevenueBreakdown> | null) ?? {};
+  return {
+    by_plan: d.by_plan ?? [],
+    by_type: d.by_type ?? [],
+    by_period: d.by_period ?? { today: 0, this_week: 0, this_month: 0, this_year: 0, total: 0 },
+    plan_analysis: d.plan_analysis ?? [],
+    churn: d.churn ?? { canceled: 0, cancel_scheduled: 0, failed_payments: 0, refunds: 0, active: 0, churn_numerator: 0, churn_denominator: 0 },
+    top_payers: d.top_payers ?? [],
+    top_plan: d.top_plan ?? null,
+    top_revenue_day: d.top_revenue_day ?? null,
+    top_count_day: d.top_count_day ?? null,
+    revenue_funnel: d.revenue_funnel ?? [],
+    support: d.support ?? {},
+    generated_at: d.generated_at ?? null,
+  };
+}
+
+export interface RevenueForecast {
+  method: string;
+  month_to_date_revenue: number; days_elapsed: number; days_in_month: number;
+  projected_month_revenue: number;
+  current_mrr: number; next_month_mrr: number; arr_forecast: number;
+  subs_this_month: number; subs_last_month: number;
+  generated_at: string | null;
+}
+
+export const EMPTY_REVENUE_FORECAST: RevenueForecast = {
+  method: '', month_to_date_revenue: 0, days_elapsed: 0, days_in_month: 0,
+  projected_month_revenue: 0, current_mrr: 0, next_month_mrr: 0, arr_forecast: 0,
+  subs_this_month: 0, subs_last_month: 0, generated_at: null,
+};
+
+export async function fetchRevenueForecast(): Promise<RevenueForecast> {
+  const { data, error } = await supabase.rpc('admin_revenue_forecast');
+  if (error) throw error;
+  return { ...EMPTY_REVENUE_FORECAST, ...((data as Partial<RevenueForecast> | null) ?? {}) };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
