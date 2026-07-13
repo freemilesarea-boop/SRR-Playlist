@@ -1083,6 +1083,71 @@ export async function fetchRecommendationHistory(opts: { limit?: number; categor
   return d.items ?? [];
 }
 
+// ── Root Cause / Impact / Outcome / Learning (0482) ──────────────────
+// Root Cause 계산은 프론트(rootCauseIntel.ts)가 기존 시계열 재사용해 수행한다(상관≠인과).
+// DB 는 스냅샷/Outcome/집계만 저장. Before 필수·After 없이 완료 금지·동일 Command 중복 금지.
+
+export async function saveRootCauseSnapshot(input: {
+  recommendationKey: string; analysisStatus: string; candidates: unknown[]; conflicting?: unknown[]; timeWindow?: string | null;
+}): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_recommendation_root_cause_save', {
+    p_recommendation_key: input.recommendationKey, p_analysis_status: input.analysisStatus,
+    p_candidates: input.candidates as never, p_conflicting: (input.conflicting ?? []) as never, p_time_window: input.timeWindow ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+
+export async function registerOutcome(input: {
+  recommendationKey: string; metricKey: string; beforeValue: number; commandId?: string | null;
+  actionType?: string | null; direction?: 'lower_better' | 'higher_better'; measurementWindow?: 'immediate' | '1h' | '24h' | '7d';
+}): Promise<{ ok: boolean; id: string; status: string }> {
+  const { data, error } = await supabase.rpc('admin_recommendation_outcome_register', {
+    p_recommendation_key: input.recommendationKey, p_metric_key: input.metricKey, p_before_value: input.beforeValue,
+    p_command_id: input.commandId ?? null, p_action_type: input.actionType ?? null,
+    p_direction: input.direction ?? 'lower_better', p_measurement_window: input.measurementWindow ?? 'immediate',
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string };
+}
+
+export async function evaluateOutcome(outcomeId: string, afterValue: number, status: 'improved' | 'unchanged' | 'worsened' | 'insufficient_data'): Promise<{ ok: boolean; id: string; delta: number; status: string }> {
+  const { data, error } = await supabase.rpc('admin_recommendation_outcome_evaluate', {
+    p_outcome_id: outcomeId, p_after_value: afterValue, p_outcome_status: status,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; delta: number; status: string };
+}
+
+export interface OutcomeRow {
+  id: string; recommendation_key: string; command_id: string | null; action_type: string | null; metric_key: string;
+  direction: string; measurement_window: string; before_value: number; before_at: string;
+  after_value: number | null; after_at: string | null; delta: number | null; outcome_status: string;
+  created_at: string; created_by_name: string | null;
+}
+
+export async function fetchOutcomes(opts: { limit?: number; recommendationKey?: string | null } = {}): Promise<OutcomeRow[]> {
+  const { data, error } = await supabase.rpc('admin_recommendation_outcomes', {
+    p_limit: opts.limit ?? 50, p_recommendation_key: opts.recommendationKey ?? null,
+  });
+  if (error) throw error;
+  const d = (data as { items?: OutcomeRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface LearningSignalRow {
+  recommendation_key: string; action_type: string | null; times_executed: number;
+  improved_count: number; unchanged_count: number; worsened_count: number; insufficient_count: number;
+  success_rate: number | null; average_delta: number | null; last_updated_at: string | null;
+}
+
+export async function fetchLearningSignals(): Promise<LearningSignalRow[]> {
+  const { data, error } = await supabase.rpc('admin_recommendation_learning_signals');
+  if (error) throw error;
+  const d = (data as { items?: LearningSignalRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
