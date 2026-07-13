@@ -56,6 +56,7 @@ import PredictiveIntelligenceSection from './PredictiveIntelligenceSection';
 import OptimizationStrategySection from './OptimizationStrategySection';
 import StrategySandboxSection from './StrategySandboxSection';
 import DraftPromotionSection from './DraftPromotionSection';
+import AiGovernanceSection from './AiGovernanceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -172,6 +173,9 @@ export default function Dashboard() {
 
       {/* Draft Promotion Gateway — 운영자 승인 기반 Draft 변환·Canary 후보 (Production 무변경, 자동 실행 없음) */}
       <DraftPromotionSection />
+
+      {/* AI Governance & Trust — 헌법/신뢰/거버넌스 + Production Change Candidate (실제 Apply 없음) */}
+      <AiGovernanceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

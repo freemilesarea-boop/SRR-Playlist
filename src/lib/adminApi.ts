@@ -1865,6 +1865,76 @@ export async function fetchPromotionAudit(requestId: string | null = null, draft
   return d.items ?? [];
 }
 
+// ── AI Governance & Trust (0496 — 헌법/신뢰/거버넌스, Production Apply 없음, AI 자기수정 불가) ──
+
+export interface ConstitutionRuleRow { id: string; rule_code: string; category: string; title: string; description: string | null; severity: string; enforcement_type: string; scope: string | null; version: number; is_active: boolean; immutable: boolean }
+export async function fetchConstitutionRules(active: boolean | null = null): Promise<ConstitutionRuleRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_constitution_rules', { p_active: active });
+  if (error) throw error;
+  const d = (data as { items?: ConstitutionRuleRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface GovernanceEventRow { id: string; source_type: string; source_id: string | null; context_key: string | null; event_type: string; rule_results: unknown; governance_decision: string | null; actor_id: string | null; created_at: string }
+export async function recordConstitutionCheck(payload: Record<string, unknown>): Promise<GovernanceEventRow> {
+  const { data, error } = await supabase.rpc('admin_ai_constitution_check', { p_payload: payload });
+  if (error) throw error; return data as GovernanceEventRow;
+}
+export async function fetchGovernanceEvents(sourceType: string | null = null, eventType: string | null = null, limit = 200): Promise<GovernanceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_governance_events', { p_source_type: sourceType, p_event_type: eventType, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: GovernanceEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface HumanOverrideRow { id: string; source_type: string; source_id: string | null; context_key: string | null; override_type: string; reason_code: string | null; reason: string | null; risk_tier: string | null; previous_decision: string | null; overridden_decision: string | null; actor_id: string | null; created_at: string }
+export async function recordHumanOverride(payload: Record<string, unknown>): Promise<HumanOverrideRow> {
+  const { data, error } = await supabase.rpc('admin_ai_human_override', { p_payload: payload });
+  if (error) throw error; return data as HumanOverrideRow;
+}
+export async function fetchHumanOverrides(limit = 200): Promise<{ items: HumanOverrideRow[]; signal: Array<{ override_type: string; reason_code: string | null; n: number }> }> {
+  const { data, error } = await supabase.rpc('admin_ai_human_overrides', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: HumanOverrideRow[]; signal?: Array<{ override_type: string; reason_code: string | null; n: number }> } | null) ?? {};
+  return { items: d.items ?? [], signal: d.signal ?? [] };
+}
+export interface ChangeCandidateRow {
+  id?: string; source_draft_id: string | null; source_promotion_request_id: string | null; source_sandbox_run_id: string | null;
+  context_key: string; change_type: string; candidate_status: string; risk_tier: string | null; readiness_score: number | null;
+  trust_snapshot: Record<string, unknown> | null; constitution_result: Record<string, unknown> | null; governance_result: Record<string, unknown> | null;
+  rollback_plan: Record<string, unknown> | null; observation_plan: Record<string, unknown> | null; execution_preconditions: Record<string, unknown> | null;
+  go_criteria: Record<string, unknown> | null; source_input_hash: string | null; source_model_version: string | null; created_at: string; reviewed_at: string | null; expired_at: string | null;
+}
+export async function requestChangeCandidate(payload: Record<string, unknown>): Promise<{ idempotent: boolean; candidate: ChangeCandidateRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_change_candidate_request', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; candidate: ChangeCandidateRow };
+}
+export async function setChangeCandidateStatus(id: string, status: string, reason: string | null = null): Promise<ChangeCandidateRow> {
+  const { data, error } = await supabase.rpc('admin_ai_change_candidate_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as ChangeCandidateRow;
+}
+export async function fetchChangeCandidateDetail(id: string): Promise<{ candidate: ChangeCandidateRow | null; events: GovernanceEventRow[] }> {
+  const { data, error } = await supabase.rpc('admin_ai_change_candidate_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; candidate?: ChangeCandidateRow; events?: GovernanceEventRow[] } | null) ?? {};
+  return { candidate: d.candidate ?? null, events: d.events ?? [] };
+}
+export async function fetchChangeCandidateHistory(contextKey: string | null = null, status: string | null = null, limit = 100): Promise<ChangeCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_change_candidate_history', { p_context_key: contextKey, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ChangeCandidateRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface GovernanceSummaryResp {
+  events: { total: number; violations: number; blocked: number; overrides: number; checks: number } | null;
+  candidates: { total: number; pending: number; governance_ready: number; rejected: number; expired: number; high_risk: number; critical_risk: number } | null;
+  constitution_audit: Array<{ rule_code: string; checked: number; violations: number; warnings: number }>;
+}
+export async function fetchGovernanceSummary(): Promise<GovernanceSummaryResp> {
+  const { data, error } = await supabase.rpc('admin_ai_governance_summary');
+  if (error) throw error;
+  const d = (data as Partial<GovernanceSummaryResp> | null) ?? {};
+  return { events: d.events ?? null, candidates: d.candidates ?? null, constitution_audit: d.constitution_audit ?? [] };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
