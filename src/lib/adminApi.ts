@@ -1180,6 +1180,87 @@ export async function fetchRankingHistory(days = 90): Promise<RankingSnapshotRow
   return d.items ?? [];
 }
 
+// ── Playlist Intelligence (0484 — playback_events_v2 읽기 전용 집계) ────
+// 기존 Playback/Queue/Scheduler/Playlist/Policy 무변경. 성과 KPI 읽기 + 추천/학습 기록만.
+
+export type PlaylistRange = '7d' | '30d' | '90d' | '12m';
+
+export interface PlaylistIntelligence {
+  range: string;
+  playlists: PlaylistKpiRow[];
+  industries: IndustryKpiRow[];
+  time_bands: BandKpiRow[];
+  seasons: SeasonKpiRow[];
+  weather_supported: boolean; event_supported: boolean; store_level_supported: boolean;
+  generated_at: string | null;
+}
+export interface PlaylistKpiRow {
+  playlist_id: string | null; playlist_title: string | null; events: number; skips: number;
+  skip_rate: number | null; completion_rate: number | null; likes: number; replays: number;
+  unique_tracks: number; store_type_count: number; last_event_at: string | null;
+}
+export interface IndustryKpiRow { store_type_slug: string; events: number; skip_rate: number | null; completion_rate: number | null; playlist_count: number; unique_tracks: number }
+export interface BandKpiRow { band: string; events: number; skip_rate: number | null; completion_rate: number | null }
+export interface SeasonKpiRow { season: string; events: number; skip_rate: number | null; completion_rate: number | null }
+
+export async function fetchPlaylistIntelligence(range: PlaylistRange = '30d'): Promise<PlaylistIntelligence> {
+  const { data, error } = await supabase.rpc('admin_playlist_intelligence', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<PlaylistIntelligence> | null) ?? {};
+  return {
+    range: d.range ?? range, playlists: d.playlists ?? [], industries: d.industries ?? [],
+    time_bands: d.time_bands ?? [], seasons: d.seasons ?? [],
+    weather_supported: d.weather_supported ?? false, event_supported: d.event_supported ?? false,
+    store_level_supported: d.store_level_supported ?? false, generated_at: d.generated_at ?? null,
+  };
+}
+
+export interface PlaylistRankings {
+  top_completion: Array<{ playlist_title: string | null; events: number; completion_rate: number | null }>;
+  lowest_skip: Array<{ playlist_title: string | null; events: number; skip_rate: number | null }>;
+  top_growth: Array<{ playlist_title: string | null; recent_events: number; prior_events: number; growth_rate: number | null }>;
+  range: string; generated_at: string | null;
+}
+export async function fetchPlaylistRankings(range: PlaylistRange = '30d'): Promise<PlaylistRankings> {
+  const { data, error } = await supabase.rpc('admin_playlist_rankings', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<PlaylistRankings> | null) ?? {};
+  return { top_completion: d.top_completion ?? [], lowest_skip: d.lowest_skip ?? [], top_growth: d.top_growth ?? [], range: d.range ?? range, generated_at: d.generated_at ?? null };
+}
+
+export async function savePlaylistReco(input: {
+  ruleKey: string; evidence: unknown[]; storeType?: string | null; timeBand?: string | null;
+  targetTitle?: string | null; recommendedTitle?: string | null; reason?: string | null; state?: 'suggested' | 'applied' | 'dismissed';
+}): Promise<{ ok: boolean; id: string; state: string }> {
+  const { data, error } = await supabase.rpc('admin_playlist_reco_save', {
+    p_rule_key: input.ruleKey, p_evidence: input.evidence as never, p_store_type_slug: input.storeType ?? null,
+    p_time_band: input.timeBand ?? null, p_target_title: input.targetTitle ?? null, p_recommended_title: input.recommendedTitle ?? null,
+    p_reason: input.reason ?? null, p_state: input.state ?? 'suggested',
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; state: string };
+}
+
+export interface PlaylistRecoRow {
+  id: string; rule_key: string; store_type_slug: string | null; time_band: string | null;
+  target_playlist_title: string | null; recommended_title: string | null; reason: string | null;
+  evidence: unknown[]; state: string; created_at: string; created_by_name: string | null;
+}
+export async function fetchPlaylistHistory(limit = 50): Promise<PlaylistRecoRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_history', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PlaylistRecoRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface PlaylistLearningRow { rule_key: string; total: number; applied: number; dismissed: number; suggested: number; apply_rate: number | null; last_at: string | null }
+export async function fetchPlaylistLearning(): Promise<PlaylistLearningRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_learning');
+  if (error) throw error;
+  const d = (data as { items?: PlaylistLearningRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
