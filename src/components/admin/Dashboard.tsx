@@ -43,6 +43,7 @@ import MissionControlSection from './MissionControlSection';
 import ActionCenterSection from './ActionCenterSection';
 import AutomationCenterSection from './AutomationCenterSection';
 import AiRecommendationSection from './AiRecommendationSection';
+import AiDecisionIntelligenceSection from './AiDecisionIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -120,6 +121,9 @@ export default function Dashboard() {
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
+
+      {/* Decision Intelligence — 실제 Outcome 기반 추천 우선순위 계산 */}
+      <AiDecisionIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

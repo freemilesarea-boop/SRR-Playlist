@@ -1148,6 +1148,38 @@ export async function fetchLearningSignals(): Promise<LearningSignalRow[]> {
   return d.items ?? [];
 }
 
+// ── Decision Intelligence (0483 + 기존 outcomes/history 재사용) ──────────
+// 추천 순위는 프론트(decisionIntel.ts)가 실제 Outcome/History 집계로 계산한다.
+// DB 는 원자료 count 집계(decision_stats) + 순위 스냅샷 저장/이력만. Rule/Weight 자동 변경 없음.
+
+export interface DecisionStatRow {
+  recommendation_key: string; considered: number; dismissed: number; resolved: number;
+  executed: number; improved: number; unchanged: number; worsened: number; insufficient: number; pending: number;
+  avg_delta: number | null; success_rate: number | null; last_at: string | null;
+}
+
+export async function fetchDecisionStats(): Promise<DecisionStatRow[]> {
+  const { data, error } = await supabase.rpc('admin_recommendation_decision_stats');
+  if (error) throw error;
+  const d = (data as { items?: DecisionStatRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export async function saveRankingSnapshot(rankings: unknown[]): Promise<{ ok: boolean; id: string; snapshot_date: string }> {
+  const { data, error } = await supabase.rpc('admin_recommendation_ranking_save', { p_rankings: rankings as never });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; snapshot_date: string };
+}
+
+export interface RankingSnapshotRow { snapshot_date: string; rankings: unknown[]; updated_at: string }
+
+export async function fetchRankingHistory(days = 90): Promise<RankingSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_recommendation_ranking_history', { p_days: days });
+  if (error) throw error;
+  const d = (data as { items?: RankingSnapshotRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
