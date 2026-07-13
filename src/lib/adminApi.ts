@@ -1326,6 +1326,75 @@ export async function fetchExperimentLearning(): Promise<ExperimentLearningRow[]
   return d.items ?? [];
 }
 
+// ── Track Rollout (0486 — 신규 음원 점진 확산; 자동 배포 없음) ────────────
+// 기존 Playback/Queue/Scheduler/Playlist/Recommendation/Experiment 무변경. per-track KPI
+// 읽기(playback_events_v2) + rollout 상태/이력 저장만. 승격/Rollback 판정은 프론트.
+
+export interface TrackRolloutRow {
+  id: string; track_id: string; track_title: string | null; stage: string; scope_type: string; scope_value: string | null;
+  rollout_percent: number; promotion_config: { completion_min: number; skip_max: number; sample_min: number; rollback_skip_max: number; rollback_completion_min: number };
+  notes: string | null; last_evaluated_at: string | null; created_at: string; updated_at: string; created_by_name?: string | null;
+}
+
+export async function fetchTrackRollouts(stage?: string | null, limit = 100): Promise<TrackRolloutRow[]> {
+  const { data, error } = await supabase.rpc('admin_track_rollouts', { p_stage: stage ?? null, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TrackRolloutRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export async function upsertTrackRollout(id: string | null, payload: Record<string, unknown>): Promise<TrackRolloutRow> {
+  const { data, error } = await supabase.rpc('admin_track_rollout_upsert', { p_id: id, p_payload: payload as never });
+  if (error) throw error;
+  return data as TrackRolloutRow;
+}
+
+export async function setTrackRolloutStage(input: {
+  id: string; toStage: string; decision: 'promote' | 'hold' | 'rollback' | 'archive' | 'manual';
+  toPercent?: number | null; evidence?: unknown[] | null; reason?: string | null;
+}): Promise<TrackRolloutRow> {
+  const { data, error } = await supabase.rpc('admin_track_rollout_set_stage', {
+    p_id: input.id, p_to_stage: input.toStage, p_decision: input.decision,
+    p_to_percent: input.toPercent ?? null, p_evidence: (input.evidence ?? null) as never, p_reason: input.reason ?? null,
+  });
+  if (error) throw error;
+  return data as TrackRolloutRow;
+}
+
+export interface TrackRolloutKpi {
+  events: number; skips: number; skip_rate: number | null; completion_rate: number | null;
+  avg_listen_seconds: number | null; likes: number; replays: number; store_coverage: number; playlist_coverage: number;
+}
+export interface TrackRolloutCompare { track_id: string; scope_type: string; scope_value: string | null; range: string; kpi: TrackRolloutKpi | null; generated_at: string | null }
+
+export async function compareTrackRollout(input: { trackId: string; scopeType?: string; scopeValue?: string | null; range?: string }): Promise<TrackRolloutCompare> {
+  const { data, error } = await supabase.rpc('admin_track_rollout_compare', {
+    p_track_id: input.trackId, p_scope_type: input.scopeType ?? 'all', p_scope_value: input.scopeValue ?? null, p_range: input.range ?? '30d',
+  });
+  if (error) throw error;
+  const d = (data as Partial<TrackRolloutCompare> | null) ?? {};
+  return { track_id: d.track_id ?? input.trackId, scope_type: d.scope_type ?? 'all', scope_value: d.scope_value ?? null, range: d.range ?? '30d', kpi: d.kpi ?? null, generated_at: d.generated_at ?? null };
+}
+
+export interface TrackRolloutHistoryRow {
+  id: string; rollout_id: string; track_id: string | null; from_stage: string | null; to_stage: string | null;
+  decision: string; from_percent: number | null; to_percent: number | null; evidence: unknown[] | null; reason: string | null; created_at: string; created_by_name: string | null;
+}
+export async function fetchTrackRolloutHistory(limit = 100, trackId?: string | null): Promise<TrackRolloutHistoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_track_rollout_history', { p_limit: limit, p_track_id: trackId ?? null });
+  if (error) throw error;
+  const d = (data as { items?: TrackRolloutHistoryRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface TrackRolloutLearning { by_decision: Record<string, number>; stage_distribution: Record<string, number>; total_rollouts: number; generated_at: string | null }
+export async function fetchTrackRolloutLearning(): Promise<TrackRolloutLearning> {
+  const { data, error } = await supabase.rpc('admin_track_rollout_learning');
+  if (error) throw error;
+  const d = (data as Partial<TrackRolloutLearning> | null) ?? {};
+  return { by_decision: d.by_decision ?? {}, stage_distribution: d.stage_distribution ?? {}, total_rollouts: d.total_rollouts ?? 0, generated_at: d.generated_at ?? null };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
