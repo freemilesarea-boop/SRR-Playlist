@@ -1261,6 +1261,71 @@ export async function fetchPlaylistLearning(): Promise<PlaylistLearningRow[]> {
   return d.items ?? [];
 }
 
+// ── Playlist Experiment (0485 — playback_events_v2 A/B 비교, 자동 교체 없음) ──
+
+export interface PlaylistExperimentRow {
+  id: string; name: string; scope_type: string; scope_value: string | null; range: string;
+  playlist_a_id: string | null; playlist_a_title: string | null; playlist_b_id: string | null; playlist_b_title: string | null;
+  status: string; winner: string | null; result: unknown; evidence: unknown[] | null;
+  started_at: string | null; ended_at: string | null; created_at: string; created_by_name?: string | null;
+}
+
+export async function fetchPlaylistExperiments(status?: string | null, limit = 50): Promise<PlaylistExperimentRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_experiments', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PlaylistExperimentRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export async function upsertPlaylistExperiment(id: string | null, payload: Record<string, unknown>): Promise<PlaylistExperimentRow> {
+  const { data, error } = await supabase.rpc('admin_playlist_experiment_upsert', { p_id: id, p_payload: payload as never });
+  if (error) throw error;
+  return data as PlaylistExperimentRow;
+}
+
+export async function setPlaylistExperimentStatus(id: string, status: 'draft' | 'running' | 'completed' | 'cancelled'): Promise<PlaylistExperimentRow> {
+  const { data, error } = await supabase.rpc('admin_playlist_experiment_set_status', { p_id: id, p_status: status });
+  if (error) throw error;
+  return data as PlaylistExperimentRow;
+}
+
+export interface PlaylistCompareRow {
+  playlist_id: string | null; playlist_title: string | null; events: number; skips: number;
+  skip_rate: number | null; completion_rate: number | null; avg_listen_seconds: number | null;
+  likes: number; replays: number; unique_tracks: number;
+}
+export interface PlaylistCompareResult {
+  playlist_a: string; playlist_b: string; scope_type: string; scope_value: string | null; range: string;
+  rows: PlaylistCompareRow[]; generated_at: string | null;
+}
+export async function comparePlaylists(input: {
+  playlistA: string; playlistB: string; scopeType?: string; scopeValue?: string | null; range?: string;
+}): Promise<PlaylistCompareResult> {
+  const { data, error } = await supabase.rpc('admin_playlist_compare', {
+    p_playlist_a: input.playlistA, p_playlist_b: input.playlistB,
+    p_scope_type: input.scopeType ?? 'all', p_scope_value: input.scopeValue ?? null, p_range: input.range ?? '30d',
+  });
+  if (error) throw error;
+  const d = (data as Partial<PlaylistCompareResult> | null) ?? {};
+  return { playlist_a: d.playlist_a ?? input.playlistA, playlist_b: d.playlist_b ?? input.playlistB, scope_type: d.scope_type ?? 'all', scope_value: d.scope_value ?? null, range: d.range ?? '30d', rows: d.rows ?? [], generated_at: d.generated_at ?? null };
+}
+
+export async function concludePlaylistExperiment(id: string, winner: 'a' | 'b' | 'tie' | 'insufficient', result: unknown, evidence: unknown[]): Promise<PlaylistExperimentRow> {
+  const { data, error } = await supabase.rpc('admin_playlist_experiment_conclude', {
+    p_id: id, p_winner: winner, p_result: result as never, p_evidence: evidence as never,
+  });
+  if (error) throw error;
+  return data as PlaylistExperimentRow;
+}
+
+export interface ExperimentLearningRow { playlist_title: string; wins: number; appearances: number }
+export async function fetchExperimentLearning(): Promise<ExperimentLearningRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_experiment_learning');
+  if (error) throw error;
+  const d = (data as { items?: ExperimentLearningRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
