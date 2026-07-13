@@ -890,6 +890,67 @@ export async function fetchNocActiveAlerts(limit = 30, severity: string | null =
   return (data ?? []) as NocAlertRow[];
 }
 
+// ── Action Center (0479 + 기존 action RPC 재사용) ─────────────────
+// Action Center 는 운영 실행 계층이다. 실제 실행은 기존 admin RPC 를 재사용하고
+// (admin_disable_user/admin_enable_user/admin_force_store_resync/admin_bulk_approve_tracks
+//  /admin_retry_pending_qc 등), 여기서는 Command 등록/완료/이력(Audit) 추적만 신규다.
+//
+// 실행 흐름: registerActionCommand(등록) → 기존 RPC 실행 → completeActionCommand(기록).
+// 등록 실패(예: 마이그레이션 미적용·중복 실행) 시 실제 실행을 하지 않는다(Audit 보장).
+
+export type ActionCommandStatus = 'pending' | 'running' | 'success' | 'failed' | 'canceled';
+
+export interface ActionRegisterResult { ok: boolean; command_id: string; status: ActionCommandStatus }
+
+export async function registerActionCommand(input: {
+  commandType: string; targetType: string; targetId?: string | null; reason?: string | null; approved?: boolean;
+}): Promise<ActionRegisterResult> {
+  const { data, error } = await supabase.rpc('admin_action_register', {
+    p_command_type: input.commandType, p_target_type: input.targetType,
+    p_target_id: input.targetId ?? null, p_reason: input.reason ?? null, p_approved: input.approved ?? false,
+  });
+  if (error) throw error;
+  return data as ActionRegisterResult;
+}
+
+export async function completeActionCommand(commandId: string, status: 'success' | 'failed' | 'canceled', result?: unknown, errorMsg?: string | null) {
+  const { data, error } = await supabase.rpc('admin_action_complete', {
+    p_command_id: commandId, p_status: status, p_result: (result ?? null) as never, p_error: errorMsg ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export interface ActionHistoryRow {
+  id: string; command_type: string; target_type: string; target_id: string | null;
+  status: ActionCommandStatus; reason: string | null; requested_by: string | null; requested_by_name: string | null;
+  approved_by: string | null; requested_at: string; started_at: string | null; completed_at: string | null;
+  error: string | null; retry_count: number; duration_seconds: number | null;
+}
+
+export async function fetchActionHistory(limit = 30): Promise<ActionHistoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_action_history', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ActionHistoryRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+/* 기존 실행 RPC 재사용 wrapper (신규 실행 로직 없음). */
+export async function actionForceStoreResync(storeId: string) {
+  const { error } = await supabase.rpc('admin_force_store_resync', { p_store_id: storeId });
+  if (error) throw error;
+}
+export async function actionRetryPendingQc(limit = 50) {
+  const { data, error } = await supabase.rpc('admin_retry_pending_qc', { p_limit: limit });
+  if (error) throw error;
+  return data;
+}
+export async function actionBulkApproveTracks(trackIds: string[], immediate = false) {
+  const { data, error } = await supabase.rpc('admin_bulk_approve_tracks', { p_track_ids: trackIds, p_immediate: immediate });
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
