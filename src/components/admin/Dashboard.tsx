@@ -47,6 +47,7 @@ import AiDecisionIntelligenceSection from './AiDecisionIntelligenceSection';
 import PlaylistIntelligenceSection from './PlaylistIntelligenceSection';
 import PlaylistExperimentSection from './PlaylistExperimentSection';
 import TrackRolloutSection from './TrackRolloutSection';
+import PlaylistGeneratorSection from './PlaylistGeneratorSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -136,6 +137,9 @@ export default function Dashboard() {
 
       {/* New Track Progressive Rollout — 신규 음원 점진 확산 (자동 배포 없음) */}
       <TrackRolloutSection />
+
+      {/* AI Playlist Generator — 실제 메타/KPI 기반 Draft 생성 (자동 Publish 없음) */}
+      <PlaylistGeneratorSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
