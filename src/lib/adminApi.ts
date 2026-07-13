@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type {
   ContextSummary, ContextTrackRow, ContextPlaylistRow, GenreMoodRow, ContextBaseline, Grain, TrendPoint,
 } from './contextIntel';
+import type { DriftWindow, ContextFeature, Snapshot, RecoOutcomeRow } from './contextLearning';
 
 export interface DashboardStats {
   today_visitors: number;
@@ -1585,6 +1586,73 @@ export async function fetchContextTrend(
     store_type: d.store_type ?? storeType, daypart: d.daypart ?? null, weekday_group: d.weekday_group ?? null,
     range: d.range ?? range, bucket: d.bucket ?? 'week', series: d.series ?? [], generated_at: d.generated_at ?? null,
   };
+}
+
+// ── Context Evolution & Adaptive Learning (0491 — Learning Signal 전용, 자동 반영 없음) ──
+
+export interface ContextDriftResp {
+  store_type: string; daypart: string | null; weekday_group: string | null; range: string;
+  recent: DriftWindow | null; prior: DriftWindow | null;
+  recent_window: { from: string; to: string } | null; prior_window: { from: string; to: string } | null;
+  generated_at: string | null; supported?: boolean; reason?: string;
+}
+export async function fetchContextDrift(
+  storeType: string, daypart: string | null = null, weekdayGroup: string | null = null, range = '30d',
+): Promise<ContextDriftResp> {
+  const { data, error } = await supabase.rpc('admin_context_drift', {
+    p_store_type: storeType, p_daypart: daypart, p_weekday_group: weekdayGroup, p_range: range,
+  });
+  if (error) throw error;
+  return data as ContextDriftResp;
+}
+
+export async function fetchContextSimilarity(range = '30d', minSample = 20, limit = 50): Promise<{ range: string; min_sample: number; items: ContextFeature[]; generated_at: string | null }> {
+  const { data, error } = await supabase.rpc('admin_context_similarity', { p_range: range, p_min_sample: minSample, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { range?: string; min_sample?: number; items?: ContextFeature[]; generated_at?: string } | null) ?? {};
+  return { range: d.range ?? range, min_sample: d.min_sample ?? minSample, items: d.items ?? [], generated_at: d.generated_at ?? null };
+}
+
+export async function saveContextSnapshot(payload: Record<string, unknown>): Promise<Snapshot> {
+  const { data, error } = await supabase.rpc('admin_context_snapshot_save', { p_payload: payload });
+  if (error) throw error;
+  return data as Snapshot;
+}
+export async function fetchContextMemory(contextKey: string | null = null, limit = 100): Promise<Snapshot[]> {
+  const { data, error } = await supabase.rpc('admin_context_memory', { p_context_key: contextKey, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: Snapshot[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export async function saveContextReco(payload: Record<string, unknown>): Promise<RecoOutcomeRow> {
+  const { data, error } = await supabase.rpc('admin_context_reco_save', { p_payload: payload });
+  if (error) throw error;
+  return data as RecoOutcomeRow;
+}
+export async function resolveContextReco(id: string, status: string, outcome: string | null = null, afterKpi: Record<string, unknown> | null = null): Promise<RecoOutcomeRow> {
+  const { data, error } = await supabase.rpc('admin_context_reco_resolve', { p_id: id, p_status: status, p_outcome: outcome, p_after_kpi: afterKpi });
+  if (error) throw error;
+  return data as RecoOutcomeRow;
+}
+export async function fetchContextRecos(contextKey: string | null = null, status: string | null = null, limit = 100): Promise<RecoOutcomeRow[]> {
+  const { data, error } = await supabase.rpc('admin_context_reco_list', { p_context_key: contextKey, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: RecoOutcomeRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface ContextLearningResp {
+  context_key: string | null; by_status: Record<string, number>;
+  by_type: Array<{ reco_type: string; total: number; applied: number; dismissed: number; improved: number; neutral: number; degraded: number }>;
+  totals: { total: number; applied: number; dismissed: number; resolved_outcomes: number; improved: number; degraded: number } | null;
+  generated_at: string | null;
+}
+export async function fetchContextLearning(contextKey: string | null = null): Promise<ContextLearningResp> {
+  const { data, error } = await supabase.rpc('admin_context_learning', { p_context_key: contextKey });
+  if (error) throw error;
+  const d = (data as Partial<ContextLearningResp> | null) ?? {};
+  return { context_key: d.context_key ?? contextKey, by_status: d.by_status ?? {}, by_type: d.by_type ?? [], totals: d.totals ?? null, generated_at: d.generated_at ?? null };
 }
 
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
