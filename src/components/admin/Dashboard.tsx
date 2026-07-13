@@ -58,6 +58,7 @@ import StrategySandboxSection from './StrategySandboxSection';
 import DraftPromotionSection from './DraftPromotionSection';
 import AiGovernanceSection from './AiGovernanceSection';
 import MultiAgentCenterSection from './MultiAgentCenterSection';
+import AiMemoryKnowledgeSection from './AiMemoryKnowledgeSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -180,6 +181,9 @@ export default function Dashboard() {
 
       {/* AI Multi-Agent Center — 전문 Agent 협업/Consensus/Conflict (Production 무변경, 자동 실행 없음) */}
       <MultiAgentCenterSection />
+
+      {/* AI Memory & Knowledge — Long-Term Memory/Graph/Pattern/Replay (Evidence 계층, Production 무변경) */}
+      <AiMemoryKnowledgeSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
