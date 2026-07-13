@@ -1496,6 +1496,39 @@ export async function fetchRotationLearning(): Promise<RotationLearning> {
   return { by_status: d.by_status ?? {}, total: d.total ?? 0, approved: d.approved ?? 0, rejected: d.rejected ?? 0, approval_rate: d.approval_rate ?? null };
 }
 
+// ── Track Intelligence (0489 — Track 중심 성과 학습, 읽기 전용) ──────────
+
+export interface TrackIntelRow {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null; mood: string | null;
+  bpm: number | null; duration: number | null;
+  events: number; skip_rate: number | null; completion_rate: number | null; likes: number; replays: number;
+  p7d: number; p30d: number; p90d: number; uniq_playlists: number; uniq_store_types: number;
+  last_played_at: string | null; days_since_last_play: number | null; rollout_stage: string | null;
+}
+export async function fetchTrackIntelList(range = '90d', limit = 200): Promise<TrackIntelRow[]> {
+  const { data, error } = await supabase.rpc('admin_track_intel_list', { p_range: range, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TrackIntelRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface TrackIntelBreakdownRow { key: string; events: number; completion_rate: number | null; skip_rate: number | null }
+export interface TrackIntelDetail {
+  track_id: string; range: string; summary: Record<string, unknown> | null;
+  by_industry: TrackIntelBreakdownRow[]; by_daypart: TrackIntelBreakdownRow[]; by_season: TrackIntelBreakdownRow[]; by_playlist: TrackIntelBreakdownRow[];
+  brand_supported: boolean; generated_at: string | null;
+}
+export async function fetchTrackIntelDetail(trackId: string, range = '90d'): Promise<TrackIntelDetail> {
+  const { data, error } = await supabase.rpc('admin_track_intel_detail', { p_track_id: trackId, p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<TrackIntelDetail> | null) ?? {};
+  return {
+    track_id: d.track_id ?? trackId, range: d.range ?? range, summary: d.summary ?? null,
+    by_industry: d.by_industry ?? [], by_daypart: d.by_daypart ?? [], by_season: d.by_season ?? [], by_playlist: d.by_playlist ?? [],
+    brand_supported: d.brand_supported ?? false, generated_at: d.generated_at ?? null,
+  };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
