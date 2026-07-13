@@ -1935,6 +1935,48 @@ export async function fetchGovernanceSummary(): Promise<GovernanceSummaryResp> {
   return { events: d.events ?? null, candidates: d.candidates ?? null, constitution_audit: d.constitution_audit ?? [] };
 }
 
+// ── Multi-Agent Collaboration (0497 — Agent 협업 분석, Production 무변경, Agent 직접수정 불가) ──
+
+export interface AiAgentRow { id: string; agent_code: string; name: string; domain: string; responsibilities: string[]; is_active: boolean; reputation: number; decisions: number; wins: number; losses: number }
+export async function fetchAiAgents(active: boolean | null = null): Promise<AiAgentRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_agents', { p_active: active });
+  if (error) throw error;
+  const d = (data as { items?: AiAgentRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface AgentReputationRow { agent_code: string; name: string; domain: string; reputation: number; decisions: number; wins: number; losses: number; win_rate: number | null }
+export async function fetchAgentReputation(): Promise<AgentReputationRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_agent_reputation');
+  if (error) throw error;
+  const d = (data as { items?: AgentReputationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchAgentMemory(agentCode: string, contextKey: string | null = null, limit = 20): Promise<{ agent_code: string; read_only: boolean; memory: Array<Record<string, unknown>> }> {
+  const { data, error } = await supabase.rpc('admin_ai_agent_memory', { p_agent_code: agentCode, p_context_key: contextKey, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { agent_code?: string; read_only?: boolean; memory?: Array<Record<string, unknown>> } | null) ?? {};
+  return { agent_code: d.agent_code ?? agentCode, read_only: d.read_only ?? true, memory: d.memory ?? [] };
+}
+export interface CollaborationRow {
+  id?: string; context_key: string; topic: string | null; participants: string[]; opinions: Array<Record<string, unknown>>;
+  consensus_type: string | null; consensus_score: number | null; conflicts: Array<Record<string, unknown>>;
+  final_decision: string | null; governance_result: Record<string, unknown> | null; input_hash: string | null; created_at: string;
+}
+export async function saveCollaboration(payload: Record<string, unknown>): Promise<{ idempotent: boolean; collaboration: CollaborationRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_collaboration_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; collaboration: CollaborationRow };
+}
+export async function fetchCollaborationHistory(contextKey: string | null = null, consensusType: string | null = null, limit = 100): Promise<CollaborationRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_collaboration_history', { p_context_key: contextKey, p_consensus_type: consensusType, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CollaborationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function recordAgentOutcome(agentCode: string, win: boolean): Promise<AiAgentRow> {
+  const { data, error } = await supabase.rpc('admin_ai_agent_record_outcome', { p_agent_code: agentCode, p_win: win });
+  if (error) throw error; return data as AiAgentRow;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

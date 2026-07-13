@@ -57,6 +57,7 @@ import OptimizationStrategySection from './OptimizationStrategySection';
 import StrategySandboxSection from './StrategySandboxSection';
 import DraftPromotionSection from './DraftPromotionSection';
 import AiGovernanceSection from './AiGovernanceSection';
+import MultiAgentCenterSection from './MultiAgentCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -176,6 +177,9 @@ export default function Dashboard() {
 
       {/* AI Governance & Trust — 헌법/신뢰/거버넌스 + Production Change Candidate (실제 Apply 없음) */}
       <AiGovernanceSection />
+
+      {/* AI Multi-Agent Center — 전문 Agent 협업/Consensus/Conflict (Production 무변경, 자동 실행 없음) */}
+      <MultiAgentCenterSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
