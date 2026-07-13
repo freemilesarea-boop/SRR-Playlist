@@ -1040,6 +1040,49 @@ export async function fetchAutomationHistory(opts: { limit?: number; ruleId?: st
   return d.items ?? [];
 }
 
+// ── AI Recommendation (0481) — Feed 는 실시간 KPI 재사용 계산; DB 는 결정만 저장 ──
+// 추천 계산은 프론트(aiRecommendation.ts)가 기존 KPI 로 수행한다. 여기서는 관리자 결정
+// (Dismiss/Resolve) 스냅샷/이력만 저장/조회한다. Evidence 없는 추천은 저장 불가(서버 검증).
+
+export interface RecommendationStateInput {
+  ruleKey: string; category: string; priority: string; confidence: number; score: number;
+  title: string; message?: string | null; evidence: unknown[]; actionRef?: string | null;
+  state: 'dismissed' | 'resolved'; commandId?: string | null;
+}
+
+export async function setRecommendationState(input: RecommendationStateInput): Promise<{ ok: boolean; id: string; state: string }> {
+  const { data, error } = await supabase.rpc('admin_recommendation_set_state', {
+    p_rule_key: input.ruleKey, p_category: input.category, p_priority: input.priority,
+    p_confidence: input.confidence, p_score: input.score, p_title: input.title, p_message: input.message ?? null,
+    p_evidence: input.evidence as never, p_action_ref: input.actionRef ?? null, p_state: input.state, p_command_id: input.commandId ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; state: string };
+}
+
+/** 오늘(KST) 처리된 rule_key → state. Feed 숨김 처리용. */
+export async function fetchRecommendationActiveStates(): Promise<Record<string, 'dismissed' | 'resolved'>> {
+  const { data, error } = await supabase.rpc('admin_recommendation_active_states');
+  if (error) throw error;
+  const d = (data as { states?: Record<string, 'dismissed' | 'resolved'> } | null) ?? {};
+  return d.states ?? {};
+}
+
+export interface RecommendationHistoryRow {
+  id: string; rule_key: string; gen_date: string; category: string; priority: string;
+  confidence: number; score: number; title: string; message: string | null; evidence: unknown[];
+  action_ref: string | null; state: string; command_id: string | null; created_at: string; created_by_name: string | null;
+}
+
+export async function fetchRecommendationHistory(opts: { limit?: number; category?: string | null } = {}): Promise<RecommendationHistoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_recommendation_history', {
+    p_limit: opts.limit ?? 50, p_category: opts.category ?? null,
+  });
+  if (error) throw error;
+  const d = (data as { items?: RecommendationHistoryRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

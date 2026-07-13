@@ -42,6 +42,7 @@ import StreamingSection from './StreamingSection';
 import MissionControlSection from './MissionControlSection';
 import ActionCenterSection from './ActionCenterSection';
 import AutomationCenterSection from './AutomationCenterSection';
+import AiRecommendationSection from './AiRecommendationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -116,6 +117,9 @@ export default function Dashboard() {
           오늘 집계 새로고침
         </button>
       </div>
+
+      {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
+      <AiRecommendationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
