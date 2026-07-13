@@ -40,6 +40,7 @@ import ArtistSection from './ArtistSection';
 import BusinessSection from './BusinessSection';
 import StreamingSection from './StreamingSection';
 import MissionControlSection from './MissionControlSection';
+import ActionCenterSection from './ActionCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -117,6 +118,9 @@ export default function Dashboard() {
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
+
+      {/* Operations Action Center — 운영 실행 계층 (기존 admin RPC 재사용) */}
+      <ActionCenterSection />
 
       {/* 회원 통계 (요약 · 결제 현황 · 플랜별 가입자 · 상태) */}
       <MemberStatsSection />
