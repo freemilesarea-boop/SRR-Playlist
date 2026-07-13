@@ -49,6 +49,7 @@ import PlaylistExperimentSection from './PlaylistExperimentSection';
 import TrackRolloutSection from './TrackRolloutSection';
 import PlaylistGeneratorSection from './PlaylistGeneratorSection';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
+import TrackIntelligenceSection from './TrackIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -144,6 +145,9 @@ export default function Dashboard() {
 
       {/* Adaptive Rotation & Anti-Fatigue — 재생 순서 초안 (자동 Queue/Scheduler 반영 없음) */}
       <AdaptiveRotationSection />
+
+      {/* Track Intelligence & Lifecycle — Track 중심 성과 학습 (자동 Stage 변경 없음) */}
+      <TrackIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
