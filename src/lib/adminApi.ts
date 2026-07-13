@@ -3,6 +3,7 @@ import type {
   ContextSummary, ContextTrackRow, ContextPlaylistRow, GenreMoodRow, ContextBaseline, Grain, TrendPoint,
 } from './contextIntel';
 import type { DriftWindow, ContextFeature, Snapshot, RecoOutcomeRow } from './contextLearning';
+import type { ScanRow } from './predictiveIntel';
 
 export interface DashboardStats {
   today_visitors: number;
@@ -1653,6 +1654,34 @@ export async function fetchContextLearning(contextKey: string | null = null): Pr
   if (error) throw error;
   const d = (data as Partial<ContextLearningResp> | null) ?? {};
   return { context_key: d.context_key ?? contextKey, by_status: d.by_status ?? {}, by_type: d.by_type ?? [], totals: d.totals ?? null, generated_at: d.generated_at ?? null };
+}
+
+// ── Predictive Intelligence (0492 — 예측·시뮬레이션 전용, 자동 반영 없음) ──
+
+export interface PredictionScanResp {
+  range: string; min_sample: number; half_days: number; items: ScanRow[]; generated_at: string | null;
+}
+export async function fetchPredictionScan(range = '30d', minSample = 20): Promise<PredictionScanResp> {
+  const { data, error } = await supabase.rpc('admin_prediction_scan', { p_range: range, p_min_sample: minSample });
+  if (error) throw error;
+  const d = (data as Partial<PredictionScanResp> | null) ?? {};
+  return { range: d.range ?? range, min_sample: d.min_sample ?? minSample, half_days: d.half_days ?? 15, items: d.items ?? [], generated_at: d.generated_at ?? null };
+}
+
+export interface PredictionSnapshot {
+  id?: string; context_key: string; prediction_type: string; horizon?: string | null;
+  prediction?: Record<string, unknown>; confidence?: number | null; evidence?: Array<{ label: string; value: string | number | null }>; created_at: string;
+}
+export async function savePredictionSnapshot(payload: Record<string, unknown>): Promise<PredictionSnapshot> {
+  const { data, error } = await supabase.rpc('admin_prediction_snapshot_save', { p_payload: payload });
+  if (error) throw error;
+  return data as PredictionSnapshot;
+}
+export async function fetchPredictionHistory(contextKey: string | null = null, predictionType: string | null = null, limit = 100): Promise<PredictionSnapshot[]> {
+  const { data, error } = await supabase.rpc('admin_prediction_history', { p_context_key: contextKey, p_prediction_type: predictionType, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PredictionSnapshot[] } | null) ?? {};
+  return d.items ?? [];
 }
 
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
