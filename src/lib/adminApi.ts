@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import type {
+  ContextSummary, ContextTrackRow, ContextPlaylistRow, GenreMoodRow, ContextBaseline, Grain, TrendPoint,
+} from './contextIntel';
 
 export interface DashboardStats {
   today_visitors: number;
@@ -1526,6 +1529,61 @@ export async function fetchTrackIntelDetail(trackId: string, range = '90d'): Pro
     track_id: d.track_id ?? trackId, range: d.range ?? range, summary: d.summary ?? null,
     by_industry: d.by_industry ?? [], by_daypart: d.by_daypart ?? [], by_season: d.by_season ?? [], by_playlist: d.by_playlist ?? [],
     brand_supported: d.brand_supported ?? false, generated_at: d.generated_at ?? null,
+  };
+}
+
+// ── Context Intelligence (0490 — 상황 조합 기준 성과 학습, 읽기 전용) ──────
+
+export interface ContextOverviewItem {
+  store_type: string; events: number; track_count: number; playlist_count: number;
+  completion_rate: number | null; skip_rate: number | null; avg_listen_seconds: number | null; last_event_at: string | null;
+}
+export interface ContextOverview {
+  range: string; items: ContextOverviewItem[];
+  season_range: { distinct_seasons: number; earliest: string | null; latest: string | null } | null;
+  generated_at: string | null;
+}
+export async function fetchContextOverview(range = '30d'): Promise<ContextOverview> {
+  const { data, error } = await supabase.rpc('admin_context_overview', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<ContextOverview> | null) ?? {};
+  return { range: d.range ?? range, items: d.items ?? [], season_range: d.season_range ?? null, generated_at: d.generated_at ?? null };
+}
+
+export interface ContextDetailResp {
+  store_type: string;
+  requested: { daypart: string | null; weekday_group: string | null };
+  resolved: { grain: Grain; daypart: string | null; weekday_group: string | null; fallback: boolean };
+  candidate_samples: { l1: number; l2: number; l3: number; min_sample: number };
+  range: string; summary: ContextSummary;
+  tracks: ContextTrackRow[]; playlists: ContextPlaylistRow[];
+  genres: GenreMoodRow[]; moods: GenreMoodRow[]; baseline: ContextBaseline; generated_at: string;
+}
+export async function fetchContextDetail(
+  storeType: string, daypart: string | null = null, weekdayGroup: string | null = null, range = '30d', minSample = 20,
+): Promise<ContextDetailResp> {
+  const { data, error } = await supabase.rpc('admin_context_detail', {
+    p_store_type: storeType, p_daypart: daypart, p_weekday_group: weekdayGroup, p_range: range, p_min_sample: minSample,
+  });
+  if (error) throw error;
+  return data as ContextDetailResp;
+}
+
+export interface ContextTrendResp {
+  store_type: string; daypart: string | null; weekday_group: string | null; range: string; bucket: string;
+  series: TrendPoint[]; generated_at: string | null;
+}
+export async function fetchContextTrend(
+  storeType: string, daypart: string | null = null, weekdayGroup: string | null = null, range = '90d',
+): Promise<ContextTrendResp> {
+  const { data, error } = await supabase.rpc('admin_context_trend', {
+    p_store_type: storeType, p_daypart: daypart, p_weekday_group: weekdayGroup, p_range: range,
+  });
+  if (error) throw error;
+  const d = (data as Partial<ContextTrendResp> | null) ?? {};
+  return {
+    store_type: d.store_type ?? storeType, daypart: d.daypart ?? null, weekday_group: d.weekday_group ?? null,
+    range: d.range ?? range, bucket: d.bucket ?? 'week', series: d.series ?? [], generated_at: d.generated_at ?? null,
   };
 }
 

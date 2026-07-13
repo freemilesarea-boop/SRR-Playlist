@@ -50,6 +50,7 @@ import TrackRolloutSection from './TrackRolloutSection';
 import PlaylistGeneratorSection from './PlaylistGeneratorSection';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
+import ContextIntelligenceSection from './ContextIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -148,6 +149,9 @@ export default function Dashboard() {
 
       {/* Track Intelligence & Lifecycle — Track 중심 성과 학습 (자동 Stage 변경 없음) */}
       <TrackIntelligenceSection />
+
+      {/* Context Intelligence — 상황(Store Type·Daypart·Weekday) 조합별 성과 학습 (분석/추천 전용) */}
+      <ContextIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
