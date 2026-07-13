@@ -1395,6 +1395,55 @@ export async function fetchTrackRolloutLearning(): Promise<TrackRolloutLearning>
   return { by_decision: d.by_decision ?? {}, stage_distribution: d.stage_distribution ?? {}, total_rollouts: d.total_rollouts ?? 0, generated_at: d.generated_at ?? null };
 }
 
+// ── Playlist Generator (0487 — 실제 메타/KPI 기반 Draft; 자동 Publish 없음) ──
+
+export interface GeneratorPoolTrack {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null; mood: string | null;
+  bpm: number | null; duration: number | null; language: string | null;
+  events: number; skip_rate: number | null; completion_rate: number | null; likes: number; replays: number;
+  last_event_at: string | null; store_coverage: number | null; rollout_stage: string | null;
+}
+export async function fetchGeneratorPool(range = '30d', limit = 300): Promise<GeneratorPoolTrack[]> {
+  const { data, error } = await supabase.rpc('admin_generator_track_pool', { p_range: range, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: GeneratorPoolTrack[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface BrandDnaRow { brand_key: string; brand_label: string | null; profile: Record<string, unknown>; source: string; updated_at: string }
+export async function fetchBrandDna(): Promise<BrandDnaRow[]> {
+  const { data, error } = await supabase.rpc('admin_brand_dna_list');
+  if (error) throw error;
+  const d = (data as { items?: BrandDnaRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function upsertBrandDna(brandKey: string, brandLabel: string | null, profile: Record<string, unknown>): Promise<BrandDnaRow> {
+  const { data, error } = await supabase.rpc('admin_brand_dna_upsert', { p_brand_key: brandKey, p_brand_label: brandLabel, p_profile: profile as never });
+  if (error) throw error;
+  return data as BrandDnaRow;
+}
+
+export interface PlaylistDraftRow {
+  id: string; name: string; store_type: string | null; brand_key: string | null; time_band: string | null; season: string | null; event_key: string | null;
+  config: Record<string, unknown>; tracks: unknown[]; excluded: unknown[]; simulation: unknown; status: string; created_at: string; created_by_name?: string | null;
+}
+export async function savePlaylistDraft(payload: Record<string, unknown>): Promise<PlaylistDraftRow> {
+  const { data, error } = await supabase.rpc('admin_playlist_draft_save', { p_payload: payload as never });
+  if (error) throw error;
+  return data as PlaylistDraftRow;
+}
+export async function fetchPlaylistDrafts(status?: string | null, limit = 50): Promise<PlaylistDraftRow[]> {
+  const { data, error } = await supabase.rpc('admin_playlist_drafts', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PlaylistDraftRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setPlaylistDraftStatus(id: string, status: 'draft' | 'approved' | 'rejected'): Promise<PlaylistDraftRow> {
+  const { data, error } = await supabase.rpc('admin_playlist_draft_set_status', { p_id: id, p_status: status });
+  if (error) throw error;
+  return data as PlaylistDraftRow;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
