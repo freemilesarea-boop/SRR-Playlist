@@ -52,6 +52,7 @@ import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
 import ContextLearningSection from './ContextLearningSection';
+import PredictiveIntelligenceSection from './PredictiveIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -156,6 +157,9 @@ export default function Dashboard() {
 
       {/* Context Evolution & Learning — 시간 진화(Drift/Stability) + Recommendation Learning (자동 반영 없음) */}
       <ContextLearningSection />
+
+      {/* Predictive Intelligence & Simulation — 미래 KPI 예측 + 변경 전 시뮬레이션 (실제 변경 없음) */}
+      <PredictiveIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
