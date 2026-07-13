@@ -53,6 +53,7 @@ import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
 import ContextLearningSection from './ContextLearningSection';
 import PredictiveIntelligenceSection from './PredictiveIntelligenceSection';
+import OptimizationStrategySection from './OptimizationStrategySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -160,6 +161,9 @@ export default function Dashboard() {
 
       {/* Predictive Intelligence & Simulation — 미래 KPI 예측 + 변경 전 시뮬레이션 (실제 변경 없음) */}
       <PredictiveIntelligenceSection />
+
+      {/* Optimization Strategy — Prediction 기반 최적화 전략 후보 생성·평가 (자동 실행 없음, 승인 필요) */}
+      <OptimizationStrategySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
