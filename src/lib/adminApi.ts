@@ -1977,6 +1977,122 @@ export async function recordAgentOutcome(agentCode: string, win: boolean): Promi
   if (error) throw error; return data as AiAgentRow;
 }
 
+// ── AI Memory & Knowledge (0498 — Long-Term Memory/Graph/Pattern, Evidence 계층 · Production 무변경) ──
+
+export interface AiMemoryRecordRow {
+  id: string; memory_type: string; memory_scope: string; scope_id: string | null; agent_code: string | null;
+  source_type: string; source_id: string; source_version: string; input_hash: string;
+  context_key: string | null; context_snapshot: Record<string, unknown>; subject_type: string | null; subject_id: string | null;
+  action_type: string | null; action_snapshot: Record<string, unknown> | null;
+  outcome_status: string; outcome_snapshot: Record<string, unknown> | null; evidence: Array<Record<string, unknown>>;
+  sample_size: number | null; confidence: number | null; freshness_score: number | null; quality_score: number | null;
+  lifecycle_status: string; seasonal_tag: string | null; recurrence_count: number; contradiction_count: number;
+  occurred_at: string; last_reinforced_at: string | null; created_at: string;
+}
+export interface AiMemorySummaryResp {
+  memory: Record<string, number | string | null> | null;
+  graph: { nodes: number; edges: number } | null;
+  patterns: Record<string, number> | null;
+  sources: Record<string, number> | null;
+}
+export async function fetchAiMemorySummary(): Promise<AiMemorySummaryResp> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_summary');
+  if (error) throw error;
+  const d = (data as Partial<AiMemorySummaryResp> | null) ?? {};
+  return { memory: d.memory ?? null, graph: d.graph ?? null, patterns: d.patterns ?? null, sources: d.sources ?? null };
+}
+export async function fetchAiMemoryRecords(opts: {
+  memoryType?: string | null; scope?: string | null; agentCode?: string | null; status?: string | null;
+  contextKey?: string | null; outcome?: string | null; includeBlocked?: boolean; limit?: number;
+} = {}): Promise<AiMemoryRecordRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_records', {
+    p_memory_type: opts.memoryType ?? null, p_scope: opts.scope ?? null, p_agent_code: opts.agentCode ?? null,
+    p_status: opts.status ?? null, p_context_key: opts.contextKey ?? null, p_outcome: opts.outcome ?? null,
+    p_include_blocked: opts.includeBlocked ?? false, p_limit: opts.limit ?? 100,
+  });
+  if (error) throw error;
+  const d = (data as { items?: AiMemoryRecordRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface AiMemoryAuditRow { id: string; memory_id: string | null; event_type: string; previous_state: string | null; new_state: string | null; reason: string | null; evidence: Array<Record<string, unknown>>; created_at: string }
+export async function fetchAiMemoryDetail(id: string): Promise<{ found: boolean; memory: AiMemoryRecordRow | null; audit: AiMemoryAuditRow[] }> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; memory?: AiMemoryRecordRow; audit?: AiMemoryAuditRow[] } | null) ?? {};
+  return { found: d.found ?? false, memory: d.memory ?? null, audit: d.audit ?? [] };
+}
+export async function fetchAiMemoryAuditLog(memoryId: string | null = null, limit = 200): Promise<AiMemoryAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_audit_log', { p_memory_id: memoryId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: AiMemoryAuditRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function createAiMemoryCandidate(payload: Record<string, unknown>): Promise<{ eligibility: string; idempotent: boolean; memory: AiMemoryRecordRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_create_candidate', { p_payload: payload });
+  if (error) throw error; return data as { eligibility: string; idempotent: boolean; memory: AiMemoryRecordRow };
+}
+export async function setAiMemoryStatus(id: string, status: string, reason: string): Promise<AiMemoryRecordRow> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as AiMemoryRecordRow;
+}
+export async function reinforceAiMemory(id: string, payload: Record<string, unknown>): Promise<AiMemoryRecordRow> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_reinforce', { p_id: id, p_payload: payload });
+  if (error) throw error; return data as AiMemoryRecordRow;
+}
+export async function contradictAiMemory(id: string, payload: Record<string, unknown>): Promise<AiMemoryRecordRow> {
+  const { data, error } = await supabase.rpc('admin_ai_memory_contradict', { p_id: id, p_payload: payload });
+  if (error) throw error; return data as AiMemoryRecordRow;
+}
+export async function markAiMemoryUsed(id: string, useType: 'retrieval_used' | 'replay_used' | 'pattern_derived', reason: string | null = null): Promise<void> {
+  const { error } = await supabase.rpc('admin_ai_memory_mark_used', { p_id: id, p_use_type: useType, p_reason: reason });
+  if (error) throw error;
+}
+export interface KnowledgeNodeRow { id: string; node_type: string; entity_id: string | null; canonical_key: string; label: string; properties: Record<string, unknown>; source_version: string; is_active: boolean; created_at: string }
+export interface KnowledgeEdgeRow { id: string; from_node_id: string; to_node_id: string; relation_type: string; scope: string | null; context_key: string | null; weight: number | null; confidence: number | null; sample_size: number | null; evidence: Array<Record<string, unknown>>; lifecycle_status: string; created_at: string }
+export async function saveKnowledgeNode(payload: Record<string, unknown>): Promise<KnowledgeNodeRow> {
+  const { data, error } = await supabase.rpc('admin_ai_knowledge_node_save', { p_payload: payload });
+  if (error) throw error; return data as KnowledgeNodeRow;
+}
+export async function saveKnowledgeEdge(payload: Record<string, unknown>): Promise<{ idempotent: boolean; edge: KnowledgeEdgeRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_knowledge_edge_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; edge: KnowledgeEdgeRow };
+}
+export async function fetchKnowledgeNodes(nodeType: string | null = null, q: string | null = null, limit = 100): Promise<KnowledgeNodeRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_knowledge_nodes', { p_node_type: nodeType, p_q: q, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: KnowledgeNodeRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface KnowledgeNeighborsResp { found: boolean; node: KnowledgeNodeRow | null; outgoing: Array<{ edge: KnowledgeEdgeRow; node: KnowledgeNodeRow }>; incoming: Array<{ edge: KnowledgeEdgeRow; node: KnowledgeNodeRow }> }
+export async function fetchKnowledgeNeighbors(nodeId: string, limit = 50): Promise<KnowledgeNeighborsResp> {
+  const { data, error } = await supabase.rpc('admin_ai_knowledge_neighbors', { p_node_id: nodeId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as Partial<KnowledgeNeighborsResp> | null) ?? {};
+  return { found: d.found ?? false, node: d.node ?? null, outgoing: d.outgoing ?? [], incoming: d.incoming ?? [] };
+}
+export interface AiPatternRow {
+  id: string; pattern_code: string; pattern_type: string; scope: string; scope_id: string | null;
+  context_definition: Record<string, unknown>; subject_definition: Record<string, unknown>; outcome_definition: Record<string, unknown>;
+  direction: string | null; effect_size: number | null; confidence: number | null; sample_size: number | null;
+  support_count: number; contradiction_count: number; quality_score: number | null; status: string;
+  evidence: Array<Record<string, unknown>>; source_period_start: string | null; source_period_end: string | null;
+  first_detected_at: string; last_detected_at: string; last_validated_at: string | null; source_version: string; created_at: string;
+}
+export async function saveAiPattern(payload: Record<string, unknown>): Promise<{ idempotent: boolean; pattern: AiPatternRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_pattern_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; pattern: AiPatternRow };
+}
+export async function fetchAiPatterns(patternType: string | null = null, status: string | null = null, scope: string | null = null, limit = 100): Promise<AiPatternRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_patterns', { p_pattern_type: patternType, p_status: status, p_scope: scope, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: AiPatternRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setAiPatternStatus(id: string, status: string, reason: string): Promise<AiPatternRow> {
+  const { data, error } = await supabase.rpc('admin_ai_pattern_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as AiPatternRow;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
