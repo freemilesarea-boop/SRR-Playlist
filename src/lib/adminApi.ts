@@ -4,6 +4,7 @@ import type {
 } from './contextIntel';
 import type { DriftWindow, ContextFeature, Snapshot, RecoOutcomeRow } from './contextLearning';
 import type { ScanRow } from './predictiveIntel';
+import type { GuardrailSource } from './strategySandbox';
 
 export interface DashboardStats {
   today_visitors: number;
@@ -1720,6 +1721,57 @@ export async function fetchStrategyLearning(contextKey: string | null = null): P
   if (error) throw error;
   const d = (data as Partial<StrategyLearningResp> | null) ?? {};
   return { context_key: d.context_key ?? contextKey, by_status: d.by_status ?? {}, by_type: d.by_type ?? [], totals: d.totals ?? null, generated_at: d.generated_at ?? null };
+}
+
+// ── Strategy Sandbox (0494 — 격리 검증·시뮬레이션 전용, Production 무변경/자동 실행 없음) ──
+
+export async function fetchSandboxConstraints(storeType: string): Promise<GuardrailSource> {
+  const { data, error } = await supabase.rpc('admin_sandbox_constraints', { p_store_type: storeType });
+  if (error) throw error;
+  const d = (data as Partial<GuardrailSource> | null) ?? {};
+  return { store_type: d.store_type ?? storeType, genre_guardrails: d.genre_guardrails ?? [], store_guardrails: d.store_guardrails ?? [] };
+}
+export interface SandboxRunRow {
+  id?: string; strategy_id: string | null; context_key: string; run_name: string | null;
+  run_status: string; review_status: string; objective: string | null; scenario: string | null; decision: string | null;
+  safety_score: number | null; benefit_score: number | null; roi_score: number | null; risk_score: number | null; cost_score: number | null;
+  sample_size: number | null; confidence: number | null; hard_constraint_pass: boolean | null; fallback_used: boolean | null;
+  created_at: string; completed_at: string | null; expired_at: string | null;
+  strategy_snapshot?: Record<string, unknown>; baseline_snapshot?: Record<string, unknown>; constraint_snapshot?: Record<string, unknown>;
+  simulation_result?: Record<string, unknown>; validation_result?: Record<string, unknown>; evidence?: Array<{ label: string; value: string | number | boolean | null }>;
+}
+export async function createSandboxRun(payload: Record<string, unknown>): Promise<SandboxRunRow> {
+  const { data, error } = await supabase.rpc('admin_sandbox_create', { p_payload: payload });
+  if (error) throw error;
+  return data as SandboxRunRow;
+}
+export interface SandboxAuditRow { id: string; sandbox_run_id: string; action: string; previous_state: string | null; next_state: string | null; actor_id: string | null; reason: string | null; created_at: string }
+export async function fetchSandboxDetail(runId: string): Promise<{ run: SandboxRunRow | null; audit: SandboxAuditRow[] }> {
+  const { data, error } = await supabase.rpc('admin_sandbox_detail', { p_run_id: runId });
+  if (error) throw error;
+  const d = (data as { found?: boolean; run?: SandboxRunRow; audit?: SandboxAuditRow[] } | null) ?? {};
+  return { run: d.run ?? null, audit: d.audit ?? [] };
+}
+export async function fetchSandboxHistory(contextKey: string | null = null, runStatus: string | null = null, reviewStatus: string | null = null, limit = 100): Promise<SandboxRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_sandbox_history', { p_context_key: contextKey, p_run_status: runStatus, p_review_status: reviewStatus, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: SandboxRunRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface SandboxSummary {
+  total: number; passed: number; review_required: number; rejected: number; insufficient_data: number;
+  failures: number; expired: number; approval_candidates: number; avg_safety: number | null; avg_benefit: number | null; avg_roi: number | null;
+}
+export async function fetchSandboxSummary(contextKey: string | null = null): Promise<SandboxSummary | null> {
+  const { data, error } = await supabase.rpc('admin_sandbox_summary', { p_context_key: contextKey });
+  if (error) throw error;
+  const d = (data as { summary?: SandboxSummary } | null) ?? {};
+  return d.summary ?? null;
+}
+export async function markSandboxReview(runId: string, reviewStatus: string, reason: string | null = null): Promise<SandboxRunRow> {
+  const { data, error } = await supabase.rpc('admin_sandbox_mark_review', { p_run_id: runId, p_review_status: reviewStatus, p_reason: reason });
+  if (error) throw error;
+  return data as SandboxRunRow;
 }
 
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
