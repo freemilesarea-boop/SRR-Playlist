@@ -48,6 +48,7 @@ import PlaylistIntelligenceSection from './PlaylistIntelligenceSection';
 import PlaylistExperimentSection from './PlaylistExperimentSection';
 import TrackRolloutSection from './TrackRolloutSection';
 import PlaylistGeneratorSection from './PlaylistGeneratorSection';
+import AdaptiveRotationSection from './AdaptiveRotationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -140,6 +141,9 @@ export default function Dashboard() {
 
       {/* AI Playlist Generator — 실제 메타/KPI 기반 Draft 생성 (자동 Publish 없음) */}
       <PlaylistGeneratorSection />
+
+      {/* Adaptive Rotation & Anti-Fatigue — 재생 순서 초안 (자동 Queue/Scheduler 반영 없음) */}
+      <AdaptiveRotationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

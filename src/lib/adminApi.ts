@@ -1444,6 +1444,58 @@ export async function setPlaylistDraftStatus(id: string, status: 'draft' | 'appr
   return data as PlaylistDraftRow;
 }
 
+// ── Adaptive Rotation (0488 — Sequencing; 자동 Queue/Scheduler 반영 없음) ──
+
+export interface RotationPoolTrack {
+  track_id: string; title: string | null; artist: string | null; main_genre: string | null; mood: string | null;
+  bpm: number | null; duration: number | null; language: string | null;
+  events: number; skip_rate: number | null; completion_rate: number | null; likes: number; replays: number;
+  p1d: number; p7d: number; p30d: number; last_played_at: string | null; days_since_last_play: number | null;
+  store_coverage: number | null; rollout_stage: string | null;
+}
+export async function fetchRotationPool(range = '30d', limit = 500, storeType?: string | null): Promise<RotationPoolTrack[]> {
+  const { data, error } = await supabase.rpc('admin_rotation_track_pool', { p_range: range, p_limit: limit, p_store_type: storeType ?? null });
+  if (error) throw error;
+  const d = (data as { items?: RotationPoolTrack[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export interface RotationDraftRow {
+  id: string; source_playlist_draft_id: string | null; name: string; store_type_slug: string | null; brand_key: string | null;
+  daypart: string | null; season: string | null; target_duration_minutes: number | null; status: string;
+  config: Record<string, unknown>; sequence: unknown[]; simulation: unknown; evidence: unknown[]; created_at: string; created_by_name?: string | null;
+}
+export async function saveRotationDraft(payload: Record<string, unknown>): Promise<RotationDraftRow> {
+  const { data, error } = await supabase.rpc('admin_rotation_draft_save', { p_payload: payload as never });
+  if (error) throw error;
+  return data as RotationDraftRow;
+}
+export async function fetchRotationDrafts(status?: string | null, limit = 50): Promise<RotationDraftRow[]> {
+  const { data, error } = await supabase.rpc('admin_rotation_drafts', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: RotationDraftRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setRotationDraftStatus(id: string, status: 'draft' | 'simulated' | 'approved' | 'rejected' | 'archived', note?: string | null): Promise<RotationDraftRow> {
+  const { data, error } = await supabase.rpc('admin_rotation_draft_set_status', { p_id: id, p_status: status, p_note: note ?? null });
+  if (error) throw error;
+  return data as RotationDraftRow;
+}
+export interface RotationHistoryRow { id: string; draft_id: string; action: string; from_status: string | null; to_status: string | null; note: string | null; created_at: string; created_by_name: string | null }
+export async function fetchRotationHistory(limit = 100): Promise<RotationHistoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_rotation_history', { p_limit: limit, p_draft_id: null });
+  if (error) throw error;
+  const d = (data as { items?: RotationHistoryRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface RotationLearning { by_status: Record<string, number>; total: number; approved: number; rejected: number; approval_rate: number | null }
+export async function fetchRotationLearning(): Promise<RotationLearning> {
+  const { data, error } = await supabase.rpc('admin_rotation_learning');
+  if (error) throw error;
+  const d = (data as Partial<RotationLearning> | null) ?? {};
+  return { by_status: d.by_status ?? {}, total: d.total ?? 0, approved: d.approved ?? 0, rejected: d.rejected ?? 0, approval_rate: d.approval_rate ?? null };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
