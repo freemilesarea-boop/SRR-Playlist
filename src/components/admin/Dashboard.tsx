@@ -45,6 +45,7 @@ import AutomationCenterSection from './AutomationCenterSection';
 import AiRecommendationSection from './AiRecommendationSection';
 import AiDecisionIntelligenceSection from './AiDecisionIntelligenceSection';
 import PlaylistIntelligenceSection from './PlaylistIntelligenceSection';
+import PlaylistExperimentSection from './PlaylistExperimentSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -128,6 +129,9 @@ export default function Dashboard() {
 
       {/* Adaptive Playlist Intelligence — 실제 재생 이벤트 KPI 기반 Playlist 성과·추천 */}
       <PlaylistIntelligenceSection />
+
+      {/* Playlist Optimization & Experiments — A/B 실험 기반 안전 최적화 (자동 교체 없음) */}
+      <PlaylistExperimentSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
