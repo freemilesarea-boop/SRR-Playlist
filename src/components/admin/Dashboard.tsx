@@ -54,6 +54,7 @@ import ContextIntelligenceSection from './ContextIntelligenceSection';
 import ContextLearningSection from './ContextLearningSection';
 import PredictiveIntelligenceSection from './PredictiveIntelligenceSection';
 import OptimizationStrategySection from './OptimizationStrategySection';
+import StrategySandboxSection from './StrategySandboxSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -164,6 +165,9 @@ export default function Dashboard() {
 
       {/* Optimization Strategy — Prediction 기반 최적화 전략 후보 생성·평가 (자동 실행 없음, 승인 필요) */}
       <OptimizationStrategySection />
+
+      {/* Strategy Sandbox — 전략 격리 검증·시뮬레이션 (Production 무변경, 자동 실행/승인 없음) */}
+      <StrategySandboxSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
