@@ -41,6 +41,7 @@ import BusinessSection from './BusinessSection';
 import StreamingSection from './StreamingSection';
 import MissionControlSection from './MissionControlSection';
 import ActionCenterSection from './ActionCenterSection';
+import AutomationCenterSection from './AutomationCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -121,6 +122,9 @@ export default function Dashboard() {
 
       {/* Operations Action Center — 운영 실행 계층 (기존 admin RPC 재사용) */}
       <ActionCenterSection />
+
+      {/* Operations Automation Center — 운영 자동화 기반 (Action Center Command/RPC 재사용) */}
+      <AutomationCenterSection />
 
       {/* 회원 통계 (요약 · 결제 현황 · 플랜별 가입자 · 상태) */}
       <MemberStatsSection />

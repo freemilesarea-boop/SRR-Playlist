@@ -951,6 +951,95 @@ export async function actionBulkApproveTracks(trackIds: string[], immediate = fa
   return data;
 }
 
+// ── Automation Center (0480 + Action Center Command 재사용) ──────────
+// 운영 자동화 규칙 저장/게이팅/감사만 신규다. 실제 실행은 Action Center Command
+// 모델(0479)과 기존 admin 실행 RPC 재사용. 규칙 생성만으로 실행되지 않으며(비활성+
+// dry_run 기본), Auto 는 Kill Switch(global+domain)+risk=low+실행 RPC 존재일 때만.
+
+export interface AutomationRuleRow {
+  id: string; name: string; description: string | null;
+  domain: string; trigger_type: string; metric: string | null; operator: string | null; threshold: number | null;
+  duration_seconds: number | null; scope: string | null;
+  action_type: string; action_config: Record<string, unknown>;
+  execution_mode: string; risk_level: string; approval_required: boolean;
+  cooldown_seconds: number; max_runs_per_day: number; max_targets_per_run: number;
+  is_enabled: boolean; dry_run: boolean;
+  created_at: string; updated_at: string;
+  last_evaluated_at: string | null; last_triggered_at: string | null; last_executed_at: string | null;
+  disabled_reason: string | null;
+}
+
+export async function fetchAutomationRules(domain?: string | null): Promise<AutomationRuleRow[]> {
+  const { data, error } = await supabase.rpc('admin_automation_rule_list', { p_domain: domain ?? null });
+  if (error) throw error;
+  const d = (data as { items?: AutomationRuleRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
+export async function upsertAutomationRule(id: string | null, payload: Record<string, unknown>): Promise<AutomationRuleRow> {
+  const { data, error } = await supabase.rpc('admin_automation_rule_upsert', { p_id: id, p_payload: payload as never });
+  if (error) throw error;
+  return data as AutomationRuleRow;
+}
+
+export async function toggleAutomationRule(id: string, opts: { enabled?: boolean; dryRun?: boolean; disabledReason?: string | null }): Promise<AutomationRuleRow> {
+  const { data, error } = await supabase.rpc('admin_automation_rule_toggle', {
+    p_id: id, p_enabled: opts.enabled ?? null, p_dry_run: opts.dryRun ?? null, p_disabled_reason: opts.disabledReason ?? null,
+  });
+  if (error) throw error;
+  return data as AutomationRuleRow;
+}
+
+export interface KillSwitchResult { global: boolean; domains: Record<string, boolean>; generated_at: string }
+
+export async function fetchAutomationKillSwitch(): Promise<KillSwitchResult> {
+  const { data, error } = await supabase.rpc('admin_automation_kill_switch_get');
+  if (error) throw error;
+  const d = (data as Partial<KillSwitchResult> | null) ?? {};
+  return { global: d.global ?? false, domains: d.domains ?? {}, generated_at: d.generated_at ?? '' };
+}
+
+export async function setAutomationKillSwitch(scope: string, enabled: boolean): Promise<KillSwitchResult> {
+  const { data, error } = await supabase.rpc('admin_automation_kill_switch_set', { p_scope: scope, p_enabled: enabled });
+  if (error) throw error;
+  const d = (data as Partial<KillSwitchResult> | null) ?? {};
+  return { global: d.global ?? false, domains: d.domains ?? {}, generated_at: d.generated_at ?? '' };
+}
+
+export interface AutomationEvalResult {
+  ok: boolean; rule_id: string; condition_met: boolean; decision: string;
+  block_reason: string | null; command_id: string | null; dry_run: boolean;
+  execution_mode: string; risk_level: string; action_type: string;
+}
+
+/** 규칙 평가(서버 게이팅 + 감사). dryRun=true 면 시뮬레이션(Command 생성 없음). */
+export async function evaluateAutomationRule(input: {
+  ruleId: string; actual: number | null; dryRun?: boolean; supported?: boolean; targetId?: string | null; targetCount?: number | null;
+}): Promise<AutomationEvalResult> {
+  const { data, error } = await supabase.rpc('admin_automation_evaluate', {
+    p_rule_id: input.ruleId, p_actual: input.actual, p_dry_run: input.dryRun ?? true,
+    p_supported: input.supported ?? false, p_target_id: input.targetId ?? null, p_target_count: input.targetCount ?? null,
+  });
+  if (error) throw error;
+  return data as AutomationEvalResult;
+}
+
+export interface AutomationRunRow {
+  id: string; rule_id: string | null; rule_name: string | null; domain: string | null;
+  metric: string | null; actual_value: number | null; threshold: number | null; condition_met: boolean | null;
+  execution_mode: string | null; decision: string; block_reason: string | null; command_id: string | null;
+  target_count: number | null; risk_level: string | null; dry_run: boolean; evaluated_at: string; requested_by_name: string | null;
+}
+
+export async function fetchAutomationHistory(opts: { limit?: number; ruleId?: string | null; domain?: string | null; dryRun?: boolean | null } = {}): Promise<AutomationRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_automation_history', {
+    p_limit: opts.limit ?? 50, p_rule_id: opts.ruleId ?? null, p_domain: opts.domain ?? null, p_dry_run: opts.dryRun ?? null,
+  });
+  if (error) throw error;
+  const d = (data as { items?: AutomationRunRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
