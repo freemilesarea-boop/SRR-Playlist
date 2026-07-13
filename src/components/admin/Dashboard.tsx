@@ -51,6 +51,7 @@ import PlaylistGeneratorSection from './PlaylistGeneratorSection';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
+import ContextLearningSection from './ContextLearningSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -152,6 +153,9 @@ export default function Dashboard() {
 
       {/* Context Intelligence — 상황(Store Type·Daypart·Weekday) 조합별 성과 학습 (분석/추천 전용) */}
       <ContextIntelligenceSection />
+
+      {/* Context Evolution & Learning — 시간 진화(Drift/Stability) + Recommendation Learning (자동 반영 없음) */}
+      <ContextLearningSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
