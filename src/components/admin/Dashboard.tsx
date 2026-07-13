@@ -46,6 +46,7 @@ import AiRecommendationSection from './AiRecommendationSection';
 import AiDecisionIntelligenceSection from './AiDecisionIntelligenceSection';
 import PlaylistIntelligenceSection from './PlaylistIntelligenceSection';
 import PlaylistExperimentSection from './PlaylistExperimentSection';
+import TrackRolloutSection from './TrackRolloutSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -132,6 +133,9 @@ export default function Dashboard() {
 
       {/* Playlist Optimization & Experiments — A/B 실험 기반 안전 최적화 (자동 교체 없음) */}
       <PlaylistExperimentSection />
+
+      {/* New Track Progressive Rollout — 신규 음원 점진 확산 (자동 배포 없음) */}
+      <TrackRolloutSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
