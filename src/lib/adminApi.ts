@@ -1774,6 +1774,97 @@ export async function markSandboxReview(runId: string, reviewStatus: string, rea
   return data as SandboxRunRow;
 }
 
+// ── Draft Promotion Gateway (0495 — 운영자 승인 기반 Draft 변환, Production 무변경/자동 실행 없음) ──
+
+export interface EligibleRunRow {
+  sandbox_run_id: string; strategy_id: string | null; context_key: string; run_status: string; review_status: string;
+  decision: string | null; scenario: string | null; objective: string | null; safety_score: number | null; benefit_score: number | null;
+  roi_score: number | null; risk_score: number | null; cost_score: number | null; confidence: number | null; sample_size: number | null;
+  hard_constraint_pass: boolean | null; input_hash: string | null; model_version: string | null; strategy_snapshot: Record<string, unknown> | null; created_at: string; expired_at: string | null;
+}
+export async function fetchEligibleRuns(contextKey: string | null = null, limit = 100): Promise<EligibleRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_promotion_eligible_runs', { p_context_key: contextKey, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: EligibleRunRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface PromotionRequestRow {
+  id?: string; sandbox_run_id: string | null; strategy_id: string | null; context_key: string; requested_draft_type: string;
+  request_status: string; risk_tier: string | null; approval_readiness: number | null; additional_approval_required: boolean | null;
+  requested_by: string | null; reviewed_by: string | null; approved_by: string | null; rejected_by: string | null;
+  rejection_reason: string | null; approval_reason: string | null; draft_reference: string | null; idempotency_key: string | null;
+  source_input_hash: string | null; source_model_version: string | null; created_at: string;
+}
+export async function createPromotionRequest(payload: Record<string, unknown>): Promise<{ idempotent: boolean; request: PromotionRequestRow }> {
+  const { data, error } = await supabase.rpc('admin_promotion_request', { p_payload: payload });
+  if (error) throw error;
+  return data as { idempotent: boolean; request: PromotionRequestRow };
+}
+export async function reviewPromotion(id: string, reason: string | null = null): Promise<PromotionRequestRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_review', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as PromotionRequestRow;
+}
+export async function approvePromotion(id: string, reason: string | null = null): Promise<PromotionRequestRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_approve', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as PromotionRequestRow;
+}
+export async function rejectPromotion(id: string, reason: string | null = null): Promise<PromotionRequestRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_reject', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as PromotionRequestRow;
+}
+export interface PromotionDraftRow {
+  id?: string; promotion_request_id: string | null; sandbox_run_id: string | null; strategy_id: string | null; context_key: string;
+  draft_type: string; draft_status: string; canary_status: string; risk_tier: string | null; canary_readiness: number | null; approval_readiness: number | null;
+  payload: Record<string, unknown> | null; validation_result: Record<string, unknown> | null; guardrail_result: Record<string, unknown> | null;
+  go_criteria: Record<string, unknown> | null; rollback_plan: Record<string, unknown> | null; observation_plan: Record<string, unknown> | null;
+  source_input_hash: string | null; source_model_version: string | null; created_at: string; updated_at: string | null; expired_at: string | null;
+}
+export async function convertPromotionDraft(requestId: string, payload: Record<string, unknown>): Promise<{ idempotent: boolean; draft: PromotionDraftRow }> {
+  const { data, error } = await supabase.rpc('admin_promotion_convert_draft', { p_request_id: requestId, p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; draft: PromotionDraftRow };
+}
+export async function validatePromotionDraft(draftId: string, payload: Record<string, unknown>): Promise<PromotionDraftRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_draft_validate', { p_draft_id: draftId, p_payload: payload });
+  if (error) throw error; return data as PromotionDraftRow;
+}
+export async function markCanaryCandidate(draftId: string, reason: string | null = null): Promise<PromotionDraftRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_mark_canary_candidate', { p_draft_id: draftId, p_reason: reason });
+  if (error) throw error; return data as PromotionDraftRow;
+}
+export async function removeCanaryCandidate(draftId: string, reason: string | null = null): Promise<PromotionDraftRow> {
+  const { data, error } = await supabase.rpc('admin_promotion_remove_canary_candidate', { p_draft_id: draftId, p_reason: reason });
+  if (error) throw error; return data as PromotionDraftRow;
+}
+export interface PromotionAuditRow { id: string; request_id: string | null; draft_id: string | null; action: string; previous_state: string | null; next_state: string | null; actor_id: string | null; reason: string | null; created_at: string }
+export async function fetchPromotionDraftDetail(draftId: string): Promise<{ draft: PromotionDraftRow | null; audit: PromotionAuditRow[] }> {
+  const { data, error } = await supabase.rpc('admin_promotion_draft_detail', { p_draft_id: draftId });
+  if (error) throw error;
+  const d = (data as { found?: boolean; draft?: PromotionDraftRow; audit?: PromotionAuditRow[] } | null) ?? {};
+  return { draft: d.draft ?? null, audit: d.audit ?? [] };
+}
+export async function fetchPromotionHistory(contextKey: string | null = null, kind: 'requests' | 'drafts' = 'requests', limit = 100): Promise<Array<PromotionRequestRow | PromotionDraftRow>> {
+  const { data, error } = await supabase.rpc('admin_promotion_history', { p_context_key: contextKey, p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: Array<PromotionRequestRow | PromotionDraftRow> } | null) ?? {};
+  return d.items ?? [];
+}
+export interface PromotionSummary {
+  requests: { total: number; pending_reviews: number; approved: number; rejected: number; converted: number; expired: number; high_risk: number; critical_risk: number; avg_approval_readiness: number | null } | null;
+  drafts: { total: number; ready: number; validation_failed: number; canary_candidates: number; expired: number; avg_canary_readiness: number | null } | null;
+}
+export async function fetchPromotionSummary(contextKey: string | null = null): Promise<PromotionSummary> {
+  const { data, error } = await supabase.rpc('admin_promotion_summary', { p_context_key: contextKey });
+  if (error) throw error;
+  const d = (data as Partial<PromotionSummary> | null) ?? {};
+  return { requests: d.requests ?? null, drafts: d.drafts ?? null };
+}
+export async function fetchPromotionAudit(requestId: string | null = null, draftId: string | null = null, limit = 200): Promise<PromotionAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_promotion_audit', { p_request_id: requestId, p_draft_id: draftId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PromotionAuditRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

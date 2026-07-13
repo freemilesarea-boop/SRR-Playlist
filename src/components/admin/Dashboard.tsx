@@ -55,6 +55,7 @@ import ContextLearningSection from './ContextLearningSection';
 import PredictiveIntelligenceSection from './PredictiveIntelligenceSection';
 import OptimizationStrategySection from './OptimizationStrategySection';
 import StrategySandboxSection from './StrategySandboxSection';
+import DraftPromotionSection from './DraftPromotionSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -168,6 +169,9 @@ export default function Dashboard() {
 
       {/* Strategy Sandbox — 전략 격리 검증·시뮬레이션 (Production 무변경, 자동 실행/승인 없음) */}
       <StrategySandboxSection />
+
+      {/* Draft Promotion Gateway — 운영자 승인 기반 Draft 변환·Canary 후보 (Production 무변경, 자동 실행 없음) */}
+      <DraftPromotionSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
