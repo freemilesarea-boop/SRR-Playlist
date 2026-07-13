@@ -1684,6 +1684,44 @@ export async function fetchPredictionHistory(contextKey: string | null = null, p
   return d.items ?? [];
 }
 
+// ── Optimization Strategy (0493 — 전략 제안·시뮬레이션 전용, 자동 실행 없음) ──
+
+export interface StrategyRow {
+  id?: string; context_key: string; strategy_type: string; target: string | null;
+  roi_score: number | null; risk_score: number | null; cost_score: number | null; confidence: number | null;
+  expected_gain: Record<string, number> | null; evidence: Array<{ label: string; value: string | number | null }>;
+  status: string; outcome: string | null; before_kpi: Record<string, unknown> | null; after_kpi: Record<string, unknown> | null;
+  created_at: string; resolved_at: string | null;
+}
+export async function saveStrategy(payload: Record<string, unknown>): Promise<StrategyRow> {
+  const { data, error } = await supabase.rpc('admin_strategy_save', { p_payload: payload });
+  if (error) throw error;
+  return data as StrategyRow;
+}
+export async function fetchStrategyMemory(contextKey: string | null = null, status: string | null = null, limit = 100): Promise<StrategyRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategy_memory', { p_context_key: contextKey, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: StrategyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function resolveStrategy(id: string, status: string, outcome: string | null = null, afterKpi: Record<string, unknown> | null = null): Promise<StrategyRow> {
+  const { data, error } = await supabase.rpc('admin_strategy_resolve', { p_id: id, p_status: status, p_outcome: outcome, p_after_kpi: afterKpi });
+  if (error) throw error;
+  return data as StrategyRow;
+}
+export interface StrategyLearningResp {
+  context_key: string | null; by_status: Record<string, number>;
+  by_type: Array<{ strategy_type: string; total: number; approved: number; dismissed: number; improved: number; degraded: number; avg_roi: number | null }>;
+  totals: { total: number; approved: number; dismissed: number; resolved_outcomes: number; improved: number; degraded: number } | null;
+  generated_at: string | null;
+}
+export async function fetchStrategyLearning(contextKey: string | null = null): Promise<StrategyLearningResp> {
+  const { data, error } = await supabase.rpc('admin_strategy_learning', { p_context_key: contextKey });
+  if (error) throw error;
+  const d = (data as Partial<StrategyLearningResp> | null) ?? {};
+  return { context_key: d.context_key ?? contextKey, by_status: d.by_status ?? {}, by_type: d.by_type ?? [], totals: d.totals ?? null, generated_at: d.generated_at ?? null };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
