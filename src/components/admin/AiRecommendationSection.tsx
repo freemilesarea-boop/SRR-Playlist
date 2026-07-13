@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Sparkles, ListChecks, History as HistoryIcon, RefreshCw, CheckCircle2, XCircle, Inbox, ExternalLink, Info,
 } from 'lucide-react';
-import { AdminCard, AdminAlert, AdminBadge, AdminEmpty, AdminModal } from '@/components/admin/ui';
+import { AdminCard, AdminAlert, AdminBadge, AdminEmpty } from '@/components/admin/ui';
+import RecommendationInsightModal from './RecommendationInsightModal';
 import {
   fetchMemberGrowthKpis, fetchRevenueKpis, fetchBusinessSummary, fetchArtistBreakdown,
   fetchNocKpi, fetchStreamV2Health, fetchNowPlayingKpi,
@@ -30,7 +31,7 @@ import { relativeTimeKo, formatKstDateTime } from '@/lib/memberGrowth';
 import {
   generateRecommendations, priorityRank,
   PRIORITY_LABEL, PRIORITY_TONE, CATEGORY_LABEL,
-  type Recommendation, type RecommendationInputs, type Evidence, type Priority,
+  type Recommendation, type RecommendationInputs, type Priority,
 } from '@/lib/aiRecommendation';
 
 const NUM = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('ko-KR'));
@@ -131,32 +132,7 @@ export default function AiRecommendationSection() {
       {tab === 'feed' && <FeedTab feed={feed} loading={loading} busy={busy} onDetail={setDetail} onDecide={decide} />}
       {tab === 'history' && <HistoryTab rows={history} loading={hLoading} />}
 
-      {detail && (
-        <AdminModal open onClose={() => setDetail(null)} title={<span className="flex items-center gap-1.5"><Info size={16} /> 추천 근거 (Evidence)</span>}>
-          <div className="space-y-3 text-xs">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <AdminBadge tone={PRIORITY_TONE[detail.priority]} size="sm">{PRIORITY_LABEL[detail.priority]}</AdminBadge>
-              <AdminBadge tone="neutral" size="sm">{CATEGORY_LABEL[detail.category]}</AdminBadge>
-              <span className="font-bold text-ink">{detail.title}</span>
-            </div>
-            <p className="text-ink-mute">{detail.message}</p>
-            <div className="rounded-lg bg-bg-deep p-2">
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-ink-dim">왜 추천했는가 (실제 KPI 비교)</p>
-              <p className="text-ink">{detail.reason}</p>
-              <p className="mt-1 text-ink-dim">Confidence(데이터 충족률) {detail.confidence}% · Score {detail.score}</p>
-            </div>
-            <EvidenceTable evidence={detail.evidence} />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => void decide(detail, 'dismissed')} disabled={busy}
-                className="rounded-full bg-bg-deep px-3 py-1.5 text-ink-mute hover:text-ink disabled:opacity-40">숨김</button>
-              <button onClick={() => void decide(detail, 'resolved')} disabled={busy}
-                className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 font-bold text-black disabled:opacity-40">
-                <CheckCircle2 size={12} /> 해결됨
-              </button>
-            </div>
-          </div>
-        </AdminModal>
-      )}
+      {detail && <RecommendationInsightModal rec={detail} onClose={() => setDetail(null)} />}
     </AdminCard>
   );
 }
@@ -232,36 +208,6 @@ function FeedTab({ feed, loading, busy, onDetail, onDecide }: {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-/* ── Evidence 표 ───────────────────────────────────────────── */
-function EvidenceTable({ evidence }: { evidence: Evidence[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] text-left text-[11px]">
-        <thead>
-          <tr className="border-b border-line/10 text-[10px] uppercase tracking-wider text-ink-dim">
-            <th className="px-2 py-1.5 font-semibold">KPI</th>
-            <th className="px-2 py-1.5 text-right font-semibold">현재</th>
-            <th className="px-2 py-1.5 text-right font-semibold">기준</th>
-            <th className="px-2 py-1.5 text-right font-semibold">변화율</th>
-            <th className="px-2 py-1.5 font-semibold">출처</th>
-          </tr>
-        </thead>
-        <tbody>
-          {evidence.map((e, i) => (
-            <tr key={i} className="border-b border-line/5 last:border-0">
-              <td className="px-2 py-1.5 text-ink">{e.label} {e.satisfied ? <CheckCircle2 size={10} className="inline" /> : ''}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink-mute">{NUM(e.current)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink-dim">{NUM(e.baseline)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink-mute">{e.changeRate == null ? '—' : `${e.changeRate}%`}</td>
-              <td className="px-2 py-1.5 text-ink-dim">{e.source}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
