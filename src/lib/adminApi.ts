@@ -3028,6 +3028,131 @@ export async function fetchOpsAudit(workItemId: string | null = null, limit = 20
   return d.items ?? [];
 }
 
+// ── Security / Privacy / Compliance (0510 — 조회·검토·권고·Reference 만, 계정/권한/데이터 변경 없음) ──
+
+export interface SecurityIdentityRow {
+  id: string; role: string; account_type: string | null; masked_email: string | null;
+  is_active: boolean; is_admin: boolean; last_sign_in_at: string | null; created_at: string; mfa_status: string;
+}
+export interface AccessReviewRow {
+  id: string; review_code: string; review_scope: string; subject_user_id: string; subject_role: string | null;
+  review_type: string; current_permissions: Record<string, unknown>; risk_summary: Record<string, unknown>;
+  conflict_summary: Record<string, unknown>; recommendation: string | null; review_status: string;
+  reviewer_id: string | null; approver_id: string | null; decision: string | null; decision_reason: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  source_version: string; input_hash: string; idempotency_key: string;
+  created_by: string | null; created_at: string; reviewed_at: string | null; expires_at: string | null;
+}
+export interface DataRegistryRow {
+  id: string; data_code: string; domain: string; table_name: string; column_name: string | null;
+  storage_location: string; classification: string; contains_personal_data: boolean;
+  contains_financial_data: boolean; contains_contract_data: boolean;
+  encryption_status: string; access_logging_status: string; retention_policy_id: string | null; owner: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  lifecycle_status: string; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface PrivacyRequestRow {
+  id: string; request_code: string; subject_user_id: string | null; request_type: string; request_status: string;
+  requested_at: string; identity_verified_at: string | null; due_at: string | null; assigned_to: string | null;
+  data_scope: Array<unknown>; legal_hold: boolean; retention_exception: string | null; action_plan: Array<unknown>;
+  external_action_reference: Record<string, unknown> | null; decision: string | null; decision_reason: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  created_by: string | null; reviewed_by: string | null; completed_at: string | null; created_at: string;
+}
+export interface RetentionPolicyRow {
+  id: string; policy_code: string; data_domain: string; retention_period_days: number | null; legal_basis: string;
+  contract_requirement: boolean; settlement_requirement: boolean; deletion_method: string; exception_rules: Array<unknown>;
+  effective_from: string; effective_to: string | null; version: number; lifecycle_status: string; change_reason: string;
+  approved_by: string | null; created_by: string | null; created_at: string;
+}
+export interface ComplianceControlRow {
+  id: string; control_code: string; control_domain: string; title: string; description: string | null; requirement: string | null;
+  evidence_sources: Array<unknown>; control_status: string; owner: string | null; reviewer: string | null;
+  review_frequency: string | null; last_reviewed_at: string | null; next_review_at: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  lifecycle_status: string; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface SecurityEventRow { id: string; event_type: string; severity: string; subject_user_id: string | null; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export async function fetchSecuritySummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_security_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function fetchSecurityIdentities(limit = 200): Promise<{ items: SecurityIdentityRow[]; note: string }> {
+  const { data, error } = await supabase.rpc('admin_security_identities', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: SecurityIdentityRow[]; note?: string } | null) ?? {};
+  return { items: d.items ?? [], note: d.note ?? '' };
+}
+export async function createAccessReview(payload: Record<string, unknown>): Promise<{ idempotent: boolean; review: AccessReviewRow }> {
+  const { data, error } = await supabase.rpc('admin_security_access_review_create', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; review: AccessReviewRow };
+}
+export async function decideAccessReview(id: string, status: string, recommendation: string | null, reason: string): Promise<AccessReviewRow> {
+  const { data, error } = await supabase.rpc('admin_security_access_review_decide', { p_id: id, p_status: status, p_recommendation: recommendation, p_reason: reason });
+  if (error) throw error; return data as AccessReviewRow;
+}
+export async function fetchAccessReviews(status: string | null = null, limit = 100): Promise<AccessReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_security_access_reviews', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: AccessReviewRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function recordSecurityExternalAction(payload: Record<string, unknown>): Promise<{ recorded: boolean; event_id: string; note: string }> {
+  const { data, error } = await supabase.rpc('admin_security_external_action_reference', { p_payload: payload });
+  if (error) throw error; return data as { recorded: boolean; event_id: string; note: string };
+}
+export async function saveSecurityDataRegistry(payload: Record<string, unknown>): Promise<DataRegistryRow> {
+  const { data, error } = await supabase.rpc('admin_security_data_registry_save', { p_payload: payload });
+  if (error) throw error; return data as DataRegistryRow;
+}
+export async function fetchSecurityDataRegistry(limit = 100): Promise<DataRegistryRow[]> {
+  const { data, error } = await supabase.rpc('admin_security_data_registry', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: DataRegistryRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function createPrivacyRequest(payload: Record<string, unknown>): Promise<PrivacyRequestRow> {
+  const { data, error } = await supabase.rpc('admin_privacy_request_create', { p_payload: payload });
+  if (error) throw error; return data as PrivacyRequestRow;
+}
+export async function updatePrivacyRequest(id: string, section: string, value: unknown, reason: string): Promise<PrivacyRequestRow> {
+  const { data, error } = await supabase.rpc('admin_privacy_request_update', { p_id: id, p_section: section, p_value: value, p_reason: reason });
+  if (error) throw error; return data as PrivacyRequestRow;
+}
+export async function fetchPrivacyRequests(status: string | null = null, limit = 100): Promise<PrivacyRequestRow[]> {
+  const { data, error } = await supabase.rpc('admin_privacy_requests', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PrivacyRequestRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveRetentionPolicy(payload: Record<string, unknown>): Promise<RetentionPolicyRow> {
+  const { data, error } = await supabase.rpc('admin_retention_policy_save', { p_payload: payload });
+  if (error) throw error; return data as RetentionPolicyRow;
+}
+export async function fetchRetentionPolicies(limit = 100): Promise<RetentionPolicyRow[]> {
+  const { data, error } = await supabase.rpc('admin_retention_policies', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: RetentionPolicyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveComplianceControl(payload: Record<string, unknown>): Promise<ComplianceControlRow> {
+  const { data, error } = await supabase.rpc('admin_compliance_control_save', { p_payload: payload });
+  if (error) throw error; return data as ComplianceControlRow;
+}
+export async function fetchComplianceControls(limit = 100): Promise<ComplianceControlRow[]> {
+  const { data, error } = await supabase.rpc('admin_compliance_controls', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ComplianceControlRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchSecurityAudit(limit = 200): Promise<SecurityEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_security_audit', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: SecurityEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
