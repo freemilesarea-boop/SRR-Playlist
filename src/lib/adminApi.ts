@@ -3322,6 +3322,103 @@ export async function fetchPolicyAudit(limit = 200): Promise<PolicyEventRow[]> {
   return (data ?? []) as PolicyEventRow[];
 }
 
+// ── Knowledge Graph (0513 — Entity/관계 inventory·분석 전용, 원본/FK/관계 변경 없음) ──
+
+export type KGSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface KGEntityRow {
+  id: string; entity_type: string; source_table: string; source_primary_key: string;
+  display_label: string; domain: string; lifecycle_status: string | null; is_sensitive: boolean;
+  source_version: string; limitations: Array<string | Record<string, unknown>>;
+  first_observed_at: string; last_observed_at: string; snapshot_at: string; created_at: string;
+}
+export interface KGRelationshipRow {
+  id: string; relationship_type: string; source_entity_id: string; target_entity_id: string;
+  direction: string; evidence_type: string; evidence_source: string; evidence_strength: string;
+  relationship_status: string; confidence: number | null; limitations: Array<string | Record<string, unknown>>;
+  source_version: string; first_observed_at: string; last_observed_at: string; snapshot_at: string; created_at: string;
+}
+export interface KGEntityDetail {
+  entity: KGEntityRow;
+  outgoing: Array<{ id: string; relationship_type: string; target_entity_id: string; target_label: string; target_type: string; evidence_type: string; evidence_strength: string; evidence_source: string }>;
+  incoming: Array<{ id: string; relationship_type: string; source_entity_id: string; source_label: string; source_type: string; evidence_type: string; evidence_strength: string; evidence_source: string }>;
+}
+export interface KGSnapshotRow {
+  id: string; snapshot_code: string; domain_scope: string; entity_count: number; relationship_count: number;
+  confirmed_relationship_count: number; inferred_relationship_count: number;
+  source_entity_counts: Record<string, unknown>; risk_summary: Record<string, unknown> | null;
+  limitations: Array<string | Record<string, unknown>>; input_hash: string; source_version: string;
+  generated_by: string | null; generated_at: string; created_at: string;
+}
+export interface KGReviewRow {
+  id: string; review_code: string; kind: string; subject_entity_id: string | null; subject_relationship_id: string | null;
+  topic: string; reason: string; evidence: Array<Record<string, unknown>>; review_status: string;
+  external_action_type: string | null; human_decision_reason: string | null; decided_by: string | null;
+  decided_at: string | null; limitations: Array<string | Record<string, unknown>>; idempotency_key: string;
+  created_by: string | null; created_at: string;
+}
+export interface KGEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchKGSummary(): Promise<KGSummary> {
+  const { data, error } = await supabase.rpc('admin_knowledge_graph_summary');
+  if (error) throw error;
+  return (data as KGSummary | null) ?? {};
+}
+export async function createKGSnapshot(): Promise<{ ok: boolean; idempotent: boolean; snapshot_id: string; snapshot_code?: string; counts: Record<string, number>; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_knowledge_graph_snapshot_create');
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; snapshot_id: string; snapshot_code?: string; counts: Record<string, number>; production_applied: boolean };
+}
+export async function fetchKGEntities(type: string | null = null, domain: string | null = null, limit = 100, offset = 0): Promise<KGEntityRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_entities', { p_type: type, p_domain: domain, p_limit: limit, p_offset: offset });
+  if (error) throw error;
+  return (data ?? []) as KGEntityRow[];
+}
+export async function fetchKGRelationships(type: string | null = null, strength: string | null = null, limit = 500, offset = 0): Promise<KGRelationshipRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_relationships', { p_type: type, p_strength: strength, p_limit: limit, p_offset: offset });
+  if (error) throw error;
+  return (data ?? []) as KGRelationshipRow[];
+}
+export async function fetchKGEntityDetail(entityId: string): Promise<KGEntityDetail> {
+  const { data, error } = await supabase.rpc('admin_knowledge_entity_detail', { p_entity_id: entityId });
+  if (error) throw error;
+  return data as KGEntityDetail;
+}
+export async function fetchKGSnapshots(limit = 30): Promise<KGSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_graph_snapshots', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KGSnapshotRow[];
+}
+export async function createKGReview(payload: { code: string; topic: string; reason: string; evidence: Array<Record<string, unknown>>; subjectEntityId?: string | null; subjectRelationshipId?: string | null }): Promise<{ ok: boolean; id: string; review_status?: string; idempotent?: boolean }> {
+  const { data, error } = await supabase.rpc('admin_knowledge_review_create', {
+    p_code: payload.code, p_topic: payload.topic, p_reason: payload.reason, p_evidence: payload.evidence,
+    p_subject_entity_id: payload.subjectEntityId ?? null, p_subject_relationship_id: payload.subjectRelationshipId ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_status?: string; idempotent?: boolean };
+}
+export async function decideKGReview(id: string, status: string, reason: string): Promise<{ ok: boolean; review_status: string; db_relationship_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_knowledge_review_decide', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; db_relationship_changed: boolean };
+}
+export async function recordKGExternalCorrection(payload: { code: string; actionType: string; reason: string; evidence: Array<Record<string, unknown>>; subjectEntityId?: string | null }): Promise<{ ok: boolean; id: string; reference_only?: boolean }> {
+  const { data, error } = await supabase.rpc('admin_knowledge_external_correction_reference', {
+    p_code: payload.code, p_action_type: payload.actionType, p_reason: payload.reason, p_evidence: payload.evidence, p_subject_entity_id: payload.subjectEntityId ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; reference_only?: boolean };
+}
+export async function fetchKGReviews(status: string | null = null, limit = 100): Promise<KGReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_reviews', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KGReviewRow[];
+}
+export async function fetchKGAudit(limit = 200): Promise<KGEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KGEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
