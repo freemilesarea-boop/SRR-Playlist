@@ -64,6 +64,7 @@ import FleetIntelligenceSection from './FleetIntelligenceSection';
 import FederatedIntelligenceSection from './FederatedIntelligenceSection';
 import SelfHealingSection from './SelfHealingSection';
 import ExecutiveCenterSection from './ExecutiveCenterSection';
+import OperationsCenterSection from './OperationsCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -204,6 +205,9 @@ export default function Dashboard() {
 
       {/* AI Music OS Executive — 15개 AI 계층 통합 Executive Intelligence (Evidence Only) */}
       <ExecutiveCenterSection />
+
+      {/* AI Operations Center — AI 제안 통합 Queue + 사람 검토/승인/피드백 (자동 승인 없음) */}
+      <OperationsCenterSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
