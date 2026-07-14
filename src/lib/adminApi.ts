@@ -2093,6 +2093,123 @@ export async function setAiPatternStatus(id: string, status: string, reason: str
   if (error) throw error; return data as AiPatternRow;
 }
 
+// ── Digital Twin & Simulation (0499 — Immutable Snapshot + 결정적 Simulation, simulated ≠ actual) ──
+
+export interface TwinSummaryResp {
+  twins: Record<string, number | string | null> | null;
+  runs: Record<string, number | string | null> | null;
+  calibration: { pending_outcome: number; calibrated: number } | null;
+}
+export async function fetchTwinSummary(): Promise<TwinSummaryResp> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_summary');
+  if (error) throw error;
+  const d = (data as Partial<TwinSummaryResp> | null) ?? {};
+  return { twins: d.twins ?? null, runs: d.runs ?? null, calibration: d.calibration ?? null };
+}
+export interface TwinRow {
+  id: string; twin_code: string; twin_type: string; twin_scope: string; scope_id: string | null;
+  source_type: string; source_id: string; source_version: string; snapshot_at: string;
+  completeness_score: number | null; freshness_score: number | null; readiness_status: string; lifecycle_status: string;
+  limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export interface TwinDetailResp {
+  found: boolean; twin: (TwinRow & Record<string, unknown>) | null;
+  scenarios: Array<{ id: string; scenario_code: string; scenario_type: string; title: string; simulation_horizon: number; lifecycle_status: string; created_at: string }>;
+  audit: Array<{ event_type: string; previous_state: string | null; new_state: string | null; reason: string | null; created_at: string }>;
+}
+export async function fetchTwins(twinType: string | null = null, status: string | null = null, limit = 100): Promise<TwinRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twins', { p_twin_type: twinType, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchTwinDetail(id: string): Promise<TwinDetailResp> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as Partial<TwinDetailResp> | null) ?? {};
+  return { found: d.found ?? false, twin: d.twin ?? null, scenarios: d.scenarios ?? [], audit: d.audit ?? [] };
+}
+export async function createTwin(payload: Record<string, unknown>): Promise<{ eligibility: string; idempotent: boolean; twin: TwinRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_create', { p_payload: payload });
+  if (error) throw error; return data as { eligibility: string; idempotent: boolean; twin: TwinRow };
+}
+export async function setTwinLifecycle(id: string, status: 'superseded' | 'archived' | 'blocked', reason: string): Promise<TwinRow> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_set_lifecycle', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as TwinRow;
+}
+export interface TwinScenarioRow {
+  id: string; scenario_code: string; twin_id: string; scenario_type: string; title: string; objective: string | null;
+  hypothesis: string | null; baseline_definition: Record<string, unknown>; simulation_horizon: number;
+  requested_metrics: string[]; assumption_snapshot: Record<string, unknown>; model_version: string; input_hash: string;
+  risk_tier: string | null; lifecycle_status: string; limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function createTwinScenario(payload: Record<string, unknown>): Promise<{ idempotent: boolean; scenario: TwinScenarioRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_scenario_create', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; scenario: TwinScenarioRow };
+}
+export async function fetchTwinScenarios(twinId: string | null = null, limit = 100): Promise<TwinScenarioRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_scenarios', { p_twin_id: twinId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinScenarioRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface TwinVariantRow {
+  id: string; scenario_id: string; variant_code: string; variant_name: string; variant_definition: Record<string, unknown>;
+  changed_dimensions: string[]; expected_direction: string | null; assumption_snapshot: Record<string, unknown>;
+  input_hash: string; is_baseline: boolean; lifecycle_status: string; created_at: string;
+}
+export async function createTwinVariant(payload: Record<string, unknown>): Promise<{ idempotent: boolean; variant: TwinVariantRow }> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_variant_create', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; variant: TwinVariantRow };
+}
+export async function fetchTwinVariants(scenarioId: string, limit = 50): Promise<TwinVariantRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_variants', { p_scenario_id: scenarioId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinVariantRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface TwinSimRunRow {
+  id: string; run_code: string; twin_id: string; scenario_id: string; baseline_variant_id: string | null; run_status: string;
+  simulation_engine_version: string; model_version: string; seed: number; iteration_count: number; simulation_horizon: number;
+  input_hash: string; started_at: string | null; completed_at: string | null; failure_code: string | null; failure_reason: string | null;
+  output_summary: Record<string, unknown> | null; confidence_summary: Record<string, unknown> | null;
+  limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function saveTwinSimulation(payload: Record<string, unknown>): Promise<{ idempotent: boolean; run: TwinSimRunRow; result_count?: number }> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_simulation_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; run: TwinSimRunRow; result_count?: number };
+}
+export async function fetchTwinSimulationRuns(twinId: string | null = null, status: string | null = null, limit = 100): Promise<TwinSimRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_simulation_runs', { p_twin_id: twinId, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinSimRunRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface TwinSimResultRow {
+  id: string; simulation_run_id: string; variant_id: string; metric_code: string; metric_type: string;
+  baseline_value: number | null; simulated_value: number | null; delta_value: number | null; delta_percent: number | null;
+  confidence: number | null; uncertainty_low: number | null; uncertainty_high: number | null; sample_size: number | null;
+  result_status: string; calibration_status: string; observed_value: number | null; absolute_error: number | null;
+  relative_error: number | null; observed_at: string | null; created_at: string;
+}
+export async function fetchTwinSimulationResults(runId: string, limit = 200): Promise<TwinSimResultRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_simulation_results', { p_run_id: runId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinSimResultRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function linkTwinCalibration(resultId: string, payload: Record<string, unknown>): Promise<TwinSimResultRow> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_calibration_link', { p_result_id: resultId, p_payload: payload });
+  if (error) throw error; return data as TwinSimResultRow;
+}
+export interface TwinAuditRow { id: string; twin_id: string | null; scenario_id: string | null; simulation_run_id: string | null; event_type: string; previous_state: string | null; new_state: string | null; reason: string | null; created_at: string }
+export async function fetchTwinAudit(twinId: string | null = null, runId: string | null = null, limit = 200): Promise<TwinAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_twin_audit', { p_twin_id: twinId, p_run_id: runId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: TwinAuditRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

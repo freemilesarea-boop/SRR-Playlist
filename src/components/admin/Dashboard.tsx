@@ -59,6 +59,7 @@ import DraftPromotionSection from './DraftPromotionSection';
 import AiGovernanceSection from './AiGovernanceSection';
 import MultiAgentCenterSection from './MultiAgentCenterSection';
 import AiMemoryKnowledgeSection from './AiMemoryKnowledgeSection';
+import AiDigitalTwinSection from './AiDigitalTwinSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -184,6 +185,9 @@ export default function Dashboard() {
 
       {/* AI Memory & Knowledge — Long-Term Memory/Graph/Pattern/Replay (Evidence 계층, Production 무변경) */}
       <AiMemoryKnowledgeSection />
+
+      {/* AI Digital Twin & Simulation Lab — Immutable Snapshot + 결정적 Counterfactual (simulated ≠ actual) */}
+      <AiDigitalTwinSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
