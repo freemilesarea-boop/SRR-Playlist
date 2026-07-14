@@ -74,6 +74,7 @@ import SecurityGovernanceSection from './SecurityGovernanceSection';
 import ExecutiveStrategySection from './ExecutiveStrategySection';
 import PolicyGovernanceSection from './PolicyGovernanceSection';
 import KnowledgeGraphSection from './KnowledgeGraphSection';
+import DecisionOutcomeSection from './DecisionOutcomeSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -244,6 +245,9 @@ export default function Dashboard() {
 
       {/* Enterprise Knowledge Graph — Entity/관계 Inventory·의존/영향/Lineage 분석 (원본/FK/관계 변경 없음) */}
       <KnowledgeGraphSection />
+
+      {/* Enterprise Decision Memory — 결정/실행 Reference/관찰/Outcome/Lesson (자동 실행·학습 없음) */}
+      <DecisionOutcomeSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
