@@ -69,6 +69,7 @@ import ExecutionReadinessSection from './ExecutionReadinessSection';
 import PostChangeObservationSection from './PostChangeObservationSection';
 import ReliabilityGovernanceSection from './ReliabilityGovernanceSection';
 import CapacityContinuitySection from './CapacityContinuitySection';
+import OperationalCommandSection from './OperationalCommandSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -224,6 +225,9 @@ export default function Dashboard() {
 
       {/* AI Capacity, Cost & Continuity — 용량/비용/연속성 예측·권고 Evidence (자동 Scale/Backup 없음) */}
       <CapacityContinuitySection />
+
+      {/* AI Operational Command — 업무/배정/SLA/Escalation/Handover/경영진 보고 (자동 배정·발송 없음) */}
+      <OperationalCommandSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
