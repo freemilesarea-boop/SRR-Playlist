@@ -2455,6 +2455,36 @@ export async function fetchPlaybooks(incidentType: string | null = null, status:
   return d.items ?? [];
 }
 
+// ── AI Music OS Executive (0503 — 통합 Executive Intelligence, Evidence Only) ──
+
+export interface AiOsHealthResp { domains: Record<string, Record<string, number | null> | number | null> | null }
+export async function fetchAiOsHealth(): Promise<AiOsHealthResp> {
+  const { data, error } = await supabase.rpc('admin_ai_os_health');
+  if (error) throw error;
+  const d = (data as Partial<AiOsHealthResp> | null) ?? {};
+  return { domains: d.domains ?? null };
+}
+export interface ExecRecommendationRow {
+  id: string; rec_code: string; category: string; horizon: string; title: string; summary: string;
+  evidence: Array<Record<string, unknown>>; confidence: number; risk_tier: string;
+  expected_outcome: Record<string, unknown>; source_refs: Array<Record<string, unknown>>;
+  status: string; limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function saveExecRecommendation(payload: Record<string, unknown>): Promise<{ idempotent: boolean; recommendation: ExecRecommendationRow }> {
+  const { data, error } = await supabase.rpc('admin_executive_recommendation_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; recommendation: ExecRecommendationRow };
+}
+export async function fetchExecRecommendations(category: string | null = null, status: string | null = null, horizon: string | null = null, limit = 100): Promise<ExecRecommendationRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_recommendations', { p_category: category, p_status: status, p_horizon: horizon, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecRecommendationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setExecRecommendationStatus(id: string, status: string, reason: string): Promise<ExecRecommendationRow> {
+  const { data, error } = await supabase.rpc('admin_executive_recommendation_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as ExecRecommendationRow;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
