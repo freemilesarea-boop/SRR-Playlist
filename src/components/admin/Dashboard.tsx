@@ -77,6 +77,7 @@ import KnowledgeGraphSection from './KnowledgeGraphSection';
 import DecisionOutcomeSection from './DecisionOutcomeSection';
 import OrganizationalLearningSection from './OrganizationalLearningSection';
 import StrategicScenarioSection from './StrategicScenarioSection';
+import BusinessCausalIntelligenceSection from './BusinessCausalIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -256,6 +257,9 @@ export default function Dashboard() {
 
       {/* Enterprise Strategic Scenario — 시나리오/포트폴리오/배분 후보 (자동 예산·전략 실행 없음) */}
       <StrategicScenarioSection />
+
+      {/* Business Causal Intelligence — 인과 후보/Digital Twin/Calibration (자동 인과 확정·개입 없음) */}
+      <BusinessCausalIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

@@ -3907,6 +3907,166 @@ export async function fetchStratAudit(limit = 200): Promise<StratEventRow[]> {
   return (data ?? []) as StratEventRow[];
 }
 
+// ── Business Causal (0517 — 인과 후보/Digital Twin/Calibration, 자동 인과 확정·개입·Confidence 수정 없음) ──
+
+export type CausalSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface BizSignalRow {
+  id: string; signal_code: string; signal_domain: string; signal_type: string; source_system: string;
+  scope_type: string; metric_name: string; metric_value: number | null; metric_unit: string | null;
+  baseline_value: number | null; observed_at: string; sample_size: number | null; created_at: string;
+}
+export interface CausalCandidateRow {
+  id: string; candidate_code: string; cause_signal_id: string; effect_signal_id: string;
+  causal_domain: string; candidate_type: string; time_lag_days: number | null;
+  temporal_order_status: string; mechanism_hypothesis: string | null; mechanism_status: string;
+  correlation_summary: string | null; supporting_evidence: Array<Record<string, unknown>>;
+  counter_evidence: Array<Record<string, unknown>>; confounders: Array<Record<string, unknown>>;
+  confounder_status: string; counter_evidence_status: string; evidence_strength: string;
+  causal_status: string; causal_confidence: number | null; review_status: string;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface CounterfactualRow {
+  id: string; counterfactual_code: string; causal_candidate_id: string | null; intervention_type: string;
+  intervention_summary: string; counterfactual_scenario: string; expected_effect: number | null;
+  low_range: number | null; high_range: number | null; confidence: number | null;
+  verification_status: string; limitations: Array<unknown>; created_at: string;
+}
+export interface CorporateTwinRow {
+  id: string; twin_code: string; title: string; twin_scope: string; model_version: string;
+  included_domains: string[]; state_snapshot: Record<string, unknown>;
+  simulations: Array<Record<string, unknown>>; input_coverage: number | null;
+  input_validation: string; twin_status: string; snapshot_at: string; limitations: Array<unknown>; created_at: string;
+}
+export interface ConfidenceRecordRow {
+  id: string; confidence_code: string; confidence_domain: string; source_type: string;
+  predicted_confidence: number | null; predicted_direction: string | null;
+  actual_outcome_status: string | null; actual_direction: string | null; actual_value: number | null;
+  observation_status: string; causality_status: string; calibration_eligible: boolean;
+  exclusion_reason: string | null; predicted_at: string | null; observed_at: string | null; created_at: string;
+}
+export interface CalibrationSnapshotRow {
+  id: string; snapshot_code: string; calibration_domain: string; source_type: string | null;
+  sample_size: number; eligible_count: number; excluded_count: number;
+  confidence_buckets: Array<Record<string, unknown>>; calibration_metrics: Record<string, unknown>;
+  calibration_status: string; recommendations: Array<unknown>; generated_at: string; created_at: string;
+}
+export interface CausalEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchCausalSummary(): Promise<CausalSummary> {
+  const { data, error } = await supabase.rpc('admin_causal_summary');
+  if (error) throw error;
+  return (data as CausalSummary | null) ?? {};
+}
+export async function createBizSignal(p: { code: string; domain: string; type: string; sourceSystem: string; metricName: string; observedAt: string; evidence: Array<Record<string, unknown>>; metricValue?: number | null; unit?: string | null; baseline?: number | null; windowDays?: number | null; sampleSize?: number | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_business_signal_create', {
+    p_code: p.code, p_domain: p.domain, p_type: p.type, p_source_system: p.sourceSystem,
+    p_metric_name: p.metricName, p_observed_at: p.observedAt, p_evidence: p.evidence,
+    p_metric_value: p.metricValue ?? null, p_unit: p.unit ?? null, p_baseline: p.baseline ?? null,
+    p_window_days: p.windowDays ?? null, p_sample_size: p.sampleSize ?? null,
+    p_scope_type: 'unverified', p_scope_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchBizSignals(domain: string | null = null, limit = 100): Promise<BizSignalRow[]> {
+  const { data, error } = await supabase.rpc('admin_business_signals', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as BizSignalRow[];
+}
+export async function createCausalCandidate(p: { code: string; causeId: string; effectId: string; domain: string; type: string; evidence: Array<Record<string, unknown>>; mechanism?: string | null; correlation?: string | null; confounders?: Array<Record<string, unknown>>; counterEvidence?: Array<Record<string, unknown>>; confidence?: number | null; timeLag?: number | null }): Promise<{ ok: boolean; id: string; causality_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_causal_candidate_create', {
+    p_code: p.code, p_cause_id: p.causeId, p_effect_id: p.effectId, p_domain: p.domain, p_type: p.type,
+    p_evidence: p.evidence, p_mechanism: p.mechanism ?? null, p_correlation: p.correlation ?? null,
+    p_temporal_order: 'insufficient_data', p_mechanism_status: 'mechanism_hypothesis_only',
+    p_confounders: p.confounders ?? [], p_counter_evidence: p.counterEvidence ?? [],
+    p_causal_status: 'draft', p_confidence: p.confidence ?? null, p_time_lag: p.timeLag ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; causality_confirmed: boolean };
+}
+export async function reviewCausalCandidate(id: string, status: string, reason: string, causalStatus: string | null = null): Promise<{ ok: boolean; review_status: string; causality_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_causal_candidate_review', { p_id: id, p_status: status, p_reason: reason, p_causal_status: causalStatus });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; causality_confirmed: boolean };
+}
+export async function fetchCausalCandidates(status: string | null = null, limit = 100): Promise<CausalCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_causal_candidates', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CausalCandidateRow[];
+}
+export async function createCounterfactual(p: { code: string; interventionType: string; summary: string; scenario: string; evidence: Array<Record<string, unknown>>; candidateId?: string | null; baseline?: string | null; expected?: number | null; low?: number | null; high?: number | null; confidence?: number | null }): Promise<{ ok: boolean; id: string; actual_outcome: boolean }> {
+  const { data, error } = await supabase.rpc('admin_causal_counterfactual_create', {
+    p_code: p.code, p_intervention_type: p.interventionType, p_summary: p.summary,
+    p_cf_scenario: p.scenario, p_evidence: p.evidence, p_candidate_id: p.candidateId ?? null,
+    p_baseline: p.baseline ?? null, p_expected: p.expected ?? null, p_low: p.low ?? null,
+    p_high: p.high ?? null, p_confidence: p.confidence ?? null, p_assumed: [], p_held: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; actual_outcome: boolean };
+}
+export async function fetchCounterfactuals(limit = 100): Promise<CounterfactualRow[]> {
+  const { data, error } = await supabase.rpc('admin_causal_counterfactuals', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CounterfactualRow[];
+}
+export async function createCorporateTwin(p: { code: string; title: string; scope: string; evidence: Array<Record<string, unknown>>; includedDomains?: string[]; state?: Record<string, unknown>; simulations?: Array<Record<string, unknown>>; inputCoverage?: number | null; inputValidation?: string }): Promise<{ ok: boolean; id: string; production_identical: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_twin_create', {
+    p_code: p.code, p_title: p.title, p_scope: p.scope, p_evidence: p.evidence,
+    p_included_domains: p.includedDomains ?? [], p_state: p.state ?? {}, p_simulations: p.simulations ?? [],
+    p_input_coverage: p.inputCoverage ?? null, p_input_validation: p.inputValidation ?? 'twin_input_incomplete', p_scope_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; production_identical: boolean };
+}
+export async function fetchCorporateTwins(limit = 50): Promise<CorporateTwinRow[]> {
+  const { data, error } = await supabase.rpc('admin_corporate_twins', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CorporateTwinRow[];
+}
+export async function createConfidenceRecord(p: { code: string; domain: string; sourceType: string; evidence: Array<Record<string, unknown>>; sourceReferenceId?: string | null; predicted?: number | null; direction?: string | null; actualStatus?: string | null; actualDirection?: string | null; actualValue?: number | null; observationStatus?: string; eligible?: boolean; exclusionReason?: string | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_confidence_record_create', {
+    p_code: p.code, p_domain: p.domain, p_source_type: p.sourceType, p_evidence: p.evidence,
+    p_source_reference_id: p.sourceReferenceId ?? null, p_predicted: p.predicted ?? null,
+    p_direction: p.direction ?? null, p_low: null, p_high: null,
+    p_actual_status: p.actualStatus ?? null, p_actual_direction: p.actualDirection ?? null,
+    p_actual_value: p.actualValue ?? null, p_observation_status: p.observationStatus ?? 'outcome_pending',
+    p_eligible: p.eligible ?? false, p_exclusion_reason: p.exclusionReason ?? null,
+    p_predicted_at: null, p_observed_at: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchConfidenceRecords(domain: string | null = null, limit = 100): Promise<ConfidenceRecordRow[]> {
+  const { data, error } = await supabase.rpc('admin_confidence_records', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ConfidenceRecordRow[];
+}
+export async function createCalibrationSnapshot(p: { code: string; domain: string; evidence: Array<Record<string, unknown>>; sourceType?: string | null; sample?: number; eligible?: number; excluded?: number; buckets?: Array<Record<string, unknown>>; metrics?: Record<string, unknown>; status?: string; recommendations?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; confidence_auto_adjusted: boolean }> {
+  const { data, error } = await supabase.rpc('admin_confidence_calibration_create', {
+    p_code: p.code, p_domain: p.domain, p_evidence: p.evidence, p_source_type: p.sourceType ?? null,
+    p_sample: p.sample ?? 0, p_eligible: p.eligible ?? 0, p_excluded: p.excluded ?? 0,
+    p_buckets: p.buckets ?? [], p_metrics: p.metrics ?? {}, p_status: p.status ?? 'insufficient_data',
+    p_recommendations: p.recommendations ?? [], p_range_start: null, p_range_end: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; confidence_auto_adjusted: boolean };
+}
+export async function fetchCalibrationSnapshots(limit = 50): Promise<CalibrationSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_confidence_calibration_snapshots', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CalibrationSnapshotRow[];
+}
+export async function recordCausalExternalEvidence(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_causal_external_evidence', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchCausalAudit(limit = 200): Promise<CausalEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_causal_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CausalEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
