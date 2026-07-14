@@ -3153,6 +3153,73 @@ export async function fetchSecurityAudit(limit = 200): Promise<SecurityEventRow[
   return d.items ?? [];
 }
 
+// ── Executive Strategy (0511 — 경영 지표 실측/추정, 추천·근거만·자동 의사결정 없음) ──
+
+export type ExecBusinessSummary = Record<string, number | string | Record<string, number> | null>;
+export interface ExecGrowthSeries {
+  months: number;
+  new_businesses: Array<{ month: string; count: number }>;
+  new_artists: Array<{ month: string; count: number }>;
+  new_tracks: Array<{ month: string; count: number }>;
+  new_signed_contracts: Array<{ month: string; count: number }>;
+  monthly_paid_revenue: Array<{ month: string; amount: number }>;
+  growth_by_industry: Array<{ industry: string; count: number }>;
+}
+export interface ExecBriefingRow {
+  id: string; briefing_date: string; snapshot: Record<string, unknown>; highlights: Array<unknown>;
+  recommendations_ref: Array<unknown>; limitations: Array<string | Record<string, unknown>>;
+  generated_by: string | null; created_at: string;
+}
+export interface ExecDecisionRow {
+  id: string; decision_code: string; category: string; recommendation: string; reason: string;
+  evidence: Array<Record<string, unknown>>; confidence: number | null; alternatives: Array<string>;
+  expected_benefit: string; risk: string; decision_status: string; human_decision_reason: string | null;
+  decided_by: string | null; decided_at: string | null; limitations: Array<string | Record<string, unknown>>;
+  source_version: string; idempotency_key: string; created_by: string | null; created_at: string;
+}
+export interface ExecEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export async function fetchExecBusinessSummary(): Promise<ExecBusinessSummary> {
+  const { data, error } = await supabase.rpc('admin_executive_business_summary');
+  if (error) throw error;
+  return (data as ExecBusinessSummary | null) ?? {};
+}
+export async function fetchExecGrowthSeries(months = 6): Promise<ExecGrowthSeries> {
+  const { data, error } = await supabase.rpc('admin_executive_growth_series', { p_months: months });
+  if (error) throw error;
+  const d = (data as Partial<ExecGrowthSeries> | null) ?? {};
+  return { months: d.months ?? months, new_businesses: d.new_businesses ?? [], new_artists: d.new_artists ?? [], new_tracks: d.new_tracks ?? [], new_signed_contracts: d.new_signed_contracts ?? [], monthly_paid_revenue: d.monthly_paid_revenue ?? [], growth_by_industry: d.growth_by_industry ?? [] };
+}
+export async function saveExecBriefing(payload: Record<string, unknown>): Promise<ExecBriefingRow> {
+  const { data, error } = await supabase.rpc('admin_executive_briefing_save', { p_payload: payload });
+  if (error) throw error; return data as ExecBriefingRow;
+}
+export async function fetchExecBriefings(limit = 30): Promise<ExecBriefingRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_briefings', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecBriefingRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveExecDecision(payload: Record<string, unknown>): Promise<{ idempotent: boolean; decision: ExecDecisionRow }> {
+  const { data, error } = await supabase.rpc('admin_executive_decision_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; decision: ExecDecisionRow };
+}
+export async function decideExecDecision(id: string, status: string, reason: string): Promise<ExecDecisionRow> {
+  const { data, error } = await supabase.rpc('admin_executive_decision_decide', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as ExecDecisionRow;
+}
+export async function fetchExecDecisions(status: string | null = null, limit = 100): Promise<ExecDecisionRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_decisions', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecDecisionRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchExecAudit(limit = 200): Promise<ExecEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_audit', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

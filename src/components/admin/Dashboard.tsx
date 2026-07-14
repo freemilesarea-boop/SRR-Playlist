@@ -71,6 +71,7 @@ import ReliabilityGovernanceSection from './ReliabilityGovernanceSection';
 import CapacityContinuitySection from './CapacityContinuitySection';
 import OperationalCommandSection from './OperationalCommandSection';
 import SecurityGovernanceSection from './SecurityGovernanceSection';
+import ExecutiveStrategySection from './ExecutiveStrategySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -232,6 +233,9 @@ export default function Dashboard() {
 
       {/* AI Security, Privacy & Compliance — 접근/민감 데이터/Privacy/Retention/Compliance Evidence (계정·권한·데이터 변경 없음) */}
       <SecurityGovernanceSection />
+
+      {/* AI Executive Intelligence — 경영 지표/전략/Explainable 의사결정 추천 (자동 계약·정산·가격·의사결정 없음) */}
+      <ExecutiveStrategySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
