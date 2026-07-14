@@ -3731,6 +3731,182 @@ export async function fetchOLAudit(limit = 200): Promise<OLEventRow[]> {
   return (data ?? []) as OLEventRow[];
 }
 
+// ── Strategic Scenario (0516 — 전략 시나리오/포트폴리오/배분 후보, 자동 예산·실행 없음) ──
+
+export type StratSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface StratObjectiveRow {
+  id: string; objective_code: string; title: string; strategic_domain: string; objective_type: string;
+  objective_status: string; target_metric: string | null; target_direction: string | null;
+  target_value: number | null; baseline_value: number | null; priority: number | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<unknown>; created_at: string;
+}
+export interface StratAssumptionRow {
+  id: string; assumption_code: string; strategic_objective_id: string | null; assumption_type: string;
+  description: string; input_value: number | null; value_unit: string | null; source_type: string;
+  verification_status: string; confidence: number | null; sensitivity: string | null; created_at: string;
+}
+export interface StratConstraintRow {
+  id: string; constraint_code: string; constraint_type: string; resource_type: string | null;
+  minimum_value: number | null; maximum_value: number | null; current_value: number | null;
+  unit: string | null; hard_constraint: boolean; exclusivity_group: string | null; created_at: string;
+}
+export interface StratScenarioRow {
+  id: string; scenario_code: string; strategic_objective_id: string | null; scenario_name: string;
+  scenario_type: string; scenario_status: string; scenario_horizon: string;
+  forecast_results: Record<string, unknown> | null; input_validation: Record<string, unknown> | null;
+  feasibility_status: string; confidence: number | null; unknown_factors: Array<unknown>;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface StratInitiativeRow {
+  id: string; initiative_code: string; title: string; initiative_type: string; strategic_domain: string;
+  required_budget: number | null; dependencies: string[]; mutual_exclusion_group: string | null;
+  reversibility: string | null; expected_cost_note: string | null; lifecycle_status: string; created_at: string;
+}
+export interface StratPortfolioRow {
+  id: string; portfolio_code: string; title: string; scenario_id: string | null; initiative_ids: string[];
+  portfolio_type: string; total_required_budget: number | null; feasibility_status: string;
+  concentration_summary: Record<string, unknown> | null; confidence: number | null;
+  expected_value_summary: string | null; expected_cost_summary: string | null; expected_risk_summary: string | null;
+  review_status: string; self_approval_warning: boolean; decision_reason: string | null; created_at: string;
+}
+export interface StratAllocationRow {
+  id: string; candidate_code: string; strategic_portfolio_id: string; resource_type: string;
+  available_amount: number | null; reserve_amount: number | null; allocated_amount: number;
+  allocation_items: Array<{ initiative_code: string; amount: number }>; constraint_status: string;
+  review_status: string; created_at: string;
+}
+export interface StratEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchStratSummary(): Promise<StratSummary> {
+  const { data, error } = await supabase.rpc('admin_strategic_summary');
+  if (error) throw error;
+  return (data as StratSummary | null) ?? {};
+}
+export async function createStratObjective(p: { code: string; title: string; domain: string; type: string; evidence: Array<Record<string, unknown>>; targetMetric?: string | null; targetDirection?: string | null; targetValue?: number | null; baselineValue?: number | null; priority?: number | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_objective_create', {
+    p_code: p.code, p_title: p.title, p_domain: p.domain, p_type: p.type, p_evidence: p.evidence,
+    p_target_metric: p.targetMetric ?? null, p_target_direction: p.targetDirection ?? null,
+    p_target_value: p.targetValue ?? null, p_baseline_value: p.baselineValue ?? null,
+    p_priority: p.priority ?? null, p_start_at: null, p_target_at: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchStratObjectives(status: string | null = null, limit = 100): Promise<StratObjectiveRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_objectives', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratObjectiveRow[];
+}
+export async function saveStratAssumption(p: { code: string; type: string; description: string; evidence: Array<Record<string, unknown>>; objectiveId?: string | null; value?: number | null; unit?: string | null; sourceType?: string; verification?: string; confidence?: number | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_assumption_save', {
+    p_code: p.code, p_type: p.type, p_description: p.description, p_evidence: p.evidence,
+    p_objective_id: p.objectiveId ?? null, p_value: p.value ?? null, p_unit: p.unit ?? null,
+    p_source_type: p.sourceType ?? 'manual', p_verification: p.verification ?? 'unverified', p_confidence: p.confidence ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchStratAssumptions(limit = 100): Promise<StratAssumptionRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_assumptions', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratAssumptionRow[];
+}
+export async function saveStratConstraint(p: { code: string; type: string; evidence: Array<Record<string, unknown>>; objectiveId?: string | null; resourceType?: string | null; min?: number | null; max?: number | null; current?: number | null; unit?: string | null; hard?: boolean; exclusivity?: string | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_constraint_save', {
+    p_code: p.code, p_type: p.type, p_evidence: p.evidence, p_objective_id: p.objectiveId ?? null,
+    p_resource_type: p.resourceType ?? null, p_min: p.min ?? null, p_max: p.max ?? null,
+    p_current: p.current ?? null, p_unit: p.unit ?? null, p_hard: p.hard ?? false, p_exclusivity: p.exclusivity ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchStratConstraints(limit = 100): Promise<StratConstraintRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_constraints', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratConstraintRow[];
+}
+export async function createStratScenario(p: { code: string; name: string; type: string; horizon: string; evidence: Array<Record<string, unknown>>; objectiveId?: string | null; forecastResults?: Record<string, unknown> | null; inputValidation?: Record<string, unknown> | null; feasibility?: string; confidence?: number | null; unknownFactors?: string[] }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_scenario_create', {
+    p_code: p.code, p_name: p.name, p_type: p.type, p_horizon: p.horizon, p_evidence: p.evidence,
+    p_objective_id: p.objectiveId ?? null, p_assumption_ids: [], p_constraint_ids: [],
+    p_forecast_results: p.forecastResults ?? null, p_input_validation: p.inputValidation ?? null,
+    p_feasibility: p.feasibility ?? 'feasibility_unverified', p_confidence: p.confidence ?? null,
+    p_unknown_factors: p.unknownFactors ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function reviewStratScenario(id: string, status: string, reason: string): Promise<{ ok: boolean; scenario_status: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_scenario_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; scenario_status: string };
+}
+export async function fetchStratScenarios(type: string | null = null, status: string | null = null, limit = 100): Promise<StratScenarioRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_scenarios', { p_type: type, p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratScenarioRow[];
+}
+export async function createStratInitiative(p: { code: string; title: string; type: string; domain: string; evidence: Array<Record<string, unknown>>; objectiveId?: string | null; budget?: number | null; dependencies?: string[]; exclusionGroup?: string | null; reversibility?: string | null; costNote?: string | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_strategic_initiative_create', {
+    p_code: p.code, p_title: p.title, p_type: p.type, p_domain: p.domain, p_evidence: p.evidence,
+    p_objective_id: p.objectiveId ?? null, p_budget: p.budget ?? null, p_dependencies: p.dependencies ?? [],
+    p_exclusion_group: p.exclusionGroup ?? null, p_reversibility: p.reversibility ?? null,
+    p_value_note: null, p_cost_note: p.costNote ?? null, p_risk_note: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchStratInitiatives(limit = 100): Promise<StratInitiativeRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_initiatives', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratInitiativeRow[];
+}
+export async function createStratPortfolio(p: { code: string; title: string; type: string; evidence: Array<Record<string, unknown>>; objectiveId?: string | null; scenarioId?: string | null; initiativeIds?: string[]; totalBudget?: number | null; feasibility?: string; concentration?: Record<string, unknown> | null; confidence?: number | null }): Promise<{ ok: boolean; id: string; budget_allocated: boolean }> {
+  const { data, error } = await supabase.rpc('admin_strategic_portfolio_create', {
+    p_code: p.code, p_title: p.title, p_type: p.type, p_evidence: p.evidence,
+    p_objective_id: p.objectiveId ?? null, p_scenario_id: p.scenarioId ?? null, p_initiative_ids: p.initiativeIds ?? [],
+    p_total_budget: p.totalBudget ?? null, p_feasibility: p.feasibility ?? 'feasibility_unverified',
+    p_concentration: p.concentration ?? null, p_confidence: p.confidence ?? null,
+    p_value_summary: null, p_cost_summary: null, p_risk_summary: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; budget_allocated: boolean };
+}
+export async function reviewStratPortfolio(id: string, status: string, reason: string): Promise<{ ok: boolean; review_status: string; budget_executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_strategic_portfolio_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; budget_executed: boolean };
+}
+export async function fetchStratPortfolios(status: string | null = null, limit = 100): Promise<StratPortfolioRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_portfolios', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratPortfolioRow[];
+}
+export async function createStratAllocation(p: { code: string; portfolioId: string; resourceType: string; allocated: number; items: Array<{ initiative_code: string; amount: number }>; evidence: Array<Record<string, unknown>>; available?: number | null; reserve?: number | null }): Promise<{ ok: boolean; id: string; constraint_status: string; budget_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_resource_allocation_create', {
+    p_code: p.code, p_portfolio_id: p.portfolioId, p_resource_type: p.resourceType,
+    p_allocated: p.allocated, p_items: p.items, p_evidence: p.evidence,
+    p_available: p.available ?? null, p_reserve: p.reserve ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; constraint_status: string; budget_changed: boolean };
+}
+export async function fetchStratAllocations(limit = 100): Promise<StratAllocationRow[]> {
+  const { data, error } = await supabase.rpc('admin_resource_allocation_candidates', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratAllocationRow[];
+}
+export async function recordStratExternalAction(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_strategic_external_action_reference', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchStratAudit(limit = 200): Promise<StratEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategic_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StratEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
