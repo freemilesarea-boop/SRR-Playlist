@@ -76,6 +76,7 @@ import PolicyGovernanceSection from './PolicyGovernanceSection';
 import KnowledgeGraphSection from './KnowledgeGraphSection';
 import DecisionOutcomeSection from './DecisionOutcomeSection';
 import OrganizationalLearningSection from './OrganizationalLearningSection';
+import StrategicScenarioSection from './StrategicScenarioSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -252,6 +253,9 @@ export default function Dashboard() {
 
       {/* Enterprise Organizational Learning — 학습 근거/패턴/정책 진화 후보 (자동 정책 변경·학습 없음) */}
       <OrganizationalLearningSection />
+
+      {/* Enterprise Strategic Scenario — 시나리오/포트폴리오/배분 후보 (자동 예산·전략 실행 없음) */}
+      <StrategicScenarioSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
