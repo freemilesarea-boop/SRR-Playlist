@@ -61,6 +61,7 @@ import MultiAgentCenterSection from './MultiAgentCenterSection';
 import AiMemoryKnowledgeSection from './AiMemoryKnowledgeSection';
 import AiDigitalTwinSection from './AiDigitalTwinSection';
 import FleetIntelligenceSection from './FleetIntelligenceSection';
+import FederatedIntelligenceSection from './FederatedIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -192,6 +193,9 @@ export default function Dashboard() {
 
       {/* Enterprise Fleet Intelligence — 익명 Cross-Enterprise/Region/Industry Benchmark (Production 무변경) */}
       <FleetIntelligenceSection />
+
+      {/* Federated Intelligence — Privacy Gate 통과 익명 Knowledge Federation (Evidence Only) */}
+      <FederatedIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
