@@ -2530,6 +2530,67 @@ export async function fetchOperationAnalytics(): Promise<OperationAnalyticsResp>
   return { operations: d.operations ?? null, reviews: d.reviews ?? null };
 }
 
+// ── Execution Readiness (0505 — 사람 실행 대기 계획, 자동 실행/Apply 없음) ──
+
+export interface ExecutionPlanRow {
+  id: string; plan_code: string; operation_id: string; source_type: string; source_id: string;
+  execution_type: string; plan_status: string; risk_tier: string; change_summary: string; business_objective: string | null;
+  scope: Record<string, unknown>; dependencies: Array<Record<string, unknown>>; preconditions: Array<Record<string, unknown>>;
+  execution_steps: Array<Record<string, unknown> | string>; validation_steps: Array<Record<string, unknown> | string>;
+  preflight: Array<{ key: string; label: string; required: boolean; status: string; evidence?: string | null; failure_reason?: string | null }>;
+  rollback_plan: Record<string, unknown> | null; observation_plan: Record<string, unknown> | null;
+  go_criteria: Array<unknown>; no_go_criteria: Array<unknown>; go_decision: string | null; go_reason: string | null;
+  change_window_start: string | null; change_window_end: string | null; change_window_meta: Record<string, unknown> | null;
+  execution_owner: string | null; rollback_owner: string | null; observation_owner: string | null;
+  evidence: Array<Record<string, unknown>>; source_versions: Record<string, string>; input_hash: string;
+  manual_reference: Record<string, unknown> | null; limitations: Array<string | Record<string, unknown>>;
+  created_at: string; reviewed_at: string | null; updated_at: string;
+}
+export async function createExecutionPlan(payload: Record<string, unknown>): Promise<{ idempotent: boolean; eligibility: string; plan: ExecutionPlanRow }> {
+  const { data, error } = await supabase.rpc('admin_execution_plan_create', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; eligibility: string; plan: ExecutionPlanRow };
+}
+export async function fetchExecutionPlans(status: string | null = null, risk: string | null = null, limit = 100): Promise<ExecutionPlanRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_plans', { p_status: status, p_risk: risk, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecutionPlanRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface ExecutionAuditRow { id?: string; event_type: string; detail: string | null; actor_id: string | null; created_at: string }
+export async function fetchExecutionPlanDetail(id: string): Promise<{ found: boolean; plan: ExecutionPlanRow | null; audit: ExecutionAuditRow[] }> {
+  const { data, error } = await supabase.rpc('admin_execution_plan_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; plan?: ExecutionPlanRow; audit?: ExecutionAuditRow[] } | null) ?? {};
+  return { found: d.found ?? false, plan: d.plan ?? null, audit: d.audit ?? [] };
+}
+export async function fetchExecutionSummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_execution_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function updateExecutionPlan(id: string, section: string, value: unknown, reason: string): Promise<ExecutionPlanRow> {
+  const { data, error } = await supabase.rpc('admin_execution_plan_update', { p_id: id, p_section: section, p_value: value, p_reason: reason });
+  if (error) throw error; return data as ExecutionPlanRow;
+}
+export async function goReviewExecutionPlan(id: string, decision: string, reason: string): Promise<ExecutionPlanRow> {
+  const { data, error } = await supabase.rpc('admin_execution_go_review', { p_id: id, p_decision: decision, p_reason: reason });
+  if (error) throw error; return data as ExecutionPlanRow;
+}
+export async function cancelExecutionPlan(id: string, reason: string): Promise<ExecutionPlanRow> {
+  const { data, error } = await supabase.rpc('admin_execution_cancel', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as ExecutionPlanRow;
+}
+export async function recordManualExecutionReference(id: string, payload: Record<string, unknown>): Promise<ExecutionPlanRow> {
+  const { data, error } = await supabase.rpc('admin_execution_manual_reference', { p_id: id, p_payload: payload });
+  if (error) throw error; return data as ExecutionPlanRow;
+}
+export async function fetchExecutionAudit(planId: string | null = null, limit = 200): Promise<ExecutionAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_audit', { p_plan_id: planId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ExecutionAuditRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
