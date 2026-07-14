@@ -2591,6 +2591,81 @@ export async function fetchExecutionAudit(planId: string | null = null, limit = 
   return d.items ?? [];
 }
 
+// ── Post-Change Observation (0506 — 사후 관측/검증/Rollback 권고/사람 인증, 실행 없음) ──
+
+export interface PostChangeObservationRow {
+  id: string; observation_code: string; execution_plan_id: string; operation_id: string | null; external_change_id: string | null;
+  observation_status: string; observation_scope: string | null;
+  baseline_start: string; baseline_end: string; observation_start: string | null; observation_end: string | null;
+  source_version: string; deployed_version: string | null; input_hash: string;
+  baseline_snapshot: Record<string, unknown>; target_snapshot: Record<string, unknown>; observed_snapshot: Record<string, unknown> | null;
+  monitoring_sources: Array<string>; success_criteria: Array<unknown>; failure_criteria: Array<unknown>;
+  regression_summary: Record<string, unknown> | null; incident_summary: Record<string, unknown> | null;
+  rollback_assessment: Record<string, unknown> | null; rollback_decision: string | null; rollback_decision_reason: string | null;
+  rollback_reference: Record<string, unknown> | null; certification_result: string | null; certification_reason: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  started_at: string | null; completed_at: string | null; created_at: string; updated_at: string;
+}
+export interface PostChangeMetricRow {
+  id: string; observation_id: string; metric_code: string; metric_type: string; metric_role: string;
+  baseline_value: number | null; target_value: number | null; observed_value: number | null;
+  absolute_delta: number | null; relative_delta: number | null; sample_size: number | null; baseline_sample_size: number | null;
+  threshold_status: string | null; validation_status: string; observed_at: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+}
+export interface PostChangeAuditRow { id?: string; observation_id: string | null; event_type: string; detail: string | null; actor_id: string | null; created_at: string }
+export async function createPostChangeObservation(payload: Record<string, unknown>): Promise<{ idempotent: boolean; eligibility: string; observation: PostChangeObservationRow }> {
+  const { data, error } = await supabase.rpc('admin_post_change_observation_create', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; eligibility: string; observation: PostChangeObservationRow };
+}
+export async function startPostChangeObservation(id: string, reason: string): Promise<PostChangeObservationRow> {
+  const { data, error } = await supabase.rpc('admin_post_change_observation_start', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as PostChangeObservationRow;
+}
+export async function collectPostChangeMetrics(id: string): Promise<{ collected: number; status: string }> {
+  const { data, error } = await supabase.rpc('admin_post_change_metrics_collect', { p_id: id });
+  if (error) throw error; return data as { collected: number; status: string };
+}
+export async function fetchPostChangeObservations(status: string | null = null, limit = 100): Promise<PostChangeObservationRow[]> {
+  const { data, error } = await supabase.rpc('admin_post_change_observations', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PostChangeObservationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchPostChangeObservationDetail(id: string): Promise<{ found: boolean; observation: PostChangeObservationRow | null; metrics: PostChangeMetricRow[]; audit: PostChangeAuditRow[] }> {
+  const { data, error } = await supabase.rpc('admin_post_change_observation_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; observation?: PostChangeObservationRow; metrics?: PostChangeMetricRow[]; audit?: PostChangeAuditRow[] } | null) ?? {};
+  return { found: d.found ?? false, observation: d.observation ?? null, metrics: d.metrics ?? [], audit: d.audit ?? [] };
+}
+export async function fetchPostChangeSummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_post_change_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function updatePostChangeReview(id: string, section: string, value: unknown, reason: string): Promise<PostChangeObservationRow> {
+  const { data, error } = await supabase.rpc('admin_post_change_review_update', { p_id: id, p_section: section, p_value: value, p_reason: reason });
+  if (error) throw error; return data as PostChangeObservationRow;
+}
+export async function recordPostChangeRollbackDecision(id: string, decision: string, reason: string): Promise<PostChangeObservationRow> {
+  const { data, error } = await supabase.rpc('admin_post_change_rollback_decision', { p_id: id, p_decision: decision, p_reason: reason });
+  if (error) throw error; return data as PostChangeObservationRow;
+}
+export async function recordPostChangeRollbackReference(id: string, payload: Record<string, unknown>): Promise<PostChangeObservationRow> {
+  const { data, error } = await supabase.rpc('admin_post_change_rollback_reference', { p_id: id, p_payload: payload });
+  if (error) throw error; return data as PostChangeObservationRow;
+}
+export async function certifyPostChangeObservation(id: string, result: string, reason: string): Promise<PostChangeObservationRow> {
+  const { data, error } = await supabase.rpc('admin_post_change_certify', { p_id: id, p_result: result, p_reason: reason });
+  if (error) throw error; return data as PostChangeObservationRow;
+}
+export async function fetchPostChangeAudit(observationId: string | null = null, limit = 200): Promise<PostChangeAuditRow[]> {
+  const { data, error } = await supabase.rpc('admin_post_change_audit', { p_observation_id: observationId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PostChangeAuditRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

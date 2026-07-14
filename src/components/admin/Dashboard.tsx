@@ -66,6 +66,7 @@ import SelfHealingSection from './SelfHealingSection';
 import ExecutiveCenterSection from './ExecutiveCenterSection';
 import OperationsCenterSection from './OperationsCenterSection';
 import ExecutionReadinessSection from './ExecutionReadinessSection';
+import PostChangeObservationSection from './PostChangeObservationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -212,6 +213,9 @@ export default function Dashboard() {
 
       {/* AI Change & Execution Readiness — 승인된 Operation 의 실행 준비 문서 (사람 실행 대기 · 자동 실행 없음) */}
       <ExecutionReadinessSection />
+
+      {/* AI Post-Change Observation & Certification — 외부 실행된 변경의 사후 관측/검증/사람 인증 (자동 Rollback·Certification 없음) */}
+      <PostChangeObservationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
