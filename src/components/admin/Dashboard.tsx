@@ -67,6 +67,7 @@ import ExecutiveCenterSection from './ExecutiveCenterSection';
 import OperationsCenterSection from './OperationsCenterSection';
 import ExecutionReadinessSection from './ExecutionReadinessSection';
 import PostChangeObservationSection from './PostChangeObservationSection';
+import ReliabilityGovernanceSection from './ReliabilityGovernanceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -216,6 +217,9 @@ export default function Dashboard() {
 
       {/* AI Post-Change Observation & Certification — 외부 실행된 변경의 사후 관측/검증/사람 인증 (자동 Rollback·Certification 없음) */}
       <PostChangeObservationSection />
+
+      {/* AI Reliability & Release Governance — SLI/SLO/Error Budget/Freeze 권고 (자동 Freeze·차단·Rollback 없음) */}
+      <ReliabilityGovernanceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

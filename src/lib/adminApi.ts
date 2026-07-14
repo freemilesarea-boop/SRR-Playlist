@@ -2666,6 +2666,94 @@ export async function fetchPostChangeAudit(observationId: string | null = null, 
   return d.items ?? [];
 }
 
+// ── Reliability Governance (0507 — SLI/SLO/Error Budget/Freeze 권고, 자동 실행/차단 없음) ──
+
+export interface ReliabilityIndicatorRow {
+  id: string; indicator_code: string; domain: string; title: string; description: string | null;
+  metric_code: string; metric_type: string; aggregation_type: string;
+  good_event_definition: string; total_event_definition: string; source_type: string; source_version: string;
+  scope_type: string; is_active: boolean; limitations: Array<string | Record<string, unknown>>; evidence: Array<Record<string, unknown>>;
+  created_by: string | null; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface ReliabilityObjectiveRow {
+  id: string; objective_code: string; indicator_id: string; indicator_code?: string; domain?: string; metric_code?: string;
+  scope_type: string; scope_id: string | null; target_value: number; compliance_window: string;
+  minimum_sample: number; minimum_data_coverage: number; severity: string;
+  error_budget_policy: Record<string, unknown>; burn_rate_policy: Record<string, unknown>;
+  effective_from: string; effective_to: string | null; lifecycle_status: string; version: number;
+  change_reason: string; checksum: string; previous_version_id: string | null;
+  approved_by: string | null; created_by: string | null; created_at: string; updated_at: string;
+}
+export interface ReliabilitySnapshotRow {
+  id: string; indicator_id: string; indicator_code?: string; domain?: string; metric_code?: string;
+  window_code: string; period_start: string | null; period_end: string;
+  good_events: number | null; total_events: number | null; sli_value: number | null; sample_size: number | null;
+  data_coverage: number | null; status: string; source_version: string; input_hash: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; calculated_at: string; created_at: string;
+}
+export interface ReliabilityDecisionRow {
+  id: string; decision_type: string; decision: string; scope: string | null; reason: string;
+  period_start: string | null; period_end: string | null; expires_at: string | null;
+  risk_snapshot: Record<string, unknown>; freeze_reference: Record<string, unknown> | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; decided_by: string | null; created_at: string;
+}
+export interface ReliabilityEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export async function saveReliabilityIndicator(payload: Record<string, unknown>): Promise<ReliabilityIndicatorRow> {
+  const { data, error } = await supabase.rpc('admin_reliability_indicator_save', { p_payload: payload });
+  if (error) throw error; return data as ReliabilityIndicatorRow;
+}
+export async function fetchReliabilityIndicators(domain: string | null = null, limit = 100): Promise<ReliabilityIndicatorRow[]> {
+  const { data, error } = await supabase.rpc('admin_reliability_indicators', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ReliabilityIndicatorRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveReliabilityObjective(payload: Record<string, unknown>): Promise<ReliabilityObjectiveRow> {
+  const { data, error } = await supabase.rpc('admin_reliability_objective_save', { p_payload: payload });
+  if (error) throw error; return data as ReliabilityObjectiveRow;
+}
+export async function fetchReliabilityObjectives(status: string | null = null, limit = 100): Promise<ReliabilityObjectiveRow[]> {
+  const { data, error } = await supabase.rpc('admin_reliability_objectives', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ReliabilityObjectiveRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function computeReliabilitySli(indicatorId: string, window: string | null): Promise<ReliabilitySnapshotRow> {
+  const { data, error } = await supabase.rpc('admin_reliability_sli_compute', { p_indicator_id: indicatorId, p_window: window });
+  if (error) throw error; return data as ReliabilitySnapshotRow;
+}
+export async function fetchReliabilitySnapshots(indicatorId: string | null = null, window: string | null = null, limit = 100): Promise<ReliabilitySnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_reliability_snapshots', { p_indicator_id: indicatorId, p_window: window, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ReliabilitySnapshotRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchReliabilitySummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_reliability_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function recordReliabilityFreezeDecision(payload: Record<string, unknown>): Promise<ReliabilityDecisionRow> {
+  const { data, error } = await supabase.rpc('admin_reliability_freeze_decision', { p_payload: payload });
+  if (error) throw error; return data as ReliabilityDecisionRow;
+}
+export async function certifyReliability(payload: Record<string, unknown>): Promise<ReliabilityDecisionRow> {
+  const { data, error } = await supabase.rpc('admin_reliability_certify', { p_payload: payload });
+  if (error) throw error; return data as ReliabilityDecisionRow;
+}
+export async function fetchReliabilityDecisions(type: string | null = null, limit = 100): Promise<ReliabilityDecisionRow[]> {
+  const { data, error } = await supabase.rpc('admin_reliability_decisions', { p_type: type, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ReliabilityDecisionRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchReliabilityAudit(limit = 200): Promise<ReliabilityEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_reliability_audit', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: ReliabilityEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
