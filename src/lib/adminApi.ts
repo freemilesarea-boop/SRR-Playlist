@@ -3220,6 +3220,108 @@ export async function fetchExecAudit(limit = 200): Promise<ExecEventRow[]> {
   return d.items ?? [];
 }
 
+// ── Policy Governance (0512 — 정책 registry/버전/추천, 자동 정책 변경·Production 적용 없음) ──
+
+export type PolicySummary = Record<string, number | string | boolean | Record<string, number> | Array<Record<string, unknown>> | null>;
+export interface PolicyRow {
+  id: string; policy_code: string; domain: string; title: string; status: string;
+  current_version: number; source_ref: string | null; depends_on: string[];
+  objectives: string[]; limitations: Array<string | Record<string, unknown>>;
+  created_by: string | null; created_at: string; updated_at: string;
+}
+export interface PolicyVersionRow {
+  id: string; policy_id: string; version: number; previous_version: number | null;
+  content: Record<string, unknown>; effective_date: string | null; change_reason: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  proposed_by: string | null; approved_by: string | null; approval_date: string | null; created_at: string;
+}
+export interface PolicyRecommendationRow {
+  id: string; rec_code: string; policy_code: string | null; rec_type: string;
+  recommendation: string; reason: string; evidence: Array<Record<string, unknown>>;
+  confidence: number | null; alternatives: string[]; risk: string;
+  preconditions: Array<string | Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  simulation: Record<string, unknown> | null; impact: Record<string, unknown> | null;
+  approval_status: string; human_decision_reason: string | null; decided_by: string | null;
+  decided_at: string | null; source_version: string; idempotency_key: string;
+  created_by: string | null; created_at: string;
+}
+export interface PolicyEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchPolicySummary(): Promise<PolicySummary> {
+  const { data, error } = await supabase.rpc('admin_policy_summary');
+  if (error) throw error;
+  return (data as PolicySummary | null) ?? {};
+}
+export async function fetchPolicyInventory(domain: string | null = null, status: string | null = null, limit = 100): Promise<PolicyRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_inventory', { p_domain: domain, p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyRow[];
+}
+export async function fetchPolicyVersions(policyCode: string, limit = 50): Promise<PolicyVersionRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_versions', { p_policy_code: policyCode, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyVersionRow[];
+}
+export async function registerPolicy(payload: {
+  code: string; domain: string; title: string; content: Record<string, unknown>; changeReason: string;
+  evidence?: Array<Record<string, unknown>>; sourceRef?: string | null; dependsOn?: string[];
+  objectives?: string[]; status?: string; effectiveDate?: string | null;
+}): Promise<{ ok: boolean; policy_id: string; version: number; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_register', {
+    p_code: payload.code, p_domain: payload.domain, p_title: payload.title,
+    p_content: payload.content, p_change_reason: payload.changeReason,
+    p_evidence: payload.evidence ?? [], p_source_ref: payload.sourceRef ?? null,
+    p_depends_on: payload.dependsOn ?? [], p_objectives: payload.objectives ?? [],
+    p_status: payload.status ?? 'draft', p_effective_date: payload.effectiveDate ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; policy_id: string; version: number; production_applied: boolean };
+}
+export async function addPolicyVersion(payload: {
+  code: string; content: Record<string, unknown>; changeReason: string;
+  evidence?: Array<Record<string, unknown>>; effectiveDate?: string | null;
+  newStatus?: string | null; approvedBySelf?: boolean;
+}): Promise<{ ok: boolean; policy_id: string; version: number; previous_version: number; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_version_add', {
+    p_code: payload.code, p_content: payload.content, p_change_reason: payload.changeReason,
+    p_evidence: payload.evidence ?? [], p_effective_date: payload.effectiveDate ?? null,
+    p_new_status: payload.newStatus ?? null, p_approved_by_self: payload.approvedBySelf ?? false,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; policy_id: string; version: number; previous_version: number; production_applied: boolean };
+}
+export async function savePolicyRecommendation(payload: {
+  code: string; recType: string; recommendation: string; reason: string;
+  evidence: Array<Record<string, unknown>>; confidence: number; alternatives: string[];
+  risk: string; preconditions: string[]; limitations: string[]; idempotencyKey: string;
+  policyCode?: string | null; simulation?: Record<string, unknown> | null; impact?: Record<string, unknown> | null;
+}): Promise<{ ok: boolean; id: string; approval_status?: string; idempotent?: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_recommendation_save', {
+    p_code: payload.code, p_rec_type: payload.recType, p_recommendation: payload.recommendation,
+    p_reason: payload.reason, p_evidence: payload.evidence, p_confidence: payload.confidence,
+    p_alternatives: payload.alternatives, p_risk: payload.risk, p_preconditions: payload.preconditions,
+    p_limitations: payload.limitations, p_idempotency_key: payload.idempotencyKey,
+    p_policy_code: payload.policyCode ?? null, p_simulation: payload.simulation ?? null, p_impact: payload.impact ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; approval_status?: string; idempotent?: boolean };
+}
+export async function decidePolicyRecommendation(id: string, status: string, reason: string): Promise<{ ok: boolean; approval_status: string; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_recommendation_decide', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; approval_status: string; production_applied: boolean };
+}
+export async function fetchPolicyRecommendations(status: string | null = null, limit = 100): Promise<PolicyRecommendationRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_recommendations', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyRecommendationRow[];
+}
+export async function fetchPolicyAudit(limit = 200): Promise<PolicyEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
