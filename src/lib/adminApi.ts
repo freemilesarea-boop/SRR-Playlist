@@ -3419,6 +3419,162 @@ export async function fetchKGAudit(limit = 200): Promise<KGEventRow[]> {
   return (data ?? []) as KGEventRow[];
 }
 
+// ── Decision Memory (0514 — 결정/실행 Reference/관찰/Outcome 기록, 자동 실행·학습 없음) ──
+
+export type DMSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface DMRecordRow {
+  id: string; decision_code: string; decision_domain: string; decision_type: string;
+  source_system: string; source_reference_id: string | null; recommendation_summary: string | null;
+  decision_summary: string; decision_status: string; decision_reason: string | null;
+  decision_maker_id: string | null; reviewer_id: string | null; approver_id: string | null;
+  self_approval_warning: boolean; decision_at: string | null; expected_outcome: Record<string, unknown> | null;
+  confidence_at_decision: number | null; risk_at_decision: string | null;
+  alternatives: Array<string | Record<string, unknown>>; preconditions: Array<string | Record<string, unknown>>;
+  limitations: Array<string | Record<string, unknown>>; evidence: Array<Record<string, unknown>>;
+  source_version: string; idempotency_key: string; created_by: string | null; created_at: string; updated_at: string;
+}
+export interface DMExecutionRefRow {
+  id: string; decision_memory_id: string; action_type: string; execution_system: string;
+  external_reference: string | null; performed_by: string | null; performed_at: string | null;
+  reported_result: string | null; verification_status: string; evidence: Array<Record<string, unknown>>;
+  limitations: Array<string | Record<string, unknown>>; idempotency_key: string; created_at: string;
+}
+export interface DMObservationRow {
+  id: string; decision_memory_id: string; observation_type: string;
+  baseline_start_at: string | null; baseline_end_at: string | null;
+  observation_start_at: string; observation_end_at: string;
+  metric_definitions: Array<Record<string, unknown>>; baseline_values: Record<string, unknown> | null;
+  expected_values: Record<string, unknown> | null; actual_values: Record<string, unknown> | null;
+  data_coverage: number | null; observation_status: string; closed_at: string | null; created_at: string;
+}
+export interface DMOutcomeRow {
+  id: string; decision_memory_id: string; observation_window_id: string | null; outcome_status: string;
+  expected_vs_actual: Record<string, unknown> | null; benefit_summary: string | null; risk_realized: string | null;
+  unintended_effects: Array<unknown>; metric_results: Array<Record<string, unknown>>;
+  confidence_after_observation: number | null; causality_status: string; repeatability_status: string;
+  decision_quality: string | null; outcome_score: number | null; lessons_learned: Record<string, unknown> | null;
+  lesson_status: string; outcome_review_status: string; reviewer_id: string | null; reviewed_at: string | null;
+  evidence: Array<Record<string, unknown>>; created_at: string;
+}
+export interface DMEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export interface DMDetail {
+  decision: DMRecordRow; execution_references: DMExecutionRefRow[]; observation_windows: DMObservationRow[];
+  outcomes: DMOutcomeRow[]; timeline: Array<{ event_type: string; detail: string | null; actor_id: string | null; created_at: string }>;
+}
+
+export async function fetchDMSummary(): Promise<DMSummary> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_summary');
+  if (error) throw error;
+  return (data as DMSummary | null) ?? {};
+}
+export async function fetchDMRecords(domain: string | null = null, status: string | null = null, limit = 100): Promise<DMRecordRow[]> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_records', { p_domain: domain, p_status: status, p_limit: limit, p_offset: 0 });
+  if (error) throw error;
+  return (data ?? []) as DMRecordRow[];
+}
+export async function fetchDMDetail(id: string): Promise<DMDetail> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_detail', { p_id: id });
+  if (error) throw error;
+  return data as DMDetail;
+}
+export async function createDMRecord(payload: {
+  code: string; domain: string; type: string; sourceSystem: string; decisionSummary: string;
+  evidence: Array<Record<string, unknown>>; sourceReferenceId?: string | null; recommendationSummary?: string | null;
+  expectedOutcome?: Record<string, unknown> | null; confidence?: number | null; risk?: string | null;
+  alternatives?: string[]; preconditions?: string[];
+}): Promise<{ ok: boolean; id: string; idempotent?: boolean }> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_create', {
+    p_code: payload.code, p_domain: payload.domain, p_type: payload.type, p_source_system: payload.sourceSystem,
+    p_decision_summary: payload.decisionSummary, p_evidence: payload.evidence,
+    p_source_reference_id: payload.sourceReferenceId ?? null, p_recommendation_summary: payload.recommendationSummary ?? null,
+    p_expected_outcome: payload.expectedOutcome ?? null, p_confidence: payload.confidence ?? null,
+    p_risk: payload.risk ?? null, p_alternatives: payload.alternatives ?? [], p_preconditions: payload.preconditions ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; idempotent?: boolean };
+}
+export async function decideDMRecord(id: string, status: string, reason: string): Promise<{ ok: boolean; decision_status: string; self_approval_warning: boolean }> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_decide', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; decision_status: string; self_approval_warning: boolean };
+}
+export async function addDMExecutionRef(payload: { code: string; decisionId: string; actionType: string; executionSystem: string; reportedResult: string; evidence: Array<Record<string, unknown>>; externalReference?: string | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_decision_execution_reference_add', {
+    p_code: payload.code, p_decision_id: payload.decisionId, p_action_type: payload.actionType,
+    p_execution_system: payload.executionSystem, p_reported_result: payload.reportedResult,
+    p_evidence: payload.evidence, p_external_reference: payload.externalReference ?? null, p_performed_at: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function updateDMExecutionVerification(id: string, status: string, reason: string): Promise<{ ok: boolean; verification_status: string }> {
+  const { data, error } = await supabase.rpc('admin_decision_execution_verification_update', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; verification_status: string };
+}
+export async function createDMObservation(payload: { decisionId: string; observationType: string; startAt: string; endAt: string; metricDefinitions: Array<Record<string, unknown>>; baselineStart?: string | null; baselineEnd?: string | null; baselineValues?: Record<string, unknown> | null; expectedValues?: Record<string, unknown> | null }): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_decision_observation_create', {
+    p_decision_id: payload.decisionId, p_observation_type: payload.observationType,
+    p_start: payload.startAt, p_end: payload.endAt, p_metric_definitions: payload.metricDefinitions,
+    p_baseline_start: payload.baselineStart ?? null, p_baseline_end: payload.baselineEnd ?? null,
+    p_baseline_values: payload.baselineValues ?? null, p_expected_values: payload.expectedValues ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function updateDMObservation(id: string, status: string, reason: string, actualValues: Record<string, unknown> | null = null, dataCoverage: number | null = null): Promise<{ ok: boolean; observation_status: string }> {
+  const { data, error } = await supabase.rpc('admin_decision_observation_update', { p_id: id, p_status: status, p_reason: reason, p_actual_values: actualValues, p_data_coverage: dataCoverage });
+  if (error) throw error;
+  return data as { ok: boolean; observation_status: string };
+}
+export async function recordDMOutcome(payload: {
+  code: string; decisionId: string; outcomeStatus: string; evidence: Array<Record<string, unknown>>;
+  observationId?: string | null; expectedVsActual?: Record<string, unknown> | null; metricResults?: Array<Record<string, unknown>>;
+  causality?: string; repeatability?: string; decisionQuality?: string | null; outcomeScore?: number | null;
+  benefit?: string | null; riskRealized?: string | null; lessons?: Record<string, unknown> | null;
+}): Promise<{ ok: boolean; id: string; causality_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_decision_outcome_record', {
+    p_code: payload.code, p_decision_id: payload.decisionId, p_outcome_status: payload.outcomeStatus,
+    p_evidence: payload.evidence, p_observation_id: payload.observationId ?? null,
+    p_expected_vs_actual: payload.expectedVsActual ?? null, p_metric_results: payload.metricResults ?? [],
+    p_causality: payload.causality ?? 'not_evaluated', p_repeatability: payload.repeatability ?? 'not_evaluated',
+    p_decision_quality: payload.decisionQuality ?? null, p_outcome_score: payload.outcomeScore ?? null,
+    p_benefit: payload.benefit ?? null, p_risk_realized: payload.riskRealized ?? null, p_lessons: payload.lessons ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; causality_confirmed: boolean };
+}
+export async function reviewDMOutcome(id: string, reviewStatus: string, reason: string, lessonStatus: string | null = null): Promise<{ ok: boolean; outcome_review_status: string }> {
+  const { data, error } = await supabase.rpc('admin_decision_outcome_review', { p_id: id, p_review_status: reviewStatus, p_reason: reason, p_lesson_status: lessonStatus });
+  if (error) throw error;
+  return data as { ok: boolean; outcome_review_status: string };
+}
+export async function recordDMExternalOutcome(decisionId: string, actionType: string, reason: string, evidence: Array<Record<string, unknown>>): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_decision_external_outcome_reference', { p_decision_id: decisionId, p_action_type: actionType, p_reason: reason, p_evidence: evidence });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchDMExecutionRefs(limit = 100): Promise<DMExecutionRefRow[]> {
+  const { data, error } = await supabase.rpc('admin_decision_execution_references', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DMExecutionRefRow[];
+}
+export async function fetchDMObservations(status: string | null = null, limit = 100): Promise<DMObservationRow[]> {
+  const { data, error } = await supabase.rpc('admin_decision_observations', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DMObservationRow[];
+}
+export async function fetchDMOutcomes(status: string | null = null, limit = 100): Promise<DMOutcomeRow[]> {
+  const { data, error } = await supabase.rpc('admin_decision_outcomes', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DMOutcomeRow[];
+}
+export async function fetchDMAudit(limit = 200): Promise<DMEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_decision_memory_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DMEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
