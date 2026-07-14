@@ -60,6 +60,7 @@ import AiGovernanceSection from './AiGovernanceSection';
 import MultiAgentCenterSection from './MultiAgentCenterSection';
 import AiMemoryKnowledgeSection from './AiMemoryKnowledgeSection';
 import AiDigitalTwinSection from './AiDigitalTwinSection';
+import FleetIntelligenceSection from './FleetIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -188,6 +189,9 @@ export default function Dashboard() {
 
       {/* AI Digital Twin & Simulation Lab — Immutable Snapshot + 결정적 Counterfactual (simulated ≠ actual) */}
       <AiDigitalTwinSection />
+
+      {/* Enterprise Fleet Intelligence — 익명 Cross-Enterprise/Region/Industry Benchmark (Production 무변경) */}
+      <FleetIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
