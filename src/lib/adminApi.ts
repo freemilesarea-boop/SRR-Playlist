@@ -2300,6 +2300,67 @@ export async function setFleetOpportunityStatus(id: string, status: string, reas
   if (error) throw error; return data as FleetOpportunityRow;
 }
 
+// ── Federated Learning (0501 — 익명 Knowledge Federation, Privacy Gate, Evidence Only) ──
+
+export interface FederatedSummaryResp {
+  patterns: { total: number; by_layer: Record<string, number>; by_status: Record<string, number>; global_validated: number; deprecated: number; last_pattern_at: string | null } | null;
+  privacy: { total: number; passed: number; blocked: number } | null;
+  conflicts: { total: number; unresolved: number; governance_review: number } | null;
+}
+export async function fetchFederatedSummary(): Promise<FederatedSummaryResp> {
+  const { data, error } = await supabase.rpc('admin_federated_summary');
+  if (error) throw error;
+  const d = (data as Partial<FederatedSummaryResp> | null) ?? {};
+  return { patterns: d.patterns ?? null, privacy: d.privacy ?? null, conflicts: d.conflicts ?? null };
+}
+export interface FederatedPatternRow {
+  id: string; pattern_key: string; layer: string; industry: string | null; region_label: string | null; context_key: string | null;
+  subject: Record<string, unknown>; metric_code: string; direction: string | null; effect_value: number | null; baseline_value: number | null;
+  confidence: number | null; sample_count: number; sample_stores: number; freshness_score: number | null; status: string;
+  privacy_passed: boolean; evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  source_version: string; input_hash: string; last_validated_at: string | null; created_at: string;
+}
+export async function fetchFederatedPatterns(layer: string | null = null, status: string | null = null, industry: string | null = null, limit = 100): Promise<FederatedPatternRow[]> {
+  const { data, error } = await supabase.rpc('admin_federated_patterns', { p_layer: layer, p_status: status, p_industry: industry, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: FederatedPatternRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface FederatedSaveResp { saved: boolean; idempotent?: boolean; privacy_passed: boolean; violations?: string[]; pattern?: FederatedPatternRow }
+export async function saveFederatedPattern(payload: Record<string, unknown>): Promise<FederatedSaveResp> {
+  const { data, error } = await supabase.rpc('admin_federated_pattern_save', { p_payload: payload });
+  if (error) throw error; return data as FederatedSaveResp;
+}
+export async function promoteFederatedPattern(id: string, status: string, reason: string): Promise<FederatedPatternRow> {
+  const { data, error } = await supabase.rpc('admin_federated_promote', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as FederatedPatternRow;
+}
+export interface FederatedConflictRow {
+  id: string; conflict_key: string; conflict_type: string; local_pattern_id: string | null; global_pattern_id: string | null;
+  context_key: string | null; summary: string; resolution: string; resolution_reason: string | null; resolved_at: string | null; created_at: string;
+}
+export async function saveFederatedConflict(payload: Record<string, unknown>): Promise<{ idempotent: boolean; conflict: FederatedConflictRow }> {
+  const { data, error } = await supabase.rpc('admin_federated_conflict_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; conflict: FederatedConflictRow };
+}
+export async function fetchFederatedConflicts(resolution: string | null = null, limit = 100): Promise<FederatedConflictRow[]> {
+  const { data, error } = await supabase.rpc('admin_federated_conflicts', { p_resolution: resolution, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: FederatedConflictRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function resolveFederatedConflict(id: string, resolution: string, reason: string): Promise<FederatedConflictRow> {
+  const { data, error } = await supabase.rpc('admin_federated_conflict_resolve', { p_id: id, p_resolution: resolution, p_reason: reason });
+  if (error) throw error; return data as FederatedConflictRow;
+}
+export interface FederatedPrivacyRow { id: string; pattern_key: string | null; layer: string | null; passed: boolean; checks: Record<string, boolean>; violations: string[]; created_at: string }
+export async function fetchFederatedPrivacyLog(passed: boolean | null = null, limit = 100): Promise<FederatedPrivacyRow[]> {
+  const { data, error } = await supabase.rpc('admin_federated_privacy_log', { p_passed: passed, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: FederatedPrivacyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
