@@ -65,6 +65,7 @@ import FederatedIntelligenceSection from './FederatedIntelligenceSection';
 import SelfHealingSection from './SelfHealingSection';
 import ExecutiveCenterSection from './ExecutiveCenterSection';
 import OperationsCenterSection from './OperationsCenterSection';
+import ExecutionReadinessSection from './ExecutionReadinessSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -208,6 +209,9 @@ export default function Dashboard() {
 
       {/* AI Operations Center — AI 제안 통합 Queue + 사람 검토/승인/피드백 (자동 승인 없음) */}
       <OperationsCenterSection />
+
+      {/* AI Change & Execution Readiness — 승인된 Operation 의 실행 준비 문서 (사람 실행 대기 · 자동 실행 없음) */}
+      <ExecutionReadinessSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
