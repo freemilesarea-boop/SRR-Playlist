@@ -68,6 +68,7 @@ import OperationsCenterSection from './OperationsCenterSection';
 import ExecutionReadinessSection from './ExecutionReadinessSection';
 import PostChangeObservationSection from './PostChangeObservationSection';
 import ReliabilityGovernanceSection from './ReliabilityGovernanceSection';
+import CapacityContinuitySection from './CapacityContinuitySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -220,6 +221,9 @@ export default function Dashboard() {
 
       {/* AI Reliability & Release Governance — SLI/SLO/Error Budget/Freeze 권고 (자동 Freeze·차단·Rollback 없음) */}
       <ReliabilityGovernanceSection />
+
+      {/* AI Capacity, Cost & Continuity — 용량/비용/연속성 예측·권고 Evidence (자동 Scale/Backup 없음) */}
+      <CapacityContinuitySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

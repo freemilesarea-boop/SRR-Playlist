@@ -2754,6 +2754,141 @@ export async function fetchReliabilityAudit(limit = 200): Promise<ReliabilityEve
   return d.items ?? [];
 }
 
+// ── Capacity & Continuity (0508 — 예측/권고/계획 Evidence 만, Infrastructure/Billing 실행 없음) ──
+
+export interface CapacityMetricRow {
+  id: string; metric_code: string; domain: string; title: string; description: string | null;
+  unit: string; source_type: string; aggregation_type: string; limit_source: string;
+  hard_limit: number | null; soft_limit: number | null; warning_threshold: number; critical_threshold: number;
+  scope_type: string; source_version: string; is_active: boolean;
+  limitations: Array<string | Record<string, unknown>>; evidence: Array<Record<string, unknown>>;
+  created_by: string | null; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface CapacitySnapshotRow {
+  id: string; metric_id: string; metric_code?: string; domain?: string; unit?: string;
+  scope_type: string; period_start: string | null; period_end: string;
+  current_usage: number | null; soft_limit: number | null; hard_limit: number | null;
+  utilization_percent: number | null; growth_per_day: number | null; headroom: number | null;
+  projected_exhaustion_at: string | null; status: string; sample_size: number | null;
+  source_version: string; input_hash: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  calculated_at: string; created_at: string;
+}
+export interface CapacityUsageDay { day: string; events: number; active_stores: number; active_players: number }
+export interface CostModelRow {
+  id: string; cost_code: string; provider: string; resource_type: string; unit: string;
+  unit_price: number; currency: string; billing_period: string; included_amount: number | null; overage_price: number | null;
+  effective_from: string; effective_to: string | null; version: number; source: string;
+  evidence: Array<Record<string, unknown>>; approved_by: string | null; created_by: string | null; created_at: string;
+}
+export interface CostSnapshotRow {
+  id: string; period_start: string; period_end: string; provider: string; resource_type: string;
+  usage_amount: number | null; included_usage: number | null; billable_usage: number | null;
+  estimated_cost: number | null; actual_cost: number | null; currency: string; model_version: string | null;
+  input_hash: string; status: string; evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  created_by: string | null; created_at: string;
+}
+export interface CapacityPlanRow {
+  id: string; plan_code: string; metric_code: string; scope_type: string; plan_type: string;
+  current_capacity: number | null; target_capacity: number | null; forecast_horizon: string | null;
+  trigger_condition: string; recommended_window: string | null; expected_cost: Record<string, unknown>;
+  risk_tier: string; dependencies: Array<unknown>; validation_plan: Array<unknown>;
+  rollback_plan: Record<string, unknown> | null; observation_plan: Record<string, unknown> | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  status: string; idempotency_key: string; requested_by: string | null; reviewed_by: string | null;
+  created_at: string; reviewed_at: string | null; expired_at: string | null;
+}
+export interface OperationalDependencyRow {
+  id: string; dependency_code: string; domain: string; provider: string; service_name: string;
+  dependency_type: string; criticality: string; failure_impact: string | null;
+  fallback_available: boolean | null; fallback_description: string | null;
+  rto_target: string; rpo_target: string; monitoring_source: string | null; owner: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  lifecycle_status: string; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface CapacityEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export async function saveCapacityMetric(payload: Record<string, unknown>): Promise<CapacityMetricRow> {
+  const { data, error } = await supabase.rpc('admin_capacity_metric_save', { p_payload: payload });
+  if (error) throw error; return data as CapacityMetricRow;
+}
+export async function fetchCapacityMetrics(domain: string | null = null, limit = 100): Promise<CapacityMetricRow[]> {
+  const { data, error } = await supabase.rpc('admin_capacity_metrics', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CapacityMetricRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchCapacityUsage(days = 30): Promise<CapacityUsageDay[]> {
+  const { data, error } = await supabase.rpc('admin_capacity_usage', { p_days: days });
+  if (error) throw error;
+  const d = (data as { items?: CapacityUsageDay[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function createCapacitySnapshot(metricId: string): Promise<CapacitySnapshotRow> {
+  const { data, error } = await supabase.rpc('admin_capacity_snapshot_create', { p_metric_id: metricId });
+  if (error) throw error; return data as CapacitySnapshotRow;
+}
+export async function fetchCapacitySnapshots(metricId: string | null = null, limit = 100): Promise<CapacitySnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_capacity_snapshots', { p_metric_id: metricId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CapacitySnapshotRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchCapacitySummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_capacity_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function saveCostModel(payload: Record<string, unknown>): Promise<CostModelRow> {
+  const { data, error } = await supabase.rpc('admin_cost_model_save', { p_payload: payload });
+  if (error) throw error; return data as CostModelRow;
+}
+export async function fetchCostModels(limit = 100): Promise<CostModelRow[]> {
+  const { data, error } = await supabase.rpc('admin_cost_models', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CostModelRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveCostSnapshot(payload: Record<string, unknown>): Promise<CostSnapshotRow> {
+  const { data, error } = await supabase.rpc('admin_cost_snapshot_save', { p_payload: payload });
+  if (error) throw error; return data as CostSnapshotRow;
+}
+export async function fetchCostSnapshots(limit = 100): Promise<CostSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_cost_snapshots', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CostSnapshotRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveCapacityPlan(payload: Record<string, unknown>): Promise<{ idempotent: boolean; plan: CapacityPlanRow }> {
+  const { data, error } = await supabase.rpc('admin_capacity_plan_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; plan: CapacityPlanRow };
+}
+export async function fetchCapacityPlans(status: string | null = null, limit = 100): Promise<CapacityPlanRow[]> {
+  const { data, error } = await supabase.rpc('admin_capacity_plans', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CapacityPlanRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function reviewCapacityPlan(id: string, status: string, reason: string): Promise<CapacityPlanRow> {
+  const { data, error } = await supabase.rpc('admin_capacity_plan_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as CapacityPlanRow;
+}
+export async function saveOperationalDependency(payload: Record<string, unknown>): Promise<OperationalDependencyRow> {
+  const { data, error } = await supabase.rpc('admin_operational_dependency_save', { p_payload: payload });
+  if (error) throw error; return data as OperationalDependencyRow;
+}
+export async function fetchOperationalDependencies(limit = 100): Promise<OperationalDependencyRow[]> {
+  const { data, error } = await supabase.rpc('admin_operational_dependencies', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OperationalDependencyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchCapacityAudit(limit = 200): Promise<CapacityEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_capacity_audit', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: CapacityEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
