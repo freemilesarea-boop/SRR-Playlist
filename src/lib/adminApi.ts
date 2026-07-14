@@ -2485,6 +2485,51 @@ export async function setExecRecommendationStatus(id: string, status: string, re
   if (error) throw error; return data as ExecRecommendationRow;
 }
 
+// ── AI Operations Center (0504 — 통합 Queue/Review/Feedback, 자동 승인 없음) ──
+
+export interface OperationRow {
+  id: string; operation_code: string; source_type: string; source_id: string; title: string; category: string;
+  risk_tier: string | null; impact: string | null; approval_policy: string; status: string;
+  timeline: Array<{ at: string; event: string; actor: string | null; detail: string | null }>;
+  evidence_refs: Array<Record<string, unknown>>; source_version: string; created_at: string; updated_at: string;
+  approve_count?: number;
+}
+export async function enrollOperation(payload: Record<string, unknown>): Promise<{ idempotent: boolean; operation: OperationRow }> {
+  const { data, error } = await supabase.rpc('admin_operation_enroll', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; operation: OperationRow };
+}
+export async function fetchOperationsQueue(status: string | null = null, category: string | null = null, risk: string | null = null, limit = 100): Promise<OperationRow[]> {
+  const { data, error } = await supabase.rpc('admin_operations_queue', { p_status: status, p_category: category, p_risk: risk, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OperationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface OperationReviewRow { id: string; operation_id: string; action: string; reason: string; feedback_type: string | null; learning_note: string | null; reviewer_id: string | null; created_at: string }
+export async function fetchOperationDetail(id: string): Promise<{ found: boolean; operation: OperationRow | null; reviews: OperationReviewRow[]; source: Record<string, unknown> | null }> {
+  const { data, error } = await supabase.rpc('admin_operation_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; operation?: OperationRow; reviews?: OperationReviewRow[]; source?: Record<string, unknown> } | null) ?? {};
+  return { found: d.found ?? false, operation: d.operation ?? null, reviews: d.reviews ?? [], source: d.source ?? null };
+}
+export async function reviewOperation(id: string, action: string, reason: string, feedbackType: string | null = null, learningNote: string | null = null): Promise<{ operation: OperationRow; note: string | null }> {
+  const { data, error } = await supabase.rpc('admin_operation_review', { p_id: id, p_action: action, p_reason: reason, p_feedback_type: feedbackType, p_learning_note: learningNote });
+  if (error) throw error; return data as { operation: OperationRow; note: string | null };
+}
+export async function archiveOperation(id: string, reason: string): Promise<OperationRow> {
+  const { data, error } = await supabase.rpc('admin_operation_archive', { p_id: id, p_reason: reason });
+  if (error) throw error; return data as OperationRow;
+}
+export interface OperationAnalyticsResp {
+  operations: Record<string, number | string | Record<string, number> | null> | null;
+  reviews: Record<string, number> | null;
+}
+export async function fetchOperationAnalytics(): Promise<OperationAnalyticsResp> {
+  const { data, error } = await supabase.rpc('admin_operation_analytics');
+  if (error) throw error;
+  const d = (data as Partial<OperationAnalyticsResp> | null) ?? {};
+  return { operations: d.operations ?? null, reviews: d.reviews ?? null };
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
