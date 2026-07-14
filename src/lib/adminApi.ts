@@ -3575,6 +3575,162 @@ export async function fetchDMAudit(limit = 200): Promise<DMEventRow[]> {
   return (data ?? []) as DMEventRow[];
 }
 
+// ── Organizational Learning (0515 — 학습 근거/패턴/조직 학습/정책 진화 후보, 자동 정책 변경·학습 없음) ──
+
+export type OLSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface OLEvidenceRow {
+  id: string; evidence_code: string; learning_domain: string; source_decision_id: string | null;
+  source_outcome_id: string | null; source_policy_id: string | null; scope_type: string; scope_id: string | null;
+  context_signature: string; outcome_status: string; causality_status: string; repeatability_status: string;
+  evidence_strength: string; applicability_status: string; eligibility: string; exclusion_reason: string | null;
+  evidence_summary: string; assumptions: Array<unknown>; unknown_factors: Array<unknown>;
+  limitations: Array<string | Record<string, unknown>>; observed_at: string | null; idempotency_key: string; created_at: string;
+}
+export interface OLPatternRow {
+  id: string; pattern_code: string; learning_domain: string; pattern_type: string; scope_type: string;
+  scope_id: string | null; context_signature: string; supporting_evidence_ids: string[]; contradicting_evidence_ids: string[];
+  sample_size: number; positive_count: number; negative_count: number; mixed_count: number; inconclusive_count: number;
+  pattern_strength: string; repeatability_status: string; applicability_status: string; confidence: number | null;
+  pattern_summary: string; reusable_insight: string | null; non_reusable_conditions: Array<unknown>;
+  lifecycle_status: string; reviewed_by: string | null; created_at: string;
+}
+export interface OLLearningRow {
+  id: string; learning_code: string; title: string; learning_domain: string; scope_type: string; scope_id: string | null;
+  supporting_pattern_ids: string[]; learning_summary: string; what_worked: Array<unknown>; what_did_not_work: Array<unknown>;
+  applicability_status: string; repeatability_status: string; evidence_strength: string; confidence: number | null;
+  policy_implication: string | null; governance_implication: string | null;
+  limitations: Array<string | Record<string, unknown>>; review_status: string; reviewed_by: string | null;
+  approved_by: string | null; created_at: string;
+}
+export interface OLEvolutionRow {
+  id: string; candidate_code: string; policy_id: string; current_policy_version: number | null; candidate_type: string;
+  target_scope_type: string; proposed_change_summary: string; reason: string; supporting_learning_ids: string[];
+  expected_benefit: string; expected_risk: string; alternatives: Array<unknown>; confidence: number | null;
+  evidence_strength: string; repeatability_status: string; applicability_status: string;
+  safety_gate: Record<string, unknown> | null; preconditions: Array<unknown>; limitations: Array<unknown>;
+  review_status: string; reviewer_id: string | null; approver_id: string | null; self_approval_warning: boolean;
+  decision_reason: string | null; created_at: string; reviewed_at: string | null;
+}
+export interface OLEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchOLSummary(): Promise<OLSummary> {
+  const { data, error } = await supabase.rpc('admin_organizational_learning_summary');
+  if (error) throw error;
+  return (data as OLSummary | null) ?? {};
+}
+export async function createOLEvidence(payload: {
+  code: string; domain: string; summary: string; contextSignature: string; outcomeStatus: string; evidenceStrength: string;
+  sourceDecisionId?: string | null; sourceOutcomeId?: string | null; sourcePolicyId?: string | null;
+  scopeType?: string; scopeId?: string | null; causality?: string; repeatability?: string; applicability?: string;
+  eligibility?: string; exclusionReason?: string | null;
+}): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_learning_evidence_create', {
+    p_code: payload.code, p_domain: payload.domain, p_summary: payload.summary,
+    p_context_signature: payload.contextSignature, p_outcome_status: payload.outcomeStatus,
+    p_evidence_strength: payload.evidenceStrength,
+    p_source_decision_id: payload.sourceDecisionId ?? null, p_source_outcome_id: payload.sourceOutcomeId ?? null,
+    p_source_policy_id: payload.sourcePolicyId ?? null, p_scope_type: payload.scopeType ?? 'unverified',
+    p_scope_id: payload.scopeId ?? null, p_causality: payload.causality ?? 'causality_unverified',
+    p_repeatability: payload.repeatability ?? 'not_evaluated', p_applicability: payload.applicability ?? 'applicability_unverified',
+    p_eligibility: payload.eligibility ?? 'eligible', p_exclusion_reason: payload.exclusionReason ?? null,
+    p_assumptions: [], p_unknown_factors: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchOLEvidence(domain: string | null = null, eligibility: string | null = null, limit = 100): Promise<OLEvidenceRow[]> {
+  const { data, error } = await supabase.rpc('admin_learning_evidence', { p_domain: domain, p_eligibility: eligibility, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OLEvidenceRow[];
+}
+export async function createOLPattern(payload: {
+  code: string; domain: string; patternType: string; summary: string; contextSignature: string;
+  supporting: string[]; sampleSize: number; positive: number; negative: number; mixed: number; inconclusive: number;
+  strength?: string; repeatability?: string; applicability?: string; confidence?: number | null;
+}): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_learning_pattern_create', {
+    p_code: payload.code, p_domain: payload.domain, p_pattern_type: payload.patternType,
+    p_summary: payload.summary, p_context_signature: payload.contextSignature,
+    p_supporting: payload.supporting, p_contradicting: [],
+    p_sample_size: payload.sampleSize, p_positive: payload.positive, p_negative: payload.negative,
+    p_mixed: payload.mixed, p_inconclusive: payload.inconclusive,
+    p_strength: payload.strength ?? 'insufficient_data', p_repeatability: payload.repeatability ?? 'sample_too_small',
+    p_applicability: payload.applicability ?? 'applicability_unverified', p_confidence: payload.confidence ?? null,
+    p_reusable_insight: null, p_non_reusable: [], p_scope_type: 'unverified', p_scope_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function fetchOLPatterns(type: string | null = null, status: string | null = null, limit = 100): Promise<OLPatternRow[]> {
+  const { data, error } = await supabase.rpc('admin_learning_patterns', { p_type: type, p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OLPatternRow[];
+}
+export async function saveOLLearning(payload: {
+  code: string; title: string; domain: string; summary: string; supportingPatterns: string[];
+  applicability?: string; repeatability?: string; strength?: string; confidence?: number | null;
+  policyImplication?: string | null; governanceImplication?: string | null;
+}): Promise<{ ok: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_organizational_learning_save', {
+    p_code: payload.code, p_title: payload.title, p_domain: payload.domain, p_summary: payload.summary,
+    p_supporting_patterns: payload.supportingPatterns, p_what_worked: [], p_what_did_not: [],
+    p_applicability: payload.applicability ?? 'applicability_unverified', p_repeatability: payload.repeatability ?? 'repeatability_unverified',
+    p_strength: payload.strength ?? 'insufficient_data', p_confidence: payload.confidence ?? null,
+    p_policy_implication: payload.policyImplication ?? null, p_governance_implication: payload.governanceImplication ?? null,
+    p_scope_type: 'unverified', p_scope_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string };
+}
+export async function reviewOLLearning(id: string, status: string, reason: string): Promise<{ ok: boolean; review_status: string }> {
+  const { data, error } = await supabase.rpc('admin_organizational_learning_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string };
+}
+export async function fetchOLLearnings(status: string | null = null, limit = 100): Promise<OLLearningRow[]> {
+  const { data, error } = await supabase.rpc('admin_organizational_learnings', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OLLearningRow[];
+}
+export async function createOLEvolutionCandidate(payload: {
+  code: string; policyId: string; candidateType: string; changeSummary: string; reason: string;
+  expectedBenefit: string; expectedRisk: string; supportingLearnings?: string[]; alternatives?: string[];
+  confidence?: number | null; strength?: string; repeatability?: string; applicability?: string;
+  safetyGate?: Record<string, unknown> | null;
+}): Promise<{ ok: boolean; id: string; policy_version_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_evolution_candidate_create', {
+    p_code: payload.code, p_policy_id: payload.policyId, p_candidate_type: payload.candidateType,
+    p_change_summary: payload.changeSummary, p_reason: payload.reason,
+    p_expected_benefit: payload.expectedBenefit, p_expected_risk: payload.expectedRisk,
+    p_supporting_learnings: payload.supportingLearnings ?? [], p_alternatives: payload.alternatives ?? [],
+    p_confidence: payload.confidence ?? null, p_strength: payload.strength ?? 'insufficient_data',
+    p_repeatability: payload.repeatability ?? 'repeatability_unverified', p_applicability: payload.applicability ?? 'applicability_unverified',
+    p_safety_gate: payload.safetyGate ?? null, p_target_scope_type: 'unverified', p_target_scope_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; policy_version_created: boolean };
+}
+export async function reviewOLEvolution(id: string, status: string, reason: string): Promise<{ ok: boolean; review_status: string; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_evolution_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; policy_applied: boolean };
+}
+export async function fetchOLEvolutionCandidates(status: string | null = null, limit = 100): Promise<OLEvolutionRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_evolution_candidates', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OLEvolutionRow[];
+}
+export async function recordOLExternalPolicyAction(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_external_policy_action', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchOLAudit(limit = 200): Promise<OLEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_learning_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OLEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

@@ -75,6 +75,7 @@ import ExecutiveStrategySection from './ExecutiveStrategySection';
 import PolicyGovernanceSection from './PolicyGovernanceSection';
 import KnowledgeGraphSection from './KnowledgeGraphSection';
 import DecisionOutcomeSection from './DecisionOutcomeSection';
+import OrganizationalLearningSection from './OrganizationalLearningSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -248,6 +249,9 @@ export default function Dashboard() {
 
       {/* Enterprise Decision Memory — 결정/실행 Reference/관찰/Outcome/Lesson (자동 실행·학습 없음) */}
       <DecisionOutcomeSection />
+
+      {/* Enterprise Organizational Learning — 학습 근거/패턴/정책 진화 후보 (자동 정책 변경·학습 없음) */}
+      <OrganizationalLearningSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
