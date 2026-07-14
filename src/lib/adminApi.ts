@@ -2210,6 +2210,96 @@ export async function fetchTwinAudit(twinId: string | null = null, runId: string
   return d.items ?? [];
 }
 
+// ── Enterprise Fleet Intelligence (0500 — 익명 집계 Benchmark, Production 무변경) ──
+
+export interface FleetSummaryResp {
+  range: string; global: Record<string, number | string | null> | null; fleet: Record<string, number> | null;
+}
+export async function fetchFleetSummary(range = '30d'): Promise<FleetSummaryResp> {
+  const { data, error } = await supabase.rpc('admin_fleet_summary', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<FleetSummaryResp> | null) ?? {};
+  return { range: d.range ?? range, global: d.global ?? null, fleet: d.fleet ?? null };
+}
+export interface FleetHealthResp {
+  scope: string; scope_key: string | null; supported: boolean;
+  kpi: Record<string, number | null> | null; governance: { trust: number | null; governance_health: number | null } | null;
+  queue_stability: null; note?: string;
+}
+export async function fetchFleetHealth(scope = 'global', scopeKey: string | null = null, range = '30d'): Promise<FleetHealthResp> {
+  const { data, error } = await supabase.rpc('admin_fleet_health', { p_scope: scope, p_scope_key: scopeKey, p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<FleetHealthResp> | null) ?? {};
+  return { scope: d.scope ?? scope, scope_key: d.scope_key ?? scopeKey, supported: d.supported ?? false, kpi: d.kpi ?? null, governance: d.governance ?? null, queue_stability: null, note: d.note };
+}
+export interface EnterpriseBenchmarkRow { anon_code: string; store_count: number; events: number; completion_rate: number | null; skip_rate: number | null; like_rate: number | null; error_rate: number | null }
+export async function fetchEnterpriseBenchmark(range = '30d', limit = 50): Promise<{ anonymized: boolean; items: EnterpriseBenchmarkRow[]; note?: string }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_benchmark', { p_range: range, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { anonymized?: boolean; items?: EnterpriseBenchmarkRow[]; note?: string } | null) ?? {};
+  return { anonymized: d.anonymized ?? true, items: d.items ?? [], note: d.note };
+}
+export interface RegionBenchmarkRow { region_name: string; store_count: number; events: number; completion_rate: number | null; skip_rate: number | null; like_rate: number | null }
+export async function fetchRegionBenchmark(range = '30d', limit = 50): Promise<RegionBenchmarkRow[]> {
+  const { data, error } = await supabase.rpc('admin_region_benchmark', { p_range: range, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: RegionBenchmarkRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface FleetGrowthRow { store_type: string; prev_events: number; curr_events: number; prev_completion: number | null; curr_completion: number | null; prev_stores: number; curr_stores: number }
+export async function fetchFleetGrowth(range = '30d'): Promise<FleetGrowthRow[]> {
+  const { data, error } = await supabase.rpc('admin_fleet_growth', { p_range: range });
+  if (error) throw error;
+  const d = (data as { items?: FleetGrowthRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface FleetScanRow { anon_code: string; store_type: string | null; events: number; skip_rate: number | null; completion_rate: number | null; error_rate: number | null; replay_rate: number | null; track_count: number | null }
+export interface FleetScanResp { anonymized: boolean; global_baseline: Record<string, number | null> | null; items: FleetScanRow[] }
+export async function fetchFleetOpportunityScan(range = '30d', minEvents = 50, limit = 50): Promise<FleetScanResp> {
+  const { data, error } = await supabase.rpc('admin_fleet_opportunity_scan', { p_range: range, p_min_events: minEvents, p_limit: limit });
+  if (error) throw error;
+  const d = (data as Partial<FleetScanResp> | null) ?? {};
+  return { anonymized: d.anonymized ?? true, global_baseline: d.global_baseline ?? null, items: d.items ?? [] };
+}
+export interface BestPracticeRow {
+  id: string; practice_code: string; scope: string; scope_key: string; title: string; description: string | null;
+  subject: Record<string, unknown>; observed_effect: Record<string, unknown>; sample_stores: number | null; sample_events: number | null;
+  confidence: number | null; status: string; evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function saveBestPractice(payload: Record<string, unknown>): Promise<{ idempotent: boolean; practice: BestPracticeRow }> {
+  const { data, error } = await supabase.rpc('admin_best_practice_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; practice: BestPracticeRow };
+}
+export async function fetchBestPractices(scope: string | null = null, status: string | null = null, limit = 100): Promise<BestPracticeRow[]> {
+  const { data, error } = await supabase.rpc('admin_best_practices', { p_scope: scope, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: BestPracticeRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setBestPracticeStatus(id: string, status: string, reason: string): Promise<BestPracticeRow> {
+  const { data, error } = await supabase.rpc('admin_best_practice_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as BestPracticeRow;
+}
+export interface FleetOpportunityRow {
+  id: string; opportunity_code: string; opportunity_type: string; scope: string; scope_key: string; severity: string;
+  kpi_snapshot: Record<string, unknown>; benchmark_snapshot: Record<string, unknown> | null; expected_direction: string | null;
+  status: string; evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function saveFleetOpportunity(payload: Record<string, unknown>): Promise<{ idempotent: boolean; opportunity: FleetOpportunityRow }> {
+  const { data, error } = await supabase.rpc('admin_fleet_opportunity_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; opportunity: FleetOpportunityRow };
+}
+export async function fetchFleetOpportunities(type: string | null = null, status: string | null = null, limit = 100): Promise<FleetOpportunityRow[]> {
+  const { data, error } = await supabase.rpc('admin_fleet_opportunities', { p_type: type, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: FleetOpportunityRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function setFleetOpportunityStatus(id: string, status: string, reason: string): Promise<FleetOpportunityRow> {
+  const { data, error } = await supabase.rpc('admin_fleet_opportunity_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as FleetOpportunityRow;
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
