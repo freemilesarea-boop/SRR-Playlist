@@ -2889,6 +2889,145 @@ export async function fetchCapacityAudit(limit = 200): Promise<CapacityEventRow[
   return d.items ?? [];
 }
 
+// ── Operational Command (0509 — 업무 등록/배정/추적/권고/보고, 자동 배정·발송 없음) ──
+
+export interface OpsWorkItemRow {
+  id: string; work_item_code: string; source_type: string; source_id: string | null; work_type: string;
+  title: string; description: string | null; priority: string; severity: string | null; work_status: string;
+  scope_type: string; scope_id: string | null;
+  assigned_to: string | null; backup_assignee: string | null; reviewer_id: string | null; approver_id: string | null;
+  sla_policy_id: string | null; due_at: string | null; response_due_at: string | null; resolution_due_at: string | null;
+  sla_paused_at: string | null; sla_pause_reason: string | null;
+  acknowledged_at: string | null; started_at: string | null; completed_at: string | null; cancelled_at: string | null;
+  source_version: string; input_hash: string; idempotency_key: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  created_by: string | null; created_at: string; updated_at: string;
+}
+export interface OpsPolicyRow {
+  id: string; policy_code: string; policy_type: string; work_type: string | null; priority: string | null;
+  config: Record<string, unknown>; lifecycle_status: string; version: number; change_reason: string; checksum: string;
+  previous_version_id: string | null; approved_by: string | null; created_by: string | null; created_at: string; updated_at: string;
+}
+export interface OpsEscalationRow {
+  id: string; work_item_id: string; work_item_code?: string; title?: string; escalation_level: number;
+  trigger_type: string; escalation_status: string; recommended_target: string | null; assigned_target: string | null;
+  reason: string; notification_references: Array<Record<string, unknown>>;
+  acknowledged_by: string | null; acknowledged_at: string | null; resolved_at: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; created_by: string | null; created_at: string;
+}
+export interface OpsShiftRow {
+  id: string; shift_code: string; shift_date: string; timezone: string; shift_start: string; shift_end: string;
+  primary_operator: string; backup_operator: string | null; escalation_operator: string | null; scope: string; status: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  created_by: string | null; approved_by: string | null; created_at: string; updated_at: string;
+}
+export interface OpsHandoverRow {
+  id: string; from_shift_id: string | null; to_shift_id: string | null; snapshot: Record<string, number>;
+  handover_summary: string; unresolved_questions: Array<unknown>; status: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  accepted_by: string | null; accepted_at: string | null; decline_reason: string | null; created_by: string | null; created_at: string;
+}
+export interface OpsEmergencyRow {
+  id: string; reference_code: string; mode_status: string; scope: string; activation_trigger: string;
+  decision_authority: string; plan_policy_id: string | null; expires_at: string | null; reason: string;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; created_by: string | null; created_at: string;
+}
+export interface OpsOperatorRow { id: string; email: string; is_active: boolean; availability: string; open_assigned: number; urgent_assigned: number }
+export interface OpsEventRow { id: string; event_type: string; work_item_id: string | null; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+export async function fetchOpsCommandSummary(): Promise<Record<string, number | string | Record<string, number> | null>> {
+  const { data, error } = await supabase.rpc('admin_ops_command_summary');
+  if (error) throw error;
+  return (data as Record<string, number | string | Record<string, number> | null> | null) ?? {};
+}
+export async function enrollOpsWorkItem(payload: Record<string, unknown>): Promise<{ idempotent: boolean; work_item: OpsWorkItemRow }> {
+  const { data, error } = await supabase.rpc('admin_ops_work_enroll', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; work_item: OpsWorkItemRow };
+}
+export async function fetchOpsWorkItems(status: string | null = null, priority: string | null = null, assigned: string | null = null, limit = 100): Promise<OpsWorkItemRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_work_items', { p_status: status, p_priority: priority, p_assigned: assigned, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsWorkItemRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function updateOpsWorkItem(id: string, section: string, value: unknown, reason: string): Promise<OpsWorkItemRow> {
+  const { data, error } = await supabase.rpc('admin_ops_work_update', { p_id: id, p_section: section, p_value: value, p_reason: reason });
+  if (error) throw error; return data as OpsWorkItemRow;
+}
+export async function assignOpsWorkItem(id: string, role: string, userId: string | null, reason: string): Promise<OpsWorkItemRow> {
+  const { data, error } = await supabase.rpc('admin_ops_assign', { p_id: id, p_role: role, p_user_id: userId, p_reason: reason });
+  if (error) throw error; return data as OpsWorkItemRow;
+}
+export async function saveOpsPolicy(payload: Record<string, unknown>): Promise<OpsPolicyRow> {
+  const { data, error } = await supabase.rpc('admin_ops_policy_save', { p_payload: payload });
+  if (error) throw error; return data as OpsPolicyRow;
+}
+export async function fetchOpsPolicies(type: string | null = null, limit = 100): Promise<OpsPolicyRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_policies', { p_type: type, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsPolicyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function requestOpsEscalation(payload: Record<string, unknown>): Promise<OpsEscalationRow> {
+  const { data, error } = await supabase.rpc('admin_ops_escalation_request', { p_payload: payload });
+  if (error) throw error; return data as OpsEscalationRow;
+}
+export async function decideOpsEscalation(id: string, section: string, value: unknown, reason: string): Promise<OpsEscalationRow> {
+  const { data, error } = await supabase.rpc('admin_ops_escalation_decision', { p_id: id, p_section: section, p_value: value, p_reason: reason });
+  if (error) throw error; return data as OpsEscalationRow;
+}
+export async function fetchOpsEscalations(status: string | null = null, limit = 100): Promise<OpsEscalationRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_escalations', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsEscalationRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function saveOpsShift(payload: Record<string, unknown>): Promise<OpsShiftRow> {
+  const { data, error } = await supabase.rpc('admin_ops_shift_save', { p_payload: payload });
+  if (error) throw error; return data as OpsShiftRow;
+}
+export async function fetchOpsShifts(limit = 100): Promise<OpsShiftRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_shifts', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsShiftRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function createOpsHandover(payload: Record<string, unknown>): Promise<OpsHandoverRow> {
+  const { data, error } = await supabase.rpc('admin_ops_handover_create', { p_payload: payload });
+  if (error) throw error; return data as OpsHandoverRow;
+}
+export async function acceptOpsHandover(id: string, action: string, reason: string): Promise<OpsHandoverRow> {
+  const { data, error } = await supabase.rpc('admin_ops_handover_accept', { p_id: id, p_action: action, p_reason: reason });
+  if (error) throw error; return data as OpsHandoverRow;
+}
+export async function fetchOpsHandovers(limit = 100): Promise<OpsHandoverRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_handovers', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsHandoverRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function recordOpsEmergencyReference(payload: Record<string, unknown>): Promise<OpsEmergencyRow> {
+  const { data, error } = await supabase.rpc('admin_ops_emergency_reference', { p_payload: payload });
+  if (error) throw error; return data as OpsEmergencyRow;
+}
+export async function fetchOpsEmergencyReferences(limit = 50): Promise<OpsEmergencyRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_emergency_references', { p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsEmergencyRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function fetchOpsOperators(): Promise<{ items: OpsOperatorRow[]; note: string }> {
+  const { data, error } = await supabase.rpc('admin_ops_operators');
+  if (error) throw error;
+  const d = (data as { items?: OpsOperatorRow[]; note?: string } | null) ?? {};
+  return { items: d.items ?? [], note: d.note ?? '' };
+}
+export async function fetchOpsAudit(workItemId: string | null = null, limit = 200): Promise<OpsEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_ops_audit', { p_work_item_id: workItemId, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: OpsEventRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
