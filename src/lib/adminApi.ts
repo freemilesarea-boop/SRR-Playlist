@@ -2361,6 +2361,100 @@ export async function fetchFederatedPrivacyLog(passed: boolean | null = null, li
   return d.items ?? [];
 }
 
+// ── Self-Healing (0502 — Incident/RCA/Recovery Candidate, 자동 복구 없음 · Evidence Only) ──
+
+export interface SelfHealingSummaryResp {
+  incidents: Record<string, number | string | null> | null;
+  recovery: Record<string, number> | null;
+  playbooks: number | null;
+}
+export async function fetchSelfHealingSummary(): Promise<SelfHealingSummaryResp> {
+  const { data, error } = await supabase.rpc('admin_self_healing_summary');
+  if (error) throw error;
+  const d = (data as Partial<SelfHealingSummaryResp> | null) ?? {};
+  return { incidents: d.incidents ?? null, recovery: d.recovery ?? null, playbooks: d.playbooks ?? null };
+}
+export interface IncidentScanResp {
+  range: string; global: Record<string, number | null> | null;
+  by_industry: Array<Record<string, number | string | null>>; note?: string;
+}
+export async function fetchIncidentScan(range = '7d'): Promise<IncidentScanResp> {
+  const { data, error } = await supabase.rpc('admin_incident_scan', { p_range: range });
+  if (error) throw error;
+  const d = (data as Partial<IncidentScanResp> | null) ?? {};
+  return { range: d.range ?? range, global: d.global ?? null, by_industry: d.by_industry ?? [], note: d.note };
+}
+export interface IncidentRow {
+  id: string; incident_code: string; incident_type: string; severity: string; scope: string; scope_key: string | null;
+  status: string; kpi_snapshot: Record<string, unknown>; baseline_snapshot: Record<string, unknown> | null;
+  root_cause_candidates: Array<Record<string, unknown>>; timeline: Array<{ at: string; event: string; detail: string | null }>;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>;
+  detected_at: string; resolved_at: string | null; created_at: string;
+}
+export async function saveIncident(payload: Record<string, unknown>): Promise<{ idempotent: boolean; incident: IncidentRow }> {
+  const { data, error } = await supabase.rpc('admin_incident_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; incident: IncidentRow };
+}
+export async function fetchIncidents(status: string | null = null, type: string | null = null, limit = 100): Promise<IncidentRow[]> {
+  const { data, error } = await supabase.rpc('admin_incidents', { p_status: status, p_type: type, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: IncidentRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export interface RecoveryCandidateRow {
+  id: string; recovery_code: string; incident_id: string; strategy_type: string; description: string | null;
+  preconditions: Array<string | Record<string, unknown>>; twin_run_id: string | null; validation_status: string;
+  success_probability: number | null; blast_radius: string | null; recovery_time_estimate_min: number | null;
+  business_impact: string | null; confidence: number | null; status: string; outcome: string; outcome_note: string | null;
+  evidence: Array<Record<string, unknown>>; limitations: Array<string | Record<string, unknown>>; created_at: string;
+}
+export async function fetchIncidentDetail(id: string): Promise<{ found: boolean; incident: IncidentRow | null; candidates: RecoveryCandidateRow[] }> {
+  const { data, error } = await supabase.rpc('admin_incident_detail', { p_id: id });
+  if (error) throw error;
+  const d = (data as { found?: boolean; incident?: IncidentRow; candidates?: RecoveryCandidateRow[] } | null) ?? {};
+  return { found: d.found ?? false, incident: d.incident ?? null, candidates: d.candidates ?? [] };
+}
+export async function updateIncidentStatus(id: string, status: string, reason: string, rootCauses: Array<Record<string, unknown>> | null = null): Promise<IncidentRow> {
+  const { data, error } = await supabase.rpc('admin_incident_update_status', { p_id: id, p_status: status, p_reason: reason, p_root_cause_candidates: rootCauses });
+  if (error) throw error; return data as IncidentRow;
+}
+export async function saveRecoveryCandidate(payload: Record<string, unknown>): Promise<{ idempotent: boolean; candidate: RecoveryCandidateRow }> {
+  const { data, error } = await supabase.rpc('admin_recovery_candidate_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; candidate: RecoveryCandidateRow };
+}
+export async function fetchRecoveryCandidates(incidentId: string | null = null, status: string | null = null, limit = 100): Promise<RecoveryCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_recovery_candidates', { p_incident_id: incidentId, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: RecoveryCandidateRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+export async function linkRecoveryTwin(id: string, twinRunId: string, passed: boolean, reason: string): Promise<RecoveryCandidateRow> {
+  const { data, error } = await supabase.rpc('admin_recovery_link_twin', { p_id: id, p_twin_run_id: twinRunId, p_passed: passed, p_reason: reason });
+  if (error) throw error; return data as RecoveryCandidateRow;
+}
+export async function setRecoveryStatus(id: string, status: string, reason: string): Promise<RecoveryCandidateRow> {
+  const { data, error } = await supabase.rpc('admin_recovery_set_status', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error; return data as RecoveryCandidateRow;
+}
+export async function recordRecoveryOutcome(id: string, outcome: string, note: string): Promise<RecoveryCandidateRow> {
+  const { data, error } = await supabase.rpc('admin_recovery_record_outcome', { p_id: id, p_outcome: outcome, p_note: note });
+  if (error) throw error; return data as RecoveryCandidateRow;
+}
+export interface PlaybookRow {
+  id: string; playbook_code: string; incident_type: string; title: string; steps: Array<{ order: number; action: string; note: string }>;
+  source_incident_ids: string[]; success_count: number; fail_count: number; status: string; created_at: string;
+}
+export async function savePlaybook(payload: Record<string, unknown>): Promise<{ idempotent: boolean; playbook: PlaybookRow }> {
+  const { data, error } = await supabase.rpc('admin_playbook_save', { p_payload: payload });
+  if (error) throw error; return data as { idempotent: boolean; playbook: PlaybookRow };
+}
+export async function fetchPlaybooks(incidentType: string | null = null, status: string | null = null, limit = 100): Promise<PlaybookRow[]> {
+  const { data, error } = await supabase.rpc('admin_playbooks', { p_incident_type: incidentType, p_status: status, p_limit: limit });
+  if (error) throw error;
+  const d = (data as { items?: PlaybookRow[] } | null) ?? {};
+  return d.items ?? [];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

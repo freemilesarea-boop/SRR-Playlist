@@ -62,6 +62,7 @@ import AiMemoryKnowledgeSection from './AiMemoryKnowledgeSection';
 import AiDigitalTwinSection from './AiDigitalTwinSection';
 import FleetIntelligenceSection from './FleetIntelligenceSection';
 import FederatedIntelligenceSection from './FederatedIntelligenceSection';
+import SelfHealingSection from './SelfHealingSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -196,6 +197,9 @@ export default function Dashboard() {
 
       {/* Federated Intelligence — Privacy Gate 통과 익명 Knowledge Federation (Evidence Only) */}
       <FederatedIntelligenceSection />
+
+      {/* AI Self-Healing — Incident/RCA/Twin 검증/복구안 (자동 복구 없음 · Evidence Only) */}
+      <SelfHealingSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
