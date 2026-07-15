@@ -82,6 +82,7 @@ import CorporateIntelligenceSection from './CorporateIntelligenceSection';
 import ExecutiveCapacitySection from './ExecutiveCapacitySection';
 import CommitmentIntelligenceSection from './CommitmentIntelligenceSection';
 import ExecutionDeliverySection from './ExecutionDeliverySection';
+import PredictiveExecutionSection from './PredictiveExecutionSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -276,6 +277,9 @@ export default function Dashboard() {
 
       {/* Execution Delivery Analytics — 실행력/Delivery/KPI 상관 분석 (자동 실행·KPI 변경 없음) */}
       <ExecutionDeliverySection />
+
+      {/* Predictive Execution — Forecast/What-if Simulation (Prediction ≠ Outcome·자동 확정 없음) */}
+      <PredictiveExecutionSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
