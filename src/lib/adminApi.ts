@@ -4953,6 +4953,87 @@ export async function fetchPerformanceAudit(limit = 200): Promise<PerformanceEve
   return (data ?? []) as PerformanceEventRow[];
 }
 
+// ── Financial Intelligence (0526 — 회계 수정·예산 변경·지출/투자 승인 자동화 없음) ──
+
+export type FinancialSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface FinancialRecordRow {
+  id: string; record_code: string; record_kind: string; title: string; description: string | null;
+  amount: number | null; currency: string; period_kind: string; period_start: string | null;
+  period_end: string | null; record_status: string; reviewed_at: string | null;
+  review_reason: string | null; warnings: Array<unknown>; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface FinancialSnapshotRow {
+  id: string; metric_source: string; period_kind: string; period_start: string | null; period_end: string | null;
+  actual_value: number | null; budget_value: number | null; forecast_value: number | null;
+  source_kind: string; sample_size: number | null; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_at: string;
+}
+export interface FinancialTimelinePoint {
+  day: string; cash_inflow: number; paid_orders: number; failed_orders: number;
+  cash_outflow_settlements: number; settlements_paid: number;
+}
+export interface FinancialEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchFinancialSummary(): Promise<FinancialSummary> {
+  const { data, error } = await supabase.rpc('admin_financial_summary');
+  if (error) throw error;
+  return (data as FinancialSummary | null) ?? {};
+}
+export async function createFinancialRecord(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; description?: string | null; amount?: number | null; currency?: string; periodKind?: string; periodStart?: string | null; periodEnd?: string | null }): Promise<{ ok: boolean; id: string; accounting_modified: boolean; budget_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_financial_record_create', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_amount: p.amount ?? null, p_currency: p.currency ?? 'KRW',
+    p_period_kind: p.periodKind ?? 'monthly', p_period_start: p.periodStart ?? null, p_period_end: p.periodEnd ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; accounting_modified: boolean; budget_changed: boolean };
+}
+export async function reviewFinancialRecord(id: string, status: string, reason: string): Promise<{ ok: boolean; record_status: string; warnings: Array<unknown>; spend_approved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_financial_record_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; record_status: string; warnings: Array<unknown>; spend_approved: boolean };
+}
+export async function fetchFinancialRecords(kind: string | null = null, limit = 100): Promise<FinancialRecordRow[]> {
+  const { data, error } = await supabase.rpc('admin_financial_records', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as FinancialRecordRow[];
+}
+export async function recordFinancialSnapshot(p: { key: string; source: string; periodKind: string; sourceKind: string; evidence: Array<Record<string, unknown>>; actual?: number | null; budget?: number | null; forecast?: number | null; periodStart?: string | null; periodEnd?: string | null; sampleSize?: number | null }): Promise<{ ok: boolean; id: string; forecast_is_not_actual: boolean }> {
+  const { data, error } = await supabase.rpc('admin_financial_snapshot_record', {
+    p_key: p.key, p_source: p.source, p_period_kind: p.periodKind, p_source_kind: p.sourceKind, p_evidence: p.evidence,
+    p_actual: p.actual ?? null, p_budget: p.budget ?? null, p_forecast: p.forecast ?? null,
+    p_period_start: p.periodStart ?? null, p_period_end: p.periodEnd ?? null, p_sample_size: p.sampleSize ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_is_not_actual: boolean };
+}
+export async function captureFinancialSnapshot(key: string, source: string, periodKind = 'monthly'): Promise<{ ok: boolean; id: string; actual_value: number | null; sample_size: number | null }> {
+  const { data, error } = await supabase.rpc('admin_financial_snapshot_capture', { p_key: key, p_source: source, p_period_kind: periodKind });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; actual_value: number | null; sample_size: number | null };
+}
+export async function fetchFinancialSnapshots(source: string | null = null, limit = 100): Promise<FinancialSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_financial_snapshots', { p_source: source, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as FinancialSnapshotRow[];
+}
+export async function fetchFinancialTimeline(days = 30): Promise<FinancialTimelinePoint[]> {
+  const { data, error } = await supabase.rpc('admin_financial_timeline', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as FinancialTimelinePoint[];
+}
+export async function recordFinancialGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; budget_changed: boolean; spend_approved: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_financial_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; budget_changed: boolean; spend_approved: boolean; auto_sent: boolean };
+}
+export async function fetchFinancialAudit(limit = 200): Promise<FinancialEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_financial_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as FinancialEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
