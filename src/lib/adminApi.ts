@@ -5034,6 +5034,88 @@ export async function fetchFinancialAudit(limit = 200): Promise<FinancialEventRo
   return (data ?? []) as FinancialEventRow[];
 }
 
+// ── Market Intelligence (0527 — 자동 경쟁사 생성·시장 분석 확정 없음) ──
+
+export type MarketSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface MarketCompetitorRow {
+  id: string; competitor_code: string; name: string; category: string | null; region: string | null;
+  position_reference: string | null; capability_notes: Array<unknown>; data_availability: string;
+  record_status: string; reviewed_at: string | null; review_reason: string | null;
+  warnings: Array<unknown>; evidence: Array<unknown>; unknown_factors: Array<unknown>;
+  limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface MarketSignalRow {
+  id: string; signal_code: string; signal_kind: string; title: string; detail: string | null;
+  region: string | null; category: string | null; observed_at: string | null; signal_status: string;
+  reviewed_at: string | null; review_reason: string | null; warnings: Array<unknown>;
+  evidence: Array<unknown>; unknown_factors: Array<unknown>; limitations: Array<unknown>; created_at: string;
+}
+export interface MarketCategoryPoint { day: string; category: string; plays: number }
+export interface MarketEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchMarketSummary(): Promise<MarketSummary> {
+  const { data, error } = await supabase.rpc('admin_market_summary');
+  if (error) throw error;
+  return (data as MarketSummary | null) ?? {};
+}
+export async function createMarketCompetitor(p: { code: string; name: string; evidence: Array<Record<string, unknown>>; category?: string | null; region?: string | null; position?: string | null; capabilities?: Array<Record<string, unknown>>; externalData?: boolean }): Promise<{ ok: boolean; id: string; ai_generated: boolean; threat_claimed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_market_competitor_create', {
+    p_code: p.code, p_name: p.name, p_evidence: p.evidence,
+    p_category: p.category ?? null, p_region: p.region ?? null, p_position: p.position ?? null,
+    p_capabilities: p.capabilities ?? [], p_external_data: p.externalData ?? false,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; ai_generated: boolean; threat_claimed: boolean };
+}
+export async function observeMarketCompetitor(id: string, note: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; fact_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_market_competitor_observe', { p_id: id, p_note: note, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; fact_confirmed: boolean };
+}
+export async function reviewMarketCompetitor(id: string, status: string, reason: string): Promise<{ ok: boolean; record_status: string; warnings: Array<unknown> }> {
+  const { data, error } = await supabase.rpc('admin_market_competitor_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; record_status: string; warnings: Array<unknown> };
+}
+export async function fetchMarketCompetitors(status: string | null = null, limit = 100): Promise<MarketCompetitorRow[]> {
+  const { data, error } = await supabase.rpc('admin_market_competitors', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MarketCompetitorRow[];
+}
+export async function recordMarketSignal(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; detail?: string | null; region?: string | null; category?: string | null; observedAt?: string | null }): Promise<{ ok: boolean; id: string; signal_status: string; fact_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_market_signal_record', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_detail: p.detail ?? null, p_region: p.region ?? null, p_category: p.category ?? null, p_observed_at: p.observedAt ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; signal_status: string; fact_confirmed: boolean };
+}
+export async function reviewMarketSignal(id: string, status: string, reason: string, additionalEvidence: Array<Record<string, unknown>> | null = null): Promise<{ ok: boolean; signal_status: string; warnings: Array<unknown>; fact_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_market_signal_review', { p_id: id, p_status: status, p_reason: reason, p_additional_evidence: additionalEvidence });
+  if (error) throw error;
+  return data as { ok: boolean; signal_status: string; warnings: Array<unknown>; fact_confirmed: boolean };
+}
+export async function fetchMarketSignals(kind: string | null = null, limit = 100): Promise<MarketSignalRow[]> {
+  const { data, error } = await supabase.rpc('admin_market_signals', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MarketSignalRow[];
+}
+export async function fetchMarketCategoryTimeline(days = 30): Promise<MarketCategoryPoint[]> {
+  const { data, error } = await supabase.rpc('admin_market_category_timeline', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as MarketCategoryPoint[];
+}
+export async function recordMarketGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; market_conclusion_confirmed: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_market_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; market_conclusion_confirmed: boolean; auto_sent: boolean };
+}
+export async function fetchMarketAudit(limit = 200): Promise<MarketEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_market_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MarketEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
