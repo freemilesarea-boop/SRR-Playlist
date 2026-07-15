@@ -86,6 +86,7 @@ import PredictiveExecutionSection from './PredictiveExecutionSection';
 import StrategicAdvisorySection from './StrategicAdvisorySection';
 import CorporateStrategySection from './CorporateStrategySection';
 import ExecutivePerformanceSection from './ExecutivePerformanceSection';
+import FinancialIntelligenceSection from './FinancialIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -292,6 +293,9 @@ export default function Dashboard() {
 
       {/* Executive Performance — KPI Intelligence (자동 KPI 생성·수정·목표 변경 없음) */}
       <ExecutivePerformanceSection />
+
+      {/* Financial Intelligence — 재무/자본/리스크 (회계 수정·예산 변경·지출 승인 자동화 없음) */}
+      <FinancialIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
