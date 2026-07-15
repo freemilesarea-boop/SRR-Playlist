@@ -90,6 +90,7 @@ import FinancialIntelligenceSection from './FinancialIntelligenceSection';
 import MarketIntelligenceSection from './MarketIntelligenceSection';
 import RiskResilienceSection from './RiskResilienceSection';
 import ResourceCapacitySection from './ResourceCapacitySection';
+import EcosystemIntelligenceSection from './EcosystemIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -308,6 +309,9 @@ export default function Dashboard() {
 
       {/* Resource & Capacity — 자원/Capacity/최적화 (자동 증설·축소·인프라 변경 없음) */}
       <ResourceCapacitySection />
+
+      {/* Ecosystem Intelligence — 파트너/의존성/공급망 (자동 파트너 등록·계약 변경 없음) */}
+      <EcosystemIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
