@@ -5116,6 +5116,59 @@ export async function fetchMarketAudit(limit = 200): Promise<MarketEventRow[]> {
   return (data ?? []) as MarketEventRow[];
 }
 
+// ── Risk & Resilience (0528 — 자동 Incident 생성·Risk 종료·서비스 중단 없음) ──
+
+export type RiskSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface RiskRegisterRow {
+  id: string; risk_code: string; risk_category: string; title: string; description: string | null;
+  likelihood_reference: number | null; impact_reference: number | null;
+  linked_risk_ids: string[]; linked_incident_ids: string[]; controls: Array<Record<string, unknown>>;
+  risk_status: string; reviewed_at: string | null; review_reason: string | null;
+  closure_evidence: Array<unknown> | null; warnings: Array<unknown>; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface RiskEventRow { id: string; event_type: string; ref_id: string | null; stage: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchRiskSummary(): Promise<RiskSummary> {
+  const { data, error } = await supabase.rpc('admin_risk_summary');
+  if (error) throw error;
+  return (data as RiskSummary | null) ?? {};
+}
+export async function createRiskRegisterEntry(p: { code: string; category: string; title: string; evidence: Array<Record<string, unknown>>; description?: string | null; likelihood?: number | null; impact?: number | null; linkedRiskIds?: string[]; linkedIncidentIds?: string[]; controls?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; risk_status: string; incident_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_risk_register_create', {
+    p_code: p.code, p_category: p.category, p_title: p.title, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_likelihood: p.likelihood ?? null, p_impact: p.impact ?? null,
+    p_linked_risk_ids: p.linkedRiskIds ?? [], p_linked_incident_ids: p.linkedIncidentIds ?? [], p_controls: p.controls ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; risk_status: string; incident_created: boolean };
+}
+export async function reviewRiskRegisterEntry(id: string, status: string, reason: string, closureEvidence: Array<Record<string, unknown>> | null = null): Promise<{ ok: boolean; risk_status: string; warnings: Array<unknown>; auto_closed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_risk_register_review', { p_id: id, p_status: status, p_reason: reason, p_closure_evidence: closureEvidence });
+  if (error) throw error;
+  return data as { ok: boolean; risk_status: string; warnings: Array<unknown>; auto_closed: boolean };
+}
+export async function fetchRiskRegister(category: string | null = null, limit = 100): Promise<RiskRegisterRow[]> {
+  const { data, error } = await supabase.rpc('admin_risk_register_list', { p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RiskRegisterRow[];
+}
+export async function recordRiskTimeline(riskId: string, stage: string, note: string): Promise<{ ok: boolean; id: string; stage: string; stage_completed_guarantee: boolean }> {
+  const { data, error } = await supabase.rpc('admin_risk_timeline_record', { p_risk_id: riskId, p_stage: stage, p_note: note });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; stage: string; stage_completed_guarantee: boolean };
+}
+export async function recordRiskGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; risk_resolved: boolean; service_stopped: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_risk_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; risk_resolved: boolean; service_stopped: boolean; auto_sent: boolean };
+}
+export async function fetchRiskAudit(limit = 200): Promise<RiskEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_risk_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RiskEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
