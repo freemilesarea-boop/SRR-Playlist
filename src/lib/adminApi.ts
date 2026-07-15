@@ -5280,6 +5280,57 @@ export async function fetchEcosystemAudit(limit = 200): Promise<EcosystemEventRo
   return (data ?? []) as EcosystemEventRow[];
 }
 
+// ── Knowledge Evolution (0531 — Best Practice 자동 등록·Knowledge 자동 삭제 없음) ──
+
+export type KnowledgeSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface OrgMemoryRow {
+  id: string; memory_code: string; memory_kind: string; title: string; content: string | null;
+  confidence_reference: string; linked_decision_ids: string[]; linked_memory_ids: string[];
+  memory_status: string; revision_count: number; reviewed_at: string | null; review_reason: string | null;
+  warnings: Array<unknown>; evidence: Array<unknown>; unknown_factors: Array<unknown>;
+  limitations: Array<unknown>; created_by: string | null; created_at: string; updated_at: string;
+}
+export interface KnowledgeEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchKnowledgeSummary(): Promise<KnowledgeSummary> {
+  const { data, error } = await supabase.rpc('admin_knowledge_summary');
+  if (error) throw error;
+  return (data as KnowledgeSummary | null) ?? {};
+}
+export async function createOrgMemory(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; content?: string | null; decisionIds?: string[]; memoryIds?: string[] }): Promise<{ ok: boolean; id: string; memory_status: string; auto_registered: boolean }> {
+  const { data, error } = await supabase.rpc('admin_org_memory_create', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_content: p.content ?? null, p_decision_ids: p.decisionIds ?? [], p_memory_ids: p.memoryIds ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; memory_status: string; auto_registered: boolean };
+}
+export async function reviewOrgMemory(id: string, status: string, reason: string, confidence: string | null = null): Promise<{ ok: boolean; memory_status: string; warnings: Array<unknown>; auto_deleted: boolean }> {
+  const { data, error } = await supabase.rpc('admin_org_memory_review', { p_id: id, p_status: status, p_reason: reason, p_confidence: confidence });
+  if (error) throw error;
+  return data as { ok: boolean; memory_status: string; warnings: Array<unknown>; auto_deleted: boolean };
+}
+export async function reviseOrgMemory(id: string, title: string | null, content: string | null, reason: string): Promise<{ ok: boolean; revised: boolean; human_approved_revision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_org_memory_revise', { p_id: id, p_title: title, p_content: content, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; revised: boolean; human_approved_revision: boolean };
+}
+export async function fetchOrgMemories(kind: string | null = null, limit = 100): Promise<OrgMemoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_org_memory_list', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OrgMemoryRow[];
+}
+export async function recordKnowledgeGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; best_practice_registered: boolean; knowledge_deleted: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_knowledge_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; best_practice_registered: boolean; knowledge_deleted: boolean; auto_sent: boolean };
+}
+export async function fetchKnowledgeAudit(limit = 200): Promise<KnowledgeEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_knowledge_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KnowledgeEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
