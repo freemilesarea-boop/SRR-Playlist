@@ -87,6 +87,7 @@ import StrategicAdvisorySection from './StrategicAdvisorySection';
 import CorporateStrategySection from './CorporateStrategySection';
 import ExecutivePerformanceSection from './ExecutivePerformanceSection';
 import FinancialIntelligenceSection from './FinancialIntelligenceSection';
+import MarketIntelligenceSection from './MarketIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -296,6 +297,9 @@ export default function Dashboard() {
 
       {/* Financial Intelligence — 재무/자본/리스크 (회계 수정·예산 변경·지출 승인 자동화 없음) */}
       <FinancialIntelligenceSection />
+
+      {/* Market Intelligence — 시장/경쟁/외부 환경 (자동 경쟁사 생성·시장 분석 확정 없음) */}
+      <MarketIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
