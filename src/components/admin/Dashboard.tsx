@@ -85,6 +85,7 @@ import ExecutionDeliverySection from './ExecutionDeliverySection';
 import PredictiveExecutionSection from './PredictiveExecutionSection';
 import StrategicAdvisorySection from './StrategicAdvisorySection';
 import CorporateStrategySection from './CorporateStrategySection';
+import ExecutivePerformanceSection from './ExecutivePerformanceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -288,6 +289,9 @@ export default function Dashboard() {
 
       {/* Corporate Strategy — Vision/Objectives/Roadmap (자동 생성·승인·변경 없음) */}
       <CorporateStrategySection />
+
+      {/* Executive Performance — KPI Intelligence (자동 KPI 생성·수정·목표 변경 없음) */}
+      <ExecutivePerformanceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
