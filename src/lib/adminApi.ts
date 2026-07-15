@@ -4067,6 +4067,153 @@ export async function fetchCausalAudit(limit = 200): Promise<CausalEventRow[]> {
   return (data ?? []) as CausalEventRow[];
 }
 
+// ── Corporate Intelligence (0518 — Executive Command, 자동 경영 결정·Priority 확정·캘린더 생성·보고서 발송 없음) ──
+
+export type CorporateIntelSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface CorpSignalRow {
+  id: string; signal_code: string; signal_domain: string; signal_type: string; source_system: string;
+  title: string; metric_name: string | null; metric_value: number | null; metric_unit: string | null;
+  baseline_value: number | null; observed_at: string; monetary_impact_krw: number | null;
+  materiality_score: number | null; materiality_status: string; urgency_score: number | null;
+  urgency_status: string; deadline_at: string | null; blast_radius: Array<unknown>;
+  blast_radius_status: string; review_status: string; limitations: Array<unknown>; created_at: string;
+}
+export interface ExecPriorityRow {
+  id: string; priority_code: string; priority_type: string; title: string; summary: string | null;
+  priority_domain: string; source_signal_ids: string[]; materiality_score: number | null;
+  materiality_status: string; urgency_score: number | null; urgency_status: string;
+  urgent_vs_important: string; deadline_at: string | null; hard_risk_flags: string[];
+  priority_score: number | null; priority_tier: string; mutually_exclusive_with: Array<unknown>;
+  dependencies: Array<unknown>; expected_impact: string | null; warnings: Array<unknown>;
+  priority_status: string; review_reason: string | null; limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface CorpConflictRow {
+  id: string; conflict_code: string; conflict_type: string; title: string; conflict_domain: string;
+  side_a_summary: string; side_b_summary: string; severity: string;
+  resolution_candidates: Array<Record<string, unknown>>; conflict_status: string;
+  review_reason: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface ExecAgendaRow {
+  id: string; agenda_code: string; agenda_type: string; title: string; agenda_window: string;
+  scheduled_for: string | null; items: Array<Record<string, unknown>>; linked_priority_ids: string[];
+  decision_required_items: Array<unknown>; can_wait_items: Array<unknown>; must_not_do_items: Array<unknown>;
+  agenda_status: string; review_reason: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface CorpIntelEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchCorporateIntelSummary(): Promise<CorporateIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_corporate_intel_summary');
+  if (error) throw error;
+  return (data as CorporateIntelSummary | null) ?? {};
+}
+export async function createCorpSignal(p: { code: string; domain: string; type: string; sourceSystem: string; title: string; observedAt: string; evidence: Array<Record<string, unknown>>; metricName?: string | null; metricValue?: number | null; unit?: string | null; baseline?: number | null; monetaryImpact?: number | null; deadline?: string | null; blastRadius?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; materiality_verified: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_signal_create', {
+    p_code: p.code, p_domain: p.domain, p_type: p.type, p_source_system: p.sourceSystem,
+    p_title: p.title, p_observed_at: p.observedAt, p_evidence: p.evidence,
+    p_metric_name: p.metricName ?? null, p_metric_value: p.metricValue ?? null,
+    p_unit: p.unit ?? null, p_baseline: p.baseline ?? null,
+    p_monetary_impact: p.monetaryImpact ?? null, p_deadline: p.deadline ?? null,
+    p_blast_radius: p.blastRadius ?? [], p_source_reference_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; materiality_verified: boolean };
+}
+export async function reviewCorpSignal(p: { id: string; reason: string; materialityStatus?: string | null; materialityScore?: number | null; urgencyStatus?: string | null; urgencyScore?: number | null; reviewStatus?: string | null }): Promise<{ ok: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_signal_review', {
+    p_id: p.id, p_reason: p.reason,
+    p_materiality_status: p.materialityStatus ?? null, p_materiality_score: p.materialityScore ?? null,
+    p_urgency_status: p.urgencyStatus ?? null, p_urgency_score: p.urgencyScore ?? null,
+    p_review_status: p.reviewStatus ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean };
+}
+export async function fetchCorpSignals(domain: string | null = null, limit = 100): Promise<CorpSignalRow[]> {
+  const { data, error } = await supabase.rpc('admin_corporate_signals', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CorpSignalRow[];
+}
+export async function createExecPriority(p: { code: string; type: string; title: string; domain: string; evidence: Array<Record<string, unknown>>; summary?: string | null; sourceSignalIds?: string[]; materialityScore?: number | null; materialityStatus?: string; urgencyScore?: number | null; urgencyStatus?: string; urgentVsImportant?: string; deadline?: string | null; hardRiskFlags?: string[]; priorityScore?: number | null; priorityTier?: string; dependencies?: Array<Record<string, unknown>>; expectedImpact?: string | null }): Promise<{ ok: boolean; id: string; auto_execution: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_priority_create', {
+    p_code: p.code, p_type: p.type, p_title: p.title, p_domain: p.domain, p_evidence: p.evidence,
+    p_summary: p.summary ?? null, p_source_signal_ids: p.sourceSignalIds ?? [],
+    p_materiality_score: p.materialityScore ?? null, p_materiality_status: p.materialityStatus ?? 'materiality_unverified',
+    p_urgency_score: p.urgencyScore ?? null, p_urgency_status: p.urgencyStatus ?? 'urgency_unverified',
+    p_urgent_vs_important: p.urgentVsImportant ?? 'insufficient_data', p_deadline: p.deadline ?? null,
+    p_hard_risk_flags: p.hardRiskFlags ?? [], p_priority_score: p.priorityScore ?? null,
+    p_priority_tier: p.priorityTier ?? 'insufficient_data', p_mutually_exclusive: [],
+    p_dependencies: p.dependencies ?? [], p_expected_impact: p.expectedImpact ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_execution: boolean };
+}
+export async function reviewExecPriority(id: string, status: string, reason: string, tier: string | null = null): Promise<{ ok: boolean; priority_status: string; warnings: Array<unknown>; executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_priority_review', { p_id: id, p_status: status, p_reason: reason, p_tier: tier });
+  if (error) throw error;
+  return data as { ok: boolean; priority_status: string; warnings: Array<unknown>; executed: boolean };
+}
+export async function fetchExecPriorities(tier: string | null = null, limit = 100): Promise<ExecPriorityRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_priorities', { p_tier: tier, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecPriorityRow[];
+}
+export async function createCorpConflict(p: { code: string; type: string; title: string; domain: string; sideA: string; sideB: string; evidence: Array<Record<string, unknown>>; severity?: string; resolutionCandidates?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; auto_resolved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_conflict_create', {
+    p_code: p.code, p_type: p.type, p_title: p.title, p_domain: p.domain,
+    p_side_a: p.sideA, p_side_b: p.sideB, p_evidence: p.evidence,
+    p_severity: p.severity ?? 'severity_unverified', p_side_a_ref: null, p_side_b_ref: null,
+    p_resolution_candidates: p.resolutionCandidates ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_resolved: boolean };
+}
+export async function reviewCorpConflict(id: string, status: string, reason: string): Promise<{ ok: boolean; conflict_status: string }> {
+  const { data, error } = await supabase.rpc('admin_corporate_conflict_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; conflict_status: string };
+}
+export async function fetchCorpConflicts(status: string | null = null, limit = 100): Promise<CorpConflictRow[]> {
+  const { data, error } = await supabase.rpc('admin_corporate_conflicts', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CorpConflictRow[];
+}
+export async function createExecAgenda(p: { code: string; type: string; title: string; evidence: Array<Record<string, unknown>>; window?: string; scheduledFor?: string | null; items?: Array<Record<string, unknown>>; linkedPriorityIds?: string[]; decisionRequired?: Array<Record<string, unknown>>; canWait?: Array<Record<string, unknown>>; mustNotDo?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; calendar_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_agenda_create', {
+    p_code: p.code, p_type: p.type, p_title: p.title, p_evidence: p.evidence,
+    p_window: p.window ?? 'ad_hoc', p_scheduled_for: p.scheduledFor ?? null,
+    p_items: p.items ?? [], p_linked_priority_ids: p.linkedPriorityIds ?? [],
+    p_decision_required: p.decisionRequired ?? [], p_can_wait: p.canWait ?? [],
+    p_must_not_do: p.mustNotDo ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; calendar_created: boolean };
+}
+export async function reviewExecAgenda(id: string, status: string, reason: string): Promise<{ ok: boolean; agenda_status: string; calendar_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_agenda_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; agenda_status: string; calendar_created: boolean };
+}
+export async function fetchExecAgendas(type: string | null = null, limit = 50): Promise<ExecAgendaRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_agendas_list', { p_type: type, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecAgendaRow[];
+}
+export async function recordCorpBriefing(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; report_sent: boolean; legal_board_document: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_briefing_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; report_sent: boolean; legal_board_document: boolean };
+}
+export async function recordCorpExternalAction(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_external_action', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchCorpIntelAudit(limit = 200): Promise<CorpIntelEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_corporate_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CorpIntelEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
