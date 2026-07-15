@@ -4621,6 +4621,80 @@ export async function fetchDeliveryAudit(limit = 200): Promise<DeliveryEventRow[
   return (data ?? []) as DeliveryEventRow[];
 }
 
+// ── Predictive Execution (0522 — Forecast/Simulation, Prediction ≠ Outcome·자동 확정/배정 없음) ──
+
+export type ForecastSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface ForecastRow {
+  id: string; forecast_code: string; forecast_kind: string; target_reference_type: string | null;
+  target_reference_id: string | null; horizon: string; predicted_value: number | null;
+  predicted_low: number | null; predicted_high: number | null; predicted_unit: string | null;
+  probability_reference: number | null; forecast_confidence: number | null; sample_size: number;
+  forecast_status: string; evidence_coverage: number | null; unknown_components: Array<unknown>;
+  missing_signals: Array<unknown>; assumptions: Array<unknown>; input_freshness: string | null;
+  actual_value: number | null; actual_recorded_at: string | null; limitations: Array<unknown>;
+  generated_at: string; created_at: string;
+}
+export interface ExecSimulationRow {
+  id: string; simulation_code: string; simulation_kind: string; scenario_summary: string;
+  baseline_snapshot: Record<string, unknown>; assumed_changes: Array<unknown>;
+  projected_effects: Array<Record<string, unknown>>; affected_references: Array<unknown>;
+  simulation_confidence: number | null; simulation_status: string; unknown_factors: Array<unknown>;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface ForecastEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchForecastSummary(): Promise<ForecastSummary> {
+  const { data, error } = await supabase.rpc('admin_forecast_summary');
+  if (error) throw error;
+  return (data as ForecastSummary | null) ?? {};
+}
+export async function createForecast(p: { code: string; kind: string; horizon: string; evidence: Array<Record<string, unknown>>; predicted?: number | null; low?: number | null; high?: number | null; unit?: string | null; probability?: number | null; confidence?: number | null; sample?: number; evidenceCoverage?: number | null; unknown?: Array<Record<string, unknown>>; missing?: Array<Record<string, unknown>>; assumptions?: Array<Record<string, unknown>>; freshness?: string | null; targetType?: string | null; targetId?: string | null }): Promise<{ ok: boolean; id: string; forecast_status: string; outcome_guaranteed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_forecast_create', {
+    p_code: p.code, p_kind: p.kind, p_horizon: p.horizon, p_evidence: p.evidence,
+    p_predicted: p.predicted ?? null, p_low: p.low ?? null, p_high: p.high ?? null,
+    p_unit: p.unit ?? null, p_probability: p.probability ?? null, p_confidence: p.confidence ?? null,
+    p_sample: p.sample ?? 0, p_evidence_coverage: p.evidenceCoverage ?? null,
+    p_unknown: p.unknown ?? [], p_missing: p.missing ?? [], p_assumptions: p.assumptions ?? [],
+    p_freshness: p.freshness ?? null, p_target_type: p.targetType ?? null, p_target_id: p.targetId ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_status: string; outcome_guaranteed: boolean };
+}
+export async function recordForecastActual(id: string, actual: number, reason: string): Promise<{ ok: boolean }> {
+  const { data, error } = await supabase.rpc('admin_forecast_actual_record', { p_id: id, p_actual: actual, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean };
+}
+export async function fetchForecasts(kind: string | null = null, limit = 100): Promise<ForecastRow[]> {
+  const { data, error } = await supabase.rpc('admin_forecasts', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ForecastRow[];
+}
+export async function createExecSimulation(p: { code: string; kind: string; summary: string; evidence: Array<Record<string, unknown>>; baseline?: Record<string, unknown>; changes?: Array<Record<string, unknown>>; effects?: Array<Record<string, unknown>>; affected?: Array<Record<string, unknown>>; confidence?: number | null; unknown?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; executed: boolean; resources_assigned: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_simulation_create', {
+    p_code: p.code, p_kind: p.kind, p_summary: p.summary, p_evidence: p.evidence,
+    p_baseline: p.baseline ?? {}, p_changes: p.changes ?? [], p_effects: p.effects ?? [],
+    p_affected: p.affected ?? [], p_confidence: p.confidence ?? null, p_unknown: p.unknown ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; executed: boolean; resources_assigned: boolean };
+}
+export async function fetchExecSimulations(kind: string | null = null, limit = 100): Promise<ExecSimulationRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_simulations', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecSimulationRow[];
+}
+export async function recordForecastGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; forecast_confirmed_as_fact: boolean }> {
+  const { data, error } = await supabase.rpc('admin_forecast_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_confirmed_as_fact: boolean };
+}
+export async function fetchForecastAudit(limit = 200): Promise<ForecastEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_forecast_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ForecastEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
