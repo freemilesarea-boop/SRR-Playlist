@@ -5222,6 +5222,64 @@ export async function fetchResourceAudit(limit = 200): Promise<ResourceEventRow[
   return (data ?? []) as ResourceEventRow[];
 }
 
+// ── Ecosystem & Partner (0530 — 자동 파트너 등록·계약/API/공급사 변경 없음) ──
+
+export type EcosystemSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface PartnerRegistryRow {
+  id: string; partner_code: string; partner_kind: string; name: string; description: string | null;
+  provider_reference: string | null; linked_dependency_ids: string[]; partner_status: string;
+  reviewed_at: string | null; review_reason: string | null; warnings: Array<unknown>;
+  evidence: Array<unknown>; unknown_factors: Array<unknown>; limitations: Array<unknown>;
+  created_by: string | null; created_at: string;
+}
+export interface EcosystemDependencyRow {
+  id: string; dependency_code: string; domain: string; provider: string; service_name: string;
+  dependency_type: string; criticality: string; failure_impact: string | null;
+  fallback_available: boolean | null; fallback_description: string | null;
+  rto_target: string; rpo_target: string; monitoring_source: string | null; owner: string | null;
+  lifecycle_status: string; created_at: string;
+}
+export interface EcosystemEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEcosystemSummary(): Promise<EcosystemSummary> {
+  const { data, error } = await supabase.rpc('admin_ecosystem_summary');
+  if (error) throw error;
+  return (data as EcosystemSummary | null) ?? {};
+}
+export async function createPartnerRegistryEntry(p: { code: string; kind: string; name: string; evidence: Array<Record<string, unknown>>; description?: string | null; provider?: string | null; dependencyIds?: string[] }): Promise<{ ok: boolean; id: string; partner_status: string; contract_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_partner_register_create', {
+    p_code: p.code, p_kind: p.kind, p_name: p.name, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_provider: p.provider ?? null, p_dependency_ids: p.dependencyIds ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; partner_status: string; contract_changed: boolean };
+}
+export async function reviewPartnerRegistryEntry(id: string, status: string, reason: string): Promise<{ ok: boolean; partner_status: string; warnings: Array<unknown>; contract_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_partner_register_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; partner_status: string; warnings: Array<unknown>; contract_changed: boolean };
+}
+export async function fetchPartnerRegistry(kind: string | null = null, limit = 100): Promise<PartnerRegistryRow[]> {
+  const { data, error } = await supabase.rpc('admin_partner_register_list', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PartnerRegistryRow[];
+}
+export async function fetchEcosystemDependencies(domain: string | null = null, limit = 100): Promise<EcosystemDependencyRow[]> {
+  const { data, error } = await supabase.rpc('admin_ecosystem_dependencies', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EcosystemDependencyRow[];
+}
+export async function recordEcosystemGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; contract_changed: boolean; api_changed: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_ecosystem_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; contract_changed: boolean; api_changed: boolean; auto_sent: boolean };
+}
+export async function fetchEcosystemAudit(limit = 200): Promise<EcosystemEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_ecosystem_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EcosystemEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
