@@ -92,6 +92,7 @@ import RiskResilienceSection from './RiskResilienceSection';
 import ResourceCapacitySection from './ResourceCapacitySection';
 import EcosystemIntelligenceSection from './EcosystemIntelligenceSection';
 import KnowledgeEvolutionSection from './KnowledgeEvolutionSection';
+import LearningIntelligenceSection from './LearningIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -316,6 +317,9 @@ export default function Dashboard() {
 
       {/* Knowledge Evolution — 조직 기억/지식 진화 (자동 등록·삭제·정책 변경 없음) */}
       <KnowledgeEvolutionSection />
+
+      {/* Learning Intelligence — 학습/개선/최적화 (자동 적용·정책 변경 없음) */}
+      <LearningIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
