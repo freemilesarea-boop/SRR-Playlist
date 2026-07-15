@@ -88,6 +88,7 @@ import CorporateStrategySection from './CorporateStrategySection';
 import ExecutivePerformanceSection from './ExecutivePerformanceSection';
 import FinancialIntelligenceSection from './FinancialIntelligenceSection';
 import MarketIntelligenceSection from './MarketIntelligenceSection';
+import RiskResilienceSection from './RiskResilienceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -300,6 +301,9 @@ export default function Dashboard() {
 
       {/* Market Intelligence — 시장/경쟁/외부 환경 (자동 경쟁사 생성·시장 분석 확정 없음) */}
       <MarketIntelligenceSection />
+
+      {/* Risk & Resilience — 리스크/연속성/복원력 (자동 Incident 생성·Risk 종료·서비스 중단 없음) */}
+      <RiskResilienceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
