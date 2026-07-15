@@ -89,6 +89,7 @@ import ExecutivePerformanceSection from './ExecutivePerformanceSection';
 import FinancialIntelligenceSection from './FinancialIntelligenceSection';
 import MarketIntelligenceSection from './MarketIntelligenceSection';
 import RiskResilienceSection from './RiskResilienceSection';
+import ResourceCapacitySection from './ResourceCapacitySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -304,6 +305,9 @@ export default function Dashboard() {
 
       {/* Risk & Resilience — 리스크/연속성/복원력 (자동 Incident 생성·Risk 종료·서비스 중단 없음) */}
       <RiskResilienceSection />
+
+      {/* Resource & Capacity — 자원/Capacity/최적화 (자동 증설·축소·인프라 변경 없음) */}
+      <ResourceCapacitySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
