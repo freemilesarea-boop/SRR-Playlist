@@ -4864,6 +4864,95 @@ export async function fetchStrategyAudit(limit = 200): Promise<StrategyEventRow[
   return (data ?? []) as StrategyEventRow[];
 }
 
+// ── Executive Performance (0525 — KPI Intelligence, 자동 생성·수정·목표 변경 없음) ──
+
+export type PerformanceSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface KpiDefinitionRow {
+  id: string; kpi_code: string; title: string; description: string | null; measurement_source: string;
+  unit: string | null; direction: string; hierarchy_level: string; parent_kpi_id: string | null;
+  linked_objective_ids: string[]; review_cycle: string; target_value: number | null;
+  target_rationale: string | null; target_set_at: string | null; kpi_status: string;
+  reviewed_at: string | null; review_reason: string | null; warnings: Array<unknown>;
+  evidence: Array<unknown>; unknown_factors: Array<unknown>; limitations: Array<unknown>;
+  created_by: string | null; created_at: string;
+}
+export interface KpiSnapshotRow {
+  id: string; kpi_id: string; period_kind: string; period_start: string | null; period_end: string | null;
+  actual_value: number | null; target_value: number | null; forecast_value: number | null;
+  source_kind: string; sample_size: number | null; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_at: string;
+}
+export interface PerformanceTimelinePoint {
+  day: string; new_members: number; listening_hours: number | null; play_starts: number;
+  player_errors: number; active_stores: number;
+}
+export interface PerformanceEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
+  const { data, error } = await supabase.rpc('admin_performance_summary');
+  if (error) throw error;
+  return (data as PerformanceSummary | null) ?? {};
+}
+export async function createKpiDefinition(p: { code: string; title: string; source: string; evidence: Array<Record<string, unknown>>; description?: string | null; unit?: string | null; direction?: string; level?: string; parentId?: string | null; objectiveIds?: string[]; reviewCycle?: string }): Promise<{ ok: boolean; id: string; kpi_status: string; ai_generated: boolean }> {
+  const { data, error } = await supabase.rpc('admin_kpi_definition_create', {
+    p_code: p.code, p_title: p.title, p_source: p.source, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_unit: p.unit ?? null, p_direction: p.direction ?? 'unspecified',
+    p_level: p.level ?? 'business_kpi', p_parent_id: p.parentId ?? null,
+    p_objective_ids: p.objectiveIds ?? [], p_review_cycle: p.reviewCycle ?? 'monthly',
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; kpi_status: string; ai_generated: boolean };
+}
+export async function setKpiTarget(id: string, target: number | null, rationale: string): Promise<{ ok: boolean; target_value: number | null; auto_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_kpi_target_set', { p_id: id, p_target: target, p_rationale: rationale });
+  if (error) throw error;
+  return data as { ok: boolean; target_value: number | null; auto_changed: boolean };
+}
+export async function reviewKpiDefinition(id: string, status: string, reason: string): Promise<{ ok: boolean; kpi_status: string; warnings: Array<unknown> }> {
+  const { data, error } = await supabase.rpc('admin_kpi_definition_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; kpi_status: string; warnings: Array<unknown> };
+}
+export async function fetchKpiDefinitions(status: string | null = null, limit = 100): Promise<KpiDefinitionRow[]> {
+  const { data, error } = await supabase.rpc('admin_kpi_definitions', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KpiDefinitionRow[];
+}
+export async function recordKpiSnapshot(p: { key: string; kpiId: string; periodKind: string; sourceKind: string; evidence: Array<Record<string, unknown>>; actual?: number | null; target?: number | null; forecast?: number | null; periodStart?: string | null; periodEnd?: string | null; sampleSize?: number | null }): Promise<{ ok: boolean; id: string; forecast_is_not_actual: boolean }> {
+  const { data, error } = await supabase.rpc('admin_kpi_snapshot_record', {
+    p_key: p.key, p_kpi_id: p.kpiId, p_period_kind: p.periodKind, p_source_kind: p.sourceKind, p_evidence: p.evidence,
+    p_actual: p.actual ?? null, p_target: p.target ?? null, p_forecast: p.forecast ?? null,
+    p_period_start: p.periodStart ?? null, p_period_end: p.periodEnd ?? null, p_sample_size: p.sampleSize ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_is_not_actual: boolean };
+}
+export async function captureKpiSnapshot(key: string, kpiId: string, periodKind = 'monthly'): Promise<{ ok: boolean; id: string; actual_value: number | null; sample_size: number | null }> {
+  const { data, error } = await supabase.rpc('admin_kpi_snapshot_capture', { p_key: key, p_kpi_id: kpiId, p_period_kind: periodKind });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; actual_value: number | null; sample_size: number | null };
+}
+export async function fetchKpiSnapshots(kpiId: string | null = null, limit = 100): Promise<KpiSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_kpi_snapshots', { p_kpi_id: kpiId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KpiSnapshotRow[];
+}
+export async function fetchPerformanceTimeline(days = 30): Promise<PerformanceTimelinePoint[]> {
+  const { data, error } = await supabase.rpc('admin_performance_timeline', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as PerformanceTimelinePoint[];
+}
+export async function recordPerformanceGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; kpi_changed: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_performance_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; kpi_changed: boolean; auto_sent: boolean };
+}
+export async function fetchPerformanceAudit(limit = 200): Promise<PerformanceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_performance_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PerformanceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
