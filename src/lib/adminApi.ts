@@ -4773,6 +4773,97 @@ export async function fetchAdvisoryAudit(limit = 200): Promise<AdvisoryEventRow[
   return (data ?? []) as AdvisoryEventRow[];
 }
 
+// ── Corporate Strategy (0524 — Vision/Objectives/Roadmap, 자동 생성·승인·변경 없음) ──
+
+export type CorpStrategySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface VisionRecordRow {
+  id: string; record_code: string; record_kind: string; statement: string; human_authored: boolean;
+  version_note: string | null; effective_from: string | null; record_status: string;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface CorpObjectiveRow {
+  id: string; objective_code: string; objective_kind: string; title: string; description: string | null;
+  parent_vision_id: string | null; parent_objective_id: string | null; target_year: number | null;
+  target_quarter: number | null; priority_reference: string; owner_reference: string | null;
+  review_cycle: string; success_criteria: Array<unknown>; linked_initiative_ids: string[];
+  linked_priority_ids: string[]; objective_status: string; review_reason: string | null;
+  warnings: Array<unknown>; unknown_factors: Array<unknown>; limitations: Array<unknown>;
+  created_by: string | null; created_at: string;
+}
+export interface RoadmapItemRow {
+  id: string; roadmap_code: string; title: string; roadmap_year: number; roadmap_phase: string;
+  phase_sequence: number | null; summary: string | null; linked_objective_ids: string[];
+  planned_milestones: Array<unknown>; dependencies: Array<unknown>; review_status: string;
+  review_reason: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface StrategyEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchCorpStrategySummary(): Promise<CorpStrategySummary> {
+  const { data, error } = await supabase.rpc('admin_corporate_strategy_summary');
+  if (error) throw error;
+  return (data as CorpStrategySummary | null) ?? {};
+}
+export async function createVisionRecord(p: { code: string; kind: string; statement: string; reason: string; effectiveFrom?: string | null; versionNote?: string | null }): Promise<{ ok: boolean; id: string; ai_generated: boolean }> {
+  const { data, error } = await supabase.rpc('admin_vision_record_create', { p_code: p.code, p_kind: p.kind, p_statement: p.statement, p_reason: p.reason, p_effective_from: p.effectiveFrom ?? null, p_version_note: p.versionNote ?? null });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; ai_generated: boolean };
+}
+export async function fetchVisionRecords(kind: string | null = null, limit = 50): Promise<VisionRecordRow[]> {
+  const { data, error } = await supabase.rpc('admin_vision_records', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as VisionRecordRow[];
+}
+export async function createCorpObjective(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; description?: string | null; visionId?: string | null; year?: number | null; quarter?: number | null; priority?: string; owner?: string | null; reviewCycle?: string; criteria?: Array<Record<string, unknown>>; initiativeIds?: string[]; priorityIds?: string[] }): Promise<{ ok: boolean; id: string; ai_generated: boolean; outcome_achieved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_corporate_objective_create', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_vision_id: p.visionId ?? null, p_parent_id: null,
+    p_year: p.year ?? null, p_quarter: p.quarter ?? null, p_priority: p.priority ?? 'unranked',
+    p_owner: p.owner ?? null, p_review_cycle: p.reviewCycle ?? 'quarterly',
+    p_criteria: p.criteria ?? [], p_initiative_ids: p.initiativeIds ?? [], p_priority_ids: p.priorityIds ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; ai_generated: boolean; outcome_achieved: boolean };
+}
+export async function reviewCorpObjective(id: string, status: string, reason: string): Promise<{ ok: boolean; objective_status: string; warnings: Array<unknown> }> {
+  const { data, error } = await supabase.rpc('admin_corporate_objective_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; objective_status: string; warnings: Array<unknown> };
+}
+export async function fetchCorpObjectives(kind: string | null = null, limit = 100): Promise<CorpObjectiveRow[]> {
+  const { data, error } = await supabase.rpc('admin_corporate_objectives', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CorpObjectiveRow[];
+}
+export async function createRoadmapItem(p: { code: string; title: string; year: number; evidence: Array<Record<string, unknown>>; phase?: string; sequence?: number | null; summary?: string | null; objectiveIds?: string[]; milestones?: Array<Record<string, unknown>>; dependencies?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; commitment_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_roadmap_item_create', {
+    p_code: p.code, p_title: p.title, p_year: p.year, p_evidence: p.evidence,
+    p_phase: p.phase ?? 'planned', p_sequence: p.sequence ?? null, p_summary: p.summary ?? null,
+    p_objective_ids: p.objectiveIds ?? [], p_milestones: p.milestones ?? [], p_dependencies: p.dependencies ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; commitment_created: boolean };
+}
+export async function reviewRoadmapItem(id: string, status: string, reason: string, phase: string | null = null): Promise<{ ok: boolean; review_status: string; auto_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_roadmap_item_review', { p_id: id, p_status: status, p_reason: reason, p_phase: phase });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; auto_changed: boolean };
+}
+export async function fetchRoadmapItems(year: number | null = null, limit = 100): Promise<RoadmapItemRow[]> {
+  const { data, error } = await supabase.rpc('admin_roadmap_items', { p_year: year, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RoadmapItemRow[];
+}
+export async function recordStrategyGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; strategy_approved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_strategy_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; strategy_approved: boolean };
+}
+export async function fetchStrategyAudit(limit = 200): Promise<StrategyEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_strategy_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StrategyEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

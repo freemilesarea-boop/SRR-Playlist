@@ -84,6 +84,7 @@ import CommitmentIntelligenceSection from './CommitmentIntelligenceSection';
 import ExecutionDeliverySection from './ExecutionDeliverySection';
 import PredictiveExecutionSection from './PredictiveExecutionSection';
 import StrategicAdvisorySection from './StrategicAdvisorySection';
+import CorporateStrategySection from './CorporateStrategySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -284,6 +285,9 @@ export default function Dashboard() {
 
       {/* Strategic Advisory — Scenario 비교/Trade-off/권고 (Recommendation ≠ Decision·자동 선택 없음) */}
       <StrategicAdvisorySection />
+
+      {/* Corporate Strategy — Vision/Objectives/Roadmap (자동 생성·승인·변경 없음) */}
+      <CorporateStrategySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
