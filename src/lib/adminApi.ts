@@ -5169,6 +5169,59 @@ export async function fetchRiskAudit(limit = 200): Promise<RiskEventRow[]> {
   return (data ?? []) as RiskEventRow[];
 }
 
+// ── Resource & Capacity (0529 — 자동 증설·축소·인프라/모델 변경 없음) ──
+
+export type ResourceSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ResourceRegistryRow {
+  id: string; resource_code: string; resource_kind: string; title: string; description: string | null;
+  provider: string | null; capacity_reference: number | null; capacity_unit: string | null;
+  linked_metric_ids: string[]; resource_status: string; reviewed_at: string | null;
+  review_reason: string | null; warnings: Array<unknown>; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface ResourceUsagePoint { day: string; playback_events: number; play_starts: number; distinct_sessions: number }
+export interface ResourceEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchResourceSummary(): Promise<ResourceSummary> {
+  const { data, error } = await supabase.rpc('admin_resource_summary');
+  if (error) throw error;
+  return (data as ResourceSummary | null) ?? {};
+}
+export async function createResourceRegistryEntry(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; description?: string | null; provider?: string | null; capacity?: number | null; unit?: string | null; metricIds?: string[] }): Promise<{ ok: boolean; id: string; resource_status: string; infra_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_resource_register_create', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_description: p.description ?? null, p_provider: p.provider ?? null,
+    p_capacity: p.capacity ?? null, p_unit: p.unit ?? null, p_metric_ids: p.metricIds ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; resource_status: string; infra_changed: boolean };
+}
+export async function reviewResourceRegistryEntry(id: string, status: string, reason: string): Promise<{ ok: boolean; resource_status: string; warnings: Array<unknown>; infra_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_resource_register_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; resource_status: string; warnings: Array<unknown>; infra_changed: boolean };
+}
+export async function fetchResourceRegistry(kind: string | null = null, limit = 100): Promise<ResourceRegistryRow[]> {
+  const { data, error } = await supabase.rpc('admin_resource_register_list', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ResourceRegistryRow[];
+}
+export async function fetchResourceUsageTimeline(days = 30): Promise<ResourceUsagePoint[]> {
+  const { data, error } = await supabase.rpc('admin_resource_usage_timeline', { p_days: days });
+  if (error) throw error;
+  return (data ?? []) as ResourceUsagePoint[];
+}
+export async function recordResourceGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; scaled: boolean; infra_changed: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_resource_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; scaled: boolean; infra_changed: boolean; auto_sent: boolean };
+}
+export async function fetchResourceAudit(limit = 200): Promise<ResourceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_resource_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ResourceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
