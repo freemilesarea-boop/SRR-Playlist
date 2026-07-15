@@ -79,6 +79,7 @@ import OrganizationalLearningSection from './OrganizationalLearningSection';
 import StrategicScenarioSection from './StrategicScenarioSection';
 import BusinessCausalIntelligenceSection from './BusinessCausalIntelligenceSection';
 import CorporateIntelligenceSection from './CorporateIntelligenceSection';
+import ExecutiveCapacitySection from './ExecutiveCapacitySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -264,6 +265,9 @@ export default function Dashboard() {
 
       {/* Corporate Intelligence — Executive Command/Priority Orchestration (자동 경영 결정·실행 없음) */}
       <CorporateIntelligenceSection />
+
+      {/* Executive Capacity — Priority Portfolio/Financial Exposure (자동 선택·캘린더·예산 없음) */}
+      <ExecutiveCapacitySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
