@@ -4085,7 +4085,7 @@ export interface ExecPriorityRow {
   urgent_vs_important: string; deadline_at: string | null; hard_risk_flags: string[];
   priority_score: number | null; priority_tier: string; mutually_exclusive_with: Array<unknown>;
   dependencies: Array<unknown>; expected_impact: string | null; warnings: Array<unknown>;
-  priority_status: string; review_reason: string | null; limitations: Array<unknown>; created_by: string | null; created_at: string;
+  priority_status: string; review_reason: string | null; reviewed_at: string | null; limitations: Array<unknown>; created_by: string | null; created_at: string;
 }
 export interface CorpConflictRow {
   id: string; conflict_code: string; conflict_type: string; title: string; conflict_domain: string;
@@ -4212,6 +4212,177 @@ export async function fetchCorpIntelAudit(limit = 200): Promise<CorpIntelEventRo
   const { data, error } = await supabase.rpc('admin_corporate_intel_audit', { p_limit: limit });
   if (error) throw error;
   return (data ?? []) as CorpIntelEventRow[];
+}
+
+// ── Executive Capacity (0519 — Capacity/Portfolio/Exposure, 자동 Priority 선택·캘린더·업무 할당·예산 배정 없음) ──
+
+export type ExecCapacitySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface ExecCapacitySnapshotRow {
+  id: string; snapshot_code: string; capacity_scope: string; scope_id: string | null; capacity_domain: string;
+  role_reference: string | null; period_start: string | null; period_end: string | null;
+  available_hours: number | null; reserved_hours: number | null; review_capacity_count: number | null;
+  decision_capacity_count: number | null; concurrent_priority_limit: number | null;
+  current_priority_count: number | null; current_review_count: number | null; current_decision_count: number | null;
+  capacity_status: string; review_status: string; limitations: Array<unknown>; generated_at: string; created_at: string;
+}
+export interface EffortEstimateRow {
+  id: string; estimate_code: string; priority_candidate_id: string; effort_domain: string;
+  review_hours: number | null; decision_hours: number | null; meeting_hours: number | null;
+  analysis_hours: number | null; execution_reference_hours: number | null; observation_hours: number | null;
+  required_roles: Array<unknown>; dependency_wait_days: number | null; expected_duration_days: number | null;
+  estimate_confidence: number | null; effort_status: string; limitations: Array<unknown>; created_at: string;
+}
+export interface AgingSnapshotRow {
+  id: string; snapshot_code: string; priority_candidate_id: string; snapshot_at: string;
+  age_days: number; status_age_days: number | null; days_to_deadline: number | null;
+  days_past_deadline: number | null; waiting_evidence_days: number | null; deferred_days: number | null;
+  aging_status: string; escalation_candidate: boolean; delay_risk: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface FinancialExposureRow {
+  id: string; exposure_code: string; priority_candidate_id: string; exposure_type: string; currency: string;
+  baseline_amount: number | null; low_estimate: number | null; expected_estimate: number | null;
+  high_estimate: number | null; time_horizon: string | null; exposure_direction: string | null;
+  probability_reference: number | null; confidence: number | null; calculation_method: string | null;
+  verification_status: string; review_status: string; limitations: Array<unknown>; created_at: string;
+}
+export interface ConfidenceDriftSnapshotRow {
+  id: string; snapshot_code: string; priority_candidate_id: string; snapshot_at: string;
+  confidence_value: number; confidence_source: string; evidence_count: number | null;
+  counter_evidence_count: number | null; input_freshness: string | null;
+  drift_from_previous: number | null; drift_from_initial: number | null; drift_status: string;
+  reason_summary: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface PriorityPortfolioRow {
+  id: string; portfolio_code: string; title: string; portfolio_period_start: string | null;
+  portfolio_period_end: string | null; portfolio_type: string; priority_candidate_ids: string[];
+  excluded_priority_ids: string[]; hard_risk_exclusion_reasons: Array<unknown>;
+  total_review_hours: number | null; total_decision_hours: number | null; total_meeting_hours: number | null;
+  total_financial_exposure: number | null; risk_summary: Array<unknown>; conflict_summary: Array<unknown>;
+  feasibility_status: string; confidence: number | null; review_status: string; decision: string | null;
+  decision_reason: string | null; warnings: Array<unknown>; limitations: Array<unknown>; created_by: string | null;
+  created_at: string; reviewed_at: string | null;
+}
+export interface ExecCapacityEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchExecCapacitySummary(): Promise<ExecCapacitySummary> {
+  const { data, error } = await supabase.rpc('admin_executive_capacity_summary');
+  if (error) throw error;
+  return (data as ExecCapacitySummary | null) ?? {};
+}
+export async function createExecCapacitySnapshot(p: { code: string; scope: string; domain: string; evidence: Array<Record<string, unknown>>; scopeId?: string | null; role?: string | null; availableHours?: number | null; reservedHours?: number | null; reviewCapacity?: number | null; decisionCapacity?: number | null; concurrentLimit?: number | null; currentPriorities?: number | null; status?: string }): Promise<{ ok: boolean; id: string; capacity_status: string }> {
+  const { data, error } = await supabase.rpc('admin_executive_capacity_snapshot_create', {
+    p_code: p.code, p_scope: p.scope, p_domain: p.domain, p_evidence: p.evidence,
+    p_scope_id: p.scopeId ?? null, p_role: p.role ?? null, p_period_start: null, p_period_end: null,
+    p_available_hours: p.availableHours ?? null, p_reserved_hours: p.reservedHours ?? null,
+    p_review_capacity: p.reviewCapacity ?? null, p_decision_capacity: p.decisionCapacity ?? null,
+    p_concurrent_limit: p.concurrentLimit ?? null, p_current_priorities: p.currentPriorities ?? null,
+    p_current_reviews: null, p_current_decisions: null,
+    p_status: p.status ?? 'executive_capacity_unknown', p_assumptions: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; capacity_status: string };
+}
+export async function fetchExecCapacitySnapshots(domain: string | null = null, limit = 50): Promise<ExecCapacitySnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_capacity_snapshots', { p_domain: domain, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecCapacitySnapshotRow[];
+}
+export async function createPriorityEffort(p: { code: string; priorityId: string; domain: string; evidence: Array<Record<string, unknown>>; reviewHours?: number | null; decisionHours?: number | null; meetingHours?: number | null; analysisHours?: number | null; executionHours?: number | null; observationHours?: number | null; confidence?: number | null; status?: string }): Promise<{ ok: boolean; id: string; effort_status: string }> {
+  const { data, error } = await supabase.rpc('admin_priority_effort_create', {
+    p_code: p.code, p_priority_id: p.priorityId, p_domain: p.domain, p_evidence: p.evidence,
+    p_review_hours: p.reviewHours ?? null, p_decision_hours: p.decisionHours ?? null,
+    p_meeting_hours: p.meetingHours ?? null, p_analysis_hours: p.analysisHours ?? null,
+    p_execution_hours: p.executionHours ?? null, p_observation_hours: p.observationHours ?? null,
+    p_required_roles: [], p_dependency_wait_days: null, p_duration_days: null,
+    p_confidence: p.confidence ?? null, p_status: p.status ?? 'manually_estimated', p_assumptions: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; effort_status: string };
+}
+export async function fetchPriorityEfforts(priorityId: string | null = null, limit = 100): Promise<EffortEstimateRow[]> {
+  const { data, error } = await supabase.rpc('admin_priority_effort_estimates', { p_priority_id: priorityId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EffortEstimateRow[];
+}
+export async function createAgingSnapshot(p: { code: string; priorityId: string; evidence: Array<Record<string, unknown>>; status?: string; daysToDeadline?: number | null; delayRisk?: string | null; escalationCandidate?: boolean }): Promise<{ ok: boolean; id: string; auto_escalated: boolean }> {
+  const { data, error } = await supabase.rpc('admin_priority_aging_snapshot_create', {
+    p_code: p.code, p_priority_id: p.priorityId, p_evidence: p.evidence,
+    p_status: p.status ?? 'aging_threshold_unverified', p_days_to_deadline: p.daysToDeadline ?? null,
+    p_waiting_evidence_days: null, p_deferred_days: null,
+    p_delay_risk: p.delayRisk ?? null, p_escalation_candidate: p.escalationCandidate ?? false,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_escalated: boolean };
+}
+export async function fetchAgingSnapshots(priorityId: string | null = null, limit = 100): Promise<AgingSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_priority_aging_snapshots', { p_priority_id: priorityId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AgingSnapshotRow[];
+}
+export async function createFinancialExposure(p: { code: string; priorityId: string; type: string; evidence: Array<Record<string, unknown>>; currency?: string; low?: number | null; expected?: number | null; high?: number | null; horizon?: string | null; direction?: string | null; probability?: number | null; confidence?: number | null; method?: string | null; verification?: string }): Promise<{ ok: boolean; id: string; accounting_loss: boolean }> {
+  const { data, error } = await supabase.rpc('admin_priority_financial_exposure_create', {
+    p_code: p.code, p_priority_id: p.priorityId, p_type: p.type, p_evidence: p.evidence,
+    p_currency: p.currency ?? 'KRW', p_baseline: null, p_low: p.low ?? null,
+    p_expected: p.expected ?? null, p_high: p.high ?? null, p_horizon: p.horizon ?? null,
+    p_direction: p.direction ?? null, p_probability: p.probability ?? null,
+    p_confidence: p.confidence ?? null, p_method: p.method ?? null,
+    p_verification: p.verification ?? 'financial_exposure_unknown', p_assumptions: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; accounting_loss: boolean };
+}
+export async function fetchFinancialExposures(priorityId: string | null = null, limit = 100): Promise<FinancialExposureRow[]> {
+  const { data, error } = await supabase.rpc('admin_priority_financial_exposures', { p_priority_id: priorityId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as FinancialExposureRow[];
+}
+export async function createConfidenceDriftSnapshot(p: { code: string; priorityId: string; confidence: number; source: string; evidence: Array<Record<string, unknown>>; evidenceCount?: number | null; counterCount?: number | null; status?: string; reason?: string | null }): Promise<{ ok: boolean; id: string; confidence_auto_adjusted: boolean }> {
+  const { data, error } = await supabase.rpc('admin_priority_confidence_snapshot_create', {
+    p_code: p.code, p_priority_id: p.priorityId, p_confidence: p.confidence, p_source: p.source,
+    p_evidence: p.evidence, p_evidence_count: p.evidenceCount ?? null, p_counter_count: p.counterCount ?? null,
+    p_freshness: null, p_status: p.status ?? 'confidence_drift_unverified', p_reason: p.reason ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; confidence_auto_adjusted: boolean };
+}
+export async function fetchConfidenceDriftSnapshots(priorityId: string | null = null, limit = 100): Promise<ConfidenceDriftSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_priority_confidence_snapshots', { p_priority_id: priorityId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ConfidenceDriftSnapshotRow[];
+}
+export async function createPriorityPortfolio(p: { code: string; title: string; type: string; evidence: Array<Record<string, unknown>>; priorityIds?: string[]; excludedIds?: string[]; hardRiskExclusionReasons?: Array<Record<string, unknown>>; reviewHours?: number | null; decisionHours?: number | null; meetingHours?: number | null; totalExposure?: number | null; riskSummary?: Array<Record<string, unknown>>; conflictSummary?: Array<Record<string, unknown>>; confidence?: number | null }): Promise<{ ok: boolean; id: string; auto_selected: boolean; optimal_claimed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_priority_portfolio_create', {
+    p_code: p.code, p_title: p.title, p_type: p.type, p_evidence: p.evidence,
+    p_priority_ids: p.priorityIds ?? [], p_excluded_ids: p.excludedIds ?? [],
+    p_hard_risk_exclusion_reasons: p.hardRiskExclusionReasons ?? [],
+    p_period_start: null, p_period_end: null,
+    p_review_hours: p.reviewHours ?? null, p_decision_hours: p.decisionHours ?? null,
+    p_meeting_hours: p.meetingHours ?? null, p_total_exposure: p.totalExposure ?? null,
+    p_risk_summary: p.riskSummary ?? [], p_conflict_summary: p.conflictSummary ?? [],
+    p_confidence: p.confidence ?? null, p_assumptions: [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_selected: boolean; optimal_claimed: boolean };
+}
+export async function reviewPriorityPortfolio(id: string, status: string, reason: string, feasibility: string | null = null): Promise<{ ok: boolean; review_status: string; warnings: Array<unknown>; executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_priority_portfolio_review', { p_id: id, p_status: status, p_reason: reason, p_feasibility: feasibility });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; warnings: Array<unknown>; executed: boolean };
+}
+export async function fetchPriorityPortfolios(status: string | null = null, limit = 50): Promise<PriorityPortfolioRow[]> {
+  const { data, error } = await supabase.rpc('admin_priority_portfolios', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PriorityPortfolioRow[];
+}
+export async function recordExecCapacityExternalAction(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_capacity_external_action', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchExecCapacityAudit(limit = 200): Promise<ExecCapacityEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_capacity_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecCapacityEventRow[];
 }
 
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
