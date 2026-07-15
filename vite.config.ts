@@ -74,6 +74,8 @@ export default defineConfig({
       // (이전 supabase storage CacheFirst 규칙이 오디오 Range 요청을 opaque 로 캐싱 → 206 깨짐).
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Admin 대시보드 청크(2MB+)가 기본 2MiB precache 한도를 초과 — 한도만 상향(캐싱 전략 변경 없음)
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

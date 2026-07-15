@@ -5331,6 +5331,64 @@ export async function fetchKnowledgeAudit(limit = 200): Promise<KnowledgeEventRo
   return (data ?? []) as KnowledgeEventRow[];
 }
 
+// ── Learning Intelligence (0532 — Improvement/Optimization 자동 적용·정책 변경 없음) ──
+
+export type LearningSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface LearningRegistryRow {
+  id: string; learning_code: string; learning_kind: string; optimization_domain: string | null;
+  title: string; content: string | null; linked_memory_ids: string[]; linked_learning_ids: string[];
+  learning_status: string; adoption_recorded: boolean; reviewed_at: string | null;
+  review_reason: string | null; warnings: Array<unknown>; evidence: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; created_by: string | null;
+  created_at: string; updated_at: string;
+}
+export interface LearningEventRow { id: string; event_type: string; ref_id: string | null; stage: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchLearningSummary(): Promise<LearningSummary> {
+  const { data, error } = await supabase.rpc('admin_learning_summary');
+  if (error) throw error;
+  return (data as LearningSummary | null) ?? {};
+}
+export async function createLearningEntry(p: { code: string; kind: string; title: string; evidence: Array<Record<string, unknown>>; content?: string | null; domain?: string | null; memoryIds?: string[]; learningIds?: string[] }): Promise<{ ok: boolean; id: string; learning_status: string; auto_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_register_create', {
+    p_code: p.code, p_kind: p.kind, p_title: p.title, p_evidence: p.evidence,
+    p_content: p.content ?? null, p_domain: p.domain ?? null,
+    p_memory_ids: p.memoryIds ?? [], p_learning_ids: p.learningIds ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; learning_status: string; auto_applied: boolean };
+}
+export async function reviewLearningEntry(id: string, status: string, reason: string): Promise<{ ok: boolean; learning_status: string; warnings: Array<unknown>; auto_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_register_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; learning_status: string; warnings: Array<unknown>; auto_applied: boolean };
+}
+export async function recordLearningAdoption(id: string, reason: string): Promise<{ ok: boolean; adoption_recorded: boolean; human_approved: boolean; outcome_guaranteed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_adoption_record', { p_id: id, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; adoption_recorded: boolean; human_approved: boolean; outcome_guaranteed: boolean };
+}
+export async function fetchLearningRegistry(kind: string | null = null, limit = 100): Promise<LearningRegistryRow[]> {
+  const { data, error } = await supabase.rpc('admin_learning_register_list', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as LearningRegistryRow[];
+}
+export async function recordLearningTimeline(learningId: string, stage: string, note: string): Promise<{ ok: boolean; id: string; stage: string; stage_completed_guarantee: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_timeline_record', { p_learning_id: learningId, p_stage: stage, p_note: note });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; stage: string; stage_completed_guarantee: boolean };
+}
+export async function recordLearningGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; improvement_applied: boolean; optimization_applied: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_learning_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; improvement_applied: boolean; optimization_applied: boolean; auto_sent: boolean };
+}
+export async function fetchLearningAudit(limit = 200): Promise<LearningEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_learning_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as LearningEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
