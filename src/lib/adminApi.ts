@@ -4385,6 +4385,180 @@ export async function fetchExecCapacityAudit(limit = 200): Promise<ExecCapacityE
   return (data ?? []) as ExecCapacityEventRow[];
 }
 
+// ── Commitment Intelligence (0520 — Execution Assurance/Accountability, 자동 업무 할당·일정 변경·완료 처리·인사 평가 없음) ──
+
+export type CommitmentSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface CommitmentRow {
+  id: string; commitment_code: string; commitment_domain: string; commitment_type: string;
+  source_reference_type: string | null; priority_candidate_id: string | null; priority_portfolio_id: string | null;
+  title: string; commitment_summary: string | null; owner_reference: string | null;
+  sponsor_reference: string | null; reviewer_reference: string | null; backup_owner_reference: string | null;
+  owner_acknowledged: boolean; sponsor_acknowledged: boolean; reviewer_acknowledged: boolean;
+  start_reference_at: string | null; target_reference_at: string | null;
+  actual_start_reference_at: string | null; actual_complete_reference_at: string | null;
+  success_criteria: Array<Record<string, unknown>>; preconditions: Array<unknown>;
+  dependencies: Array<unknown>; risks: Array<unknown>; evidence: Array<unknown>;
+  commitment_status: string; review_status: string; review_reason: string | null;
+  warnings: Array<unknown>; limitations: Array<unknown>; created_by: string | null;
+  created_at: string; updated_at: string; reviewed_at: string | null;
+}
+export interface CommitmentMilestoneRow {
+  id: string; milestone_code: string; commitment_id: string; title: string; milestone_sequence: number;
+  milestone_type: string; planned_start_reference_at: string | null; planned_due_reference_at: string | null;
+  actual_start_reference_at: string | null; actual_complete_reference_at: string | null;
+  milestone_status: string; completion_percentage_reference: number | null;
+  success_criteria: Array<unknown>; evidence_required: Array<unknown>; evidence: Array<unknown>;
+  dependencies: Array<unknown>; blockers: Array<unknown>; review_status: string;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface CommitmentProgressRow {
+  id: string; snapshot_code: string; commitment_id: string; snapshot_at: string;
+  reported_progress_percentage: number | null; verified_progress_percentage: number | null;
+  progress_status: string; completed_milestone_count: number | null; total_milestone_count: number | null;
+  active_blocker_count: number | null; schedule_variance_days: number | null;
+  scope_variance_status: string | null; delivery_confidence: number | null;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface CommitmentBlockerRow {
+  id: string; blocker_code: string; commitment_id: string; milestone_id: string | null;
+  blocker_type: string; blocker_summary: string; severity: string; impact_status: string;
+  blocking_domain: string | null; owner_reference: string | null; detected_at: string;
+  expected_resolution_reference_at: string | null; resolved_reference_at: string | null;
+  blocker_status: string; limitations: Array<unknown>; created_at: string;
+}
+export interface CompletionReviewRow {
+  id: string; review_code: string; commitment_id: string; completion_reported_at: string;
+  reported_by_reference: string | null; completion_summary: string;
+  claimed_deliverables: Array<unknown>; completion_evidence: Array<unknown>;
+  success_criteria_results: Array<unknown>; verification_status: string;
+  reviewer_reference: string | null; reviewed_at: string | null; review_reason: string | null;
+  unresolved_items: Array<unknown>; outcome_observation_required: boolean;
+  limitations: Array<unknown>; created_at: string;
+}
+export interface CommitmentEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchCommitmentSummary(): Promise<CommitmentSummary> {
+  const { data, error } = await supabase.rpc('admin_commitment_summary');
+  if (error) throw error;
+  return (data as CommitmentSummary | null) ?? {};
+}
+export async function createCommitment(p: { code: string; domain: string; type: string; title: string; evidence: Array<Record<string, unknown>>; summary?: string | null; priorityId?: string | null; portfolioId?: string | null; owner?: string | null; sponsor?: string | null; reviewer?: string | null; backup?: string | null; startAt?: string | null; targetAt?: string | null; successCriteria?: Array<Record<string, unknown>>; preconditions?: Array<Record<string, unknown>>; dependencies?: Array<Record<string, unknown>>; risks?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; execution_started: boolean; work_assigned: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_create', {
+    p_code: p.code, p_domain: p.domain, p_type: p.type, p_title: p.title, p_evidence: p.evidence,
+    p_summary: p.summary ?? null, p_priority_id: p.priorityId ?? null, p_portfolio_id: p.portfolioId ?? null,
+    p_source_type: null, p_source_id: null, p_owner: p.owner ?? null, p_sponsor: p.sponsor ?? null,
+    p_reviewer: p.reviewer ?? null, p_backup: p.backup ?? null, p_start_at: p.startAt ?? null,
+    p_target_at: p.targetAt ?? null, p_success_criteria: p.successCriteria ?? [],
+    p_preconditions: p.preconditions ?? [], p_dependencies: p.dependencies ?? [], p_risks: p.risks ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; execution_started: boolean; work_assigned: boolean };
+}
+export async function reviewCommitment(id: string, status: string, reason: string, commitmentStatus: string | null = null): Promise<{ ok: boolean; review_status: string; warnings: Array<unknown> }> {
+  const { data, error } = await supabase.rpc('admin_commitment_review', { p_id: id, p_status: status, p_reason: reason, p_commitment_status: commitmentStatus });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; warnings: Array<unknown> };
+}
+export async function setCommitmentOwnership(p: { id: string; role: string; reference: string; reason: string; acknowledged?: boolean; evidence?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; role: string; acknowledged: boolean; work_assigned: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_ownership_reference', { p_id: p.id, p_role: p.role, p_reference: p.reference, p_reason: p.reason, p_acknowledged: p.acknowledged ?? false, p_evidence: p.evidence ?? [] });
+  if (error) throw error;
+  return data as { ok: boolean; role: string; acknowledged: boolean; work_assigned: boolean };
+}
+export async function fetchCommitments(status: string | null = null, limit = 100): Promise<CommitmentRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitments', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CommitmentRow[];
+}
+export async function createCommitmentMilestone(p: { code: string; commitmentId: string; title: string; sequence: number; type: string; evidence: Array<Record<string, unknown>>; plannedStart?: string | null; plannedDue?: string | null; successCriteria?: Array<Record<string, unknown>>; evidenceRequired?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; task_created: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_milestone_create', {
+    p_code: p.code, p_commitment_id: p.commitmentId, p_title: p.title, p_sequence: p.sequence,
+    p_type: p.type, p_evidence: p.evidence, p_planned_start: p.plannedStart ?? null,
+    p_planned_due: p.plannedDue ?? null, p_success_criteria: p.successCriteria ?? [],
+    p_evidence_required: p.evidenceRequired ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; task_created: boolean };
+}
+export async function reviewCommitmentMilestone(id: string, status: string, reason: string, evidence: Array<Record<string, unknown>> = []): Promise<{ ok: boolean; milestone_status: string; outcome_achieved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_milestone_review', { p_id: id, p_status: status, p_reason: reason, p_evidence: evidence });
+  if (error) throw error;
+  return data as { ok: boolean; milestone_status: string; outcome_achieved: boolean };
+}
+export async function fetchCommitmentMilestones(commitmentId: string | null = null, limit = 100): Promise<CommitmentMilestoneRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitment_milestones', { p_commitment_id: commitmentId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CommitmentMilestoneRow[];
+}
+export async function createCommitmentProgress(p: { code: string; commitmentId: string; evidence: Array<Record<string, unknown>>; reported?: number | null; verified?: number | null; status?: string; scheduleVariance?: number | null; deliveryConfidence?: number | null }): Promise<{ ok: boolean; id: string; progress_status: string; auto_progress_change: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_progress_snapshot_create', {
+    p_code: p.code, p_commitment_id: p.commitmentId, p_evidence: p.evidence,
+    p_reported: p.reported ?? null, p_verified: p.verified ?? null,
+    p_status: p.status ?? 'insufficient_data', p_schedule_variance: p.scheduleVariance ?? null,
+    p_scope_variance: null, p_delivery_confidence: p.deliveryConfidence ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; progress_status: string; auto_progress_change: boolean };
+}
+export async function fetchCommitmentProgress(commitmentId: string | null = null, limit = 100): Promise<CommitmentProgressRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitment_progress_snapshots', { p_commitment_id: commitmentId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CommitmentProgressRow[];
+}
+export async function createCommitmentBlocker(p: { code: string; commitmentId: string; type: string; summary: string; evidence: Array<Record<string, unknown>>; milestoneId?: string | null; severity?: string; impact?: string; domain?: string | null; owner?: string | null }): Promise<{ ok: boolean; id: string; auto_resolved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_blocker_create', {
+    p_code: p.code, p_commitment_id: p.commitmentId, p_type: p.type, p_summary: p.summary,
+    p_evidence: p.evidence, p_milestone_id: p.milestoneId ?? null,
+    p_severity: p.severity ?? 'severity_unverified', p_impact: p.impact ?? 'blocker_impact_unverified',
+    p_domain: p.domain ?? null, p_owner: p.owner ?? null, p_expected_resolution: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_resolved: boolean };
+}
+export async function reviewCommitmentBlocker(id: string, status: string, reason: string): Promise<{ ok: boolean; blocker_status: string }> {
+  const { data, error } = await supabase.rpc('admin_commitment_blocker_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; blocker_status: string };
+}
+export async function fetchCommitmentBlockers(commitmentId: string | null = null, limit = 100): Promise<CommitmentBlockerRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitment_blockers', { p_commitment_id: commitmentId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CommitmentBlockerRow[];
+}
+export async function reportCommitmentCompletion(p: { code: string; commitmentId: string; summary: string; evidence: Array<Record<string, unknown>>; reportedBy?: string | null; deliverables?: Array<Record<string, unknown>>; criteriaResults?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; verified: boolean; outcome_achieved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_completion_report', {
+    p_code: p.code, p_commitment_id: p.commitmentId, p_summary: p.summary, p_evidence: p.evidence,
+    p_reported_by: p.reportedBy ?? null, p_deliverables: p.deliverables ?? [],
+    p_criteria_results: p.criteriaResults ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; verified: boolean; outcome_achieved: boolean };
+}
+export async function reviewCommitmentCompletion(id: string, status: string, reason: string, unresolved: Array<Record<string, unknown>> = []): Promise<{ ok: boolean; verification_status: string; warnings: Array<unknown>; outcome_achieved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_completion_review', { p_id: id, p_status: status, p_reason: reason, p_unresolved: unresolved });
+  if (error) throw error;
+  return data as { ok: boolean; verification_status: string; warnings: Array<unknown>; outcome_achieved: boolean };
+}
+export async function fetchCompletionReviews(commitmentId: string | null = null, limit = 100): Promise<CompletionReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitment_completion_reviews', { p_commitment_id: commitmentId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CompletionReviewRow[];
+}
+export async function recordCommitmentGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; personnel_evaluation: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; personnel_evaluation: boolean };
+}
+export async function recordCommitmentExternalAction(actionType: string, reason: string, evidence: Array<Record<string, unknown>>, refId: string | null = null): Promise<{ ok: boolean; reference_only: boolean }> {
+  const { data, error } = await supabase.rpc('admin_commitment_external_action', { p_action_type: actionType, p_reason: reason, p_evidence: evidence, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; reference_only: boolean };
+}
+export async function fetchCommitmentAudit(limit = 200): Promise<CommitmentEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_commitment_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as CommitmentEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

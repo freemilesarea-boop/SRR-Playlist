@@ -80,6 +80,7 @@ import StrategicScenarioSection from './StrategicScenarioSection';
 import BusinessCausalIntelligenceSection from './BusinessCausalIntelligenceSection';
 import CorporateIntelligenceSection from './CorporateIntelligenceSection';
 import ExecutiveCapacitySection from './ExecutiveCapacitySection';
+import CommitmentIntelligenceSection from './CommitmentIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -268,6 +269,9 @@ export default function Dashboard() {
 
       {/* Executive Capacity — Priority Portfolio/Financial Exposure (자동 선택·캘린더·예산 없음) */}
       <ExecutiveCapacitySection />
+
+      {/* Commitment Intelligence — Execution Assurance/Accountability (자동 업무·일정·완료 처리 없음) */}
+      <CommitmentIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
