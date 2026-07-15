@@ -78,6 +78,7 @@ import DecisionOutcomeSection from './DecisionOutcomeSection';
 import OrganizationalLearningSection from './OrganizationalLearningSection';
 import StrategicScenarioSection from './StrategicScenarioSection';
 import BusinessCausalIntelligenceSection from './BusinessCausalIntelligenceSection';
+import CorporateIntelligenceSection from './CorporateIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -260,6 +261,9 @@ export default function Dashboard() {
 
       {/* Business Causal Intelligence — 인과 후보/Digital Twin/Calibration (자동 인과 확정·개입 없음) */}
       <BusinessCausalIntelligenceSection />
+
+      {/* Corporate Intelligence — Executive Command/Priority Orchestration (자동 경영 결정·실행 없음) */}
+      <CorporateIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
