@@ -4695,6 +4695,84 @@ export async function fetchForecastAudit(limit = 200): Promise<ForecastEventRow[
   return (data ?? []) as ForecastEventRow[];
 }
 
+// ── Strategic Advisory (0523 — Scenario Comparison/Advisory, Recommendation ≠ Decision·자동 전략 선택 없음) ──
+
+export type AdvisorySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface ScenarioComparisonRow {
+  id: string; comparison_code: string; title: string; scenarios: Array<Record<string, unknown>>;
+  comparison_axes: Array<unknown>; tradeoffs: Array<Record<string, unknown>>;
+  decision_matrix: Array<Record<string, unknown>>; selected_scenario_reference: string | null;
+  comparison_status: string; review_status: string; review_reason: string | null;
+  unknown_factors: Array<unknown>; assumptions: Array<unknown>; limitations: Array<unknown>;
+  created_by: string | null; created_at: string;
+}
+export interface ExecAdvisoryRow {
+  id: string; advisory_code: string; advisory_type: string; title: string;
+  recommendation_summary: string; reasoning_chain: Array<unknown>; evidence: Array<unknown>;
+  advisory_confidence: number | null; evidence_coverage: number | null;
+  alternatives: Array<unknown>; assumptions: Array<unknown>; unknown_factors: Array<unknown>;
+  input_freshness: string | null; advisory_status: string; review_reason: string | null;
+  warnings: Array<unknown>; limitations: Array<unknown>; created_by: string | null; created_at: string;
+}
+export interface AdvisoryEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchAdvisorySummary(): Promise<AdvisorySummary> {
+  const { data, error } = await supabase.rpc('admin_advisory_summary');
+  if (error) throw error;
+  return (data as AdvisorySummary | null) ?? {};
+}
+export async function createScenarioComparison(p: { code: string; title: string; scenarios: Array<Record<string, unknown>>; evidence: Array<Record<string, unknown>>; axes?: Array<Record<string, unknown>>; tradeoffs?: Array<Record<string, unknown>>; matrix?: Array<Record<string, unknown>>; unknown?: Array<Record<string, unknown>>; assumptions?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; auto_selected: boolean }> {
+  const { data, error } = await supabase.rpc('admin_scenario_comparison_create', {
+    p_code: p.code, p_title: p.title, p_scenarios: p.scenarios, p_evidence: p.evidence,
+    p_axes: p.axes ?? [], p_tradeoffs: p.tradeoffs ?? [], p_matrix: p.matrix ?? [],
+    p_unknown: p.unknown ?? [], p_assumptions: p.assumptions ?? [],
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_selected: boolean };
+}
+export async function reviewScenarioComparison(id: string, status: string, reason: string, selected: string | null = null): Promise<{ ok: boolean; review_status: string; warnings: Array<unknown>; executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_scenario_comparison_review', { p_id: id, p_status: status, p_reason: reason, p_selected: selected });
+  if (error) throw error;
+  return data as { ok: boolean; review_status: string; warnings: Array<unknown>; executed: boolean };
+}
+export async function fetchScenarioComparisons(status: string | null = null, limit = 50): Promise<ScenarioComparisonRow[]> {
+  const { data, error } = await supabase.rpc('admin_scenario_comparisons', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ScenarioComparisonRow[];
+}
+export async function createExecAdvisory(p: { code: string; type: string; title: string; summary: string; reasoning: Array<Record<string, unknown>>; evidence: Array<Record<string, unknown>>; confidence?: number | null; coverage?: number | null; alternatives?: Array<Record<string, unknown>>; assumptions?: Array<Record<string, unknown>>; unknown?: Array<Record<string, unknown>>; freshness?: string | null }): Promise<{ ok: boolean; id: string; decision_made: boolean; human_approval_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_advisory_create', {
+    p_code: p.code, p_type: p.type, p_title: p.title, p_summary: p.summary,
+    p_reasoning: p.reasoning, p_evidence: p.evidence,
+    p_confidence: p.confidence ?? null, p_coverage: p.coverage ?? null,
+    p_alternatives: p.alternatives ?? [], p_assumptions: p.assumptions ?? [],
+    p_unknown: p.unknown ?? [], p_freshness: p.freshness ?? null,
+    p_target_type: null, p_target_id: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; decision_made: boolean; human_approval_required: boolean };
+}
+export async function reviewExecAdvisory(id: string, status: string, reason: string): Promise<{ ok: boolean; advisory_status: string; warnings: Array<unknown>; executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_advisory_review', { p_id: id, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; advisory_status: string; warnings: Array<unknown>; executed: boolean };
+}
+export async function fetchExecAdvisories(type: string | null = null, limit = 100): Promise<ExecAdvisoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_advisories', { p_type: type, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecAdvisoryRow[];
+}
+export async function recordAdvisoryGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; decision_made: boolean }> {
+  const { data, error } = await supabase.rpc('admin_advisory_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; decision_made: boolean };
+}
+export async function fetchAdvisoryAudit(limit = 200): Promise<AdvisoryEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_advisory_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AdvisoryEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

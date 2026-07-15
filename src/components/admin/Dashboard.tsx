@@ -83,6 +83,7 @@ import ExecutiveCapacitySection from './ExecutiveCapacitySection';
 import CommitmentIntelligenceSection from './CommitmentIntelligenceSection';
 import ExecutionDeliverySection from './ExecutionDeliverySection';
 import PredictiveExecutionSection from './PredictiveExecutionSection';
+import StrategicAdvisorySection from './StrategicAdvisorySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -280,6 +281,9 @@ export default function Dashboard() {
 
       {/* Predictive Execution — Forecast/What-if Simulation (Prediction ≠ Outcome·자동 확정 없음) */}
       <PredictiveExecutionSection />
+
+      {/* Strategic Advisory — Scenario 비교/Trade-off/권고 (Recommendation ≠ Decision·자동 선택 없음) */}
+      <StrategicAdvisorySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
