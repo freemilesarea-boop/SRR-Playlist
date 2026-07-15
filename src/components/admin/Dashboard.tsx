@@ -81,6 +81,7 @@ import BusinessCausalIntelligenceSection from './BusinessCausalIntelligenceSecti
 import CorporateIntelligenceSection from './CorporateIntelligenceSection';
 import ExecutiveCapacitySection from './ExecutiveCapacitySection';
 import CommitmentIntelligenceSection from './CommitmentIntelligenceSection';
+import ExecutionDeliverySection from './ExecutionDeliverySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -272,6 +273,9 @@ export default function Dashboard() {
 
       {/* Commitment Intelligence — Execution Assurance/Accountability (자동 업무·일정·완료 처리 없음) */}
       <CommitmentIntelligenceSection />
+
+      {/* Execution Delivery Analytics — 실행력/Delivery/KPI 상관 분석 (자동 실행·KPI 변경 없음) */}
+      <ExecutionDeliverySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
