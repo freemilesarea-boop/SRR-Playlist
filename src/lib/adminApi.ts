@@ -4559,6 +4559,68 @@ export async function fetchCommitmentAudit(limit = 200): Promise<CommitmentEvent
   return (data ?? []) as CommitmentEventRow[];
 }
 
+// ── Execution Delivery Analytics (0521 — Delivery/KPI 상관/Health, 자동 업무·KPI·Outcome 변경·인사 평가 없음) ──
+
+export type DeliverySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | null>;
+export interface DeliverySnapshotRow {
+  id: string; snapshot_code: string; snapshot_kind: string; period_start: string | null;
+  period_end: string | null; sample_size: number; success_rate: number | null; rate_status: string;
+  metrics: Record<string, unknown>; findings: Array<unknown>; risk_factors: Array<unknown>;
+  unknown_factors: Array<unknown>; limitations: Array<unknown>; generated_at: string; created_at: string;
+}
+export interface KpiCorrelationRow {
+  id: string; correlation_code: string; commitment_scope: string; kpi_type: string; kpi_source: string;
+  sample_size: number; correlation_summary: string; correlation_direction: string | null;
+  correlation_status: string; causal_candidate_ref: string | null; limitations: Array<unknown>; created_at: string;
+}
+export interface DeliveryEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchDeliverySummary(): Promise<DeliverySummary> {
+  const { data, error } = await supabase.rpc('admin_execution_delivery_summary');
+  if (error) throw error;
+  return (data as DeliverySummary | null) ?? {};
+}
+export async function createDeliverySnapshot(p: { code: string; kind: string; evidence: Array<Record<string, unknown>>; sample?: number; successRate?: number | null; metrics?: Record<string, unknown>; findings?: Array<Record<string, unknown>>; riskFactors?: Array<Record<string, unknown>> }): Promise<{ ok: boolean; id: string; rate_status: string; personnel_evaluation: boolean }> {
+  const { data, error } = await supabase.rpc('admin_delivery_snapshot_create', {
+    p_code: p.code, p_kind: p.kind, p_evidence: p.evidence,
+    p_sample: p.sample ?? 0, p_success_rate: p.successRate ?? null,
+    p_metrics: p.metrics ?? {}, p_findings: p.findings ?? [],
+    p_risk_factors: p.riskFactors ?? [], p_unknown: [],
+    p_period_start: null, p_period_end: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; rate_status: string; personnel_evaluation: boolean };
+}
+export async function fetchDeliverySnapshots(kind: string | null = null, limit = 50): Promise<DeliverySnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_delivery_snapshots', { p_kind: kind, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DeliverySnapshotRow[];
+}
+export async function createKpiCorrelation(p: { code: string; scope: string; kpiType: string; kpiSource: string; summary: string; evidence: Array<Record<string, unknown>>; sample?: number; direction?: string | null }): Promise<{ ok: boolean; id: string; correlation_status: string; causally_attributed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_kpi_correlation_create', {
+    p_code: p.code, p_scope: p.scope, p_kpi_type: p.kpiType, p_kpi_source: p.kpiSource,
+    p_summary: p.summary, p_evidence: p.evidence, p_sample: p.sample ?? 0,
+    p_direction: p.direction ?? null, p_causal_ref: null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; correlation_status: string; causally_attributed: boolean };
+}
+export async function fetchKpiCorrelations(kpiType: string | null = null, limit = 100): Promise<KpiCorrelationRow[]> {
+  const { data, error } = await supabase.rpc('admin_kpi_correlations', { p_kpi_type: kpiType, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as KpiCorrelationRow[];
+}
+export async function recordDeliveryGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; personnel_evaluation: boolean }> {
+  const { data, error } = await supabase.rpc('admin_delivery_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; personnel_evaluation: boolean };
+}
+export async function fetchDeliveryAudit(limit = 200): Promise<DeliveryEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_delivery_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DeliveryEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
