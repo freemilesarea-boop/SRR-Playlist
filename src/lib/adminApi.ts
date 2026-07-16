@@ -5451,6 +5451,54 @@ export async function fetchOrchestrationAudit(limit = 200): Promise<Orchestratio
   return (data ?? []) as OrchestrationEventRow[];
 }
 
+// ── Execution Gateway (0535 — Controlled Execution·자동 실행 없음) ──
+
+export type ExecutionGatewaySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ExecutionRequestRow { id: string; execution_code: string; request_type: string; execution_domain: string; execution_mode: string; execution_status: string; title: string; execution_summary: string | null; requested_action: string | null; target_system: string | null; target_resource_type: string | null; target_resource_id: string | null; scope_type: string; scope_id: string | null; requested_parameters: Record<string, unknown>; expected_result: string | null; expected_evidence: string | null; risk_level: string; reversibility_status: string; dry_run_required: boolean; sandbox_required: boolean; observation_required: boolean; rollback_required: boolean; approval_reference_id: string | null; governance_reference_id: string | null; source_agent_id: string | null; commitment_id: string | null; preconditions: unknown[]; assumptions: unknown[]; unknown_factors: unknown[]; limitations: unknown[]; requested_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface ExecutionCapabilityRow { id: string; capability_code: string; capability_domain: string; connector_type: string; action_type: string | null; execution_mode: string; environment_scope: string; supports_dry_run: boolean; supports_sandbox: boolean; supports_idempotency: boolean; supports_retry: boolean; supports_cancellation: boolean; supports_rollback_reference: boolean; requires_human_approval: boolean; requires_secondary_review: boolean; max_payload_size: number; timeout_seconds: number; retry_limit: number; status: string; limitations: unknown[]; created_at: string; updated_at: string }
+export interface ExecutionGatewayEventRow { id: string; event_type: string; execution_request_id: string; capability_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchExecutionGatewaySummary(): Promise<ExecutionGatewaySummary> {
+  const { data, error } = await supabase.rpc('admin_execution_gateway_summary');
+  if (error) throw error;
+  return (data as ExecutionGatewaySummary | null) ?? {};
+}
+export async function fetchExecutionRequests(status: string | null = null, limit = 200): Promise<ExecutionRequestRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_requests', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutionRequestRow[];
+}
+export async function createExecutionRequest(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; initial_status: string; request_is_not_execution: boolean; executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_execution_request_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; initial_status: string; request_is_not_execution: boolean; executed: boolean };
+}
+export async function reviewExecutionRequest(requestId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; executed: boolean; auto_approved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_execution_request_review', { p_request_id: requestId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; executed: boolean; auto_approved: boolean };
+}
+export async function fetchExecutionCapabilities(limit = 200): Promise<ExecutionCapabilityRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_capabilities', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutionCapabilityRow[];
+}
+export async function recordExecutionCapability(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; requires_human_approval: boolean; connector_executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_execution_capability_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; requires_human_approval: boolean; connector_executed: boolean };
+}
+export async function recordExecutionEvent(kind: string, requestId: string, reason: string, payload: Record<string, unknown>, capabilityId: string | null = null): Promise<{ ok: boolean; id: string; connector_executed: boolean; auto_retry: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_execution_event_record', { p_kind: kind, p_request_id: requestId, p_reason: reason, p_payload: payload, p_capability_id: capabilityId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; connector_executed: boolean; auto_retry: boolean; production_applied: boolean };
+}
+export async function fetchExecutionGatewayAudit(limit = 200): Promise<ExecutionGatewayEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_execution_gateway_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutionGatewayEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
