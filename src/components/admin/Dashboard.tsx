@@ -99,6 +99,7 @@ import ExecutionGatewaySection from './ExecutionGatewaySection';
 import RuntimeControlSection from './RuntimeControlSection';
 import RuntimeAssuranceSection from './RuntimeAssuranceSection';
 import RuntimeLearningSection from './RuntimeLearningSection';
+import PolicySimulationSection from './PolicySimulationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -344,6 +345,9 @@ export default function Dashboard() {
 
       {/* Runtime Learning — Postmortem/Policy 개선안 (자동 Root Cause 확정·Policy 적용 없음) */}
       <RuntimeLearningSection />
+
+      {/* Policy Simulation — 정책 시뮬레이션/통제 Rollout (자동 승인·적용·Rollout 없음) */}
+      <PolicySimulationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

@@ -5670,6 +5670,70 @@ export async function fetchRuntimeLearningAudit(limit = 200): Promise<RuntimeLea
   return (data ?? []) as RuntimeLearningEventRow[];
 }
 
+// ── Policy Simulation (0539 — 정책 시뮬레이션/통제 Rollout, 자동 승인·적용·Rollout 없음) ──
+
+export type PolicySimulationSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface PolicyChangeSpecificationRow { id: string; change_code: string; policy_proposal_id: string; policy_domain: string; change_type: string; current_policy_reference: string | null; proposed_policy_reference: string | null; current_policy_snapshot: Record<string, unknown>; proposed_policy_snapshot: Record<string, unknown>; normalized_delta: Record<string, unknown>; affected_execution_domains: unknown[]; affected_environment_scopes: unknown[]; affected_scope_types: unknown[]; expected_benefit: string | null; potential_side_effects: unknown[]; assumptions: unknown[]; unknown_factors: unknown[]; limitations: unknown[]; risk_level: string; reversibility_status: string; rollback_reference_required: boolean; validation_required: boolean; simulation_required: boolean; observation_required: boolean; specification_status: string; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface PolicySimulationRunRow { id: string; simulation_code: string; policy_change_specification_id: string; simulation_type: string; simulation_status: string; simulation_scope_type: string; simulation_scope_id: string | null; baseline_snapshot_reference: Record<string, unknown>; input_dataset_reference: string | null; input_hash: string | null; sample_size: number | null; replay_result: Record<string, unknown> | null; counterfactual_result: Record<string, unknown> | null; conflict_result: Record<string, unknown> | null; compatibility_result: Record<string, unknown> | null; blast_radius_result: Record<string, unknown> | null; friction_result: Record<string, unknown> | null; safety_benefit_result: Record<string, unknown> | null; expected_changes: unknown[]; expected_side_effects: unknown[]; confidence: number | null; evidence: unknown[]; limitations: unknown[]; simulated_by: string | null; reviewed_by: string | null; started_at: string | null; completed_at: string | null; created_at: string }
+export interface PolicyRolloutPlanRow { id: string; rollout_code: string; policy_change_specification_id: string; policy_simulation_run_id: string; rollout_strategy: string; rollout_status: string; environment_scope: string; target_scope_type: string; target_scope_ids: unknown[]; excluded_scope_ids: unknown[]; rollout_stages: unknown[]; stage_entry_criteria: unknown[]; stage_exit_criteria: unknown[]; stop_conditions: unknown[]; rollback_conditions: unknown[]; observation_windows: unknown[]; evidence_requirements: unknown[]; assigned_reviewers: unknown[]; estimated_blast_radius: string; estimated_operational_friction: string; expected_benefit: string | null; potential_side_effects: unknown[]; limitations: unknown[]; created_by: string | null; reviewed_by: string | null; approved_by: string | null; created_at: string; updated_at: string }
+export interface PolicyRolloutEventRow { id: string; event_type: string; policy_change_specification_id: string | null; policy_simulation_run_id: string | null; policy_rollout_plan_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchPolicySimulationSummary(): Promise<PolicySimulationSummary> {
+  const { data, error } = await supabase.rpc('admin_policy_simulation_summary');
+  if (error) throw error;
+  return (data as PolicySimulationSummary | null) ?? {};
+}
+export async function fetchPolicyChangeSpecifications(status: string | null = null, limit = 200): Promise<PolicyChangeSpecificationRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_change_specifications', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyChangeSpecificationRow[];
+}
+export async function createPolicyChangeSpecification(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; specification_is_not_application: boolean; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_change_specification_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; specification_is_not_application: boolean; policy_applied: boolean };
+}
+export async function reviewPolicyChangeSpecification(specId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; policy_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_change_specification_review', { p_spec_id: specId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; policy_applied: boolean; human_decision: boolean };
+}
+export async function fetchPolicySimulationRuns(status: string | null = null, limit = 200): Promise<PolicySimulationRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_simulation_runs', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicySimulationRunRow[];
+}
+export async function recordPolicySimulationRun(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; simulation_is_not_reality: boolean; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_simulation_run_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; simulation_is_not_reality: boolean; policy_applied: boolean };
+}
+export async function fetchPolicyRolloutPlans(status: string | null = null, limit = 200): Promise<PolicyRolloutPlanRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_rollout_plans', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyRolloutPlanRow[];
+}
+export async function createPolicyRolloutPlan(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; plan_is_not_execution: boolean; rollout_started: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_rollout_plan_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; plan_is_not_execution: boolean; rollout_started: boolean };
+}
+export async function reviewPolicyRollout(planId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; policy_applied: boolean; rollout_executed: boolean; auto_rollback: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_rollout_review', { p_plan_id: planId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; policy_applied: boolean; rollout_executed: boolean; auto_rollback: boolean };
+}
+export async function recordPolicyRolloutEvent(kind: string, reason: string, payload: Record<string, unknown>, specId: string | null = null, simId: string | null = null, planId: string | null = null): Promise<{ ok: boolean; id: string; policy_applied: boolean; rollout_executed: boolean; auto_action_taken: boolean }> {
+  const { data, error } = await supabase.rpc('admin_policy_rollout_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_spec_id: specId, p_sim_id: simId, p_plan_id: planId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; policy_applied: boolean; rollout_executed: boolean; auto_action_taken: boolean };
+}
+export async function fetchPolicyRolloutAudit(limit = 200): Promise<PolicyRolloutEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_policy_rollout_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as PolicyRolloutEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
