@@ -5617,6 +5617,59 @@ export async function fetchRuntimeAssuranceAudit(limit = 200): Promise<RuntimeAs
   return (data ?? []) as RuntimeAssuranceEventRow[];
 }
 
+// ── Runtime Learning (0538 — Postmortem/Policy Proposal, 자동 확정·적용 없음) ──
+
+export type RuntimeLearningSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface RuntimePostmortemRow { id: string; postmortem_code: string; runtime_session_id: string; runtime_incident_candidate_id: string | null; connector_instance_id: string | null; automation_definition_id: string | null; execution_request_id: string | null; postmortem_status: string; incident_summary: string; observed_effect: string | null; affected_scope: string | null; timeline_summary: string | null; detection_summary: string | null; escalation_summary: string | null; recovery_summary: string | null; resolution_summary: string | null; evidence_summary: unknown[]; known_facts: unknown[]; unknown_factors: unknown[]; assumptions: unknown[]; limitations: unknown[]; root_cause_candidates: unknown[]; contributing_factors: unknown[]; control_gaps: unknown[]; drafted_by: string | null; reviewed_by: string | null; approved_by: string | null; created_at: string; updated_at: string }
+export interface RuntimePolicyProposalRow { id: string; proposal_code: string; source_postmortem_id: string | null; source_incident_candidate_id: string | null; policy_domain: string; policy_type: string | null; title: string; proposal_summary: string | null; current_policy_reference: string | null; proposed_policy: Record<string, unknown>; expected_benefit: string | null; potential_side_effects: unknown[]; risk_level: string; rollback_reference_required: boolean; observation_required: boolean; evidence: unknown[]; alternatives: unknown[]; preconditions: unknown[]; limitations: unknown[]; proposal_status: string; application_status: string; effectiveness_status: string; proposed_by: string | null; reviewed_by: string | null; approved_by: string | null; created_at: string; updated_at: string }
+export interface RuntimeLearningEventRow { id: string; event_type: string; runtime_postmortem_id: string | null; policy_proposal_id: string | null; runtime_session_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchRuntimeLearningSummary(): Promise<RuntimeLearningSummary> {
+  const { data, error } = await supabase.rpc('admin_runtime_learning_summary');
+  if (error) throw error;
+  return (data as RuntimeLearningSummary | null) ?? {};
+}
+export async function fetchRuntimePostmortems(status: string | null = null, limit = 200): Promise<RuntimePostmortemRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_postmortems', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimePostmortemRow[];
+}
+export async function createRuntimePostmortem(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; draft_is_not_approved: boolean; root_cause_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_postmortem_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; draft_is_not_approved: boolean; root_cause_confirmed: boolean };
+}
+export async function reviewRuntimePostmortem(postmortemId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; root_cause_confirmed: boolean; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_postmortem_review', { p_postmortem_id: postmortemId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; root_cause_confirmed: boolean; policy_applied: boolean };
+}
+export async function fetchRuntimePolicyProposals(status: string | null = null, limit = 200): Promise<RuntimePolicyProposalRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_policy_proposals', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimePolicyProposalRow[];
+}
+export async function createRuntimePolicyProposal(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; proposal_is_not_approval: boolean; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_policy_proposal_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; proposal_is_not_approval: boolean; policy_applied: boolean };
+}
+export async function reviewRuntimePolicyProposal(proposalId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; proposal_status: string; application_status: string; effectiveness_status: string; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_policy_review', { p_proposal_id: proposalId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; proposal_status: string; application_status: string; effectiveness_status: string; policy_applied: boolean };
+}
+export async function recordRuntimeLearningEvent(kind: string, reason: string, payload: Record<string, unknown>, postmortemId: string | null = null, proposalId: string | null = null, sessionId: string | null = null): Promise<{ ok: boolean; id: string; root_cause_confirmed_automatically: boolean; policy_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_learning_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_postmortem_id: postmortemId, p_proposal_id: proposalId, p_session_id: sessionId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; root_cause_confirmed_automatically: boolean; policy_applied: boolean };
+}
+export async function fetchRuntimeLearningAudit(limit = 200): Promise<RuntimeLearningEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_learning_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeLearningEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
