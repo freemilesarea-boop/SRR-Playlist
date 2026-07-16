@@ -95,6 +95,7 @@ import KnowledgeEvolutionSection from './KnowledgeEvolutionSection';
 import LearningIntelligenceSection from './LearningIntelligenceSection';
 import ExecutiveOsSection from './ExecutiveOsSection';
 import GovernanceOrchestrationSection from './GovernanceOrchestrationSection';
+import ExecutionGatewaySection from './ExecutionGatewaySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -328,6 +329,9 @@ export default function Dashboard() {
 
       {/* Governance Orchestration — Multi-Agent 조율/Human Oversight (자동 승인·자동 실행 없음) */}
       <GovernanceOrchestrationSection />
+
+      {/* Execution Gateway — 통제된 실행 게이트 (자동 실행·Connector 호출 없음·production mode 미지원) */}
+      <ExecutionGatewaySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
