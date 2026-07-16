@@ -5569,6 +5569,54 @@ export async function fetchRuntimeAudit(limit = 200): Promise<RuntimeEventRow[]>
   return (data ?? []) as RuntimeEventRow[];
 }
 
+// ── Runtime Assurance (0537 — Connector Health/Incident Candidate/Escalation, 자동 제어 없음) ──
+
+export type RuntimeAssuranceSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface RuntimeSignalRow { id: string; signal_code: string | null; runtime_session_id: string; connector_instance_id: string | null; signal_type: string; signal_source: string; signal_status: string; observed_value: string | null; expected_value: string | null; threshold_reference: string | null; severity: string; confidence: number | null; evidence: unknown[]; limitations: unknown[]; observed_at: string | null; source_event_id: string | null; created_at: string }
+export interface RuntimeIncidentCandidateRow { id: string; incident_code: string; runtime_session_id: string; connector_instance_id: string | null; incident_type: string; incident_status: string; severity: string; confidence: number | null; detection_source: string | null; detected_signals: unknown[]; suspected_scope: string | null; suspected_effect: string | null; evidence: unknown[]; limitations: unknown[]; escalation_status: string; resolution_status: string; assigned_reviewer: string | null; first_detected_at: string; last_detected_at: string; created_at: string; updated_at: string }
+export interface RuntimeAssuranceEventRow { id: string; event_type: string; runtime_session_id: string | null; connector_instance_id: string | null; incident_candidate_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchRuntimeAssuranceSummary(): Promise<RuntimeAssuranceSummary> {
+  const { data, error } = await supabase.rpc('admin_runtime_assurance_summary');
+  if (error) throw error;
+  return (data as RuntimeAssuranceSummary | null) ?? {};
+}
+export async function fetchRuntimeSignals(sessionId: string | null = null, limit = 200): Promise<RuntimeSignalRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_signals', { p_session_id: sessionId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeSignalRow[];
+}
+export async function recordRuntimeSignal(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; signal_is_not_fact: boolean; incident_confirmed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_signal_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; signal_is_not_fact: boolean; incident_confirmed: boolean };
+}
+export async function fetchRuntimeIncidentCandidates(status: string | null = null, limit = 200): Promise<RuntimeIncidentCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_incident_candidates', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeIncidentCandidateRow[];
+}
+export async function createRuntimeIncidentCandidate(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; incident_confirmed: boolean; auto_registered_to_ai_incidents: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_incident_candidate_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; incident_confirmed: boolean; auto_registered_to_ai_incidents: boolean };
+}
+export async function reviewRuntimeIncidentCandidate(candidateId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; incident_confirmed: boolean; auto_action_taken: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_incident_candidate_review', { p_candidate_id: candidateId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; incident_confirmed: boolean; auto_action_taken: boolean };
+}
+export async function recordRuntimeAssuranceEvent(kind: string, reason: string, payload: Record<string, unknown>, sessionId: string | null = null, incidentId: string | null = null): Promise<{ ok: boolean; id: string; runtime_controlled: boolean; auto_message_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_assurance_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_session_id: sessionId, p_incident_id: incidentId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; runtime_controlled: boolean; auto_message_sent: boolean };
+}
+export async function fetchRuntimeAssuranceAudit(limit = 200): Promise<RuntimeAssuranceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_assurance_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeAssuranceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
