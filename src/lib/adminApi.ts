@@ -5734,6 +5734,65 @@ export async function fetchPolicyRolloutAudit(limit = 200): Promise<PolicyRollou
   return (data ?? []) as PolicyRolloutEventRow[];
 }
 
+// ── Enterprise Digital Twin (0540 — Twin ≠ Production, 자동 실행·Production 변경 없음) ──
+
+export type EnterpriseTwinSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface EnterpriseStateSnapshotRow { id: string; snapshot_code: string; snapshot_status: string; organization_state: Record<string, unknown>; runtime_state: Record<string, unknown>; connector_state: Record<string, unknown>; agent_state: Record<string, unknown>; policy_state: Record<string, unknown>; decision_state: Record<string, unknown>; knowledge_state: Record<string, unknown>; capacity_state: Record<string, unknown>; cost_state: Record<string, unknown>; incident_state: Record<string, unknown>; approval_state: Record<string, unknown>; source_coverage: unknown[]; missing_sources: unknown[]; assumptions: unknown[]; limitations: unknown[]; captured_by: string | null; captured_at: string; created_at: string }
+export interface EnterpriseTwinScenarioRow { id: string; scenario_code: string; scenario_type: string; title: string; description: string | null; scenario_status: string; support_status: string; injection_parameters: Record<string, unknown>; target_twin_layers: unknown[]; horizon_days: number | null; assumptions: unknown[]; unknown_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface EnterpriseTwinRunRow { id: string; run_code: string; snapshot_id: string; scenario_id: string; run_status: string; simulation_mode: string; sample_size: number | null; future_timeline: Record<string, unknown> | null; risk_projection: Record<string, unknown> | null; opportunity_projection: Record<string, unknown> | null; cost_projection: Record<string, unknown> | null; capacity_projection: Record<string, unknown> | null; throughput_projection: Record<string, unknown> | null; queue_projection: Record<string, unknown> | null; incident_projection: Record<string, unknown> | null; approval_queue_projection: Record<string, unknown> | null; kpi_projection: Record<string, unknown> | null; human_workload_projection: Record<string, unknown> | null; best_case: Record<string, unknown> | null; worst_case: Record<string, unknown> | null; confidence: number | null; assumptions: unknown[]; unknown_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; simulated_by: string | null; reviewed_by: string | null; started_at: string | null; completed_at: string | null; created_at: string }
+export interface EnterpriseTwinEventRow { id: string; event_type: string; snapshot_id: string | null; scenario_id: string | null; run_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseTwinSummary(): Promise<EnterpriseTwinSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_summary');
+  if (error) throw error;
+  return (data as EnterpriseTwinSummary | null) ?? {};
+}
+export async function fetchEnterpriseStateSnapshots(status: string | null = null, limit = 200): Promise<EnterpriseStateSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_state_snapshots', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseStateSnapshotRow[];
+}
+export async function captureEnterpriseStateSnapshot(payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; snapshot_status: string; twin_is_not_production: boolean; snapshot_is_not_live_state: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_state_snapshot_capture', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; snapshot_status: string; twin_is_not_production: boolean; snapshot_is_not_live_state: boolean; production_changed: boolean };
+}
+export async function fetchEnterpriseTwinScenarios(status: string | null = null, limit = 200): Promise<EnterpriseTwinScenarioRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_scenarios', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTwinScenarioRow[];
+}
+export async function createEnterpriseTwinScenario(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; support_status: string; scenario_is_not_reality: boolean; auto_executed: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_scenario_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; support_status: string; scenario_is_not_reality: boolean; auto_executed: boolean; production_changed: boolean };
+}
+export async function reviewEnterpriseTwinScenario(scenarioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_scenario_review', { p_scenario_id: scenarioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseTwinRuns(status: string | null = null, limit = 200): Promise<EnterpriseTwinRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_runs', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTwinRunRow[];
+}
+export async function recordEnterpriseTwinRun(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; run_status: string; prediction_is_not_future_fact: boolean; projection_is_not_observation: boolean; twin_is_not_production: boolean; production_changed: boolean; auto_executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_run_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; run_status: string; prediction_is_not_future_fact: boolean; projection_is_not_observation: boolean; twin_is_not_production: boolean; production_changed: boolean; auto_executed: boolean };
+}
+export async function recordEnterpriseTwinEvent(kind: string, reason: string, payload: Record<string, unknown>, snapshotId: string | null = null, scenarioId: string | null = null, runId: string | null = null): Promise<{ ok: boolean; id: string; production_changed: boolean; auto_executed: boolean; recommendation_is_not_decision: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_snapshot_id: snapshotId, p_scenario_id: scenarioId, p_run_id: runId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; production_changed: boolean; auto_executed: boolean; recommendation_is_not_decision: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseTwinAudit(limit = 200): Promise<EnterpriseTwinEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_twin_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTwinEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
