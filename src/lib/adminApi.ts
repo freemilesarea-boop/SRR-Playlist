@@ -5389,6 +5389,27 @@ export async function fetchLearningAudit(limit = 200): Promise<LearningEventRow[
   return (data ?? []) as LearningEventRow[];
 }
 
+// ── Executive AI OS (0533 — 최종 통합 레이어, 자동 Executive Decision 없음) ──
+
+export type ExecutiveOsSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ExecutiveOsEventRow { id: string; event_type: string; ref_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchExecutiveOsSummary(): Promise<ExecutiveOsSummary> {
+  const { data, error } = await supabase.rpc('admin_executive_os_summary');
+  if (error) throw error;
+  return (data as ExecutiveOsSummary | null) ?? {};
+}
+export async function recordExecutiveOsGovernance(kind: string, reason: string, payload: Record<string, unknown>, refId: string | null = null): Promise<{ ok: boolean; id: string; executive_decision_made: boolean; strategy_changed: boolean; auto_sent: boolean }> {
+  const { data, error } = await supabase.rpc('admin_executive_os_governance_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_ref_id: refId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; executive_decision_made: boolean; strategy_changed: boolean; auto_sent: boolean };
+}
+export async function fetchExecutiveOsAudit(limit = 200): Promise<ExecutiveOsEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_executive_os_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutiveOsEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
