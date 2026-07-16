@@ -5499,6 +5499,76 @@ export async function fetchExecutionGatewayAudit(limit = 200): Promise<Execution
   return (data ?? []) as ExecutionGatewayEventRow[];
 }
 
+// ── Connector Runtime Control (0536 — Supervised Runtime·자동 Connector 실행 없음) ──
+
+export type RuntimeControlSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ConnectorDefinitionRow { id: string; connector_code: string; connector_name: string; connector_domain: string; provider: string; supports_read: boolean; supports_draft: boolean; supports_write: boolean; supports_dry_run: boolean; supports_sandbox: boolean; supports_idempotency: boolean; supports_retry: boolean; supports_pause: boolean; supports_cancellation: boolean; supports_cleanup: boolean; supports_rollback_reference: boolean; requires_human_approval: boolean; requires_secondary_approval: boolean; requires_sensitive_data_access: boolean; requires_secret_access: boolean; max_payload_size: number; timeout_seconds: number; retry_limit: number; status: string; limitations: unknown[]; created_at: string; updated_at: string }
+export interface ConnectorInstanceRow { id: string; connector_definition_id: string; instance_code: string; environment_scope: string; scope_type: string; scope_id: string | null; connection_status: string; permission_status: string; scope_status: string; credential_reference_type: string; credential_reference_id: string | null; health_status: string; last_verified_at: string | null; disabled_reason: string | null; limitations: unknown[]; created_at: string; updated_at: string }
+export interface AutomationDefinitionRow { id: string; automation_code: string; title: string; description: string | null; execution_domain: string; connector_definition_id: string | null; capability_id: string | null; action_type: string | null; execution_mode: string; dry_run_required: boolean; sandbox_required: boolean; observation_required: boolean; rollback_reference_required: boolean; cleanup_required: boolean; max_execution_duration_seconds: number; max_retry_count: number; status: string; limitations: unknown[]; created_at: string; updated_at: string }
+export interface RuntimeSessionRow { id: string; runtime_session_code: string; execution_request_id: string; automation_definition_id: string; connector_instance_id: string | null; capability_id: string | null; approval_reference_id: string; gate_reference_id: string | null; session_status: string; execution_mode: string; environment_scope: string; target_resource_type: string | null; target_resource_id: string | null; runtime_preconditions: Record<string, unknown> | null; checkpoint_count: number; supervised_by: string | null; started_by: string | null; started_at: string | null; last_checkpoint_at: string | null; pause_requested_at: string | null; paused_at: string | null; cancellation_requested_at: string | null; cancelled_at: string | null; completed_reference_at: string | null; timeout_reference_at: string | null; cleanup_status: string; result_verification_status: string; observation_status: string; closure_status: string; limitations: unknown[]; created_at: string; updated_at: string }
+export interface RuntimeEventRow { id: string; event_type: string; runtime_session_id: string | null; connector_definition_id: string | null; connector_instance_id: string | null; automation_definition_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchRuntimeControlSummary(): Promise<RuntimeControlSummary> {
+  const { data, error } = await supabase.rpc('admin_runtime_control_summary');
+  if (error) throw error;
+  return (data as RuntimeControlSummary | null) ?? {};
+}
+export async function fetchConnectorDefinitions(limit = 200): Promise<ConnectorDefinitionRow[]> {
+  const { data, error } = await supabase.rpc('admin_connector_definitions', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ConnectorDefinitionRow[];
+}
+export async function recordConnectorDefinition(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; definition_is_not_availability: boolean }> {
+  const { data, error } = await supabase.rpc('admin_connector_definition_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; definition_is_not_availability: boolean };
+}
+export async function fetchConnectorInstances(limit = 200): Promise<ConnectorInstanceRow[]> {
+  const { data, error } = await supabase.rpc('admin_connector_instances', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ConnectorInstanceRow[];
+}
+export async function recordConnectorInstance(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; credential_stored: boolean }> {
+  const { data, error } = await supabase.rpc('admin_connector_instance_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; credential_stored: boolean };
+}
+export async function fetchAutomationDefinitions(limit = 200): Promise<AutomationDefinitionRow[]> {
+  const { data, error } = await supabase.rpc('admin_automation_definitions', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AutomationDefinitionRow[];
+}
+export async function recordAutomationDefinition(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; definition_is_not_execution_request: boolean }> {
+  const { data, error } = await supabase.rpc('admin_automation_definition_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; definition_is_not_execution_request: boolean };
+}
+export async function fetchRuntimeSessions(status: string | null = null, limit = 200): Promise<RuntimeSessionRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_sessions', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeSessionRow[];
+}
+export async function createRuntimeSession(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; runtime_started: boolean; auto_started: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_session_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; runtime_started: boolean; auto_started: boolean };
+}
+export async function reviewRuntimeSession(sessionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; auto_started: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_session_review', { p_session_id: sessionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; auto_started: boolean };
+}
+export async function recordRuntimeEvent(kind: string, sessionId: string, reason: string, payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; connector_executed: boolean; auto_retry: boolean }> {
+  const { data, error } = await supabase.rpc('admin_runtime_event_record', { p_kind: kind, p_session_id: sessionId, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; connector_executed: boolean; auto_retry: boolean };
+}
+export async function fetchRuntimeAudit(limit = 200): Promise<RuntimeEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_runtime_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as RuntimeEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
