@@ -97,6 +97,7 @@ import ExecutiveOsSection from './ExecutiveOsSection';
 import GovernanceOrchestrationSection from './GovernanceOrchestrationSection';
 import ExecutionGatewaySection from './ExecutionGatewaySection';
 import RuntimeControlSection from './RuntimeControlSection';
+import RuntimeAssuranceSection from './RuntimeAssuranceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -336,6 +337,9 @@ export default function Dashboard() {
 
       {/* Runtime Control — Connector 거버넌스/감독 실행 세션 (자동 Connector 실행·무인 장기 실행 없음) */}
       <RuntimeControlSection />
+
+      {/* Runtime Assurance — 세션/Connector 건강도 분석·장애 후보·Human Escalation (자동 제어 없음) */}
+      <RuntimeAssuranceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
