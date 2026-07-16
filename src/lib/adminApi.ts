@@ -5410,6 +5410,47 @@ export async function fetchExecutiveOsAudit(limit = 200): Promise<ExecutiveOsEve
   return (data ?? []) as ExecutiveOsEventRow[];
 }
 
+// ── Governance Orchestration (0534 — Multi-Agent 조율/Human Oversight, 자동 승인 없음) ──
+
+export type OrchestrationSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface OrchestrationAgentRow { id: string; agent_kind: string; agent_name: string; agent_status: string; note: string | null; linked_source: string | null; idempotency_key: string | null; created_by: string | null; created_at: string; updated_at: string }
+export interface OrchestrationEventRow { id: string; event_type: string; agent_id: string | null; workflow_key: string | null; workflow_stage: string | null; oversight_status: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchOrchestrationSummary(): Promise<OrchestrationSummary> {
+  const { data, error } = await supabase.rpc('admin_orchestration_summary');
+  if (error) throw error;
+  return (data as OrchestrationSummary | null) ?? {};
+}
+export async function fetchOrchestrationAgents(limit = 200): Promise<OrchestrationAgentRow[]> {
+  const { data, error } = await supabase.rpc('admin_orchestration_agents', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OrchestrationAgentRow[];
+}
+export async function registerOrchestrationAgent(kind: string, name: string, note: string | null = null, linkedSource: string | null = null): Promise<{ ok: boolean; id: string; auto_created: boolean; initial_status: string }> {
+  const { data, error } = await supabase.rpc('admin_orchestration_agent_register', { p_kind: kind, p_name: name, p_note: note, p_linked_source: linkedSource, p_idempotency_key: null });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_created: boolean; initial_status: string };
+}
+export async function setOrchestrationAgentStatus(agentId: string, status: string, reason: string): Promise<{ ok: boolean; before: string; after: string; auto_approved: boolean }> {
+  const { data, error } = await supabase.rpc('admin_orchestration_agent_set_status', { p_agent_id: agentId, p_status: status, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; before: string; after: string; auto_approved: boolean };
+}
+export async function recordOrchestrationEvent(kind: string, reason: string, payload: Record<string, unknown>, opts: { agentId?: string | null; workflowKey?: string | null; workflowStage?: string | null; oversightStatus?: string | null } = {}): Promise<{ ok: boolean; id: string; auto_approved: boolean; human_decision_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_orchestration_event_record', {
+    p_kind: kind, p_reason: reason, p_payload: payload,
+    p_agent_id: opts.agentId ?? null, p_workflow_key: opts.workflowKey ?? null,
+    p_workflow_stage: opts.workflowStage ?? null, p_oversight_status: opts.oversightStatus ?? null,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_approved: boolean; human_decision_required: boolean };
+}
+export async function fetchOrchestrationAudit(limit = 200): Promise<OrchestrationEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_orchestration_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as OrchestrationEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

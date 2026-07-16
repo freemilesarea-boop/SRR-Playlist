@@ -94,6 +94,7 @@ import EcosystemIntelligenceSection from './EcosystemIntelligenceSection';
 import KnowledgeEvolutionSection from './KnowledgeEvolutionSection';
 import LearningIntelligenceSection from './LearningIntelligenceSection';
 import ExecutiveOsSection from './ExecutiveOsSection';
+import GovernanceOrchestrationSection from './GovernanceOrchestrationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -324,6 +325,9 @@ export default function Dashboard() {
 
       {/* Executive AI OS — 최종 통합 관제 레이어 (자동 Executive Decision 없음·전 도메인 읽기 전용) */}
       <ExecutiveOsSection />
+
+      {/* Governance Orchestration — Multi-Agent 조율/Human Oversight (자동 승인·자동 실행 없음) */}
+      <GovernanceOrchestrationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
