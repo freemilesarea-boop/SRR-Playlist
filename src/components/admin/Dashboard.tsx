@@ -103,6 +103,7 @@ import PolicySimulationSection from './PolicySimulationSection';
 import EnterpriseTwinSection from './EnterpriseTwinSection';
 import SettlementOpsCenterSection from './SettlementOpsCenterSection';
 import ScenarioIntelligenceSection from './ScenarioIntelligenceSection';
+import PredictiveEnterpriseSection from './PredictiveEnterpriseSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -360,6 +361,9 @@ export default function Dashboard() {
 
       {/* Scenario Intelligence — 시나리오 재생/분기/복수 미래 비교 (자동 실행·Failure Injection 없음) */}
       <ScenarioIntelligenceSection />
+
+      {/* Predictive Enterprise — 예측/조기경보 Candidate (자동 Alert·Incident·Escalation·Threshold 변경 없음) */}
+      <PredictiveEnterpriseSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

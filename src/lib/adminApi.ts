@@ -5911,6 +5911,75 @@ export async function fetchScenarioAudit(limit = 200): Promise<ScenarioEventRow[
   return (data ?? []) as ScenarioEventRow[];
 }
 
+// ── Predictive Enterprise (0543 — Forecast ≠ Future Fact, 자동 Alert·Incident·Escalation·Threshold 변경 없음) ──
+
+export type ForecastIntelSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ForecastDefinitionRow { id: string; forecast_code: string; forecast_name: string; forecast_domain: string; target_metric: string; target_scope_type: string; target_scope_id: string | null; source_metric_references: unknown[]; source_table_references: unknown[]; baseline_method: string; rolling_window_definition: Record<string, unknown>; forecast_horizons: unknown[]; aggregation_interval: string | null; minimum_sample_size: number; required_data_completeness: number | null; known_external_factors: unknown[]; unknown_factors: unknown[]; leading_indicator_candidates: unknown[]; lagging_indicator_references: unknown[]; threshold_candidate_rules: unknown[]; warning_candidate_rules: unknown[]; model_reference_type: string; model_reference_id: string | null; model_version: string | null; output_schema_version: number; assumptions: unknown[]; evidence: unknown[]; limitations: unknown[]; support_status: string; definition_status: string; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface ForecastRunRow { id: string; run_code: string; forecast_definition_id: string; forecast_domain: string; target_metric: string; target_scope_type: string; target_scope_id: string | null; forecast_horizon_minutes: number | null; source_window_start: string | null; source_window_end: string | null; baseline_reference: Record<string, unknown> | null; input_dataset_reference: string | null; input_hash: string | null; sample_size: number | null; data_completeness: number | null; forecast_method: string; model_reference: string | null; model_version: string | null; predicted_value: number | null; predicted_range_low: number | null; predicted_range_high: number | null; predicted_direction: string | null; predicted_risk_class: string | null; predicted_threshold_crossing_at: string | null; leading_indicator_results: Record<string, unknown> | null; trend_result: Record<string, unknown> | null; cross_domain_impact_result: Record<string, unknown> | null; prediction_error: Record<string, unknown> | null; calibration_result: Record<string, unknown> | null; drift_result: Record<string, unknown> | null; confidence: number | null; assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; run_status: string; started_by: string | null; reviewed_by: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string }
+export interface WarningCandidateRow { id: string; warning_code: string; forecast_definition_id: string; forecast_run_id: string | null; threshold_candidate_reference: Record<string, unknown>; warning_domain: string; warning_type: string; target_scope_type: string; target_scope_id: string | null; warning_status: string; severity_candidate: string; confidence: number | null; detected_at: string; expected_event_window_start: string | null; expected_event_window_end: string | null; expected_lead_time_minutes: number | null; observed_signals: unknown[]; leading_indicator_results: Record<string, unknown> | null; projected_impact: Record<string, unknown> | null; cross_domain_impact: Record<string, unknown> | null; affected_scopes: Record<string, unknown>; recommended_review_deadline: string | null; escalation_recommendation: Record<string, unknown> | null; suggested_human_roles: unknown[]; outcome_reference: Record<string, unknown> | null; effectiveness_result: Record<string, unknown> | null; assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; created_by: string | null; reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string }
+export interface EnterpriseForecastEventRow { id: string; event_type: string; forecast_definition_id: string | null; forecast_run_id: string | null; warning_candidate_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchForecastIntelSummary(): Promise<ForecastIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_summary');
+  if (error) throw error;
+  return (data as ForecastIntelSummary | null) ?? {};
+}
+export async function fetchForecastDefinitions(status: string | null = null, limit = 200): Promise<ForecastDefinitionRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_definitions', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ForecastDefinitionRow[];
+}
+export async function createForecastDefinition(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_definition_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean };
+}
+export async function reviewForecastDefinition(definitionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; alert_dispatched: boolean; production_changed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_definition_review', { p_definition_id: definitionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; alert_dispatched: boolean; production_changed: boolean; human_decision: boolean };
+}
+export async function fetchForecastRuns(status: string | null = null, limit = 200): Promise<ForecastRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_runs', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ForecastRunRow[];
+}
+export async function createForecastRun(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_run_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean };
+}
+export async function recordForecastRun(runId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_run_record', { p_run_id: runId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; forecast_is_not_future_fact: boolean; alert_dispatched: boolean; production_changed: boolean; human_decision: boolean };
+}
+export async function fetchWarningCandidates(status: string | null = null, limit = 200): Promise<WarningCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_warning_candidates', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as WarningCandidateRow[];
+}
+export async function createWarningCandidate(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; warning_is_not_alert: boolean; alert_dispatched: boolean; incident_created: boolean; escalated: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_warning_candidate_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; warning_is_not_alert: boolean; alert_dispatched: boolean; incident_created: boolean; escalated: boolean; production_changed: boolean };
+}
+export async function reviewWarningCandidate(warningId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; alert_dispatched: boolean; incident_created: boolean; escalated: boolean; production_changed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_warning_review', { p_warning_id: warningId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; alert_dispatched: boolean; incident_created: boolean; escalated: boolean; production_changed: boolean; human_decision: boolean };
+}
+export async function recordForecastEvent(kind: string, reason: string, payload: Record<string, unknown>, definitionId: string | null = null, runId: string | null = null, warningId: string | null = null): Promise<{ ok: boolean; id: string; alert_dispatched: boolean; threshold_applied: boolean; incident_created: boolean; production_changed: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_definition_id: definitionId, p_run_id: runId, p_warning_id: warningId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; alert_dispatched: boolean; threshold_applied: boolean; incident_created: boolean; production_changed: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseForecastAudit(limit = 200): Promise<EnterpriseForecastEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_forecast_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseForecastEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
