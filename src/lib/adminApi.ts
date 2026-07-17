@@ -5793,6 +5793,50 @@ export async function fetchEnterpriseTwinAudit(limit = 200): Promise<EnterpriseT
   return (data ?? []) as EnterpriseTwinEventRow[];
 }
 
+// ── Settlement Readability (0541 — 읽기 전용 조회·마스킹·접근 Audit. 정산/지급/Shadow 계산 변경 없음) ──
+
+export interface ReadableSettlementListRow { settlement_id: string; artist_user_id: string; settlement_month: string; status: string; artist_name: string | null; real_name: string | null; nickname: string | null; email: string | null; gross_settlement_amount: number; company_fee_amount: number; sales_agent_fee_amount: number; withholding_tax_amount: number; artist_net_settlement: number; previous_carried_amount: number; final_payout_amount: number; carried_over_amount: number; paid_at: string | null; bank_name: string | null; account_holder: string | null; masked_account_number: string | null; masked_resident_number: string | null; account_status: string; tax_withholding_type: string | null; entity_type: string; rrn_registered: boolean; developer_fields: Record<string, unknown> }
+export type ReadableSettlementDetail = Record<string, unknown> & { basic: Record<string, unknown> | null; settlement: Record<string, unknown>; shadow: Record<string, unknown>; streams: Record<string, unknown>; payout_history: Array<Record<string, unknown>>; developer_fields: Record<string, unknown> };
+export type ReadableShadowCompare = Record<string, unknown> & { rows: Array<Record<string, unknown>> };
+export type ReadableSettlementKpi = Record<string, unknown>;
+export interface SettlementAccessLogRow { id: string; action: string; target_type: string; settlement_id: string | null; artist_user_id: string | null; detail: string | null; payload: Record<string, unknown> | null; viewer_id: string | null; viewed_at: string }
+
+export async function fetchReadableSettlements(params: { month?: string | null; status?: string | null; search?: string | null; bank?: string | null; entityType?: string | null; minAmount?: number | null; maxAmount?: number | null; limit?: number } = {}): Promise<{ rows: ReadableSettlementListRow[]; pii_masked_by_default: boolean }> {
+  const { data, error } = await supabase.rpc('admin_settlement_readable_list', {
+    p_month: params.month ?? null, p_status: params.status ?? null, p_search: params.search ?? null,
+    p_bank: params.bank ?? null, p_entity_type: params.entityType ?? null,
+    p_min_amount: params.minAmount ?? null, p_max_amount: params.maxAmount ?? null, p_limit: params.limit ?? 100,
+  });
+  if (error) throw error;
+  const d = (data ?? {}) as { rows?: ReadableSettlementListRow[]; pii_masked_by_default?: boolean };
+  return { rows: d.rows ?? [], pii_masked_by_default: d.pii_masked_by_default ?? true };
+}
+export async function fetchReadableSettlementDetail(settlementId: string): Promise<ReadableSettlementDetail> {
+  const { data, error } = await supabase.rpc('admin_settlement_readable_detail', { p_settlement_id: settlementId });
+  if (error) throw error;
+  return data as ReadableSettlementDetail;
+}
+export async function fetchReadableShadowCompare(month: string, limit = 100): Promise<ReadableShadowCompare> {
+  const { data, error } = await supabase.rpc('admin_settlement_shadow_readable', { p_month: month, p_limit: limit });
+  if (error) throw error;
+  return data as ReadableShadowCompare;
+}
+export async function fetchReadableSettlementKpi(month: string): Promise<ReadableSettlementKpi> {
+  const { data, error } = await supabase.rpc('admin_settlement_readable_kpi', { p_month: month });
+  if (error) throw error;
+  return (data ?? {}) as ReadableSettlementKpi;
+}
+export async function recordSettlementAccess(action: string, targetType: string, detail: string, payload: Record<string, unknown> = {}, settlementId: string | null = null, artistUserId: string | null = null): Promise<{ ok: boolean; id: string; pii_revealed: boolean; settlement_modified: boolean }> {
+  const { data, error } = await supabase.rpc('admin_settlement_access_record', { p_action: action, p_target_type: targetType, p_detail: detail, p_payload: payload, p_settlement_id: settlementId, p_artist_user_id: artistUserId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; pii_revealed: boolean; settlement_modified: boolean };
+}
+export async function fetchSettlementAccessAudit(limit = 100): Promise<SettlementAccessLogRow[]> {
+  const { data, error } = await supabase.rpc('admin_settlement_access_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as SettlementAccessLogRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
