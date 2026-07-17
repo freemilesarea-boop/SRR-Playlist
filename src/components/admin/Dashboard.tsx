@@ -101,6 +101,7 @@ import RuntimeAssuranceSection from './RuntimeAssuranceSection';
 import RuntimeLearningSection from './RuntimeLearningSection';
 import PolicySimulationSection from './PolicySimulationSection';
 import EnterpriseTwinSection from './EnterpriseTwinSection';
+import SettlementOpsCenterSection from './SettlementOpsCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -352,6 +353,9 @@ export default function Dashboard() {
 
       {/* Enterprise Digital Twin — 기업 가상 복제/미래 예측 (Twin ≠ Production·자동 실행 없음) */}
       <EnterpriseTwinSection />
+
+      {/* Settlement Ops Center — 이름 중심 정산 운영 화면 (계산·지급 변경 없음·마스킹·Audit) */}
+      <SettlementOpsCenterSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
