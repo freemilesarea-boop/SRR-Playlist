@@ -5980,6 +5980,140 @@ export async function fetchEnterpriseForecastAudit(limit = 200): Promise<Enterpr
   return (data ?? []) as EnterpriseForecastEventRow[];
 }
 
+// ── Executive Advisory (0544 — Decision Synthesis/Human Approval, Advisory ≠ Decision·자동 승인/실행 없음) ──
+
+export type ExecutiveAdvisorySummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface DecisionContextRow {
+  id: string; decision_code: string; decision_title: string; decision_domain: string; decision_type: string | null;
+  decision_status: string; priority_candidate: string; urgency_candidate: string;
+  decision_scope_type: string; decision_scope_id: string | null; executive_owner_role_candidate: string | null;
+  required_reviewer_roles: unknown[]; decision_deadline_reference: string | null;
+  decision_question: string | null; context_summary: string | null; current_state_reference: Record<string, unknown> | null;
+  enterprise_snapshot_id: string | null; twin_run_references: unknown[]; scenario_run_references: unknown[];
+  forecast_run_references: unknown[]; warning_candidate_references: unknown[]; incident_references: unknown[];
+  policy_references: unknown[]; commitment_references: unknown[]; previous_decision_references: unknown[];
+  outcome_references: unknown[]; knowledge_entity_references: unknown[]; agent_advisory_references: unknown[];
+  advisory_synthesis: Record<string, unknown> | null; agent_agreement_result: Record<string, unknown> | null;
+  agent_conflict_result: Record<string, unknown> | null;
+  evidence: unknown[]; missing_evidence: unknown[]; conflicting_evidence: unknown[]; stale_evidence: unknown[];
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[];
+  policy_constraints: unknown[]; constitutional_constraints: unknown[]; compliance_constraints: unknown[];
+  contract_constraints: unknown[]; financial_constraints: unknown[]; operational_constraints: unknown[];
+  impact_synthesis: Record<string, unknown> | null; executive_reviews: unknown[];
+  decision_reference: Record<string, unknown> | null; outcome_reference: Record<string, unknown> | null;
+  decision_quality_result: Record<string, unknown> | null; decision_drift_result: Record<string, unknown> | null;
+  limitations: unknown[]; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface DecisionOptionRow {
+  id: string; decision_context_id: string; option_code: string; option_name: string; option_type: string;
+  option_status: string; option_summary: string | null; action_reference_type: string | null; action_reference_id: string | null;
+  is_no_action_option: boolean; is_defer_option: boolean; is_evidence_gathering_option: boolean;
+  assumptions: unknown[]; preconditions: unknown[]; dependencies: unknown[]; blocking_conditions: unknown[];
+  required_approvals: unknown[]; expected_benefits: unknown[]; expected_costs: unknown[];
+  risk_projection: Record<string, unknown> | null; opportunity_projection: Record<string, unknown> | null;
+  financial_impact: Record<string, unknown> | null; capacity_impact: Record<string, unknown> | null;
+  operational_impact: Record<string, unknown> | null; security_impact: Record<string, unknown> | null;
+  privacy_impact: Record<string, unknown> | null; compliance_impact: Record<string, unknown> | null;
+  contract_impact: Record<string, unknown> | null; settlement_impact_reference: Record<string, unknown> | null;
+  payment_impact_reference: Record<string, unknown> | null; customer_experience_impact: Record<string, unknown> | null;
+  store_operations_impact: Record<string, unknown> | null; human_workload_impact: Record<string, unknown> | null;
+  reversibility_result: Record<string, unknown> | null; rollback_reference: Record<string, unknown> | null;
+  implementation_complexity_candidate: string | null; operational_friction_candidate: string | null;
+  time_to_value_candidate: string | null; expected_observation_period: string | null;
+  success_conditions: unknown[]; failure_conditions: unknown[]; stop_conditions: unknown[];
+  tradeoff_results: Record<string, unknown> | null; robustness_result: Record<string, unknown> | null;
+  regret_result: Record<string, unknown> | null; feasibility_result: Record<string, unknown> | null;
+  alternatives: unknown[]; unknown_factors: unknown[]; evidence: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface ExecutiveBriefRow {
+  id: string; brief_code: string; decision_context_id: string; brief_version: number; brief_status: string;
+  executive_summary: string | null; decision_question: string | null; why_now: string | null;
+  current_state: Record<string, unknown> | null; key_signals: unknown[]; key_warnings: unknown[];
+  key_scenarios: unknown[]; key_forecasts: unknown[]; policy_constraints: unknown[];
+  evidence_summary: Record<string, unknown> | null; missing_evidence: unknown[]; conflicting_evidence: unknown[];
+  agent_advisory_summary: Record<string, unknown> | null; agent_conflicts: unknown[]; decision_options: unknown[];
+  no_action_consequence: Record<string, unknown> | null; tradeoff_summary: Record<string, unknown> | null;
+  robustness_summary: Record<string, unknown> | null; regret_summary: Record<string, unknown> | null;
+  financial_impact_summary: Record<string, unknown> | null; capacity_impact_summary: Record<string, unknown> | null;
+  operational_impact_summary: Record<string, unknown> | null; security_privacy_compliance_summary: Record<string, unknown> | null;
+  reversibility_summary: Record<string, unknown> | null; feasibility_summary: Record<string, unknown> | null;
+  preferred_option_candidate: Record<string, unknown> | null; alternative_options: unknown[];
+  recommendation_candidate: string | null; recommendation_reason: string | null; confidence: number | null;
+  decision_deadline_reference: string | null; required_reviewer_roles: unknown[]; human_approval_required: boolean;
+  implementation_reference: Record<string, unknown> | null; observation_plan_reference: Record<string, unknown> | null;
+  review_trigger_reference: Record<string, unknown> | null; previous_brief_id: string | null;
+  assumptions: unknown[]; unknown_factors: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface ExecutiveAdvisoryEventRow { id: string; event_type: string; decision_context_id: string | null; decision_option_id: string | null; executive_brief_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchExecutiveAdvisorySummary(): Promise<ExecutiveAdvisorySummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_summary');
+  if (error) throw error;
+  return (data as ExecutiveAdvisorySummary | null) ?? {};
+}
+export async function fetchDecisionContexts(status: string | null = null, limit = 100): Promise<DecisionContextRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_contexts', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DecisionContextRow[];
+}
+export async function createDecisionContext(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; advisory_is_not_decision: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_context_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; advisory_is_not_decision: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean };
+}
+export async function reviewDecisionContext(contextId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_context_review', { p_context_id: contextId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchDecisionOptions(contextId: string | null = null, status: string | null = null, limit = 100): Promise<DecisionOptionRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_options', { p_context_id: contextId, p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as DecisionOptionRow[];
+}
+export async function createDecisionOption(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; option_is_not_selected_option: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_option_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; option_is_not_selected_option: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean };
+}
+export async function reviewDecisionOption(optionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; option_is_not_selected_option: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_option_review', { p_option_id: optionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; option_is_not_selected_option: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchExecutiveBriefs(contextId: string | null = null, status: string | null = null, limit = 100): Promise<ExecutiveBriefRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_briefs', { p_context_id: contextId, p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutiveBriefRow[];
+}
+export async function createExecutiveBrief(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; brief_version: number; initial_status: string; brief_is_not_approval: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_brief_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; brief_version: number; initial_status: string; brief_is_not_approval: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean };
+}
+export async function reviewExecutiveBrief(briefId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; brief_is_not_approval: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_brief_review', { p_brief_id: briefId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; brief_is_not_approval: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function recordExecutiveReview(contextId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_action: string; human_decision_confirmed: boolean; approval_is_not_applied_change: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_review_record', { p_context_id: contextId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_action: string; human_decision_confirmed: boolean; approval_is_not_applied_change: boolean; auto_approved: boolean; decision_executed: boolean; production_applied: boolean };
+}
+export async function recordExecutiveAdvisoryEvent(kind: string, reason: string, payload: Record<string, unknown>, contextId: string | null = null, optionId: string | null = null, briefId: string | null = null): Promise<{ ok: boolean; id: string; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_context_id: contextId, p_option_id: optionId, p_brief_id: briefId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_approved: boolean; decision_executed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchExecutiveAdvisoryAudit(limit = 200): Promise<ExecutiveAdvisoryEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_executive_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ExecutiveAdvisoryEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
