@@ -6114,6 +6114,142 @@ export async function fetchExecutiveAdvisoryAudit(limit = 200): Promise<Executiv
   return (data ?? []) as ExecutiveAdvisoryEventRow[];
 }
 
+// ── Strategy Intelligence (0545 — Strategic Portfolio/Long-Horizon Planning, 자동 Strategy·Portfolio 선택·배분 없음) ──
+
+export type StrategyIntelSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface StrategicGoalRow {
+  id: string; goal_code: string; goal_name: string; strategy_domain: string; goal_type: string; goal_status: string;
+  parent_goal_id: string | null; goal_level: number; goal_horizon: string | null; goal_summary: string | null;
+  goal_rationale: string | null; target_scope_type: string; target_scope_id: string | null;
+  target_metric_references: unknown[]; baseline_references: unknown[]; target_value_candidates: unknown[];
+  target_range_candidates: unknown[]; target_date_reference: string | null;
+  success_conditions: unknown[]; failure_conditions: unknown[]; stop_conditions: unknown[]; review_conditions: unknown[];
+  priority_candidate: string; urgency_candidate: string;
+  strategic_value_candidate: Record<string, unknown> | null; financial_value_reference: Record<string, unknown> | null;
+  operational_value_candidate: Record<string, unknown> | null; customer_value_candidate: Record<string, unknown> | null;
+  risk_reduction_candidate: Record<string, unknown> | null; goal_conflict_result: Record<string, unknown> | null;
+  dependencies: unknown[]; blocking_conditions: unknown[]; required_capabilities: unknown[]; required_resources: unknown[];
+  related_decision_references: unknown[]; related_commitment_references: unknown[]; related_knowledge_entities: unknown[];
+  evidence: unknown[]; missing_evidence: unknown[]; conflicting_evidence: unknown[];
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface StrategicInitiativeRow {
+  id: string; initiative_code: string; initiative_name: string; strategy_domain: string; initiative_type: string;
+  initiative_status: string; initiative_summary: string | null;
+  strategic_goal_references: unknown[]; decision_context_references: unknown[]; decision_option_references: unknown[];
+  executive_brief_references: unknown[]; owner_role_candidate: string | null; required_reviewer_roles: unknown[];
+  target_scope_type: string; target_scope_id: string | null;
+  horizon_start_reference: string | null; horizon_end_reference: string | null; initiative_phase: string | null;
+  sequence_candidate: number | null; parallel_group_candidate: string | null;
+  dependencies: unknown[]; blocking_conditions: unknown[]; prerequisite_capabilities: unknown[];
+  resource_demand: Record<string, unknown> | null; financial_demand: Record<string, unknown> | null;
+  capacity_demand: Record<string, unknown> | null; human_workload_demand: Record<string, unknown> | null;
+  connector_dependencies: unknown[]; provider_dependencies: unknown[]; contract_dependencies: unknown[];
+  policy_constraints: unknown[]; security_constraints: unknown[]; privacy_constraints: unknown[]; compliance_constraints: unknown[];
+  expected_benefits: unknown[]; expected_costs: unknown[]; expected_revenue_reference: Record<string, unknown> | null;
+  risk_projection: Record<string, unknown> | null; opportunity_projection: Record<string, unknown> | null;
+  financial_impact: Record<string, unknown> | null; capacity_impact: Record<string, unknown> | null;
+  operational_impact: Record<string, unknown> | null; customer_experience_impact: Record<string, unknown> | null;
+  store_operations_impact: Record<string, unknown> | null; organizational_impact: Record<string, unknown> | null;
+  reversibility_result: Record<string, unknown> | null; feasibility_result: Record<string, unknown> | null;
+  tradeoff_result: Record<string, unknown> | null; robustness_result: Record<string, unknown> | null;
+  regret_result: Record<string, unknown> | null;
+  success_conditions: unknown[]; failure_conditions: unknown[]; stop_conditions: unknown[];
+  observation_plan_reference: Record<string, unknown> | null; review_trigger_reference: Record<string, unknown> | null;
+  milestone_references: unknown[]; commitment_references: unknown[]; outcome_references: unknown[];
+  evidence: unknown[]; assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface StrategyPortfolioRow {
+  id: string; portfolio_code: string; portfolio_name: string; portfolio_version: number; previous_portfolio_id: string | null;
+  portfolio_status: string; portfolio_horizon_start: string | null; portfolio_horizon_end: string | null;
+  enterprise_scope_id: string | null; brand_scope_references: unknown[]; store_scope_references: unknown[];
+  strategic_goal_references: unknown[]; initiative_references: unknown[]; excluded_initiatives: unknown[]; exclusion_reasons: unknown[];
+  portfolio_scenarios: unknown[]; selected_scenario_reference: string | null;
+  resource_envelope_reference: Record<string, unknown> | null; financial_envelope_reference: Record<string, unknown> | null;
+  capacity_envelope_reference: Record<string, unknown> | null; human_workload_envelope_reference: Record<string, unknown> | null;
+  allocation_candidates: unknown[]; sequencing_candidate: Record<string, unknown> | null;
+  parallelization_candidate: Record<string, unknown> | null; critical_path_candidate: Record<string, unknown> | null;
+  concentration_result: Record<string, unknown> | null; diversification_result: Record<string, unknown> | null;
+  balance_result: Record<string, unknown> | null; financial_impact: Record<string, unknown> | null;
+  capacity_impact: Record<string, unknown> | null; operational_impact: Record<string, unknown> | null;
+  customer_impact: Record<string, unknown> | null; security_privacy_compliance_impact: Record<string, unknown> | null;
+  risk_projection: Record<string, unknown> | null; opportunity_projection: Record<string, unknown> | null;
+  tradeoff_result: Record<string, unknown> | null; robustness_result: Record<string, unknown> | null;
+  regret_result: Record<string, unknown> | null; reversibility_result: Record<string, unknown> | null;
+  feasibility_result: Record<string, unknown> | null; roadmap_candidate: Record<string, unknown> | null;
+  milestone_candidates: unknown[]; observation_plan_reference: Record<string, unknown> | null;
+  review_trigger_reference: Record<string, unknown> | null; recommendation_candidate: Record<string, unknown> | null;
+  strategy_reviews: unknown[]; approval_reference: Record<string, unknown> | null; outcome_reference: Record<string, unknown> | null;
+  strategy_quality_result: Record<string, unknown> | null; strategy_drift_result: Record<string, unknown> | null;
+  portfolio_drift_result: Record<string, unknown> | null;
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface EnterpriseStrategyEventRow { id: string; event_type: string; strategic_goal_id: string | null; strategic_initiative_id: string | null; strategy_portfolio_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchStrategyIntelSummary(): Promise<StrategyIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_summary');
+  if (error) throw error;
+  return (data as StrategyIntelSummary | null) ?? {};
+}
+export async function fetchStrategicGoals(status: string | null = null, limit = 100): Promise<StrategicGoalRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_goals', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StrategicGoalRow[];
+}
+export async function createStrategicGoal(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; goal_level: number; initial_status: string; goal_is_not_guaranteed_outcome: boolean; auto_approved: boolean; budget_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_goal_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; goal_level: number; initial_status: string; goal_is_not_guaranteed_outcome: boolean; auto_approved: boolean; budget_allocated: boolean; production_applied: boolean };
+}
+export async function reviewStrategicGoal(goalId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; goal_is_not_guaranteed_outcome: boolean; auto_approved: boolean; budget_allocated: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_goal_review', { p_goal_id: goalId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; goal_is_not_guaranteed_outcome: boolean; auto_approved: boolean; budget_allocated: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchStrategicInitiatives(status: string | null = null, limit = 100): Promise<StrategicInitiativeRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_initiatives', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StrategicInitiativeRow[];
+}
+export async function createStrategicInitiative(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; initiative_is_not_execution: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_initiative_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; initiative_is_not_execution: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean };
+}
+export async function reviewStrategicInitiative(initiativeId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; initiative_is_not_execution: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategic_initiative_review', { p_initiative_id: initiativeId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; initiative_is_not_execution: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchStrategyPortfolios(status: string | null = null, limit = 100): Promise<StrategyPortfolioRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_portfolios', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as StrategyPortfolioRow[];
+}
+export async function createStrategyPortfolio(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; portfolio_version: number; initial_status: string; portfolio_is_not_selected_portfolio: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_portfolio_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; portfolio_version: number; initial_status: string; portfolio_is_not_selected_portfolio: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean };
+}
+export async function reviewStrategyPortfolio(portfolioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_action: string; human_strategy_decision_confirmed: boolean; approval_is_not_allocation: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_portfolio_review', { p_portfolio_id: portfolioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_action: string; human_strategy_decision_confirmed: boolean; approval_is_not_allocation: boolean; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean };
+}
+export async function recordStrategyEvent(kind: string, reason: string, payload: Record<string, unknown>, goalId: string | null = null, initiativeId: string | null = null, portfolioId: string | null = null): Promise<{ ok: boolean; id: string; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_goal_id: goalId, p_initiative_id: initiativeId, p_portfolio_id: portfolioId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_approved: boolean; budget_allocated: boolean; resources_allocated: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseStrategyAudit(limit = 200): Promise<EnterpriseStrategyEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_strategy_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseStrategyEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
