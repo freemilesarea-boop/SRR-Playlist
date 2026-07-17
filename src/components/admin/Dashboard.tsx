@@ -104,6 +104,7 @@ import EnterpriseTwinSection from './EnterpriseTwinSection';
 import SettlementOpsCenterSection from './SettlementOpsCenterSection';
 import ScenarioIntelligenceSection from './ScenarioIntelligenceSection';
 import PredictiveEnterpriseSection from './PredictiveEnterpriseSection';
+import ExecutiveAdvisorySection from './ExecutiveAdvisorySection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -364,6 +365,9 @@ export default function Dashboard() {
 
       {/* Predictive Enterprise — 예측/조기경보 Candidate (자동 Alert·Incident·Escalation·Threshold 변경 없음) */}
       <PredictiveEnterpriseSection />
+
+      {/* Executive Advisory — 경영 의사결정 종합/사람 승인 Reference (자동 Decision·승인·실행 없음) */}
+      <ExecutiveAdvisorySection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
