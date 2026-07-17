@@ -102,6 +102,7 @@ import RuntimeLearningSection from './RuntimeLearningSection';
 import PolicySimulationSection from './PolicySimulationSection';
 import EnterpriseTwinSection from './EnterpriseTwinSection';
 import SettlementOpsCenterSection from './SettlementOpsCenterSection';
+import ScenarioIntelligenceSection from './ScenarioIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -356,6 +357,9 @@ export default function Dashboard() {
 
       {/* Settlement Ops Center — 이름 중심 정산 운영 화면 (계산·지급 변경 없음·마스킹·Audit) */}
       <SettlementOpsCenterSection />
+
+      {/* Scenario Intelligence — 시나리오 재생/분기/복수 미래 비교 (자동 실행·Failure Injection 없음) */}
+      <ScenarioIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

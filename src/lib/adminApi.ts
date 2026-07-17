@@ -5837,6 +5837,80 @@ export async function fetchSettlementAccessAudit(limit = 100): Promise<Settlemen
   return (data ?? []) as SettlementAccessLogRow[];
 }
 
+// ── Scenario Intelligence (0542 — Scenario ≠ Reality, 자동 실행·Failure Injection·Production 변경 없음) ──
+
+export type ScenarioIntelSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ScenarioTemplateRow { id: string; template_code: string; template_name: string; scenario_domain: string; scenario_type: string | null; template_version: number; previous_version_id: string | null; version_compatibility: string; change_summary: string | null; source_type: string; source_reference_id: string | null; source_snapshot_id: string | null; historical_event_reference: Record<string, unknown>; baseline_requirements: unknown[]; required_twin_layers: unknown[]; required_data_sources: unknown[]; initial_conditions: Record<string, unknown>; scenario_variables: unknown[]; default_assumptions: unknown[]; known_external_factors: unknown[]; unknown_factors: unknown[]; timeline_definition: unknown[]; decision_points: unknown[]; transition_rules: unknown[]; stop_conditions: unknown[]; success_conditions: unknown[]; failure_conditions: unknown[]; recovery_conditions: unknown[]; expected_outputs: unknown[]; evidence: unknown[]; limitations: unknown[]; support_status: string; template_status: string; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface ScenarioRunRow { id: string; run_code: string; scenario_template_id: string; scenario_template_version: number; enterprise_snapshot_id: string; source_twin_run_id: string | null; run_mode: string; run_status: string; scenario_scope_type: string; scenario_scope_id: string | null; horizon_minutes: number | null; input_variables: Record<string, unknown>; input_hash: string | null; branch_generation_strategy: string; max_branch_depth: number; max_branch_count: number; timeline_result: Record<string, unknown> | null; branch_summary: Record<string, unknown> | null; future_state_results: Record<string, unknown> | null; comparison_result: Record<string, unknown> | null; tradeoff_result: Record<string, unknown> | null; robustness_result: Record<string, unknown> | null; regret_result: Record<string, unknown> | null; risk_result: Record<string, unknown> | null; opportunity_result: Record<string, unknown> | null; outcome_reference: Record<string, unknown> | null; accuracy_candidate: Record<string, unknown> | null; drift_candidate: Record<string, unknown> | null; confidence: number | null; sample_size: number | null; assumptions: unknown[]; unknown_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; started_by: string | null; reviewed_by: string | null; started_at: string | null; completed_at: string | null; created_at: string; updated_at: string }
+export interface ScenarioBranchRow { id: string; branch_code: string; scenario_run_id: string; parent_branch_id: string | null; branch_name: string; branch_depth: number; branch_trigger: string | null; branch_condition: Record<string, unknown>; transition_type: string | null; selected_option_reference: string | null; future_case_type: string | null; variable_overrides: Record<string, unknown>; probability_candidate: number | null; probability_basis: string | null; probability_confidence: number | null; branch_status: string; projected_outputs: Record<string, unknown> | null; risk_projection: Record<string, unknown> | null; cost_projection: Record<string, unknown> | null; capacity_projection: Record<string, unknown> | null; opportunity_projection: Record<string, unknown> | null; human_workload_projection: Record<string, unknown> | null; recovery_projection: Record<string, unknown> | null; assumptions: unknown[]; unknown_factors: unknown[]; evidence: unknown[]; limitations: unknown[]; created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string }
+export interface ScenarioEventRow { id: string; event_type: string; scenario_template_id: string | null; scenario_run_id: string | null; scenario_branch_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchScenarioIntelSummary(): Promise<ScenarioIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_summary');
+  if (error) throw error;
+  return (data as ScenarioIntelSummary | null) ?? {};
+}
+export async function fetchScenarioTemplates(status: string | null = null, limit = 200): Promise<ScenarioTemplateRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_templates', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ScenarioTemplateRow[];
+}
+export async function createScenarioTemplate(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; template_is_not_execution: boolean; scenario_is_not_reality: boolean; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_template_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; template_is_not_execution: boolean; scenario_is_not_reality: boolean; production_changed: boolean };
+}
+export async function reviewScenarioTemplate(templateId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_template_review', { p_template_id: templateId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean };
+}
+export async function versionScenarioTemplate(templateId: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; template_version: number; previous_version_id: string; version_compatibility: string; production_changed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_template_version', { p_template_id: templateId, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; template_version: number; previous_version_id: string; version_compatibility: string; production_changed: boolean };
+}
+export async function fetchScenarioRuns(status: string | null = null, limit = 200): Promise<ScenarioRunRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_runs', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ScenarioRunRow[];
+}
+export async function createScenarioRun(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; simulation_is_not_execution: boolean; prediction_is_not_future_fact: boolean; production_changed: boolean; auto_executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_run_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; simulation_is_not_execution: boolean; prediction_is_not_future_fact: boolean; production_changed: boolean; auto_executed: boolean };
+}
+export async function recordScenarioRun(runId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; simulation_is_not_execution: boolean; production_changed: boolean; auto_executed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_run_record', { p_run_id: runId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; simulation_is_not_execution: boolean; production_changed: boolean; auto_executed: boolean; human_decision: boolean };
+}
+export async function fetchScenarioBranches(runId: string | null = null, limit = 200): Promise<ScenarioBranchRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_branches', { p_run_id: runId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ScenarioBranchRow[];
+}
+export async function recordScenarioBranch(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; branch_depth: number; branch_probability_is_not_true_probability: boolean; production_changed: boolean; auto_executed: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_branch_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; branch_depth: number; branch_probability_is_not_true_probability: boolean; production_changed: boolean; auto_executed: boolean };
+}
+export async function reviewScenarioBranch(branchId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_branch_review', { p_branch_id: branchId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; status: string; production_changed: boolean; auto_executed: boolean; human_decision: boolean };
+}
+export async function recordScenarioEvent(kind: string, reason: string, payload: Record<string, unknown>, templateId: string | null = null, runId: string | null = null, branchId: string | null = null): Promise<{ ok: boolean; id: string; production_changed: boolean; auto_executed: boolean; recommendation_is_not_decision: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_template_id: templateId, p_run_id: runId, p_branch_id: branchId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; production_changed: boolean; auto_executed: boolean; recommendation_is_not_decision: boolean; human_review_required: boolean };
+}
+export async function fetchScenarioAudit(limit = 200): Promise<ScenarioEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_scenario_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ScenarioEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
