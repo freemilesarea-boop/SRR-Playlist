@@ -105,6 +105,7 @@ import SettlementOpsCenterSection from './SettlementOpsCenterSection';
 import ScenarioIntelligenceSection from './ScenarioIntelligenceSection';
 import PredictiveEnterpriseSection from './PredictiveEnterpriseSection';
 import ExecutiveAdvisorySection from './ExecutiveAdvisorySection';
+import StrategyIntelligenceSection from './StrategyIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -368,6 +369,9 @@ export default function Dashboard() {
 
       {/* Executive Advisory — 경영 의사결정 종합/사람 승인 Reference (자동 Decision·승인·실행 없음) */}
       <ExecutiveAdvisorySection />
+
+      {/* Strategy Intelligence — 전략 포트폴리오/장기 계획 Candidate (자동 Strategy·Portfolio 선택·배분 없음) */}
+      <StrategyIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
