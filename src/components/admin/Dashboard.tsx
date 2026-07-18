@@ -119,6 +119,7 @@ import MissionIntelligenceSection from './MissionIntelligenceSection';
 import EnvironmentIntelligenceSection from './EnvironmentIntelligenceSection';
 import DecisionLaboratorySection from './DecisionLaboratorySection';
 import ConstraintOptimizationSection from './ConstraintOptimizationSection';
+import ValueOptimizationSection from './ValueOptimizationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -424,6 +425,9 @@ export default function Dashboard() {
 
       {/* Constraint Optimization — 자원/용량/제약 관측 Candidate (자동 재배치·인력 이동 없음) */}
       <ConstraintOptimizationSection />
+
+      {/* Value Optimization — Benefit/ROI/Leakage 관측 Candidate (자동 투자 승인·Budget 변경 없음) */}
+      <ValueOptimizationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
