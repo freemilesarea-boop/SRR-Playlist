@@ -6511,6 +6511,115 @@ export async function fetchEnterpriseExecutionAudit(limit = 200): Promise<Enterp
   return (data ?? []) as EnterpriseExecutionEventRow[];
 }
 
+/* ── AI-OPS-44: Enterprise Performance Intelligence, KPI Governance &
+      Strategic Performance Management Center (0548) — KPI 자동 변경/평가 없음 ── */
+
+export type EnterprisePerformanceSummary = Record<string, unknown>;
+
+export interface EnterpriseKpiRow {
+  id: string;
+  kpi_code: string;
+  kpi_name: string;
+  kpi_category: string;
+  kpi_status: string;
+  kpi_description: string | null;
+  unit_type: string | null;
+  direction: string;
+  strategic_goal_id: string | null;
+  strategy_portfolio_id: string | null;
+  execution_program_id: string | null;
+  baseline_value: number | null;
+  baseline_source_reference: string | null;
+  target_value: number | null;
+  target_horizon_reference: string | null;
+  target_rationale: string | null;
+  current_value_reference: number | null;
+  current_observed_at: string | null;
+  trend_status: string;
+  variance_status: string;
+  business_impact_status: string;
+  confidence: number | null;
+  trend_result: Record<string, unknown> | null;
+  variance_result: Record<string, unknown> | null;
+  forecast_comparison_result: Record<string, unknown> | null;
+  drift_result: Record<string, unknown> | null;
+  correlation_result: Record<string, unknown> | null;
+  dependency_result: Record<string, unknown> | null;
+  impact_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null;
+  performance_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  outcome_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseKpiSnapshotRow {
+  id: string;
+  kpi_id: string;
+  snapshot_period_reference: string | null;
+  observed_value: number | null;
+  observed_at: string | null;
+  source_reference_type: string | null;
+  source_reference_id: string | null;
+  data_quality: string;
+  sample_size: number | null;
+  variance_vs_target: number | null;
+  variance_vs_baseline: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface EnterprisePerformanceEventRow { id: string; event_type: string; kpi_id: string | null; kpi_snapshot_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterprisePerformanceSummary(): Promise<EnterprisePerformanceSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_performance_intel_summary');
+  if (error) throw error;
+  return (data as EnterprisePerformanceSummary | null) ?? {};
+}
+export async function fetchEnterpriseKpis(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseKpiRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_kpis_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseKpiRow[];
+}
+export async function createEnterpriseKpi(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; target_is_not_guaranteed_result: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_kpi_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; target_is_not_guaranteed_result: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseKpi(kpiId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; target_is_not_guaranteed_result: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_kpi_review', { p_kpi_id: kpiId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; target_is_not_guaranteed_result: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function recordEnterpriseKpiSnapshot(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; kpi_id: string; observed_value_present: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_kpi_snapshot_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; kpi_id: string; observed_value_present: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; production_applied: boolean };
+}
+export async function fetchEnterpriseKpiSnapshots(kpiId: string | null = null, limit = 100): Promise<EnterpriseKpiSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_kpi_snapshots_list', { p_kpi_id: kpiId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseKpiSnapshotRow[];
+}
+export async function recordEnterprisePerformanceReview(kpiId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; budget_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_evaluation_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_performance_review', { p_kpi_id: kpiId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; budget_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_evaluation_required: boolean };
+}
+export async function recordEnterprisePerformanceEvent(kind: string, reason: string, payload: Record<string, unknown>, kpiId: string | null = null): Promise<{ ok: boolean; id: string; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; budget_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_performance_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_kpi_id: kpiId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; kpi_auto_modified: boolean; auto_evaluation_applied: boolean; compensation_changed: boolean; budget_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterprisePerformanceAudit(limit = 200): Promise<EnterprisePerformanceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_performance_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterprisePerformanceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

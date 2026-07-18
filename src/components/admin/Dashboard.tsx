@@ -108,6 +108,7 @@ import ExecutiveAdvisorySection from './ExecutiveAdvisorySection';
 import StrategyIntelligenceSection from './StrategyIntelligenceSection';
 import ResourceAllocationSection from './ResourceAllocationSection';
 import ExecutionIntelligenceSection from './ExecutionIntelligenceSection';
+import PerformanceIntelligenceSection from './PerformanceIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -380,6 +381,9 @@ export default function Dashboard() {
 
       {/* Execution Intelligence — 실행 관측/Initiative Delivery Candidate (자동 실행·완료·승인 없음) */}
       <ExecutionIntelligenceSection />
+
+      {/* Performance Intelligence — KPI/성과 관측 Candidate (자동 KPI 변경·평가·보상 없음) */}
+      <PerformanceIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
