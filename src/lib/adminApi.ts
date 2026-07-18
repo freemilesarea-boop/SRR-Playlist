@@ -6737,6 +6737,124 @@ export async function fetchEnterpriseValueAudit(limit = 200): Promise<Enterprise
   return (data ?? []) as EnterpriseValueEventRow[];
 }
 
+/* ── AI-OPS-46: Enterprise Portfolio Intelligence, Investment Portfolio
+      Optimization & Strategic Capital Governance Center (0550) —
+      자동 투자 승인/자본 배분 없음 ── */
+
+export type EnterprisePortfolioSummary = Record<string, unknown>;
+
+export interface EnterpriseInvestmentPortfolioRow {
+  id: string;
+  portfolio_code: string;
+  portfolio_name: string;
+  portfolio_category: string;
+  portfolio_status: string;
+  portfolio_description: string | null;
+  strategy_portfolio_id: string | null;
+  total_capital_reference: number | null;
+  capital_source_reference: string | null;
+  diversification_status: string;
+  allocation_status: string;
+  optimization_status: string;
+  confidence: number | null;
+  initiative_references: unknown;
+  business_value_references: unknown;
+  kpi_references: unknown;
+  program_references: unknown;
+  resource_references: unknown;
+  balance_result: Record<string, unknown> | null;
+  diversification_result: Record<string, unknown> | null;
+  concentration_result: Record<string, unknown> | null;
+  roi_mix_result: Record<string, unknown> | null;
+  value_mix_result: Record<string, unknown> | null;
+  risk_return_result: Record<string, unknown> | null;
+  tradeoff_result: Record<string, unknown> | null;
+  comparison_result: Record<string, unknown> | null;
+  opportunity_cost_result: Record<string, unknown> | null;
+  capacity_fit_result: Record<string, unknown> | null;
+  optimization_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null;
+  portfolio_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  decision_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterprisePortfolioScenarioRow {
+  id: string;
+  scenario_code: string;
+  scenario_name: string;
+  investment_portfolio_id: string;
+  scenario_status: string;
+  scenario_summary: string | null;
+  current_allocation: Record<string, unknown> | null;
+  proposed_allocation: Record<string, unknown> | null;
+  expected_benefit_candidate: number | null;
+  expected_risk_candidate: number | null;
+  capacity_requirement: Record<string, unknown> | null;
+  opportunity_cost_candidate: Record<string, unknown> | null;
+  allocation_result: Record<string, unknown> | null;
+  comparison_result: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterprisePortfolioEventRow { id: string; event_type: string; investment_portfolio_id: string | null; portfolio_scenario_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterprisePortfolioSummary(): Promise<EnterprisePortfolioSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_intel_summary');
+  if (error) throw error;
+  return (data as EnterprisePortfolioSummary | null) ?? {};
+}
+export async function fetchEnterpriseInvestmentPortfolios(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseInvestmentPortfolioRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_investment_portfolios_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseInvestmentPortfolioRow[];
+}
+export async function createEnterpriseInvestmentPortfolio(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; portfolio_is_not_approved_portfolio: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_investment_portfolio_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; portfolio_is_not_approved_portfolio: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseInvestmentPortfolio(portfolioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; portfolio_is_not_approved_portfolio: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_investment_portfolio_review', { p_portfolio_id: portfolioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; portfolio_is_not_approved_portfolio: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterprisePortfolioScenario(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; allocation_candidate_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_scenario_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; allocation_candidate_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; production_applied: boolean };
+}
+export async function reviewEnterprisePortfolioScenario(scenarioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; allocation_candidate_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_scenario_review', { p_scenario_id: scenarioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; allocation_candidate_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterprisePortfolioScenarios(portfolioId: string | null = null, limit = 100): Promise<EnterprisePortfolioScenarioRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_scenarios_list', { p_portfolio_id: portfolioId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterprisePortfolioScenarioRow[];
+}
+export async function recordEnterprisePortfolioReview(portfolioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; decision_reference_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; strategy_changed: boolean; initiative_terminated: boolean; accounting_applied: boolean; production_applied: boolean; human_decision_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_executive_review', { p_portfolio_id: portfolioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; decision_reference_is_not_capital_allocation: boolean; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; strategy_changed: boolean; initiative_terminated: boolean; accounting_applied: boolean; production_applied: boolean; human_decision_required: boolean };
+}
+export async function recordEnterprisePortfolioEvent(kind: string, reason: string, payload: Record<string, unknown>, portfolioId: string | null = null, scenarioId: string | null = null): Promise<{ ok: boolean; id: string; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; strategy_changed: boolean; initiative_terminated: boolean; accounting_applied: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_portfolio_id: portfolioId, p_scenario_id: scenarioId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; investment_approved: boolean; capital_allocated: boolean; budget_changed: boolean; strategy_changed: boolean; initiative_terminated: boolean; accounting_applied: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterprisePortfolioAudit(limit = 200): Promise<EnterprisePortfolioEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_portfolio_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterprisePortfolioEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
