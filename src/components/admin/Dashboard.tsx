@@ -123,6 +123,7 @@ import ValueOptimizationSection from './ValueOptimizationSection';
 import TransformationIntelligenceSection from './TransformationIntelligenceSection';
 import ContinuousImprovementSection from './ContinuousImprovementSection';
 import InnovationIntelligenceSection from './InnovationIntelligenceSection';
+import ForesightIntelligenceSection from './ForesightIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -440,6 +441,9 @@ export default function Dashboard() {
 
       {/* Innovation Intelligence — 혁신 기회/미래 성장 관측 Candidate (자동 사업 시작·투자 승인 없음) */}
       <InnovationIntelligenceSection />
+
+      {/* Foresight Intelligence — 약한 신호/미래 시나리오 관측 Candidate (자동 장기 전략 변경 없음) */}
+      <ForesightIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
