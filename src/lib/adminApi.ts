@@ -6620,6 +6620,123 @@ export async function fetchEnterprisePerformanceAudit(limit = 200): Promise<Ente
   return (data ?? []) as EnterprisePerformanceEventRow[];
 }
 
+/* ── AI-OPS-45: Enterprise Value Intelligence, Business Value Attribution &
+      ROI Governance Center (0549) — ROI 자동 확정/투자 자동 승인 없음 ── */
+
+export type EnterpriseValueSummary = Record<string, unknown>;
+
+export interface EnterpriseBusinessValueRow {
+  id: string;
+  value_code: string;
+  value_name: string;
+  value_category: string;
+  value_status: string;
+  value_description: string | null;
+  unit_type: string | null;
+  direction: string;
+  strategic_initiative_id: string | null;
+  strategy_portfolio_id: string | null;
+  execution_program_id: string | null;
+  kpi_id: string | null;
+  baseline_value: number | null;
+  baseline_source_reference: string | null;
+  current_value_reference: number | null;
+  current_observed_at: string | null;
+  investment_reference: number | null;
+  investment_source_reference: string | null;
+  benefit_reference: number | null;
+  time_horizon_reference: string | null;
+  value_trend_status: string;
+  roi_status: string;
+  attribution_status: string;
+  confidence: number | null;
+  trend_result: Record<string, unknown> | null;
+  roi_result: Record<string, unknown> | null;
+  roi_history: unknown;
+  attribution_result: Record<string, unknown> | null;
+  kpi_link_result: Record<string, unknown> | null;
+  execution_link_result: Record<string, unknown> | null;
+  investment_effectiveness_result: Record<string, unknown> | null;
+  drift_result: Record<string, unknown> | null;
+  correlation_result: Record<string, unknown> | null;
+  cross_domain_result: Record<string, unknown> | null;
+  value_score_result: Record<string, unknown> | null;
+  tradeoff_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null;
+  value_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  outcome_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseValueSnapshotRow {
+  id: string;
+  business_value_id: string;
+  snapshot_period_reference: string | null;
+  observed_value: number | null;
+  observed_at: string | null;
+  investment_reference: number | null;
+  benefit_reference: number | null;
+  source_reference_type: string | null;
+  source_reference_id: string | null;
+  data_quality: string;
+  sample_size: number | null;
+  variance_vs_baseline: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface EnterpriseValueEventRow { id: string; event_type: string; business_value_id: string | null; value_snapshot_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseValueSummary(): Promise<EnterpriseValueSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseValueSummary | null) ?? {};
+}
+export async function fetchEnterpriseBusinessValues(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseBusinessValueRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_business_values_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseBusinessValueRow[];
+}
+export async function createEnterpriseBusinessValue(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; value_is_not_financial_statement: boolean; roi_confirmed: boolean; investment_approved: boolean; budget_changed: boolean; accounting_applied: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_business_value_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; value_is_not_financial_statement: boolean; roi_confirmed: boolean; investment_approved: boolean; budget_changed: boolean; accounting_applied: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseBusinessValue(valueId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; value_is_not_financial_statement: boolean; roi_confirmed: boolean; investment_approved: boolean; budget_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_business_value_review', { p_value_id: valueId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; value_is_not_financial_statement: boolean; roi_confirmed: boolean; investment_approved: boolean; budget_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function recordEnterpriseValueSnapshot(payload: Record<string, unknown>): Promise<{ ok: boolean; id: string; business_value_id: string; observed_value_present: boolean; roi_confirmed: boolean; investment_approved: boolean; accounting_applied: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_snapshot_record', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; business_value_id: string; observed_value_present: boolean; roi_confirmed: boolean; investment_approved: boolean; accounting_applied: boolean; production_applied: boolean };
+}
+export async function fetchEnterpriseValueSnapshots(valueId: string | null = null, limit = 100): Promise<EnterpriseValueSnapshotRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_snapshots_list', { p_value_id: valueId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseValueSnapshotRow[];
+}
+export async function recordEnterpriseValueReview(valueId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; roi_confirmed: boolean; investment_approved: boolean; investment_terminated: boolean; budget_changed: boolean; strategy_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_decision_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_executive_review', { p_value_id: valueId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; roi_confirmed: boolean; investment_approved: boolean; investment_terminated: boolean; budget_changed: boolean; strategy_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_decision_required: boolean };
+}
+export async function recordEnterpriseValueEvent(kind: string, reason: string, payload: Record<string, unknown>, valueId: string | null = null): Promise<{ ok: boolean; id: string; roi_confirmed: boolean; investment_approved: boolean; investment_terminated: boolean; budget_changed: boolean; strategy_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_value_id: valueId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; roi_confirmed: boolean; investment_approved: boolean; investment_terminated: boolean; budget_changed: boolean; strategy_changed: boolean; accounting_applied: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseValueAudit(limit = 200): Promise<EnterpriseValueEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseValueEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
