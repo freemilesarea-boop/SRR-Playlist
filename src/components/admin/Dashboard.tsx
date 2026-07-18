@@ -118,6 +118,7 @@ import AutonomousIntelligenceSection from './AutonomousIntelligenceSection';
 import MissionIntelligenceSection from './MissionIntelligenceSection';
 import EnvironmentIntelligenceSection from './EnvironmentIntelligenceSection';
 import DecisionLaboratorySection from './DecisionLaboratorySection';
+import ConstraintOptimizationSection from './ConstraintOptimizationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -420,6 +421,9 @@ export default function Dashboard() {
 
       {/* Decision Laboratory — 시나리오/시뮬레이션 비교 Candidate (자동 전략 실행 없음) */}
       <DecisionLaboratorySection />
+
+      {/* Constraint Optimization — 자원/용량/제약 관측 Candidate (자동 재배치·인력 이동 없음) */}
+      <ConstraintOptimizationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
