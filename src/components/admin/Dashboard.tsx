@@ -122,6 +122,7 @@ import ConstraintOptimizationSection from './ConstraintOptimizationSection';
 import ValueOptimizationSection from './ValueOptimizationSection';
 import TransformationIntelligenceSection from './TransformationIntelligenceSection';
 import ContinuousImprovementSection from './ContinuousImprovementSection';
+import InnovationIntelligenceSection from './InnovationIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -436,6 +437,9 @@ export default function Dashboard() {
 
       {/* Continuous Improvement — 개선 기회/운영 우수성 관측 Candidate (자동 프로세스 변경 없음) */}
       <ContinuousImprovementSection />
+
+      {/* Innovation Intelligence — 혁신 기회/미래 성장 관측 Candidate (자동 사업 시작·투자 승인 없음) */}
+      <InnovationIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

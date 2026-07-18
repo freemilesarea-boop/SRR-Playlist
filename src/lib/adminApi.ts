@@ -8015,6 +8015,109 @@ export async function fetchEnterpriseContinuousImprovementAudit(limit = 200): Pr
   return (data ?? []) as EnterpriseImprovementEventRow[];
 }
 
+/* ── AI-OPS-58: Enterprise Innovation Intelligence, Innovation Portfolio &
+      Future Opportunity Center (0562) — 자동 사업 시작 없음 ── */
+
+export type EnterpriseInnovationSummary = Record<string, unknown>;
+
+export interface EnterpriseInnovationRow {
+  id: string;
+  innovation_code: string;
+  innovation_name: string;
+  innovation_category: string;
+  innovation_status: string;
+  innovation_summary: string | null;
+  opportunity_status: string;
+  risk_status: string;
+  portfolio_status: string;
+  confidence: number | null;
+  improvement_id: string | null;
+  transformation_id: string | null;
+  decision_scenario_id: string | null;
+  mission_id: string | null;
+  opportunity_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  portfolio_result: Record<string, unknown> | null;
+  readiness_result: Record<string, unknown> | null;
+  future_opportunity_result: Record<string, unknown> | null;
+  technology_result: Record<string, unknown> | null;
+  market_result: Record<string, unknown> | null;
+  alignment_result: Record<string, unknown> | null;
+  priority_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  innovation_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  innovation_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseInnovationReviewRow {
+  id: string;
+  review_code: string;
+  innovation_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseInnovationEventRow { id: string; event_type: string; innovation_id: string | null; innovation_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseInnovationSummary(): Promise<EnterpriseInnovationSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseInnovationSummary | null) ?? {};
+}
+export async function fetchEnterpriseInnovations(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseInnovationRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovations_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseInnovationRow[];
+}
+export async function createEnterpriseInnovation(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; opportunity_is_not_guaranteed_success: boolean; business_launched: boolean; product_launched: boolean; investment_approved: boolean; budget_changed: boolean; organization_changed: boolean; strategy_changed: boolean; contract_signed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; opportunity_is_not_guaranteed_success: boolean; business_launched: boolean; product_launched: boolean; investment_approved: boolean; budget_changed: boolean; organization_changed: boolean; strategy_changed: boolean; contract_signed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseInnovation(innovationId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; opportunity_is_not_guaranteed_success: boolean; business_launched: boolean; product_launched: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_review', { p_innovation_id: innovationId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; opportunity_is_not_guaranteed_success: boolean; business_launched: boolean; product_launched: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseInnovationReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; business_launched: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; business_launched: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseInnovationReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; business_launched: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; business_launched: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseInnovationReviews(innovationId: string | null = null, limit = 100): Promise<EnterpriseInnovationReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_reviews_list', { p_innovation_id: innovationId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseInnovationReviewRow[];
+}
+export async function recordEnterpriseInnovationEvent(kind: string, reason: string, payload: Record<string, unknown>, innovationId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; business_launched: boolean; product_launched: boolean; investment_approved: boolean; budget_changed: boolean; organization_changed: boolean; strategy_changed: boolean; contract_signed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_innovation_id: innovationId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; business_launched: boolean; product_launched: boolean; investment_approved: boolean; budget_changed: boolean; organization_changed: boolean; strategy_changed: boolean; contract_signed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseInnovationAudit(limit = 200): Promise<EnterpriseInnovationEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_innovation_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseInnovationEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
