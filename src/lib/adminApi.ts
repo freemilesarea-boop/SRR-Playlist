@@ -6855,6 +6855,120 @@ export async function fetchEnterprisePortfolioAudit(limit = 200): Promise<Enterp
   return (data ?? []) as EnterprisePortfolioEventRow[];
 }
 
+/* ── AI-OPS-47: Enterprise Governance Intelligence, Strategic Decision
+      Governance & Executive Approval Center (0551) — 자동 승인/거절 없음 ── */
+
+export type EnterpriseGovernanceSummary = Record<string, unknown>;
+
+export interface EnterpriseGovernanceDecisionRow {
+  id: string;
+  decision_code: string;
+  decision_name: string;
+  governance_category: string;
+  decision_status: string;
+  decision_summary: string | null;
+  decision_context: Record<string, unknown> | null;
+  strategy_portfolio_id: string | null;
+  investment_portfolio_id: string | null;
+  execution_program_id: string | null;
+  business_value_id: string | null;
+  kpi_id: string | null;
+  validation_status: string;
+  risk_status: string;
+  confidence: number | null;
+  evidence_summary: Record<string, unknown> | null;
+  policy_references: unknown;
+  related_decision_references: unknown;
+  policy_mapping_result: Record<string, unknown> | null;
+  compliance_result: Record<string, unknown> | null;
+  validation_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  timeline_result: Record<string, unknown> | null;
+  comparison_result: Record<string, unknown> | null;
+  executive_brief: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null;
+  governance_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  approval_reference: Record<string, unknown> | null;
+  rejection_reference: Record<string, unknown> | null;
+  decision_record: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseApprovalWorkflowRow {
+  id: string;
+  workflow_code: string;
+  governance_decision_id: string;
+  workflow_status: string;
+  initiator_reference: string | null;
+  reviewer_references: unknown;
+  executive_approver_references: unknown;
+  final_decision_owner_reference: string | null;
+  review_history: unknown;
+  approval_timeline: unknown;
+  chain_result: Record<string, unknown> | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseGovernanceEventRow { id: string; event_type: string; governance_decision_id: string | null; approval_workflow_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseGovernanceSummary(): Promise<EnterpriseGovernanceSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseGovernanceSummary | null) ?? {};
+}
+export async function fetchEnterpriseGovernanceDecisions(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseGovernanceDecisionRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_decisions_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseGovernanceDecisionRow[];
+}
+export async function createEnterpriseGovernanceDecision(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_approved_decision: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_decision_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_approved_decision: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseGovernanceDecision(decisionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; candidate_is_not_approved_decision: boolean; human_approval_recorded: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_decision_review', { p_decision_id: decisionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; candidate_is_not_approved_decision: boolean; human_approval_recorded: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseApprovalWorkflow(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; chain_is_not_final_approval: boolean; decision_auto_approved: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_approval_workflow_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; chain_is_not_final_approval: boolean; decision_auto_approved: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseApprovalWorkflow(workflowId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; chain_is_not_final_approval: boolean; decision_auto_approved: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_approval_workflow_review', { p_workflow_id: workflowId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; chain_is_not_final_approval: boolean; decision_auto_approved: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseApprovalWorkflows(decisionId: string | null = null, limit = 100): Promise<EnterpriseApprovalWorkflowRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_approval_workflows_list', { p_decision_id: decisionId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseApprovalWorkflowRow[];
+}
+export async function recordEnterpriseGovernanceReview(decisionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; production_applied: boolean; human_decision_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_review', { p_decision_id: decisionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_action: string; review_is_not_approval: boolean; decision_auto_approved: boolean; policy_changed: boolean; budget_approved: boolean; production_applied: boolean; human_decision_required: boolean };
+}
+export async function recordEnterpriseGovernanceEvent(kind: string, reason: string, payload: Record<string, unknown>, decisionId: string | null = null, workflowId: string | null = null): Promise<{ ok: boolean; id: string; decision_auto_approved: boolean; decision_auto_rejected: boolean; policy_changed: boolean; budget_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_decision_id: decisionId, p_workflow_id: workflowId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; decision_auto_approved: boolean; decision_auto_rejected: boolean; policy_changed: boolean; budget_approved: boolean; capital_allocated: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseGovernanceAudit(limit = 200): Promise<EnterpriseGovernanceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_governance_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseGovernanceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
