@@ -8118,6 +8118,109 @@ export async function fetchEnterpriseInnovationAudit(limit = 200): Promise<Enter
   return (data ?? []) as EnterpriseInnovationEventRow[];
 }
 
+/* ── AI-OPS-59: Enterprise Foresight Intelligence, Strategic Foresight &
+      Long-Term Future Planning Center (0563) — 자동 전략 변경 없음 ── */
+
+export type EnterpriseForesightSummary = Record<string, unknown>;
+
+export interface EnterpriseForesightRow {
+  id: string;
+  foresight_code: string;
+  foresight_name: string;
+  foresight_category: string;
+  foresight_status: string;
+  foresight_summary: string | null;
+  signal_status: string;
+  scenario_status: string;
+  opportunity_status: string;
+  confidence: number | null;
+  innovation_id: string | null;
+  decision_scenario_id: string | null;
+  environment_observation_id: string | null;
+  mission_id: string | null;
+  signal_result: Record<string, unknown> | null;
+  scenario_result: Record<string, unknown> | null;
+  opportunity_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  option_result: Record<string, unknown> | null;
+  trend_result: Record<string, unknown> | null;
+  readiness_result: Record<string, unknown> | null;
+  horizon_result: Record<string, unknown> | null;
+  uncertainty_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  foresight_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  foresight_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseForesightReviewRow {
+  id: string;
+  review_code: string;
+  foresight_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseForesightEventRow { id: string; event_type: string; foresight_id: string | null; foresight_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseForesightSummary(): Promise<EnterpriseForesightSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseForesightSummary | null) ?? {};
+}
+export async function fetchEnterpriseForesights(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseForesightRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseForesightRow[];
+}
+export async function createEnterpriseForesight(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; weak_signal_is_not_future_fact: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; budget_changed: boolean; organization_changed: boolean; contract_signed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; weak_signal_is_not_future_fact: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; budget_changed: boolean; organization_changed: boolean; contract_signed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseForesight(foresightId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; weak_signal_is_not_future_fact: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_review', { p_foresight_id: foresightId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; weak_signal_is_not_future_fact: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseForesightReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; long_term_strategy_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; long_term_strategy_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseForesightReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; long_term_strategy_changed: boolean; investment_approved: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseForesightReviews(foresightId: string | null = null, limit = 100): Promise<EnterpriseForesightReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_reviews_list', { p_foresight_id: foresightId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseForesightReviewRow[];
+}
+export async function recordEnterpriseForesightEvent(kind: string, reason: string, payload: Record<string, unknown>, foresightId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; budget_changed: boolean; organization_changed: boolean; contract_signed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_foresight_id: foresightId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; long_term_strategy_changed: boolean; investment_approved: boolean; business_launched: boolean; budget_changed: boolean; organization_changed: boolean; contract_signed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseForesightAudit(limit = 200): Promise<EnterpriseForesightEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_foresight_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseForesightEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
