@@ -7394,6 +7394,109 @@ export async function fetchEnterpriseMissionAudit(limit = 200): Promise<Enterpri
   return (data ?? []) as EnterpriseMissionEventRow[];
 }
 
+/* ── AI-OPS-52: Enterprise Ecosystem Intelligence, External Intelligence &
+      Strategic Environment Center (0556) — 자동 전략/계약 변경 없음 ── */
+
+export type EnterpriseEnvironmentSummary = Record<string, unknown>;
+
+export interface EnterpriseEnvironmentObservationRow {
+  id: string;
+  observation_code: string;
+  observation_title: string;
+  environment_category: string;
+  observation_status: string;
+  observation_summary: string | null;
+  signal_status: string;
+  impact_status: string;
+  risk_status: string;
+  confidence: number | null;
+  mission_id: string | null;
+  strategy_portfolio_id: string | null;
+  market_result: Record<string, unknown> | null;
+  competitive_result: Record<string, unknown> | null;
+  partner_result: Record<string, unknown> | null;
+  customer_result: Record<string, unknown> | null;
+  technology_result: Record<string, unknown> | null;
+  regulatory_result: Record<string, unknown> | null;
+  economic_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  impact_result: Record<string, unknown> | null;
+  mapping_result: Record<string, unknown> | null;
+  relationship_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  environment_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  environment_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseEnvironmentReviewRow {
+  id: string;
+  review_code: string;
+  environment_observation_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseEnvironmentEventRow { id: string; event_type: string; environment_observation_id: string | null; environment_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseEnvironmentSummary(): Promise<EnterpriseEnvironmentSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseEnvironmentSummary | null) ?? {};
+}
+export async function fetchEnterpriseEnvironmentObservations(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseEnvironmentObservationRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_observations_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseEnvironmentObservationRow[];
+}
+export async function createEnterpriseEnvironmentObservation(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; risk_signal_is_not_actual_risk: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; contract_terminated: boolean; partner_approved: boolean; pricing_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_observation_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; risk_signal_is_not_actual_risk: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; contract_terminated: boolean; partner_approved: boolean; pricing_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseEnvironmentObservation(observationId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; risk_signal_is_not_actual_risk: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_observation_review', { p_observation_id: observationId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; risk_signal_is_not_actual_risk: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseEnvironmentReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; strategy_changed: boolean; mission_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; strategy_changed: boolean; mission_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseEnvironmentReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseEnvironmentReviews(observationId: string | null = null, limit = 100): Promise<EnterpriseEnvironmentReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_reviews_list', { p_observation_id: observationId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseEnvironmentReviewRow[];
+}
+export async function recordEnterpriseEnvironmentEvent(kind: string, reason: string, payload: Record<string, unknown>, observationId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; contract_terminated: boolean; partner_approved: boolean; vendor_changed: boolean; budget_changed: boolean; pricing_changed: boolean; product_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_observation_id: observationId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; strategy_changed: boolean; mission_changed: boolean; contract_signed: boolean; contract_terminated: boolean; partner_approved: boolean; vendor_changed: boolean; budget_changed: boolean; pricing_changed: boolean; product_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseEnvironmentAudit(limit = 200): Promise<EnterpriseEnvironmentEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_environment_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseEnvironmentEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
