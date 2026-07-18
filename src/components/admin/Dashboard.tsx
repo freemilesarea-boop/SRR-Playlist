@@ -120,6 +120,7 @@ import EnvironmentIntelligenceSection from './EnvironmentIntelligenceSection';
 import DecisionLaboratorySection from './DecisionLaboratorySection';
 import ConstraintOptimizationSection from './ConstraintOptimizationSection';
 import ValueOptimizationSection from './ValueOptimizationSection';
+import TransformationIntelligenceSection from './TransformationIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -428,6 +429,9 @@ export default function Dashboard() {
 
       {/* Value Optimization — Benefit/ROI/Leakage 관측 Candidate (자동 투자 승인·Budget 변경 없음) */}
       <ValueOptimizationSection />
+
+      {/* Transformation Intelligence — 변화/조직 진화 관측 Candidate (자동 조직 개편·인사 이동 없음) */}
+      <TransformationIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />

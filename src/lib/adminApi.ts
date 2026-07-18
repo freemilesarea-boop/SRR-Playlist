@@ -7809,6 +7809,109 @@ export async function fetchEnterpriseValueOptimizationAudit(limit = 200): Promis
   return (data ?? []) as EnterpriseValueOptimizationEventRow[];
 }
 
+/* ── AI-OPS-56: Enterprise Transformation Intelligence, Change Management &
+      Organizational Evolution Center (0560) — 자동 조직 개편 없음 ── */
+
+export type EnterpriseTransformationSummary = Record<string, unknown>;
+
+export interface EnterpriseTransformationRow {
+  id: string;
+  transformation_code: string;
+  transformation_name: string;
+  transformation_category: string;
+  transformation_status: string;
+  transformation_summary: string | null;
+  impact_status: string;
+  readiness_status: string;
+  stakeholder_status: string;
+  confidence: number | null;
+  value_realization_id: string | null;
+  organization_model_id: string | null;
+  decision_scenario_id: string | null;
+  execution_program_id: string | null;
+  impact_result: Record<string, unknown> | null;
+  readiness_result: Record<string, unknown> | null;
+  stakeholder_result: Record<string, unknown> | null;
+  evolution_result: Record<string, unknown> | null;
+  dependency_result: Record<string, unknown> | null;
+  priority_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  resistance_result: Record<string, unknown> | null;
+  alignment_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  transformation_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  transformation_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseTransformationReviewRow {
+  id: string;
+  review_code: string;
+  transformation_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseTransformationEventRow { id: string; event_type: string; transformation_id: string | null; transformation_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseTransformationSummary(): Promise<EnterpriseTransformationSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseTransformationSummary | null) ?? {};
+}
+export async function fetchEnterpriseTransformations(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseTransformationRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformations_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTransformationRow[];
+}
+export async function createEnterpriseTransformation(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; readiness_is_not_successful_transformation: boolean; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; budget_changed: boolean; kpi_changed: boolean; project_created: boolean; contract_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; readiness_is_not_successful_transformation: boolean; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; budget_changed: boolean; kpi_changed: boolean; project_created: boolean; contract_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseTransformation(transformationId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; readiness_is_not_successful_transformation: boolean; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_review', { p_transformation_id: transformationId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; readiness_is_not_successful_transformation: boolean; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseTransformationReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; reorganization_applied: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; reorganization_applied: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseTransformationReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; reorganization_applied: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; reorganization_applied: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseTransformationReviews(transformationId: string | null = null, limit = 100): Promise<EnterpriseTransformationReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_reviews_list', { p_transformation_id: transformationId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTransformationReviewRow[];
+}
+export async function recordEnterpriseTransformationEvent(kind: string, reason: string, payload: Record<string, unknown>, transformationId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; budget_changed: boolean; kpi_changed: boolean; project_created: boolean; contract_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_transformation_id: transformationId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; reorganization_applied: boolean; personnel_moved: boolean; strategy_changed: boolean; budget_changed: boolean; kpi_changed: boolean; project_created: boolean; contract_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseTransformationAudit(limit = 200): Promise<EnterpriseTransformationEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_transformation_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseTransformationEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
