@@ -116,6 +116,7 @@ import OrganizationIntelligenceSection from './OrganizationIntelligenceSection';
 import KnowledgeIntelligenceSection from './KnowledgeIntelligenceSection';
 import AutonomousIntelligenceSection from './AutonomousIntelligenceSection';
 import MissionIntelligenceSection from './MissionIntelligenceSection';
+import EnvironmentIntelligenceSection from './EnvironmentIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -412,6 +413,9 @@ export default function Dashboard() {
 
       {/* Mission Intelligence — Mission/Objective 정렬 관측 Candidate (자동 Mission·Vision·OKR 변경 없음) */}
       <MissionIntelligenceSection />
+
+      {/* Environment Intelligence — 외부 환경/전략 영향 관측 Candidate (자동 전략·계약 변경 없음) */}
+      <EnvironmentIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
