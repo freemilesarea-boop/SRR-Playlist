@@ -107,6 +107,7 @@ import PredictiveEnterpriseSection from './PredictiveEnterpriseSection';
 import ExecutiveAdvisorySection from './ExecutiveAdvisorySection';
 import StrategyIntelligenceSection from './StrategyIntelligenceSection';
 import ResourceAllocationSection from './ResourceAllocationSection';
+import ExecutionIntelligenceSection from './ExecutionIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -376,6 +377,9 @@ export default function Dashboard() {
 
       {/* Resource Intelligence — 자원/자본 배분 Candidate (자동 배정·집행·Provisioning 없음) */}
       <ResourceAllocationSection />
+
+      {/* Execution Intelligence — 실행 관측/Initiative Delivery Candidate (자동 실행·완료·승인 없음) */}
+      <ExecutionIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
