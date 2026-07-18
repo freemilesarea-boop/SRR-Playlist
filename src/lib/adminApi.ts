@@ -7287,6 +7287,113 @@ export async function fetchEnterpriseAiAudit(limit = 200): Promise<EnterpriseAiE
   return (data ?? []) as EnterpriseAiEventRow[];
 }
 
+/* ── AI-OPS-51: Enterprise Mission Intelligence, Objective Alignment &
+      Strategic Outcome Center (0555) — 자동 Mission/Vision/OKR 변경 없음 ── */
+
+export type EnterpriseMissionSummary = Record<string, unknown>;
+
+export interface EnterpriseMissionRow {
+  id: string;
+  mission_code: string;
+  mission_name: string;
+  mission_category: string;
+  mission_status: string;
+  mission_statement: string | null;
+  alignment_status: string;
+  drift_status: string;
+  outcome_status: string;
+  confidence: number | null;
+  strategy_portfolio_id: string | null;
+  vision_record_id: string | null;
+  mission_tree: Record<string, unknown> | null;
+  objective_mappings: unknown;
+  okr_mappings: unknown;
+  alignment_result: Record<string, unknown> | null;
+  initiative_alignment_result: Record<string, unknown> | null;
+  kpi_alignment_result: Record<string, unknown> | null;
+  portfolio_alignment_result: Record<string, unknown> | null;
+  organization_alignment_result: Record<string, unknown> | null;
+  value_alignment_result: Record<string, unknown> | null;
+  execution_alignment_result: Record<string, unknown> | null;
+  drift_result: Record<string, unknown> | null;
+  outcome_result: Record<string, unknown> | null;
+  trend_result: Record<string, unknown> | null;
+  coverage_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  alignment_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  mission_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseObjectiveAlignmentRow {
+  id: string;
+  alignment_code: string;
+  mission_id: string;
+  objective_name: string;
+  alignment_dimension: string;
+  alignment_status: string;
+  record_status: string;
+  target_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  review_reference: Record<string, unknown> | null;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseMissionEventRow { id: string; event_type: string; mission_id: string | null; objective_alignment_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseMissionSummary(): Promise<EnterpriseMissionSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_mission_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseMissionSummary | null) ?? {};
+}
+export async function fetchEnterpriseMissions(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseMissionRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_missions_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseMissionRow[];
+}
+export async function createEnterpriseMission(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; alignment_is_not_mission_success: boolean; mission_changed: boolean; vision_changed: boolean; okr_generated: boolean; strategy_changed: boolean; kpi_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_mission_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; alignment_is_not_mission_success: boolean; mission_changed: boolean; vision_changed: boolean; okr_generated: boolean; strategy_changed: boolean; kpi_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseMission(missionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; alignment_is_not_mission_success: boolean; mission_changed: boolean; vision_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_mission_review', { p_mission_id: missionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; alignment_is_not_mission_success: boolean; mission_changed: boolean; vision_changed: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseObjectiveAlignment(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; alignment_is_not_achievement: boolean; mission_changed: boolean; okr_generated: boolean; kpi_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_objective_alignment_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; alignment_is_not_achievement: boolean; mission_changed: boolean; okr_generated: boolean; kpi_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseObjectiveAlignment(alignmentId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; alignment_is_not_achievement: boolean; mission_changed: boolean; kpi_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_objective_alignment_review', { p_alignment_id: alignmentId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; alignment_is_not_achievement: boolean; mission_changed: boolean; kpi_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseObjectiveAlignments(missionId: string | null = null, limit = 100): Promise<EnterpriseObjectiveAlignmentRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_objective_alignments_list', { p_mission_id: missionId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseObjectiveAlignmentRow[];
+}
+export async function recordEnterpriseMissionEvent(kind: string, reason: string, payload: Record<string, unknown>, missionId: string | null = null, alignmentId: string | null = null): Promise<{ ok: boolean; id: string; mission_changed: boolean; vision_changed: boolean; okr_generated: boolean; kpi_changed: boolean; strategy_changed: boolean; governance_changed: boolean; budget_changed: boolean; organization_changed: boolean; portfolio_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_mission_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_mission_id: missionId, p_alignment_id: alignmentId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; mission_changed: boolean; vision_changed: boolean; okr_generated: boolean; kpi_changed: boolean; strategy_changed: boolean; governance_changed: boolean; budget_changed: boolean; organization_changed: boolean; portfolio_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseMissionAudit(limit = 200): Promise<EnterpriseMissionEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_mission_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseMissionEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

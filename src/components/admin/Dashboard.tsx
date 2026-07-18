@@ -115,6 +115,7 @@ import GovernanceIntelligenceSection from './GovernanceIntelligenceSection';
 import OrganizationIntelligenceSection from './OrganizationIntelligenceSection';
 import KnowledgeIntelligenceSection from './KnowledgeIntelligenceSection';
 import AutonomousIntelligenceSection from './AutonomousIntelligenceSection';
+import MissionIntelligenceSection from './MissionIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -408,6 +409,9 @@ export default function Dashboard() {
 
       {/* Autonomous Intelligence — AI 분석 품질 자기 평가 Candidate (자동 모델·Prompt·Rule 변경 없음) */}
       <AutonomousIntelligenceSection />
+
+      {/* Mission Intelligence — Mission/Objective 정렬 관측 Candidate (자동 Mission·Vision·OKR 변경 없음) */}
+      <MissionIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
