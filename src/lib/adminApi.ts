@@ -7497,6 +7497,112 @@ export async function fetchEnterpriseEnvironmentAudit(limit = 200): Promise<Ente
   return (data ?? []) as EnterpriseEnvironmentEventRow[];
 }
 
+/* ── AI-OPS-53: Enterprise Scenario Intelligence, Predictive Simulation &
+      Executive Decision Laboratory (0557) — 자동 실행 없음 ── */
+
+export type EnterpriseDecisionLabSummary = Record<string, unknown>;
+
+export interface EnterpriseDecisionScenarioRow {
+  id: string;
+  scenario_code: string;
+  scenario_title: string;
+  scenario_category: string;
+  scenario_status: string;
+  scenario_summary: string | null;
+  impact_status: string;
+  tradeoff_status: string;
+  confidence_status: string;
+  confidence: number | null;
+  mission_id: string | null;
+  strategy_portfolio_id: string | null;
+  environment_observation_id: string | null;
+  current_state: Record<string, unknown> | null;
+  alternatives: unknown;
+  whatif_result: Record<string, unknown> | null;
+  resource_result: Record<string, unknown> | null;
+  financial_result: Record<string, unknown> | null;
+  operational_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  impact_result: Record<string, unknown> | null;
+  tradeoff_result: Record<string, unknown> | null;
+  confidence_result: Record<string, unknown> | null;
+  cost_benefit_result: Record<string, unknown> | null;
+  ranking_result: Record<string, unknown> | null;
+  comparison_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  simulation_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  scenario_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseDecisionScenarioReviewRow {
+  id: string;
+  review_code: string;
+  decision_scenario_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseDecisionScenarioEventRow { id: string; event_type: string; decision_scenario_id: string | null; scenario_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseDecisionLabSummary(): Promise<EnterpriseDecisionLabSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_lab_summary');
+  if (error) throw error;
+  return (data as EnterpriseDecisionLabSummary | null) ?? {};
+}
+export async function fetchEnterpriseDecisionScenarios(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseDecisionScenarioRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenarios_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseDecisionScenarioRow[];
+}
+export async function createEnterpriseDecisionScenario(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; scenario_is_not_future_reality: boolean; strategy_executed: boolean; project_created: boolean; budget_changed: boolean; contract_signed: boolean; organization_changed: boolean; kpi_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; scenario_is_not_future_reality: boolean; strategy_executed: boolean; project_created: boolean; budget_changed: boolean; contract_signed: boolean; organization_changed: boolean; kpi_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseDecisionScenario(scenarioId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; scenario_is_not_future_reality: boolean; strategy_executed: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_review', { p_scenario_id: scenarioId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; scenario_is_not_future_reality: boolean; strategy_executed: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseDecisionScenarioReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; strategy_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; strategy_executed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseDecisionScenarioReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; strategy_executed: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; strategy_executed: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseDecisionScenarioReviews(scenarioId: string | null = null, limit = 100): Promise<EnterpriseDecisionScenarioReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_reviews_list', { p_scenario_id: scenarioId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseDecisionScenarioReviewRow[];
+}
+export async function recordEnterpriseDecisionScenarioEvent(kind: string, reason: string, payload: Record<string, unknown>, scenarioId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; strategy_executed: boolean; project_created: boolean; budget_changed: boolean; contract_signed: boolean; organization_changed: boolean; kpi_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_scenario_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_scenario_id: scenarioId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; strategy_executed: boolean; project_created: boolean; budget_changed: boolean; contract_signed: boolean; organization_changed: boolean; kpi_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseDecisionLabAudit(limit = 200): Promise<EnterpriseDecisionScenarioEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_decision_lab_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseDecisionScenarioEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
