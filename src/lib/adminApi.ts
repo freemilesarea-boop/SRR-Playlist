@@ -7706,6 +7706,109 @@ export async function fetchEnterpriseCapacityAudit(limit = 200): Promise<Enterpr
   return (data ?? []) as EnterpriseCapacityEventRow[];
 }
 
+/* ── AI-OPS-55: Enterprise Value Optimization Intelligence, Benefit
+      Realization & ROI Governance Center (0559) — 자동 투자 승인 없음 ── */
+
+export type EnterpriseValueOptimizationSummary = Record<string, unknown>;
+
+export interface EnterpriseValueRealizationRow {
+  id: string;
+  realization_code: string;
+  realization_name: string;
+  value_category: string;
+  realization_status: string;
+  realization_summary: string | null;
+  roi_status: string;
+  benefit_status: string;
+  leakage_status: string;
+  confidence: number | null;
+  business_value_id: string | null;
+  strategy_portfolio_id: string | null;
+  execution_program_id: string | null;
+  decision_scenario_id: string | null;
+  outcome_result: Record<string, unknown> | null;
+  roi_result: Record<string, unknown> | null;
+  benefit_result: Record<string, unknown> | null;
+  cost_benefit_result: Record<string, unknown> | null;
+  leakage_result: Record<string, unknown> | null;
+  investment_effectiveness_result: Record<string, unknown> | null;
+  kpi_contribution_result: Record<string, unknown> | null;
+  portfolio_value_result: Record<string, unknown> | null;
+  optimization_opportunities: unknown;
+  scorecard_result: Record<string, unknown> | null;
+  value_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  realization_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseValueOptimizationReviewRow {
+  id: string;
+  review_code: string;
+  value_realization_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseValueOptimizationEventRow { id: string; event_type: string; value_realization_id: string | null; value_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseValueOptimizationSummary(): Promise<EnterpriseValueOptimizationSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_summary');
+  if (error) throw error;
+  return (data as EnterpriseValueOptimizationSummary | null) ?? {};
+}
+export async function fetchEnterpriseValueRealizations(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseValueRealizationRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_realizations_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseValueRealizationRow[];
+}
+export async function createEnterpriseValueRealization(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; roi_is_not_business_success: boolean; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; portfolio_changed: boolean; kpi_changed: boolean; strategy_changed: boolean; project_terminated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_realization_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; roi_is_not_business_success: boolean; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; portfolio_changed: boolean; kpi_changed: boolean; strategy_changed: boolean; project_terminated: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseValueRealization(realizationId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; roi_is_not_business_success: boolean; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_realization_review', { p_realization_id: realizationId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; roi_is_not_business_success: boolean; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseValueOptimizationReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; investment_approved: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; investment_approved: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseValueOptimizationReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; investment_approved: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; investment_approved: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseValueOptimizationReviews(realizationId: string | null = null, limit = 100): Promise<EnterpriseValueOptimizationReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_reviews_list', { p_realization_id: realizationId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseValueOptimizationReviewRow[];
+}
+export async function recordEnterpriseValueOptimizationEvent(kind: string, reason: string, payload: Record<string, unknown>, realizationId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; portfolio_changed: boolean; kpi_changed: boolean; strategy_changed: boolean; project_terminated: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_realization_id: realizationId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; investment_approved: boolean; investment_cancelled: boolean; budget_changed: boolean; portfolio_changed: boolean; kpi_changed: boolean; strategy_changed: boolean; project_terminated: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseValueOptimizationAudit(limit = 200): Promise<EnterpriseValueOptimizationEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_value_optimization_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseValueOptimizationEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
