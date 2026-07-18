@@ -7182,6 +7182,111 @@ export async function fetchEnterpriseKnowledgeAudit(limit = 200): Promise<Enterp
   return (data ?? []) as EnterpriseKnowledgeEventRow[];
 }
 
+/* ── AI-OPS-50: Enterprise Autonomous Intelligence, Meta-Reasoning &
+      Self-Improvement Governance Center (0554) — 자동 모델/Prompt/Rule 변경 없음 ── */
+
+export type EnterpriseAiSummary = Record<string, unknown>;
+
+export interface EnterpriseAiReviewRow {
+  id: string;
+  review_code: string;
+  review_title: string;
+  review_category: string;
+  review_status: string;
+  review_summary: string | null;
+  accuracy_status: string;
+  calibration_status: string;
+  confidence: number | null;
+  knowledge_memory_id: string | null;
+  governance_decision_id: string | null;
+  decision_outcome_id: string | null;
+  observation_result: Record<string, unknown> | null;
+  reasoning_result: Record<string, unknown> | null;
+  meta_reasoning_result: Record<string, unknown> | null;
+  accuracy_result: Record<string, unknown> | null;
+  calibration_result: Record<string, unknown> | null;
+  decision_quality_result: Record<string, unknown> | null;
+  failure_result: Record<string, unknown> | null;
+  hallucination_result: Record<string, unknown> | null;
+  blind_spot_result: Record<string, unknown> | null;
+  coverage_result: Record<string, unknown> | null;
+  oversight_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  accuracy_history: unknown;
+  confidence_history: unknown;
+  failure_history: unknown;
+  learning_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseImprovementCandidateRow {
+  id: string;
+  candidate_code: string;
+  ai_review_id: string | null;
+  improvement_area: string;
+  priority_status: string;
+  improvement_status: string;
+  description: string | null;
+  expected_effect: string | null;
+  evidence: unknown;
+  review_reference: Record<string, unknown> | null;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseAiEventRow { id: string; event_type: string; ai_review_id: string | null; improvement_candidate_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseAiSummary(): Promise<EnterpriseAiSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseAiSummary | null) ?? {};
+}
+export async function fetchEnterpriseAiReviews(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseAiReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_reviews_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseAiReviewRow[];
+}
+export async function createEnterpriseAiReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; ai_review_is_not_human_approval: boolean; model_changed: boolean; model_trained: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; ai_review_is_not_human_approval: boolean; model_changed: boolean; model_trained: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseAiReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; ai_review_is_not_human_approval: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; ai_review_is_not_human_approval: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseImprovementCandidate(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_applied_improvement: boolean; improvement_applied: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_improvement_candidate_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_applied_improvement: boolean; improvement_applied: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseImprovementCandidate(candidateId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; candidate_is_not_applied_improvement: boolean; improvement_applied: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_improvement_candidate_review', { p_candidate_id: candidateId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; candidate_is_not_applied_improvement: boolean; improvement_applied: boolean; model_changed: boolean; prompt_changed: boolean; rule_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseImprovementCandidates(reviewId: string | null = null, limit = 100): Promise<EnterpriseImprovementCandidateRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_improvement_candidates_list', { p_review_id: reviewId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseImprovementCandidateRow[];
+}
+export async function recordEnterpriseAiEvent(kind: string, reason: string, payload: Record<string, unknown>, reviewId: string | null = null, candidateId: string | null = null): Promise<{ ok: boolean; id: string; model_changed: boolean; model_trained: boolean; prompt_changed: boolean; rule_changed: boolean; policy_changed: boolean; code_changed: boolean; database_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_review_id: reviewId, p_candidate_id: candidateId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; model_changed: boolean; model_trained: boolean; prompt_changed: boolean; rule_changed: boolean; policy_changed: boolean; code_changed: boolean; database_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseAiAudit(limit = 200): Promise<EnterpriseAiEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_ai_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseAiEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
