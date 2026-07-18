@@ -121,6 +121,7 @@ import DecisionLaboratorySection from './DecisionLaboratorySection';
 import ConstraintOptimizationSection from './ConstraintOptimizationSection';
 import ValueOptimizationSection from './ValueOptimizationSection';
 import TransformationIntelligenceSection from './TransformationIntelligenceSection';
+import ContinuousImprovementSection from './ContinuousImprovementSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -432,6 +433,9 @@ export default function Dashboard() {
 
       {/* Transformation Intelligence — 변화/조직 진화 관측 Candidate (자동 조직 개편·인사 이동 없음) */}
       <TransformationIntelligenceSection />
+
+      {/* Continuous Improvement — 개선 기회/운영 우수성 관측 Candidate (자동 프로세스 변경 없음) */}
+      <ContinuousImprovementSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
