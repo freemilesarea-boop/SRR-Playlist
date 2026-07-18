@@ -7603,6 +7603,109 @@ export async function fetchEnterpriseDecisionLabAudit(limit = 200): Promise<Ente
   return (data ?? []) as EnterpriseDecisionScenarioEventRow[];
 }
 
+/* ── AI-OPS-54: Enterprise Resource Intelligence, Capacity Planning &
+      Constraint Optimization Center (0558) — 자동 재배치 없음 ── */
+
+export type EnterpriseCapacitySummary = Record<string, unknown>;
+
+export interface EnterpriseCapacityResourceRow {
+  id: string;
+  resource_code: string;
+  resource_name: string;
+  resource_category: string;
+  resource_status: string;
+  resource_summary: string | null;
+  capacity_status: string;
+  constraint_status: string;
+  readiness_status: string;
+  confidence: number | null;
+  decision_scenario_id: string | null;
+  execution_program_id: string | null;
+  organization_model_id: string | null;
+  strategy_portfolio_id: string | null;
+  capacity_result: Record<string, unknown> | null;
+  constraint_result: Record<string, unknown> | null;
+  readiness_result: Record<string, unknown> | null;
+  utilization_result: Record<string, unknown> | null;
+  workload_result: Record<string, unknown> | null;
+  budget_result: Record<string, unknown> | null;
+  dependency_result: Record<string, unknown> | null;
+  bottleneck_result: Record<string, unknown> | null;
+  optimization_candidates: unknown;
+  scorecard_result: Record<string, unknown> | null;
+  capacity_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  resource_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseCapacityReviewRow {
+  id: string;
+  review_code: string;
+  capacity_resource_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseCapacityEventRow { id: string; event_type: string; capacity_resource_id: string | null; capacity_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseCapacitySummary(): Promise<EnterpriseCapacitySummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseCapacitySummary | null) ?? {};
+}
+export async function fetchEnterpriseCapacityResources(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseCapacityResourceRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_resources_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseCapacityResourceRow[];
+}
+export async function createEnterpriseCapacityResource(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; capacity_is_not_guaranteed_delivery: boolean; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; project_started: boolean; project_terminated: boolean; contract_changed: boolean; organization_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_resource_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; capacity_is_not_guaranteed_delivery: boolean; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; project_started: boolean; project_terminated: boolean; contract_changed: boolean; organization_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseCapacityResource(resourceId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; capacity_is_not_guaranteed_delivery: boolean; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_resource_review', { p_resource_id: resourceId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; capacity_is_not_guaranteed_delivery: boolean; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseCapacityReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; resource_reallocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; resource_reallocated: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseCapacityReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; resource_reallocated: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; resource_reallocated: boolean; budget_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseCapacityReviews(resourceId: string | null = null, limit = 100): Promise<EnterpriseCapacityReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_reviews_list', { p_resource_id: resourceId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseCapacityReviewRow[];
+}
+export async function recordEnterpriseCapacityEvent(kind: string, reason: string, payload: Record<string, unknown>, resourceId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; project_started: boolean; project_terminated: boolean; contract_changed: boolean; organization_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_resource_id: resourceId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; resource_reallocated: boolean; personnel_moved: boolean; budget_changed: boolean; project_started: boolean; project_terminated: boolean; contract_changed: boolean; organization_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseCapacityAudit(limit = 200): Promise<EnterpriseCapacityEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_capacity_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseCapacityEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
