@@ -7076,6 +7076,112 @@ export async function fetchEnterpriseOrganizationAudit(limit = 200): Promise<Ent
   return (data ?? []) as EnterpriseOrganizationEventRow[];
 }
 
+/* ── AI-OPS-49: Enterprise Knowledge Intelligence, Organizational Memory
+      & Continuous Learning Center (0553) — 자동 사실 확정/정책 승격 없음 ── */
+
+export type EnterpriseKnowledgeSummary = Record<string, unknown>;
+
+export interface EnterpriseKnowledgeMemoryRow {
+  id: string;
+  knowledge_code: string;
+  knowledge_title: string;
+  knowledge_category: string;
+  knowledge_status: string;
+  knowledge_summary: string | null;
+  quality_status: string;
+  evidence_coverage_status: string;
+  relationship_status: string;
+  confidence: number | null;
+  governance_decision_id: string | null;
+  business_value_id: string | null;
+  execution_program_id: string | null;
+  organization_model_id: string | null;
+  knowledge_sources: unknown;
+  evidence: unknown;
+  knowledge_graph: unknown;
+  validation_result: Record<string, unknown> | null;
+  coverage_result: Record<string, unknown> | null;
+  relationship_result: Record<string, unknown> | null;
+  memory_result: Record<string, unknown> | null;
+  pattern_result: Record<string, unknown> | null;
+  lesson_result: Record<string, unknown> | null;
+  best_practice_result: Record<string, unknown> | null;
+  similar_case_result: Record<string, unknown> | null;
+  quality_result: Record<string, unknown> | null;
+  freshness_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  learning_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  knowledge_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseKnowledgeReviewRow {
+  id: string;
+  review_code: string;
+  knowledge_memory_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseKnowledgeEventRow { id: string; event_type: string; knowledge_memory_id: string | null; knowledge_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseKnowledgeSummary(): Promise<EnterpriseKnowledgeSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseKnowledgeSummary | null) ?? {};
+}
+export async function fetchEnterpriseKnowledgeMemories(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseKnowledgeMemoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_memories_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseKnowledgeMemoryRow[];
+}
+export async function createEnterpriseKnowledgeMemory(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_verified_knowledge: boolean; fact_confirmed: boolean; policy_promoted: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_memory_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_verified_knowledge: boolean; fact_confirmed: boolean; policy_promoted: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseKnowledgeMemory(memoryId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; candidate_is_not_verified_knowledge: boolean; fact_confirmed: boolean; policy_promoted: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_memory_review', { p_memory_id: memoryId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; candidate_is_not_verified_knowledge: boolean; fact_confirmed: boolean; policy_promoted: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseKnowledgeReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; fact_confirmed: boolean; policy_promoted: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; fact_confirmed: boolean; policy_promoted: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseKnowledgeReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; fact_confirmed: boolean; policy_promoted: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; fact_confirmed: boolean; policy_promoted: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseKnowledgeReviews(memoryId: string | null = null, limit = 100): Promise<EnterpriseKnowledgeReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_reviews_list', { p_memory_id: memoryId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseKnowledgeReviewRow[];
+}
+export async function recordEnterpriseKnowledgeEvent(kind: string, reason: string, payload: Record<string, unknown>, memoryId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; fact_confirmed: boolean; policy_promoted: boolean; legal_judgment_made: boolean; compliance_confirmed: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_memory_id: memoryId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; fact_confirmed: boolean; policy_promoted: boolean; legal_judgment_made: boolean; compliance_confirmed: boolean; strategy_changed: boolean; governance_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseKnowledgeAudit(limit = 200): Promise<EnterpriseKnowledgeEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_knowledge_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseKnowledgeEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
