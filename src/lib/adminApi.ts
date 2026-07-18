@@ -6969,6 +6969,113 @@ export async function fetchEnterpriseGovernanceAudit(limit = 200): Promise<Enter
   return (data ?? []) as EnterpriseGovernanceEventRow[];
 }
 
+/* ── AI-OPS-48: Enterprise Organizational Intelligence, Organizational
+      Health & Operating Model Center (0552) — 자동 조직 개편/인사 없음 ── */
+
+export type EnterpriseOrganizationSummary = Record<string, unknown>;
+
+export interface EnterpriseOrganizationModelRow {
+  id: string;
+  organization_code: string;
+  organization_name: string;
+  organization_category: string;
+  organization_status: string;
+  organization_description: string | null;
+  strategy_portfolio_id: string | null;
+  execution_program_id: string | null;
+  health_status: string;
+  maturity_status: string;
+  capability_gap_status: string;
+  confidence: number | null;
+  team_structure: Record<string, unknown> | null;
+  role_matrix: unknown;
+  responsibility_matrix: Record<string, unknown> | null;
+  decision_flow_result: Record<string, unknown> | null;
+  collaboration_result: Record<string, unknown> | null;
+  health_result: Record<string, unknown> | null;
+  maturity_result: Record<string, unknown> | null;
+  capability_gap_result: Record<string, unknown> | null;
+  bottleneck_result: Record<string, unknown> | null;
+  workload_result: Record<string, unknown> | null;
+  dependency_result: Record<string, unknown> | null;
+  spof_result: Record<string, unknown> | null;
+  scenario_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  improvement_candidates: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  organization_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  governance_references: unknown;
+  resource_references: unknown;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseOperatingReviewRow {
+  id: string;
+  review_code: string;
+  organization_model_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseOrganizationEventRow { id: string; event_type: string; organization_model_id: string | null; operating_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseOrganizationSummary(): Promise<EnterpriseOrganizationSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseOrganizationSummary | null) ?? {};
+}
+export async function fetchEnterpriseOrganizationModels(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseOrganizationModelRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_models_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseOrganizationModelRow[];
+}
+export async function createEnterpriseOrganizationModel(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_organization_change: boolean; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_model_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; candidate_is_not_organization_change: boolean; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseOrganizationModel(modelId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; candidate_is_not_organization_change: boolean; organization_changed: boolean; personnel_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_model_review', { p_model_id: modelId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; candidate_is_not_organization_change: boolean; organization_changed: boolean; personnel_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseOperatingReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; organization_changed: boolean; personnel_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_operating_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; organization_changed: boolean; personnel_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseOperatingReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_operating_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseOperatingReviews(modelId: string | null = null, limit = 100): Promise<EnterpriseOperatingReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_operating_reviews_list', { p_model_id: modelId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseOperatingReviewRow[];
+}
+export async function recordEnterpriseOrganizationEvent(kind: string, reason: string, payload: Record<string, unknown>, modelId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; compensation_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_model_id: modelId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; organization_changed: boolean; personnel_changed: boolean; promotion_applied: boolean; termination_applied: boolean; compensation_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseOrganizationAudit(limit = 200): Promise<EnterpriseOrganizationEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_organization_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseOrganizationEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
