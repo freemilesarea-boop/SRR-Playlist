@@ -6250,6 +6250,138 @@ export async function fetchEnterpriseStrategyAudit(limit = 200): Promise<Enterpr
   return (data ?? []) as EnterpriseStrategyEventRow[];
 }
 
+// ── Resource Intelligence (0546 — Capital Allocation/Capacity Planning, 자동 배정·집행·Provisioning 없음) ──
+
+export type ResourceIntelSummary = Record<string, number | string | boolean | Record<string, number> | Record<string, unknown> | Array<unknown> | null>;
+export interface ResourceInventoryRow {
+  id: string; resource_code: string; resource_name: string; resource_domain: string; resource_type: string;
+  resource_status: string; resource_scope_type: string; resource_scope_id: string | null;
+  resource_owner_role_reference: string | null; source_reference_type: string | null; source_reference_id: string | null;
+  unit_type: string | null; currency_reference: string | null;
+  total_capacity_candidate: number | null; available_capacity_candidate: number | null;
+  committed_capacity_reference: number | null; reserved_capacity_reference: number | null;
+  utilized_capacity_candidate: number | null; unavailable_capacity_reference: number | null;
+  capacity_headroom_candidate: number | null; utilization_candidate: number | null;
+  freshness_status: string; reliability_candidate: string; data_completeness: number | null;
+  observation_start: string | null; observation_end: string | null; forecast_horizon_reference: string | null;
+  provider_reference: string | null; connector_reference: string | null; contract_reference: string | null;
+  cost_reference: Record<string, unknown> | null; budget_reference: Record<string, unknown> | null;
+  reservation_reference: Record<string, unknown> | null; availability_result: Record<string, unknown> | null;
+  human_capacity_result: Record<string, unknown> | null; technical_capacity_result: Record<string, unknown> | null;
+  commitment_references: unknown[]; initiative_references: unknown[]; portfolio_references: unknown[];
+  restrictions: unknown[]; policy_constraints: unknown[]; security_constraints: unknown[];
+  privacy_constraints: unknown[]; compliance_constraints: unknown[];
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface ResourceDemandRow {
+  id: string; demand_code: string; demand_name: string; strategic_initiative_id: string | null;
+  strategy_portfolio_id: string | null; decision_context_reference: string | null;
+  resource_domain: string; resource_type: string; demand_status: string;
+  required_quantity_candidate: number | null; minimum_quantity_candidate: number | null;
+  preferred_quantity_candidate: number | null; peak_quantity_candidate: number | null;
+  unit_type: string | null; currency_reference: string | null;
+  required_start_reference: string | null; required_end_reference: string | null; demand_horizon: string | null;
+  demand_priority_candidate: string; demand_urgency_candidate: string;
+  demand_profile: Record<string, unknown> | null; phase_demand: unknown[];
+  recurring_demand: Record<string, unknown> | null; one_time_demand: Record<string, unknown> | null;
+  dependency_references: unknown[]; shared_resource_references: unknown[]; substitute_resource_candidates: unknown[];
+  resource_flexibility_candidate: string | null; delay_tolerance_candidate: string | null; scaling_behavior_candidate: string | null;
+  demand_forecast: Record<string, unknown> | null; conflict_result: Record<string, unknown> | null; confidence: number | null;
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface AllocationOptionRow {
+  id: string; allocation_code: string; allocation_name: string; strategy_portfolio_id: string | null;
+  strategic_initiative_references: unknown[]; resource_demand_references: unknown[];
+  option_type: string; option_status: string; allocation_summary: string | null;
+  allocation_horizon_start: string | null; allocation_horizon_end: string | null;
+  resource_allocations: unknown[]; excluded_demands: unknown[]; exclusion_reasons: unknown[];
+  deferred_demands: unknown[]; partial_allocations: unknown[]; substitute_resources: unknown[];
+  shared_resource_plan: Record<string, unknown> | null; reserve_capacity_plan: Record<string, unknown> | null;
+  contingency_plan: Record<string, unknown> | null; capacity_plan_candidate: Record<string, unknown> | null;
+  financial_envelope_reference: Record<string, unknown> | null; budget_candidate: Record<string, unknown> | null;
+  capacity_candidate: Record<string, unknown> | null; human_capacity_candidate: Record<string, unknown> | null;
+  technical_capacity_candidate: Record<string, unknown> | null; operational_capacity_candidate: Record<string, unknown> | null;
+  opportunity_cost_candidate: Record<string, unknown> | null; capital_efficiency_candidate: Record<string, unknown> | null;
+  utilization_candidate: Record<string, unknown> | null; headroom_candidate: Record<string, unknown> | null;
+  concentration_result: Record<string, unknown> | null; diversification_result: Record<string, unknown> | null;
+  conflict_result: Record<string, unknown> | null; capacity_gap_result: Record<string, unknown> | null;
+  funding_gap_result: Record<string, unknown> | null; tradeoff_result: Record<string, unknown> | null;
+  robustness_result: Record<string, unknown> | null; regret_result: Record<string, unknown> | null;
+  reversibility_result: Record<string, unknown> | null; feasibility_result: Record<string, unknown> | null;
+  success_conditions: unknown[]; failure_conditions: unknown[]; stop_conditions: unknown[];
+  observation_plan_reference: Record<string, unknown> | null; review_trigger_reference: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null; allocation_reviews: unknown[];
+  approval_reference: Record<string, unknown> | null; outcome_reference: Record<string, unknown> | null;
+  allocation_quality_result: Record<string, unknown> | null; resource_drift_result: Record<string, unknown> | null;
+  allocation_drift_result: Record<string, unknown> | null;
+  assumptions: unknown[]; unknown_factors: unknown[]; external_factors: unknown[]; evidence: unknown[]; limitations: unknown[];
+  created_by: string | null; reviewed_by: string | null; created_at: string; updated_at: string;
+}
+export interface EnterpriseResourceEventRow { id: string; event_type: string; resource_id: string | null; resource_demand_id: string | null; allocation_option_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchResourceIntelSummary(): Promise<ResourceIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_summary');
+  if (error) throw error;
+  return (data as ResourceIntelSummary | null) ?? {};
+}
+export async function fetchResourceInventory(status: string | null = null, limit = 100): Promise<ResourceInventoryRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_inventory_list', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ResourceInventoryRow[];
+}
+export async function createResourceInventory(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; inventory_is_not_ledger: boolean; auto_allocated: boolean; budget_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_inventory_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; inventory_is_not_ledger: boolean; auto_allocated: boolean; budget_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean };
+}
+export async function reviewResourceInventory(resourceId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; auto_allocated: boolean; budget_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_inventory_review', { p_resource_id: resourceId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; auto_allocated: boolean; budget_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchResourceDemands(status: string | null = null, limit = 100): Promise<ResourceDemandRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_demands_list', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as ResourceDemandRow[];
+}
+export async function createResourceDemand(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; demand_is_not_reservation: boolean; auto_allocated: boolean; budget_allocated: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_demand_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; demand_is_not_reservation: boolean; auto_allocated: boolean; budget_allocated: boolean; production_applied: boolean };
+}
+export async function reviewResourceDemand(demandId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; demand_is_not_reservation: boolean; auto_allocated: boolean; budget_allocated: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_demand_review', { p_demand_id: demandId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; demand_is_not_reservation: boolean; auto_allocated: boolean; budget_allocated: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchAllocationOptions(status: string | null = null, limit = 100): Promise<AllocationOptionRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_allocation_options_list', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as AllocationOptionRow[];
+}
+export async function createAllocationOption(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; option_is_not_allocated_resource: boolean; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_allocation_option_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; option_is_not_allocated_resource: boolean; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean };
+}
+export async function reviewAllocationOption(optionId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_action: string; human_allocation_decision_confirmed: boolean; approval_is_not_execution: boolean; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_allocation_review', { p_option_id: optionId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_action: string; human_allocation_decision_confirmed: boolean; approval_is_not_execution: boolean; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean };
+}
+export async function recordResourceEvent(kind: string, reason: string, payload: Record<string, unknown>, resourceId: string | null = null, demandId: string | null = null, optionId: string | null = null): Promise<{ ok: boolean; id: string; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_resource_id: resourceId, p_demand_id: demandId, p_option_id: optionId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_allocated: boolean; budget_allocated: boolean; resources_allocated: boolean; capacity_provisioned: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseResourceAudit(limit = 200): Promise<EnterpriseResourceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resource_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseResourceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;

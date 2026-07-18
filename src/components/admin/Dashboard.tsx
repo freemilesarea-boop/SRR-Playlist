@@ -106,6 +106,7 @@ import ScenarioIntelligenceSection from './ScenarioIntelligenceSection';
 import PredictiveEnterpriseSection from './PredictiveEnterpriseSection';
 import ExecutiveAdvisorySection from './ExecutiveAdvisorySection';
 import StrategyIntelligenceSection from './StrategyIntelligenceSection';
+import ResourceAllocationSection from './ResourceAllocationSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -372,6 +373,9 @@ export default function Dashboard() {
 
       {/* Strategy Intelligence — 전략 포트폴리오/장기 계획 Candidate (자동 Strategy·Portfolio 선택·배분 없음) */}
       <StrategyIntelligenceSection />
+
+      {/* Resource Intelligence — 자원/자본 배분 Candidate (자동 배정·집행·Provisioning 없음) */}
+      <ResourceAllocationSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
