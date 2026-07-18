@@ -111,6 +111,7 @@ import ExecutionIntelligenceSection from './ExecutionIntelligenceSection';
 import PerformanceIntelligenceSection from './PerformanceIntelligenceSection';
 import ValueIntelligenceSection from './ValueIntelligenceSection';
 import PortfolioIntelligenceSection from './PortfolioIntelligenceSection';
+import GovernanceIntelligenceSection from './GovernanceIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -392,6 +393,9 @@ export default function Dashboard() {
 
       {/* Portfolio Intelligence — 투자 포트폴리오/자본 배분 Candidate (자동 투자 승인·자본 배분 없음) */}
       <PortfolioIntelligenceSection />
+
+      {/* Governance Intelligence — 전략 의사결정 Governance/승인 지원 (자동 승인·거절·정책 변경 없음) */}
+      <GovernanceIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
