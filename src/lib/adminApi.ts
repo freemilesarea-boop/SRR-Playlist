@@ -6382,6 +6382,135 @@ export async function fetchEnterpriseResourceAudit(limit = 200): Promise<Enterpr
   return (data ?? []) as EnterpriseResourceEventRow[];
 }
 
+/* ── AI-OPS-43: Enterprise Execution Intelligence, Program Management &
+      Initiative Delivery Center (0547) — Plan ≠ Execution·자동 시작/완료/승인 없음 ── */
+
+export type ExecutionIntelSummary = Record<string, unknown>;
+
+export interface EnterpriseExecutionProgramRow {
+  id: string;
+  program_code: string;
+  program_name: string;
+  program_type: string;
+  program_status: string;
+  strategy_portfolio_id: string | null;
+  program_summary: string | null;
+  planned_start_reference: string | null;
+  planned_end_reference: string | null;
+  actual_start_reference: string | null;
+  actual_end_reference: string | null;
+  planned_progress_candidate: number | null;
+  actual_progress_reference: number | null;
+  forecast_progress_candidate: number | null;
+  delivery_health: string;
+  delivery_risk: string;
+  progress_drift_status: string;
+  delivery_quality: string;
+  milestones: unknown;
+  initiative_references: unknown;
+  allocation_references: unknown;
+  commitment_references: unknown;
+  dependency_result: Record<string, unknown> | null;
+  critical_path_result: Record<string, unknown> | null;
+  health_result: Record<string, unknown> | null;
+  risk_result: Record<string, unknown> | null;
+  drift_result: Record<string, unknown> | null;
+  quality_result: Record<string, unknown> | null;
+  velocity_result: Record<string, unknown> | null;
+  stability_result: Record<string, unknown> | null;
+  forecast_result: Record<string, unknown> | null;
+  delay_result: Record<string, unknown> | null;
+  delay_root_cause_result: Record<string, unknown> | null;
+  bottleneck_result: Record<string, unknown> | null;
+  recommendation_candidate: Record<string, unknown> | null;
+  delivery_reviews: unknown;
+  approval_reference: Record<string, unknown> | null;
+  outcome_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseExecutionPlanRow {
+  id: string;
+  plan_code: string;
+  plan_name: string;
+  execution_program_id: string;
+  strategic_initiative_id: string | null;
+  plan_status: string;
+  plan_summary: string | null;
+  wave_references: unknown;
+  milestones: unknown;
+  deliverable_references: unknown;
+  planned_start_reference: string | null;
+  planned_end_reference: string | null;
+  planned_progress_candidate: number | null;
+  actual_progress_reference: number | null;
+  forecast_progress_candidate: number | null;
+  delivery_health: string;
+  delivery_risk: string;
+  progress_drift_status: string;
+  delivery_quality: string;
+  delivery_reviews: unknown;
+  approval_reference: Record<string, unknown> | null;
+  outcome_reference: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseExecutionEventRow { id: string; event_type: string; execution_program_id: string | null; execution_plan_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchExecutionIntelSummary(): Promise<ExecutionIntelSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_summary');
+  if (error) throw error;
+  return (data as ExecutionIntelSummary | null) ?? {};
+}
+export async function fetchEnterpriseExecutionPrograms(status: string | null = null, limit = 100): Promise<EnterpriseExecutionProgramRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_programs_list', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseExecutionProgramRow[];
+}
+export async function createEnterpriseExecutionProgram(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; program_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_program_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; program_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseExecutionProgram(programId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; program_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_program_review', { p_program_id: programId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; program_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseExecutionPlans(status: string | null = null, limit = 100): Promise<EnterpriseExecutionPlanRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_plans_list', { p_status: status, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseExecutionPlanRow[];
+}
+export async function createEnterpriseExecutionPlan(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; plan_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_plan_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; plan_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseExecutionPlan(planId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; plan_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_plan_review', { p_plan_id: planId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; plan_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function recordEnterpriseDeliveryReview(targetType: 'program' | 'plan', targetId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; review_action: string; human_delivery_decision_confirmed: boolean; approval_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; milestone_auto_completed: boolean; schedule_changed: boolean; budget_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_delivery_review', { p_target_type: targetType, p_target_id: targetId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; review_action: string; human_delivery_decision_confirmed: boolean; approval_is_not_execution: boolean; auto_started: boolean; auto_completed: boolean; milestone_auto_completed: boolean; schedule_changed: boolean; budget_changed: boolean; production_applied: boolean };
+}
+export async function recordEnterpriseExecutionEvent(kind: string, reason: string, payload: Record<string, unknown>, programId: string | null = null, planId: string | null = null): Promise<{ ok: boolean; id: string; auto_started: boolean; auto_completed: boolean; milestone_auto_completed: boolean; schedule_changed: boolean; budget_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_program_id: programId, p_plan_id: planId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; auto_started: boolean; auto_completed: boolean; milestone_auto_completed: boolean; schedule_changed: boolean; budget_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseExecutionAudit(limit = 200): Promise<EnterpriseExecutionEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_execution_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseExecutionEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
