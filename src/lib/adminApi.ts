@@ -9184,3 +9184,58 @@ export async function proposeAiExperimentRollback(id: string, payload: Record<st
   if (error) throw error;
   return data as AiExpDetail;
 }
+
+/* ── AI-EXPERIMENT-2 — Internal Treatment Runtime (0570) ─────────────────── */
+export interface AiExpRuntimeEvent {
+  id: string; experiment_id: string | null; assignment_id: string | null; store_id: string;
+  session_id: string | null; route: string; fallback_reason: string | null;
+  algorithm_version: string | null; weight_version: string | null;
+  treatment_duration_ms: number | null; control_duration_ms: number | null;
+  result_count: number | null; queue_contract_valid: boolean | null; occurred_at: string;
+}
+
+export interface AiExpInternalOverview {
+  experiment: { id: string; name: string; stage: string; status: string; emergency_stop: boolean; allocation_ratio: number } | null;
+  allowlist_count: number;
+  control_stores: number;
+  treatment_stores: number;
+  store_stops: Array<{ store_id: string; status: string; reason: string; stopped_at: string }>;
+  runtime_totals: { total: number; treatment: number; fallback_control: number; control: number };
+  exposure_totals: { control: number; treatment: number; fallback: number };
+}
+
+export async function stopAiExperimentStore(id: string, storeId: string, reason: string): Promise<{ ok: boolean; store_id: string; status: string }> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_store_stop', { p_id: id, p_store_id: storeId, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; store_id: string; status: string };
+}
+
+export async function resumeAiExperimentStore(id: string, storeId: string, reason: string): Promise<{ ok: boolean; store_id: string; status: string }> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_store_resume', { p_id: id, p_store_id: storeId, p_reason: reason });
+  if (error) throw error;
+  return data as { ok: boolean; store_id: string; status: string };
+}
+
+export async function fetchAiExperimentRuntimeEvents(id: string, limit = 100): Promise<AiExpRuntimeEvent[]> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_runtime_events', { p_id: id, p_limit: limit });
+  if (error) throw error;
+  return (data as AiExpRuntimeEvent[] | null) ?? [];
+}
+
+export async function fetchAiExperimentInternalOverview(id: string): Promise<AiExpInternalOverview> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_internal_overview', { p_id: id });
+  if (error) throw error;
+  return data as AiExpInternalOverview;
+}
+
+export async function generateAiExperimentMetricSnapshot(id: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_generate_metric_snapshot', { p_id: id });
+  if (error) throw error;
+  return (data as Record<string, unknown>) ?? {};
+}
+
+export async function generateAiExperimentGuardrailSnapshot(id: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_generate_guardrail_snapshot', { p_id: id });
+  if (error) throw error;
+  return (data as Record<string, unknown>) ?? {};
+}
