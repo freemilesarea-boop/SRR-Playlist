@@ -124,6 +124,7 @@ import TransformationIntelligenceSection from './TransformationIntelligenceSecti
 import ContinuousImprovementSection from './ContinuousImprovementSection';
 import InnovationIntelligenceSection from './InnovationIntelligenceSection';
 import ForesightIntelligenceSection from './ForesightIntelligenceSection';
+import ResilienceIntelligenceSection from './ResilienceIntelligenceSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -444,6 +445,9 @@ export default function Dashboard() {
 
       {/* Foresight Intelligence — 약한 신호/미래 시나리오 관측 Candidate (자동 장기 전략 변경 없음) */}
       <ForesightIntelligenceSection />
+
+      {/* Resilience Intelligence — 회복력/Business Continuity 관측 Candidate (자동 복구 실행 없음) */}
+      <ResilienceIntelligenceSection />
 
       {/* Mission Control — 전체 통합 관제 (기존 Dashboard 재사용 레이어) */}
       <MissionControlSection />
