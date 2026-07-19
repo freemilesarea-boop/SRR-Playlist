@@ -9,6 +9,7 @@ import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi
 import { toast } from '@/store/toastStore';
 import { captureError } from '@/lib/sentry';
 import { sendPush } from '@/lib/pushApi';
+import { emitQueueExposures } from '@/lib/experimentRuntime';
 
 /**
  * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
@@ -116,6 +117,15 @@ export function useBusinessAutoSwitch() {
         setLastSwitchedScheduleId(targetScheduleId);
         if (!isInitial) toast.success(`${targetSlotName} 플레이리스트로 자동 전환했어요`);
         void logScheduleEvent(userId, targetScheduleId, targetPlaylistId, isInitial ? 'started' : 'switched');
+        // AI-EXPERIMENT-1 Stage 0 — Exposure Emission(fire-and-forget · 실패 silent ·
+        // Assignment 없는 일반 매장은 내부에서 no-op). 재생 로직/Queue 계약 무변경.
+        if (userId) {
+          void emitQueueExposures({
+            storeId: userId, playlistId: targetPlaylistId, sessionId: null,
+            trackIds: playable.map((t) => t.id), source: 'scheduler',
+            dayKey: `${new Date().toISOString().slice(0, 10)}|${targetScheduleId}`,
+          });
+        }
       } catch (e) {
         if (alive) {
           toast.error(e instanceof Error ? e.message : '자동 전환 실패');

@@ -52,6 +52,7 @@ import PlaylistIntelCoreSection from './PlaylistIntelCoreSection';
 import PlaylistSequencingSection from './PlaylistSequencingSection';
 import RecommendationV2Section from './RecommendationV2Section';
 import LearningSignalsSection from './LearningSignalsSection';
+import ExperimentCenterSection from './ExperimentCenterSection';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
@@ -269,6 +270,9 @@ export default function Dashboard() {
 
       {/* Learning Signal Foundation — Exposure/검증/집계/Shadow Weight Proposal (Weight 자동 반영 없음) */}
       <LearningSignalsSection />
+
+      {/* Experiment Center — Controlled A/B & Canary (Allowlist 한정 · Global Rollout 없음) */}
+      <ExperimentCenterSection />
 
       {/* Adaptive Rotation & Anti-Fatigue — 재생 순서 초안 (자동 Queue/Scheduler 반영 없음) */}
       <AdaptiveRotationSection />

@@ -9098,3 +9098,89 @@ export async function setAiLearnProposalStatus(id: string, status: AiLearnPropos
   if (error) throw error;
   return data as AiLearnProposalDetail;
 }
+
+/* ═══════════════ AI-EXPERIMENT-1 — Controlled A/B & Canary (Allowlist 한정) ═══════════════ */
+/* Global Rollout/v1 교체/Production Weight Apply RPC 없음. */
+
+export type AiExpStatus = 'draft' | 'ready_for_review' | 'approved' | 'scheduled' | 'running' | 'paused' | 'stopped' | 'completed' | 'rejected' | 'archived';
+
+export interface AiExpListRow {
+  id: string; name: string; stage: string; status: AiExpStatus; primary_metric: string;
+  allocation_ratio: number; emergency_stop: boolean;
+  quality_score: number | null; quality_grade: string | null; decision: string | null;
+  assignment_count: number; allowlist_count: number; exposure_count: number;
+  start_at: string | null; end_at: string | null; created_at: string;
+  created_by_name: string | null; approved_by_name: string | null;
+}
+
+export interface AiExpDetail {
+  experiment: AiExpListRow & {
+    hypothesis: string; secondary_metrics: string[]; guardrail_config: Record<string, unknown>;
+    control_algorithm_version: string; treatment_algorithm_version: string;
+    control_weight_version: string; treatment_weight_version: string;
+    seed: number; assignment_version: string;
+    minimum_exposure: number; minimum_valid_outcomes: number;
+    minimum_duration_hours: number; maximum_duration_hours: number;
+    pause_reason: string | null; stop_reason: string | null;
+    config_snapshot: Record<string, unknown>; decision_reason: string | null;
+  };
+  allowlist: Array<{ store_id: string; allowed_stage: string; status: string; approval_reason: string | null; created_at: string }>;
+  assignments: Array<{ store_id: string; variant: string; status: string; reason: string | null; assigned_at: string }>;
+  events: Array<{ event_type: string; actor_name?: string | null; actor_id: string | null; previous_status: string | null; next_status: string | null; reason: string | null; metadata: Record<string, unknown>; created_at: string }>;
+  snapshots: Array<Record<string, unknown>>;
+  rollback_proposals: Array<Record<string, unknown>>;
+}
+
+export async function createAiExperiment(payload: Record<string, unknown>): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_create', { p_payload: payload as never });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function fetchAiExperiments(status?: string | null, limit = 50): Promise<AiExpListRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_exps', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiExpListRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiExperimentDetail(id: string): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_detail', { p_id: id });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function setAiExperimentAllowlist(experimentId: string, storeId: string, payload: Record<string, unknown>): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_allowlist_set', { p_experiment_id: experimentId, p_store_id: storeId, p_payload: payload as never });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function buildAiExperimentAssignments(id: string): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_build_assignments', { p_id: id });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function setAiExperimentStatus(id: string, status: AiExpStatus, reason?: string): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_set_status', { p_id: id, p_status: status, p_reason: reason ?? null });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function setAiExperimentEmergencyStop(id: string, enabled: boolean, reason: string): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_emergency_stop', { p_id: id, p_enabled: enabled, p_reason: reason });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function recordAiExperimentSnapshot(id: string, snapshot: Record<string, unknown>): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_record_snapshot', { p_id: id, p_snapshot: snapshot as never });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
+
+export async function proposeAiExperimentRollback(id: string, payload: Record<string, unknown>): Promise<AiExpDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_rollback_propose', { p_id: id, p_payload: payload as never });
+  if (error) throw error;
+  return data as AiExpDetail;
+}
