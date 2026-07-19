@@ -50,6 +50,7 @@ import TrackRolloutSection from './TrackRolloutSection';
 import PlaylistGeneratorSection from './PlaylistGeneratorSection';
 import PlaylistIntelCoreSection from './PlaylistIntelCoreSection';
 import PlaylistSequencingSection from './PlaylistSequencingSection';
+import RecommendationV2Section from './RecommendationV2Section';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
@@ -261,6 +262,9 @@ export default function Dashboard() {
 
       {/* Sequencing Intelligence — Draft 순서 초안/Transition 평가 (Shadow · 순서만 설계 · 자동 반영 없음) */}
       <PlaylistSequencingSection />
+
+      {/* Recommendation v2 — 다목적 추천 Draft + v1 Shadow 비교 (v1 무변경 · 자동 반영 없음) */}
+      <RecommendationV2Section />
 
       {/* Adaptive Rotation & Anti-Fatigue — 재생 순서 초안 (자동 Queue/Scheduler 반영 없음) */}
       <AdaptiveRotationSection />
