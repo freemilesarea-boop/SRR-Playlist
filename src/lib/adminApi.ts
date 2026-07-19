@@ -9239,3 +9239,59 @@ export async function generateAiExperimentGuardrailSnapshot(id: string): Promise
   if (error) throw error;
   return (data as Record<string, unknown>) ?? {};
 }
+
+/* ── AI-EXPERIMENT-3 — Internal Test Execution / Evidence (0571) ──────────── */
+export interface AiExpTestSessionRow {
+  id: string; experiment_id: string | null; store_id: string | null;
+  environment_status: string; db_isolation: string; migration_status: string;
+  browser: string | null; device: string | null; operator: string | null;
+  status: string; final_decision: string | null; started_at: string | null; ended_at: string | null; created_at: string;
+}
+
+export interface AiExpExecutionCheck {
+  id: string; session_id: string; check_key: string; category: string;
+  status: string; evidence_type: string; evidence_summary: string; occurred_at: string;
+}
+
+export interface AiExpTestSessionDetail {
+  session: AiExpTestSessionRow & { decision_reason: string | null; brand_id: string | null; assignment_id: string | null; os: string | null };
+  checks: AiExpExecutionCheck[];
+  check_summary: { pass: number; fail: number; not_run: number; insufficient_data: number };
+  feedback: Array<Record<string, unknown>>;
+}
+
+export async function createAiExperimentTestSession(payload: Record<string, unknown>): Promise<{ session_id: string }> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_create_test_session', { p_payload: payload as never });
+  if (error) throw error;
+  return data as { session_id: string };
+}
+
+export async function fetchAiExperimentTestSessions(experimentId?: string | null, limit = 50): Promise<AiExpTestSessionRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_test_sessions', { p_experiment_id: experimentId ?? null, p_limit: limit });
+  if (error) throw error;
+  return (data as AiExpTestSessionRow[] | null) ?? [];
+}
+
+export async function fetchAiExperimentTestSessionDetail(sessionId: string): Promise<AiExpTestSessionDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_test_session_detail', { p_session_id: sessionId });
+  if (error) throw error;
+  return data as AiExpTestSessionDetail;
+}
+
+export async function recordAiExperimentExecutionCheck(sessionId: string, payload: Record<string, unknown>): Promise<{ check_id: string; status: string }> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_record_execution_check', { p_session_id: sessionId, p_payload: payload as never });
+  if (error) throw error;
+  return data as { check_id: string; status: string };
+}
+
+export async function recordAiExperimentOperatorFeedback(sessionId: string, payload: Record<string, unknown>): Promise<{ feedback_id: string }> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_record_operator_feedback', { p_session_id: sessionId, p_payload: payload as never });
+  if (error) throw error;
+  return data as { feedback_id: string };
+}
+
+export async function computeAiExperimentPromotionGate(sessionId: string, decision?: string | null, reason?: string | null): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('admin_ai_exp_compute_promotion_gate', { p_session_id: sessionId, p_decision: decision ?? null, p_reason: reason ?? null });
+  if (error) throw error;
+  return (data as Record<string, unknown>) ?? {};
+}
