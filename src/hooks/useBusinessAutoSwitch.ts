@@ -9,7 +9,7 @@ import { getCurrentSchedule, logScheduleEvent } from '@/lib/businessSchedulerApi
 import { toast } from '@/store/toastStore';
 import { captureError } from '@/lib/sentry';
 import { sendPush } from '@/lib/pushApi';
-import { emitQueueExposures } from '@/lib/experimentRuntime';
+import { emitQueueExposures, resolveStoreQueue } from '@/lib/experimentRuntime';
 
 /**
  * 매장 자동 운영 엔진 — BusinessPage 마운트 시 1회 활성.
@@ -107,11 +107,33 @@ export function useBusinessAutoSwitch() {
           return;
         }
         const playlist = playlists.find((p) => p.id === targetPlaylistId) ?? null;
+
+        // AI-EXPERIMENT-2 Stage 2 — Internal Treatment Routing(Fail-Closed).
+        // 승인된 internal_test Treatment Store 만 Recommendation v2 Runtime 순서를
+        // 사용한다. 부적격/Timeout/무효 Queue 는 항상 playable(Control)로 회귀하며
+        // 일반 매장은 Gate 조회가 부적격 → playable 그대로. Player/Queue 계약 무변경.
+        let queueTracks = playable;
+        let treatmentRouted = false;
+        if (userId) {
+          const routed = await resolveStoreQueue({
+            storeId: userId, playlistId: targetPlaylistId, sessionId: null,
+            controlTracks: playable,
+            currentTrackId: usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id ?? null,
+            recentTrackIds: [], targetCount: Math.min(playable.length, 50),
+          });
+          if (!alive) return;
+          if (!useBusinessStore.getState().businessMode) return;
+          if (getCurrentSchedule(useBusinessScheduleStore.getState().schedules)?.id !== targetScheduleId) return;
+          queueTracks = routed.tracks.length > 0 ? routed.tracks : playable;
+          treatmentRouted = routed.route === 'treatment';
+        }
+
         setRepeat('all');
         setShuffle(true);
-        // X6.80 — 시간대 전환 시에도 daily seed shuffle 적용 (매일 다른 순서)
+        // X6.80 — 시간대 전환 시에도 daily seed shuffle 적용 (매일 다른 순서).
+        // Treatment 는 v2 결정론 순서를 유지하므로 daily shuffle 을 끈다(Control 은 유지).
         // setShuffle 을 먼저 호출해야 setQueue 내부의 get().shuffle 이 true 임
-        setQueue(playable, 0, playlist, null, { dailySeedShuffle: true });
+        setQueue(queueTracks, 0, playlist, null, { dailySeedShuffle: !treatmentRouted });
         playAction();
         if (import.meta.env.DEV) console.debug('[StoreEngine] playback switched', { tracks: playable.length, isInitial, slot: targetSlotName });
         setLastSwitchedScheduleId(targetScheduleId);
@@ -122,7 +144,7 @@ export function useBusinessAutoSwitch() {
         if (userId) {
           void emitQueueExposures({
             storeId: userId, playlistId: targetPlaylistId, sessionId: null,
-            trackIds: playable.map((t) => t.id), source: 'scheduler',
+            trackIds: queueTracks.map((t) => t.id), source: 'scheduler',
             dayKey: `${new Date().toISOString().slice(0, 10)}|${targetScheduleId}`,
           });
         }

@@ -9,26 +9,31 @@
  * 탭: Overview · Create · Detail(Allowlist/Assignment/Monitoring/Rollback) · Limitations.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { FlaskConical, PlusCircle, FileSearch, ShieldAlert, RefreshCw, Inbox } from 'lucide-react';
+import { FlaskConical, PlusCircle, FileSearch, ShieldAlert, RefreshCw, Inbox, Radio, Activity } from 'lucide-react';
 import { AdminCard, AdminAlert, AdminBadge, AdminEmpty } from '@/components/admin/ui';
 import {
   buildAiExperimentAssignments, createAiExperiment, fetchAiExperimentDetail, fetchAiExperiments,
   proposeAiExperimentRollback, setAiExperimentAllowlist, setAiExperimentEmergencyStop, setAiExperimentStatus,
+  fetchAiExperimentInternalOverview, fetchAiExperimentRuntimeEvents, stopAiExperimentStore, resumeAiExperimentStore,
+  generateAiExperimentMetricSnapshot, generateAiExperimentGuardrailSnapshot,
   type AiExpDetail, type AiExpListRow, type AiExpStatus,
+  type AiExpInternalOverview, type AiExpRuntimeEvent,
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import { relativeTimeKo } from '@/lib/memberGrowth';
 import { FIXED_EXPERIMENT_WARNING } from '@/lib/experimentIntel';
+import { INTERNAL_RUNTIME_WARNING } from '@/lib/experimentRuntimeRouting';
 
 const NUM = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('ko-KR'));
 
-type Tab = 'overview' | 'create' | 'detail' | 'limits';
+type Tab = 'overview' | 'create' | 'detail' | 'runtime' | 'limits';
 const TABS: { key: Tab; label: string; icon: typeof FlaskConical }[] = [
   { key: 'overview', label: 'Overview', icon: FlaskConical },
   { key: 'create', label: 'Create', icon: PlusCircle },
   { key: 'detail', label: 'Detail', icon: FileSearch },
+  { key: 'runtime', label: 'Internal Runtime', icon: Radio },
   { key: 'limits', label: 'Limitations', icon: ShieldAlert },
 ];
 
@@ -42,12 +47,13 @@ const KNOWN_LIMITATIONS = [
   'Approved/성공 판정은 Recommendation v2의 전체 Production 적용이 아니며, promote_candidate는 더 제한된 다음 단계 후보를 뜻합니다.',
   'Variant는 서버(md5 bucket)가 결정하고 sticky 저장됩니다 — 클라이언트는 Variant를 지정할 수 없습니다.',
   'Stage 0(Event Emission)은 스케줄러 setQueue 직후 fire-and-forget 1지점만 배선했으며, Event 실패는 Playback에 전파되지 않습니다(재시도 1회 상한).',
-  'Stage 2/3 Treatment 라우팅은 서버 게이트+Fallback 규칙까지 구축된 기반이며, 실제 Player 라우팅 배선은 관리자 승인 후 별도 최소 변경으로 수행합니다.',
+  'Stage 2(internal_test) Treatment는 스케줄러 setQueue 직전 1지점에 Fail-Closed 라우팅으로 배선했습니다 — 승인된 Allowlist Store만 v2 Runtime 순서를 사용하고, Gate/Timeout/무효 Queue는 항상 Control(v1)로 회귀합니다. Stage 3(Canary) 외부 Store 라우팅은 별도 Phase입니다.',
   'Emergency Stop은 신규 Treatment 라우팅 중지 신호입니다 — 재생 중 Track 중단/Queue 삭제/Weight 변경이 아닙니다.',
   'SRM 감지 또는 Blocking Guardrail 위반 상태에서는 continue/promote 결정을 서버가 기록 거부합니다.',
   'Sample/기간 부족 상태에서 승자를 선언하지 않으며(CI 기반 유의성 필수), Shadow 결과는 실제 Treatment 결과로 기록되지 않습니다.',
   'Rollback Proposal approved는 자동 Rollback 실행이 아니라 관리자 실행 후보 승인 기록입니다.',
-  '이 UI는 브라우저에서 직접 검증되지 않았습니다. Migration 0565~0569는 Production 미적용이며 실제 실험은 아직 실행되지 않았습니다(모든 지표 0/not_run).',
+  '이 UI는 브라우저에서 직접 검증되지 않았습니다. Migration 0565~0570은 Production 미적용이며 실제 내부 테스트는 아직 실행되지 않았습니다(Runtime Route/Exposure/Attribution/모든 지표 0/not_run).',
+  'Store별 Emergency Stop은 다음 추천 요청부터 Control로 회귀시키는 신호이며, 현재 재생 중인 Track을 강제 중단하거나 Queue를 삭제하지 않습니다. 재활성화는 명시적 관리자 승인만 가능합니다.',
 ];
 
 function Box({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -77,6 +83,11 @@ export default function ExperimentCenterSection() {
   const [stage, setStage] = useState('shadow_assignment');
   const [ratioPct, setRatioPct] = useState(50);
   const [seed, setSeed] = useState(1);
+
+  // Internal Runtime 탭
+  const [rtOverview, setRtOverview] = useState<AiExpInternalOverview | null>(null);
+  const [rtEvents, setRtEvents] = useState<AiExpRuntimeEvent[] | null>(null);
+  const [rtStoreId, setRtStoreId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -117,6 +128,22 @@ export default function ExperimentCenterSection() {
     catch (e) { toast.error(friendlyError(e, '서버 게이트(승인/Allowlist/근거)가 거부할 수 있습니다')); }
     finally { setBusy(false); }
   }, [load]);
+
+  const loadRuntime = useCallback(async (id: string) => {
+    setBusy(true);
+    try {
+      const [ov, ev] = await Promise.all([fetchAiExperimentInternalOverview(id), fetchAiExperimentRuntimeEvents(id, 100)]);
+      setRtOverview(ov); setRtEvents(ev);
+    } catch (e) { toast.error(friendlyError(e, '0570 미적용일 수 있음')); setRtOverview(null); setRtEvents(null); }
+    finally { setBusy(false); }
+  }, []);
+
+  const runtimeAct = useCallback(async (fn: () => Promise<unknown>, ok: string, id: string) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); await loadRuntime(id); }
+    catch (e) { toast.error(friendlyError(e, '서버 게이트/사유가 거부할 수 있습니다')); }
+    finally { setBusy(false); }
+  }, [loadRuntime]);
 
   return (
     <AdminCard title="Experiment Center" subtitle="AI-EXPERIMENT-1 — Controlled A/B & Canary (Allowlist 한정 · Global Rollout 없음)">
@@ -287,6 +314,79 @@ export default function ExperimentCenterSection() {
         ) : (
           <div className="mt-3"><AdminEmpty icon={<FileSearch size={24} />} title="선택된 Experiment 없음" description="Overview에서 상세를 열어주세요." /></div>
         )
+      ) : null}
+
+      {tab === 'runtime' ? (
+        <div className="mt-3 space-y-2 text-[11px]">
+          <AdminAlert tone="warning">{INTERNAL_RUNTIME_WARNING}</AdminAlert>
+          {!detail ? (
+            <AdminEmpty icon={<Radio size={24} />} title="Experiment 미선택" description="Overview/Detail에서 실험을 먼저 열고 Internal Runtime을 조회하세요." />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-ink">{detail.experiment.name}</span>
+                <AdminBadge tone={STATUS_TONE[detail.experiment.status]}>{detail.experiment.status}</AdminBadge>
+                <AdminBadge tone="neutral">{detail.experiment.stage}</AdminBadge>
+                <button type="button" onClick={() => void loadRuntime(detail.experiment.id)} disabled={busy}
+                  className="ml-auto rounded bg-bg-deep px-2.5 py-1 text-ink-mute hover:text-ink disabled:opacity-50">
+                  <Activity className="mr-1 inline h-3 w-3" />Runtime 조회
+                </button>
+              </div>
+
+              {/* Internal Test Overview */}
+              {rtOverview ? (
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <Box label="Allowlist(active)" value={NUM(rtOverview.allowlist_count)} />
+                  <Box label="Control / Treatment Store" value={`${NUM(rtOverview.control_stores)} / ${NUM(rtOverview.treatment_stores)}`} hint={`상한 ${2}`} />
+                  <Box label="Runtime Route" value={`T ${NUM(rtOverview.runtime_totals.treatment)} · FB ${NUM(rtOverview.runtime_totals.fallback_control)}`} hint={`total ${NUM(rtOverview.runtime_totals.total)}`} />
+                  <Box label="Exposure(C/T)" value={`${NUM(rtOverview.exposure_totals.control)} / ${NUM(rtOverview.exposure_totals.treatment)}`} hint={`fallback ${NUM(rtOverview.exposure_totals.fallback)}`} />
+                </div>
+              ) : (
+                <p className="text-ink-mute">Runtime 조회를 눌러 Internal Overview를 불러오세요. 실제 Internal Test 미실행 시 모든 값은 0입니다(정직 보고).</p>
+              )}
+
+              {/* Snapshot 생성 */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => void runtimeAct(() => generateAiExperimentMetricSnapshot(detail.experiment.id), 'Metric Snapshot 생성(표본 부족 시 insufficient_data)', detail.experiment.id)} disabled={busy} className="rounded bg-bg-deep px-2.5 py-1 text-ink disabled:opacity-50">Metric Snapshot 생성</button>
+                <button type="button" onClick={() => void runtimeAct(() => generateAiExperimentGuardrailSnapshot(detail.experiment.id), 'Guardrail Snapshot 생성(Blocking 시 Pause 제안만)', detail.experiment.id)} disabled={busy} className="rounded bg-bg-deep px-2.5 py-1 text-ink disabled:opacity-50">Guardrail Snapshot 생성</button>
+              </div>
+
+              {/* Store Controls */}
+              <div className="rounded-lg bg-bg-deep p-3">
+                <div className="mb-1 font-semibold text-ink">Store Controls (Store별 Emergency Stop — 재생 Track 강제 중단 없음)</div>
+                <div className="flex items-center gap-2">
+                  <input value={rtStoreId} onChange={(e) => setRtStoreId(e.target.value)} placeholder="Store UUID" className="w-72 rounded bg-black/30 px-2 py-1 text-ink" />
+                  <button type="button" onClick={() => { if (!rtStoreId.trim() || !reason.trim()) { toast.error('Store ID와 사유를 입력하세요.'); return; } void runtimeAct(() => stopAiExperimentStore(detail.experiment.id, rtStoreId.trim(), reason.trim()), 'Store Stop(다음 요청부터 Control)', detail.experiment.id); }} disabled={busy} className="rounded bg-black/20 px-2 py-1 text-red-300 disabled:opacity-50">Store Stop</button>
+                  <button type="button" onClick={() => { if (!rtStoreId.trim() || !reason.trim()) { toast.error('Store ID와 사유를 입력하세요.'); return; } void runtimeAct(() => resumeAiExperimentStore(detail.experiment.id, rtStoreId.trim(), reason.trim()), 'Store Resume(명시 승인)', detail.experiment.id); }} disabled={busy} className="rounded bg-black/20 px-2 py-1 text-ink disabled:opacity-50">Store Resume</button>
+                </div>
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="사유(필수)" className="mt-1 w-full rounded bg-black/30 px-2 py-1 text-ink" />
+                {rtOverview && rtOverview.store_stops.length > 0 ? rtOverview.store_stops.map((s) => (
+                  <div key={s.store_id} className="mt-1 text-ink-mute">{s.store_id} · <span className={s.status === 'stopped' ? 'text-red-300' : 'text-ink'}>{s.status}</span> · {s.reason} · {relativeTimeKo(s.stopped_at, nowMs)}</div>
+                )) : <p className="mt-1 text-ink-mute">Store Stop 없음.</p>}
+              </div>
+
+              {/* Runtime Monitor */}
+              <div className="rounded-lg bg-bg-deep p-3">
+                <div className="mb-1 font-semibold text-ink">Runtime Monitor / Queue Validation ({rtEvents?.length ?? 0})</div>
+                {rtEvents == null ? (
+                  <p className="text-ink-mute">Runtime 조회를 눌러 이벤트를 불러오세요.</p>
+                ) : rtEvents.length === 0 ? (
+                  <p className="text-ink-mute">Runtime Event 없음 — 실제 내부 테스트가 실행되지 않았습니다(route/fallback/attribution 전부 not_run).</p>
+                ) : rtEvents.map((ev) => (
+                  <div key={ev.id} className="mt-1 flex flex-wrap items-center gap-1.5 text-ink-mute">
+                    <AdminBadge tone={ev.route === 'treatment' ? 'primary' : ev.route === 'fallback_control' ? 'warning' : 'neutral'}>{ev.route}</AdminBadge>
+                    {ev.fallback_reason ? <span className="text-amber-300">{ev.fallback_reason}</span> : null}
+                    <span>· {ev.algorithm_version ?? '—'} / {ev.weight_version ?? '—'}</span>
+                    <span>· contract {ev.queue_contract_valid == null ? '—' : ev.queue_contract_valid ? 'valid' : 'invalid'}</span>
+                    <span>· n={NUM(ev.result_count)}</span>
+                    {ev.treatment_duration_ms != null ? <span>· {ev.treatment_duration_ms}ms</span> : null}
+                    <span>· {relativeTimeKo(ev.occurred_at, nowMs)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       ) : null}
 
       {tab === 'limits' ? (
