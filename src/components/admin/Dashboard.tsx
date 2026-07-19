@@ -129,6 +129,7 @@ import ExecutiveCommandCenterSection from './ExecutiveCommandCenterSection';
 import EnterpriseIntelligenceHubSection from './EnterpriseIntelligenceHubSection';
 import DecisionReviewCenterSection from './DecisionReviewCenterSection';
 import GovernanceComplianceCenterSection from './GovernanceComplianceCenterSection';
+import EnterpriseKnowledgeHubSection from './EnterpriseKnowledgeHubSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -215,6 +216,9 @@ export default function Dashboard() {
 
       {/* Governance & Compliance Center — 기존 Policy/권한/감사 통합 Governance Layer (자동 Policy/Permission 변경 없음) */}
       <GovernanceComplianceCenterSection />
+
+      {/* Enterprise Knowledge Hub — 기존 기록 검색·연결·요약 Knowledge Layer (자동 지식 생성 없음) */}
+      <EnterpriseKnowledgeHubSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
