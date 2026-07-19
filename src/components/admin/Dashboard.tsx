@@ -130,6 +130,7 @@ import EnterpriseIntelligenceHubSection from './EnterpriseIntelligenceHubSection
 import DecisionReviewCenterSection from './DecisionReviewCenterSection';
 import GovernanceComplianceCenterSection from './GovernanceComplianceCenterSection';
 import EnterpriseKnowledgeHubSection from './EnterpriseKnowledgeHubSection';
+import StrategyInnovationCenterSection from './StrategyInnovationCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -219,6 +220,9 @@ export default function Dashboard() {
 
       {/* Enterprise Knowledge Hub — 기존 기록 검색·연결·요약 Knowledge Layer (자동 지식 생성 없음) */}
       <EnterpriseKnowledgeHubSection />
+
+      {/* Strategy & Innovation Center — 기존 전략/혁신 원장 통합 Executive Strategy Layer (자동 전략/Roadmap 생성 없음) */}
+      <StrategyInnovationCenterSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
