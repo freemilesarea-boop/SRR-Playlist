@@ -131,6 +131,7 @@ import DecisionReviewCenterSection from './DecisionReviewCenterSection';
 import GovernanceComplianceCenterSection from './GovernanceComplianceCenterSection';
 import EnterpriseKnowledgeHubSection from './EnterpriseKnowledgeHubSection';
 import StrategyInnovationCenterSection from './StrategyInnovationCenterSection';
+import ForesightRiskCenterSection from './ForesightRiskCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -223,6 +224,9 @@ export default function Dashboard() {
 
       {/* Strategy & Innovation Center — 기존 전략/혁신 원장 통합 Executive Strategy Layer (자동 전략/Roadmap 생성 없음) */}
       <StrategyInnovationCenterSection />
+
+      {/* Foresight & Risk Center — 기존 Forecast/Risk/Scenario 통합 Executive Foresight Layer (미래 단정/자동 생성 없음) */}
+      <ForesightRiskCenterSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
