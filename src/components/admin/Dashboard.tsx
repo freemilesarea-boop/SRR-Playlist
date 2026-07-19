@@ -126,6 +126,7 @@ import InnovationIntelligenceSection from './InnovationIntelligenceSection';
 import ForesightIntelligenceSection from './ForesightIntelligenceSection';
 import ResilienceIntelligenceSection from './ResilienceIntelligenceSection';
 import ExecutiveCommandCenterSection from './ExecutiveCommandCenterSection';
+import EnterpriseIntelligenceHubSection from './EnterpriseIntelligenceHubSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -203,6 +204,9 @@ export default function Dashboard() {
 
       {/* Executive Command Center — 기존 Intelligence 통합 관측 Command Layer (신규 Engine/자동 승인 없음) */}
       <ExecutiveCommandCenterSection />
+
+      {/* Enterprise Intelligence Hub — 기존 데이터 통합 조회/연관 설명 Data Layer (생성/추론/자동 승인 없음) */}
+      <EnterpriseIntelligenceHubSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
