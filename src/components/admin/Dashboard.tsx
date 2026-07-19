@@ -48,6 +48,7 @@ import PlaylistIntelligenceSection from './PlaylistIntelligenceSection';
 import PlaylistExperimentSection from './PlaylistExperimentSection';
 import TrackRolloutSection from './TrackRolloutSection';
 import PlaylistGeneratorSection from './PlaylistGeneratorSection';
+import PlaylistIntelCoreSection from './PlaylistIntelCoreSection';
 import AdaptiveRotationSection from './AdaptiveRotationSection';
 import TrackIntelligenceSection from './TrackIntelligenceSection';
 import ContextIntelligenceSection from './ContextIntelligenceSection';
@@ -253,6 +254,9 @@ export default function Dashboard() {
 
       {/* AI Playlist Generator — 실제 메타/KPI 기반 Draft 생성 (자동 Publish 없음) */}
       <PlaylistGeneratorSection />
+
+      {/* Playlist Intelligence Core — 제약/다양성/품질 평가 기반 Safe Draft (Shadow · 자동 반영 없음) */}
+      <PlaylistIntelCoreSection />
 
       {/* Adaptive Rotation & Anti-Fatigue — 재생 순서 초안 (자동 Queue/Scheduler 반영 없음) */}
       <AdaptiveRotationSection />

@@ -8729,3 +8729,81 @@ export async function applyAnalyticsDb(): Promise<ApplyAnalyticsResult> {
     return { ok: false, error: e instanceof Error ? e.message : 'unknown' };
   }
 }
+
+/* ═══════════════ AI-PLAYLIST-INTEL-1 — Playlist Intelligence Core (Shadow Draft) ═══════════════ */
+/* Draft 는 실제 Playlist/Queue/Player/Scheduler 에 반영되지 않는다. Publish RPC 없음. */
+
+export type AiPlDraftStatus = 'draft' | 'ready_for_review' | 'approved' | 'rejected' | 'expired' | 'archived';
+
+export interface AiPlDraftListRow {
+  id: string; name: string; generation_mode: string; store_type: string | null; brand_key: string | null;
+  status: AiPlDraftStatus; target_track_count: number; candidate_track_count: number; selected_track_count: number;
+  quality_score: number | null; quality_grade: string | null; algorithm_version: string;
+  expires_at: string | null; created_at: string; reviewed_at: string | null;
+  created_by_name: string | null; reviewed_by_name: string | null;
+}
+
+export interface AiPlDraftTrackRow {
+  track_id: string; draft_order: number; selection_score: number | null; selected: boolean;
+  selection_reasons: Array<{ code: string; message: string; scoreImpact: number; source: string }>;
+  exclusion_reasons: Array<{ code: string; message: string; scoreImpact: number; source: string }>;
+  feature_snapshot: Record<string, unknown>;
+  title: string | null; artist: string | null; album_name: string | null;
+  main_genre: string | null; mood: string | null; bpm: number | null;
+}
+
+export interface AiPlDraftEventRow {
+  event_type: string; actor_id: string | null; actor_name: string | null;
+  previous_status: string | null; next_status: string | null; reason: string | null;
+  metadata: Record<string, unknown>; created_at: string;
+}
+
+export interface AiPlDraftDetail {
+  draft: AiPlDraftListRow & {
+    input_snapshot: Record<string, unknown>; constraint_snapshot: Record<string, unknown>;
+    relaxations: Array<{ constraint: string; from: string; to: string; note: string }>;
+    quality_breakdown: Record<string, unknown>; explanation: string[];
+    warnings: string[]; insufficient_data: string[]; rejection_reason: string | null;
+  };
+  tracks: AiPlDraftTrackRow[];
+  events: AiPlDraftEventRow[];
+  duplicate?: boolean;
+}
+
+export async function fetchAiPlCandidatePool(filters: Record<string, unknown>): Promise<{
+  items: Array<Record<string, unknown>>; store_type: string | null; limit: number;
+}> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_candidate_pool', { p_filters: filters as never });
+  if (error) throw error;
+  return (data as { items: Array<Record<string, unknown>>; store_type: string | null; limit: number });
+}
+
+export async function createAiPlDraft(payload: Record<string, unknown>): Promise<AiPlDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_draft_create', { p_payload: payload as never });
+  if (error) throw error;
+  return data as AiPlDraftDetail;
+}
+
+export async function fetchAiPlDrafts(status?: string | null, limit = 50): Promise<AiPlDraftListRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_drafts', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiPlDraftListRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiPlDraftDetail(id: string): Promise<AiPlDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_draft_detail', { p_id: id });
+  if (error) throw error;
+  return data as AiPlDraftDetail;
+}
+
+export async function reevaluateAiPlDraft(id: string): Promise<AiPlDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_draft_reevaluate', { p_id: id });
+  if (error) throw error;
+  return data as AiPlDraftDetail;
+}
+
+export async function setAiPlDraftStatus(id: string, status: AiPlDraftStatus, reason?: string): Promise<AiPlDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_draft_set_status', { p_id: id, p_status: status, p_reason: reason ?? null });
+  if (error) throw error;
+  return data as AiPlDraftDetail;
+}
