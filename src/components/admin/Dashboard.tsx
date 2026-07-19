@@ -133,6 +133,7 @@ import EnterpriseKnowledgeHubSection from './EnterpriseKnowledgeHubSection';
 import StrategyInnovationCenterSection from './StrategyInnovationCenterSection';
 import ForesightRiskCenterSection from './ForesightRiskCenterSection';
 import ResilienceRecoveryCenterSection from './ResilienceRecoveryCenterSection';
+import UnifiedExecutiveOsSection from './UnifiedExecutiveOsSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -207,6 +208,9 @@ export default function Dashboard() {
           오늘 집계 새로고침
         </button>
       </div>
+
+      {/* Unified Executive AI Operating System — E-1~E-9 Layer 통합 최상위 운영 계층 (자동 의사결정 없음) */}
+      <UnifiedExecutiveOsSection />
 
       {/* Executive Command Center — 기존 Intelligence 통합 관측 Command Layer (신규 Engine/자동 승인 없음) */}
       <ExecutiveCommandCenterSection />
