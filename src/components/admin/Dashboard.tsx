@@ -128,6 +128,7 @@ import ResilienceIntelligenceSection from './ResilienceIntelligenceSection';
 import ExecutiveCommandCenterSection from './ExecutiveCommandCenterSection';
 import EnterpriseIntelligenceHubSection from './EnterpriseIntelligenceHubSection';
 import DecisionReviewCenterSection from './DecisionReviewCenterSection';
+import GovernanceComplianceCenterSection from './GovernanceComplianceCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -211,6 +212,9 @@ export default function Dashboard() {
 
       {/* Decision & Review Center — 기존 제안/검토 통합 Human Decision Layer (AI 결정/자동 승인·거절 없음) */}
       <DecisionReviewCenterSection />
+
+      {/* Governance & Compliance Center — 기존 Policy/권한/감사 통합 Governance Layer (자동 Policy/Permission 변경 없음) */}
+      <GovernanceComplianceCenterSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
