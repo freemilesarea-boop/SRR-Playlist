@@ -127,6 +127,7 @@ import ForesightIntelligenceSection from './ForesightIntelligenceSection';
 import ResilienceIntelligenceSection from './ResilienceIntelligenceSection';
 import ExecutiveCommandCenterSection from './ExecutiveCommandCenterSection';
 import EnterpriseIntelligenceHubSection from './EnterpriseIntelligenceHubSection';
+import DecisionReviewCenterSection from './DecisionReviewCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -207,6 +208,9 @@ export default function Dashboard() {
 
       {/* Enterprise Intelligence Hub — 기존 데이터 통합 조회/연관 설명 Data Layer (생성/추론/자동 승인 없음) */}
       <EnterpriseIntelligenceHubSection />
+
+      {/* Decision & Review Center — 기존 제안/검토 통합 Human Decision Layer (AI 결정/자동 승인·거절 없음) */}
+      <DecisionReviewCenterSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
