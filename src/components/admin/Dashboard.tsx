@@ -132,6 +132,7 @@ import GovernanceComplianceCenterSection from './GovernanceComplianceCenterSecti
 import EnterpriseKnowledgeHubSection from './EnterpriseKnowledgeHubSection';
 import StrategyInnovationCenterSection from './StrategyInnovationCenterSection';
 import ForesightRiskCenterSection from './ForesightRiskCenterSection';
+import ResilienceRecoveryCenterSection from './ResilienceRecoveryCenterSection';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
@@ -227,6 +228,9 @@ export default function Dashboard() {
 
       {/* Foresight & Risk Center — 기존 Forecast/Risk/Scenario 통합 Executive Foresight Layer (미래 단정/자동 생성 없음) */}
       <ForesightRiskCenterSection />
+
+      {/* Resilience & Recovery Center — 기존 Incident/Recovery 통합 Executive Resilience Layer (자동 복구 실행 없음) */}
+      <ResilienceRecoveryCenterSection />
 
       {/* AI Recommendation — 실제 KPI 근거 추천 Feed (Mission Control 상단) */}
       <AiRecommendationSection />
