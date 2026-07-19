@@ -9,15 +9,18 @@
  * 탭: Overview · Create · Detail(Allowlist/Assignment/Monitoring/Rollback) · Limitations.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { FlaskConical, PlusCircle, FileSearch, ShieldAlert, RefreshCw, Inbox, Radio, Activity } from 'lucide-react';
+import { FlaskConical, PlusCircle, FileSearch, ShieldAlert, RefreshCw, Inbox, Radio, Activity, ClipboardCheck } from 'lucide-react';
 import { AdminCard, AdminAlert, AdminBadge, AdminEmpty } from '@/components/admin/ui';
 import {
   buildAiExperimentAssignments, createAiExperiment, fetchAiExperimentDetail, fetchAiExperiments,
   proposeAiExperimentRollback, setAiExperimentAllowlist, setAiExperimentEmergencyStop, setAiExperimentStatus,
   fetchAiExperimentInternalOverview, fetchAiExperimentRuntimeEvents, stopAiExperimentStore, resumeAiExperimentStore,
   generateAiExperimentMetricSnapshot, generateAiExperimentGuardrailSnapshot,
+  createAiExperimentTestSession, fetchAiExperimentTestSessions, fetchAiExperimentTestSessionDetail,
+  computeAiExperimentPromotionGate,
   type AiExpDetail, type AiExpListRow, type AiExpStatus,
   type AiExpInternalOverview, type AiExpRuntimeEvent,
+  type AiExpTestSessionRow, type AiExpTestSessionDetail,
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import { toast } from '@/store/toastStore';
@@ -25,15 +28,35 @@ import { friendlyError } from '@/lib/errorMessages';
 import { relativeTimeKo } from '@/lib/memberGrowth';
 import { FIXED_EXPERIMENT_WARNING } from '@/lib/experimentIntel';
 import { INTERNAL_RUNTIME_WARNING } from '@/lib/experimentRuntimeRouting';
+import {
+  evaluateReadinessGate, FIXED_EXECUTION_WARNING,
+  type EnvironmentInput,
+} from '@/lib/experimentExecutionReadiness';
+
+// 사전 환경 감사(읽기 전용, 증거 기반): SRR Supabase 프로젝트는 Production 1개뿐이고
+// 개발 브랜치가 없어 Vercel Preview 앱이 Production DB 에 연결된다. Production migration
+// 이력은 0453 에서 종료(0565~0571 미적용). → Live 실행 최종 Decision = NO-GO.
+const AUDITED_ENVIRONMENT: EnvironmentInput = {
+  previewConnectedToProduction: true,
+  isolatedTestDb: false,
+  isolatedPreviewDb: false,
+  migrationStatus: 'not_applied',
+  missingTables: ['ai_recommendation_experiments', 'ai_experiment_runtime_events', 'ai_experiment_test_sessions'],
+  missingAdminRpcs: ['admin_ai_exp_create'],
+  missingRuntimeRpcs: ['experiment_treatment_gate', 'experiment_treatment_recommend'],
+  testStoreConfirmed: false,
+  emergencyStopTestable: false,
+};
 
 const NUM = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('ko-KR'));
 
-type Tab = 'overview' | 'create' | 'detail' | 'runtime' | 'limits';
+type Tab = 'overview' | 'create' | 'detail' | 'runtime' | 'execution' | 'limits';
 const TABS: { key: Tab; label: string; icon: typeof FlaskConical }[] = [
   { key: 'overview', label: 'Overview', icon: FlaskConical },
   { key: 'create', label: 'Create', icon: PlusCircle },
   { key: 'detail', label: 'Detail', icon: FileSearch },
   { key: 'runtime', label: 'Internal Runtime', icon: Radio },
+  { key: 'execution', label: 'Execution Validation', icon: ClipboardCheck },
   { key: 'limits', label: 'Limitations', icon: ShieldAlert },
 ];
 
@@ -52,7 +75,8 @@ const KNOWN_LIMITATIONS = [
   'SRM 감지 또는 Blocking Guardrail 위반 상태에서는 continue/promote 결정을 서버가 기록 거부합니다.',
   'Sample/기간 부족 상태에서 승자를 선언하지 않으며(CI 기반 유의성 필수), Shadow 결과는 실제 Treatment 결과로 기록되지 않습니다.',
   'Rollback Proposal approved는 자동 Rollback 실행이 아니라 관리자 실행 후보 승인 기록입니다.',
-  '이 UI는 브라우저에서 직접 검증되지 않았습니다. Migration 0565~0570은 Production 미적용이며 실제 내부 테스트는 아직 실행되지 않았습니다(Runtime Route/Exposure/Attribution/모든 지표 0/not_run).',
+  '이 UI는 브라우저에서 직접 검증되지 않았습니다. Migration 0565~0571은 Production 미적용이며 실제 내부 테스트는 아직 실행되지 않았습니다(Runtime Route/Exposure/Attribution/모든 지표 0/not_run).',
+  '사전 환경 감사(증거 기반): SRR Supabase는 Production 프로젝트 1개뿐·개발 브랜치 없음 → Vercel Preview 앱이 Production DB에 연결되고 격리 Test/Preview DB가 없어, AI-EXPERIMENT-3 Live 실행 최종 Decision은 NO-GO입니다. 실제 Treatment·Migration Apply·브라우저 재생 검증을 수행하지 않았습니다. Execution Validation 탭은 격리 Test DB 확보 시 사용할 증거 기록/Promotion Gate 프레임워크입니다.',
   'Store별 Emergency Stop은 다음 추천 요청부터 Control로 회귀시키는 신호이며, 현재 재생 중인 Track을 강제 중단하거나 Queue를 삭제하지 않습니다. 재활성화는 명시적 관리자 승인만 가능합니다.',
 ];
 
@@ -88,6 +112,11 @@ export default function ExperimentCenterSection() {
   const [rtOverview, setRtOverview] = useState<AiExpInternalOverview | null>(null);
   const [rtEvents, setRtEvents] = useState<AiExpRuntimeEvent[] | null>(null);
   const [rtStoreId, setRtStoreId] = useState('');
+
+  // Execution Validation 탭
+  const [sessions, setSessions] = useState<AiExpTestSessionRow[] | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<AiExpTestSessionDetail | null>(null);
+  const readiness = evaluateReadinessGate(AUDITED_ENVIRONMENT);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -144,6 +173,20 @@ export default function ExperimentCenterSection() {
     catch (e) { toast.error(friendlyError(e, '서버 게이트/사유가 거부할 수 있습니다')); }
     finally { setBusy(false); }
   }, [loadRuntime]);
+
+  const loadSessions = useCallback(async () => {
+    setBusy(true);
+    try { setSessions(await fetchAiExperimentTestSessions(null, 50)); }
+    catch (e) { toast.error(friendlyError(e, '0571 미적용 — Test Session 테이블 부재')); setSessions(null); }
+    finally { setBusy(false); }
+  }, []);
+
+  const openSession = useCallback(async (id: string) => {
+    setBusy(true);
+    try { setSessionDetail(await fetchAiExperimentTestSessionDetail(id)); }
+    catch (e) { toast.error(friendlyError(e, '0571 미적용일 수 있음')); }
+    finally { setBusy(false); }
+  }, []);
 
   return (
     <AdminCard title="Experiment Center" subtitle="AI-EXPERIMENT-1 — Controlled A/B & Canary (Allowlist 한정 · Global Rollout 없음)">
@@ -386,6 +429,104 @@ export default function ExperimentCenterSection() {
               </div>
             </>
           )}
+        </div>
+      ) : null}
+
+      {tab === 'execution' ? (
+        <div className="mt-3 space-y-2 text-[11px]">
+          <AdminAlert tone="warning">{FIXED_EXECUTION_WARNING}</AdminAlert>
+
+          {/* Environment Readiness — 증거 기반 사전 감사 결과 */}
+          <div className="rounded-lg bg-bg-deep p-3">
+            <div className="mb-1 flex items-center gap-2 font-semibold text-ink">
+              Environment Readiness
+              <AdminBadge tone={readiness.ready ? 'success' : 'danger'}>
+                {readiness.environment.toUpperCase()}
+              </AdminBadge>
+              <AdminBadge tone="neutral">{readiness.isolation}</AdminBadge>
+            </div>
+            {!readiness.ready ? (
+              <AdminAlert tone="danger">
+                Live 실행 최종 Decision = <strong>NO-GO</strong>. 사전 환경 감사 결과 SRR Supabase는 Production 프로젝트 1개뿐이고 개발 브랜치가 없어
+                Vercel Preview 앱이 Production DB에 연결되며(격리 Test/Preview DB 없음), Production migration은 0453에서 종료(0565~0571 미적용)입니다.
+                따라서 실제 Treatment·Migration Apply·브라우저 재생 검증을 수행하지 않았고, 관련 항목은 전부 not_run 입니다.
+              </AdminAlert>
+            ) : null}
+            <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Box label="DB Isolation" value={readiness.isolation} />
+              <Box label="Migration" value={AUDITED_ENVIRONMENT.migrationStatus} />
+              <Box label="Required RPC" value={AUDITED_ENVIRONMENT.missingRuntimeRpcs.length === 0 ? 'present' : 'missing'} hint={`runtime ${AUDITED_ENVIRONMENT.missingRuntimeRpcs.length} missing`} />
+              <Box label="Test Store" value={AUDITED_ENVIRONMENT.testStoreConfirmed ? 'confirmed' : 'unconfirmed'} />
+            </div>
+            <div className="mt-1 text-ink-mute">Blockers: {readiness.blockers.join(', ') || '없음'}</div>
+          </div>
+
+          {/* Test Session 목록 — 증거 기록 인프라(격리 DB 확보 시 사용) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => void loadSessions()} disabled={busy} className="rounded bg-bg-deep px-2.5 py-1 text-ink-mute hover:text-ink disabled:opacity-50">
+              <Activity className="mr-1 inline h-3 w-3" />Test Session 조회
+            </button>
+            <button type="button" disabled={busy || !detail}
+              onClick={() => {
+                if (!detail) { toast.error('Detail에서 실험을 먼저 여세요.'); return; }
+                void (async () => {
+                  try {
+                    const r = await createAiExperimentTestSession({
+                      experiment_id: detail.experiment.id,
+                      environment_status: readiness.environment, db_isolation: readiness.isolation,
+                      migration_status: AUDITED_ENVIRONMENT.migrationStatus, operator: 'admin',
+                    });
+                    toast.success('Test Session 생성'); await openSession(r.session_id); await loadSessions();
+                  } catch (e) { toast.error(friendlyError(e, '0571 미적용 — 격리 Test DB에서만 기록 가능')); }
+                })();
+              }}
+              className="rounded bg-bg-deep px-2.5 py-1 text-ink disabled:opacity-50">Test Session 생성</button>
+          </div>
+
+          {sessions == null ? (
+            <p className="text-ink-mute">Test Session 조회를 눌러 목록을 불러오세요. 실제 내부 테스트 미실행 + 0571 미적용으로 목록은 비어 있습니다(정직 보고).</p>
+          ) : sessions.length === 0 ? (
+            <AdminEmpty icon={<ClipboardCheck size={24} />} title="Test Session 없음" description="격리 Test/Preview DB 확보 전에는 실제 실행 증거가 없습니다." />
+          ) : (
+            <div className="rounded-lg bg-bg-deep p-2">
+              {sessions.map((s) => (
+                <div key={s.id} className="flex items-center justify-between text-ink-mute">
+                  <span>{s.environment_status} · {s.db_isolation} · {s.final_decision ?? '—'} · {relativeTimeKo(s.created_at, nowMs)}</span>
+                  <button type="button" onClick={() => void openSession(s.id)} disabled={busy} className="text-ink hover:underline disabled:opacity-50">열기</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Session Detail — Execution Checks + Promotion Gate */}
+          {sessionDetail ? (
+            <div className="rounded-lg bg-bg-deep p-3">
+              <div className="mb-1 font-semibold text-ink">
+                Session {sessionDetail.session.id.slice(0, 8)} · Decision {sessionDetail.session.final_decision ?? '—'}
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <Box label="Pass" value={NUM(sessionDetail.check_summary.pass)} />
+                <Box label="Fail" value={NUM(sessionDetail.check_summary.fail)} />
+                <Box label="Not Run" value={NUM(sessionDetail.check_summary.not_run)} />
+                <Box label="Insufficient" value={NUM(sessionDetail.check_summary.insufficient_data)} />
+              </div>
+              {sessionDetail.checks.length === 0 ? (
+                <p className="mt-1 text-ink-mute">Execution Check 없음 — 증거 없는 항목은 PASS로 승격되지 않습니다(not_run).</p>
+              ) : sessionDetail.checks.map((c) => (
+                <div key={c.id} className="mt-1 flex flex-wrap items-center gap-1.5 text-ink-mute">
+                  <AdminBadge tone={c.status === 'pass' ? 'success' : c.status === 'fail' ? 'danger' : 'neutral'}>{c.status}</AdminBadge>
+                  <span>{c.category} · {c.check_key}</span>
+                  <span>· {c.evidence_type}{c.evidence_summary ? ` (${c.evidence_summary})` : ''}</span>
+                </div>
+              ))}
+              <button type="button" disabled={busy}
+                onClick={() => void (async () => {
+                  try { await computeAiExperimentPromotionGate(sessionDetail.session.id, 'NO_GO', '환경 미격리(Preview→Production DB) — 실제 실행 불가'); toast.success('Promotion Gate 산출(NO_GO)'); await openSession(sessionDetail.session.id); }
+                  catch (e) { toast.error(friendlyError(e, '0571 미적용일 수 있음')); }
+                })()}
+                className="mt-2 rounded bg-black/20 px-2.5 py-1 text-ink disabled:opacity-50">Promotion Gate 산출</button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
