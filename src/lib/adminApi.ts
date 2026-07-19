@@ -8807,3 +8807,82 @@ export async function setAiPlDraftStatus(id: string, status: AiPlDraftStatus, re
   if (error) throw error;
   return data as AiPlDraftDetail;
 }
+
+/* ═══════════════ AI-PLAYLIST-INTEL-2 — Sequencing Intelligence (Shadow) ═══════════════ */
+/* Sequence Draft 는 playlist_tracks(order_index)/Queue/Scheduler/Player 에 반영되지 않는다. */
+
+export type AiPlSeqStatus = 'draft' | 'ready_for_review' | 'approved' | 'rejected' | 'expired' | 'archived';
+
+export interface AiPlSeqInput {
+  draft_id: string; draft_name: string; draft_status: string; store_type: string | null;
+  constraint_snapshot: Record<string, unknown>;
+  tracks: Array<Record<string, unknown>>;
+}
+
+export interface AiPlSeqListRow {
+  id: string; name: string; strategy: string; status: AiPlSeqStatus; seed: number;
+  playlist_draft_id: string; draft_name: string; track_count: number;
+  quality_score: number | null; quality_grade: string | null; avg_energy_delta: string | null;
+  algorithm_version: string; expires_at: string | null; created_at: string; reviewed_at: string | null;
+  created_by_name: string | null; reviewed_by_name: string | null;
+}
+
+export interface AiPlSeqTrackRow {
+  track_id: string; sequence_position: number; original_draft_order: number | null;
+  transition_from_track_id: string | null; transition_score: number | null;
+  energy_delta: number | null; bpm_delta: number | null;
+  reasons: Array<{ code: string; message: string; scoreImpact: number; source: string }>;
+  warnings: string[];
+  title: string | null; artist: string | null; album_name: string | null;
+  main_genre: string | null; mood: string | null; instrumental: boolean | null;
+  energy: number | null; bpm: number | null; vocal_presence: number | null;
+}
+
+export interface AiPlSeqDetail {
+  sequence: AiPlSeqListRow & {
+    input_snapshot: Record<string, unknown>; constraint_snapshot: Record<string, unknown>;
+    relaxations: Array<{ constraint: string; from: string; to: string; note: string }>;
+    energy_curve: number[]; quality_breakdown: Record<string, unknown>;
+    transition_summary: Record<string, unknown>; explanation: string[];
+    warnings: string[]; insufficient_data: string[]; rejection_reason: string | null;
+  };
+  tracks: AiPlSeqTrackRow[];
+  events: AiPlDraftEventRow[];
+  duplicate?: boolean;
+}
+
+export async function fetchAiPlSequenceInput(draftId: string): Promise<AiPlSeqInput> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seq_input', { p_draft_id: draftId });
+  if (error) throw error;
+  return data as AiPlSeqInput;
+}
+
+export async function createAiPlSequence(payload: Record<string, unknown>): Promise<AiPlSeqDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seq_create', { p_payload: payload as never });
+  if (error) throw error;
+  return data as AiPlSeqDetail;
+}
+
+export async function fetchAiPlSequences(status?: string | null, limit = 50): Promise<AiPlSeqListRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seqs', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiPlSeqListRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiPlSequenceDetail(id: string): Promise<AiPlSeqDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seq_detail', { p_id: id });
+  if (error) throw error;
+  return data as AiPlSeqDetail;
+}
+
+export async function reevaluateAiPlSequence(id: string): Promise<AiPlSeqDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seq_reevaluate', { p_id: id });
+  if (error) throw error;
+  return data as AiPlSeqDetail;
+}
+
+export async function setAiPlSequenceStatus(id: string, status: AiPlSeqStatus, reason?: string): Promise<AiPlSeqDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_pl_seq_set_status', { p_id: id, p_status: status, p_reason: reason ?? null });
+  if (error) throw error;
+  return data as AiPlSeqDetail;
+}
