@@ -8221,6 +8221,108 @@ export async function fetchEnterpriseForesightAudit(limit = 200): Promise<Enterp
   return (data ?? []) as EnterpriseForesightEventRow[];
 }
 
+/* ── AI-OPS-60: Enterprise Resilience Intelligence, Adaptive Response &
+      Business Continuity Center (0564) — 자동 복구 실행 없음 ── */
+
+export type EnterpriseResilienceSummary = Record<string, unknown>;
+
+export interface EnterpriseResilienceRow {
+  id: string;
+  resilience_code: string;
+  resilience_name: string;
+  resilience_category: string;
+  resilience_status: string;
+  resilience_summary: string | null;
+  assessment_status: string;
+  recovery_status: string;
+  adaptive_status: string;
+  confidence: number | null;
+  foresight_id: string | null;
+  transformation_id: string | null;
+  capacity_resource_id: string | null;
+  environment_observation_id: string | null;
+  assessment_result: Record<string, unknown> | null;
+  recovery_result: Record<string, unknown> | null;
+  adaptive_result: Record<string, unknown> | null;
+  continuity_result: Record<string, unknown> | null;
+  stability_result: Record<string, unknown> | null;
+  risk_signal_result: Record<string, unknown> | null;
+  spof_result: Record<string, unknown> | null;
+  priority_risk_result: Record<string, unknown> | null;
+  scorecard_result: Record<string, unknown> | null;
+  resilience_history: unknown;
+  recommendation_candidate: Record<string, unknown> | null;
+  resilience_reviews: unknown;
+  review_reference: Record<string, unknown> | null;
+  learning_references: unknown;
+  evidence: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseResilienceReviewRow {
+  id: string;
+  review_code: string;
+  resilience_id: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string | null;
+  findings: unknown;
+  review_reference: Record<string, unknown> | null;
+  evidence: unknown;
+  limitations: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnterpriseResilienceEventRow { id: string; event_type: string; resilience_id: string | null; resilience_review_id: string | null; detail: string | null; payload: Record<string, unknown> | null; actor_id: string | null; created_at: string }
+
+export async function fetchEnterpriseResilienceSummary(): Promise<EnterpriseResilienceSummary> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_intel_summary');
+  if (error) throw error;
+  return (data as EnterpriseResilienceSummary | null) ?? {};
+}
+export async function fetchEnterpriseResiliences(status: string | null = null, category: string | null = null, limit = 100): Promise<EnterpriseResilienceRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_list', { p_status: status, p_category: category, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseResilienceRow[];
+}
+export async function createEnterpriseResilience(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; resilience_is_not_guaranteed_survival: boolean; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; organization_changed: boolean; budget_changed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; resilience_is_not_guaranteed_survival: boolean; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; organization_changed: boolean; budget_changed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseResilience(resilienceId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; resilience_is_not_guaranteed_survival: boolean; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_review', { p_resilience_id: resilienceId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; resilience_is_not_guaranteed_survival: boolean; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function createEnterpriseResilienceReview(payload: Record<string, unknown>): Promise<{ ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; recovery_executed: boolean; production_applied: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_review_create', { p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; idempotent: boolean; id: string; initial_status: string; review_is_not_approval: boolean; recovery_executed: boolean; production_applied: boolean };
+}
+export async function reviewEnterpriseResilienceReview(reviewId: string, action: string, reason: string, payload: Record<string, unknown> = {}): Promise<{ ok: boolean; id: string; status: string; review_is_not_approval: boolean; recovery_executed: boolean; failover_applied: boolean; production_applied: boolean; human_decision: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_review_review', { p_review_id: reviewId, p_action: action, p_reason: reason, p_payload: payload });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; status: string; review_is_not_approval: boolean; recovery_executed: boolean; failover_applied: boolean; production_applied: boolean; human_decision: boolean };
+}
+export async function fetchEnterpriseResilienceReviews(resilienceId: string | null = null, limit = 100): Promise<EnterpriseResilienceReviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_reviews_list', { p_resilience_id: resilienceId, p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseResilienceReviewRow[];
+}
+export async function recordEnterpriseResilienceEvent(kind: string, reason: string, payload: Record<string, unknown>, resilienceId: string | null = null, reviewId: string | null = null): Promise<{ ok: boolean; id: string; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; organization_changed: boolean; budget_changed: boolean; production_applied: boolean; human_review_required: boolean }> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_event_record', { p_kind: kind, p_reason: reason, p_payload: payload, p_resilience_id: resilienceId, p_review_id: reviewId });
+  if (error) throw error;
+  return data as { ok: boolean; id: string; recovery_executed: boolean; failover_applied: boolean; strategy_changed: boolean; organization_changed: boolean; budget_changed: boolean; production_applied: boolean; human_review_required: boolean };
+}
+export async function fetchEnterpriseResilienceAudit(limit = 200): Promise<EnterpriseResilienceEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_resilience_intel_audit', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as EnterpriseResilienceEventRow[];
+}
+
 export async function fetchDailySeries(days = 7): Promise<DailySeriesPoint[]> {
   const { data, error } = await supabase.rpc('admin_daily_series', { days });
   if (error) throw error;
