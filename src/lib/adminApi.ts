@@ -8886,3 +8886,86 @@ export async function setAiPlSequenceStatus(id: string, status: AiPlSeqStatus, r
   if (error) throw error;
   return data as AiPlSeqDetail;
 }
+
+/* ═══════════════ AI-RECOMMEND-2 — Recommendation v2 (Shadow Draft) ═══════════════ */
+/* v1 추천/Playlist/Queue/Player 는 무변경. v1 비교는 서버가 읽기 전용으로만 호출한다. */
+
+export type AiRecDraftStatus = 'draft' | 'ready_for_review' | 'approved' | 'rejected' | 'expired' | 'archived';
+
+export interface AiRecDraftListRow {
+  id: string; name: string; recommendation_mode: string; status: AiRecDraftStatus;
+  store_type: string | null; brand_id: string | null;
+  target_track_count: number; candidate_count: number; eligible_count: number; selected_count: number;
+  quality_score: number | null; quality_grade: string | null; has_v1_comparison: boolean;
+  algorithm_version: string; seed: number; expires_at: string | null;
+  created_at: string; reviewed_at: string | null;
+  created_by_name: string | null; reviewed_by_name: string | null;
+}
+
+export interface AiRecDraftTrackRow {
+  track_id: string; rank: number; selected: boolean; eligible: boolean;
+  final_score: number | null; score_breakdown: Record<string, unknown>;
+  selection_reasons: Array<{ code: string; message: string; scoreImpact: number; source: string }>;
+  exclusion_reasons: Array<{ code: string; message: string; scoreImpact: number; source: string }>;
+  feature_snapshot: Record<string, unknown>;
+  v1_rank: number | null; rank_delta: number | null;
+  title: string | null; artist: string | null; album_name: string | null;
+  main_genre: string | null; mood: string | null; bpm: number | null;
+}
+
+export interface AiRecDraftDetail {
+  draft: AiRecDraftListRow & {
+    input_snapshot: Record<string, unknown>; weight_snapshot: Record<string, unknown>;
+    constraint_snapshot: Record<string, unknown>; quality_breakdown: Record<string, unknown>;
+    comparison_summary: Record<string, unknown>; explanation: string[];
+    warnings: string[]; insufficient_data: string[]; rejection_reason: string | null;
+  };
+  tracks: AiRecDraftTrackRow[];
+  events: AiPlDraftEventRow[];
+  comparisons: Array<{ comparison_type: string; baseline_version: string; candidate_version: string; metrics: Record<string, unknown>; created_at: string }>;
+  duplicate?: boolean;
+}
+
+export async function fetchAiRecCandidatePool(filters: Record<string, unknown>): Promise<{
+  items: Array<Record<string, unknown>>; exposure_ledger: string; limit: number;
+}> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_candidate_pool', { p_filters: filters as never });
+  if (error) throw error;
+  return data as { items: Array<Record<string, unknown>>; exposure_ledger: string; limit: number };
+}
+
+export async function createAiRecDraft(payload: Record<string, unknown>): Promise<AiRecDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_draft_create', { p_payload: payload as never });
+  if (error) throw error;
+  return data as AiRecDraftDetail;
+}
+
+export async function fetchAiRecDrafts(status?: string | null, limit = 50): Promise<AiRecDraftListRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_drafts', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiRecDraftListRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiRecDraftDetail(id: string): Promise<AiRecDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_draft_detail', { p_id: id });
+  if (error) throw error;
+  return data as AiRecDraftDetail;
+}
+
+export async function reevaluateAiRecDraft(id: string): Promise<AiRecDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_draft_reevaluate', { p_id: id });
+  if (error) throw error;
+  return data as AiRecDraftDetail;
+}
+
+export async function setAiRecDraftStatus(id: string, status: AiRecDraftStatus, reason?: string): Promise<AiRecDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_draft_set_status', { p_id: id, p_status: status, p_reason: reason ?? null });
+  if (error) throw error;
+  return data as AiRecDraftDetail;
+}
+
+export async function compareAiRecDraftWithV1(id: string): Promise<AiRecDraftDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_rec_compare_v1', { p_draft_id: id });
+  if (error) throw error;
+  return data as AiRecDraftDetail;
+}
