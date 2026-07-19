@@ -8969,3 +8969,132 @@ export async function compareAiRecDraftWithV1(id: string): Promise<AiRecDraftDet
   if (error) throw error;
   return data as AiRecDraftDetail;
 }
+
+/* ═══════════════ AI-LEARNING-1 — Learning Signal Foundation (Shadow) ═══════════════ */
+/* Production Weight/v1·v2/Playlist/Queue/Player 불변. Apply RPC 없음. */
+
+export type AiLearnProposalStatus = 'draft' | 'ready_for_review' | 'approved' | 'rejected' | 'archived';
+
+export interface AiLearnOverview {
+  exposures_total: number; exposures_shadow: number;
+  events_total: number; events_valid: number; events_invalid: number; events_excluded: number;
+  attributed: number; unattributed: number;
+  track_coverage: number; store_coverage: number;
+  aggregates: number; proposals: number;
+  reaction_rows_production_note: string;
+}
+
+export interface AiLearnExposureRow {
+  id: string; is_shadow: boolean; source: string; algorithm_version: string | null;
+  store_id: string | null; store_type: string | null; track_id: string; title: string | null;
+  recommendation_rank: number | null; playlist_id: string | null; sequence_draft_id: string | null;
+  exposed_at: string; selected_at: string | null; playback_started_at: string | null;
+}
+
+export interface AiLearnEventRow {
+  id: string; event_type: string; track_id: string; title: string | null;
+  store_id: string | null; session_id: string | null;
+  occurred_at: string; received_at: string; normalized_value: number | null;
+  signal_type: string; signal_status: string; confidence: number;
+  attribution_status: string; validation_reasons: string[];
+}
+
+export interface AiLearnAggregateRow {
+  entity_type: string; entity_id: string; title: string | null;
+  window_type: string; window_start: string; window_end: string;
+  metrics: Record<string, unknown>; confidence: number; sample_status: string;
+  bias_flags: unknown[];
+}
+
+export interface AiLearnProposalRow {
+  id: string; scope_type: string; scope_id: string | null; status: AiLearnProposalStatus;
+  algorithm_version: string; base_weight_version: string; proposed_weight_version: string;
+  sample_count: number; confidence: number;
+  quality_score: number | null; quality_grade: string | null;
+  created_at: string; reviewed_at: string | null;
+  created_by_name: string | null; reviewed_by_name: string | null;
+}
+
+export interface AiLearnProposalDetail {
+  proposal: AiLearnProposalRow & {
+    current_weights: Record<string, number>; proposed_weights: Record<string, number>;
+    deltas: Record<string, number>; evidence_window: Record<string, unknown>;
+    expected_impact: Record<string, unknown>; backtest_result: Record<string, unknown>;
+    risks: string[]; insufficient_data: string[]; explanation: string[];
+    rejection_reason: string | null;
+  };
+  events: AiPlDraftEventRow[];
+  duplicate?: boolean;
+}
+
+export async function fetchAiLearnOverview(): Promise<AiLearnOverview> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_overview');
+  if (error) throw error;
+  return data as AiLearnOverview;
+}
+
+export async function recordAiLearnExposure(payload: Record<string, unknown>): Promise<{ id: string; duplicate: boolean }> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_record_exposure', { p_payload: payload as never });
+  if (error) throw error;
+  return data as { id: string; duplicate: boolean };
+}
+
+export async function recordAiLearnEvents(events: Array<Record<string, unknown>>): Promise<{ inserted: number; duplicates: number; invalid: number }> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_record_events', { p_events: events as never });
+  if (error) throw error;
+  return data as { inserted: number; duplicates: number; invalid: number };
+}
+
+export async function fetchAiLearnExposures(limit = 50, offset = 0): Promise<AiLearnExposureRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_exposures', { p_limit: limit, p_offset: offset });
+  if (error) throw error;
+  return ((data as { items?: AiLearnExposureRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiLearnEvents(status?: string | null, limit = 50): Promise<AiLearnEventRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_events', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiLearnEventRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function buildAiLearnAggregates(window: 'daily' | '7d' | '28d'): Promise<{ window: string; rows: number }> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_build_aggregates', { p_window: window });
+  if (error) throw error;
+  return data as { window: string; rows: number };
+}
+
+export async function fetchAiLearnAggregates(entityType = 'track', window = '7d', limit = 100): Promise<AiLearnAggregateRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_aggregates', { p_entity_type: entityType, p_window: window, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiLearnAggregateRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function createAiLearnProposal(payload: Record<string, unknown>): Promise<AiLearnProposalDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_proposal_create', { p_payload: payload as never });
+  if (error) throw error;
+  return data as AiLearnProposalDetail;
+}
+
+export async function fetchAiLearnProposals(status?: string | null, limit = 50): Promise<AiLearnProposalRow[]> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_proposals', { p_status: status ?? null, p_limit: limit });
+  if (error) throw error;
+  return ((data as { items?: AiLearnProposalRow[] } | null) ?? {}).items ?? [];
+}
+
+export async function fetchAiLearnProposalDetail(id: string): Promise<AiLearnProposalDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_proposal_detail', { p_id: id });
+  if (error) throw error;
+  return data as AiLearnProposalDetail;
+}
+
+export async function recordAiLearnBacktest(id: string, result: Record<string, unknown>): Promise<AiLearnProposalDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_proposal_backtest', { p_id: id, p_result: result as never });
+  if (error) throw error;
+  return data as AiLearnProposalDetail;
+}
+
+export async function setAiLearnProposalStatus(id: string, status: AiLearnProposalStatus, reason?: string): Promise<AiLearnProposalDetail> {
+  const { data, error } = await supabase.rpc('admin_ai_learn_proposal_set_status', { p_id: id, p_status: status, p_reason: reason ?? null });
+  if (error) throw error;
+  return data as AiLearnProposalDetail;
+}
