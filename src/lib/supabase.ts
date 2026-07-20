@@ -1,9 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateEnvironment, maskProjectRef } from '@/lib/appEnvironment';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(url && anon);
+
+/**
+ * AI-ENV-1 — 환경 검증(Client 생성 전). Preview/Test 앱이 Production Project Ref 에
+ * 연결되거나 Service Role Key 가 노출되면 status='blocked' 이며, 그 경우 Client 를
+ * **Production 이 아닌 dead localhost 로 중립화**해 어떤 요청도 Production 에 도달하지
+ * 못하게 한다(App 은 상위에서 Environment Block Screen 을 렌더). 미설정(legacy) 환경은
+ * 기존 동작을 유지해 Production 을 깨뜨리지 않는다(자동 Fallback 아님 — 명시적 legacy).
+ */
+export const environmentValidation = validateEnvironment({
+  appEnv: import.meta.env.VITE_APP_ENV,
+  supabaseUrl: url,
+  anonKey: anon,
+  expectedRef: import.meta.env.VITE_EXPECTED_SUPABASE_PROJECT_REF,
+});
+const envBlocked = environmentValidation.status === 'blocked';
 
 /** 현재 연결된 Supabase project ref (예: nsoesrvwkxqifjcxzvol). UI/로그 진단용. */
 export const supabaseProjectRef: string = (() => {
@@ -18,10 +34,12 @@ export const supabaseProjectRef: string = (() => {
 // 어떤 프로젝트/DB 에 연결됐는지 즉시 확인 (배포본에서도 출력) — 업로드 미반영 진단용
  
 console.log('[SupabaseEnv]', {
-  url: url ?? '(missing)',
-  projectRef: supabaseProjectRef,
+  appEnv: environmentValidation.appEnvironment,
+  projectRef: maskProjectRef(supabaseProjectRef),
   anonKeySet: Boolean(anon),
   configured: isSupabaseConfigured,
+  safety: environmentValidation.status,
+  blocked: envBlocked,
 });
 
 /**
@@ -74,9 +92,11 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
 }
 
 // Untyped client — 우리는 자체 Row 타입(@/types/db)으로 캐스팅해 사용합니다.
+// envBlocked(증명된 위험: Preview→Production Ref / Service Role 노출 / Ref 불일치)일 때는
+// Production 이 아닌 dead localhost 로 중립화 — 어떤 요청도 Production 에 도달하지 않는다.
 export const supabase = createClient(
-  url || 'http://localhost:54321',
-  anon || 'public-anon-key',
+  envBlocked ? 'http://127.0.0.1:54321' : (url || 'http://localhost:54321'),
+  envBlocked ? 'blocked-neutralized-key' : (anon || 'public-anon-key'),
   {
     auth: {
       persistSession: true,

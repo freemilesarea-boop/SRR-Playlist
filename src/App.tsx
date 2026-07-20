@@ -6,10 +6,12 @@ import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { usePlayerStore } from '@/store/playerStore';
 import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, environmentValidation } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
 import { installUnloadGuard } from '@/lib/playbackGuard';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
+import EnvironmentBlockScreen from '@/components/EnvironmentBlockScreen';
+import EnvironmentBanner from '@/components/EnvironmentBanner';
 import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
@@ -161,6 +163,13 @@ export default function App() {
   useWakeLock(playing);
   useTrackVisit();
 
+  // AI-ENV-1 — 안전하지 않은 환경 연결(Preview→Production Ref / Service Role 노출 /
+  // Expected Ref 불일치)이 증명되면 Player/Admin 렌더 전에 차단한다. Production 으로
+  // 자동 Fallback 하지 않는다(legacy 미설정 환경은 status!=='blocked' 이라 통과).
+  if (environmentValidation.status === 'blocked') {
+    return <EnvironmentBlockScreen result={environmentValidation} onRetry={() => window.location.reload()} />;
+  }
+
   if (!isSupabaseConfigured) {
     return <ConfigMissingScreen />;
   }
@@ -200,6 +209,7 @@ export default function App() {
 
   return (
     <>
+      <EnvironmentBanner />
       <Toaster />
       {decision === 'loading' ? (
         <AccountStatusLoader />
