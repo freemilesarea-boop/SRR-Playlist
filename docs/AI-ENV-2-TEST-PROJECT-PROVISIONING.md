@@ -11,6 +11,25 @@
   원클릭 적용한다. 아래 "CI 원클릭 적용" 참고.
 - ⏳ Vercel Preview 환경변수 설정 / Browser 검증: 운영자 작업(대시보드 접근 필요).
 
+## AI-ENV-2C-OPS — 실행 경로 감사 + Connection Preflight (실측)
+
+- **Preflight PASS (읽기 전용, MCP 단일 쿼리)**: Test `haojpu…qorr` @ port 5432 · PostgreSQL 17.6 ·
+  public tables/views/functions = **0/0/0** · auth_users **0** · storage_buckets **0** ·
+  foreign_servers **0** · extensions 5(Supabase 기본) · migration history **0**.
+  → 대상이 Production(`nsoesr…zvol`)과 상이하고 **완전 빈 격리 상태**임을 확정(스펙 5~6단계).
+- **실행 경로 결정**:
+  - GitHub Actions dispatch(에이전트) = BLOCKED(403, Actions write 권한 없음)
+  - Repository Secret 등록(에이전트) = BLOCKED(도구 부재 — 운영자만)
+  - 에이전트 Local psql = BLOCKED(raw postgres TCP 차단)
+  - **CI Runner → Supabase = AVAILABLE**(기존 db-apply 워크플로우가 증거)
+  - **운영자 Local = AVAILABLE_WITH_OPERATOR** ← **권장 최단 경로**
+- **Full Migration Run**: 이 세션에서 실행 불가 → 운영자가 아래 중 하나로 첫 Full Run 수행:
+  1. **운영자 Local(권장)**: PR 브랜치 checkout 후
+     `TEST_SUPABASE_PROJECT_REF=haojpuhztegecbrwqorr DATABASE_URL="<test-session-pooler-uri>" npm run db:test:dryrun`
+     (db-test-guard가 Production Ref 거부 · 0001→최신 순차 · 첫 실패에서 중단·번호 보고)
+  2. **CI**: 아래 "CI 원클릭 적용" — 단, 워크플로우가 default 브랜치에 있어야 dispatch 가능
+     (이 PR 체인 병합 또는 workflow-only 반영은 **명시적 repo 변경 승인 후에만**).
+
 ## CI 원클릭 적용 (권장 — 전체 스택 + Seed)
 
 1. Repo Settings → Secrets and variables → Actions 에 등록(값은 절대 커밋/PR 금지):
