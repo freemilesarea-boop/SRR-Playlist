@@ -14,6 +14,7 @@ import {
   computeEnvironmentReadiness, maskProjectRef, isIntegrationBlocked,
   type ReadinessInput, type IntegrationName,
 } from '@/lib/appEnvironment';
+import { deriveFinalCertification, type FinalCertInput } from '@/lib/migrationCertification';
 
 // 증거 기반 현재 상태(읽기 전용 감사 결과). 코드 가드는 완비됐으나 격리 Test DB /
 // Preview 환경변수 / Browser 검증은 사람 후속 작업이라 PARTIALLY_READY.
@@ -47,6 +48,28 @@ const FOUNDATION_READINESS: ReadinessInput = {
 
 const INTEGRATIONS: IntegrationName[] = ['payment', 'settlement', 'email', 'sms', 'push', 'webhook', 'store_control', 'analytics'];
 
+// AI-ENV-2 — Dedicated Test Project 미프로비저닝(월 $10 결제 + 사람 승인 필요) →
+// Live 인증 Decision = BLOCKED. 격리 DB 없어 Migration/RLS/RPC/Browser 전부 not_run.
+const CERT_INPUT: FinalCertInput = {
+  dedicatedProjectExists: false,
+  previewConnectedToTestProject: false,
+  productionRefUsedAsTarget: false,
+  secretIsolated: true,
+  failClosedGuardOk: true,
+  migration: { status: 'not_run', fullStackApplied: false, latestMatches: false, blockers: ['no_target_db'] },
+  driftRepoVsTest: 'unknown',
+  seedApplied: false,
+  authLoginOk: 'not_run',
+  storageOk: 'not_run',
+  audioPlaybackOk: 'not_run',
+  rls: { status: 'not_run', criticalFailure: false, perRole: [] },
+  rpc: { status: 'not_run', missing: [], existsButUnvalidated: [], failed: [] },
+  externalIntegrationsBlocked: true,
+  resetReseedOk: 'not_run',
+  browserPreviewOk: 'not_run',
+  productionDataAbsence: 'not_run',
+};
+
 function Box({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' | 'bad' }) {
   const color = tone === 'ok' ? 'text-emerald-300' : tone === 'bad' ? 'text-red-300' : tone === 'warn' ? 'text-amber-300' : 'text-ink';
   return (
@@ -67,6 +90,7 @@ export default function EnvironmentFoundationSection() {
 
   const decisionTone = readiness.decision === 'READY_FOR_INTERNAL_TEST' ? 'success'
     : readiness.decision === 'PARTIALLY_READY' ? 'warning' : 'danger';
+  const cert = deriveFinalCertification(CERT_INPUT);
 
   return (
     <AdminCard title="Environment Foundation" subtitle="AI-ENV-1 — Isolated Preview DB · Safe Migration Pipeline · Fail-Closed Guard">
@@ -126,14 +150,41 @@ export default function EnvironmentFoundationSection() {
         <p className="mt-1 text-ink-mute">Production 환경에서는 정상 동작하며, Test/Preview/Local 에서는 결제·정산·이메일·SMS·Webhook·외부 매장 제어를 차단합니다.</p>
       </div>
 
+      {/* AI-ENV-2 — Dedicated Test Project Certification */}
+      <div className="mt-3 rounded-lg bg-bg-deep p-3 text-[11px]">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-ink">
+          Test Project Certification (AI-ENV-2)
+          <AdminBadge tone={cert.decision === 'READY_FOR_INTERNAL_TEST' ? 'success' : cert.decision === 'PARTIALLY_READY' ? 'warning' : 'danger'}>
+            {cert.decision}
+          </AdminBadge>
+          <span className="text-ink-mute">Score {cert.score ?? '—'} · {cert.grade}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Box label="Dedicated Test Project" value="not provisioned" tone="bad" />
+          <Box label="Preview → Test DB" value="not connected" tone="warn" />
+          <Box label="Full Migration Apply" value="not_run" tone="warn" />
+          <Box label="RLS / RPC Integration" value="not_run" tone="warn" />
+          <Box label="Test Auth / Storage / Audio" value="not_run" tone="warn" />
+          <Box label="Browser Preview" value="not_run" tone="warn" />
+          <Box label="Production Data Absence" value="not_run" tone="warn" />
+          <Box label="Prod Ref Used As Target" value="no" tone="ok" />
+        </div>
+        <AdminAlert tone="danger">
+          Live 인증 Decision = <strong>BLOCKED</strong>. Dedicated Test Supabase Project 생성은 <strong>월 $10 recurring 결제 + 사용자 승인</strong>이
+          필요한 billable 작업이라 자율 생성하지 않았고, Vercel Preview 환경변수 설정 도구도 없습니다. 정확한 사람 실행 절차는
+          <code> docs/AI-ENV-2-TEST-PROJECT-PROVISIONING.md </code>를 참고하세요. Blocking: {cert.blockingReasons.join(', ')}.
+        </AdminAlert>
+      </div>
+
       {/* 정직 고지 */}
       <ul className="mt-3 list-disc space-y-1 pl-5 text-[11px] text-ink-mute">
         <li>Production DB/Schema/Data/Auth/Storage/Secret을 변경하지 않았고 Production Service Role Key를 사용하지 않았습니다.</li>
         <li>Dedicated Test Supabase Project를 <strong>생성하지 않았습니다</strong>(결제·운영 권한 필요 — 사람 후속 작업). Local/코드 기반만 구축했습니다.</li>
         <li>Test/Preview DB에 실제 Migration을 적용하지 않았습니다. DB/RPC/Browser Integration Test는 not_run입니다.</li>
         <li>Synthetic Seed에는 실제 개인정보/계약/정산/계좌/ISRC/Production Row ID가 없습니다.</li>
-        <li>이 Phase에서는 AI Treatment/Canary/Global Rollout을 실행하지 않았습니다. 최종 Decision = <strong>PARTIALLY_READY</strong>.</li>
-        <li>READY_FOR_INTERNAL_TEST는 Internal Test 성공이 아니라 실행 환경 준비 완료를 의미합니다.</li>
+        <li>AI-ENV-2: Dedicated Test Project를 생성하지 않았고(월 $10 결제 + 사용자 승인 필요), Vercel Preview 환경변수를 설정하지 않았으며, Test DB에 Migration을 적용하지 않았습니다. Migration/RLS/RPC/Browser/Audio Integration은 not_run입니다.</li>
+        <li>이 Phase에서는 AI Treatment/Internal Experiment/Canary/Global Rollout을 실행하지 않았습니다. Live 인증 Decision = <strong>BLOCKED</strong>.</li>
+        <li>READY_FOR_INTERNAL_TEST는 Internal Test 성공이 아니라 격리 환경 인증 완료를 의미하며, 아직 달성하지 않았습니다.</li>
       </ul>
     </AdminCard>
   );
