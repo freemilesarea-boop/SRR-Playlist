@@ -26,6 +26,10 @@ on:
         description: '격리 Test DB 에 전체 마이그레이션을 적용하려면 APPLY_TO_TEST 입력'
         required: true
         default: ''
+      apply_seed:
+        description: 'Synthetic Seed 도 적용하려면 true (AI-ENV-2C 인증 단계에서는 false — 다음 Phase 2D 에서 seed)'
+        required: false
+        default: 'false'
 
 jobs:
   provision-test-db:
@@ -83,36 +87,73 @@ jobs:
           # 실제 운영 데이터가 이미 있으면(예: users 다수) 안전을 위해 경고만 — 빈 Test DB 전제.
           psql -tA -c "select 'is_empty=' || (case when $COUNT = 0 then 'YES' else 'NO' end);"
 
-      - name: 1) Full migration stack 순차 적용 (0001 → 최신)
+      - name: 1) Full migration stack 순차 적용 (0001 → 최신) — 첫 실패에서 중단 + 번호 보고
         run: |
           set -e
+          total=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
           applied=0
           for f in $(ls supabase/migrations/*.sql | sort); do
-            echo "→ apply $(basename "$f")"
-            psql -v ON_ERROR_STOP=1 -f "$f"
+            name=$(basename "$f")
+            echo "→ apply $name"
+            if ! psql -v ON_ERROR_STOP=1 -f "$f" > /tmp/mig.out 2> /tmp/mig.err; then
+              echo "::error::Migration 실패: $name (applied=$applied/$total)"
+              echo "── stderr (첫 20줄) ──"
+              head -20 /tmp/mig.err
+              echo "::error::기존 Migration 을 수정하지 말고 신규 Compatibility Migration(예: 0572_*.sql)으로 해결한 뒤, 빈 DB 를 초기화하고 0001 부터 재실행하세요."
+              exit 1
+            fi
             applied=$((applied+1))
           done
-          echo "✅ applied $applied migration files"
+          echo "FAILED_MIGRATION_COUNT=0"
+          echo "✅ applied $applied/$total migration files — Failed Migration = 0"
 
-      - name: 2) Synthetic Seed 적용 (seed_test.sql)
+      - name: 2) Synthetic Seed 적용 (seed_test.sql) — apply_seed=true 일 때만 (AI-ENV-2D)
+        if: ${{ github.event.inputs.apply_seed == 'true' }}
         run: psql -v ON_ERROR_STOP=1 -f supabase/seed_test.sql
 
-      - name: 3) 검증 — 핵심 테이블 + AI Experiment 자산 존재
+      - name: 3) Schema Inventory (AI-ENV-2C Certification — steps 9)
         run: |
           set -e
+          echo "════════ SCHEMA INVENTORY (public) ════════"
           psql -tA <<'SQL'
-            select 'public_tables=' || count(*)::text from information_schema.tables where table_schema='public';
-            select 'tracks_seeded=' || count(*)::text from public.tracks where title like 'TEST %';
-            select 'ai_experiment_tables=' || count(*)::text
-              from information_schema.tables
-              where table_schema='public' and table_name like 'ai_experiment%';
+            select 'tables='      || count(*)::text from information_schema.tables    where table_schema='public' and table_type='BASE TABLE';
+            select 'views='       || count(*)::text from information_schema.views     where table_schema='public';
+            select 'functions='   || count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public';
+            select 'policies='    || count(*)::text from pg_policies where schemaname='public';
+            select 'rls_enabled_tables=' || count(*)::text from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity;
+            select 'triggers='    || count(*)::text from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal;
+            select 'indexes='     || count(*)::text from pg_indexes where schemaname='public';
+            select 'constraints=' || count(*)::text from information_schema.table_constraints where constraint_schema='public';
+            select 'extensions='  || count(*)::text from pg_extension;
+            select 'enums='       || count(*)::text from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typtype='e';
+          SQL
+          echo "════════ AI Experiment 자산 확인 ════════"
+          psql -tA <<'SQL'
+            select 'ai_experiment_tables=' || count(*)::text from information_schema.tables where table_schema='public' and table_name like 'ai_experiment%';
+            select 'ai_learning_tables='   || count(*)::text from information_schema.tables where table_schema='public' and table_name like 'ai_learning%';
+            select 'tracks_seeded='        || count(*)::text from public.tracks where title like 'TEST %';
             select 'exp_runtime_rpc=' ||
               (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-                where n.nspname='public' and p.proname='experiment_treatment_gate')
-                then 'YES' else 'NO' end);
+                where n.nspname='public' and p.proname='experiment_treatment_gate') then 'YES' else 'NO' end);
           SQL
 
-      - name: 4) 정직 고지
+      - name: 4) Migration Drift (AI-ENV-2C Certification — step 10)
+        run: |
+          set -e
+          REPO_COUNT=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
+          echo "repository_migration_files=$REPO_COUNT"
+          # supabase_migrations.schema_migrations 가 존재하면 적용 이력 수도 비교(psql 직접 적용은 이력을 남기지 않을 수 있음).
+          psql -tA <<'SQL'
+            select 'applied_history=' ||
+              coalesce((select count(*)::text from supabase_migrations.schema_migrations), 'n/a(psql direct apply — history not tracked)');
+            select 'public_tables_present=' ||
+              (case when (select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE') > 0 then 'YES' else 'NO' end);
+          SQL
+          echo "DRIFT_NOTE: psql 직접 적용은 supabase_migrations 이력을 남기지 않을 수 있습니다. 스키마 존재 여부로 적용 완료를 판단하고,"
+          echo "정식 이력 기반 drift(in_sync) 확인이 필요하면 'supabase db push'(CLI link)로 적용하세요."
+
+      - name: 5) 정직 고지
         run: |
           echo "이 워크플로우는 격리 Test Project 에만 적용됩니다. Production 은 변경되지 않았습니다."
           echo "실제 결제/이메일/SMS/Webhook 은 호출하지 않았고, AI Treatment/Experiment 는 실행하지 않았습니다."
+          echo "Schema Inventory 와 Failed Migration=0 이 확인되면 이 Test DB 는 MIGRATION_CERTIFIED 후보입니다."
