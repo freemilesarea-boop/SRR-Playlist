@@ -31,9 +31,16 @@ on:
         required: false
         default: 'false'
 
+# 최소 권한 — 이 워크플로우는 Repository 를 읽고 Test DB 에만 적용한다.
+permissions:
+  contents: read
+
 jobs:
   provision-test-db:
     runs-on: ubuntu-latest
+    # Test 전용 Environment — Production Secret Scope 와 분리. 운영자는 이 environment 에만
+    # Test DB Secret 을 등록하고(선택적으로 승인 보호 규칙 부여) Production Scope 를 오염시키지 않는다.
+    environment: test
     env:
       PGHOST: ${{ secrets.TEST_SUPABASE_DB_HOST }}
       PGUSER: ${{ secrets.TEST_SUPABASE_DB_USER }}
@@ -54,9 +61,27 @@ jobs:
             exit 1
           fi
 
+      - name: Secret presence check (값 미노출 — configured yes/no 만 보고)
+        run: |
+          set -euo pipefail
+          # 시크릿 '값'은 절대 출력하지 않는다. 등록 여부(길이>0)만 yes/no 로 보고한다.
+          present() { if [ -n "${1:-}" ]; then echo "yes"; else echo "no"; fi; }
+          echo "════════ TEST SECRET PRESENCE (값 미노출) ════════"
+          echo "TEST_SUPABASE_DB_HOST     configured: $(present "$PGHOST")"
+          echo "TEST_SUPABASE_DB_USER     configured: $(present "$PGUSER")"
+          echo "TEST_SUPABASE_DB_PASSWORD configured: $(present "$PGPASSWORD")"
+          echo "TEST_SUPABASE_PROJECT_REF configured: $(present "$TEST_SUPABASE_PROJECT_REF")"
+          echo "TEST_SUPABASE_DB_PORT     configured: $(present "${PGPORT:-}") (미설정 시 5432)"
+          echo "TEST_SUPABASE_DB_NAME     configured: $(present "${PGDATABASE:-}") (미설정 시 postgres)"
+          if [ -z "$PGHOST" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ] || [ -z "$TEST_SUPABASE_PROJECT_REF" ]; then
+            echo "::error::필수 Test Secret 이 등록되지 않았습니다. 운영자는 'test' Environment 에 4개 필수 Secret 을 등록한 뒤 다시 실행하세요."
+            exit 1
+          fi
+          echo "✅ 필수 Test Secret 4개 모두 등록됨 (값은 표시하지 않음)."
+
       - name: Production guard (Ref/Host/User 검사)
         run: |
-          set -e
+          set -euo pipefail
           if [ -z "$PGHOST" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ] || [ -z "$TEST_SUPABASE_PROJECT_REF" ]; then
             echo "::error::필수 시크릿(TEST_SUPABASE_DB_HOST/USER/PASSWORD/PROJECT_REF)이 비어 있습니다."
             exit 1
@@ -80,7 +105,7 @@ jobs:
 
       - name: 0) 연결 + 빈 DB 확인
         run: |
-          set -e
+          set -euo pipefail
           psql -c "select now() as server_time;"
           COUNT=$(psql -tA -c "select count(*) from information_schema.tables where table_schema='public';")
           echo "public tables before apply: $COUNT"
@@ -89,7 +114,7 @@ jobs:
 
       - name: 1) Full migration stack 순차 적용 (0001 → 최신) — 첫 실패에서 중단 + 번호 보고
         run: |
-          set -e
+          set -euo pipefail
           total=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
           applied=0
           for f in $(ls supabase/migrations/*.sql | sort); do
@@ -113,7 +138,7 @@ jobs:
 
       - name: 3) Schema Inventory (AI-ENV-2C Certification — steps 9)
         run: |
-          set -e
+          set -euo pipefail
           echo "════════ SCHEMA INVENTORY (public) ════════"
           psql -tA <<'SQL'
             select 'tables='      || count(*)::text from information_schema.tables    where table_schema='public' and table_type='BASE TABLE';
@@ -139,7 +164,7 @@ jobs:
 
       - name: 4) Migration Drift (AI-ENV-2C Certification — step 10)
         run: |
-          set -e
+          set -euo pipefail
           REPO_COUNT=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
           echo "repository_migration_files=$REPO_COUNT"
           # supabase_migrations.schema_migrations 가 존재하면 적용 이력 수도 비교(psql 직접 적용은 이력을 남기지 않을 수 있음).
