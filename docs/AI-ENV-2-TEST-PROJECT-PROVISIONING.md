@@ -205,3 +205,39 @@ npm run db:test:guard && psql "$TEST_DATABASE_URL" -f supabase/seed_test.sql
 > `READY_FOR_INTERNAL_TEST`는 Internal Test **성공**이 아니라 격리 환경 **인증 완료**를
 > 의미한다. Recommendation v2 Treatment/Internal Experiment/Canary/Global Rollout은 다음
 > Phase에서만 수행한다.
+
+## 13. Workflow 활성화 게이트 (AI-ENV-2C-ACTIVATE)
+
+`test-db-provision.yml` 은 실행 준비를 마쳤으나 **활성화(1회 실제 실행)는 운영자 승인이
+필요한 게이트**로 남는다. 코드 에이전트 실행 환경은 (a) GitHub Secret 을 등록할 수 없고,
+(b) Test DB 비밀번호 값을 알지 못하며, (c) `workflow_dispatch` 가 403(Resource not
+accessible by integration)으로 거부된다. 따라서 아래 두 승인이 없으면 상태는
+`BLOCKED_WAITING_FOR_OPERATOR` 이다.
+
+### 13.1 운영자 실행 절차 (원클릭)
+
+1. **GitHub `test` Environment 생성** — Settings → Environments → New environment → 이름
+   `test`. (선택) Required reviewers 로 승인 보호 규칙을 추가하면 오실행을 막는다.
+2. **필수 Secret 4개 등록** (해당 `test` Environment 스코프에만, Production 스코프 오염 금지):
+   - `TEST_SUPABASE_DB_HOST` — 예) `aws-0-ap-southeast-1.pooler.supabase.com`
+   - `TEST_SUPABASE_DB_USER` — 예) `postgres.haojpuhztegecbrwqorr` (pooler) 또는 `postgres`
+   - `TEST_SUPABASE_DB_PASSWORD` — Test 프로젝트 DB 비밀번호(날것 — PR/로그/커밋에 절대 노출 금지)
+   - `TEST_SUPABASE_PROJECT_REF` — `haojpuhztegecbrwqorr`
+   - (선택) `TEST_SUPABASE_DB_PORT`(기본 5432), `TEST_SUPABASE_DB_NAME`(기본 postgres)
+3. **워크플로우 수동 실행** — Actions → "DB · Test Project 전체 마이그레이션 …" → Run
+   workflow → `confirm=APPLY_TO_TEST`, `apply_seed=false` (Seed 는 다음 Phase).
+4. 실행 로그에서 **Secret presence = 모두 yes**, **Production guard 통과**, **Failed
+   Migration = 0**, **Schema Inventory** 를 확인하면 Test DB 는 `MIGRATION_CERTIFIED` 후보.
+
+### 13.2 안전장치 (하드닝 요약)
+
+- `permissions: contents: read` — 최소 권한(쓰기·Actions·패키지 권한 없음).
+- `environment: test` — Test 전용 Secret 스코프. Production Secret 과 물리적 분리.
+- `workflow_dispatch` 전용 + `confirm=APPLY_TO_TEST` 이중 확인 + `apply_seed` 기본 `false`.
+- Production guard: `TEST_SUPABASE_PROJECT_REF == nsoesrvwkxqifjcxzvol` 또는 Host/User 에
+  Production Ref 포함 시 즉시 실패.
+- 모든 셸 스텝 `set -euo pipefail`, 모든 psql `ON_ERROR_STOP=1`.
+- Secret presence check 는 **값을 출력하지 않고** configured yes/no 만 보고.
+
+> 이 Workflow-only 변경은 Application Source·Production Configuration·Migration 내용을
+> 일절 포함하지 않는다. Default Branch 반영(Merge) 및 Secret 등록은 운영자 승인 사항이다.
