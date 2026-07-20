@@ -1,0 +1,118 @@
+name: DB · Test Project 전체 마이그레이션 + Synthetic Seed (AI-ENV-2B)
+
+# 격리된 SRR Playlist Test Supabase Project 에 0001~최신 전체 Migration Stack + Synthetic
+# Seed 를 적용한다. **Production 대상 금지** — 아래 가드가 Production Ref/Host 를 거부한다.
+#
+# 이 워크플로우가 필요한 이유: 코드 에이전트 실행 환경은 raw postgres TCP(5432/6543)가
+# 차단되어 Test DB 에 직접 적용할 수 없다. GitHub Actions Runner 는 postgres 로 접속할 수
+# 있으므로, 운영자가 아래 시크릿만 등록하고 수동 실행하면 전체 스택이 Test DB 에 적용된다.
+#
+# 필요한 Repo Secrets (Settings → Secrets and variables → Actions):
+#   TEST_SUPABASE_DB_HOST       예) aws-0-ap-southeast-1.pooler.supabase.com  (또는 db.<test-ref>.supabase.co)
+#   TEST_SUPABASE_DB_USER       예) postgres.<test-ref>  (pooler) 또는 postgres (direct)
+#   TEST_SUPABASE_DB_PASSWORD   Test 프로젝트 DB 비밀번호 (날것)
+#   TEST_SUPABASE_PROJECT_REF   Test 프로젝트 Ref (가드용 — Production Ref 면 거부)
+#   (선택) TEST_SUPABASE_DB_PORT  기본 5432
+#   (선택) TEST_SUPABASE_DB_NAME  기본 postgres
+#
+# 안전장치:
+#   · Production Project Ref(nsoesrvwkxqifjcxzvol) 가 Host/User/Ref 에 포함되면 즉시 실패.
+#   · 수동 실행(workflow_dispatch)만. confirm 입력값이 정확해야 진행.
+#   · 각 Migration 은 ON_ERROR_STOP=1 — 첫 실패에서 중단하고 번호를 보고.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '격리 Test DB 에 전체 마이그레이션을 적용하려면 APPLY_TO_TEST 입력'
+        required: true
+        default: ''
+
+jobs:
+  provision-test-db:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.TEST_SUPABASE_DB_HOST }}
+      PGUSER: ${{ secrets.TEST_SUPABASE_DB_USER }}
+      PGPASSWORD: ${{ secrets.TEST_SUPABASE_DB_PASSWORD }}
+      PGPORT: ${{ secrets.TEST_SUPABASE_DB_PORT }}
+      PGDATABASE: ${{ secrets.TEST_SUPABASE_DB_NAME }}
+      PGSSLMODE: require
+      TEST_SUPABASE_PROJECT_REF: ${{ secrets.TEST_SUPABASE_PROJECT_REF }}
+      PRODUCTION_PROJECT_REF: nsoesrvwkxqifjcxzvol
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Confirm input
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "APPLY_TO_TEST" ]; then
+            echo "::error::confirm 입력이 APPLY_TO_TEST 가 아닙니다. 안전을 위해 중단합니다."
+            exit 1
+          fi
+
+      - name: Production guard (Ref/Host/User 검사)
+        run: |
+          set -e
+          if [ -z "$PGHOST" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ] || [ -z "$TEST_SUPABASE_PROJECT_REF" ]; then
+            echo "::error::필수 시크릿(TEST_SUPABASE_DB_HOST/USER/PASSWORD/PROJECT_REF)이 비어 있습니다."
+            exit 1
+          fi
+          if [ "$TEST_SUPABASE_PROJECT_REF" = "$PRODUCTION_PROJECT_REF" ]; then
+            echo "::error::TEST_SUPABASE_PROJECT_REF 가 Production Ref 입니다. 중단."
+            exit 1
+          fi
+          if printf '%s%s' "$PGHOST" "$PGUSER" | grep -q "$PRODUCTION_PROJECT_REF"; then
+            echo "::error::DB Host/User 에 Production Ref 가 포함되어 있습니다. 중단."
+            exit 1
+          fi
+          echo "✅ Production guard 통과 — target ref: ${TEST_SUPABASE_PROJECT_REF:0:6}…"
+          echo "PGPORT=${PGPORT:-5432}" >> "$GITHUB_ENV"
+          echo "PGDATABASE=${PGDATABASE:-postgres}" >> "$GITHUB_ENV"
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: 0) 연결 + 빈 DB 확인
+        run: |
+          set -e
+          psql -c "select now() as server_time;"
+          COUNT=$(psql -tA -c "select count(*) from information_schema.tables where table_schema='public';")
+          echo "public tables before apply: $COUNT"
+          # 실제 운영 데이터가 이미 있으면(예: users 다수) 안전을 위해 경고만 — 빈 Test DB 전제.
+          psql -tA -c "select 'is_empty=' || (case when $COUNT = 0 then 'YES' else 'NO' end);"
+
+      - name: 1) Full migration stack 순차 적용 (0001 → 최신)
+        run: |
+          set -e
+          applied=0
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "→ apply $(basename "$f")"
+            psql -v ON_ERROR_STOP=1 -f "$f"
+            applied=$((applied+1))
+          done
+          echo "✅ applied $applied migration files"
+
+      - name: 2) Synthetic Seed 적용 (seed_test.sql)
+        run: psql -v ON_ERROR_STOP=1 -f supabase/seed_test.sql
+
+      - name: 3) 검증 — 핵심 테이블 + AI Experiment 자산 존재
+        run: |
+          set -e
+          psql -tA <<'SQL'
+            select 'public_tables=' || count(*)::text from information_schema.tables where table_schema='public';
+            select 'tracks_seeded=' || count(*)::text from public.tracks where title like 'TEST %';
+            select 'ai_experiment_tables=' || count(*)::text
+              from information_schema.tables
+              where table_schema='public' and table_name like 'ai_experiment%';
+            select 'exp_runtime_rpc=' ||
+              (case when exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                where n.nspname='public' and p.proname='experiment_treatment_gate')
+                then 'YES' else 'NO' end);
+          SQL
+
+      - name: 4) 정직 고지
+        run: |
+          echo "이 워크플로우는 격리 Test Project 에만 적용됩니다. Production 은 변경되지 않았습니다."
+          echo "실제 결제/이메일/SMS/Webhook 은 호출하지 않았고, AI Treatment/Experiment 는 실행하지 않았습니다."

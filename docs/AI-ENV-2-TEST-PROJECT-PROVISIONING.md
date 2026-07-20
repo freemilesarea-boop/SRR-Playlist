@@ -1,4 +1,32 @@
-# AI-ENV-2 — Dedicated Test Project Provisioning Runbook (사람 실행 절차)
+# AI-ENV-2 / AI-ENV-2B — Dedicated Test Project Provisioning Runbook
+
+## 진행 상태 (AI-ENV-2B)
+
+- ✅ **Dedicated Test Project 생성 완료** (운영자 $10/월 승인 후): `SRR Playlist Test` ·
+  ref `haojpu…qorr` · region `ap-southeast-1` · status `ACTIVE_HEALTHY` · public 테이블 0 ·
+  migration 0 (깨끗한 격리 상태). Production ref(`nsoesr…zvol`)와 상이 — 격리 확인.
+- ⏳ **전체 Migration 적용 대기**: 코드 에이전트 환경은 raw postgres TCP(5432/6543)가
+  차단되어 직접 push 불가하고, MCP 관리 API 로 517파일/7.6MB 전량 스트리밍은 비현실적.
+  → **`.github/workflows/test-db-provision.yml`** (GitHub Actions, postgres 접근 가능)로
+  원클릭 적용한다. 아래 "CI 원클릭 적용" 참고.
+- ⏳ Vercel Preview 환경변수 설정 / Browser 검증: 운영자 작업(대시보드 접근 필요).
+
+## CI 원클릭 적용 (권장 — 전체 스택 + Seed)
+
+1. Repo Settings → Secrets and variables → Actions 에 등록(값은 절대 커밋/PR 금지):
+   - `TEST_SUPABASE_DB_HOST` (예: `aws-0-ap-southeast-1.pooler.supabase.com` 또는 `db.haojpu…qorr.supabase.co`)
+   - `TEST_SUPABASE_DB_USER` (pooler: `postgres.haojpu…qorr` / direct: `postgres`)
+   - `TEST_SUPABASE_DB_PASSWORD` (Test 프로젝트 DB 비밀번호 — Supabase Dashboard → Project Settings → Database)
+   - `TEST_SUPABASE_PROJECT_REF` = `haojpu…qorr` (전체 ref)
+2. Actions 탭 → "DB · Test Project 전체 마이그레이션 + Synthetic Seed (AI-ENV-2B)" → Run workflow
+   → confirm 입력란에 `APPLY_TO_TEST` 입력 → 실행. (Production ref/host 는 가드가 거부)
+3. 실행 로그에서 applied migration 수 / seeded tracks / ai_experiment 테이블 존재 확인.
+
+> 아래는 로컬/CLI 로 직접 수행하려는 경우의 상세 절차다.
+
+---
+
+# 사람 실행 절차 (수동 대안)
 
 이 문서는 **격리된 SRR 전용 Test Supabase Project**를 구성하고 Vercel Preview를 그
 Test Project에 연결하기 위해 **사람(운영자)이 직접 수행**해야 하는 정확한 절차와 값

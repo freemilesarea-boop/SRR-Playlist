@@ -48,15 +48,16 @@ const FOUNDATION_READINESS: ReadinessInput = {
 
 const INTEGRATIONS: IntegrationName[] = ['payment', 'settlement', 'email', 'sms', 'push', 'webhook', 'store_control', 'analytics'];
 
-// AI-ENV-2 — Dedicated Test Project 미프로비저닝(월 $10 결제 + 사람 승인 필요) →
-// Live 인증 Decision = BLOCKED. 격리 DB 없어 Migration/RLS/RPC/Browser 전부 not_run.
+// AI-ENV-2B — 운영자 $10/월 승인 후 Dedicated Test Project 생성 완료(ref haojpu…qorr,
+// ap-southeast-1, 격리·빈 상태). 그러나 전체 Migration 적용/Seed/RLS/RPC/Browser 는
+// CI(test-db-provision.yml)·운영자 후속 작업 → Decision = PARTIALLY_READY.
 const CERT_INPUT: FinalCertInput = {
-  dedicatedProjectExists: false,
+  dedicatedProjectExists: true,
   previewConnectedToTestProject: false,
   productionRefUsedAsTarget: false,
   secretIsolated: true,
   failClosedGuardOk: true,
-  migration: { status: 'not_run', fullStackApplied: false, latestMatches: false, blockers: ['no_target_db'] },
+  migration: { status: 'not_run', fullStackApplied: false, latestMatches: false, blockers: ['apply_via_ci_pending'] },
   driftRepoVsTest: 'unknown',
   seedApplied: false,
   authLoginOk: 'not_run',
@@ -160,19 +161,19 @@ export default function EnvironmentFoundationSection() {
           <span className="text-ink-mute">Score {cert.score ?? '—'} · {cert.grade}</span>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          <Box label="Dedicated Test Project" value="not provisioned" tone="bad" />
-          <Box label="Preview → Test DB" value="not connected" tone="warn" />
-          <Box label="Full Migration Apply" value="not_run" tone="warn" />
+          <Box label="Dedicated Test Project" value="provisioned (haojpu…)" tone="ok" />
+          <Box label="Preview → Test DB" value="pending operator" tone="warn" />
+          <Box label="Full Migration Apply" value="pending CI" tone="warn" />
           <Box label="RLS / RPC Integration" value="not_run" tone="warn" />
           <Box label="Test Auth / Storage / Audio" value="not_run" tone="warn" />
           <Box label="Browser Preview" value="not_run" tone="warn" />
           <Box label="Production Data Absence" value="not_run" tone="warn" />
           <Box label="Prod Ref Used As Target" value="no" tone="ok" />
         </div>
-        <AdminAlert tone="danger">
-          Live 인증 Decision = <strong>BLOCKED</strong>. Dedicated Test Supabase Project 생성은 <strong>월 $10 recurring 결제 + 사용자 승인</strong>이
-          필요한 billable 작업이라 자율 생성하지 않았고, Vercel Preview 환경변수 설정 도구도 없습니다. 정확한 사람 실행 절차는
-          <code> docs/AI-ENV-2-TEST-PROJECT-PROVISIONING.md </code>를 참고하세요. Blocking: {cert.blockingReasons.join(', ')}.
+        <AdminAlert tone="warning">
+          Live 인증 Decision = <strong>PARTIALLY_READY</strong>. 운영자 $10/월 승인 후 <strong>Dedicated Test Project(ap-southeast-1)를 생성·격리 확인</strong>했습니다.
+          전체 Migration 적용/Seed/RLS/RPC/Browser 는 <code>.github/workflows/test-db-provision.yml</code>(CI 원클릭)과 운영자 후속 작업으로 완료합니다 —
+          코드 에이전트 환경은 postgres TCP 가 차단되어 직접 적용 불가. 절차: <code>docs/AI-ENV-2-TEST-PROJECT-PROVISIONING.md</code>. Pending: {cert.blockingReasons.join(', ')}.
         </AdminAlert>
       </div>
 
