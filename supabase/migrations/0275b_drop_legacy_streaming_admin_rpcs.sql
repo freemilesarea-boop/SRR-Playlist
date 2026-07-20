@@ -1,0 +1,42 @@
+-- ============================================================
+-- 0275b_drop_legacy_streaming_admin_rpcs.sql
+--
+-- 목적: Empty Database 전체 Migration Replay 시 0276_anti_abuse_rpc_filter.sql 에서
+--       발생하는 replay 실패를 해소한다 (0013b/0211b 로 0014/0212 통과 후 확인된 다음 하드 중단).
+--
+-- 실패 원인 (실측 — 파일 + Test DB pg_proc 재확인):
+--   · 0078_stream_event_hardening.sql 이 아래 두 함수를 생성한다.
+--       public.admin_streaming_overview(int)         RETURNS TABLE(day, total_streams,
+--         eligible_streams, unique_listeners, unique_tracks)
+--       public.admin_top_streaming_tracks(int, int)  RETURNS TABLE(rank, track_id, track_code,
+--         title, artist, artist_user_id, stream_count, eligible_count)
+--     (0078 의 grant 문도 각각 (int), (int, int) — 인자 수 확인)
+--   · 0276_anti_abuse_rpc_filter.sql 이 동일 시그니처에 대해 CREATE OR REPLACE 로 반환 타입을
+--     확장한다 (line 215: admin_streaming_overview 에 effective_streams/excluded_by_cap 추가,
+--     line 234: admin_top_streaming_tracks 에 effective_count 추가).
+--   · PostgreSQL 은 CREATE OR REPLACE FUNCTION 으로 반환 타입을 변경할 수 없다
+--     → ERROR: cannot change return type of existing function
+--     (운영자 Run: 0276 line 215 admin_streaming_overview 에서 최초 중단, line 234 는 미도달)
+--   · 0078 과 0276 사이에 이 두 함수를 DROP/재정의하는 migration 이 없다.
+--
+-- 대상 시그니처 (실제 존재하는 것만 — Test DB pg_proc 로 재확인):
+--   public.admin_streaming_overview(integer)
+--   public.admin_top_streaming_tracks(integer, integer)
+--   (int == integer — DROP 매칭 동일)
+--
+-- 해결:
+--   · 기존 migration(0078, 0276 등)은 절대 수정하지 않는다.
+--   · 이 파일은 정렬상 0275_ 뒤, 0276_ 앞에 실행되도록 배치되어
+--     (workflow: `ls supabase/migrations/*.sql | sort`, lint: suffix 규칙 0275b 허용),
+--     0276 실행 직전에 두 함수를 제거한다 → 0276 의 CREATE OR REPLACE 가 신규 반환타입을
+--     충돌 없이 생성한다.
+--
+-- 안전성:
+--   · IF EXISTS 로 idempotent.
+--   · **CASCADE 미사용** — Test DB pg_depend 확인 결과 두 함수에 의존하는 객체 0개.
+--   · Runtime/Production/Playback/Scheduler/Settlement/Recommendation 로직과 무관.
+--   · streaming admin RPC 반환타입 충돌 해소에만 한정.
+-- ============================================================
+
+drop function if exists public.admin_streaming_overview(integer);
+drop function if exists public.admin_top_streaming_tracks(integer, integer);
