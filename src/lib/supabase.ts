@@ -108,3 +108,16 @@ export const supabase = createClient(
     },
   },
 );
+
+/**
+ * AI-ENV-2 — 타입 기반 Fail-Closed Runtime. status='blocked' 이면 client 는 null 이며
+ * 신규 코드는 이 판별 유니온으로 Query 진입을 타입 차원에서 막을 수 있다. 기존 `supabase`
+ * export 는 하위호환을 위해 유지하되 blocked 시 dead localhost 로 중립화되어 있다.
+ */
+export type SupabaseRuntime =
+  | { status: 'ready'; client: typeof supabase; environment: typeof environmentValidation }
+  | { status: 'blocked'; client: null; environment: typeof environmentValidation };
+
+export const supabaseRuntime: SupabaseRuntime = envBlocked
+  ? { status: 'blocked', client: null, environment: environmentValidation }
+  : { status: 'ready', client: supabase, environment: environmentValidation };

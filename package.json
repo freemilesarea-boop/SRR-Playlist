@@ -22,8 +22,11 @@
     "db:test:status": "node scripts/db-test-guard.mjs && supabase migration list",
     "db:test:push": "node scripts/db-test-guard.mjs && supabase db push",
     "db:test:verify": "node scripts/db-test-guard.mjs && supabase migration list",
+    "db:test:dryrun": "node scripts/migration-dryrun.mjs",
+    "db:test:dryrun:list": "node scripts/migration-dryrun.mjs --list",
     "db:local:start": "supabase start",
-    "db:local:reset": "supabase db reset"
+    "db:local:reset": "supabase db reset",
+    "env:preview:verify": "node scripts/env-preview-verify.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
