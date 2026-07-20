@@ -18,9 +18,15 @@
    - `TEST_SUPABASE_DB_USER` (pooler: `postgres.haojpu…qorr` / direct: `postgres`)
    - `TEST_SUPABASE_DB_PASSWORD` (Test 프로젝트 DB 비밀번호 — Supabase Dashboard → Project Settings → Database)
    - `TEST_SUPABASE_PROJECT_REF` = `haojpu…qorr` (전체 ref)
-2. Actions 탭 → "DB · Test Project 전체 마이그레이션 + Synthetic Seed (AI-ENV-2B)" → Run workflow
-   → confirm 입력란에 `APPLY_TO_TEST` 입력 → 실행. (Production ref/host 는 가드가 거부)
-3. 실행 로그에서 applied migration 수 / seeded tracks / ai_experiment 테이블 존재 확인.
+2. Actions 탭 → "DB · Test Project 전체 마이그레이션 + Synthetic Seed" → Run workflow
+   → `confirm` = `APPLY_TO_TEST`, `apply_seed` 선택 → 실행. (Production ref/host 는 가드가 거부)
+   - **AI-ENV-2C (Migration 인증만)**: `apply_seed=false` (기본) → 0001~최신 전체 적용 +
+     Schema Inventory(Tables/Views/Functions/Policies/RLS/Triggers/Index/Constraints/
+     Extensions/Enums) + Drift + `Failed Migration = 0` 산출. Seed/Auth/Storage 는 미적용.
+   - **AI-ENV-2D (Seed 포함)**: `apply_seed=true` → 위 + Synthetic Seed 적용.
+3. 실행 로그에서 `Failed Migration = 0` + Schema Inventory 확인 → 첫 실패 시 로그의 Migration
+   번호/SQLSTATE 를 보고 신규 `0572_*.sql` Compatibility Migration 으로 해결(기존 파일 수정 금지),
+   빈 DB 초기화 후 0001 부터 재실행.
 
 > 아래는 로컬/CLI 로 직접 수행하려는 경우의 상세 절차다.
 
