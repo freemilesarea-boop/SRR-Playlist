@@ -12,7 +12,8 @@
 --   4) 자동 병합 audit action 을 'auto_carryover_consumed' 로 명확화.
 --   5) 수동 이월: payable→기과세(final_payout), pending/held→미과세(total). action 'admin_manual_carryover'.
 --
--- Production 미적용. Test 에서만 검증. check_function_bodies off 로 drift(누락 테이블) 내성 확보.
+-- 검증: SETTLEMENT-E2E-1 에서 Test project 대상 실제 RPC E2E 인증. Production 적용은 Runbook 따름.
+-- check_function_bodies off 는 스키마 drift(누락 테이블) 내성 확보용 — Prod 는 모든 참조 테이블 존재.
 
 set check_function_bodies = off;
 

@@ -15,7 +15,8 @@
 --     동시에 채워 기존 UI/RPC 회귀가 없도록 한다.
 --   - 기존 정산 금액을 재계산하지 않는다. Backfill 은 순수 재분류(합계 보존)만 수행.
 --
--- 이 마이그레이션은 Production 에 적용하지 않는다. Test(haojpuhztegecbrwqorr)에서만 검증.
+-- 검증: SETTLEMENT-E2E-1 / RELEASE-GATE-1 에서 Test project 대상 실제 RPC E2E 로 인증됨.
+-- Production 적용은 별도 Runbook(잠금 → 0454 → 검증 → 0455 → smoke)에 따라 수행한다.
 
 -- ============================================================
 -- 1) 신규 컬럼 (방어적 추가)
@@ -69,13 +70,22 @@ end$$;
 --    (기과세 이월 0건). 따라서 기존 이월금은 전부 "미과세(untaxed)" 로 분류한다.
 --    이미 신규 컬럼이 채워진 행(생성 함수 v2 산출)은 건너뛴다.
 -- ============================================================
+-- 규칙:
+--   · carry-IN(previous_carried) 은 항상 미과세로 재분류. Production 인증(AUDIT-2B):
+--     기과세 이월 0건 → 과거 유입 이월은 전부 미과세. (행 자신의 withholding 과 무관 —
+--     withholding 은 그 행의 지급 세금이지 유입 이월의 과세상태가 아니다.)
+--   · carry-OUT(carried_over) 은 그 행의 withholding 으로 분기(방어적). 실제로 meets_min
+--     행은 carried_over=0, 미달 행은 withholding=0 이라 결과는 전부 미과세이나, 혹시 모를
+--     기과세 carry-out 이 존재하면 taxed 로 분류하여 오분류를 막는다.
+--   · idempotent: 신규 분리 컬럼이 아직 0 인 행만 대상.
 update public.artist_settlements s
 set previous_carryover_untaxed_amount = coalesce(s.previous_carried_amount, 0),
     previous_carryover_taxed_amount   = 0,
-    carryover_untaxed_amount          = coalesce(s.carried_over_amount, 0),
-    carryover_taxed_amount            = 0
-where coalesce(s.withholding_tax_amount, 0) = 0                 -- 세후 이월이 아닌 순수 미과세만
-  and s.previous_carryover_untaxed_amount = 0
+    carryover_untaxed_amount          = case when coalesce(s.withholding_tax_amount,0) = 0
+                                             then coalesce(s.carried_over_amount, 0) else 0 end,
+    carryover_taxed_amount            = case when coalesce(s.withholding_tax_amount,0) > 0
+                                             then coalesce(s.carried_over_amount, 0) else 0 end
+where s.previous_carryover_untaxed_amount = 0
   and s.previous_carryover_taxed_amount   = 0
   and s.carryover_untaxed_amount          = 0
   and s.carryover_taxed_amount            = 0
