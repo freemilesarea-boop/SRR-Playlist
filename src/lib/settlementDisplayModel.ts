@@ -249,6 +249,58 @@ export function summarizeSettlements(rows: AdminSettlementRow[]): SettlementSumm
   };
 }
 
+// ── 운영 Filter (모델 기반, 단일 권위) ──
+export type SettlementFacet =
+  | 'all' | 'payable' | 'paid' | 'held' | 'auto_carryover' | 'manual_carryover'
+  | 'below_min' | 'identity_incomplete' | 'account_incomplete' | 'tax_review' | 'has_carryover';
+
+export const SETTLEMENT_FACET_LABELS: Record<SettlementFacet, string> = {
+  all: '전체',
+  payable: '지급 가능',
+  paid: '지급 완료',
+  held: '지급 보류',
+  auto_carryover: '자동 이월',
+  manual_carryover: '수동 이월',
+  below_min: '기준 미달',
+  identity_incomplete: '정산정보 미완료',
+  account_incomplete: '계좌 확인 필요',
+  tax_review: '세율 확인 필요',
+  has_carryover: '이월금 보유',
+};
+
+export function settlementFacetMatches(model: SettlementDisplayModel, facet: SettlementFacet): boolean {
+  switch (facet) {
+    case 'all': return true;
+    case 'payable': return model.effectivePayableAmount > 0 && !model.isPaid;
+    case 'paid': return model.isPaid;
+    case 'held': return model.isHeld;
+    case 'auto_carryover': return model.displayAmountKind === 'auto_carryover';
+    case 'manual_carryover': return model.displayAmountKind === 'manual_carryover';
+    case 'below_min': return !model.meetsMinPayout && !model.isPaid && !model.isHeld;
+    case 'identity_incomplete': return model.requiredAction === 'verify_identity';
+    case 'account_incomplete': return model.requiredAction === 'verify_account';
+    case 'tax_review': return model.requiredAction === 'set_tax';
+    case 'has_carryover': return model.totalPreviousCarryoverAmount > 0 || model.totalNextCarryoverAmount > 0;
+    default: return true;
+  }
+}
+
+export function settlementSearchMatches(row: AdminSettlementRow, q: string): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  return [row.artist_nickname, row.artist_email, row.legal_name, row.artist_user_id]
+    .some((v) => (v ?? '').toString().toLowerCase().includes(s));
+}
+
+/** 목록·Summary·CSV 가 공유하는 단일 필터. */
+export function applySettlementFilters(
+  rows: AdminSettlementRow[], facet: SettlementFacet, search: string,
+): AdminSettlementRow[] {
+  return rows.filter((r) =>
+    settlementSearchMatches(r, search) &&
+    (facet === 'all' || settlementFacetMatches(buildSettlementDisplayModel(r), facet)));
+}
+
 const CSV_HEADERS = [
   '정산월', '회원 ID', '회원명', '아티스트명', '당월 총 발생액', '회사 수수료', '영업 수수료',
   '당월 순정산액', '이전 미과세 이월', '이전 기과세 이월', '과세 대상액', '세율 유형', '적용 세율',
