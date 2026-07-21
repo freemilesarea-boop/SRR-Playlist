@@ -311,6 +311,31 @@ export async function adminCarryoverSettlement(
   return data as CarryoverResult;
 }
 
+/** UX-2C — 상세 화면용 taxed/untaxed 이월 분리 + snapshot 조회 (additive, read-only). */
+export interface SettlementDisplayFields {
+  previous_carryover_untaxed_amount: number | null;
+  previous_carryover_taxed_amount: number | null;
+  carryover_untaxed_amount: number | null;
+  carryover_taxed_amount: number | null;
+  taxable_base_amount: number | null;
+  tax_withholding_type_snapshot: string | null;
+  tax_rate_snapshot: number | null;
+  minimum_payout_snapshot: number | null;
+  is_manual_carryover: boolean | null;
+  merged_into_settlement_id: string | null;
+  paid_at: string | null;
+  paid_by: string | null;
+  held_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export async function adminSettlementDisplayFields(id: string): Promise<SettlementDisplayFields | null> {
+  const { data, error } = await supabase.rpc('admin_settlement_display_fields', { p_settlement_id: id });
+  if (error) throw error;
+  return (data ?? null) as SettlementDisplayFields | null;
+}
+
 export async function getMySettlements(): Promise<MySettlementRow[]> {
   const { data, error } = await supabase.rpc('get_my_settlements');
   if (error) throw error;

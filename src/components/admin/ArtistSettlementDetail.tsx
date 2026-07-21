@@ -19,7 +19,12 @@ import { friendlyError } from '@/lib/errorMessages';
 import RevealAccountButton from './RevealAccountButton';
 import RevealPiiButton from './RevealPiiButton';
 import CarryoverModal from './CarryoverModal';
-import { humanizeHoldReason } from '@/lib/settlementDisplayModel';
+import { humanizeHoldReason, buildSettlementDisplayModel } from '@/lib/settlementDisplayModel';
+import { adminSettlementDisplayFields, type SettlementDisplayFields } from '@/lib/artistSettlementApi';
+import {
+  FinancialStatus, CarryoverDetail, PolicySnapshot, HoldPanel, AuditTimeline,
+  type AuditEvent,
+} from './settlement/SettlementParts';
 
 const TAX_LABEL: Record<string, string> = {
   business_income_3_3: '사업소득 3.3%',
@@ -95,6 +100,7 @@ export default function ArtistSettlementDetail({
   const [holdModalOpen, setHoldModalOpen] = useState(false);
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
   const [versions, setVersions] = useState<SettlementVersionRow[]>([]);
+  const [displayFields, setDisplayFields] = useState<SettlementDisplayFields | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,6 +108,12 @@ export default function ArtistSettlementDetail({
     try {
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
       setData(d);
+      // UX-2C: taxed/untaxed 이월 분리 + snapshot (additive RPC; 미배포 환경은 graceful null)
+      try {
+        setDisplayFields(await adminSettlementDisplayFields(settlementId));
+      } catch {
+        setDisplayFields(null);
+      }
       // X6.45: 동일 (월, 아티스트) 의 version 이력 조회 (재생성 시 누적)
       try {
         const vs = await adminSettlementVersionHistory(
@@ -174,6 +186,18 @@ export default function ArtistSettlementDetail({
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, { onClose });
 
+  // UX-2C: 상세 표시 모델 (data.settlement + 분리필드 병합). 계산식은 model 이 단일 권위.
+  const model = data ? buildSettlementDisplayModel({
+    ...data.settlement,
+    artist_nickname: data.artist.nickname ?? '',
+    artist_email: data.artist.email ?? '',
+    ...(displayFields ?? {}),
+  } as unknown as import('@/lib/artistSettlementApi').AdminSettlementRow) : null;
+  const auditEvents: AuditEvent[] = (data?.audit_logs ?? []).map((l) => ({
+    id: l.id, action: l.action, created_at: l.created_at, reason: l.reason,
+    amount: l.amount, from_month: l.from_month, to_month: l.to_month, detail: l.detail,
+  }));
+
   return (
     <div
       ref={dialogRef}
@@ -211,6 +235,23 @@ export default function ArtistSettlementDetail({
                 {data.settlement.status}
               </p>
             </header>
+
+            {/* UX-2C 정산 Command Center — 상태별 지급/이월 명확화 (SettlementDisplayModel 기반) */}
+            {model && (
+              <div className="space-y-4">
+                <HoldPanel model={model} />
+                <FinancialStatus model={model} />
+                <CarryoverDetail model={model} />
+                <PolicySnapshot
+                  model={model}
+                  policy={{
+                    poolRevenueRatio: data.policy.pool_revenue_ratio,
+                    companyFeeRatio: data.policy.company_fee_ratio,
+                    createdAt: displayFields?.created_at ?? data.settlement.finalized_at,
+                  }}
+                />
+              </div>
+            )}
 
             <section>
               <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">산정 내역</h5>
@@ -417,34 +458,12 @@ export default function ArtistSettlementDetail({
               <Alert tone="info" title="지급 메모">{data.settlement.payout_memo}</Alert>
             )}
 
-            {data.audit_logs && data.audit_logs.length > 0 && (
-              <section>
-                <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
-                  관리자 액션 기록 ({data.audit_logs.length})
-                </h5>
-                <ul className="space-y-1 rounded-xl bg-bg-card px-3 py-2 text-xs ring-1 ring-line/10">
-                  {data.audit_logs.map((log) => (
-                    <li key={log.id} className="border-b border-line/10 py-1 last:border-b-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] uppercase text-ink-dim">{log.action}</span>
-                        <span className="text-[10px] text-ink-dim">
-                          {new Date(log.created_at).toLocaleString('ko-KR')}
-                        </span>
-                      </div>
-                      {log.amount != null && (
-                        <p className="text-ink-mute">
-                          금액 {fmtKrw(log.amount)}
-                          {log.from_month && log.to_month
-                            ? ` · ${log.from_month.slice(0, 7)} → ${log.to_month.slice(0, 7)}`
-                            : ''}
-                        </p>
-                      )}
-                      {log.reason && <p className="text-ink">사유: {log.reason}</p>}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+            <section>
+              <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                정산 변경 이력 ({auditEvents.length})
+              </h5>
+              <AuditTimeline events={auditEvents} />
+            </section>
 
             {versions.length > 1 && (
               <section>
