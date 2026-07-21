@@ -111,6 +111,9 @@ export interface GenerateSettlementResult {
   total_sales_agent_fee: number;
   total_final_payout: number;
   total_carried_over: number;
+  // LOGIC-2: 활성 정책 최소 지급 기준 (UI 하드코딩 제거용 single source of truth)
+  min_payout_amount?: number;
+  min_payout_basis?: string;
   skipped_artists: Array<{
     artist_user_id: string;
     existing_status: string;

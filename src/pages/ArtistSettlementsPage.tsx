@@ -35,7 +35,7 @@ const STATUS_TONE: Record<SettlementStatus, string> = {
 
 const STATUS_LABEL: Record<SettlementStatus, string> = {
   pending: '확정 대기',                 // 노출되지 않지만, 만약 통과 시 "실시간" 단어 사용 금지
-  carried_over: '5만원 미만 → 이월',
+  carried_over: '최소 지급 기준 미달 → 이월',
   payable: '지급 예정',
   paid: '지급 완료',
   held: '보류',
@@ -72,7 +72,7 @@ export default function ArtistSettlementsPage() {
             <Wallet size={20} /> 내 정산 내역
           </h1>
           <p className="text-xs text-ink-mute">
-            매월 1회 정산서 발행 · 5만원 미만은 다음 달로 이월 · 3.3% 원천징수
+            매월 1회 정산서 발행 · 최소 지급 기준 미달 시 다음 달로 이월 · 원천징수 유형별 적용
           </p>
         </div>
       </header>

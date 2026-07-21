@@ -494,7 +494,14 @@ function GenerateModal({
               <Kv label="재생성 (version+1)" value={`${dryResult.overwritten}건`} />
               <Kv label="스킵 (FINALIZED/PAID)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
               <Kv label="지급 대상" value={`${dryResult.payable}건`} />
-              <Kv label="이월 (5만원 미만)" value={`${dryResult.carried_over}건`} />
+              <Kv
+                label={
+                  dryResult.min_payout_amount != null
+                    ? `이월 (최소 ${fmtKrw(dryResult.min_payout_amount)} 미만)`
+                    : '이월 (최소 지급 기준 미달)'
+                }
+                value={`${dryResult.carried_over}건`}
+              />
               <Kv label="총 최종 지급액" value={fmtKrw(dryResult.total_final_payout)} tone="text-accent font-bold" />
             </div>
             {dryResult.skipped_artists.length > 0 && (
