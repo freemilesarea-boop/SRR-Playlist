@@ -1,0 +1,49 @@
+{
+  "audit": "PLATFORM-AUDIT-1", "commit": "0f3bb57",
+  "summary": {
+    "vercel_serverless": 3, "supabase_edge_functions": 20,
+    "distinct_client_rpc_calls": 710, "sql_function_defs": 949,
+    "rpc_called_but_undefined": 29, "rpc_defined_not_called": 270,
+    "external_integrations": 11
+  },
+  "vercel_serverless": [
+    { "path": "api/cron/daily-metrics.ts", "method": "GET", "auth": "CRON_SECRET (optional)", "risk": "R-06" },
+    { "path": "api/cron/enterprise-ops.ts", "method": "GET", "auth": "CRON_SECRET (required)" },
+    { "path": "api/admin/enterprise-ops-run.ts", "method": "POST", "auth": "admin + debounce" }
+  ],
+  "edge_functions": [
+    "admin-apply-analytics-db", "admin-trigger-password-reset", "create-payapp-subscription",
+    "cancel-payapp-subscription", "payapp-feedback", "sync-payapp-payments", "get-my-subscription",
+    "dispatch-admin-notifications", "dispatch-contract-emails", "dispatch-moderation-emails",
+    "dispatch-trial-reminders", "dispatch-enterprise-billing-invoice", "generate-enterprise-billing-pdf",
+    "generate-enterprise-intel-report", "notify-new-inquiry", "notify-inquiry-reply",
+    "dispatch-kakao-message(STUB-501)", "check-audio-health", "process-scheduled-releases", "send-push"
+  ],
+  "rpc_undefined_in_migrations": [
+    "admin_list_site_notices", "admin_upsert_site_notice", "admin_toggle_site_notice", "admin_delete_site_notice",
+    "list_active_site_notices", "admin_update_site_settings", "get_site_settings",
+    "create_support_inquiry", "list_my_inquiries", "get_my_inquiry_detail", "admin_list_support_inquiries",
+    "admin_get_support_inquiry_detail", "admin_support_inquiry_summary", "admin_update_inquiry",
+    "ai_predictions_summary", "ai_correction_stats", "apply_track_ai_predictions",
+    "bulk_apply_high_confidence_ai_predictions", "list_pending_ai_predictions", "list_admin_tracks_with_ai",
+    "list_severe_metadata_mismatches", "bulk_delete_severe_mismatches", "admin_update_track_metadata_full",
+    "list_clap_recommendations", "list_clap_auto_approved", "list_clap_curation_playlists",
+    "rollback_clap_auto_attach", "set_playlist_auto_attach", "admin_hard_delete_track",
+    "admin_purge_all_tracks", "get_admin_track_detail"
+  ],
+  "external_integrations": [
+    { "name": "Supabase", "side": "both", "env": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] },
+    { "name": "Vercel", "side": "server", "env": ["CRON_SECRET"] },
+    { "name": "PayApp", "side": "server", "role": "only PG", "env": ["PAYAPP_USERID", "PAYAPP_LINKKEY", "PAYAPP_LINKVAL"] },
+    { "name": "Resend", "side": "server", "env": ["RESEND_API_KEY", "RESEND_FROM"] },
+    { "name": "Slack", "side": "server", "config": "admin_settings.notification_slack_webhook_url" },
+    { "name": "Sentry", "side": "client", "env": ["VITE_SENTRY_DSN"] },
+    { "name": "WebPush/VAPID", "side": "both", "env": ["VITE_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"] },
+    { "name": "Kakao", "side": "both", "env": ["VITE_KAKAO_JS_KEY", "KAKAO_REST_API_KEY"] },
+    { "name": "FFmpeg.wasm", "side": "client", "env": [] },
+    { "name": "GitHub Actions", "side": "ci", "env": [] },
+    { "name": "Postgres-direct", "side": "server", "env": ["ANALYTICS_DB_URL"] }
+  ],
+  "not_present": ["Cloudflare/R2/S3/AWS", "Stripe/Toss/PortOne/IamPort", "PostHog/Mixpanel/GA"],
+  "findings": ["API-F1 daily-metrics optional auth", "API-F2 29 undefined RPCs", "API-F3 VITE_APP_VERSION undocumented", "API-F4 prod env console.log"]
+}

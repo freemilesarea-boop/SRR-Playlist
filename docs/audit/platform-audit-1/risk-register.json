@@ -1,0 +1,30 @@
+{
+  "audit": "PLATFORM-AUDIT-1",
+  "commit": "0f3bb57",
+  "summary": { "P0": 0, "P1": 4, "P2": 12, "P3": 6, "P4": 1, "total": 23 },
+  "risks": [
+    { "id": "R-01", "severity": "P1", "domain": "auth", "feature": "AUTH-007", "confidence": "Strong/Unverified", "symptom": "Google login fails/loops on some origins", "cause": "redirectTo=window.location.origin; per-origin whitelist required", "fix": "Pin redirectTo to canonical or whitelist all origins", "files": ["src/store/authStore.ts:254", "src/lib/productionRedirect.ts"] },
+    { "id": "R-02", "severity": "P1", "domain": "auth", "feature": "AUTH-007", "confidence": "Suspected", "symptom": "New Google user stuck, no profile", "cause": "Relies on DB trigger on_auth_user_created; live existence unconfirmed", "fix": "Verify trigger + client fallback", "files": ["supabase/migrations/0021_signup_metadata_trigger.sql", "src/App.tsx:170-185"] },
+    { "id": "R-03", "severity": "P1", "domain": "api-db", "feature": "SUPPORT-001", "confidence": "Strong", "symptom": "29 client RPC calls have no committed definition (PGRST202 risk)", "cause": "Called in src, 0 CREATE FUNCTION in migrations", "fix": "Reconcile: commit migrations or remove calls; verify live DB" },
+    { "id": "R-04", "severity": "P1", "domain": "security", "feature": "BRAND-005", "confidence": "Confirmed", "symptom": "Confidential enterprise contracts may have been public", "cause": "enterprise-contracts bucket public in 0383, locked 0394", "fix": "Audit access logs for public window" },
+    { "id": "R-05", "severity": "P2", "domain": "security-pii", "feature": "AUTH-001", "confidence": "Confirmed", "symptom": "Signup email+payload logged to browser console", "cause": "authStore.ts:226,239 unconditional console.log", "fix": "Remove/DEV-gate" },
+    { "id": "R-06", "severity": "P2", "domain": "ops-security", "feature": "OPS-001", "confidence": "Strong", "symptom": "daily-metrics cron unauthenticated if CRON_SECRET unset", "cause": "optional auth; calls service_role RPCs", "fix": "Hard-require CRON_SECRET" },
+    { "id": "R-07", "severity": "P2", "domain": "security", "feature": "DB-RLS", "confidence": "Unverified", "symptom": "Possible over-permissive RLS", "cause": "336 policies not line-verified; 0388 lockdown implies prior gap", "fix": "Line-by-line RLS review on money/PII" },
+    { "id": "R-08", "severity": "P2", "domain": "security", "feature": "DB-functions", "confidence": "Strong", "symptom": "5 SECURITY DEFINER fns without set search_path", "cause": "grep; incl recent 0374", "fix": "Add set search_path=public" },
+    { "id": "R-09", "severity": "P2", "domain": "security", "feature": "RT-F1", "confidence": "Suspected", "symptom": "/my/playlist/:id public, may leak private playlists", "cause": "App.tsx:271 unguarded", "fix": "Confirm RLS or add guard" },
+    { "id": "R-10", "severity": "P2", "domain": "security", "feature": "RT-F3", "confidence": "Unverified", "symptom": "Enterprise HQ routes login-only (no client role guard)", "cause": "rely on RPC/RLS", "fix": "Verify server enforcement" },
+    { "id": "R-11", "severity": "P2", "domain": "curation", "feature": "PLACE-1/SCH-2/SCH-3", "confidence": "Strong", "symptom": "Algorithms auto-mutate catalog/policies without per-action confirm", "cause": "release trigger, daily cron inject, dry_run=false", "fix": "Explicit confirm or observe-mode" },
+    { "id": "R-12", "severity": "P2", "domain": "stability", "feature": "PLAYER-001", "confidence": "Strong", "symptom": "Player.tsx God component (2970 LOC) leak/regression risk", "cause": "32 effects, 36 timers/listeners in one file", "fix": "Extract audio-lifecycle hooks" },
+    { "id": "R-13", "severity": "P2", "domain": "tests", "feature": "all", "confidence": "Confirmed", "symptom": "Auth/OAuth/player/payment/admin/AI untested", "cause": "coverage on settlement+brand-media only", "fix": "Add critical-journey tests" },
+    { "id": "R-14", "severity": "P2", "domain": "deps", "feature": "build", "confidence": "Confirmed", "symptom": "react-router moderate (prod); vitest/vite critical/high (dev)", "cause": "npm audit", "fix": "Patch react-router; bump Vite/Vitest" },
+    { "id": "R-15", "severity": "P2", "domain": "auth", "feature": "AUTH-005", "confidence": "Confirmed", "symptom": "No self-service password reset", "cause": "reset only via admin edge fn", "fix": "Add public reset flow" },
+    { "id": "R-16", "severity": "P2", "domain": "algorithm", "feature": "LRN-8", "confidence": "Strong", "symptom": "Regression weight optimizer statistically invalid", "cause": "independent per-sub-score regressions", "fix": "Statistician review; keep gated" },
+    { "id": "R-17", "severity": "P3", "domain": "hygiene", "feature": "RT-F2", "confidence": "Confirmed", "symptom": "No 404 page (silent redirect)", "fix": "Add NotFound page" },
+    { "id": "R-18", "severity": "P3", "domain": "env", "feature": "API-F3", "confidence": "Confirmed", "symptom": "VITE_APP_VERSION used but not in .env.example", "fix": "Document var" },
+    { "id": "R-19", "severity": "P3", "domain": "security", "feature": "API-F4", "confidence": "Strong", "symptom": "Prod console.log of Supabase project URL/ref", "cause": "supabase.ts:20", "fix": "Gate behind DEV" },
+    { "id": "R-20", "severity": "P3", "domain": "db", "feature": "DB-F4/F5", "confidence": "Strong", "symptom": "Dead/orphan tables + 0421-0451 migration void", "fix": "Confirm rollout; cleanup phase" },
+    { "id": "R-21", "severity": "P3", "domain": "algorithm", "feature": "ALG-F3", "confidence": "Strong", "symptom": "CLAP ingestion not automated (embed_backend_url empty)", "fix": "Wire embedding cron or document SOP" },
+    { "id": "R-22", "severity": "P3", "domain": "hooks", "feature": "CH-F1", "confidence": "Strong", "symptom": "54 exhaustive-deps suppressions (stale-closure surface)", "fix": "Audit high-risk effects" },
+    { "id": "R-23", "severity": "P4", "domain": "curation", "feature": "ML-2", "confidence": "Strong", "symptom": "CLAP classifier overfitting, unversioned prompts", "fix": "MIR/ML review; version prompts" }
+  ]
+}

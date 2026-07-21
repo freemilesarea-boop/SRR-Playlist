@@ -1,0 +1,23 @@
+{
+  "audit": "PLATFORM-AUDIT-1", "commit": "0f3bb57",
+  "runner": { "unit": "vitest (node, globals:false)", "e2e": "Playwright NOT installed", "sql": "pgTAP (needs Test DB)" },
+  "executed_this_phase": { "command": "vitest run", "files": 7, "passed": 129, "failed": 0, "tsc": "PASS", "eslint": "PASS", "migration_lint": "PASS", "tones": "PASS", "build": "PASS" },
+  "summary": { "test_files": 13, "runnable_unit_component": 7, "e2e_non_runnable": 3, "sql_needs_db": 3, "cases_passed": 129 },
+  "tests": [
+    { "file": "src/lib/brandMediaType.test.ts", "type": "unit", "cases": 14, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/lib/brandSignageSettings.test.ts", "type": "unit", "cases": 33, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/lib/brandSlideshow.test.ts", "type": "unit", "cases": 25, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/lib/settlementDisplayModel.test.ts", "type": "unit", "cases": 17, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/lib/settlementFilters.test.ts", "type": "unit", "cases": 17, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/components/admin/ArtistSettlementsList.test.tsx", "type": "component", "cases": 15, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "src/components/admin/settlement/SettlementParts.test.tsx", "type": "component", "cases": 8, "safety": "Safe Local/CI", "result": "PASS" },
+    { "file": "e2e/brand-player-signage.spec.ts", "type": "e2e-playwright", "safety": "Requires browser; runner UNINSTALLED", "result": "NOT_RUN" },
+    { "file": "e2e/brand-player-slideshow.spec.ts", "type": "e2e-playwright", "safety": "Requires browser; runner UNINSTALLED", "result": "NOT_RUN" },
+    { "file": "e2e/brand-player-video.spec.ts", "type": "e2e-playwright", "safety": "Requires browser; runner UNINSTALLED", "result": "NOT_RUN" },
+    { "file": "supabase/tests/settlement_versioning_test.sql", "type": "sql-pgtap", "safety": "Requires Test DB; Unsafe for Prod", "result": "NOT_RUN" },
+    { "file": "supabase/tests/settlement_logic2_compute_test.sql", "type": "sql-pgtap", "safety": "Requires Test DB; Unsafe for Prod", "result": "NOT_RUN" },
+    { "file": "supabase/tests/settlement_e2e_lifecycle_test.sql", "type": "sql-pgtap", "safety": "Requires Test DB; Unsafe for Prod", "result": "NOT_RUN" }
+  ],
+  "coverage_gaps_no_tests": ["auth/signup", "OAuth/Kakao", "Player.tsx + useAudio* hooks", "admin actions", "payment/PayApp", "AI curation", "supabase api wrappers"],
+  "findings": ["TEST-F1 coverage only settlement+brand-player", "TEST-F2 Playwright uninstalled", "TEST-F3 SQL tests not CI-wired"]
+}

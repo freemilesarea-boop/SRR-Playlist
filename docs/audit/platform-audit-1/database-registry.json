@@ -1,0 +1,33 @@
+{
+  "audit": "PLATFORM-AUDIT-1", "commit": "0f3bb57",
+  "source": "supabase/migrations/*.sql (419 files 0001-0456) + supabase/tests",
+  "note": "static SQL analysis only; deployed-schema drift UNVERIFIED",
+  "summary": {
+    "migrations": 419, "tables_approx": 205, "views": 12, "materialized_views": 0,
+    "create_function_stmts": 1356, "distinct_functions": "UNVERIFIED (heavy or-replace churn)",
+    "security_definer_files": 362, "triggers": 89, "enums": 0,
+    "rls_enable_stmts": 203, "rls_policies": 336, "storage_buckets": 7, "pg_cron_jobs": 1,
+    "realtime_tables": ["payment_orders", "users", "store_policy_sync_status"],
+    "duplicate_prefixes_allowlisted": ["0068", "0214", "0388"],
+    "sequence_gaps": ["0198-0203", "0354", "0365-0366", "0408-0411", "0414-0419", "0421-0451"]
+  },
+  "storage_buckets": [
+    { "name": "audio", "public": true, "created": "0010" },
+    { "name": "covers", "public": true, "created": "0010" },
+    { "name": "brand-assets", "public": true, "created": "0213" },
+    { "name": "brand-media", "public": true, "created": "0405" },
+    { "name": "enterprise-announcements", "public": true, "created": "0381" },
+    { "name": "enterprise-documents", "public": false, "created": "0367c" },
+    { "name": "enterprise-contracts", "public": false, "created": "0383", "note": "public until 0394 - security fix", "risk": "R-04" }
+  ],
+  "sensitive_tables_rls": {
+    "users": true, "artist_payout_accounts": true, "payout_intake_submissions": true,
+    "artist_settlements": true, "settlement_items": true, "streaming_revenues": true,
+    "payment_orders": true, "subscriptions": true, "app_internal_secrets": true,
+    "artist_contracts": true, "enterprise_billing_invoices": true, "enterprise_contracts": true
+  },
+  "security_definer_missing_search_path": ["0051", "0120", "0140", "0284", "0374"],
+  "orphan_table_candidates": ["_x6_playlist_archive_snapshot", "_x6_schedule_fix_snapshot", "signup_debug_events", "store_archetype_seed_candidates", "artist_settlements_v2", "settlement_items_v2", "settlement_generation_runs_v2", "streaming_revenues_v2"],
+  "cron_jobs": [{ "name": "srr-weight-regression-weekly", "migration": "0337", "schedule": "weekly Mon 04:00 UTC" }],
+  "findings": ["DB-F1 RLS policies not line-verified", "DB-F2 5 DEFINER fns no search_path", "DB-F3 enterprise-contracts public window", "DB-F4 dead/orphan tables", "DB-F5 0421-0451 void"]
+}

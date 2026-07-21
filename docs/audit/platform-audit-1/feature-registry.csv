@@ -1,0 +1,66 @@
+feature_id,domain,feature,role,status,risk
+AUTH-001,auth,Email signup,public,UNVERIFIED,R-05
+AUTH-002,auth,Email login,public,UNVERIFIED,
+AUTH-003,auth,Logout,member,UNVERIFIED,
+AUTH-004,auth,Email verify+resend,public,UNVERIFIED,
+AUTH-005,auth,Password reset request,member,PARTIAL,R-15
+AUTH-006,auth,Password change,member,UNVERIFIED,
+AUTH-007,auth,Google OAuth,public,UNVERIFIED,R-01;R-02
+AUTH-008,auth,Kakao login toggle,public,UNVERIFIED,
+AUTH-009,auth,Session refresh/expiry,member,UNVERIFIED,
+AUTH-010,auth,Account-state gate,member,UNVERIFIED,
+USER-001,account,Profile view/edit,member,UNVERIFIED,
+USER-002,account,Withdrawal/soft-delete,member,UNVERIFIED,
+USER-003,account,Admin role/state change,admin,UNVERIFIED,
+ARTIST-001,artist,Artist apply/approve,artist,UNVERIFIED,
+ARTIST-002,artist,Invite/sales code,artist,UNVERIFIED,
+ARTIST-003,artist,Contract+signature,artist,UNVERIFIED,
+ARTIST-004,artist,Payout account PII/bank,artist,UNVERIFIED,
+TRACK-001,music,Track upload,artist,UNVERIFIED,
+TRACK-002,music,Quality gate,artist,UNVERIFIED,
+TRACK-003,music,Dedupe/fingerprint,artist/admin,UNVERIFIED,
+TRACK-004,music,QC pipeline,admin,UNVERIFIED,
+TRACK-005,music,Admin review,admin,UNVERIFIED,
+TRACK-006,music,Scheduled release,admin,UNVERIFIED,
+PLAYER-001,playback,Store player,store,UNVERIFIED,R-12
+PLAYER-002,playback,Brand player,brand,UNVERIFIED,
+PLAYER-003,playback,Heartbeat/liveness,store,UNVERIFIED,
+PLAYER-004,playback,Reactions,store,UNVERIFIED,
+PLAYER-005,playback,Time-of-day scheduler,store,UNVERIFIED,
+PLAYLIST-001,playlist,CRUD public/private,member,UNVERIFIED,R-09
+PLAYLIST-002,playlist,Auto-placement,system,UNVERIFIED,R-11
+PLAYLIST-003,playlist,Daily refresh cron,system,UNVERIFIED,R-11
+PLAYLIST-004,recommend,Personalized/cold/collab,member,UNVERIFIED,
+PLAYLIST-005,curation,CLAP recommendations,admin,UNVERIFIED,
+PLAYLIST-006,curation,Fit-score engine,admin,UNVERIFIED,
+PLAYLIST-007,curation,Guardrails/genre policy,system/admin,UNVERIFIED,
+BRAND-001,brand,Brand/HQ accounts+policies,brand-hq,UNVERIFIED,R-10
+BRAND-002,brand,Media image/video/signage,brand,UNVERIFIED,
+BRAND-003,brand,Announcements/emergency broadcast,brand-hq,UNVERIFIED,
+BRAND-004,brand,Billing invoice/PDF/email,super-admin,UNVERIFIED,
+BRAND-005,brand,Contracts,super-admin,UNVERIFIED,R-04
+BRAND-006,brand,Fleet/NOC monitoring,admin,UNVERIFIED,
+SETTLEMENT-001,settlement,Generate/version/finalize,settlement-admin,code-PASS,
+SETTLEMENT-002,settlement,Carryover tax-safe split,settlement-admin,code-PASS,
+SETTLEMENT-003,settlement,Detail/summary/CSV/timeline,settlement-admin,code-PASS,
+SETTLEMENT-004,settlement,Artist settlement view,artist,UNVERIFIED,
+SETTLEMENT-005,settlement,Settlement V2 shadow,super-admin,DEAD,
+PAY-001,payment,Subscription create PayApp,member,UNVERIFIED,
+PAY-002,payment,Cancel/grace,member,UNVERIFIED,
+PAY-003,payment,Webhook feedback,webhook,UNVERIFIED,
+PAY-004,payment,Manual sync/import,admin,UNVERIFIED,
+PAY-005,payment,Promotions/free trial,member,UNVERIFIED,
+ADMIN-001,admin,Admin console 68 tabs RBAC,admin/super,UNVERIFIED,
+ADMIN-002,admin,Member/business/artist mgmt,admin,UNVERIFIED,
+ADMIN-003,admin,QC/content/audio-engine,admin/super,UNVERIFIED,
+ADMIN-004,admin,AI operations/weights,admin,UNVERIFIED,
+ADMIN-005,admin,Enterprise command/ops/settlement,super,UNVERIFIED,
+OPS-001,ops,Cron daily-metrics,cron,UNVERIFIED,R-06
+OPS-002,ops,Cron enterprise-ops 15min,cron,UNVERIFIED,
+OPS-003,ops,Cron weekly weight-regression,cron,UNVERIFIED,
+NOTIF-001,notify,Email Resend,system,UNVERIFIED,
+NOTIF-002,notify,Slack ops alerts,admin,UNVERIFIED,
+NOTIF-003,notify,Web push,member,UNVERIFIED,
+NOTIF-004,notify,Kakao messaging,system,NOT_IMPLEMENTED,
+PUBLIC-001,public,Landing/service/legal/support,public,PARTIAL,
+SUPPORT-001,support,Inquiries,member/admin,UNVERIFIED,R-03
