@@ -15,14 +15,16 @@ export const supabaseProjectRef: string = (() => {
   }
 })();
 
-// 어떤 프로젝트/DB 에 연결됐는지 즉시 확인 (배포본에서도 출력) — 업로드 미반영 진단용
- 
-console.log('[SupabaseEnv]', {
-  url: url ?? '(missing)',
-  projectRef: supabaseProjectRef,
-  anonKeySet: Boolean(anon),
-  configured: isSupabaseConfigured,
-});
+// AUTH-STABILIZATION-1: 프로덕션 콘솔에 project URL/ref 를 노출하지 않도록 DEV 로 제한.
+// (진단이 필요하면 DEV 빌드에서만 확인.)
+if (import.meta.env.DEV) {
+  console.log('[SupabaseEnv]', {
+    url: url ?? '(missing)',
+    projectRef: supabaseProjectRef,
+    anonKeySet: Boolean(anon),
+    configured: isSupabaseConfigured,
+  });
+}
 
 /**
  * 모든 Supabase 요청에 hard timeout 적용 (Storage 업로드는 예외).

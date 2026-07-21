@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getOAuthCallbackUrl, getPasswordResetUrl } from '@/lib/authRedirect';
 import type { UserRow } from '@/types/db';
 
 declare global {
@@ -38,6 +39,12 @@ interface AuthState {
   signOut: () => Promise<void>;
   /** 회원가입 인증 메일 재발송 — 메일 못 받았거나 만료된 경우 사용. */
   resendSignupEmail: (email: string) => Promise<void>;
+  /**
+   * 셀프서비스 비밀번호 재설정 요청 — 재설정 링크 이메일 발송.
+   * enumeration 방지: 성공/미가입 여부를 구분하지 않고 항상 정상 resolve 한다
+   * (호출자는 언제나 동일한 안내를 표시). 실제 오류는 rate-limit 등에서만 throw.
+   */
+  requestPasswordReset: (email: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -222,26 +229,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       nickname: nickname || email.split('@')[0],
       ...(metadata ?? {}),
     };
-     
-    console.log('[auth] signUp request:', { email, data });
+    // AUTH-STABILIZATION-1: 회원가입 email/payload 를 브라우저 콘솔에 남기던 개인정보 로그 제거.
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data },
+      options: { data, emailRedirectTo: getOAuthCallbackUrl() },
     });
     if (error) {
-       
-      console.error('[auth] signUp error:', error);
+      // 개인정보(이메일 등)가 담길 수 있는 raw error 는 프로덕션에 남기지 않음.
+      if (import.meta.env.DEV) {
+        console.error('[auth] signUp failed:', (error as { status?: number }).status ?? error.name);
+      }
       throw error;
     }
     const ids = signUpData.user?.identities;
-     
-    console.log('[auth] signUp response:', {
-      user_id: signUpData.user?.id,
-      email_confirmed: signUpData.user?.email_confirmed_at != null,
-      has_session: !!signUpData.session,
-      identities_count: ids?.length ?? 0,
-    });
     // confirm email ON 환경에서 동일 이메일 재가입 시 identities=[] 빈 배열로 반환됨 → silent duplicate.
     if (signUpData.user && (!ids || ids.length === 0)) {
       throw new Error('이미 가입된 이메일입니다. 로그인해주세요.');
@@ -251,7 +252,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: getOAuthCallbackUrl() },
     });
     if (error) throw error;
   },
@@ -260,7 +261,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
         // X6.11: 로그인 목적의 최소 scope 만 — profile_nickname + account_email.
         // talk_message 는 별도 권한 심사 + 사용자 동의 부담이 커서 제거. 알림톡 발송이
         // 필요해지면 비즈 메시지 (알림톡/친구톡 API) 로 별도 솔루션 사용 권장.
@@ -287,8 +288,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: getOAuthCallbackUrl() },
     });
     if (error) throw error;
+  },
+
+  requestPasswordReset: async (email) => {
+    // enumeration 방지: 미가입/오류를 호출자에게 구분해 알리지 않는다.
+    // rate-limit(429) 같은 재시도 유도 오류만 throw 하고, 그 외 오류는 조용히 삼킨다.
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getPasswordResetUrl(),
+      });
+      if (error && (error.status === 429 || /rate limit/i.test(error.message))) {
+        throw error;
+      }
+    } catch (e) {
+      if (e && typeof e === 'object' && 'status' in e && (e as { status?: number }).status === 429) {
+        throw e;
+      }
+      // 그 외는 enumeration 방지를 위해 삼킨다.
+    }
   },
 }));

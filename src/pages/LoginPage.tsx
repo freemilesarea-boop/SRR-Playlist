@@ -16,9 +16,11 @@ import EnterpriseStoreSignupForm from '@/components/auth/EnterpriseStoreSignupFo
 import InAppBrowserWarningModal from '@/components/auth/InAppBrowserWarningModal';
 import Logo from '@/components/Logo';
 import { friendlyError } from '@/lib/errorMessages';
+import { sanitizeAuthReturnPath } from '@/lib/authRedirect';
 
 type Mode =
   | 'signin'
+  | 'forgot'                        // 셀프서비스 비밀번호 재설정 요청 (AUTH-STABILIZATION-1)
   | 'signup-type'
   | 'signup-individual'
   | 'signup-business'
@@ -41,13 +43,17 @@ function firstRouteFor(accountType: string | undefined | null): string {
 }
 
 export default function LoginPage() {
-  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, resendSignupEmail } = useAuthStore();
+  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, resendSignupEmail, requestPasswordReset } = useAuthStore();
   const profile = useAuthStore((s) => s.profile);
   const isProfileReady = useAuthStore((s) => s.isProfileReady);
   const location = useLocation();
   // 로그인 게이트(SubscriptionGate) 또는 공유 링크에서 넘어온 returnTo URL.
   // 명시적 returnTo 있으면 그곳으로, 없고 첫 로그인이면 account_type 기반 분기.
-  const explicitReturn = (location.state as { from?: string } | null)?.from ?? null;
+  // Open Redirect 방지: 외부에서 주입될 수 있는 복귀 경로를 내부 절대경로로만 제한.
+  const explicitReturn = sanitizeAuthReturnPath(
+    (location.state as { from?: string } | null)?.from ?? null,
+    '',
+  ) || null;
   function computeTarget(): string {
     if (explicitReturn) return explicitReturn;
     let done = false;
@@ -79,6 +85,8 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
+  // AUTH-STABILIZATION-1 — 셀프서비스 비밀번호 재설정 요청 상태
+  const [resetSent, setResetSent] = useState(false);
   // X6.33: PWA standalone 케이스도 같은 모달 흐름 사용 — isPwa flag 로 분기.
   const [inAppWarning, setInAppWarning] = useState<{
     label: string | null;
@@ -159,6 +167,27 @@ export default function LoginPage() {
       setError(friendlyError(err, '재발송 실패'));
     } finally {
       setResending(false);
+    }
+  }
+
+  async function onRequestReset(e: React.FormEvent) {
+    e.preventDefault();
+    const v = email.trim();
+    if (!v) {
+      setError('가입하신 이메일을 입력해주세요.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await requestPasswordReset(v);
+      // enumeration 방지: 가입 여부와 무관하게 항상 동일한 안내.
+      setResetSent(true);
+    } catch (err) {
+      // rate-limit 등만 사용자에게 노출 (재시도 유도).
+      setError(friendlyError(err, '잠시 후 다시 시도해주세요.'));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -263,7 +292,7 @@ export default function LoginPage() {
         {showBackButton && (
           <button
             type="button"
-            onClick={() => setMode(mode === 'signup-type' ? 'signin' : 'signup-type')}
+            onClick={() => setMode(mode === 'signup-type' || mode === 'forgot' ? 'signin' : 'signup-type')}
             className="inline-flex items-center gap-1 text-xs text-ink-mute hover:text-ink"
           >
             <ArrowLeft size={12} /> 뒤로
@@ -372,7 +401,56 @@ export default function LoginPage() {
                       ? `재발송 (${resendCooldown}초 후 가능)`
                       : '인증 메일이 안 왔어요 — 재발송'}
                 </button>
+
+                {/* AUTH-STABILIZATION-1 — 셀프서비스 비밀번호 재설정 진입 */}
+                <button
+                  type="button"
+                  onClick={() => { setError(null); setResetSent(false); setMode('forgot'); }}
+                  className="block w-full text-center text-[11px] text-ink-mute hover:text-ink"
+                >
+                  비밀번호를 잊으셨나요?
+                </button>
               </form>
+            )}
+
+            {mode === 'forgot' && (
+              resetSent ? (
+                <div className="space-y-3 text-center">
+                  <Alert tone="success">
+                    입력하신 이메일이 가입되어 있다면 비밀번호 재설정 링크를 보냈어요.
+                    받은편지함과 스팸함을 확인해주세요.
+                  </Alert>
+                  <button
+                    type="button"
+                    onClick={() => { setMode('signin'); setResetSent(false); }}
+                    className="text-xs text-ink-mute hover:text-ink"
+                  >
+                    로그인으로 돌아가기
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={onRequestReset} className="space-y-3">
+                  <p className="text-xs text-ink-mute">
+                    가입하신 이메일로 비밀번호 재설정 링크를 보내드려요.
+                  </p>
+                  <div className="relative">
+                    <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-dim" />
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="이메일"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="input pl-10"
+                    />
+                  </div>
+                  {error && <Alert tone="error">{error}</Alert>}
+                  <button type="submit" disabled={busy} className="btn-primary w-full py-3">
+                    {busy ? '전송 중…' : '재설정 링크 보내기'}
+                  </button>
+                </form>
+              )
             )}
 
             {mode === 'signup-type' && (
