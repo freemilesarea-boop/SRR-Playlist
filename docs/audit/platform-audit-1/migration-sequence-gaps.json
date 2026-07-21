@@ -1,0 +1,22 @@
+{
+  "file_count": 419,
+  "min_sequence": "0001",
+  "max_sequence": "0456",
+  "distinct_numbers": 406,
+  "missing_count": 50,
+  "missing_ranges": [
+    "0198-0203",
+    "0354",
+    "0365-0366",
+    "0408-0411",
+    "0414-0419",
+    "0421-0451"
+  ],
+  "duplicate_bare_prefixes": [
+    "0068",
+    "0214",
+    "0388"
+  ],
+  "suffix_family_files": 11,
+  "note": "Max sequence 0456. No migration above 0456 exists in the working tree or any git history; the externally-cited 0571 has no corresponding file in this repository."
+}

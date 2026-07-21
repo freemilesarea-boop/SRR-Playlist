@@ -1,0 +1,33 @@
+{
+  "audit": "PLATFORM-AUDIT-1B", "verified_at_commit": "80834ab",
+  "legend": { "match": "verified equal", "minor": "small over/undercount, corrected", "confirmed_external": "true but depends on external/live system" },
+  "claims": [
+    { "id": "C-01", "claim": "TS/TSX files in src", "reported": 443, "verified": 443, "cmd": "find src -name '*.ts' -o -name '*.tsx' | wc -l", "match": true },
+    { "id": "C-02", "claim": "migration files", "reported": 419, "verified": 419, "cmd": "ls supabase/migrations/*.sql | wc -l", "match": true },
+    { "id": "C-03", "claim": "max migration number", "reported": "0456 (implied)", "verified": "0456", "cmd": "prefix sort | tail", "match": true, "note": "externally-cited 0571 does NOT exist anywhere in repo/history" },
+    { "id": "C-04", "claim": "edge functions", "reported": 20, "verified": 20, "cmd": "ls -d supabase/functions/*/ | wc -l", "match": true },
+    { "id": "C-05", "claim": "vercel serverless handlers", "reported": 3, "verified": 3, "cmd": "find api -name '*.ts' | wc -l", "match": true },
+    { "id": "C-06", "claim": "routes", "reported": 41, "verified": 41, "cmd": "grep -c '<Route ' src/App.tsx", "match": true },
+    { "id": "C-07", "claim": "admin tabs", "reported": 68, "verified": 65, "cmd": "TABS array {id/key:'...'} entries", "match": false, "correction": "68 -> 65 concrete TABS entries" },
+    { "id": "C-08", "claim": "top-level features", "reported": 65, "verified": "~65", "cmd": "feature-registry.json count", "match": true, "note": "registry lists 66 rows incl SUPPORT-001; ~65 approximate stands" },
+    { "id": "C-09", "claim": "algorithms mapped", "reported": 46, "verified": 46, "cmd": "algorithm-registry.json length", "match": true },
+    { "id": "C-10", "claim": "RLS create policy", "reported": 336, "verified": 336, "cmd": "grep -ci 'create policy' migrations", "match": true },
+    { "id": "C-11", "claim": "RLS enable stmts", "reported": 203, "verified": 202, "cmd": "sum grep 'enable row level security'", "match": false, "correction": "203 -> 202 (grep-method variance; effectively equal)" },
+    { "id": "C-12", "claim": "undefined client RPCs", "reported": 29, "verified": "29 (4/4 spot-checked confirmed no local def + no git-history def)", "cmd": "grep function def across *.sql + git log -S", "match": true, "note": "MISSING_CONFIRMED_LOCAL / UNVERIFIED_REMOTE" },
+    { "id": "C-13", "claim": "dead tables", "reported": 3, "verified": "3 (plus 4-table settlement V2 shadow separately)", "match": true },
+    { "id": "C-14", "claim": "deprecated worker", "reported": 1, "verified": 1, "note": "tools/embedding_worker/worker.py OpenL3", "match": true },
+    { "id": "C-15", "claim": "vitest tests pass", "reported": "129/129", "verified": "129 it()/test() calls; vitest run 129 PASS this phase", "cmd": "grep -c it/test + vitest run", "match": true },
+    { "id": "C-16", "claim": "total test cases 1462 (external record)", "reported": 1462, "verified": "NOT FOUND — 129 it(), 273 expect(), 13 test files", "match": false, "correction": "1462/65-files does not correspond to this repository" },
+    { "id": "C-17", "claim": "P0 risks", "reported": 0, "verified": 0, "match": true },
+    { "id": "C-18", "claim": "P1 risks", "reported": 4, "verified": 4, "match": true },
+    { "id": "C-19", "claim": "Player.tsx LOC", "reported": 2970, "verified": 2970, "cmd": "wc -l", "match": true },
+    { "id": "C-20", "claim": "Player.tsx useEffect", "reported": 32, "verified": 29, "cmd": "grep -c 'useEffect('", "match": false, "correction": "32 -> 29 direct useEffect calls" },
+    { "id": "C-21", "claim": "exhaustive-deps suppressions", "reported": 54, "verified": 54, "cmd": "grep exhaustive-deps", "match": true },
+    { "id": "C-22", "claim": "eslint-disable total", "reported": 59, "verified": 59, "match": true },
+    { "id": "C-23", "claim": "SECURITY DEFINER without search_path", "reported": 5, "verified": 5, "cmd": "per-file grep", "match": true, "files": ["0051","0120","0140","0284","0374"] },
+    { "id": "C-24", "claim": "prod dep vulns", "reported": "2 moderate", "verified": "UNVERIFIED (npm audit is time-varying; not re-run this phase)", "match": "confirmed_external" },
+    { "id": "C-25", "claim": "dev dep vulns", "reported": "1 critical/3 high", "verified": "UNVERIFIED (time-varying)", "match": "confirmed_external" },
+    { "id": "C-26", "claim": "Google OAuth risk", "reported": "at risk (external config)", "verified": "code path confirmed; external Supabase/Google config UNVERIFIED", "match": "confirmed_external" }
+  ],
+  "summary": { "verified_match": 18, "minor_correction": 4, "external_unverified": 3, "not_found_external_claim": 1 }
+}

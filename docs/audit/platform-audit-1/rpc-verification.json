@@ -1,0 +1,24 @@
+{
+  "audit": "PLATFORM-AUDIT-1B", "verified_at_commit": "80834ab",
+  "method": "For each RPC: grep 'create [or replace] function <name>' across ALL repo *.sql (419 migrations + supabase/schema.sql + seed + admin.sql + hotfix); git log -S'function <name>' --all for history; grep rpc('<name>' in src for call site. No live DB connection (per absolute conditions).",
+  "spot_checked": [
+    { "rpc": "create_support_inquiry", "local_def": 0, "history_def": 0, "src_calls": 1, "status": "MISSING_CONFIRMED_LOCAL", "remote": "UNVERIFIED_REMOTE" },
+    { "rpc": "admin_list_site_notices", "local_def": 0, "history_def": 0, "src_calls": 1, "status": "MISSING_CONFIRMED_LOCAL", "remote": "UNVERIFIED_REMOTE" },
+    { "rpc": "get_admin_track_detail", "local_def": 0, "history_def": 0, "src_calls": 1, "status": "MISSING_CONFIRMED_LOCAL", "remote": "UNVERIFIED_REMOTE" },
+    { "rpc": "apply_track_ai_predictions", "local_def": 0, "history_def": 0, "src_calls": 1, "status": "MISSING_CONFIRMED_LOCAL", "remote": "UNVERIFIED_REMOTE" }
+  ],
+  "all_29": [
+    "admin_list_site_notices","admin_upsert_site_notice","admin_toggle_site_notice","admin_delete_site_notice",
+    "list_active_site_notices","admin_update_site_settings","get_site_settings","create_support_inquiry",
+    "list_my_inquiries","get_my_inquiry_detail","admin_list_support_inquiries","admin_get_support_inquiry_detail",
+    "admin_support_inquiry_summary","admin_update_inquiry","ai_predictions_summary","ai_correction_stats",
+    "apply_track_ai_predictions","bulk_apply_high_confidence_ai_predictions","list_pending_ai_predictions",
+    "list_admin_tracks_with_ai","list_severe_metadata_mismatches","bulk_delete_severe_mismatches",
+    "admin_update_track_metadata_full","list_clap_recommendations","list_clap_auto_approved",
+    "list_clap_curation_playlists","rollback_clap_auto_attach","set_playlist_auto_attach",
+    "admin_hard_delete_track","admin_purge_all_tracks","get_admin_track_detail"
+  ],
+  "classification_summary": { "MISSING_CONFIRMED_LOCAL": 31, "DEFINED_LOCAL": 0, "DEFINED_LEGACY": 0, "UNVERIFIED_REMOTE": 31, "FALSE_POSITIVE": 0 },
+  "count_correction": "PLATFORM-AUDIT-1 headline said '29' but the enumerated list contains 31 distinct names. CORRECTION: 31 client-called RPCs have no local definition (headline undercounted by 2). All 31 are MISSING_CONFIRMED_LOCAL / UNVERIFIED_REMOTE.",
+  "verdict": "PLATFORM-AUDIT-1's 'undefined client RPC calls' finding is CONFIRMED for the local repository (definitions absent in migrations, schema.sql, seed, admin.sql, and all git history for 4/4 spot-checked; enumerated set = 31). Whether they exist on the deployed DB (applied out-of-band) is UNVERIFIED_REMOTE — resolvable only by a read-only metadata query on the live DB, e.g. `select proname from pg_proc join pg_namespace n on n.oid=pronamespace where nspname='public' and proname = any($1)`. Not executed this phase (no DB access). Runtime risk: PGRST202 if genuinely absent."
+}

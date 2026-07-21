@@ -1,0 +1,27 @@
+{
+  "audit": "PLATFORM-AUDIT-1B", "verified_at_commit": "80834ab",
+  "branches": [
+    { "branch": "claude/platform-audit-1-inventory", "head": "80834ab", "date": "2026-07-21", "purpose": "audit docs (this)", "production_relation": "docs-only superset of audit base", "audit_suitability": "n/a (contains the audit)" },
+    { "branch": "feat/settlement-ux-2b-command-center", "head": "0f3bb57", "date": "2026-07-21", "purpose": "PLATFORM-AUDIT-1 base + settlement UX", "contains_latest_migrations": "0456", "production_relation": "default + 9 settlement commits (superset)", "audit_suitability": "SUITABLE (superset of production)" },
+    { "branch": "feat/settlement-logic-2-tax-safe-carryover", "head": "4eecaa0", "date": "2026-07-21", "purpose": "settlement logic (0454/0455)", "production_relation": "unmerged draft" },
+    { "branch": "claude/settlement-audit-phase-1-7wj7ew", "head": "5df9ac2", "date": "2026-07-21", "purpose": "settlement audit base", "production_relation": "unmerged draft" },
+    { "branch": "claude/playlist-mvp-development-2JmTJ", "head": "0b016c4", "date": "2026-07-10", "purpose": "DEFAULT / integration branch", "contains_latest_migrations": "0453 (416 files)", "production_relation": "git default branch = production by convention", "audit_suitability": "production baseline; subset of audit base" }
+  ],
+  "ancestry": {
+    "audit_base": "0f3bb57",
+    "default_branch_tip": "0b016c4",
+    "merge_base": "0b016c4",
+    "default_is_ancestor_of_audit": true,
+    "commits_in_default_not_in_audit": 0,
+    "commits_in_audit_not_in_default": 9,
+    "conclusion": "audit base 0f3bb57 is a STRICT SUPERSET of the default/production branch (default tip is the merge-base). PLATFORM-AUDIT-1 therefore covered the entire production platform PLUS 9 in-flight settlement commits."
+  },
+  "questions": {
+    "q1_default_is_latest_integration": "YES (claude/playlist-mvp-development-2JmTJ, 0b016c4, Jul 10)",
+    "q2_audit_equals_or_superset_of_production": "SUPERSET (audit = default + settlement)",
+    "q3_audit_included_latest_settlement_aiops_player_brand_enterprise": "YES — settlement is the superset delta; AI-OPS/Player/Brand/Enterprise are in the default branch and thus in the audit base",
+    "q4_missing_merges_prs_commits": "None missing relative to default; the 9 extra commits are unmerged settlement drafts (PR #483/#484, still draft)",
+    "q5_usable_as_full_platform_result": "YES for code/static scope. Production runtime binding + deployed SHA remain UNVERIFIED (no Vercel production-deploy SHA access)."
+  },
+  "production_deployment_sha": "UNVERIFIED (no access to Vercel production deployment record; git default branch tip is 0b016c4)"
+}

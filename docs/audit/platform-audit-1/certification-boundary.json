@@ -1,0 +1,32 @@
+{
+  "audit": "PLATFORM-AUDIT-1B", "verified_at_commit": "80834ab",
+  "levels": ["STATIC_CERTIFIED", "RUNTIME_CERTIFIED", "PRODUCTION_VERIFIED", "UNVERIFIED", "NOT_CERTIFIED"],
+  "definitions": {
+    "STATIC_CERTIFIED": "code present + wired + tsc/eslint/build/test-defs pass; no runtime observed",
+    "RUNTIME_CERTIFIED": "verified working in a Test/isolated runtime (browser/Test DB)",
+    "PRODUCTION_VERIFIED": "confirmed in Production (read-only or approved smoke)",
+    "UNVERIFIED": "external/config not confirmable from repo",
+    "NOT_CERTIFIED": "a defect is confirmed"
+  },
+  "areas": [
+    { "area": "TypeScript typecheck", "level": "STATIC_CERTIFIED", "evidence": "tsc --noEmit PASS this phase" },
+    { "area": "Lint (eslint/migrations/tones)", "level": "STATIC_CERTIFIED", "evidence": "all PASS this phase" },
+    { "area": "Build", "level": "STATIC_CERTIFIED", "evidence": "vite build PASS (prior session)" },
+    { "area": "Vitest suite (129)", "level": "RUNTIME_CERTIFIED", "evidence": "vitest run 129/129 in node/jsdom this phase" },
+    { "area": "Settlement compute logic", "level": "RUNTIME_CERTIFIED", "evidence": "SQL tests + 129 vitest; Test-DB verified in prior phases; NOT Production-verified" },
+    { "area": "Email login", "level": "STATIC_CERTIFIED", "evidence": "code wired; no runtime login observed" },
+    { "area": "Google OAuth", "level": "UNVERIFIED", "evidence": "depends on Supabase/Google external config" },
+    { "area": "New-user profile provisioning", "level": "UNVERIFIED", "evidence": "DB trigger; live existence unconfirmed" },
+    { "area": "Store player 24/7", "level": "STATIC_CERTIFIED", "evidence": "code wired; no runtime/soak; no player tests" },
+    { "area": "Payments (PayApp)", "level": "STATIC_CERTIFIED", "evidence": "webhook idempotent by design; no sandbox run" },
+    { "area": "RLS enforcement", "level": "UNVERIFIED", "evidence": "336 policies defined but not runtime-evaluated" },
+    { "area": "Enterprise-contracts storage privacy", "level": "NOT_CERTIFIED", "evidence": "confirmed past public window 0383->0394 (R-04)" },
+    { "area": "Signup PII console log", "level": "NOT_CERTIFIED", "evidence": "confirmed R-05" },
+    { "area": "Production config alignment (env/schema/OAuth redirect/storage)", "level": "UNVERIFIED", "evidence": "no Production DB / dashboard access" }
+  ],
+  "corrections_to_audit1": [
+    "Q13 settlement 'CERTIFIED (logic)' -> RUNTIME_CERTIFIED (Test-DB), NOT Production-verified.",
+    "Overall verdict 'CONDITIONALLY CERTIFIED' -> restated as STATIC_CERTIFIED with RUNTIME_CERTIFIED settlement + Test suite; PRODUCTION_VERIFIED = none.",
+    "Any implied production certainty removed; runtime items explicitly UNVERIFIED."
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "audit": "PLATFORM-AUDIT-1B", "verified_at_commit": "80834ab",
+  "by_runner": [
+    { "runner": "vitest (unit)", "files": 5, "cases": 106, "executed": true, "passed": 106, "safety": "Safe Local/CI" },
+    { "runner": "vitest (component/jsdom)", "files": 2, "cases": 23, "executed": true, "passed": 23, "safety": "Safe Local/CI" },
+    { "runner": "Playwright (e2e)", "files": 3, "cases": "~14 test() blocks", "executed": false, "reason": "@playwright/test NOT installed; specs never run; live BASE_URL + seeded brand required" },
+    { "runner": "pgTAP (SQL)", "files": 3, "cases": "n/a", "executed": false, "reason": "requires Postgres/Supabase Test DB; mutates settlement tables; unsafe for prod" },
+    { "runner": "Jest / Cypress / Deno / shell", "files": 0, "cases": 0, "executed": false, "reason": "none present" }
+  ],
+  "totals": { "test_files": 13, "vitest_files": 7, "vitest_cases_it_test": 129, "vitest_cases_executed": 129, "vitest_passed": 129, "expect_assertions_src": 273, "e2e_files_non_runnable": 3, "sql_files_need_db": 3 },
+  "npm_test_scope": "vitest run — includes src/**/*.test.ts(x) only (node env). Does NOT run e2e or SQL.",
+  "ci_test_scope": "GitHub Actions run lint-migrations + lint-tones + test-db-provision + db-apply-recommendation-seed. NO vitest / tsc / eslint / playwright in CI. The 129 vitest cases are LOCAL-only.",
+  "reconciliation_129_vs_1462": "129 = the actual count of it()/test() calls across the 7 runnable vitest files (verified by grep and by `vitest run`). The externally-cited '65 files / 1,462 tests' does not correspond to any state of THIS repository: the working tree has 13 test files total, 129 it() calls, and 273 expect() assertions; git history shows no larger test suite. Source of the 1,462 figure is external/unknown and cannot be reconciled here.",
+  "audit1_conclusion_correctness": "PLATFORM-AUDIT-1's '129/129 PASS' is CORRECT and appropriately scoped (it also explicitly noted e2e Playwright uninstalled and SQL tests need a Test DB). The phrase 'full tests complete' should be read as 'full RUNNABLE vitest suite complete'; e2e + SQL remain NOT executed."
+}
