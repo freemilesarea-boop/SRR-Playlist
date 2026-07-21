@@ -56,6 +56,16 @@ export interface AdminSettlementRow {
   // X6.45 — 버전 관리 (pending/held 재생성 시 version+1, 최신만 is_current)
   version: number;
   is_current: boolean;
+  // LOGIC-2 (선택) — taxed/untaxed 이월 분리 + snapshot. 표시 RPC 확장 시 채워짐.
+  // 없으면 표시 모델이 레거시 carried_over/previous_carried 합계로 graceful degrade.
+  carryover_untaxed_amount?: number | null;
+  carryover_taxed_amount?: number | null;
+  previous_carryover_untaxed_amount?: number | null;
+  previous_carryover_taxed_amount?: number | null;
+  taxable_base_amount?: number | null;
+  tax_rate_snapshot?: number | null;
+  tax_withholding_type_snapshot?: string | null;
+  minimum_payout_snapshot?: number | null;
 }
 
 /** X6.45 — 동일 (월, 아티스트) 의 정산 version 이력 1건 */
@@ -111,6 +121,9 @@ export interface GenerateSettlementResult {
   total_sales_agent_fee: number;
   total_final_payout: number;
   total_carried_over: number;
+  // LOGIC-2: 활성 정책 최소 지급 기준 (UI 하드코딩 제거용 single source of truth)
+  min_payout_amount?: number;
+  min_payout_basis?: string;
   skipped_artists: Array<{
     artist_user_id: string;
     existing_status: string;

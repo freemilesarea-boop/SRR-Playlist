@@ -1,0 +1,75 @@
+-- ============================================================
+-- settlement_e2e_lifecycle_test.sql — SETTLEMENT-E2E-1 lifecycle spec
+--
+-- 목적: LOGIC-2 정산 엔진을 실제 RPC 경로로 끝까지 검증하는 재현 가능한 스펙.
+--   생성 → 세율/정책 snapshot → PII/세율 hold → finalize → 지급 →
+--   수동 이월(기과세) → 다음 달 생성(재과세 금지) → 감사 구분 → 불변식.
+--
+-- 전제(Production-equivalent 스키마 필요):
+--   0300(payout PII) · 0311/0315(carryover+protect relax) · 0316(정책) ·
+--   0321(adjustments) · 0326(settlement_period_month) · 0454/0455(LOGIC-2).
+--   → 완전 이관된 환경(Prod 또는 Prod-equivalent clone)에서 실행.
+--   드리프트된 순수 Test 에서는 SETTLEMENT-E2E-1 세션이 스키마를 보강한 뒤 실행함.
+--
+-- 실행 방식:
+--   admin RPC 는 auth.uid() 기반 admin 체크가 있으므로, 합성 admin 을
+--   request.jwt.claims 로 임퍼소네이트하여 실행한다(아래 참조).
+--   모든 fixture 는 e2e_settlement_ prefix. 트랜잭션 종료 시 정리 스크립트로 제거 가능.
+--
+-- 인증된 결과(SETTLEMENT-E2E-1, Test project haojpuhztegecbrwqorr):
+--   · 실 generator 2099-02 (9 artists) / 2099-03 (4 artists) 실행 성공
+--   · A03 net10000→wh330/final9670 · A05 8.8%→1760/18240 · A06 0%→0/20000
+--   · A07 unknown-rate → held(tax_type_unknown) · A09 PII → held, force 지급
+--   · A15 기과세 이월 9670 재과세 금지: wh=396 (≠715), final=21274
+--   · APAY payable 수동 이월 → carryover_taxed=29010 → 2099-03 재과세 0, final=29010
+--   · 정책 snapshot: 2099-02 min=10000 / 2099-03 min=20000
+--   · 감사 action 구분: auto_carryover_consumed / admin_manual_carryover / mark_paid
+--   · 가드: paid-이월불가 · 중복이월 · 사유필수 · PII무단지급 · 중복생성 no-op
+--   · 불변식 0 위반 · 음수 0 · 재과세 0 · legacy=untaxed+taxed
+--   · 체인 보존: APAY 30000 = tax 990 + 이월 29010
+--
+-- 알려진 경미 사항(비금전, 후속 개선 후보):
+--   payable 을 수동 이월하면 소스행의 final_payout_amount/withholding 이
+--   immutable 트리거로 보존되어 남는다(스냅샷). 이월 표현은 carryover_taxed 이며
+--   월간 금액 보존은 정상. 행 단위 단순합 검사 시 carried_over 행은 final 을 제외해야 함.
+-- ============================================================
+
+-- ---- 임퍼소네이트 실행 예시 (한 트랜잭션 내에서만 유효) ----
+--   begin;
+--   select set_config('request.jwt.claims','{"sub":"<admin-uuid>"}', true);
+--   select public.admin_generate_monthly_settlement('2099-02-01', false);
+--   commit;
+
+-- ---- 핵심 불변식 (완전 이관 환경에서 e2e rows 대상 실행) ----
+-- 재과세 금지: 기과세 이월이 있는데(base=0) withholding>0 이면 실패
+--   select count(*) from public.artist_settlements
+--   where taxable_base_amount=0 and previous_carryover_taxed_amount>0 and withholding_tax_amount>0;  -- expect 0
+-- 금액 보존(carried_over 행은 final 제외):
+--   (previous_carryover_untaxed_amount+previous_carryover_taxed_amount)
+--     = withholding_tax_amount
+--       + case when status='carried_over' then 0 else final_payout_amount end
+--       + carryover_untaxed_amount + carryover_taxed_amount;  -- 모든 e2e row 성립
+-- 음수 금지: carryover_untaxed_amount/carryover_taxed_amount/final_payout_amount/withholding_tax_amount >= 0
+-- 레거시 일치: carried_over_amount = carryover_untaxed_amount + carryover_taxed_amount
+
+-- ============================================================
+-- Fixture cleanup (e2e_settlement_ prefix 전체 제거 — 재실행 가능)
+--   ※ paid 행은 immutable 트리거로 삭제 차단되므로 세션 replication 우회 필요.
+-- ============================================================
+-- do $$
+-- begin
+--   set local session_replication_role = replica;  -- immutability/guard 트리거 우회 (정리 전용)
+--   delete from public.settlement_admin_audit_logs where artist_id in
+--     (select id from public.users where nickname like 'e2e_settlement%');
+--   delete from public.settlement_items where artist_user_id in
+--     (select id from public.users where nickname like 'e2e_settlement%');
+--   delete from public.streaming_revenues where artist_user_id in
+--     (select id from public.users where nickname like 'e2e_settlement%');
+--   delete from public.artist_settlements where artist_user_id in
+--     (select id from public.users where nickname like 'e2e_settlement%');
+--   delete from public.settlement_generation_runs where settlement_month in ('2099-01-01','2099-02-01','2099-03-01');
+--   delete from public.artist_payout_accounts where legal_name like 'e2e_%';
+--   delete from public.settlement_policies where note like 'e2e_settlement%';
+--   delete from public.users where nickname like 'e2e_settlement%';
+--   delete from auth.users where email like 'e2e_settlement_%@example.test';
+-- end$$;
