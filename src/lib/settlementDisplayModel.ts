@@ -47,7 +47,19 @@ export interface SettlementDisplayModel {
   isManualCarryover: boolean;
   meetsMinPayout: boolean;
   minimumPayoutAmount: number | null;
+  // UX-2B — 화면 공용 파생값 (컴포넌트가 자체 분기하지 않도록)
+  historicalCalculatedPayoutAmount: number;
+  effectivePaidAmount: number;
+  effectiveRemainingAmount: number;
+  effectiveNextCarryoverAmount: number;
+  displayAmountKind: DisplayAmountKind;
+  statusLabel: string;
+  statusDescription: string;
+  requiredAction: RequiredAction;
 }
+
+export type DisplayAmountKind = 'payable' | 'paid' | 'held' | 'auto_carryover' | 'manual_carryover' | 'zero';
+export type RequiredAction = 'none' | 'pay' | 'verify_identity' | 'verify_account' | 'set_tax' | 'review_carryover';
 
 function n(v: number | null | undefined): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
@@ -89,6 +101,42 @@ export function buildSettlementDisplayModel(row: AdminSettlementRow): Settlement
 
   const paidAmount = isPaid ? calculatedFinal : 0;
   const remainingUnpaid = Math.max(effectivePayable - paidAmount, 0);
+  const totalNextCarryover = effectiveNextUntaxed + effectiveNextTaxed;
+
+  // 파생 표시값
+  const displayAmountKind: DisplayAmountKind = isPaid
+    ? 'paid'
+    : isHeld
+      ? 'held'
+      : isCarried
+        ? (row.is_manual_carryover ? 'manual_carryover' : 'auto_carryover')
+        : effectivePayable > 0
+          ? 'payable'
+          : 'zero';
+
+  const statusLabel =
+    isPaid ? '지급 완료'
+    : isPayable ? '지급 가능'
+    : isHeld ? holdReasonToStatusLabel(row.held_reason)
+    : isCarried ? (row.is_manual_carryover ? '수동 이월' : '자동 이월')
+    : (status === 'pending' && meetsMin) ? '지급 가능'
+    : status === 'pending' ? '기준 미달'
+    : status === 'disputed' ? '분쟁'
+    : '확인 필요';
+
+  const requiredAction: RequiredAction =
+    isPaid ? 'none'
+    : isHeld ? holdReasonToAction(row.held_reason)
+    : isCarried ? 'review_carryover'
+    : (isPayable || (status === 'pending' && meetsMin)) ? 'pay'
+    : 'none';
+
+  const statusDescription = humanizeHoldReason(row.held_reason)
+    ?? (isPaid ? '지급이 완료되었습니다.'
+      : isCarried ? '다음 달 정산에 합산됩니다.'
+      : (isPayable || (status === 'pending' && meetsMin)) ? '지급 처리 가능합니다.'
+      : status === 'pending' ? '최소 지급 기준에 도달하지 않았습니다.'
+      : '');
 
   return {
     currentGrossAmount: n(row.gross_settlement_amount),
@@ -118,7 +166,173 @@ export function buildSettlementDisplayModel(row: AdminSettlementRow): Settlement
     isManualCarryover: row.is_manual_carryover === true,
     meetsMinPayout: meetsMin,
     minimumPayoutAmount: row.minimum_payout_snapshot != null ? n(row.minimum_payout_snapshot) : null,
+    historicalCalculatedPayoutAmount: calculatedFinal,
+    effectivePaidAmount: paidAmount,
+    effectiveRemainingAmount: remainingUnpaid,
+    effectiveNextCarryoverAmount: totalNextCarryover,
+    displayAmountKind,
+    statusLabel,
+    statusDescription,
+    requiredAction,
   };
+}
+
+function holdReasonToStatusLabel(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'pii_incomplete': return '정산정보 입력 필요';
+    case 'account_missing': return '계좌 등록 필요';
+    case 'account_unverified': return '계좌 확인 필요';
+    case 'tax_type_unknown': return '세율 확인 필요';
+    case 'minimum_not_met': return '기준 미달';
+    default: return '지급 보류';
+  }
+}
+
+function holdReasonToAction(reason: string | null | undefined): RequiredAction {
+  switch (reason) {
+    case 'pii_incomplete': return 'verify_identity';
+    case 'account_missing':
+    case 'account_unverified': return 'verify_account';
+    case 'tax_type_unknown': return 'set_tax';
+    default: return 'none';
+  }
+}
+
+/** 필요 조치 라벨 (관리자). */
+export function requiredActionLabel(action: RequiredAction): string {
+  const map: Record<RequiredAction, string> = {
+    none: '없음',
+    pay: '지급 처리',
+    verify_identity: '정산정보 확인',
+    verify_account: '계좌 확인',
+    set_tax: '세율 설정',
+    review_carryover: '이월 내역 확인',
+  };
+  return map[action];
+}
+
+export interface SettlementSummary {
+  count: number;
+  totalCurrentNet: number;
+  totalPreviousCarryover: number;
+  totalWithholding: number;
+  totalEffectivePayable: number;   // sum(effectivePayableAmount) — 중복 없음
+  totalPaid: number;               // sum(effectivePaidAmount)
+  totalRemainingUnpaid: number;
+  totalNextCarryover: number;      // sum(effectiveNextCarryoverAmount)
+  heldCount: number;
+  identityIncompleteCount: number;
+  accountIncompleteCount: number;
+  taxReviewCount: number;
+}
+
+/**
+ * 목록/필터 데이터셋의 status-aware 합계. 동일 금액을 지급/이월에 중복 포함하지 않는다.
+ * (effectivePayable 과 effectiveNextCarryover 는 상태별로 상호배타적이므로 겹치지 않음.)
+ */
+export function summarizeSettlements(rows: AdminSettlementRow[]): SettlementSummary {
+  const models = rows.map(buildSettlementDisplayModel);
+  const sum = (f: (m: SettlementDisplayModel) => number) => models.reduce((a, m) => a + f(m), 0);
+  return {
+    count: models.length,
+    totalCurrentNet: sum((m) => m.currentNetAmount),
+    totalPreviousCarryover: sum((m) => m.totalPreviousCarryoverAmount),
+    totalWithholding: sum((m) => m.withholdingTaxAmount),
+    totalEffectivePayable: sum((m) => m.effectivePayableAmount),
+    totalPaid: sum((m) => m.effectivePaidAmount),
+    totalRemainingUnpaid: sum((m) => m.effectiveRemainingAmount),
+    totalNextCarryover: sum((m) => m.effectiveNextCarryoverAmount),
+    heldCount: models.filter((m) => m.isHeld).length,
+    identityIncompleteCount: models.filter((m) => m.requiredAction === 'verify_identity').length,
+    accountIncompleteCount: models.filter((m) => m.requiredAction === 'verify_account').length,
+    taxReviewCount: models.filter((m) => m.requiredAction === 'set_tax').length,
+  };
+}
+
+// ── 운영 Filter (모델 기반, 단일 권위) ──
+export type SettlementFacet =
+  | 'all' | 'payable' | 'paid' | 'held' | 'auto_carryover' | 'manual_carryover'
+  | 'below_min' | 'identity_incomplete' | 'account_incomplete' | 'tax_review' | 'has_carryover';
+
+export const SETTLEMENT_FACET_LABELS: Record<SettlementFacet, string> = {
+  all: '전체',
+  payable: '지급 가능',
+  paid: '지급 완료',
+  held: '지급 보류',
+  auto_carryover: '자동 이월',
+  manual_carryover: '수동 이월',
+  below_min: '기준 미달',
+  identity_incomplete: '정산정보 미완료',
+  account_incomplete: '계좌 확인 필요',
+  tax_review: '세율 확인 필요',
+  has_carryover: '이월금 보유',
+};
+
+export function settlementFacetMatches(model: SettlementDisplayModel, facet: SettlementFacet): boolean {
+  switch (facet) {
+    case 'all': return true;
+    case 'payable': return model.effectivePayableAmount > 0 && !model.isPaid;
+    case 'paid': return model.isPaid;
+    case 'held': return model.isHeld;
+    case 'auto_carryover': return model.displayAmountKind === 'auto_carryover';
+    case 'manual_carryover': return model.displayAmountKind === 'manual_carryover';
+    case 'below_min': return !model.meetsMinPayout && !model.isPaid && !model.isHeld;
+    case 'identity_incomplete': return model.requiredAction === 'verify_identity';
+    case 'account_incomplete': return model.requiredAction === 'verify_account';
+    case 'tax_review': return model.requiredAction === 'set_tax';
+    case 'has_carryover': return model.totalPreviousCarryoverAmount > 0 || model.totalNextCarryoverAmount > 0;
+    default: return true;
+  }
+}
+
+export function settlementSearchMatches(row: AdminSettlementRow, q: string): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  return [row.artist_nickname, row.artist_email, row.legal_name, row.artist_user_id]
+    .some((v) => (v ?? '').toString().toLowerCase().includes(s));
+}
+
+/** 목록·Summary·CSV 가 공유하는 단일 필터. */
+export function applySettlementFilters(
+  rows: AdminSettlementRow[], facet: SettlementFacet, search: string,
+): AdminSettlementRow[] {
+  return rows.filter((r) =>
+    settlementSearchMatches(r, search) &&
+    (facet === 'all' || settlementFacetMatches(buildSettlementDisplayModel(r), facet)));
+}
+
+const CSV_HEADERS = [
+  '정산월', '회원 ID', '회원명', '아티스트명', '당월 총 발생액', '회사 수수료', '영업 수수료',
+  '당월 순정산액', '이전 미과세 이월', '이전 기과세 이월', '과세 대상액', '세율 유형', '적용 세율',
+  '원천징수액', '계산된 최종 금액', '현재 지급 가능액', '지급 완료액', '잔여 미지급액',
+  '다음 미과세 이월', '다음 기과세 이월', '현재 상태', '보류 사유', '지급 완료일',
+];
+
+function csvCell(v: string | number | null | undefined): string {
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** SettlementDisplayModel 기반 CSV. 화면 합계와 반드시 일치. 민감정보(계좌/주민번호) 미포함. */
+export function settlementRowsToCsv(rows: AdminSettlementRow[]): string {
+  const lines = [CSV_HEADERS.map(csvCell).join(',')];
+  for (const row of rows) {
+    const m = buildSettlementDisplayModel(row);
+    lines.push([
+      row.settlement_month?.slice(0, 7) ?? '',
+      row.artist_user_id ?? '',
+      row.artist_nickname ?? '',
+      (row as { artist_name?: string }).artist_name ?? '',
+      m.currentGrossAmount, m.companyFeeAmount, m.salesAgentFeeAmount, m.currentNetAmount,
+      m.previousUntaxedCarryoverAmount, m.previousTaxedCarryoverAmount, m.taxableBaseAmount,
+      m.taxType ?? '', m.taxRate != null ? m.taxRate : '',
+      m.withholdingTaxAmount, m.historicalCalculatedPayoutAmount,
+      m.effectivePayableAmount, m.effectivePaidAmount, m.effectiveRemainingAmount,
+      m.nextUntaxedCarryoverAmount, m.nextTaxedCarryoverAmount,
+      m.statusLabel, humanizeHoldReason(m.holdReason) ?? '', row.paid_at?.slice(0, 10) ?? '',
+    ].map(csvCell).join(','));
+  }
+  return lines.join('\n');
 }
 
 /** 지급 차단/보류 사유 → 사용자 친화 문구 (관리자). */

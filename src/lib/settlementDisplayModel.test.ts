@@ -4,6 +4,9 @@ import {
   humanizeHoldReason,
   humanizeTaxType,
   artistStatusGuidance,
+  summarizeSettlements,
+  settlementRowsToCsv,
+  requiredActionLabel,
 } from './settlementDisplayModel';
 import type { AdminSettlementRow } from './artistSettlementApi';
 
@@ -123,5 +126,81 @@ describe('artistStatusGuidance — no internal jargon', () => {
     expect(g).toContain('정산 정보');
     expect(artistStatusGuidance(buildSettlementDisplayModel(row({ status: 'paid', final_payout_amount: 1, meets_min_payout: true })))).toContain('지급 완료');
     expect(artistStatusGuidance(buildSettlementDisplayModel(row({ status: 'carried_over', carried_over_amount: 1 })))).toContain('이월');
+  });
+});
+
+describe('summarizeSettlements + CSV parity (no double count)', () => {
+  const dataset = [
+    row({ status: 'payable', final_payout_amount: 9670, meets_min_payout: true, artist_net_settlement: 10000 }),
+    row({ status: 'paid', final_payout_amount: 18240, meets_min_payout: true, paid_at: '2099-03-01', artist_net_settlement: 20000 }),
+    // manually-carried payable: final 29010 AND carryover_taxed 29010 = same money
+    row({ status: 'carried_over', final_payout_amount: 29010, carryover_taxed_amount: 29010, carryover_untaxed_amount: 0, is_manual_carryover: true }),
+    // below-min carried
+    row({ status: 'pending', meets_min_payout: false, carried_over_amount: 5000, carryover_untaxed_amount: 5000 }),
+    row({ status: 'held', held_reason: 'pii_incomplete', final_payout_amount: 19340, meets_min_payout: true }),
+  ];
+
+  it('summary does not double-count manual-carry money across payable and carryover', () => {
+    const s = summarizeSettlements(dataset);
+    expect(s.count).toBe(5);
+    // effective payable: payable 9670 + paid 18240 (paid path) = 27910 (held=0, carried=0, below-min=0)
+    expect(s.totalEffectivePayable).toBe(9670 + 18240);
+    expect(s.totalPaid).toBe(18240);
+    // next carryover: manual-carry 29010 + below-min 5000 = 34010 (payable/paid/held excluded)
+    expect(s.totalNextCarryover).toBe(29010 + 5000);
+    // the manual-carry 29010 appears in carryover ONLY, never added to payable
+    expect(s.totalEffectivePayable).toBe(27910);
+    expect(s.heldCount).toBe(1);
+    expect(s.identityIncompleteCount).toBe(1);
+  });
+
+  it('CSV column sums equal the on-screen summary (parity)', () => {
+    const s = summarizeSettlements(dataset);
+    const csv = settlementRowsToCsv(dataset);
+    const rows = csv.split('\n');
+    const header = rows[0].split(',');
+    const idxPayable = header.indexOf('현재 지급 가능액');
+    const idxNextUntaxed = header.indexOf('다음 미과세 이월');
+    const idxNextTaxed = header.indexOf('다음 기과세 이월');
+    const idxPaid = header.indexOf('지급 완료액');
+    let payable = 0, nextCarry = 0, paid = 0;
+    for (const line of rows.slice(1)) {
+      const c = line.split(',');
+      payable += Number(c[idxPayable]);
+      nextCarry += Number(c[idxNextUntaxed]) + Number(c[idxNextTaxed]);
+      paid += Number(c[idxPaid]);
+    }
+    expect(payable).toBe(s.totalEffectivePayable);
+    expect(nextCarry).toBe(s.totalNextCarryover);
+    expect(paid).toBe(s.totalPaid);
+  });
+
+  it('CSV omits sensitive columns and values (no account/rrn data)', () => {
+    const header = settlementRowsToCsv([]).split('\n')[0];
+    // no sensitive COLUMNS (account number / rrn)
+    expect(header).not.toMatch(/계좌|주민|rrn|account_number/i);
+    // no masked account / rrn VALUE patterns in the data
+    const csv = settlementRowsToCsv(dataset);
+    expect(csv).not.toMatch(/\*{3,}\d|\d{6}-\*/);
+  });
+});
+
+describe('displayAmountKind + requiredAction + statusLabel', () => {
+  it('kinds by status', () => {
+    expect(buildSettlementDisplayModel(row({ status: 'paid', final_payout_amount: 1, meets_min_payout: true })).displayAmountKind).toBe('paid');
+    expect(buildSettlementDisplayModel(row({ status: 'payable', final_payout_amount: 1, meets_min_payout: true })).displayAmountKind).toBe('payable');
+    expect(buildSettlementDisplayModel(row({ status: 'held', held_reason: 'pii_incomplete' })).displayAmountKind).toBe('held');
+    expect(buildSettlementDisplayModel(row({ status: 'carried_over', is_manual_carryover: true, carryover_taxed_amount: 1 })).displayAmountKind).toBe('manual_carryover');
+    expect(buildSettlementDisplayModel(row({ status: 'carried_over', carried_over_amount: 1 })).displayAmountKind).toBe('auto_carryover');
+  });
+  it('required actions', () => {
+    expect(buildSettlementDisplayModel(row({ status: 'held', held_reason: 'pii_incomplete' })).requiredAction).toBe('verify_identity');
+    expect(buildSettlementDisplayModel(row({ status: 'held', held_reason: 'account_unverified' })).requiredAction).toBe('verify_account');
+    expect(buildSettlementDisplayModel(row({ status: 'held', held_reason: 'tax_type_unknown' })).requiredAction).toBe('set_tax');
+    expect(buildSettlementDisplayModel(row({ status: 'payable', final_payout_amount: 1, meets_min_payout: true })).requiredAction).toBe('pay');
+    expect(requiredActionLabel('verify_identity')).toBe('정산정보 확인');
+  });
+  it('held statusLabel avoids raw code', () => {
+    expect(buildSettlementDisplayModel(row({ status: 'held', held_reason: 'pii_incomplete' })).statusLabel).toBe('정산정보 입력 필요');
   });
 });
