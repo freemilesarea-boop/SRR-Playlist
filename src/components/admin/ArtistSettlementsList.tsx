@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X, Check } from 'lucide-react';
+import { Calculator, Eye, RefreshCw, Wallet, ArrowRightCircle, X, Check, Download } from 'lucide-react';
+import { summarizeSettlements, settlementRowsToCsv, type SettlementSummary } from '@/lib/settlementDisplayModel';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminListSettlements,
@@ -144,6 +145,14 @@ export default function ArtistSettlementsList() {
             <RefreshCw size={12} /> 새로고침
           </button>
           <button
+            onClick={() => downloadSettlementsCsv(rows, month)}
+            disabled={rows.length === 0}
+            className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-3 py-2 text-xs font-semibold ring-1 ring-line/10 hover:bg-bg-hover disabled:opacity-40"
+            title="현재 필터된 정산을 CSV로 내보내기 (화면 합계와 일치)"
+          >
+            <Download size={12} /> CSV
+          </button>
+          <button
             onClick={() => setGenModalOpen(true)}
             className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-black hover:bg-accent/90"
           >
@@ -153,6 +162,8 @@ export default function ArtistSettlementsList() {
       </div>
 
       {error && <Alert tone="error" title="조회 실패">{error}</Alert>}
+
+      {!loading && rows.length > 0 && <SettlementSummaryCards rows={rows} />}
 
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -522,6 +533,49 @@ function Kv({ label, value, tone }: { label: string; value: string; tone?: strin
     <div className="rounded-md bg-bg-soft px-2 py-1.5">
       <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
       <p className={`mt-0.5 font-mono text-xs ${tone ?? ''}`}>{value}</p>
+    </div>
+  );
+}
+
+/** 현재 필터된 rows 를 SettlementDisplayModel 기반 CSV 로 내보낸다 (화면 합계와 일치). */
+function downloadSettlementsCsv(rows: AdminSettlementRow[], month: string): void {
+  const csv = settlementRowsToCsv(rows);
+  // Excel 한글 깨짐 방지 BOM
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `settlements_${month ? month.slice(0, 7) : 'all'}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Status-aware 요약 카드 — 지급/이월 금액을 중복 없이 집계 (summarizeSettlements). */
+function SettlementSummaryCards({ rows }: { rows: AdminSettlementRow[] }) {
+  const s: SettlementSummary = summarizeSettlements(rows);
+  const cards: Array<{ label: string; value: string; tone?: string }> = [
+    { label: '정산 대상', value: `${s.count}명` },
+    { label: '당월 순정산', value: fmtKrw(s.totalCurrentNet) },
+    { label: '이전 이월', value: fmtKrw(s.totalPreviousCarryover) },
+    { label: '원천징수', value: fmtKrw(s.totalWithholding) },
+    { label: '현재 지급 가능', value: fmtKrw(s.totalEffectivePayable), tone: 'text-accent font-bold' },
+    { label: '지급 완료', value: fmtKrw(s.totalPaid), tone: 'text-emerald-600 dark:text-emerald-300' },
+    { label: '다음 달 이월', value: fmtKrw(s.totalNextCarryover), tone: 'text-amber-600 dark:text-amber-300' },
+    { label: '지급 보류', value: `${s.heldCount}명` },
+    { label: '정산정보 미완료', value: `${s.identityIncompleteCount}명` },
+    { label: '계좌 확인 필요', value: `${s.accountIncompleteCount}명` },
+    { label: '세율 확인 필요', value: `${s.taxReviewCount}명` },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {cards.map((c) => (
+        <div key={c.label} className="rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
+          <p className="text-[10px] uppercase tracking-wider text-ink-dim">{c.label}</p>
+          <p className={`mt-0.5 tabular-nums text-sm ${c.tone ?? 'text-ink'}`}>{c.value}</p>
+        </div>
+      ))}
     </div>
   );
 }
