@@ -19,6 +19,7 @@ import { friendlyError } from '@/lib/errorMessages';
 import RevealAccountButton from './RevealAccountButton';
 import RevealPiiButton from './RevealPiiButton';
 import CarryoverModal from './CarryoverModal';
+import { humanizeHoldReason } from '@/lib/settlementDisplayModel';
 
 const TAX_LABEL: Record<string, string> = {
   business_income_3_3: '사업소득 3.3%',
@@ -408,7 +409,9 @@ export default function ArtistSettlementDetail({
             </section>
 
             {data.settlement.held_reason && (
-              <Alert tone="warning" title="보류 사유">{data.settlement.held_reason}</Alert>
+              <Alert tone="warning" title="보류 사유">
+                {humanizeHoldReason(data.settlement.held_reason) ?? data.settlement.held_reason}
+              </Alert>
             )}
             {data.settlement.payout_memo && (
               <Alert tone="info" title="지급 메모">{data.settlement.payout_memo}</Alert>
