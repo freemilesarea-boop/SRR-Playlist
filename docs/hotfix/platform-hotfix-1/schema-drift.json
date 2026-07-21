@@ -1,0 +1,12 @@
+{
+  "audit": "PLATFORM-HOTFIX-1", "base": "acebedd",
+  "remote_access": "NONE — no Test/Production DB connection this phase (read-only metadata not run)",
+  "repository": { "migrations": 416, "max_migration": "0453", "create_function_defs": 946, "rpc_call_names": 725 },
+  "drift": {
+    "rpc_called_but_undefined_locally": 31,
+    "classification": "DEFINED_REMOTE_ONLY? / UNVERIFIED_REMOTE (likely applied out-of-band; not confirmable without DB access)",
+    "signature_drift": "UNVERIFIED", "permission_drift": "UNVERIFIED", "source_drift": "UNVERIFIED"
+  },
+  "note": "This branch (default acebedd) has 416 migrations / max 0453. The settlement branch adds 0454-0456 (417-419). Neither introduces the 31 functions. Full drift reconciliation requires a read-only pg_proc query against Test and Production and is deferred to DB-SCHEMA-RECONCILIATION.",
+  "next": "DB-SCHEMA-RECONCILIATION — run the operator read-only query (rpc-remote-status.json) on Test + Production; for each present-remote/absent-local function, either export its definition into a committed migration or remove the client call."
+}

@@ -1,0 +1,12 @@
+{
+  "audit": "PLATFORM-HOTFIX-1", "base": "acebedd",
+  "risks": [
+    { "id": "H-01", "severity": "P1", "item": "31 client RPCs undefined locally (PGRST202 risk)", "evidence": "rpc-master-registry.json; 4 spot-checked incl. git history", "resolution": "DOCUMENT_REMOTE_ONLY + PGRST202 error mapping + CI guard; not created (forbidden)", "remaining": "UNVERIFIED_REMOTE — must confirm on live DB (DB-SCHEMA-RECONCILIATION)" },
+    { "id": "H-02", "severity": "P2", "item": "daily-metrics cron fail-open (unauthenticated service_role exec if CRON_SECRET unset)", "evidence": "api/cron/daily-metrics.ts before", "resolution": "FIXED — verifyCronAuth fail-closed (503/401/403), timing-safe", "remaining": "operator must set CRON_SECRET in prod (checklist)" },
+    { "id": "H-03", "severity": "P2", "item": "Undefined-function errors could leak function name / cause infinite loading", "evidence": "errorMessages.ts had no PGRST202/42883", "resolution": "FIXED — safe mapping; wrappers throw so message surfaces", "remaining": "none (code)" },
+    { "id": "H-04", "severity": "P3", "item": "No guard against NEW undefined RPC calls entering the codebase", "evidence": "no CI check existed", "resolution": "FIXED — scripts/lint-rpc-registry.mjs + CI workflow + allowlist", "remaining": "none" },
+    { "id": "H-05", "severity": "P2", "item": "Destructive undefined RPCs (admin_purge_all_tracks, admin_hard_delete_track, bulk_delete_severe_mismatches)", "evidence": "adminTrackApi.ts", "resolution": "DEFER — if genuinely missing they already fail closed (PGRST202); if present-remote, verify auth/RLS in reconciliation", "remaining": "UNVERIFIED_REMOTE" },
+    { "id": "H-06", "severity": "P3", "item": "Repository schema drift vs remote (unknown extent)", "evidence": "schema-drift.json", "resolution": "DOCUMENTED", "remaining": "DB-SCHEMA-RECONCILIATION" }
+  ],
+  "summary": { "P0": 0, "P1": 1, "P2": 3, "P3": 2, "fixed_code": 3, "deferred": 2, "documented": 1 }
+}

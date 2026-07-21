@@ -1,0 +1,503 @@
+{
+  "audit": "PLATFORM-HOTFIX-1",
+  "commit_base": "acebedd",
+  "count": 31,
+  "rpcs": [
+    {
+      "id": "RPC-001",
+      "name": "admin_delete_site_notice",
+      "domain": "notices",
+      "call_sites": [
+        "src/lib/siteNoticesApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": true,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-002",
+      "name": "admin_get_support_inquiry_detail",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-003",
+      "name": "admin_hard_delete_track",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": true,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-004",
+      "name": "admin_list_site_notices",
+      "domain": "notices",
+      "call_sites": [
+        "src/lib/siteNoticesApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-005",
+      "name": "admin_list_support_inquiries",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-006",
+      "name": "admin_purge_all_tracks",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": true,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-007",
+      "name": "admin_support_inquiry_summary",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-008",
+      "name": "admin_toggle_site_notice",
+      "domain": "notices",
+      "call_sites": [
+        "src/lib/siteNoticesApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-009",
+      "name": "admin_update_inquiry",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-010",
+      "name": "admin_update_site_settings",
+      "domain": "settings",
+      "call_sites": [
+        "src/lib/siteSettingsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-011",
+      "name": "admin_update_track_metadata_full",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-012",
+      "name": "admin_upsert_site_notice",
+      "domain": "notices",
+      "call_sites": [
+        "src/lib/siteNoticesApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-013",
+      "name": "ai_correction_stats",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-014",
+      "name": "ai_predictions_summary",
+      "domain": "ai-ops",
+      "call_sites": [
+        "src/lib/trackAiPredictionsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-015",
+      "name": "apply_track_ai_predictions",
+      "domain": "ai-ops",
+      "call_sites": [
+        "src/lib/trackAiPredictionsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-016",
+      "name": "bulk_apply_high_confidence_ai_predictions",
+      "domain": "ai-ops",
+      "call_sites": [
+        "src/lib/trackAiPredictionsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-017",
+      "name": "bulk_delete_severe_mismatches",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "write",
+      "destructive": true,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-018",
+      "name": "create_support_inquiry",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-019",
+      "name": "get_admin_track_detail",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-020",
+      "name": "get_my_inquiry_detail",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-021",
+      "name": "get_site_settings",
+      "domain": "settings",
+      "call_sites": [
+        "src/lib/siteSettingsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-022",
+      "name": "list_active_site_notices",
+      "domain": "notices",
+      "call_sites": [
+        "src/lib/siteNoticesApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-023",
+      "name": "list_admin_tracks_with_ai",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-024",
+      "name": "list_clap_auto_approved",
+      "domain": "clap-curation",
+      "call_sites": [
+        "src/lib/clapCurationApi.ts"
+      ],
+      "tier": "C",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-025",
+      "name": "list_clap_curation_playlists",
+      "domain": "clap-curation",
+      "call_sites": [
+        "src/lib/clapCurationApi.ts"
+      ],
+      "tier": "C",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-026",
+      "name": "list_clap_recommendations",
+      "domain": "clap-curation",
+      "call_sites": [
+        "src/lib/clapCurationApi.ts"
+      ],
+      "tier": "C",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-027",
+      "name": "list_my_inquiries",
+      "domain": "support",
+      "call_sites": [
+        "src/lib/supportInquiryApi.ts"
+      ],
+      "tier": "A",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-028",
+      "name": "list_pending_ai_predictions",
+      "domain": "ai-ops",
+      "call_sites": [
+        "src/lib/trackAiPredictionsApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-029",
+      "name": "list_severe_metadata_mismatches",
+      "domain": "admin-track",
+      "call_sites": [
+        "src/lib/adminTrackApi.ts"
+      ],
+      "tier": "B",
+      "kind": "read",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-030",
+      "name": "rollback_clap_auto_attach",
+      "domain": "clap-curation",
+      "call_sites": [
+        "src/lib/clapCurationApi.ts"
+      ],
+      "tier": "C",
+      "kind": "write",
+      "destructive": true,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    },
+    {
+      "id": "RPC-031",
+      "name": "set_playlist_auto_attach",
+      "domain": "clap-curation",
+      "call_sites": [
+        "src/lib/clapCurationApi.ts"
+      ],
+      "tier": "C",
+      "kind": "write",
+      "destructive": false,
+      "local": "MISSING",
+      "git_history": "NONE",
+      "remote": "UNVERIFIED_REMOTE",
+      "status": "DEFINED_REMOTE_ONLY?/UNVERIFIED_REMOTE",
+      "decision": "DOCUMENT_REMOTE_ONLY + DEFER (DB-SCHEMA-RECONCILIATION)"
+    }
+  ]
+}

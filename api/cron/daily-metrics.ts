@@ -5,24 +5,23 @@
  * 환경 변수:
  *   - SUPABASE_URL          (Vercel env)
  *   - SUPABASE_SERVICE_ROLE_KEY   (Vercel env, secret!)
- *   - CRON_SECRET                  (선택, 호출 보호)
+ *   - CRON_SECRET                  (필수, fail-closed 호출 보호)
  *
  * vercel.json 에 schedule "0 1 * * *" 로 등록됨.
  */
 
+import { verifyCronAuth, cronAuthErrorResponse } from '../_lib/cronAuth';
+
 export const config = { runtime: 'edge' };
 
-interface VercelRequest extends Request {}
+type VercelRequest = Request;
 
 export default async function handler(req: VercelRequest) {
-  // CRON_SECRET 보호 (Vercel cron 은 Authorization: Bearer <CRON_SECRET> 헤더를 자동 추가)
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${secret}`) {
-      return new Response('unauthorized', { status: 401 });
-    }
-  }
+  // PLATFORM-HOTFIX-1: fail-closed. CRON_SECRET 미설정이면 503, 헤더 없으면 401, 불일치면 403.
+  // (이전엔 secret 미설정 시 인증을 건너뛰어 service_role RPC 가 무인증 실행될 수 있었음.)
+  const cronAuth = verifyCronAuth(req);
+  if (!cronAuth.ok) return cronAuthErrorResponse(cronAuth);
+  const secret = process.env.CRON_SECRET ?? '';
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

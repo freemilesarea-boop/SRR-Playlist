@@ -1,0 +1,15 @@
+{
+  "audit": "PLATFORM-HOTFIX-1", "base": "acebedd",
+  "endpoints": [
+    { "path": "api/cron/daily-metrics.ts", "auth_before": "optional (skipped if CRON_SECRET unset — FAIL-OPEN)", "auth_after": "verifyCronAuth fail-closed: 503 if unset, 401 no header, 403 mismatch", "service_role_rpc": ["expire_free_trials", "admin_compute_daily_metrics"], "status": "HARDENED" },
+    { "path": "api/cron/enterprise-ops.ts", "auth_before": "required (500 if unset, 401 mismatch)", "auth_after": "unchanged (already fail-closed)", "service_role_rpc": ["admin_evaluate_policy_automation_rules", "admin_mark_enterprise_billing_overdue", "admin_log_operation"], "status": "ALREADY_COMPLIANT (documented; not modified to avoid regression)" },
+    { "path": "api/admin/enterprise-ops-run.ts", "auth_before": "admin user token + role check + 60s debounce, attaches CRON_SECRET server-side", "auth_after": "unchanged", "status": "COMPLIANT (admin-gated proxy)" },
+    { "path": "supabase/functions/check-audio-health", "auth": "admin JWT OR x-cron-secret", "status": "COMPLIANT" },
+    { "path": "supabase/functions/process-scheduled-releases", "auth": "admin JWT OR x-cron-secret", "status": "COMPLIANT" },
+    { "path": "supabase/functions/dispatch-trial-reminders", "auth": "x-cron-secret OR service_role JWT", "status": "COMPLIANT" },
+    { "path": "supabase/functions/dispatch-admin-notifications", "auth": "admin JWT OR x-cron-secret", "status": "COMPLIANT" }
+  ],
+  "shared_helper": "api/_lib/cronAuth.ts — verifyCronAuth (fail-closed, timing-safe, secret never logged)",
+  "note": "Edge-function cron auth was already gated (x-cron-secret / service_role). Only api/cron/daily-metrics.ts was fail-open and is now fixed. enterprise-ops was already fail-closed; left as-is to avoid regression, documented compliant.",
+  "cron_secret_logging": "verifyCronAuth never emits the secret value; error responses carry only a code (CONFIGURATION_ERROR/UNAUTHORIZED/FORBIDDEN)."
+}

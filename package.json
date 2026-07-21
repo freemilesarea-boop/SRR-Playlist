@@ -13,6 +13,7 @@
     "lint:migrations": "node scripts/lint-migrations.mjs",
     "lint:tones": "node scripts/lint-admin-tones.mjs",
     "lint:tones:strict": "node scripts/lint-admin-tones.mjs --strict",
+    "lint:rpc": "node scripts/lint-rpc-registry.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "check-env": "node scripts/check-env.mjs",
     "audit": "node scripts/audit.mjs",

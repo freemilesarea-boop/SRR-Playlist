@@ -1,0 +1,188 @@
+[
+  {
+    "rpc": "admin_delete_site_notice",
+    "call_sites": [
+      "src/lib/siteNoticesApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_get_support_inquiry_detail",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_hard_delete_track",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_list_site_notices",
+    "call_sites": [
+      "src/lib/siteNoticesApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_list_support_inquiries",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_purge_all_tracks",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_support_inquiry_summary",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_toggle_site_notice",
+    "call_sites": [
+      "src/lib/siteNoticesApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_update_inquiry",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_update_site_settings",
+    "call_sites": [
+      "src/lib/siteSettingsApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_update_track_metadata_full",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "admin_upsert_site_notice",
+    "call_sites": [
+      "src/lib/siteNoticesApi.ts"
+    ]
+  },
+  {
+    "rpc": "ai_correction_stats",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "ai_predictions_summary",
+    "call_sites": [
+      "src/lib/trackAiPredictionsApi.ts"
+    ]
+  },
+  {
+    "rpc": "apply_track_ai_predictions",
+    "call_sites": [
+      "src/lib/trackAiPredictionsApi.ts"
+    ]
+  },
+  {
+    "rpc": "bulk_apply_high_confidence_ai_predictions",
+    "call_sites": [
+      "src/lib/trackAiPredictionsApi.ts"
+    ]
+  },
+  {
+    "rpc": "bulk_delete_severe_mismatches",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "create_support_inquiry",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "get_admin_track_detail",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "get_my_inquiry_detail",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "get_site_settings",
+    "call_sites": [
+      "src/lib/siteSettingsApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_active_site_notices",
+    "call_sites": [
+      "src/lib/siteNoticesApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_admin_tracks_with_ai",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_clap_auto_approved",
+    "call_sites": [
+      "src/lib/clapCurationApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_clap_curation_playlists",
+    "call_sites": [
+      "src/lib/clapCurationApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_clap_recommendations",
+    "call_sites": [
+      "src/lib/clapCurationApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_my_inquiries",
+    "call_sites": [
+      "src/lib/supportInquiryApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_pending_ai_predictions",
+    "call_sites": [
+      "src/lib/trackAiPredictionsApi.ts"
+    ]
+  },
+  {
+    "rpc": "list_severe_metadata_mismatches",
+    "call_sites": [
+      "src/lib/adminTrackApi.ts"
+    ]
+  },
+  {
+    "rpc": "rollback_clap_auto_attach",
+    "call_sites": [
+      "src/lib/clapCurationApi.ts"
+    ]
+  },
+  {
+    "rpc": "set_playlist_auto_attach",
+    "call_sites": [
+      "src/lib/clapCurationApi.ts"
+    ]
+  }
+]

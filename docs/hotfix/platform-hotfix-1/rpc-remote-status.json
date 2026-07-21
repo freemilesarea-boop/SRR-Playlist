@@ -1,0 +1,193 @@
+{
+  "remote_access": "NONE (Test + Production) — read-only metadata query not runnable this phase",
+  "status": "ALL UNVERIFIED_REMOTE",
+  "operator_readonly_query": "select proname, pronargs, prosecdef from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname = any($1) order by proname;",
+  "rpcs": [
+    {
+      "rpc": "admin_delete_site_notice",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_get_support_inquiry_detail",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_hard_delete_track",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_list_site_notices",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_list_support_inquiries",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_purge_all_tracks",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_support_inquiry_summary",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_toggle_site_notice",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_update_inquiry",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_update_site_settings",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_update_track_metadata_full",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "admin_upsert_site_notice",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "ai_correction_stats",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "ai_predictions_summary",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "apply_track_ai_predictions",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "bulk_apply_high_confidence_ai_predictions",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "bulk_delete_severe_mismatches",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "create_support_inquiry",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "get_admin_track_detail",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "get_my_inquiry_detail",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "get_site_settings",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_active_site_notices",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_admin_tracks_with_ai",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_clap_auto_approved",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_clap_curation_playlists",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_clap_recommendations",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_my_inquiries",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_pending_ai_predictions",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "list_severe_metadata_mismatches",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "rollback_clap_auto_attach",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    },
+    {
+      "rpc": "set_playlist_auto_attach",
+      "repository": "MISSING",
+      "test_remote": "UNVERIFIED",
+      "production_remote": "UNVERIFIED"
+    }
+  ]
+}

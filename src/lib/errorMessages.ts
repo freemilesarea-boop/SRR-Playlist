@@ -32,6 +32,10 @@ const PG_CODE_MAP: Record<string, string> = {
   'PGRST301': '로그인이 필요합니다.',
   'PGRST302': '권한이 없습니다.',
   'PGRST116': '대상을 찾을 수 없습니다.',
+  // PLATFORM-HOTFIX-1 — 정의되지 않은 함수(RPC) 호출: 내부 함수명/SQL 을 노출하지 않고
+  // 안전한 안내로 대체. (PGRST202: PostgREST schema cache 에 함수 없음 / 42883: undefined_function)
+  'PGRST202': '요청하신 기능을 현재 사용할 수 없습니다. 잠시 후 다시 시도하거나 운영자에게 문의해주세요.',
+  '42883': '요청하신 기능을 현재 사용할 수 없습니다. 잠시 후 다시 시도하거나 운영자에게 문의해주세요.',
 };
 
 /**
@@ -101,6 +105,10 @@ const PATTERN_RULES: Array<{ re: RegExp; msg: string }> = [
   { re: /tax_consent_required/i, msg: '원천징수 동의가 필요합니다.' },
   { re: /pii_encryption_key_not_configured/i,
     msg: '시스템 설정 오류 — 운영팀에 문의해주세요.' },
+
+  // PLATFORM-HOTFIX-1 — 정의되지 않은 함수(RPC). 함수명/스키마 노출 없이 안전 안내.
+  { re: /could not find the function|PGRST202|schema cache|undefined function|function .* does not exist/i,
+    msg: '요청하신 기능을 현재 사용할 수 없습니다. 잠시 후 다시 시도하거나 운영자에게 문의해주세요.' },
 
   // 일반 not_found / required / immutable
   { re: /_not_found$|^not found$|^not_found$/i, msg: '대상을 찾을 수 없습니다.' },

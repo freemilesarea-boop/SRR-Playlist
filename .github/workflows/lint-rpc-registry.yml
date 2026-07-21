@@ -1,0 +1,46 @@
+name: Lint · RPC Registry
+
+# PLATFORM-HOTFIX-1 — 신규 undefined RPC 유입 차단.
+# 클라이언트/운영 코드에서 호출하는 supabase.rpc('<name>') 이름이 로컬 CREATE FUNCTION
+# 정의 또는 승인된 remote-only 허용목록에 있어야 한다. 새 undefined RPC → PR check 실패.
+#
+# 스크립트:  scripts/lint-rpc-registry.mjs
+# 허용목록:  scripts/rpc-remote-only-allowlist.json (31 remote-only RPCs, 재조정 대상)
+# 의존성 없는 순수 Node — npm ci 불필요.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'api/**'
+      - 'supabase/**'
+      - 'scripts/lint-rpc-registry.mjs'
+      - 'scripts/rpc-remote-only-allowlist.json'
+      - '.github/workflows/lint-rpc-registry.yml'
+  push:
+    branches:
+      - claude/playlist-mvp-development-2JmTJ
+    paths:
+      - 'src/**'
+      - 'api/**'
+      - 'supabase/**'
+      - 'scripts/lint-rpc-registry.mjs'
+      - 'scripts/rpc-remote-only-allowlist.json'
+
+jobs:
+  lint-rpc-registry:
+    name: Lint RPC registry (no new undefined RPC)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run lint:rpc
+        run: |
+          node --version
+          npm run lint:rpc
