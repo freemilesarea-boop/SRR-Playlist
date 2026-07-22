@@ -294,6 +294,8 @@ export default function BrandPlayerPage() {
           logoUrl={brandLogoUrl}
           artworkUrl={artworkUrl}
           nextArtworkUrl={nextArtworkUrl}
+          trackTitle={current?.title ?? null}
+          trackArtist={current?.artist ?? null}
           className="absolute inset-0 h-full w-full"
           chromeHidden={presentation}
           transition={{ effect: signage.transition_effect, durationMs: signage.transition_duration_ms }}

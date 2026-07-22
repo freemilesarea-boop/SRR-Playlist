@@ -24,6 +24,9 @@ export interface BrandVisualStageProps {
   artworkUrl: string | null;
   /** 다음 곡 자켓 URL(preload용, 선택). */
   nextArtworkUrl?: string | null;
+  /** 현재 재생곡 제목/아티스트(자켓 아래 중앙 캡션용, 선택). */
+  trackTitle?: string | null;
+  trackArtist?: string | null;
   className?: string;
   chromeHidden?: boolean;
   transition?: { effect: SignageTransitionEffect; durationMs: number };
@@ -33,7 +36,7 @@ export interface BrandVisualStageProps {
 }
 
 export default function BrandVisualStage({
-  media, brandName, logoUrl, artworkUrl, nextArtworkUrl, className,
+  media, brandName, logoUrl, artworkUrl, nextArtworkUrl, trackTitle, trackArtist, className,
   chromeHidden = false, transition, showSlideDots = false, onModeChange,
 }: BrandVisualStageProps) {
   // 정적 유효 미디어(빈 URL/미지원 형식 제외). 배열 길이만으로 빈 상태를 판정하지 않는다.
@@ -91,6 +94,11 @@ export default function BrandVisualStage({
       </div>
     );
   } else if (mode === 'TRACK_ARTWORK' && artworkUrl) {
+    // 중앙 캡션(제목/아티스트)은 일반 뷰에서만 — presentation 모드는 opt-in 오버레이/컨트롤바가
+    // now-playing 을 담당하므로 중복 표시하지 않는다.
+    const caption = !chromeHidden && (trackTitle || trackArtist)
+      ? { title: trackTitle ?? '', artist: trackArtist ?? '' }
+      : null;
     content = (
       <ArtworkStage
         artworkUrl={artworkUrl}
@@ -98,6 +106,7 @@ export default function BrandVisualStage({
         brandName={brandName}
         className={layer}
         onError={handleArtworkError}
+        caption={caption}
       />
     );
   } else {
@@ -126,13 +135,14 @@ export default function BrandVisualStage({
  * 다음 자켓은 비가시 img 로 미리 로드. URL 은 콘솔에 출력하지 않는다.
  */
 function ArtworkStage({
-  artworkUrl, nextArtworkUrl, brandName, className, onError,
+  artworkUrl, nextArtworkUrl, brandName, className, onError, caption,
 }: {
   artworkUrl: string;
   nextArtworkUrl: string | null;
   brandName: string;
   className: string;
   onError: (url: string) => void;
+  caption?: { title: string; artist: string } | null;
 }) {
   return (
     <div className={`flex items-center justify-center overflow-hidden bg-black ${className}`}>
@@ -168,6 +178,22 @@ function ArtworkStage({
           className="pointer-events-none absolute h-px w-px opacity-0"
           onError={() => onError(nextArtworkUrl)}
         />
+      )}
+      {/* 중앙 캡션: 현재곡 제목/아티스트. absolute 배치로 자켓 크기·Layout Shift 에 영향 없음.
+          제목 최대 2줄 말줄임, 아티스트 1줄 말줄임, 반응형. */}
+      {caption && (caption.title || caption.artist) && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[5%] flex flex-col items-center gap-0.5 px-6 text-center">
+          {caption.title && (
+            <p className="line-clamp-2 max-w-[86%] text-base font-bold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-lg md:text-xl">
+              {caption.title}
+            </p>
+          )}
+          {caption.artist && (
+            <p className="max-w-[86%] truncate text-xs text-white/75 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] sm:text-sm">
+              {caption.artist}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

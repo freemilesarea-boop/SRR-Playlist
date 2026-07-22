@@ -49,9 +49,10 @@ describe('resolveBrandDisplayMode — priority', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 2, logoUrl: 'l', artworkUrl: 'a', artworkFailed: false }))
       .toBe('BRAND_MEDIA');
   });
-  it('2: no media + logo present → BRAND_LOGO (even with artwork)', () => {
-    expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: 'https://x/logo.png', artworkUrl: 'a', artworkFailed: false }))
-      .toBe('BRAND_LOGO');
+  // UX-FIX-1: 자켓이 로고보다 우선. 유효 자켓 + 로고 동시 존재 → TRACK_ARTWORK.
+  it('2: no media + valid artwork → TRACK_ARTWORK (wins over logo)', () => {
+    expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: 'https://x/logo.png', artworkUrl: 'https://x/art.jpg', artworkFailed: false }))
+      .toBe('TRACK_ARTWORK');
   });
   it('3: no media + no logo + artwork present → TRACK_ARTWORK', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: null, artworkUrl: 'https://x/art.jpg', artworkFailed: false }))
@@ -61,11 +62,16 @@ describe('resolveBrandDisplayMode — priority', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: null, artworkUrl: null, artworkFailed: false }))
       .toBe('DEFAULT_FALLBACK');
   });
-  it('4: artwork present but load failed → DEFAULT_FALLBACK', () => {
+  // UX-FIX-1: 자켓 로드 실패 → 로고로 폴백 (로고 존재 시).
+  it('4a: artwork load failed + logo present → BRAND_LOGO (fallback to logo)', () => {
+    expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: 'https://x/logo.png', artworkUrl: 'https://x/art.jpg', artworkFailed: true }))
+      .toBe('BRAND_LOGO');
+  });
+  it('4b: artwork present but load failed + no logo → DEFAULT_FALLBACK', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: null, artworkUrl: 'https://x/art.jpg', artworkFailed: true }))
       .toBe('DEFAULT_FALLBACK');
   });
-  it('5: invalid media (usable=0) + logo → BRAND_LOGO', () => {
+  it('5: invalid media (usable=0) + logo + no artwork → BRAND_LOGO', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: 'https://x/logo.png', artworkUrl: null, artworkFailed: false }))
       .toBe('BRAND_LOGO');
   });
