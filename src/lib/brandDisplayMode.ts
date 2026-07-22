@@ -1,10 +1,15 @@
-// Phase BRAND-PLAYER-UX-4 — 브랜드 플레이어 시각 콘텐츠 표시 우선순위 (단일 Selector).
+// Phase BRAND-PLAYER-UX-4 → UX-FIX-1 — 브랜드 플레이어 시각 콘텐츠 표시 우선순위 (단일 Selector).
 //
-// 우선순위:
+// 우선순위(UX-FIX-1 에서 자켓을 로고보다 앞으로 조정):
 //   1) 유효한 브랜드 사이니지 미디어(이미지/영상)가 하나라도 있으면 → BRAND_MEDIA
-//   2) 미디어 없음 + 브랜드 로고 존재 → BRAND_LOGO
-//   3) 미디어·로고 없음 + 현재곡 자켓 존재(로드 실패 아님) → TRACK_ARTWORK
-//   4) 그 외(자켓 없음 또는 로드 실패) → DEFAULT_FALLBACK (안전한 기본 화면, 안내 문구 없음)
+//   2) 미디어 없음 + 현재곡 자켓 존재(로드 실패 아님) → TRACK_ARTWORK
+//   3) 미디어·자켓 없음(또는 자켓 로드 실패) + 브랜드/서비스 로고 존재 → BRAND_LOGO
+//   4) 그 외 → DEFAULT_FALLBACK (안전한 기본 화면, 안내 문구 없음)
+//
+// 근거: 사용자 확인 증상 — 현재곡 자켓이 있어도 중앙에 로고가 고정 표시되던 문제.
+//   자켓이 유효하면 현재곡 자켓을 중앙 메인 이미지로 우선 표시하고, 자켓이 없거나 로드
+//   실패한 경우에만 로고로 폴백한다. 사이니지 미디어(BRAND_MEDIA)는 별도의 의도된
+//   기능이므로 최상위 우선순위를 유지한다.
 //
 // 여러 컴포넌트에서 조건문을 중복하지 않도록 표시 모드 결정을 이 파일 하나로 통합한다.
 import { mediaTypeForMime } from '@/lib/brandMediaType';
@@ -54,11 +59,11 @@ export interface DisplayModeInput {
   artworkFailed: boolean;
 }
 
-/** 표시 모드 결정 — 우선순위 1→4. */
+/** 표시 모드 결정 — 우선순위 1→4 (자켓이 로고보다 우선). */
 export function resolveBrandDisplayMode(input: DisplayModeInput): BrandPlayerDisplayMode {
   if (input.usableMediaCount > 0) return 'BRAND_MEDIA';
-  if (hasNonEmpty(input.logoUrl)) return 'BRAND_LOGO';
   if (hasNonEmpty(input.artworkUrl) && !input.artworkFailed) return 'TRACK_ARTWORK';
+  if (hasNonEmpty(input.logoUrl)) return 'BRAND_LOGO';
   return 'DEFAULT_FALLBACK';
 }
 

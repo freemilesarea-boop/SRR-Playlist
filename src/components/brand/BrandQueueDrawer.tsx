@@ -86,7 +86,7 @@ export default function BrandQueueDrawer({
         aria-label="재생목록"
         className={`absolute right-0 top-0 z-[122] flex h-full w-[min(92vw,400px)] flex-col border-l border-white/10 bg-neutral-950/95 backdrop-blur transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-bold text-white">
             <Music size={16} className="text-accent" /> 재생목록
             <span className="text-white/40">· {queue.length}곡</span>
@@ -101,7 +101,7 @@ export default function BrandQueueDrawer({
           </button>
         </div>
 
-        <div className="pt-2">
+        <div className="shrink-0 pt-2">
           <BrandQueueSearch
             value={term}
             onChange={setTerm}
@@ -112,7 +112,10 @@ export default function BrandQueueDrawer({
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain pb-2">
+        {/* UX-FIX-1: min-h-0 로 flex 자식이 컨테이너보다 커질 때 내부 스크롤이 실제로 동작하도록 함
+            (min-h-0 없으면 flex-1 자식이 콘텐츠 높이만큼 늘어나 overflow 스크롤이 발생하지 않음).
+            하단 padding 은 마지막 곡이 Safe Area/컨트롤에 가리지 않도록 확보. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [touch-action:pan-y] pb-[max(1rem,env(safe-area-inset-bottom))]">
           {queue.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-white/50">재생 가능한 곡이 없어요.</p>
           )}
