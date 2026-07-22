@@ -1,0 +1,32 @@
+{
+  "phase": "RPC-MIGRATION-RECOVERY-1C",
+  "cluster": "C",
+  "title": "Track AI Prediction Schema Recovery",
+  "branch": "claude/rpc-migration-recovery-1c-track-ai",
+  "base_commit": "a4aba42",
+  "migration": "0459_track_ai_predictions_recover.sql",
+  "applied_to": "test_only",
+  "production_changes": 0,
+  "tables_recovered": 1,
+  "rpcs_recovered": 4,
+  "security_fixed_readers": 2,
+  "verbatim_writes": 2,
+  "anon_grants": 0,
+  "allowlist_before": 17,
+  "allowlist_after": 13,
+  "undefined_rpc_before": 17,
+  "undefined_rpc_after": 13,
+  "cumulative_tables_recovered": "5/5",
+  "cumulative_rpcs_recovered": "18/31",
+  "regression": {
+    "lint_rpc": "PASS",
+    "lint_migrations": "PASS",
+    "typecheck": "PASS",
+    "eslint": "PASS",
+    "vitest": "85 PASS",
+    "build": "PASS"
+  },
+  "ai_logic_changed": false,
+  "cluster_a_b_d_e_changed": false,
+  "verdict": "RECOVERED_AND_TEST_CERTIFIED"
+}

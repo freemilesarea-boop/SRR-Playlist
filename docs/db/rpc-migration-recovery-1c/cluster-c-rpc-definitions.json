@@ -1,0 +1,47 @@
+{
+  "note": "Signatures/returns only. Full function source intentionally omitted per phase rules.",
+  "rpcs": [
+    {
+      "name": "ai_predictions_summary",
+      "identity_args": "()",
+      "returns": "table(total_predictions integer, pending_count integer, applied_count integer, avg_energy_confidence numeric, high_conf_pending integer)",
+      "language": "plpgsql",
+      "volatility": "stable",
+      "security": "definer",
+      "search_path": "public",
+      "admin_guard": true,
+      "recovery": "SECURITY_FIX (was language sql + no admin check in Production)"
+    },
+    {
+      "name": "list_pending_ai_predictions",
+      "identity_args": "(p_limit integer)",
+      "returns": "table(16 cols: id, track_id, track_title, track_artist, cover_url, main_genre, sub_genre, current_energy_level, current_bpm, current_tempo_feel, predicted_energy_level, energy_confidence, predicted_bpm, predicted_tempo_feel, model_version, created_at)",
+      "language": "plpgsql",
+      "volatility": "stable",
+      "security": "definer",
+      "search_path": "public",
+      "admin_guard": true,
+      "recovery": "SECURITY_FIX (was language sql + no admin check in Production)"
+    },
+    {
+      "name": "apply_track_ai_predictions",
+      "identity_args": "(p_prediction_id uuid, p_apply_energy boolean, p_apply_bpm boolean, p_apply_tempo_feel boolean, p_overwrite_existing boolean)",
+      "returns": "void",
+      "language": "plpgsql",
+      "security": "definer",
+      "search_path": "public",
+      "admin_guard": true,
+      "recovery": "VERBATIM"
+    },
+    {
+      "name": "bulk_apply_high_confidence_ai_predictions",
+      "identity_args": "(p_confidence_threshold numeric, p_limit integer)",
+      "returns": "integer",
+      "language": "plpgsql",
+      "security": "definer",
+      "search_path": "public",
+      "admin_guard": true,
+      "recovery": "VERBATIM"
+    }
+  ]
+}

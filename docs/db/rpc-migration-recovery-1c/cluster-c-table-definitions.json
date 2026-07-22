@@ -1,0 +1,23 @@
+{
+  "table": "public.track_ai_predictions",
+  "column_count": 22,
+  "primary_key": ["id"],
+  "unique": [["track_id", "model_version"]],
+  "foreign_keys": [
+    { "columns": ["track_id"], "references": "public.tracks(id)", "on_delete": "cascade" },
+    { "columns": ["applied_by"], "references": "public.users(id)", "on_delete": "no action" }
+  ],
+  "not_null_no_default": ["id_via_default", "track_id", "model_version_has_default", "created_at_has_default"],
+  "jsonb_payload_columns_not_returned": ["energy_label_scores", "prediction_scores"],
+  "indexes": [
+    "pk (id)",
+    "unique (track_id, model_version)",
+    "track_ai_predictions_track_idx btree(track_id)",
+    "track_ai_predictions_unapplied_idx btree(created_at desc) where applied_at is null",
+    "track_ai_predictions_main_genre_idx btree(predicted_main_genre) where predicted_main_genre is not null",
+    "track_ai_predictions_dayparts_gin_idx gin(predicted_dayparts)",
+    "track_ai_predictions_moods_gin_idx gin(predicted_moods)",
+    "track_ai_predictions_store_types_gin_idx gin(predicted_store_types)"
+  ],
+  "rls": { "enabled": true, "policies": ["track_ai_predictions_admin_read (SELECT, admin-only)"] }
+}

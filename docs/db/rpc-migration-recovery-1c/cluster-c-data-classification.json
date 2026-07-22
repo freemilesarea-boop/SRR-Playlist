@@ -1,0 +1,18 @@
+{
+  "user_visible_fields": [],
+  "user_reader_exists": false,
+  "admin_only_returned": [
+    "processing_status(applied_at)", "predicted_energy_level", "predicted_bpm",
+    "predicted_tempo_feel", "energy_confidence", "avg_energy_confidence",
+    "high_conf_pending", "model_version", "created_at", "joined_track_display_fields"
+  ],
+  "sensitive_stored_not_returned": [
+    "energy_label_scores", "prediction_scores", "applied_by", "bpm_confidence",
+    "genre_confidence", "mood_confidence", "store_type_confidence", "daypart_confidence",
+    "predicted_main_genre", "predicted_sub_genres", "predicted_moods",
+    "predicted_store_types", "predicted_dayparts"
+  ],
+  "pii_present": false,
+  "monetary_present": false,
+  "direct_table_access": "admin_only_via_rls"
+}

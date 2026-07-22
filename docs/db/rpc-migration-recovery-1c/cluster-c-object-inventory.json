@@ -1,0 +1,18 @@
+{
+  "phase": "RPC-MIGRATION-RECOVERY-1C",
+  "cluster": "C",
+  "branch": "claude/rpc-migration-recovery-1c-track-ai",
+  "base_commit": "a4aba42",
+  "migration": "0459_track_ai_predictions_recover.sql",
+  "test_project": "hao...qorr",
+  "production_project": "nso...zvol",
+  "tables": [
+    { "name": "public.track_ai_predictions", "state": "PRODUCTION_ONLY", "columns": 22, "action": "RECOVER" }
+  ],
+  "rpcs": [
+    { "name": "ai_predictions_summary", "args": "()", "returns": "table(5)", "class": "admin_reader", "action": "SECURITY_FIX" },
+    { "name": "list_pending_ai_predictions", "args": "(integer)", "returns": "table(16)", "class": "admin_reader", "action": "SECURITY_FIX" },
+    { "name": "apply_track_ai_predictions", "args": "(uuid,boolean,boolean,boolean,boolean)", "returns": "void", "class": "admin_write", "action": "VERBATIM" },
+    { "name": "bulk_apply_high_confidence_ai_predictions", "args": "(numeric,integer)", "returns": "integer", "class": "admin_write", "action": "VERBATIM" }
+  ]
+}

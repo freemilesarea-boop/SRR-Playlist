@@ -1,0 +1,21 @@
+{
+  "removed_from_allowlist": [
+    "ai_predictions_summary",
+    "list_pending_ai_predictions",
+    "apply_track_ai_predictions",
+    "bulk_apply_high_confidence_ai_predictions"
+  ],
+  "allowlist_before": 17,
+  "allowlist_after": 13,
+  "lint_rpc": {
+    "call_names": 725,
+    "local_defs": 964,
+    "undefined": 13,
+    "undefined_before": 17,
+    "new_undefined": 0,
+    "status": "PASS"
+  },
+  "lint_migrations": { "scanned": 419, "violations": 0, "new_duplicate_prefix": 0, "status": "PASS" },
+  "cluster_a_regression": "none",
+  "cluster_b_regression": "none"
+}

@@ -1,0 +1,23 @@
+{
+  "environment": "test (hao...qorr)",
+  "method": "DO block, session_replication_role=replica, jwt impersonation, sentinel raise -> full rollback",
+  "synthetic_data_only": true,
+  "results": [
+    { "role": "anon", "rpc": "ai_predictions_summary", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "anon", "rpc": "list_pending_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "anon", "rpc": "apply_track_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "anon", "rpc": "bulk_apply_high_confidence_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "user", "rpc": "ai_predictions_summary", "expected": "blocked", "result": "PASS", "error": "unauthorized", "note": "over-exposure fix" },
+    { "role": "user", "rpc": "list_pending_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized", "note": "over-exposure fix" },
+    { "role": "user", "rpc": "apply_track_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "user", "rpc": "bulk_apply_high_confidence_ai_predictions", "expected": "blocked", "result": "PASS", "error": "unauthorized" },
+    { "role": "admin", "rpc": "ai_predictions_summary", "expected": "rows", "result": "PASS" },
+    { "role": "admin", "rpc": "list_pending_ai_predictions", "expected": "rows", "result": "PASS" },
+    { "role": "admin", "rpc": "apply_track_ai_predictions(invalid)", "expected": "prediction_not_found", "result": "PASS" },
+    { "role": "admin", "rpc": "apply_track_ai_predictions(applied)", "expected": "already_applied", "result": "PASS" },
+    { "role": "admin", "rpc": "apply_track_ai_predictions(valid)", "expected": "track_updated+stamped", "result": "PASS", "detail": "energy=4,bpm=128,tempo=fast,applied_by=admin" },
+    { "role": "admin", "rpc": "bulk_apply_high_confidence_ai_predictions", "expected": "count", "result": "PASS", "detail": "applied=2" }
+  ],
+  "rollback_confirmed": true,
+  "residual_synthetic_data": false
+}

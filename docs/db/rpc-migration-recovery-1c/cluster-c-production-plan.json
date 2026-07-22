@@ -1,0 +1,13 @@
+{
+  "production_changes_this_phase": 0,
+  "deferred_to": "combined Production apply phase after Clusters D-E",
+  "table": { "action": "baseline_noop", "reason": "already exists in Production" },
+  "readers_create_or_replace": ["ai_predictions_summary", "list_pending_ai_predictions"],
+  "writes": { "action": "no_change", "reason": "match Production 1:1" },
+  "grant_correction": { "revoke_public": true, "anon": "none", "authenticated_plus_guard": true },
+  "rls_policy_verify": ["track_ai_predictions_admin_read"],
+  "apply_order": ["preflight_snapshot", "create_or_replace_readers", "grant_correction", "rls_verify", "smoke_tests", "grant_reverify"],
+  "lock_risk": "low (function-only replace, no table rewrite)",
+  "rollback": "re-apply snapshotted prior reader defs + original grants",
+  "smoke_tests": ["admin_reader_ok", "nonadmin_reader_unauthorized", "write_admin_only", "data_exposure_check"]
+}

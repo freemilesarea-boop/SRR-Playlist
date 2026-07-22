@@ -1,0 +1,17 @@
+{
+  "user_return_surface": "none (no user reader)",
+  "admin_readers_checked": ["ai_predictions_summary", "list_pending_ai_predictions"],
+  "leak_checks": {
+    "raw_prediction_payload": "not_exposed",
+    "raw_label_scores": "not_exposed",
+    "model_debug_fields": "not_exposed",
+    "prompt_or_input_path": "absent_and_not_exposed",
+    "storage_path": "absent_and_not_exposed",
+    "other_user_id": "not_exposed",
+    "audit_actor_applied_by": "not_exposed",
+    "retry_count_operational_flags": "absent_and_not_exposed",
+    "internal_model_metadata_beyond_version_label": "not_exposed"
+  },
+  "error_messages_contain_data": false,
+  "error_tokens": ["unauthorized", "prediction_not_found", "already_applied", "track_not_found"]
+}

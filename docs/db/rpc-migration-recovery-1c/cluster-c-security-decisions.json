@@ -1,0 +1,17 @@
+{
+  "security_definer_decisions": [
+    { "rpc": "ai_predictions_summary", "decision": "KEEP_SECURITY_DEFINER" },
+    { "rpc": "list_pending_ai_predictions", "decision": "KEEP_SECURITY_DEFINER" },
+    { "rpc": "apply_track_ai_predictions", "decision": "KEEP_SECURITY_DEFINER" },
+    { "rpc": "bulk_apply_high_confidence_ai_predictions", "decision": "KEEP_SECURITY_DEFINER" }
+  ],
+  "admin_guard_added": ["ai_predictions_summary", "list_pending_ai_predictions"],
+  "admin_guard_preexisting": ["apply_track_ai_predictions", "bulk_apply_high_confidence_ai_predictions"],
+  "language_conversions": [
+    { "rpc": "ai_predictions_summary", "from": "sql", "to": "plpgsql" },
+    { "rpc": "list_pending_ai_predictions", "from": "sql", "to": "plpgsql" }
+  ],
+  "signatures_preserved": true,
+  "returns_preserved": true,
+  "ai_logic_changed": false
+}

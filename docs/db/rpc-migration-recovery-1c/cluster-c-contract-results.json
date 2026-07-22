@@ -1,0 +1,26 @@
+{
+  "rpcs": [
+    {
+      "name": "ai_predictions_summary",
+      "exists": true, "signature_ok": true, "return_shape_ok": true,
+      "cases": { "unauthorized": "PASS", "normal": "PASS", "empty": "PASS" }
+    },
+    {
+      "name": "list_pending_ai_predictions",
+      "exists": true, "signature_ok": true, "return_shape_ok": true, "default_param": 50,
+      "cases": { "unauthorized": "PASS", "normal": "PASS", "empty": "PASS", "stable_order": "PASS", "limit": "PASS" }
+    },
+    {
+      "name": "apply_track_ai_predictions",
+      "exists": true, "signature_ok": true,
+      "cases": { "invalid_uuid": "prediction_not_found", "unauthorized": "PASS", "already_applied": "already_applied", "normal": "PASS", "tx_rollback": "PASS" }
+    },
+    {
+      "name": "bulk_apply_high_confidence_ai_predictions",
+      "exists": true, "signature_ok": true, "defaults": [0.6, 500],
+      "cases": { "unauthorized": "PASS", "normal": "PASS", "empty": "PASS", "idempotency": "PASS" }
+    }
+  ],
+  "overloads": "none",
+  "model_executed": false
+}

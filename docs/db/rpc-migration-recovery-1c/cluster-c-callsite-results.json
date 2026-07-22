@@ -1,0 +1,14 @@
+{
+  "wrapper_module": "src/lib/trackAiPredictionsApi.ts",
+  "all_callers_admin": true,
+  "client_supplied_identity": false,
+  "callsites": [
+    { "rpc": "list_pending_ai_predictions", "fn": "listPendingAiPredictions", "file": "src/components/admin/TrackAiMetadataPanel.tsx", "line": 41, "role": "admin" },
+    { "rpc": "ai_predictions_summary", "fn": "aiPredictionsSummary", "file": "src/components/admin/TrackAiMetadataPanel.tsx", "line": 42, "role": "admin" },
+    { "rpc": "apply_track_ai_predictions", "fn": "applyTrackAiPredictions", "file": "src/components/admin/TrackAiMetadataPanel.tsx", "line": 58, "role": "admin" },
+    { "rpc": "bulk_apply_high_confidence_ai_predictions", "fn": "bulkApplyHighConfidence", "file": "src/components/admin/TrackAiMetadataPanel.tsx", "line": 76, "role": "admin" },
+    { "rpc": "bulk_apply_high_confidence_ai_predictions", "fn": "bulkApplyHighConfidence", "file": "src/components/admin/ContentManagement.tsx", "line": 285, "role": "admin" }
+  ],
+  "user_or_owner_reader": false,
+  "contract_decision": "KEEP_SIGNATURE (no client change needed)"
+}
