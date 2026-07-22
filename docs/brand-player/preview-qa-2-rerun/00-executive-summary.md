@@ -3,6 +3,8 @@
 > Branch `claude/brand-player-preview-qa-2-rerun` from `claude/brand-test-recovery-1` (`602dc6b`).
 > **Status: `BLOCKED`.** No source change, no deploy, no Production change, no Test DB mutation this phase.
 
+> **Operator follow-up (after operator configured Preview env + Test password):** see [`22-operator-followup-results.md`](./22-operator-followup-results.md). A Test-bound Playwright/Chromium harness was built and run locally, but this session's **egress policy denies the browser's connection to the Test Supabase host** (`403` at the agent proxy — logged, not routed around), so the in-browser login/data/player flow cannot execute here. **Verified regardless:** the client attempts **only** the Test host with **zero** Production-host attempts (isolation P0 holds), and the backend is re-certified ready (brands 2 / stores 2 / media A=4,B=0 / tracks 15 / playlist 15 / 6 RPCs / QA auth+profile ready). All in-browser runtime items are `OPERATOR_REQUIRED`; none marked PASS. **Follow-up status: `BLOCKED`.**
+
 ## What changed since the previous BLOCKED (PREVIEW-QA-2)
 The Test backend is now **ready** (BRAND-TEST-RECOVERY-1): the full brand player flow runs on Test and was SQL-certified 19/19. Re-verified this phase — brands 2, stores 2, tracks 15, media 4, `_brand_generate_playlist` → 15, QA auth user present, `verify_store_code`+`get_brand_player_config` present. So the **backend blocker is removed**.
 
