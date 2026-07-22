@@ -1,0 +1,21 @@
+{
+  "environment": "test (hao...qorr)",
+  "method": "session_replication_role=replica + jwt impersonation + role switch; sentinel raise / rollback",
+  "synthetic_data_only": true,
+  "anon_blocked": {"count": "13/13", "result": "PASS"},
+  "nonadmin_blocked": {"count": "13/13", "result": "PASS", "note": "over-exposure fix for 7 readers"},
+  "admin_readers_ok": {"count": "7/7", "result": "PASS"},
+  "admin_write_error_handling": [
+    {"rpc": "admin_hard_delete_track", "case": "invalid_uuid", "expected": "track_not_found", "result": "PASS"},
+    {"rpc": "admin_purge_all_tracks", "case": "wrong_confirm", "expected": "confirmation_required", "result": "PASS"},
+    {"rpc": "rollback_clap_auto_attach", "case": "invalid_uuid", "expected": "not_found", "result": "PASS"},
+    {"rpc": "set_playlist_auto_attach", "case": "threshold_150", "expected": "threshold must be 0-100", "result": "PASS"},
+    {"rpc": "admin_update_track_metadata_full", "case": "energy_9", "expected": "energy_level must be 1-5", "result": "PASS"}
+  ],
+  "ownership_rls_artist_lifetime_streams": {
+    "userB_self": {"rows": 1, "only_own": true, "result": "PASS"},
+    "admin": {"rows": 2, "result": "PASS"},
+    "anon": {"result": "PASS", "detail": "permission denied (no grant)"}
+  },
+  "rollback_confirmed": true
+}

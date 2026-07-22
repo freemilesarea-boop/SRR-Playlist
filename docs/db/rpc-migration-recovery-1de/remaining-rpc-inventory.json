@@ -1,0 +1,31 @@
+{
+  "phase": "RPC-MIGRATION-RECOVERY-1DE",
+  "branch": "claude/rpc-migration-recovery-1de-final",
+  "base_commit": "86e9225",
+  "test_project": "hao...qorr",
+  "production_project": "nso...zvol",
+  "cluster_d": [
+    {"rpc": "get_admin_track_detail", "args": "(uuid)", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "list_admin_tracks_with_ai", "args": "(integer)", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "ai_correction_stats", "args": "()", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "list_severe_metadata_mismatches", "args": "(integer)", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "admin_hard_delete_track", "args": "(uuid)", "class": "admin_write", "action": "verbatim"},
+    {"rpc": "admin_purge_all_tracks", "args": "(text)", "class": "admin_write", "action": "verbatim"},
+    {"rpc": "admin_update_track_metadata_full", "args": "(uuid,+25)", "class": "admin_write", "action": "verbatim"},
+    {"rpc": "bulk_delete_severe_mismatches", "args": "(numeric,integer)", "class": "admin_write", "action": "verbatim"}
+  ],
+  "cluster_e": [
+    {"rpc": "list_clap_curation_playlists", "args": "()", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "list_clap_recommendations", "args": "(uuid,integer)", "class": "admin_reader", "action": "security_fix_plus_casts"},
+    {"rpc": "list_clap_auto_approved", "args": "(integer)", "class": "admin_reader", "action": "security_fix"},
+    {"rpc": "rollback_clap_auto_attach", "args": "(uuid)", "class": "admin_write", "action": "verbatim"},
+    {"rpc": "set_playlist_auto_attach", "args": "(uuid,boolean,numeric)", "class": "admin_write", "action": "verbatim"}
+  ],
+  "transitive_dependencies": {
+    "tables": ["ai_metadata_corrections", "artist_lifetime_streams"],
+    "helper_functions": ["_log_ai_correction", "snapshot_artist_lifetime_streams"],
+    "columns": ["playlists.auto_attach_enabled", "playlists.auto_attach_threshold"]
+  },
+  "owner_or_user_rpc": [],
+  "service_only_rpc": []
+}

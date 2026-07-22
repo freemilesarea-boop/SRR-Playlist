@@ -1,0 +1,15 @@
+{
+  "user_return_surface": "none (no user rpc); only artist_lifetime_streams self-read (own aggregate only)",
+  "admin_readers_checked": 7,
+  "leak_checks": {
+    "raw_ai_payload": "not_exposed",
+    "ai_correction_individual_rows": "aggregate_only",
+    "storage_model_paths": "not_exposed_except_admin_hard_delete_cleanup_refs",
+    "prompt_signed_url": "absent_and_not_exposed",
+    "other_user_id": "not_exposed",
+    "audit_actor": "not_exposed_in_readers",
+    "retry_count_operational_flags": "absent_and_not_exposed"
+  },
+  "error_messages_contain_data": false,
+  "error_tokens": ["unauthorized", "track_not_found", "not_found", "not_auto_approved", "confirmation_required", "threshold must be 0-100", "energy_level must be 1-5", "bpm must be 0-400"]
+}

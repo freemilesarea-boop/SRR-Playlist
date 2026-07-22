@@ -1,19 +1,5 @@
 {
   "_comment": "PLATFORM-HOTFIX-1 — client-called RPCs with NO local CREATE FUNCTION definition. Classified DOCUMENT_REMOTE_ONLY / UNVERIFIED_REMOTE (likely applied to the DB out-of-band). Each MUST be reconciled in a DB-SCHEMA-RECONCILIATION phase (either commit the migration or remove the call). Do NOT add new entries to silence lint-rpc-registry without an explicit reconciliation decision.",
-  "_recovered": "Cluster A (7 RPCs, migration 0457) + Cluster B (7 RPCs, migration 0458) + Cluster C (4 RPCs, migration 0459) recovered to local migrations + applied/verified on Test; removed from this allowlist. Remaining 13 pending clusters D-E.",
-  "allow": [
-    "admin_hard_delete_track",
-    "admin_purge_all_tracks",
-    "admin_update_track_metadata_full",
-    "ai_correction_stats",
-    "bulk_delete_severe_mismatches",
-    "get_admin_track_detail",
-    "list_admin_tracks_with_ai",
-    "list_clap_auto_approved",
-    "list_clap_curation_playlists",
-    "list_clap_recommendations",
-    "list_severe_metadata_mismatches",
-    "rollback_clap_auto_attach",
-    "set_playlist_auto_attach"
-  ]
+  "_recovered": "FULLY RECONCILED. Cluster A (7 RPCs, 0457) + Cluster B (7, 0458) + Cluster C (4, 0459) + Cluster D (8, 0460) + Cluster E (5, 0461) recovered to local migrations + applied/verified on Test; all removed from this allowlist. Undefined RPC count: 31 → 0.",
+  "allow": []
 }

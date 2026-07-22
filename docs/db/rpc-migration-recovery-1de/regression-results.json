@@ -1,0 +1,15 @@
+{
+  "typecheck": "PASS",
+  "eslint": "PASS",
+  "unit": {"passed": 85, "total": 85, "files": 5},
+  "build": "PASS",
+  "migration_lint": "PASS",
+  "rpc_registry_guard": "PASS",
+  "cluster_a_regression": "PASS",
+  "cluster_b_regression": "PASS",
+  "cluster_c_regression": "PASS",
+  "cluster_d_sql_security": "PASS",
+  "cluster_e_sql_security": "PASS",
+  "rpc_contract_tests": "PASS",
+  "application_integration": "DEFERRED_no_test_bound_preview"
+}

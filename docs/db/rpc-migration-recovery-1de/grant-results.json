@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "count": 15,
+    "all_plpgsql": true,
+    "all_secdef": true,
+    "all_search_path_public": true,
+    "anon_execute": 0,
+    "authenticated_client_rpcs": 13,
+    "internal_helpers_no_client_grant": 2,
+    "public_execute": 0
+  },
+  "tables": {
+    "ai_metadata_corrections": {"rls": true, "authenticated": "SELECT", "anon": "none", "policies": ["ai_corrections_admin_read"]},
+    "artist_lifetime_streams": {"rls": true, "authenticated": "SELECT", "anon": "none", "policies": ["alstreams_admin_read", "alstreams_self_read"]}
+  },
+  "production_table_grants_note": "Production grants anon+authenticated full CRUD (Supabase default, RLS-backstopped); recovery tightens to authenticated SELECT only, staged for Production."
+}

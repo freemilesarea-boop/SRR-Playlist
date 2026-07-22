@@ -1,0 +1,33 @@
+{
+  "phase": "RPC-MIGRATION-RECOVERY-1DE",
+  "branch": "claude/rpc-migration-recovery-1de-final",
+  "base_commit": "86e9225",
+  "migrations": ["0460_cluster_d_admin_tracks_recover.sql", "0461_cluster_e_clap_curation_recover.sql"],
+  "applied_to": "test_only",
+  "production_changes": 0,
+  "rpcs_recovered_this_phase": 13,
+  "cluster_d": 8,
+  "cluster_e": 5,
+  "security_fixed_readers": 7,
+  "verbatim_writes": 6,
+  "dependency_tables_recovered": 2,
+  "dependency_helpers_recovered": 2,
+  "dependency_columns_recovered": 2,
+  "allowlist_before": 13,
+  "allowlist_after": 0,
+  "final_recovery_status": {
+    "tables": "5/5",
+    "rpcs": "31/31",
+    "undefined_rpc": 0,
+    "public_execute": 0,
+    "anon_admin_access": 0,
+    "admin_guard_missing": 0,
+    "ownership_guard_missing": 0,
+    "definer_search_path_missing": 0
+  },
+  "regression": {"typecheck": "PASS", "eslint": "PASS", "unit": "85/85", "build": "PASS", "migration_lint": "PASS", "rpc_registry": "PASS", "cluster_a": "PASS", "cluster_b": "PASS", "cluster_c": "PASS"},
+  "ai_settlement_playlist_logic_changed": false,
+  "production_recommendation": "FULL_TEST_SCHEMA_CERTIFIED",
+  "recommended_next_phase": "RPC-PRODUCTION-APPLY-1",
+  "verdict": "COMPLETE"
+}

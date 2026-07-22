@@ -1,0 +1,11 @@
+{
+  "migration": "0461_cluster_e_clap_curation_recover.sql",
+  "applied_to": "test_only",
+  "columns_recovered": ["playlists.auto_attach_enabled", "playlists.auto_attach_threshold"],
+  "readers_security_fixed": ["list_clap_curation_playlists", "list_clap_recommendations", "list_clap_auto_approved"],
+  "writes_verbatim": ["rollback_clap_auto_attach", "set_playlist_auto_attach"],
+  "contract_casts_added": {"list_clap_recommendations": ["t.duration::numeric", "t.energy_level::text"]},
+  "grants": {"revoke_public": true, "anon": "none", "authenticated": true},
+  "curation_logic_changed": false,
+  "playlist_logic_changed": false
+}

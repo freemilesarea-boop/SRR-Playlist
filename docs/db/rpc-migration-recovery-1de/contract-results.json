@@ -1,0 +1,22 @@
+{
+  "total": 13,
+  "all_exist": true,
+  "all_signatures_match": true,
+  "all_return_shapes_match": true,
+  "overloads": "none",
+  "unauthorized_all": "PASS",
+  "notfound_cases": {
+    "admin_hard_delete_track": "track_not_found",
+    "admin_purge_all_tracks": "confirmation_required",
+    "rollback_clap_auto_attach": "not_found/not_auto_approved",
+    "get_admin_track_detail": "0_rows",
+    "list_clap_recommendations": "0_rows"
+  },
+  "input_validation": {
+    "admin_update_track_metadata_full": ["energy 1-5", "bpm 0-400"],
+    "set_playlist_auto_attach": ["threshold 0-100"]
+  },
+  "stable_ordering": true,
+  "pagination_limit": true,
+  "model_executed": false
+}

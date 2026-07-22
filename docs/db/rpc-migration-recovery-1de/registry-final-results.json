@@ -1,0 +1,11 @@
+{
+  "removed_from_allowlist": ["admin_hard_delete_track", "admin_purge_all_tracks", "admin_update_track_metadata_full", "ai_correction_stats", "bulk_delete_severe_mismatches", "get_admin_track_detail", "list_admin_tracks_with_ai", "list_clap_auto_approved", "list_clap_curation_playlists", "list_clap_recommendations", "list_severe_metadata_mismatches", "rollback_clap_auto_attach", "set_playlist_auto_attach"],
+  "allowlist_before": 13,
+  "allowlist_after": 0,
+  "lint_rpc": {"call_names": 725, "local_defs": 979, "undefined": 0, "undefined_before": 13, "new_undefined": 0, "duplicate_rpc": 0, "signature_drift": 0, "status": "PASS"},
+  "lint_migrations": {"scanned": 421, "violations": 0, "new_duplicate_prefix": 0, "status": "PASS"},
+  "cumulative_undefined": "31 -> 0",
+  "cluster_a_regression": "none",
+  "cluster_b_regression": "none",
+  "cluster_c_regression": "none"
+}

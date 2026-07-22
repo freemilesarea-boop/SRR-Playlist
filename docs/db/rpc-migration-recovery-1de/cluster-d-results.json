@@ -1,0 +1,11 @@
+{
+  "migration": "0460_cluster_d_admin_tracks_recover.sql",
+  "applied_to": "test_only",
+  "tables_recovered": ["ai_metadata_corrections", "artist_lifetime_streams"],
+  "helpers_recovered": ["_log_ai_correction", "snapshot_artist_lifetime_streams"],
+  "readers_security_fixed": ["get_admin_track_detail", "list_admin_tracks_with_ai", "ai_correction_stats", "list_severe_metadata_mismatches"],
+  "writes_verbatim": ["admin_hard_delete_track", "admin_purge_all_tracks", "admin_update_track_metadata_full", "bulk_delete_severe_mismatches"],
+  "grants": {"revoke_public": true, "anon": "none", "authenticated_client_rpcs": true, "internal_helpers_client_grant": false, "tables_authenticated_select": true},
+  "settlement_logic_changed": false,
+  "ai_logic_changed": false
+}

@@ -1,0 +1,11 @@
+{
+  "security_definer": "KEEP_ALL_15",
+  "admin_guard_added": ["get_admin_track_detail", "list_admin_tracks_with_ai", "ai_correction_stats", "list_severe_metadata_mismatches", "list_clap_curation_playlists", "list_clap_recommendations", "list_clap_auto_approved"],
+  "admin_guard_preexisting": ["admin_hard_delete_track", "admin_purge_all_tracks", "admin_update_track_metadata_full", "bulk_delete_severe_mismatches", "rollback_clap_auto_attach", "set_playlist_auto_attach", "snapshot_artist_lifetime_streams"],
+  "internal_only_no_client_grant": ["_log_ai_correction", "snapshot_artist_lifetime_streams"],
+  "language_conversions_sql_to_plpgsql": ["get_admin_track_detail", "list_admin_tracks_with_ai", "ai_correction_stats", "list_severe_metadata_mismatches", "list_clap_curation_playlists", "list_clap_recommendations", "list_clap_auto_approved"],
+  "signatures_preserved": true,
+  "returns_preserved": true,
+  "service_role_grant_dropped": true,
+  "client_supplied_id_trusted": false
+}
