@@ -1,12 +1,13 @@
-// Phase BRAND-PLAYER-UX-4 — 전체화면 하단 Playback Control Bar + Queue Viewer.
-// 기존 Player 의 공식 command(play/pause/next/prev/jumpTo)만 호출한다.
-//   · 별도 Audio Element / Playback Engine / Queue 를 만들지 않는다.
-//   · 시각 컨트롤일 뿐 — Scheduler/Crossfade/Analytics/Heartbeat 경로 불변.
-// 표시/자동숨김: 마우스 이동·하단 진입·터치 탭·포커스·일시정지·큐열림 시 표시, 재생 중 무조작 3초 후 숨김.
+// Phase BRAND-PLAYER-UX-5 — 전체화면 하단 Control Bar (최종 레이아웃) + Queue Viewer.
+// 진행바/시간 · 볼륨/Mute · Shuffle/Repeat 상태 · Queue 검색/섹션 · Auto-hide 보강.
+// 기존 Player command(play/pause/next/prev/jumpTo/seekTo/setVolume/toggleMute)만 호출.
+//   별도 Audio/Engine/Queue 생성 없음 — Scheduler/Crossfade/Analytics/Heartbeat 불변.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ListMusic, Minimize2, Music } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ListMusic, Minimize2, Music, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import BrandQueueDrawer from '@/components/brand/BrandQueueDrawer';
+import BrandPlaybackProgress from '@/components/brand/BrandPlaybackProgress';
+import BrandVolumeControl from '@/components/brand/BrandVolumeControl';
 
 const AUTO_HIDE_MS = 3000;
 const NAV_THROTTLE_MS = 400;
@@ -20,6 +21,9 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const playing = usePlayerStore((s) => s.playing);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const repeat = usePlayerStore((s) => s.repeat);
+  const shuffleOrder = usePlayerStore((s) => s.shuffleOrder);
   const play = usePlayerStore((s) => s.play);
   const pause = usePlayerStore((s) => s.pause);
   const next = usePlayerStore((s) => s.next);
@@ -31,13 +35,18 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
 
   const [visible, setVisible] = useState(true);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [held, setHeld] = useState(false);          // progress/volume drag 중
+  const [searchFocused, setSearchFocused] = useState(false);
   const hideTimerRef = useRef<number | null>(null);
   const hoveringRef = useRef(false);
+  const holdCountRef = useRef(0);
+  const searchFocusRef = useRef(false);
   const navLockRef = useRef(0);
   const queueBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // 자동숨김을 억제해야 하는 상태(일시정지/큐열림/hover)면 항상 표시.
-  const forceVisible = !playing || queueOpen || hoveringRef.current;
+  const suppressHide = () =>
+    !playing || queueOpen || hoveringRef.current || holdCountRef.current > 0 || searchFocusRef.current;
+  const forceVisible = !playing || queueOpen || hoveringRef.current || held || searchFocused;
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
@@ -45,26 +54,33 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
 
   const scheduleHide = useCallback(() => {
     clearHideTimer();
-    if (!playing || queueOpen || hoveringRef.current) return; // 억제 조건이면 숨기지 않음
+    if (suppressHide()) return;
     hideTimerRef.current = window.setTimeout(() => setVisible(false), AUTO_HIDE_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearHideTimer, playing, queueOpen]);
 
-  const reveal = useCallback(() => {
-    setVisible(true);
-    scheduleHide();
-  }, [scheduleHide]);
+  const reveal = useCallback(() => { setVisible(true); scheduleHide(); }, [scheduleHide]);
 
-  // active 아닐 때 정리. active 진입 시 표시 + 타이머 시작.
+  const setHold = useCallback((h: boolean) => {
+    holdCountRef.current = Math.max(0, holdCountRef.current + (h ? 1 : -1));
+    setHeld(holdCountRef.current > 0);
+    if (h) { clearHideTimer(); setVisible(true); } else { scheduleHide(); }
+  }, [clearHideTimer, scheduleHide]);
+
+  const onSearchFocusChange = useCallback((f: boolean) => {
+    searchFocusRef.current = f;
+    setSearchFocused(f);
+    if (f) { clearHideTimer(); setVisible(true); } else { scheduleHide(); }
+  }, [clearHideTimer, scheduleHide]);
+
   useEffect(() => {
     if (!active) { clearHideTimer(); setQueueOpen(false); setVisible(true); return; }
     reveal();
     return clearHideTimer;
   }, [active, reveal, clearHideTimer]);
 
-  // 곡 변경/일시정지/큐열림 → 표시 갱신.
   useEffect(() => { if (active) reveal(); }, [active, index, playing, queueOpen, reveal]);
 
-  // 전역 마우스 이동 → 표시(감지 영역 = 화면 어디든 움직임). 하단 zone 은 아래 별도 catcher.
   useEffect(() => {
     if (!active) return;
     const onMove = () => reveal();
@@ -72,7 +88,6 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
     return () => window.removeEventListener('mousemove', onMove);
   }, [active, reveal]);
 
-  // 빠른 연속 이동 방어 + 공식 command.
   const navGuard = useCallback((fn: () => void) => {
     const now = Date.now();
     if (now - navLockRef.current < NAV_THROTTLE_MS) return;
@@ -83,24 +98,21 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
   const doPrev = useCallback(() => navGuard(prev), [navGuard, prev]);
   const togglePlay = useCallback(() => { if (playing) pause(); else play(); }, [playing, play, pause]);
 
-  // 키보드 (전체화면 한정). Input/Button focus 시 Space 중복 방지.
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       const isFormish = tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable;
-      if (isFormish) return;
+      if (isFormish) return; // Search/Volume 입력 중 단축키 억제 (F 는 page 에서 처리)
       switch (e.key) {
-        case ' ': // Space: 재생/일시정지 (button focus 시 중복 방지)
+        case ' ':
           if (tag === 'BUTTON') return;
           e.preventDefault(); togglePlay(); reveal(); break;
         case 'ArrowRight': e.preventDefault(); doNext(); reveal(); break;
         case 'ArrowLeft': e.preventDefault(); doPrev(); reveal(); break;
         case 'q': case 'Q': e.preventDefault(); setQueueOpen((v) => !v); reveal(); break;
-        case 'Escape':
-          if (queueOpen) { setQueueOpen(false); } else { onExit(); }
-          break;
+        case 'Escape': if (queueOpen) setQueueOpen(false); else onExit(); break;
         default: break;
       }
     };
@@ -109,13 +121,13 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
   }, [active, togglePlay, doNext, doPrev, queueOpen, onExit, reveal]);
 
   if (!active) return null;
-
   const shown = visible || forceVisible;
+
+  const RepeatIcon = repeat === 'one' ? Repeat1 : Repeat;
+  const repeatActive = repeat !== 'off';
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[120]">
-      {/* 터치/클릭 토글 catcher — 컨트롤이 숨겨졌을 땐 탭으로 표시, 보일 땐 탭으로 숨김.
-          큐 열림 시엔 drawer backdrop 이 처리하므로 비활성. */}
       {!queueOpen && (
         <button
           type="button"
@@ -126,7 +138,6 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
         />
       )}
 
-      {/* 하단 감지 영역(화면 하단 ~20%) — 진입/이동 시 표시 유지 */}
       <div
         aria-hidden
         onMouseEnter={reveal}
@@ -135,17 +146,16 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
         style={{ pointerEvents: shown ? 'none' : 'auto' }}
       />
 
-      {/* Control Bar */}
       <div
         onMouseEnter={() => { hoveringRef.current = true; clearHideTimer(); setVisible(true); }}
         onMouseLeave={() => { hoveringRef.current = false; scheduleHide(); }}
         onFocus={() => { clearHideTimer(); setVisible(true); }}
         onBlur={() => scheduleHide()}
-        className={`pointer-events-auto absolute inset-x-0 bottom-0 z-[121] flex items-center gap-4 border-t border-white/10 bg-gradient-to-t from-black/90 to-black/40 px-5 py-4 backdrop-blur transition-[opacity,transform] duration-300 motion-reduce:transition-none [padding-bottom:env(safe-area-inset-bottom)] ${shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'}`}
+        className={`pointer-events-auto absolute inset-x-0 bottom-0 z-[121] flex flex-col gap-2 border-t border-white/10 bg-gradient-to-t from-black/95 via-black/80 to-black/30 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,transform] duration-300 motion-reduce:transition-none sm:px-6 ${shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'}`}
       >
-        {/* 현재 곡 정보 */}
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-white/10">
+        {/* 1행: 곡 정보(좌) + 볼륨/큐/종료(우) */}
+        <div className="flex items-center gap-3">
+          <span className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-white/10">
             {current?.cover_url ? (
               <img src={current.cover_url} alt="" className="h-full w-full object-cover" draggable={false}
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
@@ -153,14 +163,31 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
               <span className="flex h-full w-full items-center justify-center"><Music size={18} className="text-white/40" /></span>
             )}
           </span>
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-bold text-white">{current?.title ?? '재생 대기'}</span>
             <span className="block truncate text-xs text-white/55">{current?.artist ?? '—'}</span>
           </span>
+          <div className="hidden sm:block"><BrandVolumeControl onHold={setHold} onActivity={reveal} /></div>
+          <div className="sm:hidden"><BrandVolumeControl onHold={setHold} onActivity={reveal} compact /></div>
+          <button ref={queueBtnRef} onClick={() => setQueueOpen((v) => !v)} aria-label="재생목록 열기" aria-expanded={queueOpen} aria-haspopup="dialog"
+            className={`shrink-0 rounded-full p-2.5 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent ${queueOpen ? 'bg-accent/25 text-accent' : 'bg-white/10 text-white'}`}>
+            <ListMusic size={18} />
+          </button>
+          <button onClick={onExit} aria-label="전체화면 종료 (F/ESC)"
+            className="shrink-0 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent">
+            <Minimize2 size={18} />
+          </button>
         </div>
 
-        {/* Transport */}
-        <div className="flex items-center gap-2">
+        {/* 2행: 진행바 + 시간 */}
+        <BrandPlaybackProgress onHold={setHold} onActivity={reveal} />
+
+        {/* 3행: Shuffle 상태 · 이전/재생/다음 · Repeat 상태 (상태 표시 read-only) */}
+        <div className="flex items-center justify-center gap-3">
+          <span title={shuffle ? '셔플 켜짐' : '셔플 꺼짐'} aria-label={shuffle ? '셔플 켜짐' : '셔플 꺼짐'}
+            className={`rounded-full p-2 ${shuffle ? 'text-accent' : 'text-white/35'}`}>
+            <Shuffle size={17} />
+          </span>
           <button onClick={doPrev} disabled={!hasQueue} aria-label="이전 곡"
             className="rounded-full bg-white/10 p-3 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40">
             <SkipBack size={20} fill="currentColor" />
@@ -173,18 +200,11 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
             className="rounded-full bg-white/10 p-3 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40">
             <SkipForward size={20} fill="currentColor" />
           </button>
-        </div>
-
-        {/* Queue + Exit */}
-        <div className="flex items-center gap-2">
-          <button ref={queueBtnRef} onClick={() => setQueueOpen((v) => !v)} aria-label="재생목록 열기" aria-expanded={queueOpen} aria-haspopup="dialog"
-            className={`rounded-full p-3 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent ${queueOpen ? 'bg-accent/25 text-accent' : 'bg-white/10 text-white'}`}>
-            <ListMusic size={20} />
-          </button>
-          <button onClick={onExit} aria-label="전체화면 종료"
-            className="rounded-full bg-white/10 p-3 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent">
-            <Minimize2 size={20} />
-          </button>
+          <span title={repeat === 'one' ? '한 곡 반복' : repeat === 'all' ? '전체 반복' : '반복 꺼짐'}
+            aria-label={repeat === 'one' ? '한 곡 반복' : repeat === 'all' ? '전체 반복' : '반복 꺼짐'}
+            className={`rounded-full p-2 ${repeatActive ? 'text-accent' : 'text-white/35'}`}>
+            <RepeatIcon size={17} />
+          </span>
         </div>
       </div>
 
@@ -192,9 +212,12 @@ export default function BrandFullscreenControls({ active, onExit }: Props) {
         open={queueOpen}
         queue={queue}
         index={index}
-        onSelect={(i) => { jumpTo(i); /* 선택 후 현재곡 즉시 갱신; drawer 는 유지(연속 선택 편의) */ }}
+        shuffle={shuffle}
+        shuffleOrder={shuffleOrder}
+        onSelect={(originalIndex) => { jumpTo(originalIndex); }}
         onClose={() => setQueueOpen(false)}
         returnFocusRef={queueBtnRef}
+        onSearchFocusChange={onSearchFocusChange}
       />
     </div>
   );

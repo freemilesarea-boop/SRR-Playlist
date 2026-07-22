@@ -62,54 +62,61 @@ export default function BrandVisualStage({
     });
   }, []);
 
-  const base = `absolute inset-0 h-full w-full ${className ?? ''}`;
+  const layer = 'absolute inset-0 h-full w-full';
 
+  let content: React.ReactNode;
   if (mode === 'BRAND_MEDIA') {
-    return (
+    content = (
       <BrandSignage
         items={validMedia}
         brandName={brandName}
-        className={base}
+        className={layer}
         chromeHidden={chromeHidden}
         transition={transition}
         showSlideDots={showSlideDots}
         onUsableCountChange={setUsableMediaCount}
       />
     );
-  }
-
-  if (mode === 'BRAND_LOGO' && logoUrl) {
-    return (
-      <div className={`flex items-center justify-center bg-gradient-to-br from-slate-900 to-black ${base}`}>
+  } else if (mode === 'BRAND_LOGO' && logoUrl) {
+    // 로고 배경: 안정적 neutral dark gradient(무거운 색상 추출 없음). 로고 중앙·비율 유지·확대 제한.
+    content = (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-slate-900 via-neutral-900 to-black ${layer}`}>
         <img
           src={logoUrl}
           alt={brandName}
           draggable={false}
-          // 원본 비율 유지 + 잘림 방지 + 과대확대 제한(최대 ~40v/화면), 저해상도 깨짐 방지.
           className="max-h-[40%] max-w-[55%] object-contain [image-rendering:auto]"
           onError={() => handleArtworkError(logoUrl)}
         />
       </div>
     );
-  }
-
-  if (mode === 'TRACK_ARTWORK' && artworkUrl) {
-    return (
+  } else if (mode === 'TRACK_ARTWORK' && artworkUrl) {
+    content = (
       <ArtworkStage
         artworkUrl={artworkUrl}
         nextArtworkUrl={nextArtworkUrl ?? null}
         brandName={brandName}
-        className={base}
+        className={layer}
         onError={handleArtworkError}
       />
     );
+  } else {
+    // DEFAULT_FALLBACK — 안전한 기본 화면(안내 문구 없음).
+    content = (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-slate-900 via-neutral-900 to-black ${layer}`}>
+        <LogoMark size={96} className="text-white/70" />
+        <span className="sr-only">{brandName}</span>
+      </div>
+    );
   }
 
-  // DEFAULT_FALLBACK — 안전한 기본 화면(안내 문구 없음).
+  // Display Mode 전환 fade(200~300ms) — mode 를 key 로 하여 전환 시에만 재생.
+  // Audio Crossfade 와 완전 독립(오디오 상태 무변경). Reduced Motion 에서는 fade 없음.
   return (
-    <div className={`flex items-center justify-center bg-gradient-to-br from-slate-900 to-black ${base}`}>
-      <LogoMark size={96} className="text-white/70" />
-      <span className="sr-only">{brandName}</span>
+    <div className={`absolute inset-0 h-full w-full overflow-hidden bg-black ${className ?? ''}`}>
+      <div key={mode} className="absolute inset-0 h-full w-full motion-safe:animate-[fadeIn_250ms_ease-in-out]">
+        {content}
+      </div>
     </div>
   );
 }
@@ -136,9 +143,12 @@ function ArtworkStage({
         alt=""
         aria-hidden
         draggable={false}
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30 blur-2xl motion-safe:transition-opacity motion-safe:duration-500"
+        // Spotify 스타일: 동일 자켓 → cover 채움 + 강한 blur + scale 확대(blur edge 방지).
+        className="absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-3xl motion-safe:transition-opacity motion-safe:duration-500"
         onError={() => onError(artworkUrl)}
       />
+      {/* Dark overlay — 가독성 확보 */}
+      <div aria-hidden className="absolute inset-0 bg-black/45" />
       {/* 전경: 원본 비율 유지(object-contain). key 변경으로 fade-in 재생. */}
       <img
         key={`fg-${artworkUrl}`}

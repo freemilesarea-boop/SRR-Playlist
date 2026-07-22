@@ -100,6 +100,20 @@ export default function BrandPlayerPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [presentation, fallback]);
 
+  // BRAND-PLAYER-UX-5 — F 키: 전체화면 진입/종료 토글. Input(검색 등) 입력 중에는 무시.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'f' && e.key !== 'F') return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
+      e.preventDefault();
+      if (presentation) exitPresentation(); else void enterPresentation();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [presentation, enterPresentation, exitPresentation]);
+
   // 매장/키오스크 모드: crossfade off + wake lock (전역) — store player 와 동일
   useEffect(() => {
     setBusinessMode(true);

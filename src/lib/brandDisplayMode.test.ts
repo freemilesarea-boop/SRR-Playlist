@@ -77,4 +77,16 @@ describe('resolveBrandDisplayMode — priority', () => {
     expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: '   ', artworkUrl: null, artworkFailed: false }))
       .toBe('DEFAULT_FALLBACK');
   });
+
+  // §15 video-loop invariant: while ≥1 valid media remains (e.g. a single looping video),
+  // the mode stays BRAND_MEDIA and never drops to TRACK_ARTWORK on video end.
+  it('video-loop invariant: single valid media + artwork stays BRAND_MEDIA', () => {
+    expect(resolveBrandDisplayMode({ usableMediaCount: 1, logoUrl: null, artworkUrl: 'https://x/art.jpg', artworkFailed: false }))
+      .toBe('BRAND_MEDIA');
+  });
+  it('video-load-failure invariant: only when media becomes unusable does priority re-evaluate', () => {
+    // failed video → usable drops to 0 → falls to artwork (not before)
+    expect(resolveBrandDisplayMode({ usableMediaCount: 0, logoUrl: null, artworkUrl: 'https://x/art.jpg', artworkFailed: false }))
+      .toBe('TRACK_ARTWORK');
+  });
 });

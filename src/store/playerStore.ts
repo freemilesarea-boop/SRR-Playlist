@@ -29,6 +29,13 @@ interface PlayerState {
   pendingSeekSec: number | null;
 
   /**
+   * BRAND-PLAYER-UX-5 — live seek 요청. Audio Element Owner(<Player>)만 소비한다.
+   * { sec, trackId } 로 대상 트랙을 검증 → 곡 변경 race 방지. 소비 후 consumeLiveSeek 로 null.
+   * UI 는 seekTo() 만 호출하고 audio DOM 에 직접 접근하지 않는다.
+   */
+  liveSeek: { sec: number; trackId: string } | null;
+
+  /**
    * X6.80 — opts.dailySeedShuffle: 매장 모드에서 매일 다른 순서로 셔플.
    * shuffle=true 와 함께 사용 → buildSeededShuffleOrder(todayKstSeed) 적용.
    * (true → 같은 날엔 일관, 다음날 자동 다른 순서)
@@ -46,6 +53,10 @@ interface PlayerState {
   next: () => void;
   prev: () => void;
   jumpTo: (i: number) => void;
+  /** BRAND-PLAYER-UX-5 — 현재 트랙 내 위치 이동 요청(초). Owner 가 실제 audio.currentTime 적용. */
+  seekTo: (sec: number) => void;
+  /** Owner 전용 — liveSeek 소비 후 초기화. */
+  consumeLiveSeek: () => void;
   setShuffle: (v: boolean) => void;
   setRepeat: (r: RepeatMode) => void;
   setVolume: (v: number) => void;
@@ -156,6 +167,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   mutedVolume: loadMutedVolume(),
   shuffleOrder: [],
   pendingSeekSec: null,
+  liveSeek: null,
 
   setQueue: (tracks, startIndex = 0, playlist = null, context = null, opts) => {
     // 안전장치: 재생 불가(audio_url null/빈문자열/형식이상) 트랙은 큐에서 제외.
@@ -279,8 +291,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   jumpTo: (i) => {
     const { queue } = get();
     if (i < 0 || i >= queue.length) return;
-    set({ index: i, currentTime: 0, playing: true, pendingSeekSec: null });
+    set({ index: i, currentTime: 0, playing: true, pendingSeekSec: null, liveSeek: null });
   },
+
+  // BRAND-PLAYER-UX-5 — live seek 요청. 실제 audio.currentTime 변경은 Owner(<Player>)에서만.
+  // 현재 트랙 id 를 함께 실어 곡 변경 race 를 방지. currentTime 은 즉시 낙관적 반영(UI 반응성).
+  seekTo: (sec) => {
+    const { queue, index } = get();
+    const track = queue[index];
+    if (!track) return;
+    const s = Number.isFinite(sec) && sec > 0 ? sec : 0;
+    set({ liveSeek: { sec: s, trackId: track.id }, currentTime: s });
+  },
+  consumeLiveSeek: () => set({ liveSeek: null }),
 
   setShuffle: (v) => {
     const { queue, index } = get();
