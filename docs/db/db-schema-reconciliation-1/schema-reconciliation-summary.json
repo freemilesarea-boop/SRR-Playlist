@@ -1,0 +1,12 @@
+{
+  "audit": "DB-SCHEMA-RECONCILIATION-1",
+  "test_project": "hao…qorr (SRR Playlist Test)", "production_project": "nso…zvol (SRR Playlist)", "isolated": true,
+  "method": "read-only pg_catalog / information_schema metadata; no function execution; no user data; no DDL/DML",
+  "rpc_results": { "LOCAL_AND_REMOTE_MATCH": 0, "REMOTE_ONLY_MATCHED_testprod": 0, "PRODUCTION_ONLY": 31, "TEST_ONLY": 0, "ABSENT_BOTH": 0, "SIGNATURE_DRIFT": 0, "SECURITY_DRIFT": 0, "UNVERIFIED": 0 },
+  "table_drift_production_only": ["site_notices","site_settings","support_inquiries","support_inquiry_attachments","track_ai_predictions"],
+  "security": { "all_search_path_set": true, "over_exposed_readers": 10, "severity": "P2", "destructive_guarded": true },
+  "production_recommendation": "READY_FOR_RPC_MIGRATION_RECOVERY (with mandatory security fix for 10 readers)",
+  "cron_gate": "BLOCKED_UNVERIFIED (CRON_SECRET existence unconfirmed)",
+  "migrations_authored": 0,
+  "production_changes": 0
+}

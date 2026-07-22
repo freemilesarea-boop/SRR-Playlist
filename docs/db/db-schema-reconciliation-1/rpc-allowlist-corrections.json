@@ -1,0 +1,14 @@
+{
+  "audit": "DB-SCHEMA-RECONCILIATION-1",
+  "current_allowlist_file": "scripts/rpc-remote-only-allowlist.json (31 entries)",
+  "decision": "KEEP all 31 temporarily (all confirmed PRESENT_PRODUCTION → prod runtime works; not live PGRST202 in prod). Each is now tied to RPC-MIGRATION-RECOVERY with a follow-up, not indefinite.",
+  "remove_now": [],
+  "block_now": [],
+  "keep_with_followup": "all 31 → RPC-MIGRATION-RECOVERY (commit to repo + apply to Test). Entry should be removed from allowlist once its migration lands (local definition then exists).",
+  "priority_security_fix_before_or_during_recovery": [
+    "admin_list_site_notices","ai_correction_stats","ai_predictions_summary","get_admin_track_detail",
+    "list_admin_tracks_with_ai","list_clap_auto_approved","list_clap_curation_playlists",
+    "list_clap_recommendations","list_pending_ai_predictions","list_severe_metadata_mismatches"
+  ],
+  "note": "No code allowlist change made this phase (docs-only). Recommendation: add a comment/expiry pointer in the allowlist during recovery."
+}

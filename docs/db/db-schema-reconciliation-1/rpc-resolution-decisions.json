@@ -1,0 +1,143 @@
+{
+  "default": "COMMIT_REMOTE_DEFINITION (present in Prod with exact def) + RESTORE_TEST_SCHEMA (absent in Test)",
+  "security_fix_required": [
+    "admin_list_site_notices",
+    "ai_correction_stats",
+    "ai_predictions_summary",
+    "get_admin_track_detail",
+    "list_admin_tracks_with_ai",
+    "list_clap_auto_approved",
+    "list_clap_curation_playlists",
+    "list_clap_recommendations",
+    "list_pending_ai_predictions",
+    "list_severe_metadata_mismatches"
+  ],
+  "none_to_remove": true,
+  "absent_both": [],
+  "decisions": [
+    {
+      "rpc": "admin_delete_site_notice",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_get_support_inquiry_detail",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_hard_delete_track",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_list_site_notices",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_list_support_inquiries",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_purge_all_tracks",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_support_inquiry_summary",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_toggle_site_notice",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_update_inquiry",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_update_site_settings",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_update_track_metadata_full",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "admin_upsert_site_notice",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "ai_correction_stats",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "ai_predictions_summary",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "apply_track_ai_predictions",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "bulk_apply_high_confidence_ai_predictions",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "bulk_delete_severe_mismatches",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "create_support_inquiry",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "get_admin_track_detail",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "get_my_inquiry_detail",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "get_site_settings",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_active_site_notices",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_admin_tracks_with_ai",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_clap_auto_approved",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_clap_curation_playlists",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_clap_recommendations",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_my_inquiries",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_pending_ai_predictions",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "list_severe_metadata_mismatches",
+      "decision": "COMMIT_REMOTE_DEFINITION + REQUIRE_SECURITY_FIX + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "rollback_clap_auto_attach",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    },
+    {
+      "rpc": "set_playlist_auto_attach",
+      "decision": "COMMIT_REMOTE_DEFINITION + RESTORE_TEST_SCHEMA"
+    }
+  ]
+}

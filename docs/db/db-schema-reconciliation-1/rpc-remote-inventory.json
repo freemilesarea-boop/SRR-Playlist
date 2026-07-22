@@ -1,0 +1,599 @@
+{
+  "audit": "DB-SCHEMA-RECONCILIATION-1",
+  "test": "hao…qorr",
+  "production": "nso…zvol",
+  "count": 31,
+  "rpcs": [
+    {
+      "id": "RPC-001",
+      "name": "admin_delete_site_notice",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_id uuid",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-002",
+      "name": "admin_get_support_inquiry_detail",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_inquiry_id uuid",
+      "return_type": "jsonb",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-003",
+      "name": "admin_hard_delete_track",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_track_id uuid",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": true,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-004",
+      "name": "admin_list_site_notices",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "SETOF site_notices",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-005",
+      "name": "admin_list_support_inquiries",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_status text, p_inquiry_type text, p_priority text, p_assigned_admin_id uuid, p_search text, p_limit integer",
+      "return_type": "TABLE(... incl user_email, contact_email, contact_phone ...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-006",
+      "name": "admin_purge_all_tracks",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_confirm text",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": true,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-007",
+      "name": "admin_support_inquiry_summary",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_days integer",
+      "return_type": "jsonb",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-008",
+      "name": "admin_toggle_site_notice",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_id uuid, p_active boolean",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-009",
+      "name": "admin_update_inquiry",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_inquiry_id uuid, p_status text, p_priority text, p_admin_note text, p_assigned_admin_id uuid",
+      "return_type": "jsonb",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-010",
+      "name": "admin_update_site_settings",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_distribution_enabled boolean, p_notice_enabled boolean, p_notice_title text, p_notice_body text",
+      "return_type": "site_settings",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-011",
+      "name": "admin_update_track_metadata_full",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_track_id uuid, ...26 params",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-012",
+      "name": "admin_upsert_site_notice",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_id uuid, ...10 params",
+      "return_type": "site_notices",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-013",
+      "name": "ai_correction_stats",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-014",
+      "name": "ai_predictions_summary",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-015",
+      "name": "apply_track_ai_predictions",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_prediction_id uuid, p_apply_energy boolean, p_apply_bpm boolean, p_apply_tempo_feel boolean, p_overwrite_existing boolean",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-016",
+      "name": "bulk_apply_high_confidence_ai_predictions",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_confidence_threshold numeric, p_limit integer",
+      "return_type": "integer",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-017",
+      "name": "bulk_delete_severe_mismatches",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_min_confidence numeric, p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": true,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-018",
+      "name": "create_support_inquiry",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_inquiry_type text, ...10 params",
+      "return_type": "jsonb",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-019",
+      "name": "get_admin_track_detail",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_track_id uuid",
+      "return_type": "TABLE(...large)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-020",
+      "name": "get_my_inquiry_detail",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_inquiry_id uuid",
+      "return_type": "jsonb",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-021",
+      "name": "get_site_settings",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "site_settings",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-022",
+      "name": "list_active_site_notices",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-023",
+      "name": "list_admin_tracks_with_ai",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-024",
+      "name": "list_clap_auto_approved",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-025",
+      "name": "list_clap_curation_playlists",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-026",
+      "name": "list_clap_recommendations",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_playlist_id uuid, p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-027",
+      "name": "list_my_inquiries",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-028",
+      "name": "list_pending_ai_predictions",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-029",
+      "name": "list_severe_metadata_mismatches",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_limit integer",
+      "return_type": "TABLE(...)",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "read",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-030",
+      "name": "rollback_clap_auto_attach",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_recommendation_id uuid",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    },
+    {
+      "id": "RPC-031",
+      "name": "set_playlist_auto_attach",
+      "test": "ABSENT_TEST",
+      "production": "PRESENT_PRODUCTION",
+      "repository": "MISSING",
+      "signature": "p_playlist_id uuid, p_enabled boolean, p_threshold numeric",
+      "return_type": "void",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_grants": [
+        "authenticated",
+        "service_role"
+      ],
+      "kind": "write",
+      "destructive": false,
+      "drift": "PRESENT_PROD_ONLY",
+      "final_class": "PRODUCTION_ONLY"
+    }
+  ]
+}

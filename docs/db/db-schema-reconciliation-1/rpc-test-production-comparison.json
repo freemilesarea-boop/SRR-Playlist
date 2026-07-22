@@ -1,0 +1,200 @@
+{
+  "summary": {
+    "MATCH": 0,
+    "PRESENT_PROD_ONLY": 31,
+    "PRESENT_TEST_ONLY": 0,
+    "SIGNATURE_DRIFT": 0,
+    "SECURITY_DRIFT": 0,
+    "ABSENT_BOTH": 0,
+    "UNVERIFIED": 0
+  },
+  "note": "All 31 present in Production, absent in Test → no cross-env source comparison possible (Test has none). Dependency tables site_notices/site_settings/support_inquiries/support_inquiry_attachments/track_ai_predictions are ALSO Production-only.",
+  "rpcs": [
+    {
+      "rpc": "admin_delete_site_notice",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_get_support_inquiry_detail",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_hard_delete_track",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_list_site_notices",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_list_support_inquiries",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_purge_all_tracks",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_support_inquiry_summary",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_toggle_site_notice",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_update_inquiry",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_update_site_settings",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_update_track_metadata_full",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "admin_upsert_site_notice",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "ai_correction_stats",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "ai_predictions_summary",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "apply_track_ai_predictions",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "bulk_apply_high_confidence_ai_predictions",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "bulk_delete_severe_mismatches",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "create_support_inquiry",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "get_admin_track_detail",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "get_my_inquiry_detail",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "get_site_settings",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_active_site_notices",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_admin_tracks_with_ai",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_clap_auto_approved",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_clap_curation_playlists",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_clap_recommendations",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_my_inquiries",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_pending_ai_predictions",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "list_severe_metadata_mismatches",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "rollback_clap_auto_attach",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    },
+    {
+      "rpc": "set_playlist_auto_attach",
+      "test": "ABSENT",
+      "production": "PRESENT",
+      "drift": "PRESENT_PROD_ONLY"
+    }
+  ]
+}

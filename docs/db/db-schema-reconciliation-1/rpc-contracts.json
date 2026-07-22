@@ -1,0 +1,219 @@
+[
+  {
+    "rpc": "admin_delete_site_notice",
+    "remote_signature": "p_id uuid",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_get_support_inquiry_detail",
+    "remote_signature": "p_inquiry_id uuid",
+    "return_type": "jsonb",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_hard_delete_track",
+    "remote_signature": "p_track_id uuid",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_list_site_notices",
+    "remote_signature": "",
+    "return_type": "SETOF site_notices",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_list_support_inquiries",
+    "remote_signature": "p_status text, p_inquiry_type text, p_priority text, p_assigned_admin_id uuid, p_search text, p_limit integer",
+    "return_type": "TABLE(... incl user_email, contact_email, contact_phone ...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_purge_all_tracks",
+    "remote_signature": "p_confirm text",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_support_inquiry_summary",
+    "remote_signature": "p_days integer",
+    "return_type": "jsonb",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_toggle_site_notice",
+    "remote_signature": "p_id uuid, p_active boolean",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_update_inquiry",
+    "remote_signature": "p_inquiry_id uuid, p_status text, p_priority text, p_admin_note text, p_assigned_admin_id uuid",
+    "return_type": "jsonb",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_update_site_settings",
+    "remote_signature": "p_distribution_enabled boolean, p_notice_enabled boolean, p_notice_title text, p_notice_body text",
+    "return_type": "site_settings",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_update_track_metadata_full",
+    "remote_signature": "p_track_id uuid, ...26 params",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "admin_upsert_site_notice",
+    "remote_signature": "p_id uuid, ...10 params",
+    "return_type": "site_notices",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "ai_correction_stats",
+    "remote_signature": "",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "ai_predictions_summary",
+    "remote_signature": "",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "apply_track_ai_predictions",
+    "remote_signature": "p_prediction_id uuid, p_apply_energy boolean, p_apply_bpm boolean, p_apply_tempo_feel boolean, p_overwrite_existing boolean",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "bulk_apply_high_confidence_ai_predictions",
+    "remote_signature": "p_confidence_threshold numeric, p_limit integer",
+    "return_type": "integer",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "bulk_delete_severe_mismatches",
+    "remote_signature": "p_min_confidence numeric, p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "create_support_inquiry",
+    "remote_signature": "p_inquiry_type text, ...10 params",
+    "return_type": "jsonb",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "get_admin_track_detail",
+    "remote_signature": "p_track_id uuid",
+    "return_type": "TABLE(...large)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "get_my_inquiry_detail",
+    "remote_signature": "p_inquiry_id uuid",
+    "return_type": "jsonb",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "get_site_settings",
+    "remote_signature": "",
+    "return_type": "site_settings",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_active_site_notices",
+    "remote_signature": "",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_admin_tracks_with_ai",
+    "remote_signature": "p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_clap_auto_approved",
+    "remote_signature": "p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_clap_curation_playlists",
+    "remote_signature": "",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_clap_recommendations",
+    "remote_signature": "p_playlist_id uuid, p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_my_inquiries",
+    "remote_signature": "p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_pending_ai_predictions",
+    "remote_signature": "p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "list_severe_metadata_mismatches",
+    "remote_signature": "p_limit integer",
+    "return_type": "TABLE(...)",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "rollback_clap_auto_attach",
+    "remote_signature": "p_recommendation_id uuid",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  },
+  {
+    "rpc": "set_playlist_auto_attach",
+    "remote_signature": "p_playlist_id uuid, p_enabled boolean, p_threshold numeric",
+    "return_type": "void",
+    "call_site_file": "see rpc-master-registry (hotfix)",
+    "contract": "client wrapper must match remote identity args; verified names align (p_-prefixed)"
+  }
+]

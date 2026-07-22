@@ -1,0 +1,11 @@
+{
+  "audit": "DB-SCHEMA-RECONCILIATION-1",
+  "context": "PLATFORM-HOTFIX-1 made api/cron/daily-metrics.ts fail-closed (503 without CRON_SECRET).",
+  "production_cron_secret": "UNVERIFIED — no Vercel env read access from this environment",
+  "preview_cron_secret": "UNVERIFIED",
+  "caller_secret": "Vercel Cron auto-attaches Authorization: Bearer <CRON_SECRET> only if the env var is set",
+  "header_format": "Authorization: Bearer <secret>  OR  x-cron-secret: <secret>",
+  "status": "UNVERIFIED",
+  "merge_gate": "BLOCK PLATFORM-HOTFIX-1 production merge until operator confirms CRON_SECRET is set in Production (and Preview). Otherwise daily-metrics returns 503 and metrics/trial-expiry stop.",
+  "operator_action": "Set CRON_SECRET in Vercel (Production + Preview) BEFORE merging the hotfix; verify daily-metrics + enterprise-ops return 200 post-deploy."
+}

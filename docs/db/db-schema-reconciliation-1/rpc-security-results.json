@@ -1,0 +1,49 @@
+{
+  "all_search_path_set": true,
+  "all_security_definer": true,
+  "guarded_write_or_admin": [
+    "admin_delete_site_notice",
+    "admin_get_support_inquiry_detail",
+    "admin_hard_delete_track",
+    "admin_list_support_inquiries",
+    "admin_purge_all_tracks",
+    "admin_support_inquiry_summary",
+    "admin_toggle_site_notice",
+    "admin_update_inquiry",
+    "admin_update_site_settings",
+    "admin_update_track_metadata_full",
+    "admin_upsert_site_notice",
+    "apply_track_ai_predictions",
+    "bulk_apply_high_confidence_ai_predictions",
+    "bulk_delete_severe_mismatches",
+    "create_support_inquiry",
+    "get_my_inquiry_detail",
+    "list_my_inquiries",
+    "list_active_site_notices",
+    "rollback_clap_auto_attach",
+    "set_playlist_auto_attach"
+  ],
+  "public_intended": [
+    "get_site_settings",
+    "list_active_site_notices"
+  ],
+  "user_scoped": [
+    "create_support_inquiry",
+    "list_my_inquiries",
+    "get_my_inquiry_detail"
+  ],
+  "over_exposed_readers": [
+    "admin_list_site_notices",
+    "ai_correction_stats",
+    "ai_predictions_summary",
+    "get_admin_track_detail",
+    "list_admin_tracks_with_ai",
+    "list_clap_auto_approved",
+    "list_clap_curation_playlists",
+    "list_clap_recommendations",
+    "list_pending_ai_predictions",
+    "list_severe_metadata_mismatches"
+  ],
+  "finding": "10 admin/internal READER functions are SECURITY DEFINER granted to authenticated with NO detected in-function admin role check → any authenticated user can read admin data (RLS bypassed). Data is internal-ops (track admin detail, AI predictions, CLAP curation, all-notices) — no PII/money → P2. admin_list_support_inquiries returns contact_email/phone but IS admin-guarded (PASS).",
+  "over_exposed_severity": "P2"
+}
