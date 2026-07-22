@@ -1,0 +1,7 @@
+{
+  "cross_user_read": "BLOCKED (userB get_my_inquiry_detail(userA id) -> not_found)",
+  "cross_user_list": "BLOCKED (userB list empty)",
+  "anon": "BLOCKED (create + admin_list unauthorized)",
+  "admin_note_to_owner": "exposed on own inquiry only (P3 observation, contract-preserving)",
+  "pii_to_other_users": "none (RLS self-or-admin + function auth.uid scoping)"
+}

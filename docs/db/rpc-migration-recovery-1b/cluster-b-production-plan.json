@@ -1,0 +1,6 @@
+{
+  "principle": "Production already has these objects; apply = align repo history. Cluster B has NO security fix (already safe) -> create-table-if-not-exists (no-op in prod) + create-or-replace functions (identical) + grant revoke-public/regrant.",
+  "order": "tables if not exists -> functions create or replace -> grants",
+  "rollback": "functions create or replace to captured prior def (identical); no table drops in prod",
+  "verification": "read-only metadata: signatures match, no anon grant, RLS policies present"
+}

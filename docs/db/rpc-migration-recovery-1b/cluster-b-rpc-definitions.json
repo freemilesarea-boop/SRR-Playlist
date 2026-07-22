@@ -1,0 +1,68 @@
+{
+  "note": "source captured via pg_get_functiondef; recovered verbatim (already ownership/admin-guarded)",
+  "rpcs": {
+    "create_support_inquiry": {
+      "role": "user-write",
+      "owner": "auth.uid()",
+      "admin": false,
+      "ret": "jsonb",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "list_my_inquiries": {
+      "role": "user-read",
+      "owner": "user_id=auth.uid()",
+      "admin": false,
+      "ret": "TABLE(8 cols)",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "get_my_inquiry_detail": {
+      "role": "user-read",
+      "owner": "user_id=auth.uid() or admin",
+      "admin": false,
+      "ret": "jsonb(own inquiry+attachments)",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "admin_list_support_inquiries": {
+      "role": "admin-read",
+      "owner": "-",
+      "admin": true,
+      "ret": "TABLE(23 cols incl PII)",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "admin_get_support_inquiry_detail": {
+      "role": "admin-read",
+      "owner": "-",
+      "admin": true,
+      "ret": "jsonb",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "admin_support_inquiry_summary": {
+      "role": "admin-read",
+      "owner": "-",
+      "admin": true,
+      "ret": "jsonb(aggregate)",
+      "grants": [
+        "authenticated"
+      ]
+    },
+    "admin_update_inquiry": {
+      "role": "admin-write",
+      "owner": "-",
+      "admin": true,
+      "ret": "jsonb",
+      "grants": [
+        "authenticated"
+      ]
+    }
+  }
+}

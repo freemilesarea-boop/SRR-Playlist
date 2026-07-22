@@ -1,0 +1,21 @@
+{
+  "applied_test": "0458",
+  "tables_created": 2,
+  "functions_created": 7,
+  "rls": true,
+  "signatures_match_prod": true,
+  "no_anon_grant": true,
+  "functional": {
+    "anon_create_blocked": true,
+    "anon_admin_list_blocked": true,
+    "userA_owner_is_authuid": true,
+    "userA_list_1": true,
+    "userA_admin_list_blocked": true,
+    "userB_cannot_read_userA": true,
+    "userB_list_empty": true,
+    "admin_list_sees": true,
+    "admin_update_ok": true,
+    "admin_invalid_id_not_found": true
+  },
+  "method": "synthetic users in a rolled-back transaction (session_replication_role=replica for FK bypass); no real data; no Production execution"
+}

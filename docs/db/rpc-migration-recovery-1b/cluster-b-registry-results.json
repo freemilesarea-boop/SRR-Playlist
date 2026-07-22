@@ -1,0 +1,20 @@
+{
+  "before": {
+    "undefined": 24
+  },
+  "after": {
+    "undefined": 17,
+    "local_defs_added": 7
+  },
+  "removed": [
+    "create_support_inquiry",
+    "list_my_inquiries",
+    "get_my_inquiry_detail",
+    "admin_list_support_inquiries",
+    "admin_get_support_inquiry_detail",
+    "admin_support_inquiry_summary",
+    "admin_update_inquiry"
+  ],
+  "lint_rpc": "PASS (0 new)",
+  "cluster_a_regression": "intact (7 still local)"
+}

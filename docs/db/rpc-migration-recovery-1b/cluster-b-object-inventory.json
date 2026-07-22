@@ -1,0 +1,17 @@
+{
+  "tables": [
+    "support_inquiries",
+    "support_inquiry_attachments"
+  ],
+  "rpcs": [
+    "create_support_inquiry",
+    "list_my_inquiries",
+    "get_my_inquiry_detail",
+    "admin_list_support_inquiries",
+    "admin_get_support_inquiry_detail",
+    "admin_support_inquiry_summary",
+    "admin_update_inquiry"
+  ],
+  "undefined_before": 24,
+  "undefined_after": 17
+}

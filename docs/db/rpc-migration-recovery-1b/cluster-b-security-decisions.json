@@ -1,0 +1,8 @@
+{
+  "over_exposed_readers": 0,
+  "security_fixes_needed": 0,
+  "rationale": "All 7 already secure in Production: user fns use auth.uid() ownership (owner never from client); admin fns have users.role=admin guard. Recovered verbatim.",
+  "security_definer": "KEEP all (search_path=public verified)",
+  "grants": "revoke all from public; NO anon; all -> authenticated (+ internal owner/admin check)",
+  "ownership": "create sets owner=auth.uid(); list/detail scoped to auth.uid() (or admin)"
+}

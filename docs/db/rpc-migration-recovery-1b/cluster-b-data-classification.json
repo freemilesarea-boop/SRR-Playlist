@@ -1,0 +1,30 @@
+{
+  "user_visible_own": [
+    "id",
+    "inquiry_type",
+    "title",
+    "body",
+    "status",
+    "priority",
+    "created_at",
+    "resolved_at",
+    "own attachments",
+    "admin_note(reply?)"
+  ],
+  "admin_only": [
+    "all inquiries",
+    "user_email",
+    "contact_email",
+    "contact_phone",
+    "admin_note",
+    "assigned_admin_id",
+    "other users context"
+  ],
+  "sensitive": [
+    "user_email",
+    "contact_email",
+    "contact_phone",
+    "file_url(storage path)"
+  ],
+  "observation_P3": "get_my_inquiry_detail/list_my_inquiries expose admin_note + assigned_admin_id on the callers OWN inquiry (Production contract; admin_note plausibly the user-facing reply). No cross-user leak (verified). Not changed to preserve client contract; recommend confirming admin_note semantics."
+}

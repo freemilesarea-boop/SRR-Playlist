@@ -1,0 +1,42 @@
+{
+  "support_inquiries": {
+    "cols": 25,
+    "pk": "id",
+    "fks": [
+      "user_id->users SET NULL",
+      "business_id->business_profiles SET NULL",
+      "artist_id->artist_profiles SET NULL",
+      "assigned_admin_id->users SET NULL"
+    ],
+    "checks": [
+      "inquiry_type",
+      "status",
+      "priority",
+      "title>0",
+      "body>0"
+    ],
+    "idx": 4,
+    "rls": true,
+    "owner_col": "user_id",
+    "sensitive": [
+      "user_email",
+      "contact_email",
+      "contact_phone",
+      "admin_note",
+      "assigned_admin_id",
+      "browser_user_agent"
+    ]
+  },
+  "support_inquiry_attachments": {
+    "cols": 7,
+    "pk": "id",
+    "fks": [
+      "inquiry_id->support_inquiries CASCADE"
+    ],
+    "idx": 1,
+    "rls": true,
+    "sensitive": [
+      "file_url"
+    ]
+  }
+}

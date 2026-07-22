@@ -1,0 +1,16 @@
+{
+  "tables_recovered_applied_verified_test": 2,
+  "rpc_recovered_applied_verified_test": 7,
+  "security_corrected": 0,
+  "deferred": 0,
+  "failed": 0,
+  "production_changes": 0,
+  "migrations_authored": 1,
+  "migrations_applied_test": 1,
+  "undefined_rpc": {
+    "before": 24,
+    "after": 17
+  },
+  "verdict": "CLUSTER_B_READY_FOR_PRODUCTION_APPLY (test-verified)",
+  "cluster_complete": true
+}
