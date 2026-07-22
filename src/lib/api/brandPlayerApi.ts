@@ -27,6 +27,52 @@ export async function getBrandPlayerConfig(brandId: string, sessionToken: string
   return data as BrandPlayerConfig;
 }
 
+// ── BRAND-DEVICE-BINDING-1: 기기 Binding 서버 검증/폐기/목록 ──────────────
+/** 서버 재검증 결과(민감정보 없음). */
+export interface BindingVerify {
+  ok: boolean;
+  reason?: string;
+  brand_name?: string | null;
+  device_label?: string | null;
+  expires_at?: string | null;
+}
+
+/** 자동 진입 전 Device Binding 서버 재검증(소유자+미폐기+미만료+활성 브랜드). */
+export async function verifyBrandDeviceBinding(brandId: string, sessionToken: string): Promise<BindingVerify> {
+  const { data, error } = await supabase.rpc('verify_brand_device_binding', {
+    p_brand_id: brandId,
+    p_session_token: sessionToken,
+  });
+  if (error) throw error;
+  return (data ?? { ok: false, reason: 'error' }) as BindingVerify;
+}
+
+/** 이 기기 연결 해제(자기 binding 만). */
+export async function revokeBrandDeviceByToken(brandId: string, sessionToken: string): Promise<{ ok: boolean; reason?: string }> {
+  const { data, error } = await supabase.rpc('revoke_brand_device_by_token', {
+    p_brand_id: brandId,
+    p_session_token: sessionToken,
+  });
+  if (error) throw error;
+  return (data ?? { ok: false }) as { ok: boolean; reason?: string };
+}
+
+export interface MyBrandDevice {
+  device_label: string | null;
+  brand_name: string | null;
+  last_seen_at: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  revoked: boolean;
+}
+
+/** 내 계정에 연결된 기기 목록(비민감 표시정보만). */
+export async function listMyBrandDevices(): Promise<MyBrandDevice[]> {
+  const { data, error } = await supabase.rpc('list_my_brand_devices');
+  if (error) throw error;
+  return (data ?? []) as MyBrandDevice[];
+}
+
 /** 세션 heartbeat (last_seen_at / 현재곡 갱신). 실패는 silent 처리 권장. */
 export async function brandPlayerHeartbeat(
   brandId: string, sessionToken: string, currentTrackId: string | null, userAgent: string | null,

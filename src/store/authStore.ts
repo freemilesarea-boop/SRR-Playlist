@@ -276,6 +276,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { suppressUnloadWarningOnce } = await import('@/lib/playbackGuard');
       suppressUnloadWarningOnce();
     } catch { /* noop */ }
+    // BRAND-DEVICE-BINDING-1: 브랜드 로그아웃 시 이 브라우저의 매장 자동 진입 binding 제거.
+    // (다음 로그인 시 매장 코드 재입력 — 로그아웃 후 자동 진입 차단.) Server binding 은 유지.
+    try {
+      const { clearAllBrandBindings } = await import('@/lib/brandSession');
+      clearAllBrandBindings();
+    } catch { /* noop */ }
     await supabase.auth.signOut();
     set({
       session: null, user: null, profile: null, profileError: null,

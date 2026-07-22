@@ -1,19 +1,44 @@
 // Brand Player 진입 — 매장 코드(Store Invite Code) 입력 페이지 (/brand).
 // 매장은 본사에서 받은 매장 코드만 입력 → 본사 조회 → 연결 브랜드 플레이어로 진입.
 // (사용자 입력 "브랜드 코드"는 사용하지 않음. 브랜드는 관리자 내부 객체.)
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Tag, ArrowRight, Loader2, KeyRound, Clock } from 'lucide-react';
 import { verifyStoreCode } from '@/lib/api/brandPlayerApi';
 import { saveBrandToken, pushRecentBrand, getRecentBrands, getBrandToken } from '@/lib/brandSession';
 import { STORE_VERIFY_ERROR_MESSAGES } from '@/types/brand';
 
+interface BrandNavState { fromPlayerReject?: boolean; deviceRevoked?: boolean; switchStore?: boolean; reason?: string }
+
 export default function BrandPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = (location.state ?? null) as BrandNavState | null;
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const recent = getRecentBrands();
+  const autoTriedRef = useRef(false);
+
+  // BRAND-DEVICE-BINDING-1: 재방문 자동 진입.
+  // 저장된 binding 이 있으면 플레이어로 진입(플레이어가 서버 재검증). 단, 플레이어가 거부/해제/전환으로
+  // 돌려보낸 경우에는 자동 진입하지 않는다(무한 루프 방지) — 코드 입력을 요구한다.
+  useEffect(() => {
+    if (autoTriedRef.current) return;
+    autoTriedRef.current = true;
+    if (navState?.fromPlayerReject || navState?.deviceRevoked || navState?.switchStore) {
+      if (navState.deviceRevoked) setNotice('이 기기의 매장 연결이 해제되었습니다.');
+      else if (navState.reason === 'expired') setNotice('매장 연결이 만료되었습니다. 매장 코드를 다시 입력해 주세요.');
+      else if (navState.reason === 'revoked') setNotice('이 기기의 매장 연결이 해제되었습니다.');
+      return;
+    }
+    const top = recent[0];
+    if (top && getBrandToken(top.id)) {
+      navigate(`/brand/player/${top.id}`, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -53,7 +78,12 @@ export default function BrandPage() {
           본사에서 받은 <b className="text-ink">매장 코드</b>를 입력하면<br />
           우리 매장 전용 음악과 사이니지가 자동으로 재생돼요.
         </p>
+        <p className="text-xs text-ink-dim">이 브라우저에서는 다음부터 매장 코드 없이 자동으로 연결됩니다.</p>
       </div>
+
+      {notice && (
+        <p className="w-full rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-medium text-amber-600 dark:text-amber-300">{notice}</p>
+      )}
 
       <form onSubmit={handleSubmit} className="w-full space-y-4">
         <div className="space-y-2">

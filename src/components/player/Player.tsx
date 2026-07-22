@@ -282,12 +282,14 @@ export default function Player() {
     duration,
     shuffleOrder,
     pendingSeekSec,
+    liveSeek,
     play,
     pause,
     toggle,
     next,
     prev,
     jumpTo,
+    consumeLiveSeek,
     setShuffle,
     setRepeat,
     setVolume,
@@ -477,6 +479,28 @@ export default function Player() {
     // activeRef 는 ref 객체 (안정) — deps 에 포함하면 끝없는 재등록
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, toggle, prev, next, setCurrentTime]);
+
+  // BRAND-PLAYER-UX-5 — live seek 적용(Audio Element Owner 전용 경로).
+  //   · UI 는 store.seekTo(sec) 만 호출 → 여기서만 실제 audio.currentTime 변경.
+  //   · Track Identity 검증(곡 변경 race 방지) + crossfade 중 skip + duration clamp.
+  //   · Analytics/Heartbeat: 별도 이벤트 없이 currentTime 동기화만(heartbeat 는 currentTime 참조).
+  useEffect(() => {
+    if (!liveSeek) return;
+    const apply = () => {
+      const audio = activeRef();
+      const st = usePlayerStore.getState();
+      const curId = st.queue[st.index]?.id;
+      const d = audio ? audio.duration : NaN;
+      if (audio && curId === liveSeek.trackId && !crossfading && Number.isFinite(d) && d > 0) {
+        const target = Math.min(Math.max(liveSeek.sec, 0), Math.max(0, d - 0.1));
+        try { audio.currentTime = target; setCurrentTime(target); } catch { /* iOS 가끔 거부 */ }
+      }
+    };
+    apply();
+    consumeLiveSeek();
+    // activeRef 는 안정 ref. crossfading/liveSeek 변경 시에만 재실행.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSeek, crossfading, consumeLiveSeek, setCurrentTime]);
 
   // playbackState 동기화 — 잠금화면 play/pause 아이콘
   useEffect(() => {
