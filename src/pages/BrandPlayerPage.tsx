@@ -3,7 +3,7 @@
 // 이미지 사이니지는 BrandSignage 가 독립 DOM 으로 처리 → audio remount 없음.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -13,9 +13,11 @@ import { getBrandPlayerConfig } from '@/lib/api/brandPlayerApi';
 import { getBrandToken, clearBrandToken } from '@/lib/brandSession';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { useBrandPlayerHeartbeat } from '@/hooks/useBrandPlayerHeartbeat';
-import BrandSignage from '@/components/brand/BrandSignage';
+import BrandVisualStage from '@/components/brand/BrandVisualStage';
+import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
+import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
 import type { PlaylistRow } from '@/types/db';
 
@@ -39,6 +41,9 @@ export default function BrandPlayerPage() {
   const setRepeat = usePlayerStore((s) => s.setRepeat);
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
+  // BRAND-PLAYER-UX-4 — 브랜드/서비스 로고(사이니지 미디어 없을 때 Priority 2). 기존 필드 재사용.
+  const brandLogoUrl = useBrandStore((s) => s.logo_url);
+  const loadBrandSettings = useBrandStore((s) => s.load);
 
   const { online, wakeLockSupported, wakeLockActive } = usePlaybackHealthStore();
 
@@ -100,6 +105,9 @@ export default function BrandPlayerPage() {
     setBusinessMode(true);
     enableForBusinessMode();
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 브랜드/서비스 로고 로드(멱등). AppShell 밖 kiosk 라우트에서도 로고 확보.
+  useEffect(() => { void loadBrandSettings(); }, [loadBrandSettings]);
 
   // config 로드 + (최초 1회) 큐 세팅
   const loadConfig = useCallback(async (opts?: { requeueIfEmpty?: boolean }) => {
@@ -169,6 +177,9 @@ export default function BrandPlayerPage() {
 
   const current = queue[index];
   const hasQueue = queue.length > 0;
+  // BRAND-PLAYER-UX-4 — 자켓 표시(Priority 3)용 현재/다음 자켓. 다음은 preload 힌트(선형 근사).
+  const artworkUrl = current?.cover_url ?? null;
+  const nextArtworkUrl = queue[index + 1]?.cover_url ?? queue[0]?.cover_url ?? null;
   // 사이니지 설정(전환효과/시간 + presentation 표시옵션). 레거시/null 은 default(fade/500/전부 off)로 정규화.
   const signage = normalizeSignageSettings(config?.signage);
 
@@ -222,9 +233,12 @@ export default function BrandPlayerPage() {
         ref={presentationRef}
         className={`relative overflow-hidden bg-black ${presentation && fallback ? 'fixed inset-0 z-[100]' : 'flex-1'}`}
       >
-        <BrandSignage
-          items={config?.media ?? []}
+        <BrandVisualStage
+          media={config?.media ?? []}
           brandName={config?.brand.name ?? '브랜드'}
+          logoUrl={brandLogoUrl}
+          artworkUrl={artworkUrl}
+          nextArtworkUrl={nextArtworkUrl}
           className="absolute inset-0 h-full w-full"
           chromeHidden={presentation}
           transition={{ effect: signage.transition_effect, durationMs: signage.transition_duration_ms }}
@@ -238,16 +252,9 @@ export default function BrandPlayerPage() {
             nowPlaying={current ? { title: current.title, artist: current.artist } : null}
           />
         )}
-        {/* presentation 종료 affordance — 평소 투명, hover/focus/tap 시 노출 (chrome 방해 최소화) */}
-        {presentation && (
-          <button
-            onClick={exitPresentation}
-            aria-label="전체화면 종료"
-            className="absolute right-4 top-4 z-[110] inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white opacity-0 backdrop-blur transition-opacity hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
-          >
-            <Minimize2 size={14} /> 전체화면 종료 (ESC)
-          </button>
-        )}
+        {/* BRAND-PLAYER-UX-4 — 전체화면 하단 Control Bar + Queue Viewer.
+            기존 Player command(play/pause/next/prev/jumpTo)만 사용 → audio/queue/scheduler 불변. */}
+        <BrandFullscreenControls active={presentation} onExit={exitPresentation} />
       </div>
 
       {/* 하단 음악 상태 + 컨트롤 (작게) — presentation 모드에서 숨김 */}

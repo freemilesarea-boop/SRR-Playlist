@@ -12,7 +12,6 @@
 // [crossfade] 이전 미디어를 아래 레이어로 잠시 유지 + 새 미디어를 위에서 opacity 0→1 → 검은 깜빡임 없음.
 // [DOM 상한] 화면 mount 미디어 = 위 1 + 아래 0~1 + 미리로드 1~2 = 최대 ~4. 100개여도 전부 렌더 안 함.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImageOff, Sparkles } from 'lucide-react';
 import { resolveSlideDurationMs, nextSlideIndex, normalizeSlideIndex, shouldRunSlideshow } from '@/lib/brandSlideshow';
 import { slidePreloadIndexes, slideProgressMode, DEFAULT_TRANSITION_MS } from '@/lib/brandSignageSettings';
 import { isVideoAsset } from '@/lib/brandMediaType';
@@ -34,6 +33,11 @@ interface Props {
   chromeHidden?: boolean;
   transition?: { effect: SignageTransitionEffect; durationMs: number };
   showSlideDots?: boolean;
+  /**
+   * BRAND-PLAYER-UX-4 — 런타임에 표시 가능한(로드 실패 제외) 미디어 수를 부모에 보고.
+   * 부모(BrandVisualStage)가 이 값이 0 이 되면 로고/자켓 우선순위로 전환한다.
+   */
+  onUsableCountChange?: (count: number) => void;
 }
 
 function usePrefersReducedMotion(): boolean {
@@ -51,6 +55,7 @@ function usePrefersReducedMotion(): boolean {
 
 export default function BrandSignage({
   items, brandName, className, chromeHidden = false, transition, showSlideDots = false,
+  onUsableCountChange,
 }: Props) {
   const [idx, setIdx] = useState(0);
   // 같은 인덱스로 재진입(단일 video 반복)해도 remount 되도록 하는 카운터
@@ -100,6 +105,11 @@ export default function BrandSignage({
 
   useEffect(() => () => { if (fadeClearRef.current) window.clearTimeout(fadeClearRef.current); }, []);
 
+  // BRAND-PLAYER-UX-4 — 표시 가능한 미디어 수 보고(로드 실패 반영). 부모가 우선순위 재평가.
+  useEffect(() => {
+    onUsableCountChange?.(count);
+  }, [count, onUsableCountChange]);
+
   // 유지 타이머: image 일 때만. video 는 onEnded 가 전환을 담당(길이를 자르지 않음).
   // 이미지 0·1장이면 타이머 없음. 단일 타이머.
   useEffect(() => {
@@ -119,26 +129,9 @@ export default function BrandSignage({
     setCycle((c) => c + 1);
   }, []);
 
-  // fallback: 사용할 미디어 없음
-  if (count === 0 || !cur) {
-    return (
-      <div className={`flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-900 to-black text-white/80 ${className ?? ''}`}>
-        {items.length === 0 ? (
-          <>
-            <Sparkles size={48} className="text-accent" />
-            <p className="text-2xl font-extrabold tracking-tight">{brandName}</p>
-            <p className="text-sm text-white/50">브랜드 사이니지 미디어가 아직 등록되지 않았어요.</p>
-          </>
-        ) : (
-          <>
-            <ImageOff size={44} className="text-white/40" />
-            <p className="text-lg font-bold">미디어를 불러올 수 없어요</p>
-            <p className="text-sm text-white/50">{brandName}</p>
-          </>
-        )}
-      </div>
-    );
-  }
+  // BRAND-PLAYER-UX-4 — 표시 가능한 미디어가 없으면 안내 문구 대신 아무것도 렌더하지 않는다.
+  // 상위(BrandVisualStage)가 이 경우 로고 → 자켓 → 기본 화면 우선순위로 전환한다.
+  if (count === 0 || !cur) return null;
 
   const preloadIdx = slidePreloadIndexes(safeIdx, count, count > 2);
   const preloadItems = preloadIdx.map((i) => usable[i]).filter(Boolean) as SignageItem[];
