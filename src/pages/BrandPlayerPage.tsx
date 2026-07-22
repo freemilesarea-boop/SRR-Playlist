@@ -3,13 +3,13 @@
 // 이미지 사이니지는 BrandSignage 가 독립 DOM 으로 처리 → audio remount 없음.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2, LogOut, Repeat as SwitchIcon } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
-import { getBrandPlayerConfig } from '@/lib/api/brandPlayerApi';
+import { getBrandPlayerConfig, verifyBrandDeviceBinding, revokeBrandDeviceByToken } from '@/lib/api/brandPlayerApi';
 import { getBrandToken, clearBrandToken } from '@/lib/brandSession';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { useBrandPlayerHeartbeat } from '@/hooks/useBrandPlayerHeartbeat';
@@ -169,6 +169,39 @@ export default function BrandPlayerPage() {
     return () => window.removeEventListener('online', onOnline);
   }, [loadConfig]);
 
+  // BRAND-DEVICE-BINDING-1: 진입 시 Device Binding 서버 재검증(자동 진입 게이트).
+  // 저장값만으로 승인하지 않는다. 소유자/미폐기/미만료/활성 브랜드가 아니면 로컬 토큰 제거 후 코드 화면.
+  // 네트워크 오류는 이미 재생 중인 세션을 강제 종료하지 않는다(기존 offline 정책) — config 로드가 최종 게이트.
+  useEffect(() => {
+    if (!brandId || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await verifyBrandDeviceBinding(brandId, token);
+        if (cancelled || v.ok) return;
+        clearBrandToken(brandId);
+        navigate('/brand', { replace: true, state: { fromPlayerReject: true, reason: v.reason } });
+      } catch { /* 일시 네트워크 오류 → 무시(무한 로딩/강제 종료 금지) */ }
+    })();
+    return () => { cancelled = true; };
+  }, [brandId, token, navigate]);
+
+  // 이 기기 연결 해제 / 다른 매장 연결 — 공식 Player 정지 경로 사용(audio/queue 엔진 미변경).
+  const disconnectDevice = useCallback(async () => {
+    if (!brandId || !token) return;
+    try { await revokeBrandDeviceByToken(brandId, token); } catch { /* 서버 실패해도 로컬 정리 진행 */ }
+    clearBrandToken(brandId);
+    pause();
+    navigate('/brand', { replace: true, state: { deviceRevoked: true } });
+  }, [brandId, token, pause, navigate]);
+
+  const switchStore = useCallback(() => {
+    if (!brandId) return;
+    clearBrandToken(brandId);
+    pause();
+    navigate('/brand', { replace: true, state: { switchStore: true } });
+  }, [brandId, pause, navigate]);
+
   // heartbeat
   useBrandPlayerHeartbeat({ brandId: brandId ?? null, sessionToken: token, enabled: !!brandId && !!token });
 
@@ -236,9 +269,17 @@ export default function BrandPlayerPage() {
             <ShieldCheck size={12} /> 24시간 재생 준비됨
           </span>
         </div>
-        <button onClick={() => navigate('/brand')} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
-          <X size={14} /> 나가기
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={switchStore} title="다른 매장 코드 입력" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+            <SwitchIcon size={13} /> 다른 매장
+          </button>
+          <button onClick={() => void disconnectDevice()} title="이 기기의 매장 연결 해제" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+            <LogOut size={13} /> 연결 해제
+          </button>
+          <button onClick={() => navigate('/brand')} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+            <X size={14} /> 나가기
+          </button>
+        </div>
       </header>
 
       {/* 사이니지 (화면 대부분) — presentation 진입 시 이 컨테이너만 Fullscreen 대상.
