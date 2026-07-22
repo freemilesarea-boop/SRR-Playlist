@@ -1,0 +1,255 @@
+{
+  "audit": "RPC-MIGRATION-RECOVERY-1",
+  "note": "source captured via pg_get_functiondef (not stored here); metadata only",
+  "count": 31,
+  "rpcs": [
+    {
+      "rpc": "get_site_settings",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "list_active_site_notices",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "admin_list_site_notices",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "admin_upsert_site_notice",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "admin_toggle_site_notice",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "admin_delete_site_notice",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "admin_update_site_settings",
+      "cluster": "A",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "RECOVERED_APPLIED_VERIFIED_TEST"
+    },
+    {
+      "rpc": "create_support_inquiry",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_my_inquiries",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "get_my_inquiry_detail",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_list_support_inquiries",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_get_support_inquiry_detail",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_support_inquiry_summary",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_update_inquiry",
+      "cluster": "B",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "ai_predictions_summary",
+      "cluster": "C",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_pending_ai_predictions",
+      "cluster": "C",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "apply_track_ai_predictions",
+      "cluster": "C",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "bulk_apply_high_confidence_ai_predictions",
+      "cluster": "C",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "get_admin_track_detail",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_admin_tracks_with_ai",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "ai_correction_stats",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_severe_metadata_mismatches",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_update_track_metadata_full",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_hard_delete_track",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "admin_purge_all_tracks",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "bulk_delete_severe_mismatches",
+      "cluster": "D",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_clap_recommendations",
+      "cluster": "E",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_clap_auto_approved",
+      "cluster": "E",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "list_clap_curation_playlists",
+      "cluster": "E",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": true,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "set_playlist_auto_attach",
+      "cluster": "E",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    },
+    {
+      "rpc": "rollback_clap_auto_attach",
+      "cluster": "E",
+      "security_definer": true,
+      "search_path": "public",
+      "security_fix": false,
+      "status": "DEFINITIONS_CAPTURED_PREPARED"
+    }
+  ]
+}

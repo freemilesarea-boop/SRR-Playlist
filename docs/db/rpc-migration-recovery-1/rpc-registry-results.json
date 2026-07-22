@@ -1,0 +1,21 @@
+{
+  "before": {
+    "undefined": 31,
+    "allowlisted": 31
+  },
+  "after": {
+    "undefined": 24,
+    "allowlisted": 24,
+    "local_defs_added": 7
+  },
+  "lint_rpc": "PASS (0 new undefined)",
+  "removed_from_allowlist": [
+    "get_site_settings",
+    "list_active_site_notices",
+    "admin_list_site_notices",
+    "admin_upsert_site_notice",
+    "admin_toggle_site_notice",
+    "admin_delete_site_notice",
+    "admin_update_site_settings"
+  ]
+}

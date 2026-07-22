@@ -1,0 +1,19 @@
+{
+  "project": "hao…qorr",
+  "applied": [
+    "0457"
+  ],
+  "cluster_A": {
+    "tables_created": [
+      "site_notices",
+      "site_settings"
+    ],
+    "rls": true,
+    "functions_created": 7,
+    "signatures_match_prod": true,
+    "security_fix_verified": true,
+    "public_reader_callable": true,
+    "admin_guard_rejects_nonadmin": true
+  },
+  "clusters_BCDE": "not applied (definitions captured)"
+}

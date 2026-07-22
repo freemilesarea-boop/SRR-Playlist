@@ -1,0 +1,13 @@
+{
+  "tables_recovered_applied_verified_test": 2,
+  "tables_prepared": 3,
+  "rpc_recovered_applied_verified_test": 7,
+  "rpc_prepared": 24,
+  "security_corrected_applied": 1,
+  "security_corrected_planned": 9,
+  "production_changes": 0,
+  "migrations_authored": 1,
+  "migrations_applied_test": 1,
+  "verdict": "TEST_SCHEMA_ONLY (Cluster A complete+verified; B-E prepared)",
+  "full_set_complete": false
+}

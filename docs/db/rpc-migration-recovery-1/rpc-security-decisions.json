@@ -1,0 +1,21 @@
+{
+  "guard_pattern": "exists (select 1 from public.users u where u.id=auth.uid() and u.role='admin')  -- repo canonical",
+  "all_keep_security_definer": true,
+  "all_search_path_public": true,
+  "over_exposed_readers_to_fix": [
+    "admin_list_site_notices",
+    "ai_correction_stats",
+    "ai_predictions_summary",
+    "get_admin_track_detail",
+    "list_admin_tracks_with_ai",
+    "list_clap_auto_approved",
+    "list_clap_curation_playlists",
+    "list_clap_recommendations",
+    "list_pending_ai_predictions",
+    "list_severe_metadata_mismatches"
+  ],
+  "fixed_this_phase": [
+    "admin_list_site_notices"
+  ],
+  "grant_policy": "revoke all from public; public readers -> anon,authenticated; admin/user -> authenticated (+ internal guard); service_role bypasses grants"
+}

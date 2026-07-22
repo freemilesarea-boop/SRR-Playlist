@@ -1,0 +1,8 @@
+{
+  "cluster_A": {
+    "admin_list_site_notices": "guard raises unauthorized for non-admin (PASS)",
+    "list_active_site_notices": "callable as public/anon (PASS)",
+    "signatures": "match Production identity args (PASS)"
+  },
+  "method": "executed on Test only (synthetic; no Production execution)"
+}

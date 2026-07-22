@@ -1,0 +1,80 @@
+{
+  "audit": "RPC-MIGRATION-RECOVERY-1",
+  "source": "read-only pg_catalog metadata (no rows read)",
+  "tables": {
+    "site_settings": {
+      "cols": 7,
+      "pk": "id (singleton check id=1)",
+      "fk": [
+        "updated_by->users"
+      ],
+      "rls": true,
+      "prod_only": true,
+      "test_after": "CREATED"
+    },
+    "site_notices": {
+      "cols": 13,
+      "pk": "id",
+      "fk": [
+        "created_by->users"
+      ],
+      "checks": [
+        "audience",
+        "display_location"
+      ],
+      "idx": [
+        "site_notices_active_idx (partial)"
+      ],
+      "rls": true,
+      "prod_only": true,
+      "test_after": "CREATED"
+    },
+    "support_inquiries": {
+      "cols": 25,
+      "pk": "id",
+      "fk": [
+        "user_id",
+        "business_id",
+        "artist_id",
+        "assigned_admin_id -> ... ON DELETE SET NULL"
+      ],
+      "checks": [
+        "inquiry_type",
+        "status",
+        "priority",
+        "title",
+        "body"
+      ],
+      "idx": 4,
+      "rls": true,
+      "prod_only": true,
+      "test_after": "PENDING"
+    },
+    "support_inquiry_attachments": {
+      "cols": 7,
+      "pk": "id",
+      "fk": [
+        "inquiry_id->support_inquiries ON DELETE CASCADE"
+      ],
+      "idx": 1,
+      "rls": true,
+      "prod_only": true,
+      "test_after": "PENDING"
+    },
+    "track_ai_predictions": {
+      "cols": 22,
+      "pk": "id",
+      "fk": [
+        "track_id->tracks CASCADE",
+        "applied_by->users"
+      ],
+      "unique": [
+        "(track_id,model_version)"
+      ],
+      "idx": "7 incl GIN",
+      "rls": true,
+      "prod_only": true,
+      "test_after": "PENDING"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "principle": "Production already HAS these functions/tables. Apply plan = align repo history + tighten over-exposed grants ONLY; do not recreate existing objects blindly.",
+  "per_migration": "Preflight: check object existence; tables use CREATE TABLE IF NOT EXISTS (already present in prod -> skip); functions use CREATE OR REPLACE (safe); apply the 10 security-fix function replacements + grant revoke/regrant.",
+  "production_security_fix": "The 10 over-exposed readers must be CREATE OR REPLACE-d in Production with the admin guard (this is the real prod security remediation).",
+  "cron_dependency": "set CRON_SECRET before/independent (PLATFORM-HOTFIX-1).",
+  "rollback": "CREATE OR REPLACE back to prior definition (captured hashes); tables not dropped in prod.",
+  "verification": "re-run read-only metadata query; confirm guard present + grants tightened."
+}
