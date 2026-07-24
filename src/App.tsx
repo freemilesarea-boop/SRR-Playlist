@@ -53,6 +53,8 @@ const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/Salesperson
 const FranchiseHqDashboardPage = lazyWithRetry(() => import('@/pages/FranchiseHqDashboardPage'));
 const EnterpriseHqMePage = lazyWithRetry(() => import('@/pages/EnterpriseHqMePage'));
 const EnterpriseHqOpsPage = lazyWithRetry(() => import('@/pages/EnterpriseHqOpsPage'));
+const EnterpriseOpsStoresPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoresPage'));
+const EnterpriseOpsStoreDetailPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoreDetailPage'));
 const EnterpriseHqIntelPage = lazyWithRetry(() => import('@/pages/EnterpriseHqIntelPage'));
 const EnterpriseHqNotificationsPage = lazyWithRetry(() => import('@/pages/EnterpriseHqNotificationsPage'));
 const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylistsPage'));
@@ -266,6 +268,8 @@ export default function App() {
                 <Route path="/enterprise/hq" element={<RequireAuth><FranchiseHqDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/me" element={<RequireAuth><EnterpriseHqMePage /></RequireAuth>} />
                 <Route path="/enterprise/ops" element={<RequireAuth><EnterpriseHqOpsPage /></RequireAuth>} />
+                <Route path="/enterprise/operations/stores" element={<RequireAuth><EnterpriseOpsStoresPage /></RequireAuth>} />
+                <Route path="/enterprise/operations/stores/:storeId" element={<RequireAuth><EnterpriseOpsStoreDetailPage /></RequireAuth>} />
                 <Route path="/enterprise/intel" element={<RequireAuth><EnterpriseHqIntelPage /></RequireAuth>} />
                 <Route path="/enterprise/notifications" element={<RequireAuth><EnterpriseHqNotificationsPage /></RequireAuth>} />
                 <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
