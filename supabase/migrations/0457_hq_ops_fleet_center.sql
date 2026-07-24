@@ -312,19 +312,21 @@ begin
         or (p_status = 'contract_expiring' and v_contract_expiring)
       )
     order by
-      case when p_sort = 'name' then store_name end asc nulls last,
+      -- store_name 은 SELECT 별칭이므로 ORDER BY CASE 식 내부에서는 입력컬럼으로 해석된다.
+      -- 별칭 대신 원본 입력컬럼 식을 직접 사용해야 함 (PostgreSQL alias-in-expression 규칙).
+      case when p_sort = 'name' then coalesce(s.fs_store_name, u.full_name, u.nickname, '(매장명 없음)') end asc nulls last,
       case when p_sort = 'status' then
         case
-          when has_playback_error then 0
-          when is_offline_24h then 1
-          when is_idle_1h_to_24h then 2
-          when has_policy_outdated then 3
-          when is_idle_5m_to_1h then 4
-          when is_online then 5
+          when sms.has_playback_error then 0
+          when sms.is_offline_24h then 1
+          when sms.is_idle_1h_to_24h then 2
+          when sms.has_policy_outdated then 3
+          when sms.is_idle_5m_to_1h then 4
+          when sms.is_online then 5
           else 6
         end
       end asc nulls last,
-      coalesce(last_heartbeat_at, '1970-01-01'::timestamptz) desc
+      coalesce(sms.last_heartbeat_at, '1970-01-01'::timestamptz) desc
     limit v_limit offset v_offset
   ),
   paged as (
