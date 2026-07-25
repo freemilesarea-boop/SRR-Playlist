@@ -23,8 +23,10 @@ import {
   adminListBrandRegistry, adminCreateBrandRegistry, adminUpdateBrandRegistry,
   adminToggleBrandRegistryActive, adminGenerateBrandCode,
   adminApproveBrandOnboarding, adminRejectBrandOnboarding,
+  adminUpdateBrandRegistryPricing, adminCountBrandActiveContracts,
   type BrandRegistryRow, type BrandSettlementMethod,
 } from '@/lib/api/enterpriseBrandRegistryApi';
+import { planBrandPricingSave, type BrandPriceApplyScope } from '@/lib/brandPricing';
 import {
   adminListEnterpriseAccounts, type EnterpriseAccount,
 } from '@/lib/api/enterpriseAccountsApi';
@@ -377,6 +379,15 @@ function BrandRegistryFormModal({
   const [genning, setGenning] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Store-price apply scope (edit only). Default MUST be registry-only (never auto-touch existing contracts).
+  const [applyScope, setApplyScope] = useState<BrandPriceApplyScope>('registry_only');
+  const originalStorePrice = row?.default_store_price ?? null;
+  const priceChanged = mode === 'edit' && storePrice !== originalStorePrice;
+  // Confirm modal state for the "apply to active contracts" path.
+  const [confirmState, setConfirmState] = useState<
+    { count: number | null; loading: boolean; error: string | null } | null
+  >(null);
+
   const genCode = useCallback(async () => {
     if (!brandName.trim()) { toast.error('브랜드명 필요'); return; }
     setGenning(true);
@@ -388,11 +399,8 @@ function BrandRegistryFormModal({
     finally { setGenning(false); }
   }, [brandName]);
 
-  const submit = useCallback(async () => {
-    if (!brandName.trim() || !businessName.trim() || !managerName.trim() || !managerEmail.trim()) {
-      toast.error('브랜드명 / 사업자명 / 담당자명 / 이메일 은 필수');
-      return;
-    }
+  // Actual persistence. `applyToActive` is passed explicitly (true only after confirm-modal approval).
+  const doSave = useCallback(async (applyToActive: boolean) => {
     setBusy(true);
     try {
       if (mode === 'create') {
@@ -413,6 +421,9 @@ function BrandRegistryFormModal({
         await audit('brand.create', 'success', 'brand created', { brand_id: r.id, brand_code: r.brand_code });
         toast.success(`브랜드 등록 완료 · 코드 ${r.brand_code}`);
       } else if (row) {
+        const plan = planBrandPricingSave({ mode: 'edit', originalPrice: originalStorePrice, newPrice: storePrice, scope: applyScope });
+        // 1) Non-pricing fields via the existing RPC. Keep price at the ORIGINAL value here so this
+        //    call never changes it — the pricing RPC owns any price change (atomic + audited).
         await adminUpdateBrandRegistry({
           id: row.id,
           brandName, businessName,
@@ -421,15 +432,36 @@ function BrandRegistryFormModal({
           managerName, managerEmail, managerPhone: managerPhone || null,
           businessAddress: businessAddress || null,
           defaultMonthlyFee: monthlyFee,
-          defaultStorePrice: storePrice,
+          defaultStorePrice: originalStorePrice ?? storePrice,
           defaultCommissionRate: commissionRate,
           defaultMinimumPayout: minPayout,
           defaultSettlementMethod: settlementMethod,
           defaultAutoRenew: autoRenew,
           memo: memo || null,
         });
-        await audit('brand.update', 'success', 'brand updated', { brand_id: row.id });
-        toast.success('브랜드 수정 완료');
+        // 2) Pricing (registry default + optional active-contract propagation) — only when price changed.
+        let priceMsg = '';
+        if (plan.callPricingRpc) {
+          try {
+            const pr = await adminUpdateBrandRegistryPricing({
+              brandRegistryId: row.id,
+              defaultStorePrice: storePrice,
+              applyToActiveContracts: applyToActive,
+            });
+            priceMsg = applyToActive
+              ? ` · 활성 계약 ${pr.updated_contract_count}건 반영(다음 인보이스부터)`
+              : ' · 신규 계약 기본값만 변경';
+          } catch (pe) {
+            const pmsg = (pe as Error).message;
+            await audit('brand.update', 'failed', 'pricing update failed', { brand_id: row.id }, pmsg);
+            toast.error(`기본 정보는 저장됐으나 가격 반영 실패(부분 성공): ${pmsg}`);
+            return; // partial success — keep modal open, do not call onSaved()
+          }
+        }
+        await audit('brand.update', 'success', 'brand updated', {
+          brand_id: row.id, price_changed: plan.priceChanged, applied_to_active: applyToActive,
+        });
+        toast.success(`브랜드 수정 완료${priceMsg}`);
       }
       onSaved();
     } catch (e) {
@@ -440,10 +472,32 @@ function BrandRegistryFormModal({
   }, [
     mode, row, brandName, brandCode, businessName, businessRegNo, representative,
     managerName, managerEmail, managerPhone, businessAddress,
-    monthlyFee, storePrice, commissionRate, minPayout, settlementMethod, autoRenew, memo, onSaved,
+    monthlyFee, storePrice, commissionRate, minPayout, settlementMethod, autoRenew, memo,
+    originalStorePrice, applyScope, onSaved,
   ]);
 
+  // Save button: validate, then gate the risky "apply to active contracts" path behind a confirm modal.
+  const onSubmit = useCallback(async () => {
+    if (!brandName.trim() || !businessName.trim() || !managerName.trim() || !managerEmail.trim()) {
+      toast.error('브랜드명 / 사업자명 / 담당자명 / 이메일 은 필수');
+      return;
+    }
+    const plan = planBrandPricingSave({ mode, originalPrice: originalStorePrice, newPrice: storePrice, scope: applyScope });
+    if (plan.showConfirmModal && row) {
+      setConfirmState({ count: null, loading: true, error: null });
+      try {
+        const c = await adminCountBrandActiveContracts(row.id);
+        setConfirmState({ count: c.active_contract_count, loading: false, error: null });
+      } catch (e) {
+        setConfirmState({ count: null, loading: false, error: (e as Error).message });
+      }
+      return;
+    }
+    await doSave(false);
+  }, [mode, brandName, businessName, managerName, managerEmail, originalStorePrice, storePrice, applyScope, row, doSave]);
+
   return (
+    <>
     <AdminModal
       open size="xl" onClose={onClose}
       title={<span className="flex items-center gap-2"><Building2 size={14} /> {mode === 'create' ? '브랜드 등록' : `수정 — ${row?.brand_name}`}</span>}
@@ -451,7 +505,7 @@ function BrandRegistryFormModal({
       footer={
         <>
           <AdminButton size="lg" variant="subtle" tone="neutral" onClick={onClose} disabled={busy}>취소</AdminButton>
-          <AdminButton size="lg" tone="primary" onClick={submit} disabled={busy}>
+          <AdminButton size="lg" tone="primary" onClick={onSubmit} disabled={busy}>
             {busy ? <><RefreshCw size={12} className="animate-spin" /> 저장 중…</> : '저장'}
           </AdminButton>
         </>
@@ -528,7 +582,8 @@ function BrandRegistryFormModal({
               <input type="number" min={0} className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
                 value={monthlyFee} onChange={(e) => setMonthlyFee(Number(e.target.value) || 0)} />
             </label>
-            <label className="text-[11px] text-ink-mute">매장 단가 (₩)
+            <label className="text-[11px] text-ink-mute">
+              {mode === 'create' ? '신규 계약 기본 매장 단가 (₩)' : '매장당 월 청구 단가 (₩)'}
               <input type="number" min={0} className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
                 value={storePrice} onChange={(e) => setStorePrice(Number(e.target.value) || 0)} />
             </label>
@@ -555,6 +610,38 @@ function BrandRegistryFormModal({
           </div>
         </div>
 
+        {/* 매장 단가 적용 범위 — 수정 모드 + 단가 실제 변경 시에만 의미 */}
+        {mode === 'edit' && (
+          <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/15">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-amber-200">매장 단가 적용 범위</p>
+            <p className="mt-1 text-[10px] text-ink-mute">
+              브랜드 기본 단가는 <b>신규 계약</b>에만 적용됩니다. 기존 계약 청구 단가는{' '}
+              <code>enterprise_contracts.monthly_store_price</code> 가 원본입니다.
+            </p>
+            <div className="mt-2 space-y-2">
+              <label className={`flex items-start gap-2 rounded-lg p-2 ring-1 ${applyScope === 'registry_only' ? 'ring-primary/40 bg-primary/5' : 'ring-line/15'}`}>
+                <input type="radio" name="applyScope" className="mt-0.5"
+                  checked={applyScope === 'registry_only'} onChange={() => setApplyScope('registry_only')} disabled={!priceChanged} />
+                <span className="text-[11px] text-ink">
+                  <b>신규 계약 기본값만 변경</b>
+                  <span className="block text-[10px] text-ink-mute">앞으로 생성되는 계약에만 적용됩니다. 기존 계약과 이미 발행된 인보이스는 변경되지 않습니다.</span>
+                </span>
+              </label>
+              <label className={`flex items-start gap-2 rounded-lg p-2 ring-1 ${applyScope === 'active_contracts' ? 'ring-amber-400/50 bg-amber-400/10' : 'ring-line/15'}`}>
+                <input type="radio" name="applyScope" className="mt-0.5"
+                  checked={applyScope === 'active_contracts'} onChange={() => setApplyScope('active_contracts')} disabled={!priceChanged} />
+                <span className="text-[11px] text-ink">
+                  <b>기존 활성 계약에도 다음 청구부터 적용</b>
+                  <span className="block text-[10px] text-ink-mute">현재 활성 계약의 매장 단가를 변경합니다. 이미 발행된 인보이스는 변경되지 않으며 다음 인보이스부터 적용됩니다.</span>
+                </span>
+              </label>
+              {!priceChanged && (
+                <p className="text-[10px] text-ink-mute">매장 단가를 변경해야 적용 범위 선택이 활성화됩니다.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         <label className="text-[11px] text-ink-mute block">
           메모
           <textarea rows={2} className="mt-1 w-full rounded bg-bg px-2 py-1.5 text-[12px] text-ink ring-1 ring-line/20"
@@ -562,5 +649,47 @@ function BrandRegistryFormModal({
         </label>
       </div>
     </AdminModal>
+
+    {confirmState && row && (
+      <AdminModal
+        open size="md" onClose={() => setConfirmState(null)}
+        title={<span className="flex items-center gap-2"><Handshake size={14} /> 매장 단가 변경 확인</span>}
+        headerExtra={<AdminBadge tone="warning" variant="subtle">활성 계약 반영</AdminBadge>}
+        footer={
+          <>
+            <AdminButton size="lg" variant="subtle" tone="neutral" onClick={() => setConfirmState(null)} disabled={busy}>취소</AdminButton>
+            <AdminButton size="lg" tone="primary" onClick={() => { setConfirmState(null); void doSave(true); }} disabled={busy || confirmState.loading}>
+              {busy ? <><RefreshCw size={12} className="animate-spin" /> 적용 중…</> : '변경 적용'}
+            </AdminButton>
+          </>
+        }
+      >
+        <div className="space-y-3 text-[12px] text-ink">
+          <p>
+            매장 단가를 <b>{fmtMoney(originalStorePrice)}</b> 에서 <b>{fmtMoney(storePrice)}</b> 로 변경합니다.
+          </p>
+          <div className="rounded-lg bg-bg-card p-3 ring-1 ring-line/15">
+            <p className="text-[11px] text-ink-mute">적용 범위 (활성 계약)</p>
+            <p className="mt-0.5 text-[13px] font-bold">
+              {confirmState.loading ? '조회 중…'
+                : confirmState.error ? '활성 계약 조회 필요'
+                : `활성 계약 ${confirmState.count ?? 0}건`}
+            </p>
+            {confirmState.error && <p className="mt-1 text-[10px] text-rose-400">{confirmState.error}</p>}
+            <p className="mt-2 text-[11px] text-ink-mute">반영 시점</p>
+            <p className="mt-0.5 text-[12px]">다음 인보이스 생성부터</p>
+          </div>
+          <div className="rounded-lg bg-bg-card p-3 ring-1 ring-line/15">
+            <p className="text-[11px] font-bold text-ink">변경되지 않는 항목</p>
+            <ul className="mt-1 list-disc pl-4 text-[11px] text-ink-mute">
+              <li>이미 발행된 인보이스</li>
+              <li>완료된 결제 · 과거 정산</li>
+              <li>PayApp 개인/비즈니스 구독 (무관)</li>
+            </ul>
+          </div>
+        </div>
+      </AdminModal>
+    )}
+    </>
   );
 }
