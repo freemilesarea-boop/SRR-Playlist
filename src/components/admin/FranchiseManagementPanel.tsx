@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, Plus, ArrowLeft, Settings, Store as StoreIcon, Activity,
   Wifi, WifiOff, Music, ChevronRight, X, Calendar, Send, Link as LinkIcon,
-  Building2,
+  Building2, Layers, Clock, Pause, Archive, RotateCcw, Globe,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
@@ -25,7 +25,6 @@ import {
   adminLinkStore,
   adminUnlinkStore,
   adminUpsertPolicy,
-  adminUpsertSlot,
   adminDeleteSlot,
   applyFranchisePolicy,
   getFranchiseDashboard,
@@ -34,6 +33,13 @@ import {
   listFranchiseStores,
   listFranchisePolicies,
   listPolicySlots,
+  adminUpsertFranchiseSlotV2,
+  adminListFranchisePlaylistSets,
+  adminUpsertFranchisePlaylistSet,
+  adminArchiveFranchisePlaylistSet,
+  adminRestoreFranchisePlaylistSet,
+  adminListStorePlaybackOverrides,
+  adminUpsertStorePlaybackOverride,
   type FranchiseListRow,
   type FranchiseDashboard,
   type FranchiseRegion,
@@ -41,6 +47,9 @@ import {
   type FranchiseMusicPolicy,
   type FranchiseMusicPolicySlot,
   type FranchiseSyncStatusRow,
+  type FranchisePlaylistSet,
+  type StorePlaybackOverrideRow,
+  type SlotType,
   type PolicyTargetType,
 } from '@/lib/api/franchiseApi';
 import { fetchPlaylists } from '@/lib/api';
@@ -53,9 +62,15 @@ import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 
 type View = 'list' | 'detail';
-type DetailTab = 'stores' | 'policies' | 'schedule' | 'sync';
+type DetailTab = 'stores' | 'policies' | 'sets' | 'overrides' | 'schedule' | 'sync';
 
 const DAY_KO = ['', '월', '화', '수', '목', '금', '토', '일'];
+
+// Common timezones for store playback overrides (0459). Kept short + KST-first.
+const TIMEZONE_OPTIONS = [
+  'Asia/Seoul', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Bangkok',
+  'Asia/Dubai', 'Europe/London', 'Europe/Paris', 'America/New_York', 'America/Los_Angeles',
+] as const;
 
 export interface FranchiseManagementPanelProps {
   /**
@@ -367,13 +382,15 @@ function FranchiseDetail({
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-full bg-bg-card p-1 text-xs">
-        {(['stores', 'policies', 'schedule', 'sync'] as const).map((t) => (
+        {(['stores', 'policies', 'sets', 'overrides', 'schedule', 'sync'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 rounded-full px-3 py-1.5 font-semibold transition ${
+            className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 font-semibold transition ${
               tab === t ? 'bg-accent text-black' : 'text-ink-mute hover:bg-bg-hover'
             }`}>
             {t === 'stores' && '매장'}
             {t === 'policies' && '배포 플레이리스트'}
+            {t === 'sets' && '플레이리스트 세트'}
+            {t === 'overrides' && '매장 재생설정'}
             {t === 'schedule' && '스케줄'}
             {t === 'sync' && '동기화 상태'}
           </button>
@@ -388,6 +405,8 @@ function FranchiseDetail({
           onPolicyCreatedReturn={onPolicyCreatedReturn}
         />
       )}
+      {tab === 'sets' && <PlaylistSetsTab franchiseId={franchiseId} />}
+      {tab === 'overrides' && <StoreOverridesTab franchiseId={franchiseId} />}
       {tab === 'schedule' && <ScheduleTab dashboard={dashboard} />}
       {tab === 'sync' && <SyncStatusTab franchiseId={franchiseId} />}
     </div>
@@ -633,6 +652,324 @@ function PoliciesTab({
         />
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// Tab: 플레이리스트 세트 (0459/0460 — 큐레이션 세트 CRUD)
+// =============================================================================
+
+function PlaylistSetStatusBadge({ status }: { status: FranchisePlaylistSet['status'] }) {
+  const map: Record<FranchisePlaylistSet['status'], string> = {
+    active:    'bg-emerald-500/25 text-emerald-300',
+    scheduled: 'bg-sky-500/25 text-sky-300',
+    inactive:  'bg-amber-500/25 text-amber-300',
+    expired:   'bg-ink/15 text-ink-mute',
+    deleted:   'bg-rose-500/25 text-rose-300',
+  };
+  const ko: Record<FranchisePlaylistSet['status'], string> = {
+    active: '활성', scheduled: '예약', inactive: '비활성', expired: '만료', deleted: '보관됨',
+  };
+  return <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${map[status]}`}>{ko[status]}</span>;
+}
+
+function PlaylistSetsTab({ franchiseId }: { franchiseId: string }) {
+  const [rows, setRows] = useState<FranchisePlaylistSet[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [editing, setEditing] = useState<FranchisePlaylistSet | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRows(await adminListFranchisePlaylistSets(franchiseId, includeDeleted)); }
+    catch (e) { toast.error(`플레이리스트 세트 로딩 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, [franchiseId, includeDeleted]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bg-card p-3 text-xs">
+        <span>큐레이션 세트는 기존 플레이리스트를 회전 순서·유효기간과 함께 묶는 그룹입니다. 자동 스케줄 슬롯에 선택적으로 연결됩니다.</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-1 text-[10px] text-ink-mute">
+            <input type="checkbox" checked={includeDeleted} onChange={(e) => setIncludeDeleted(e.target.checked)} /> 보관됨 포함
+          </label>
+          <button onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 font-bold text-black hover:bg-accent/90">
+            <Layers size={11} /> 세트 추가
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl bg-bg-card">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+              <th className="px-3 py-2">세트명</th>
+              <th className="px-3 py-2">플레이리스트</th>
+              <th className="px-3 py-2 text-center">회전순서</th>
+              <th className="px-3 py-2">상태</th>
+              <th className="px-3 py-2 text-right">유효기간</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && rows.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-ink-dim">로딩 중…</td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-ink-dim">
+                등록된 세트가 없습니다. "세트 추가"로 시작하세요.
+              </td></tr>
+            )}
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-line/5">
+                <td className="px-3 py-2">
+                  <div className="font-semibold">{r.name}</div>
+                  {r.description && <div className="text-[10px] text-ink-dim">{r.description}</div>}
+                </td>
+                <td className="px-3 py-2 text-emerald-300">{r.playlist_title ?? r.playlist_id.slice(0, 8)}</td>
+                <td className="px-3 py-2 text-center tabular-nums">{r.rotation_order}</td>
+                <td className="px-3 py-2"><PlaylistSetStatusBadge status={r.status} /></td>
+                <td className="px-3 py-2 text-right text-[10px] text-ink-mute">
+                  {r.valid_from ? new Date(r.valid_from).toLocaleDateString('ko-KR') : '—'}
+                  {' ~ '}
+                  {r.valid_until ? new Date(r.valid_until).toLocaleDateString('ko-KR') : '무기한'}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <div className="inline-flex gap-1">
+                    {r.status === 'deleted' ? (
+                      <button onClick={async () => {
+                        try { await adminRestoreFranchisePlaylistSet(r.id); toast.success('복원됨'); void load(); }
+                        catch (e) { toast.error((e as Error).message); }
+                      }} className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                        <RotateCcw size={10} /> 복원
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={() => setEditing(r)}
+                          className="rounded bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">편집</button>
+                        <button onClick={async () => {
+                          if (!confirm(`"${r.name}" 세트를 보관하시겠습니까? (슬롯 연결은 해제됩니다)`)) return;
+                          try { await adminArchiveFranchisePlaylistSet(r.id); toast.success('보관됨'); void load(); }
+                          catch (e) { toast.error((e as Error).message); }
+                        }} className="inline-flex items-center gap-1 rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                          <Archive size={10} /> 보관
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {(showCreate || editing) && (
+        <PlaylistSetModal
+          franchiseId={franchiseId} set={editing}
+          onClose={() => { setShowCreate(false); setEditing(null); }}
+          onSaved={() => { setShowCreate(false); setEditing(null); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PlaylistSetModal({
+  franchiseId, set, onClose, onSaved,
+}: {
+  franchiseId: string; set: FranchisePlaylistSet | null;
+  onClose: () => void; onSaved: () => void;
+}) {
+  const isEdit = !!set;
+  const [name, setName] = useState(set?.name ?? '');
+  const [description, setDescription] = useState(set?.description ?? '');
+  const [playlistId, setPlaylistId] = useState(set?.playlist_id ?? '');
+  const [rotationOrder, setRotationOrder] = useState(set?.rotation_order ?? 0);
+  const [isActive, setIsActive] = useState(set?.is_active ?? true);
+  const [validFrom, setValidFrom] = useState(set?.valid_from?.slice(0, 10) ?? '');
+  const [validUntil, setValidUntil] = useState(set?.valid_until?.slice(0, 10) ?? '');
+  const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void fetchPlaylists().then(setPlaylists).catch((e) => toast.error((e as Error).message));
+  }, []);
+
+  const canSave = !!name.trim() && !!playlistId
+    && (!validFrom || !validUntil || validUntil >= validFrom);
+
+  return (
+    <ModalShell title={isEdit ? '세트 편집' : '새 플레이리스트 세트'} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="세트명"><input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="예: 봄 시즌 로테이션" /></Field>
+        <Field label="설명 (선택)"><textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input min-h-[50px]" /></Field>
+        <Field label="플레이리스트">
+          <select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)} className="input">
+            <option value="">플레이리스트 선택…</option>
+            {playlists.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+          </select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="회전 순서">
+            <input type="number" min={0} value={rotationOrder}
+              onChange={(e) => setRotationOrder(Math.max(0, Number(e.target.value) || 0))} className="input" />
+          </Field>
+          <Field label="활성">
+            <label className="flex h-full items-center gap-2 text-[12px]">
+              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> 활성 상태
+            </label>
+          </Field>
+          <Field label="유효 시작 (선택)"><input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} className="input" /></Field>
+          <Field label="유효 종료 (선택)"><input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} className="input" /></Field>
+        </div>
+        {validFrom && validUntil && validUntil < validFrom && (
+          <p className="text-[11px] text-rose-300">유효 종료일은 시작일 이후여야 합니다.</p>
+        )}
+        <button disabled={!canSave || saving} onClick={async () => {
+          setSaving(true);
+          try {
+            await adminUpsertFranchisePlaylistSet({
+              franchiseId, playlistId, name: name.trim(), description: description.trim() || null,
+              rotationOrder, isActive, validFrom: validFrom || null, validUntil: validUntil || null,
+              setId: set?.id ?? null,
+            });
+            toast.success(isEdit ? '세트 저장됨' : '세트 생성됨'); onSaved();
+          } catch (e) { toast.error((e as Error).message); }
+          finally { setSaving(false); }
+        }}
+          className="w-full rounded bg-accent px-3 py-2 font-bold text-black hover:bg-accent/90 disabled:opacity-50">
+          {saving ? '저장 중…' : '저장'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// =============================================================================
+// Tab: 매장 재생설정 (0459/0460 — per-store 타임존 + 본사 스케줄 준수 여부)
+// =============================================================================
+
+function StoreOverridesTab({ franchiseId }: { franchiseId: string }) {
+  const [rows, setRows] = useState<StorePlaybackOverrideRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<StorePlaybackOverrideRow | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRows(await adminListStorePlaybackOverrides(franchiseId)); }
+    catch (e) { toast.error(`매장 재생설정 로딩 실패: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, [franchiseId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl bg-bg-card p-3 text-xs">
+        매장별 재생 타임존과 <b>본사 스케줄 준수 여부</b>를 설정합니다. 설정이 없는 매장은 기본값(Asia/Seoul · 본사 스케줄 준수)으로 동작합니다.
+      </div>
+
+      <div className="overflow-x-auto rounded-xl bg-bg-card">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+              <th className="px-3 py-2">매장</th>
+              <th className="px-3 py-2">본사 스케줄</th>
+              <th className="px-3 py-2">타임존</th>
+              <th className="px-3 py-2">설정</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && rows.length === 0 && (
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-dim">로딩 중…</td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-dim">연결된 매장이 없습니다.</td></tr>
+            )}
+            {rows.map((r) => (
+              <tr key={r.store_id} className="border-b border-line/5">
+                <td className="px-3 py-2 font-semibold">{r.store_name ?? r.store_id.slice(0, 8)}</td>
+                <td className="px-3 py-2">
+                  {r.has_override
+                    ? (r.use_brand_schedule
+                        ? <span className="text-emerald-300">준수</span>
+                        : <span className="text-amber-300">개별 운영</span>)
+                    : <span className="text-ink-dim">준수 (기본)</span>}
+                </td>
+                <td className="px-3 py-2 inline-flex items-center gap-1 text-ink-mute">
+                  <Globe size={10} /> {r.timezone ?? 'Asia/Seoul'}
+                </td>
+                <td className="px-3 py-2">
+                  {r.has_override
+                    ? <span className="text-[10px] text-ink-mute">{r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : ''}</span>
+                    : <span className="text-[10px] text-ink-dim">미설정</span>}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <button onClick={() => setEditing(r)}
+                    className="inline-flex items-center gap-1 rounded bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+                    <Clock size={10} /> 설정
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <StoreOverrideModal
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StoreOverrideModal({
+  row, onClose, onSaved,
+}: { row: StorePlaybackOverrideRow; onClose: () => void; onSaved: () => void }) {
+  const [useBrandSchedule, setUseBrandSchedule] = useState(row.use_brand_schedule ?? true);
+  const [timezone, setTimezone] = useState(row.timezone ?? 'Asia/Seoul');
+  const [saving, setSaving] = useState(false);
+  return (
+    <ModalShell title={`매장 재생설정 — ${row.store_name ?? row.store_id.slice(0, 8)}`} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="본사 스케줄 준수">
+          <label className="flex items-center gap-2 text-[12px]">
+            <input type="checkbox" checked={useBrandSchedule} onChange={(e) => setUseBrandSchedule(e.target.checked)} />
+            본사 자동 스케줄을 따릅니다 (해제 시 매장 개별 운영)
+          </label>
+        </Field>
+        <Field label="타임존">
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="input">
+            {TIMEZONE_OPTIONS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+          </select>
+        </Field>
+        <p className="text-[10px] text-ink-dim">
+          스케줄 슬롯의 시간대는 이 타임존을 기준으로 평가됩니다. 이미 발행된 재생 이력에는 영향을 주지 않습니다.
+        </p>
+        <button disabled={saving} onClick={async () => {
+          setSaving(true);
+          try {
+            await adminUpsertStorePlaybackOverride({ storeId: row.store_id, useBrandSchedule, timezone });
+            toast.success('매장 재생설정 저장됨'); onSaved();
+          } catch (e) { toast.error((e as Error).message); }
+          finally { setSaving(false); }
+        }}
+          className="w-full rounded bg-accent px-3 py-2 font-bold text-black hover:bg-accent/90 disabled:opacity-50">
+          {saving ? '저장 중…' : '저장'}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -949,6 +1286,7 @@ function MusicPolicyBuilderModal({
   const [policyId, setPolicyId] = useState<string | null>(policy?.id ?? null);
   const [slots, setSlots] = useState<FranchiseMusicPolicySlot[]>([]);
   const [allPlaylists, setAllPlaylists] = useState<PlaylistRow[]>([]);
+  const [playlistSets, setPlaylistSets] = useState<FranchisePlaylistSet[]>([]);
 
   const loadSlots = useCallback(async () => {
     if (!policyId) return;
@@ -959,7 +1297,11 @@ function MusicPolicyBuilderModal({
   useEffect(() => {
     void loadSlots();
     void fetchPlaylists().then(setAllPlaylists).catch((e) => toast.error((e as Error).message));
-  }, [loadSlots]);
+    // Curated playlist sets (0459/0460) — optional per-slot rotation grouping. Non-fatal if empty.
+    void adminListFranchisePlaylistSets(franchiseId)
+      .then((s) => setPlaylistSets(s.filter((x) => x.status === 'active' || x.status === 'scheduled')))
+      .catch(() => setPlaylistSets([]));
+  }, [loadSlots, franchiseId]);
 
   const savePolicy = async () => {
     setSaving(true);
@@ -1020,7 +1362,7 @@ function MusicPolicyBuilderModal({
           {policyId && (
             <>
               <SlotsEditor policyId={policyId} slots={slots} playlists={allPlaylists}
-                onChanged={() => void loadSlots()} />
+                sets={playlistSets} onChanged={() => void loadSlots()} />
             </>
           )}
         </div>
@@ -1030,27 +1372,44 @@ function MusicPolicyBuilderModal({
 }
 
 function SlotsEditor({
-  policyId, slots, playlists, onChanged,
-}: { policyId: string; slots: FranchiseMusicPolicySlot[]; playlists: PlaylistRow[]; onChanged: () => void }) {
+  policyId, slots, playlists, sets, onChanged,
+}: {
+  policyId: string; slots: FranchiseMusicPolicySlot[]; playlists: PlaylistRow[];
+  sets: FranchisePlaylistSet[]; onChanged: () => void;
+}) {
   const [showAdd, setShowAdd] = useState(false);
-  const playlistTitle = (id: string) => playlists.find((p) => p.id === id)?.title ?? id.slice(0, 8);
+  const playlistTitle = (id: string | null) => (id ? (playlists.find((p) => p.id === id)?.title ?? id.slice(0, 8)) : '');
+  const setName = (id: string | null | undefined) => (id ? (sets.find((s) => s.id === id)?.name ?? null) : null);
   return (
     <div className="space-y-2">
       {slots.length === 0 && <p className="text-[11px] text-ink-dim">슬롯 없음</p>}
       <div className="space-y-1">
-        {slots.map((s) => (
-          <div key={s.id} className="rounded bg-bg-deep px-2 py-1.5 text-[11px] flex items-center gap-2">
-            <span className="font-bold">{s.slot_name}</span>
-            <span className="text-ink-mute">{s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</span>
-            <span className="text-ink-mute">{s.days_of_week.map((d) => DAY_KO[d]).join('')}</span>
-            <span className="flex-1 text-emerald-300 truncate">{playlistTitle(s.playlist_id)}</span>
-            <button onClick={async () => {
-              if (!confirm('슬롯 삭제?')) return;
-              try { await adminDeleteSlot(s.id); toast.success('삭제'); onChanged(); }
-              catch (e) { toast.error((e as Error).message); }
-            }} className="text-rose-300 hover:underline">삭제</button>
-          </div>
-        ))}
+        {slots.map((s) => {
+          const isBreak = s.slot_type === 'break';
+          const attachedSet = setName(s.playlist_set_id);
+          return (
+            <div key={s.id} className="rounded bg-bg-deep px-2 py-1.5 text-[11px] flex items-center gap-2">
+              <span className="font-bold">{s.slot_name}</span>
+              <span className="text-ink-mute">{s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</span>
+              <span className="text-ink-mute">{s.days_of_week.map((d) => DAY_KO[d]).join('')}</span>
+              {isBreak ? (
+                <span className="flex-1 inline-flex items-center gap-1 text-amber-300">
+                  <Pause size={10} /> 브레이크(무음)
+                </span>
+              ) : (
+                <span className="flex-1 truncate text-emerald-300">
+                  {playlistTitle(s.playlist_id)}
+                  {attachedSet && <span className="ml-1 text-violet-300">· {attachedSet}</span>}
+                </span>
+              )}
+              <button onClick={async () => {
+                if (!confirm('슬롯 삭제?')) return;
+                try { await adminDeleteSlot(s.id); toast.success('삭제'); onChanged(); }
+                catch (e) { toast.error((e as Error).message); }
+              }} className="text-rose-300 hover:underline">삭제</button>
+            </div>
+          );
+        })}
       </div>
       {!showAdd && (
         <button onClick={() => setShowAdd(true)}
@@ -1059,7 +1418,7 @@ function SlotsEditor({
         </button>
       )}
       {showAdd && (
-        <AddSlotInline policyId={policyId} playlists={playlists}
+        <AddSlotInline policyId={policyId} playlists={playlists} sets={sets}
           onCancel={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); onChanged(); }} />
       )}
@@ -1068,28 +1427,66 @@ function SlotsEditor({
 }
 
 function AddSlotInline({
-  policyId, playlists, onCancel, onSaved,
-}: { policyId: string; playlists: PlaylistRow[]; onCancel: () => void; onSaved: () => void }) {
+  policyId, playlists, sets, onCancel, onSaved,
+}: {
+  policyId: string; playlists: PlaylistRow[]; sets: FranchisePlaylistSet[];
+  onCancel: () => void; onSaved: () => void;
+}) {
+  const [slotType, setSlotType] = useState<SlotType>('playlist');
   const [slotName, setSlotName] = useState('morning');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('11:00');
   const [playlistId, setPlaylistId] = useState('');
+  const [setId, setSetId] = useState('');
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
   const [saving, setSaving] = useState(false);
+
+  // Sets are constrained to their own playlist server-side, so only offer sets matching the chosen playlist.
+  const matchingSets = useMemo(
+    () => sets.filter((s) => s.playlist_id === playlistId),
+    [sets, playlistId],
+  );
+  // Reset an attached set when it no longer matches the selected playlist.
+  useEffect(() => {
+    if (setId && !matchingSets.some((s) => s.id === setId)) setSetId('');
+  }, [matchingSets, setId]);
+
+  const canSave = slotType === 'break' ? days.length > 0 : (!!playlistId && days.length > 0);
+
   return (
     <div className="space-y-2 rounded bg-bg-deep p-2 text-[11px]">
+      <div className="flex gap-1">
+        {(['playlist', 'break'] as const).map((t) => (
+          <button key={t} type="button" onClick={() => setSlotType(t)}
+            className={`flex-1 inline-flex items-center justify-center gap-1 rounded px-2 py-1 font-bold ${
+              slotType === t ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute'
+            }`}>
+            {t === 'playlist' ? <><Music size={10} /> 재생</> : <><Pause size={10} /> 브레이크(무음)</>}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <select value={slotName} onChange={(e) => setSlotName(e.target.value)} className="input text-[11px]">
-          {['morning', 'lunch', 'afternoon', 'dinner', 'closing', 'weekend', 'event'].map((s) =>
+          {['morning', 'lunch', 'afternoon', 'dinner', 'closing', 'weekend', 'event', 'break'].map((s) =>
             <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)} className="input text-[11px]">
-          <option value="">플레이리스트 선택…</option>
-          {playlists.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-        </select>
+        {slotType === 'playlist' ? (
+          <select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)} className="input text-[11px]">
+            <option value="">플레이리스트 선택…</option>
+            {playlists.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+          </select>
+        ) : (
+          <div className="flex items-center rounded bg-bg-card px-2 text-ink-mute">브레이크는 재생 없이 무음 처리됩니다.</div>
+        )}
         <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input text-[11px]" />
         <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="input text-[11px]" />
       </div>
+      {slotType === 'playlist' && matchingSets.length > 0 && (
+        <select value={setId} onChange={(e) => setSetId(e.target.value)} className="input text-[11px] w-full">
+          <option value="">세트 미지정 (플레이리스트 그대로)</option>
+          {matchingSets.map((s) => <option key={s.id} value={s.id}>세트: {s.name}</option>)}
+        </select>
+      )}
       <div className="flex flex-wrap gap-1">
         {[1, 2, 3, 4, 5, 6, 7].map((d) => (
           <button key={d} type="button"
@@ -1101,10 +1498,14 @@ function AddSlotInline({
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="rounded bg-bg-card px-2 py-1 text-ink-mute">취소</button>
-        <button disabled={!playlistId || saving} onClick={async () => {
+        <button disabled={!canSave || saving} onClick={async () => {
           setSaving(true);
           try {
-            await adminUpsertSlot({ policyId, slotName, startTime, endTime, playlistId, daysOfWeek: days });
+            await adminUpsertFranchiseSlotV2({
+              policyId, slotName, startTime, endTime, slotType, daysOfWeek: days,
+              playlistId: slotType === 'playlist' ? playlistId : null,
+              playlistSetId: slotType === 'playlist' && setId ? setId : null,
+            });
             toast.success('슬롯 추가'); onSaved();
           } catch (e) { toast.error((e as Error).message); }
           finally { setSaving(false); }
