@@ -26,6 +26,7 @@ import BusinessReactionTab from '@/components/admin/aiCuration/BusinessReactionT
 import DuplicateDetectionTab from '@/components/admin/aiCuration/DuplicateDetectionTab';
 import AdminLearningTab from '@/components/admin/aiCuration/AdminLearningTab';
 import WeightTuningTab from '@/components/admin/aiCuration/WeightTuningTab';
+import AiRuntimePreviewTab from '@/components/admin/aiCuration/AiRuntimePreviewTab';
 
 import QcQueueTab from '@/components/admin/QcQueueTab';
 import BehaviorTab from '@/components/admin/BehaviorTab';
@@ -42,10 +43,11 @@ type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 
   | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview'
   | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight'
   | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy' | 'admin_learning'
-  | 'weight_tuning';
+  | 'weight_tuning' | 'runtime_preview';
 
 const TABS: [SubTab, string][] = [
   ['perf', '운영 성과'],
+  ['runtime_preview', '🧪 AI 런타임 프리뷰'],
   ['admin_learning', '🧠 검수 패턴 학습'],
   ['weight_tuning', '⚖️ 가중치 튜닝'],
   ['store_genre_policy', '매장 장르 정책 (v1)'],
@@ -94,6 +96,7 @@ export default function AiCurationPanel() {
         ))}
       </div>
       {sub === 'perf' && <PerformanceTab />}
+      {sub === 'runtime_preview' && <AiRuntimePreviewTab />}
       {sub === 'admin_learning' && <AdminLearningTab />}
       {sub === 'weight_tuning' && <WeightTuningTab />}
       {sub === 'pending' && <PendingTab />}
