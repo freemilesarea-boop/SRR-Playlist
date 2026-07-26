@@ -107,14 +107,33 @@ describe('search — permission-filtered, ranked', () => {
   it('영문 alias: "settlement" → 정산', () => {
     expect(searchOperatorRoutes('settlement', SUPER)[0].entry.id).toBe('finance-settlements');
   });
-  it('alias: "store override" → 가맹점 관리', () => {
-    expect(searchOperatorRoutes('store override', ADMIN)[0].entry.id).toBe('enterprise-franchises');
+  it('alias: "store override" → 매장별 재생 설정 (라벨이 기대와 일치)', () => {
+    const top = searchOperatorRoutes('store override', ADMIN)[0].entry;
+    expect(top.id).toBe('store-playback-settings');
+    expect(top.label).toBe('매장별 재생 설정');
+  });
+  it('한국어: "매장별 재생설정" → 매장별 재생 설정', () => {
+    expect(searchOperatorRoutes('매장별 재생설정', ADMIN)[0].entry.id).toBe('store-playback-settings');
   });
   it('한국어 키워드: "브레이크" → 음악 > 브레이크', () => {
     expect(searchOperatorRoutes('브레이크', ADMIN)[0].entry.id).toBe('music-breaks');
   });
   it('대소문자 무시', () => {
     expect(searchOperatorRoutes('SETTLEMENT', SUPER)[0].entry.id).toBe('finance-settlements');
+  });
+  it('"playlist" → 플레이리스트 + 플레이리스트 세트', () => {
+    const ids = searchOperatorRoutes('playlist', ADMIN).map((r) => r.entry.id);
+    expect(ids[0]).toBe('music-playlists');
+    expect(ids).toContain('music-sets');
+  });
+  it('"billing" → 청구', () => {
+    expect(searchOperatorRoutes('billing', ADMIN)[0].entry.id).toBe('finance-billing');
+  });
+  it('"contract" → 계약', () => {
+    expect(searchOperatorRoutes('contract', ADMIN)[0].entry.id).toBe('finance-contracts');
+  });
+  it('"store" → 매장 관련 결과', () => {
+    expect(searchOperatorRoutes('store', ADMIN)[0].entry.category).toBe('stores');
   });
   it('공백 trim', () => {
     expect(searchOperatorRoutes('   초대   ', SUPER)[0].entry.id).toBe('invite-codes');
