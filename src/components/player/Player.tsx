@@ -2381,7 +2381,9 @@ export default function Player() {
       // await 도중 사용자가 next/prev/트랙변경을 했으면 중복 진행 금지 (stale closure 방어)
       const st = usePlayerStore.getState();
       if (endedId !== null && st.queue[st.index]?.id !== endedId) return;
-      next();
+      // BRAND-PLAYLIST-ROTATION-4C — 자연 종료임을 명시. 마지막 재생순번/단일 트랙이면
+      // playerStore.next 가 Cycle 완료 Signal 을 emit 한다(수동 next 는 emit 안 함).
+      next({ cause: 'audio_ended' });
     });
     checkAudioHealth('ended');
   }

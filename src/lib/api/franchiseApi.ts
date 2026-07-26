@@ -677,3 +677,37 @@ export async function resolveStorePlaybackPolicy(
   if (error) { console.error('[franchiseApi] resolve playback policy failed', error); throw error; }
   return data as StorePlaybackResolution;
 }
+
+// ---- Store-scoped rotation pool (BRAND-PLAYLIST-ROTATION-4B, migration 0461).
+// The store player asks "which curated sets may I rotate through right now?". The RPC
+// enforces ownership + franchise isolation server-side; the client never supplies a
+// franchise id and never reads franchise_playlist_sets directly.
+export interface StoreRotationPoolSet {
+  playlist_set_id: string;
+  playlist_id: string;
+  name: string;
+  rotation_order: number;
+  is_active: boolean;
+  valid_from: string | null;
+  valid_until: string | null;
+  franchise_id: string;
+  created_at: string | null;
+}
+
+export interface StoreRotationPoolResponse {
+  success: boolean;
+  franchise_id: string | null;
+  timezone: string;
+  computed_at: string;
+  data: StoreRotationPoolSet[];
+}
+
+export async function fetchStorePlaylistRotationPool(
+  storeId: string, at?: string | null,
+): Promise<StoreRotationPoolResponse> {
+  const { data, error } = await supabase.rpc('get_store_playlist_rotation_pool', {
+    p_store_id: storeId, p_at: at ?? null,
+  });
+  if (error) { console.error('[franchiseApi] rotation pool fetch failed', error); throw error; }
+  return data as StoreRotationPoolResponse;
+}

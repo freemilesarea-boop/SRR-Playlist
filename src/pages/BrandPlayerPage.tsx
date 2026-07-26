@@ -336,7 +336,7 @@ export default function BrandPlayerPage() {
           <button onClick={() => (playing ? pause() : play())} aria-label={playing ? '일시정지' : '재생'} className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-black hover:bg-accent/90">
             {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="ml-0.5" />}
           </button>
-          <button onClick={next} aria-label="다음 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"><SkipForward size={18} fill="currentColor" /></button>
+          <button onClick={() => next()} aria-label="다음 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"><SkipForward size={18} fill="currentColor" /></button>
           {/* Presentation Fullscreen 진입 — 저장 이미지만 전체화면. 음악은 계속 재생. */}
           <button
             onClick={() => void enterPresentation()}
