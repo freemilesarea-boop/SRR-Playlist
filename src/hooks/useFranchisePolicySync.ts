@@ -16,6 +16,7 @@ import {
 } from '@/lib/api/franchiseApi';
 import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { resolveStoreRuntimeQueue } from '@/lib/aiRuntimeQueueService';
 import { usePlayerStore } from '@/store/playerStore';
 import type { PlaylistRow } from '@/types/db';
 
@@ -154,9 +155,18 @@ async function applyPolicyPlaylist(
       sort_order: 0,
       created_at: new Date().toISOString(),
     };
-    setQueue(playable, 0, playlistRow, null, { dailySeedShuffle: true });
+    // AI-RUNTIME-CONNECTION-1: static queue obtained FIRST; resolver returns it
+    // unchanged when AI runtime mode is OFF (default), AI re-rank only for approved
+    // PREVIEW stores, immediate static fallback on any failure. Never throws.
+    const resolved = await resolveStoreRuntimeQueue({
+      storeId,
+      playlistId: p.matched_slot.playlist_id,
+      staticTracks: playable,
+    });
+    setQueue(resolved.tracks, 0, playlistRow, null, { dailySeedShuffle: resolved.seedShuffle });
     console.info('[franchise] policy playlist applied', {
-      policy: p.policy_name, slot: p.matched_slot.slot_name, tracks: playable.length,
+      policy: p.policy_name, slot: p.matched_slot.slot_name,
+      tracks: resolved.tracks.length, source: resolved.source,
     });
   } catch (e) {
     console.warn('[franchise] failed to apply policy playlist', e);

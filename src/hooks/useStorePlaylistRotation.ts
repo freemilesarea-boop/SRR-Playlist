@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 import { fetchStorePlaylistRotationPool } from '@/lib/api/franchiseApi';
 import { fetchPlaylistTracks } from '@/lib/api';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
+import { resolveStoreRuntimeQueue } from '@/lib/aiRuntimeQueueService';
 import { usePlayerStore } from '@/store/playerStore';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import {
@@ -184,11 +185,11 @@ export function useStorePlaylistRotation({ storeId, enabled, decision }: Options
           if (alt && alt.playlistId !== currentPlaylistId && alt.playlistId !== choice.playlistId) {
             const altTracks = await fetchPlaylistTracks(alt.playlistId, storeId);
             const altPlayable = filterPlayableTracks(altTracks).playable;
-            if (altPlayable.length > 0) applyRotationQueue(alt, altPlayable, storeId, memRef, saveMem);
+            if (altPlayable.length > 0) await applyRotationQueue(alt, altPlayable, storeId, memRef, saveMem);
           }
           return;
         }
-        applyRotationQueue(choice, playable, storeId, memRef, saveMem);
+        await applyRotationQueue(choice, playable, storeId, memRef, saveMem);
       } catch (e) {
         console.warn('[rotation] failed to load next playlist — keeping current queue', e);
       } finally {
@@ -221,13 +222,13 @@ export function useStorePlaylistRotation({ storeId, enabled, decision }: Options
 }
 
 /** Load the chosen rotation playlist into the queue + persist memory. */
-function applyRotationQueue(
+async function applyRotationQueue(
   choice: { set: RotationPoolRow; playlistId: string },
   playable: TrackRow[],
   storeId: string,
   memRef: React.MutableRefObject<RotPoolMemory | null>,
   persist: (storeId: string, mem: RotPoolMemory) => void,
-): void {
+): Promise<void> {
   const playlistRow: PlaylistRow = {
     id: choice.playlistId,
     title: choice.set.name,
@@ -240,7 +241,17 @@ function applyRotationQueue(
     sort_order: 0,
     created_at: new Date().toISOString(),
   };
-  usePlayerStore.getState().setQueue(playable, 0, playlistRow, null, { dailySeedShuffle: true });
+  // AI-RUNTIME-CONNECTION-1: static queue is obtained FIRST (playable); the resolver
+  // returns it byte-identically when the store's AI runtime mode is OFF (default), and
+  // an AI re-ranked queue only for approved PREVIEW stores. Never throws → always static-safe.
+  const resolved = await resolveStoreRuntimeQueue({
+    storeId,
+    playlistId: choice.playlistId,
+    staticTracks: playable,
+  });
+  usePlayerStore.getState().setQueue(resolved.tracks, 0, playlistRow, null, {
+    dailySeedShuffle: resolved.seedShuffle,
+  });
   const prev = memRef.current;
   if (prev) {
     memRef.current = {
