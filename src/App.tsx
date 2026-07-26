@@ -8,6 +8,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
+import { OPERATOR_ROUTE_PATHS } from '@/lib/operatorRouteRegistry';
 import { installUnloadGuard } from '@/lib/playbackGuard';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
@@ -61,6 +62,11 @@ const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylist
 const CuratorsListPage = lazyWithRetry(() => import('@/pages/CuratorsListPage'));
 const BrandPage = lazyWithRetry(() => import('@/pages/BrandPage'));
 const BrandPlayerPage = lazyWithRetry(() => import('@/pages/BrandPlayerPage'));
+// ADMIN-UX-IMPLEMENT-1 — 운영자 전용 셸(소비자 AppShell 과 분리). 자체 게이트로 운영자만 진입.
+const OperatorLayout = lazyWithRetry(() => import('@/components/operator/OperatorLayout'));
+const OperatorHomePage = lazyWithRetry(() => import('@/pages/OperatorHomePage'));
+// ADMIN-UX-IMPLEMENT-2 — Canonical /ops 하위 라우트(레지스트리 기반 제네릭 페이지, 기존 패널 재사용).
+const OperatorRoutePage = lazyWithRetry(() => import('@/components/operator/OperatorRoutePage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -281,6 +287,17 @@ export default function App() {
                     </RequireAdmin>
                   }
                 />
+              </Route>
+              {/* 운영자 셸 — AppShell 밖에 별도 마운트 (소비자 Sidebar/Player/BottomNav 없음).
+                  RequireAuth 로 세션 확인 후, OperatorLayout 내부에서 운영자 여부를 게이트. */}
+              <Route element={<RequireAuth><OperatorLayout /></RequireAuth>}>
+                <Route path="/ops" element={<OperatorHomePage />} />
+                {/* Canonical /ops 하위 라우트 — 레지스트리에서 파생, 기존 Admin 패널 재사용 */}
+                {OPERATOR_ROUTE_PATHS.map((p) => (
+                  <Route key={p} path={p} element={<OperatorRoutePage />} />
+                ))}
+                {/* 알 수 없는 /ops/* — 소비자 홈이 아니라 콘솔 안에서 안전 처리 */}
+                <Route path="/ops/*" element={<OperatorRoutePage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
