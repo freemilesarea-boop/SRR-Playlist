@@ -178,6 +178,10 @@ begin
   if p_event_type not in ('play','start','skip','complete','like','unlike','error') then
     raise exception 'invalid event_type %', p_event_type;
   end if;
+  -- reject invalid duration (negative). played is clamped to >=0 at insert.
+  if p_duration is not null and p_duration < 0 then
+    raise exception 'invalid_event: negative duration';
+  end if;
   -- reject physically-impossible completion (client-reported played grossly exceeds duration)
   if p_duration is not null and p_duration > 0
      and p_played is not null and p_played > p_duration * 1.5 then
