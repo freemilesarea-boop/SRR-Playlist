@@ -627,7 +627,7 @@ function BrandRegistryFormModal({
                   <span className="block text-[10px] text-ink-mute">앞으로 생성되는 계약에만 적용됩니다. 기존 계약과 이미 발행된 인보이스는 변경되지 않습니다.</span>
                 </span>
               </label>
-              <label className={`flex items-start gap-2 rounded-lg p-2 ring-1 ${applyScope === 'active_contracts' ? 'ring-amber-400/50 bg-amber-400/10' : 'ring-line/15'}`}>
+              <label className={`flex items-start gap-2 rounded-lg p-2 ring-1 ${applyScope === 'active_contracts' ? 'ring-amber-400/50 bg-amber-400/20' : 'ring-line/15'}`}>
                 <input type="radio" name="applyScope" className="mt-0.5"
                   checked={applyScope === 'active_contracts'} onChange={() => setApplyScope('active_contracts')} disabled={!priceChanged} />
                 <span className="text-[11px] text-ink">
@@ -675,7 +675,7 @@ function BrandRegistryFormModal({
                 : confirmState.error ? '활성 계약 조회 필요'
                 : `활성 계약 ${confirmState.count ?? 0}건`}
             </p>
-            {confirmState.error && <p className="mt-1 text-[10px] text-rose-400">{confirmState.error}</p>}
+            {confirmState.error && <p className="mt-1 text-[10px] text-rose-300">{confirmState.error}</p>}
             <p className="mt-2 text-[11px] text-ink-mute">반영 시점</p>
             <p className="mt-0.5 text-[12px]">다음 인보이스 생성부터</p>
           </div>
