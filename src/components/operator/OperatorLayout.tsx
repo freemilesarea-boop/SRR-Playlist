@@ -3,6 +3,7 @@ import { Navigate, Outlet, Link } from 'react-router-dom';
 import { Menu, X, Home } from 'lucide-react';
 import { useOperatorAccess } from '@/hooks/useOperatorAccess';
 import OperatorSidebar from './OperatorSidebar';
+import OperatorCommandPalette from './OperatorCommandPalette';
 import type { OperatorAccessContext } from '@/lib/operatorNavigation';
 
 /**
@@ -96,6 +97,9 @@ export default function OperatorLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Command Palette (Cmd/Ctrl+K) — 셸 전역 1회 마운트 */}
+      <OperatorCommandPalette ctx={ctx} />
     </div>
   );
 }

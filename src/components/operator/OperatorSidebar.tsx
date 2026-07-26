@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles,
-  Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, type LucideIcon,
+  Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, Search, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import {
-  filterNavSections, activeNavItemId, type OperatorNavSection, type OperatorAccessContext,
-} from '@/lib/operatorNavigation';
+  sidebarSectionsForRole, matchOpsRoute,
+  type OperatorSidebarSection, type OperatorAccessContext,
+} from '@/lib/operatorRouteRegistry';
 
 /** 설정에 저장된 문자열 아이콘 이름 → lucide 컴포넌트. 미매핑은 안전한 기본값. */
 const ICONS: Record<string, LucideIcon> = {
@@ -30,18 +31,16 @@ export interface OperatorSidebarProps {
 }
 
 /**
- * 운영자 셸 사이드바 — 역할 인지(role-aware) 네비게이션 콘텐츠.
+ * 운영자 셸 사이드바 — Canonical /ops 라우트 레지스트리(SSOT)에서 파생된 역할 인지 네비게이션.
  * 위치/반응형 처리는 OperatorLayout 이 담당하고, 이 컴포넌트는 순수 콘텐츠만 렌더한다.
  */
 export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProps) {
   const location = useLocation();
   const signOut = useAuthStore((s) => s.signOut);
 
-  const sections = useMemo<OperatorNavSection[]>(() => filterNavSections(ctx), [ctx]);
-  const activeId = useMemo(
-    () => activeNavItemId(location.pathname, location.search),
-    [location.pathname, location.search],
-  );
+  const sections = useMemo<OperatorSidebarSection[]>(() => sidebarSectionsForRole(ctx), [ctx]);
+  const activeEntry = useMemo(() => matchOpsRoute(location.pathname), [location.pathname]);
+  const activeId = activeEntry?.id ?? null;
   const activeSectionId = useMemo(
     () => sections.find((s) => s.items.some((it) => it.id === activeId))?.id ?? sections[0]?.id ?? null,
     [sections, activeId],
@@ -51,15 +50,17 @@ export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProp
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const isOpen = (sectionId: string) => {
     if (sectionId in collapsed) return !collapsed[sectionId];
-    return sectionId === activeSectionId; // 기본: 활성 섹션만 열림
+    return sectionId === activeSectionId;
   };
   const toggle = (sectionId: string) =>
     setCollapsed((prev) => ({ ...prev, [sectionId]: sectionId in prev ? !prev[sectionId] : sectionId !== activeSectionId ? false : true }));
 
+  const openPalette = () => window.dispatchEvent(new Event('ops:open-command-palette'));
+
   return (
     <div className="flex h-full flex-col bg-bg">
       {/* Brand / title */}
-      <div className="px-5 pb-4 pt-5">
+      <div className="px-5 pb-3 pt-5">
         <Link to="/ops" onClick={onNavigate} className="group inline-flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
             <Home size={16} strokeWidth={2.4} />
@@ -75,7 +76,18 @@ export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProp
         </div>
       </div>
 
-      <p className="px-5 pb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-ink-dim">Navigate</p>
+      {/* Search (Cmd+K) trigger */}
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={openPalette}
+          className="flex w-full items-center gap-2 rounded-xl border border-line/15 px-3 py-2 text-left text-xs text-ink-dim transition-colors hover:bg-bg-hover"
+        >
+          <Search size={14} className="flex-none" />
+          <span className="flex-1">검색…</span>
+          <kbd className="flex-none rounded border border-line/20 px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd>
+        </button>
+      </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="운영 메뉴">
         {sections.map((section) => {
@@ -102,10 +114,10 @@ export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProp
                     return (
                       <li key={item.id}>
                         <Link
-                          to={item.href}
+                          to={item.canonicalPath}
                           onClick={onNavigate}
                           aria-current={active ? 'page' : undefined}
-                          title={item.helpText ?? item.description}
+                          title={item.description}
                           className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                             active
                               ? 'bg-accent/15 font-semibold text-accent'
