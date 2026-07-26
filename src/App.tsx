@@ -61,6 +61,9 @@ const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylist
 const CuratorsListPage = lazyWithRetry(() => import('@/pages/CuratorsListPage'));
 const BrandPage = lazyWithRetry(() => import('@/pages/BrandPage'));
 const BrandPlayerPage = lazyWithRetry(() => import('@/pages/BrandPlayerPage'));
+// ADMIN-UX-IMPLEMENT-1 — 운영자 전용 셸(소비자 AppShell 과 분리). 자체 게이트로 운영자만 진입.
+const OperatorLayout = lazyWithRetry(() => import('@/components/operator/OperatorLayout'));
+const OperatorHomePage = lazyWithRetry(() => import('@/pages/OperatorHomePage'));
 
 function RouteFallback() {
   // chunk 로드가 10초 이상 지속되면 (네트워크 hang / 캐시 꼬임) 새로고침 안내
@@ -281,6 +284,11 @@ export default function App() {
                     </RequireAdmin>
                   }
                 />
+              </Route>
+              {/* 운영자 셸 — AppShell 밖에 별도 마운트 (소비자 Sidebar/Player/BottomNav 없음).
+                  RequireAuth 로 세션 확인 후, OperatorLayout 내부에서 운영자 여부를 게이트. */}
+              <Route element={<RequireAuth><OperatorLayout /></RequireAuth>}>
+                <Route path="/ops" element={<OperatorHomePage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
