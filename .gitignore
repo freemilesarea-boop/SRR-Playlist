@@ -31,3 +31,7 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# one-time local-run demo/QA account provisioning utilities (their own headers say "Do NOT commit")
+scripts/create-demo-accounts.mjs
+scripts/set-demo-account-passwords.mjs

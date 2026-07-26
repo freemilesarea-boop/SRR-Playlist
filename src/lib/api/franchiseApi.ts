@@ -87,10 +87,13 @@ export interface FranchiseMusicPolicySlot {
   slot_name: string;
   start_time: string;  // 'HH:MM:SS'
   end_time: string;
-  playlist_id: string;
+  playlist_id: string | null;   // null for break slots (0459)
   days_of_week: number[];  // 1=월 ... 7=일
   sort_order: number;
   created_at: string;
+  // 0459 additive columns (default-inert for pre-existing slots)
+  slot_type?: 'playlist' | 'break';
+  playlist_set_id?: string | null;
 }
 
 export interface FranchiseDashboard {
@@ -450,4 +453,261 @@ export async function getMyFranchisePolicies(): Promise<FranchiseMusicPolicy[]> 
   const { data, error } = await supabase.rpc('get_my_franchise_policies');
   if (error) { console.error('[franchiseApi] my policies failed', error); throw error; }
   return (data ?? []) as FranchiseMusicPolicy[];
+}
+
+// =============================================================================
+// BRAND-PLAYLIST-ROTATION-1 — curated playlist sets, break-aware slots, store overrides
+// Migrations: 0459_brand_playback_schedule.sql (tables/resolver),
+//             0460_brand_playlist_management_access.sql (RLS + admin RPCs).
+// All additive; existing policies/slots keep their exact prior behavior.
+// =============================================================================
+
+export type PlaylistSetStatus = 'active' | 'inactive' | 'scheduled' | 'expired' | 'deleted';
+
+export interface FranchisePlaylistSet {
+  id: string;
+  franchise_id: string;
+  playlist_id: string;
+  playlist_title: string | null;
+  name: string;
+  description: string | null;
+  rotation_order: number;
+  is_active: boolean;
+  valid_from: string | null;
+  valid_until: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  status: PlaylistSetStatus;
+}
+
+export async function adminListFranchisePlaylistSets(
+  franchiseId: string, includeDeleted = false,
+): Promise<FranchisePlaylistSet[]> {
+  const { data, error } = await supabase.rpc('admin_list_franchise_playlist_sets', {
+    p_franchise_id: franchiseId, p_include_deleted: includeDeleted,
+  });
+  if (error) { console.error('[franchiseApi] list playlist sets failed', error); throw error; }
+  return ((data as { data?: FranchisePlaylistSet[] })?.data ?? []) as FranchisePlaylistSet[];
+}
+
+export interface UpsertPlaylistSetParams {
+  franchiseId: string;
+  playlistId: string;
+  name: string;
+  description?: string | null;
+  rotationOrder?: number;
+  isActive?: boolean;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  setId?: string | null;
+}
+
+export async function adminUpsertFranchisePlaylistSet(
+  params: UpsertPlaylistSetParams,
+): Promise<{ success: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_upsert_franchise_playlist_set', {
+    p_franchise_id: params.franchiseId,
+    p_playlist_id: params.playlistId,
+    p_name: params.name,
+    p_description: params.description ?? null,
+    p_rotation_order: params.rotationOrder ?? 0,
+    p_is_active: params.isActive ?? true,
+    p_valid_from: params.validFrom ?? null,
+    p_valid_until: params.validUntil ?? null,
+    p_set_id: params.setId ?? null,
+  });
+  if (error) { console.error('[franchiseApi] upsert playlist set failed', error); throw error; }
+  return data as { success: boolean; id: string };
+}
+
+export async function adminArchiveFranchisePlaylistSet(setId: string): Promise<{ success: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_archive_franchise_playlist_set', { p_set_id: setId });
+  if (error) { console.error('[franchiseApi] archive playlist set failed', error); throw error; }
+  return data as { success: boolean; id: string };
+}
+
+export async function adminRestoreFranchisePlaylistSet(setId: string): Promise<{ success: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_restore_franchise_playlist_set', { p_set_id: setId });
+  if (error) { console.error('[franchiseApi] restore playlist set failed', error); throw error; }
+  return data as { success: boolean; id: string };
+}
+
+// ---- Break-aware slot editor (v2). Superset of adminUpsertSlot: adds slot_type + playlist_set_id.
+export type SlotType = 'playlist' | 'break';
+
+export interface UpsertSlotV2Params {
+  policyId: string;
+  slotName: string;
+  startTime: string;   // 'HH:MM'
+  endTime: string;
+  slotType: SlotType;
+  playlistId?: string | null;      // required for 'playlist', must be null for 'break'
+  playlistSetId?: string | null;   // optional; when set, must match the playlist and franchise
+  daysOfWeek?: number[];
+  sortOrder?: number;
+  slotId?: string | null;
+}
+
+export async function adminUpsertFranchiseSlotV2(
+  params: UpsertSlotV2Params,
+): Promise<{ success: boolean; id: string }> {
+  const { data, error } = await supabase.rpc('admin_upsert_franchise_slot_v2', {
+    p_policy_id: params.policyId,
+    p_slot_name: params.slotName,
+    p_start_time: params.startTime,
+    p_end_time: params.endTime,
+    p_slot_type: params.slotType,
+    p_playlist_id: params.slotType === 'break' ? null : (params.playlistId ?? null),
+    p_playlist_set_id: params.slotType === 'break' ? null : (params.playlistSetId ?? null),
+    p_days_of_week: params.daysOfWeek ?? [1, 2, 3, 4, 5, 6, 7],
+    p_sort_order: params.sortOrder ?? 0,
+    p_slot_id: params.slotId ?? null,
+  });
+  if (error) { console.error('[franchiseApi] upsert slot v2 failed', error); throw error; }
+  return data as { success: boolean; id: string };
+}
+
+export interface FranchisePolicySlotV2 {
+  slot_id: string;
+  slot_name: string;
+  days_of_week: number[];
+  start_time: string;
+  end_time: string;
+  slot_type: SlotType;
+  playlist_id: string | null;
+  playlist_title: string | null;
+  playlist_set_id: string | null;
+  playlist_set_name: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export async function adminListFranchisePolicySlots(policyId: string): Promise<FranchisePolicySlotV2[]> {
+  const { data, error } = await supabase.rpc('admin_list_franchise_policy_slots', { p_policy_id: policyId });
+  if (error) { console.error('[franchiseApi] list policy slots v2 failed', error); throw error; }
+  return ((data as { data?: FranchisePolicySlotV2[] })?.data ?? []) as FranchisePolicySlotV2[];
+}
+
+// ---- Store playback overrides (per-store timezone + follow-brand-schedule flag).
+export interface StorePlaybackOverrideRow {
+  store_id: string;
+  store_name: string | null;
+  region_id: string | null;
+  use_brand_schedule: boolean | null;
+  timezone: string | null;
+  is_active: boolean | null;
+  updated_at: string | null;
+  has_override: boolean;
+}
+
+export async function adminListStorePlaybackOverrides(franchiseId: string): Promise<StorePlaybackOverrideRow[]> {
+  const { data, error } = await supabase.rpc('admin_list_store_playback_overrides', { p_franchise_id: franchiseId });
+  if (error) { console.error('[franchiseApi] list store overrides failed', error); throw error; }
+  return ((data as { data?: StorePlaybackOverrideRow[] })?.data ?? []) as StorePlaybackOverrideRow[];
+}
+
+export async function adminUpsertStorePlaybackOverride(input: {
+  storeId: string; useBrandSchedule: boolean; timezone: string; isActive?: boolean;
+}): Promise<{ success: boolean; store_id: string }> {
+  const { data, error } = await supabase.rpc('admin_upsert_store_playback_override', {
+    p_store_id: input.storeId,
+    p_use_brand_schedule: input.useBrandSchedule,
+    p_timezone: input.timezone,
+    p_is_active: input.isActive ?? true,
+  });
+  if (error) { console.error('[franchiseApi] upsert store override failed', error); throw error; }
+  return data as { success: boolean; store_id: string };
+}
+
+// ---- Store-side self-service (a store manages only its own override).
+export interface MyStorePlaybackOverride {
+  success: boolean;
+  store_id: string;
+  override: { use_brand_schedule: boolean; timezone: string; is_active: boolean; updated_at: string } | null;
+}
+
+export async function getMyStorePlaybackOverride(): Promise<MyStorePlaybackOverride> {
+  const { data, error } = await supabase.rpc('get_my_store_playback_override');
+  if (error) { console.error('[franchiseApi] my store override failed', error); throw error; }
+  return data as MyStorePlaybackOverride;
+}
+
+export async function upsertMyStorePlaybackOverride(input: {
+  useBrandSchedule: boolean; timezone: string;
+}): Promise<{ success: boolean; store_id: string }> {
+  const { data, error } = await supabase.rpc('upsert_my_store_playback_override', {
+    p_use_brand_schedule: input.useBrandSchedule,
+    p_timezone: input.timezone,
+  });
+  if (error) { console.error('[franchiseApi] upsert my store override failed', error); throw error; }
+  return data as { success: boolean; store_id: string };
+}
+
+// ---- Runtime resolver (store player asks "what should I be doing right now?").
+export interface StorePlaybackResolution {
+  mode: PlaybackMode;
+  source: PolicySource | null;
+  has_franchise_policy: boolean;
+  franchise_id?: string;
+  policy_id?: string;
+  policy_name?: string;
+  timezone: string;
+  matched_slot: {
+    id: string; slot_name: string; slot_type: SlotType;
+    start_time: string; end_time: string; days_of_week: number[];
+  } | null;
+  playlist_set_id: string | null;
+  playlist_id: string | null;
+  effective_from?: string | null;
+  effective_until?: string | null;
+  next_transition_at: string | null;
+  computed_at: string;
+}
+
+export type PlaybackMode = 'play' | 'break' | 'closed';
+export type PolicySource = 'store_override' | 'brand_schedule' | 'fallback';
+
+export async function resolveStorePlaybackPolicy(
+  storeId: string, at?: string | null,
+): Promise<StorePlaybackResolution> {
+  const { data, error } = await supabase.rpc('resolve_store_playback_policy', {
+    p_store_id: storeId, p_at: at ?? null,
+  });
+  if (error) { console.error('[franchiseApi] resolve playback policy failed', error); throw error; }
+  return data as StorePlaybackResolution;
+}
+
+// ---- Store-scoped rotation pool (BRAND-PLAYLIST-ROTATION-4B, migration 0461).
+// The store player asks "which curated sets may I rotate through right now?". The RPC
+// enforces ownership + franchise isolation server-side; the client never supplies a
+// franchise id and never reads franchise_playlist_sets directly.
+export interface StoreRotationPoolSet {
+  playlist_set_id: string;
+  playlist_id: string;
+  name: string;
+  rotation_order: number;
+  is_active: boolean;
+  valid_from: string | null;
+  valid_until: string | null;
+  franchise_id: string;
+  created_at: string | null;
+}
+
+export interface StoreRotationPoolResponse {
+  success: boolean;
+  franchise_id: string | null;
+  timezone: string;
+  computed_at: string;
+  data: StoreRotationPoolSet[];
+}
+
+export async function fetchStorePlaylistRotationPool(
+  storeId: string, at?: string | null,
+): Promise<StoreRotationPoolResponse> {
+  const { data, error } = await supabase.rpc('get_store_playlist_rotation_pool', {
+    p_store_id: storeId, p_at: at ?? null,
+  });
+  if (error) { console.error('[franchiseApi] rotation pool fetch failed', error); throw error; }
+  return data as StoreRotationPoolResponse;
 }

@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import type { TrackRow, PlaylistRow } from '@/types/db';
 import { isPlayableTrack } from '@/lib/audio';
+import {
+  isPlaylistCycleComplete,
+  type NextCause,
+  type PlaylistCycleEvent,
+} from '@/lib/playerCycleCompletion';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -36,6 +41,30 @@ interface PlayerState {
   liveSeek: { sec: number; trackId: string } | null;
 
   /**
+   * BRAND-PLAYLIST-ROTATION-4 — 본사 스케줄(브레이크/운영종료) 재생 억제 게이트.
+   * useStorePlaybackPolicy 가 resolve_store_playback_policy 결과로 설정한다.
+   * suppressed=true 이면 play()/toggle()/setQueue() 가 playing=true 로 만들지 않는다
+   * (playing=false 유지). 기존 Player 의 모든 auto-resume 경로는 이미 playing=false 를
+   * "사용자 의도적 정지"로 존중하므로, 이 게이트 하나로 브레이크/종료 중 무음이 보장된다.
+   * 프랜차이즈 미연결/legacy/play 매장에서는 항상 false → 회귀 0.
+   */
+  scheduleSuppressed: boolean;
+  scheduleSuppressReason: 'break' | 'closed' | null;
+
+  /**
+   * BRAND-PLAYLIST-ROTATION-4C — Queue 세대(generation). setQueue 마다 증가.
+   * Cycle 완료 Signal / Rotation 이 stale onEnded·이전 Playlist 완료를 걸러내는 기준.
+   */
+  queueGeneration: number;
+  /**
+   * BRAND-PLAYLIST-ROTATION-4C — 명시적 "플레이리스트 1 Cycle 완료" Signal.
+   * next({cause:'audio_ended'}) 가 마지막 재생순번(또는 단일 트랙) 자연 종료 시에만 emit.
+   * monotonic sequence — 소비자는 마지막 처리 sequence 만 추적(boolean flag 사용 금지).
+   * 수동 next/prev/jumpTo/setQueue/Break/Closed 에서는 절대 emit 하지 않는다.
+   */
+  cycleEvent: PlaylistCycleEvent | null;
+
+  /**
    * X6.80 — opts.dailySeedShuffle: 매장 모드에서 매일 다른 순서로 셔플.
    * shuffle=true 와 함께 사용 → buildSeededShuffleOrder(todayKstSeed) 적용.
    * (true → 같은 날엔 일관, 다음날 자동 다른 순서)
@@ -50,7 +79,18 @@ interface PlayerState {
   play: () => void;
   pause: () => void;
   toggle: () => void;
-  next: () => void;
+  /**
+   * BRAND-PLAYLIST-ROTATION-4 — 스케줄 게이트 설정.
+   * reason!=null → 즉시 억제(playing=false + suppressed). reason=null → 게이트 해제
+   * (자동 재생하지 않음; 재개는 호출측이 play() 로 명시적으로 결정).
+   */
+  setScheduleSuppression: (reason: 'break' | 'closed' | null) => void;
+  /**
+   * 다음 곡. opts.cause 로 자동 종료(audio_ended) 와 수동/스킵을 구분한다.
+   * default 'manual_next' → 기존 호출부(수동 next, 미디어세션 등)는 그대로 동작하고
+   * Cycle 완료 Signal 을 발생시키지 않는다. Player onEnded 자연 종료만 'audio_ended'.
+   */
+  next: (opts?: { cause?: NextCause }) => void;
   prev: () => void;
   jumpTo: (i: number) => void;
   /** BRAND-PLAYER-UX-5 — 현재 트랙 내 위치 이동 요청(초). Owner 가 실제 audio.currentTime 적용. */
@@ -168,6 +208,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffleOrder: [],
   pendingSeekSec: null,
   liveSeek: null,
+  scheduleSuppressed: false,
+  scheduleSuppressReason: null,
+  queueGeneration: 0,
+  cycleEvent: null,
 
   setQueue: (tracks, startIndex = 0, playlist = null, context = null, opts) => {
     // 안전장치: 재생 불가(audio_url null/빈문자열/형식이상) 트랙은 큐에서 제외.
@@ -209,21 +253,55 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       index: safeIdx,
       playlist,
       playlistContext: context,
-      playing: true,
+      // BRAND-PLAYLIST-ROTATION-4 — 브레이크/종료 억제 중이면 큐만 준비하고 정지 유지.
+      // (프랜차이즈 정책이 다음 슬롯 playlist 를 미리 스테이징해도 브레이크 중 재생되지 않음)
+      playing: !get().scheduleSuppressed,
       currentTime: 0,
       duration: 0,
       pendingSeekSec: null,
       shuffleOrder,
+      // 4C — 새 Queue 로드 = 세대 증가. 진행 중이던 Cycle Signal 을 stale 로 만든다.
+      queueGeneration: get().queueGeneration + 1,
     });
   },
 
-  play: () => set({ playing: true }),
+  // BRAND-PLAYLIST-ROTATION-4 — 스케줄 억제 중 play()/toggle() 는 재생 시작을 거부한다.
+  // (수동 재생 우회 차단 §21 + franchiseSync/business auto-switch 의 재개 차단)
+  play: () => { if (get().scheduleSuppressed) return; set({ playing: true }); },
   pause: () => set({ playing: false }),
-  toggle: () => set((s) => ({ playing: !s.playing })),
+  toggle: () => set((s) => ({ playing: s.scheduleSuppressed ? false : !s.playing })),
 
-  next: () => {
+  setScheduleSuppression: (reason) => {
+    if (reason) {
+      set({ scheduleSuppressed: true, scheduleSuppressReason: reason, playing: false });
+    } else {
+      set({ scheduleSuppressed: false, scheduleSuppressReason: null });
+    }
+  },
+
+  next: (opts) => {
+    const cause: NextCause = opts?.cause ?? 'manual_next';
     const { queue, index, shuffle, shuffleOrder, repeat } = get();
     if (queue.length === 0) return;
+
+    // 4C — 자연 종료(audio_ended) 가 마지막 재생순번/단일 트랙에서 발생하면 Cycle 완료.
+    // 아래 wrap 분기 set() 에만 병합한다(...cyc). 완료가 아니면 cyc={} → no-op.
+    const complete = isPlaylistCycleComplete({
+      cause, repeat, queueLength: queue.length, index, shuffle, shuffleOrder,
+    });
+    const cyc: { cycleEvent?: PlaylistCycleEvent } = complete
+      ? {
+          cycleEvent: {
+            sequence: (get().cycleEvent?.sequence ?? 0) + 1,
+            playlistId: get().playlist?.id ?? null,
+            queueGeneration: get().queueGeneration,
+            trackId: queue[index]?.id ?? null,
+            completedAt: Date.now(),
+            cause: 'audio_ended',
+          },
+        }
+      : {};
+
     if (repeat === 'one') {
       set({ currentTime: 0, pendingSeekSec: null });
       return;
@@ -234,9 +312,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // queue=1 일 때 repeat='all' 은 repeat='one' 과 동등하게 트랙 재시작.
     if (queue.length <= 1) {
       if (repeat === 'all') {
-        set({ currentTime: 0, pendingSeekSec: null, playing: true });
+        set({ currentTime: 0, pendingSeekSec: null, playing: true, ...cyc });
       } else {
-        set({ playing: false, currentTime: 0, pendingSeekSec: null });
+        set({ playing: false, currentTime: 0, pendingSeekSec: null, ...cyc });
       }
       return;
     }
@@ -247,9 +325,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextPos = pos + 1;
         if (nextPos >= shuffleOrder.length) {
           if (repeat === 'all') {
-            set({ index: shuffleOrder[0], currentTime: 0, playing: true, pendingSeekSec: null });
+            set({ index: shuffleOrder[0], currentTime: 0, playing: true, pendingSeekSec: null, ...cyc });
           } else {
-            set({ playing: false, currentTime: 0, pendingSeekSec: null });
+            set({ playing: false, currentTime: 0, pendingSeekSec: null, ...cyc });
           }
           return;
         }
@@ -259,9 +337,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (index + 1 >= queue.length) {
       if (repeat === 'all') {
-        set({ index: 0, currentTime: 0, playing: true, pendingSeekSec: null });
+        set({ index: 0, currentTime: 0, playing: true, pendingSeekSec: null, ...cyc });
       } else {
-        set({ playing: false, currentTime: 0, pendingSeekSec: null });
+        set({ playing: false, currentTime: 0, pendingSeekSec: null, ...cyc });
       }
       return;
     }

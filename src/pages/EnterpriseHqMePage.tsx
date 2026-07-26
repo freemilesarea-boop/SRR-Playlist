@@ -148,8 +148,24 @@ function DashboardContent({
         </div>
       </section>
 
-      {/* Phase 3-3 + 3-4 + 3-5 — 운영 관제 · 브랜드 인텔리전스 · 알림센터 진입 CTA */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* 운영센터 · 운영 관제 · 브랜드 인텔리전스 · 알림센터 진입 CTA */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Link
+          to="/enterprise/operations/stores"
+          className="group flex items-center gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 ring-1 ring-emerald-200 transition hover:bg-emerald-100 dark:bg-emerald-500/20 dark:border-transparent dark:ring-emerald-400/40 dark:hover:bg-emerald-500/25"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/40 dark:text-emerald-50" aria-hidden>
+            <Store size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold text-slate-950 dark:text-emerald-50">가맹점 운영 센터</p>
+            <p className="text-[12px] text-slate-700 dark:text-emerald-100">
+              통합 매장 목록 · 재생/계약/미납/Health.
+            </p>
+          </div>
+          <ChevronRight size={16} className="text-slate-700 dark:text-emerald-100 transition group-hover:translate-x-0.5" />
+        </Link>
+
         <Link
           to="/enterprise/ops"
           className="group flex items-center gap-3 rounded-2xl bg-sky-50 border border-sky-200 p-4 ring-1 ring-sky-200 transition hover:bg-sky-100 dark:bg-sky-500/20 dark:border-transparent dark:ring-sky-400/40 dark:hover:bg-sky-500/25"

@@ -177,6 +177,68 @@ export async function adminUpdateBrandRegistry(input: BrandRegistryUpdateInput):
   return data as { success: boolean; id: string };
 }
 
+// ---- Brand store-price propagation (Phase BRAND-BILLING-DYNAMIC-PRICE-1) --------------------
+// Migration: supabase/migrations/0458_brand_store_price_propagation.sql
+// Does NOT touch the invoice pricing resolver, issued invoices, settlements, or any PayApp object.
+
+export interface ApplyBrandStorePriceResult {
+  updated_contract_count: number;
+  previous_price: number | null;
+  new_price: number;
+}
+
+export interface BrandActiveContractCount {
+  active_contract_count: number;
+  registry_default_store_price: number;
+  billed_contract_price: number | null;
+  distinct_active_prices: number;
+}
+
+export interface UpdateBrandRegistryPricingResult {
+  success: boolean;
+  brand_registry_id: string;
+  previous_default_store_price: number | null;
+  new_default_store_price: number;
+  applied_to_active_contracts: boolean;
+  updated_contract_count: number;
+}
+
+/** Read-only: how many ACTIVE contracts this brand's price change would affect (for the confirm modal). */
+export async function adminCountBrandActiveContracts(brandRegistryId: string): Promise<BrandActiveContractCount> {
+  const { data, error } = await supabase.rpc('admin_count_brand_active_contracts', {
+    p_brand_registry_id: brandRegistryId,
+  });
+  if (error) throw error;
+  return data as BrandActiveContractCount;
+}
+
+/** Reusable primitive: apply a store price to a brand's ACTIVE contracts only. */
+export async function adminApplyBrandStorePriceToActiveContracts(input: {
+  brandRegistryId: string; monthlyStorePrice: number; effectiveFrom?: string | null;
+}): Promise<ApplyBrandStorePriceResult> {
+  const { data, error } = await supabase.rpc('admin_apply_brand_store_price_to_active_contracts', {
+    p_brand_registry_id: input.brandRegistryId,
+    p_monthly_store_price: input.monthlyStorePrice,
+    p_effective_from: input.effectiveFrom ?? null,
+  });
+  if (error) throw error;
+  return data as ApplyBrandStorePriceResult;
+}
+
+/** Integrated + atomic: update the registry default price and (optionally) propagate to active contracts. */
+export async function adminUpdateBrandRegistryPricing(input: {
+  brandRegistryId: string; defaultStorePrice: number; applyToActiveContracts: boolean; effectiveFrom?: string | null;
+}): Promise<UpdateBrandRegistryPricingResult> {
+  const { data, error } = await supabase.rpc('admin_update_brand_registry_pricing', {
+    p_brand_registry_id: input.brandRegistryId,
+    p_default_store_price: input.defaultStorePrice,
+    p_apply_to_active_contracts: input.applyToActiveContracts,
+    p_effective_from: input.effectiveFrom ?? null,
+  });
+  if (error) throw error;
+  return data as UpdateBrandRegistryPricingResult;
+}
+
 export async function adminToggleBrandRegistryActive(id: string, isActive: boolean): Promise<{ success: boolean; id: string; is_active: boolean }> {
   const { data, error } = await supabase.rpc('admin_toggle_brand_registry_active', {
     p_id: id, p_is_active: isActive,

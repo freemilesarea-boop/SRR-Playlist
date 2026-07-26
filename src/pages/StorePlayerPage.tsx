@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
-  Music, AlertTriangle, Sparkles, ListMusic,
+  Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -19,6 +19,13 @@ import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 // Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
 // StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
 import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
+// BRAND-PLAYLIST-ROTATION-4 — 본사 재생 스케줄(운영/브레이크/종료) 런타임 오버레이.
+// resolve_store_playback_policy 를 조회해 break/closed 시 재생 억제 게이트를 구동한다.
+// 프랜차이즈 미연결/legacy 매장은 has_franchise_policy=false → 게이트 항상 off (회귀 0).
+import { useStorePlaybackPolicy } from '@/hooks/useStorePlaybackPolicy';
+// BRAND-PLAYLIST-ROTATION-4B — Queue 종료 시 다음 curated set 으로 순환.
+// play 모드 + Pool≥2 에서만 동작; break/closed/legacy/fallback 에서는 완전 비활성.
+import { useStorePlaylistRotation } from '@/hooks/useStorePlaylistRotation';
 // AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
 // GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
 // 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
@@ -68,6 +75,16 @@ export default function StorePlayerPage() {
   // 트랙 변경 즉시 fire. heartbeat 실패는 silent (player 재생 절대 방해 X).
   useStoreHeartbeat({ storeId, enabled: !!storeId });
 
+  // BRAND-PLAYLIST-ROTATION-4 — 본사 스케줄 오버레이. break/closed 진입 시 playerStore
+  // scheduleSuppression 게이트가 자동으로 재생을 정지/재개한다 (아래 UI 는 상태 표시 전용).
+  const { decision: schedule } = useStorePlaybackPolicy({ storeId, enabled: !!storeId });
+  // Queue 종료 기준 Playlist Set 순환. schedule 상태를 그대로 받아 play 모드에서만 동작.
+  useStorePlaylistRotation({ storeId, enabled: !!storeId, decision: schedule });
+  const isBreak = schedule.state === 'break';
+  const isClosed = schedule.state === 'closed';
+  const scheduleActive = isBreak || isClosed; // 재생 억제 중
+  const nextTransitionLabel = formatNextTransition(schedule.nextTransitionAtIso, schedule.timezone);
+
   const current = queue[index];
   const upcoming =
     repeat === 'one'
@@ -97,6 +114,16 @@ export default function StorePlayerPage() {
               title={`본사 정책: ${franchiseSync.policy.policy_name ?? ''} · 슬롯: ${franchiseSync.policy.matched_slot?.slot_name ?? '—'}`}
             >
               <Sparkles size={12} /> 본사 정책 자동 동기화
+            </span>
+          )}
+          {isBreak && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-slate-900 dark:text-amber-200">
+              <Coffee size={12} /> 브레이크타임
+            </span>
+          )}
+          {isClosed && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/25 px-2.5 py-1 text-slate-900 dark:text-slate-200">
+              <Moon size={12} /> 운영 시간 아님
             </span>
           )}
         </div>
@@ -148,25 +175,41 @@ export default function StorePlayerPage() {
               <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
             </div>
 
-            {/* 큰 컨트롤 */}
+            {/* 큰 컨트롤 — 브레이크/운영종료 중에는 본사 스케줄 준수를 위해 비활성. */}
             <div className="flex items-center gap-6">
-              <button onClick={prev} aria-label="이전 곡" className="rounded-full bg-white/10 p-4 hover:bg-white/20">
+              <button
+                onClick={prev}
+                disabled={scheduleActive}
+                aria-label="이전 곡"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+              >
                 <SkipBack size={24} fill="currentColor" />
               </button>
               <button
                 onClick={() => (playing ? pause() : play())}
+                disabled={scheduleActive}
                 aria-label={playing ? '일시정지' : '재생'}
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
               >
                 {playing ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
               </button>
-              <button onClick={next} aria-label="다음 곡" className="rounded-full bg-white/10 p-4 hover:bg-white/20">
+              <button
+                onClick={() => next()}
+                disabled={scheduleActive}
+                aria-label="다음 곡"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+              >
                 <SkipForward size={24} fill="currentColor" />
               </button>
             </div>
 
-            {/* 자동재생 실패(브라우저 정책) 시 안내 — playing=false 인데 큐가 있으면 "재생 시작" 강조 */}
-            {!playing && (
+            {/* 본사 스케줄 안내 (브레이크/운영종료). 오류처럼 보이지 않도록 별도 배너로 표시. */}
+            {scheduleActive && (
+              <ScheduleBanner kind={isBreak ? 'break' : 'closed'} nextLabel={nextTransitionLabel} />
+            )}
+
+            {/* 자동재생 실패(브라우저 정책) 시 안내 — 스케줄 억제 중이 아닐 때만 "재생 시작" 강조 */}
+            {!playing && !scheduleActive && (
               <button
                 onClick={() => play()}
                 className="rounded-full bg-accent px-6 py-3 text-sm font-bold text-black hover:bg-accent/90"
@@ -184,15 +227,21 @@ export default function StorePlayerPage() {
           </>
         ) : (
           <div className="space-y-4 text-center">
-            <Music size={40} className="mx-auto text-white/40" />
-            <p className="text-lg font-bold">재생할 곡이 없어요</p>
-            <p className="text-sm text-white/60">매장 운영 화면에서 플레이리스트를 선택해 재생을 시작하세요.</p>
-            <button
-              onClick={() => navigate('/business')}
-              className="rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-black hover:bg-accent/90"
-            >
-              플레이리스트 고르기
-            </button>
+            {scheduleActive ? (
+              <ScheduleBanner kind={isBreak ? 'break' : 'closed'} nextLabel={nextTransitionLabel} />
+            ) : (
+              <>
+                <Music size={40} className="mx-auto text-white/40" />
+                <p className="text-lg font-bold">재생할 곡이 없어요</p>
+                <p className="text-sm text-white/60">매장 운영 화면에서 플레이리스트를 선택해 재생을 시작하세요.</p>
+                <button
+                  onClick={() => navigate('/business')}
+                  className="rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-black hover:bg-accent/90"
+                >
+                  플레이리스트 고르기
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -249,4 +298,58 @@ function Stat({ icon, label, value, tone = 'text-white' }: { icon: React.ReactNo
       <p className={`mt-0.5 text-sm font-bold ${tone}`}>{value}</p>
     </div>
   );
+}
+
+/**
+ * BRAND-PLAYLIST-ROTATION-4 — 본사 스케줄에 의한 일시정지/운영종료 안내.
+ * 색상뿐 아니라 아이콘 + 텍스트로 상태를 전달한다(§22 접근성). 오류가 아니라
+ * 정상 스케줄 상태임을 분명히 한다.
+ */
+function ScheduleBanner({ kind, nextLabel }: { kind: 'break' | 'closed'; nextLabel: string | null }) {
+  const isBreak = kind === 'break';
+  return (
+    <div
+      role="status"
+      className={`mx-auto flex max-w-sm flex-col items-center gap-2 rounded-2xl px-6 py-5 text-center ring-1 ${
+        isBreak ? 'bg-amber-500/10 ring-amber-400/30' : 'bg-slate-500/10 ring-slate-400/25'
+      }`}
+    >
+      <span className={`inline-flex h-11 w-11 items-center justify-center rounded-full ${isBreak ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-500/25 text-slate-200'}`}>
+        {isBreak ? <Coffee size={22} /> : <Moon size={22} />}
+      </span>
+      <p className="text-base font-bold">
+        {isBreak ? '브레이크타임 — 재생 일시정지' : '운영 시간이 아닙니다'}
+      </p>
+      <p className="text-sm text-white/60">
+        {isBreak ? '본사 설정에 따라 잠시 음악이 멈춰 있어요.' : '운영 시작 시간에 자동으로 재생을 재개합니다.'}
+      </p>
+      {nextLabel && (
+        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-white/75">
+          <Clock size={13} /> {isBreak ? '재생 재개' : '운영 시작'}: {nextLabel}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 다음 전환 시각을 매장 타임존 기준으로 표시용 포맷. 정본(계산)은 Resolver 이며
+ * 프론트는 표시 변환만 수행한다(§12). 잘못된 입력은 조용히 null.
+ */
+function formatNextTransition(iso: string | null, timezone: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Intl.DateTimeFormat('ko-KR', {
+      timeZone: timezone ?? 'Asia/Seoul',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(ms));
+  } catch {
+    return null;
+  }
 }
