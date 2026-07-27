@@ -121,6 +121,37 @@ describe('quick tasks', () => {
   });
 });
 
+describe('deep-link keys resolve to a job group (regression)', () => {
+  // 실제 repo tab key(문서의 users/content-management/franchise-management/settlement-center/
+  // settings 는 존재하지 않음 → 실제 키로 대체) 가 올바른 그룹으로 해석되는지 잠금.
+  const DEEP_LINKS: Array<[string, string]> = [
+    ['dashboard', '홈'],
+    ['members', '회원'],
+    ['track-review', '음원'],
+    ['content', '플레이리스트'],
+    ['playlist-builder', '플레이리스트'],
+    ['store-monitoring', '매장'],
+    ['enterprise-overview', '본사·브랜드'],
+    ['enterprise-command-center', '본사·브랜드'],
+    ['enterprise-accounts', '본사·브랜드'],
+    ['franchise', '본사·브랜드'],
+    ['artist-settlements', '정산'],
+    ['enterprise-settlement-center', '정산'],
+    ['site-settings', '운영·설정'],
+  ];
+  it('each existing deep-link tab maps to its job group', () => {
+    for (const [key, expected] of DEEP_LINKS) {
+      expect(EXISTING_TAB_KEYS).toContain(key); // 실제 존재하는 키만 검증
+      expect(groupOfTab(key)).toBe(expected);
+    }
+  });
+  it('advanced deep-link tabs are still placed (reachable via ?tab=)', () => {
+    // command-center 는 고급(기본 숨김)이지만 그룹에 배치되어 딥링크 접근 가능해야 한다.
+    expect(isAdvancedTab('enterprise-command-center')).toBe(true);
+    expect(groupOfTab('enterprise-command-center')).toBe('본사·브랜드');
+  });
+});
+
 describe('breadcrumb', () => {
   it('builds group > subgroup > page for a deep tab', () => {
     const crumbs = breadcrumbFor('track-review', '음원 검수');
