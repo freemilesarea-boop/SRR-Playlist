@@ -279,6 +279,22 @@ export interface CandidateFilters {
   excludeAlreadyIn?: boolean;
   excludeArtists?: string[];
   excludeTrackIds?: string[];
+  /** any-of 느슨한(대소문자·부분일치) 장르 허용 목록. 비어있으면 미적용. */
+  includeGenres?: string[];
+  /** 느슨한(대소문자·부분일치) 장르 차단 목록. */
+  excludeGenres?: string[];
+  /** explicit 트랙 제외(explicit===true 만 제외; null 은 통과). */
+  excludeExplicit?: boolean;
+}
+
+/** 느슨한 장르 매칭: 토큰 목록 중 하나라도 트랙 장르와 부분일치하면 true. */
+function genreMatchesAny(genre: string | null, tokens: string[]): boolean {
+  if (!genre) return false;
+  const g = genre.toLowerCase();
+  return tokens.some((raw) => {
+    const tok = raw.trim().toLowerCase();
+    return tok !== '' && (g.includes(tok) || tok.includes(g));
+  });
 }
 
 function includesCI(hay: string | null, needle: string): boolean {
@@ -318,8 +334,12 @@ export function filterCandidates(tracks: BuilderTrack[], f: CandidateFilters = {
     if (f.excludeBlocked && (t.guardrailBlocked || t.fitStatus === 'excluded')) return false;
     if (f.excludePenalized && (t.guardrailPenalty > 0 || t.fitStatus === 'review_needed')) return false;
     if (f.excludeAlreadyIn && t.alreadyInPlaylist) return false;
+    if (f.excludeExplicit && t.explicit === true) return false;
     if (t.artist && exArtists.has(t.artist)) return false;
     if (exIds.has(t.track_id)) return false;
+
+    if (f.includeGenres && f.includeGenres.length > 0 && !genreMatchesAny(t.genre, f.includeGenres)) return false;
+    if (f.excludeGenres && f.excludeGenres.length > 0 && genreMatchesAny(t.genre, f.excludeGenres)) return false;
 
     return true;
   });

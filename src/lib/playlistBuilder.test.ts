@@ -274,6 +274,34 @@ describe('mapping / enrichment', () => {
   });
 });
 
+describe('filterCandidates — genre/explicit extensions (UX-2)', () => {
+  it('includeGenres: loose any-of match', () => {
+    const rows = [
+      mapAdminTrack({ id: 'a', main_genre: 'Lofi Beats' }),
+      mapAdminTrack({ id: 'b', main_genre: 'EDM' }),
+    ];
+    const r = filterCandidates(rows, { includeGenres: ['lofi', 'jazz'] });
+    expect(r.map((t) => t.track_id)).toEqual(['a']);
+  });
+  it('excludeGenres: loose any-of block', () => {
+    const rows = [
+      mapAdminTrack({ id: 'a', main_genre: 'ambient' }),
+      mapAdminTrack({ id: 'b', main_genre: 'jazz' }),
+    ];
+    const r = filterCandidates(rows, { excludeGenres: ['ambient'] });
+    expect(r.map((t) => t.track_id)).toEqual(['b']);
+  });
+  it('excludeExplicit: only true excluded, null passes', () => {
+    const rows = [
+      mapAdminTrack({ id: 'a', explicit_content: true }),
+      mapAdminTrack({ id: 'b', explicit_content: false }),
+      mapAdminTrack({ id: 'c' }), // null explicit
+    ];
+    const r = filterCandidates(rows, { excludeExplicit: true });
+    expect(r.map((t) => t.track_id).sort()).toEqual(['b', 'c']);
+  });
+});
+
 describe('save payload + clone title', () => {
   it('toSaveTrackIds preserves order and drops duplicates/empties', () => {
     const ids = toSaveTrackIds([

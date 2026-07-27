@@ -11,6 +11,7 @@
  * SQL: supabase/migrations/0466_admin_playlist_builder.sql
  */
 import { supabase } from '@/lib/supabase';
+import type { StoreProfileRow } from '@/lib/playlistPresets';
 
 /** admin_save_playlist_tracks 반환. */
 export interface SavePlaylistTracksResult {
@@ -123,4 +124,26 @@ export async function loadCandidatePool(
   }
   const rows = (data as { tracks?: unknown } | null)?.tracks;
   return (Array.isArray(rows) ? rows : []) as CandidatePoolRow[];
+}
+
+/**
+ * 운영 Preset 소스: 기존 ai_store_profiles(업종별 정책) 조회.
+ *   RLS: asp_admin_read(admin 전체) / asp_public_read(active). 신규 테이블/RPC 없이 재사용.
+ *   active 프로필만, sort_order 순.
+ */
+export async function listStoreProfiles(): Promise<StoreProfileRow[]> {
+  const { data, error } = await supabase
+    .from('ai_store_profiles')
+    .select(
+      'store_key, store_label, preferred_genres, blocked_genres, preferred_moods, vocal_preference, ' +
+        'ideal_bpm_min, ideal_bpm_max, bpm_min, bpm_max, ideal_energy_min, ideal_energy_max, energy_min, energy_max, ' +
+        'allow_explicit, require_clean_content, sort_order, active, description',
+    )
+    .eq('active', true)
+    .order('sort_order', { ascending: true });
+  if (error) {
+    console.error('[playlistBuilderApi] listStoreProfiles failed', error);
+    throw error;
+  }
+  return (data ?? []) as unknown as StoreProfileRow[];
 }
