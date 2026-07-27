@@ -527,6 +527,29 @@ export function sameOrder(a: { track_id: string }[], b: { track_id: string }[]):
   return true;
 }
 
+/** 저장 payload(admin_save_playlist_tracks)용 순서 보존·중복 제거된 track_id 목록. */
+export function toSaveTrackIds(tracks: { track_id: string }[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tracks) {
+    if (!t.track_id || seen.has(t.track_id)) continue;
+    seen.add(t.track_id);
+    out.push(t.track_id);
+  }
+  return out;
+}
+
+/** 복제 시 기본 제목 제안: "제목" → "제목 (사본)", 이미 (사본)이면 (사본 2), (사본 3)… */
+export function suggestCloneTitle(title: string | null | undefined): string {
+  const base = (title ?? '').trim() || '제목 없음';
+  const m = base.match(/^(.*?) \(사본(?: (\d+))?\)$/);
+  if (m) {
+    const n = m[2] ? parseInt(m[2], 10) + 1 : 2;
+    return `${m[1]} (사본 ${n})`;
+  }
+  return `${base} (사본)`;
+}
+
 // =============================================================================
 // Mapping — merge existing RPC/table shapes into BuilderTrack (no new fields)
 // =============================================================================

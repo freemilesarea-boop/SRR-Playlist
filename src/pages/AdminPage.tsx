@@ -64,6 +64,7 @@ const ContentManagement = lazy(() => import('@/components/admin/ContentManagemen
 const RecommendationTester = lazy(() => import('@/components/admin/RecommendationTester'));
 const PromotionCodes = lazy(() => import('@/components/admin/PromotionCodes'));
 const AutoPlaylistManager = lazy(() => import('@/components/admin/AutoPlaylistManager'));
+const PlaylistBuilderWorkspace = lazy(() => import('@/components/admin/PlaylistBuilderWorkspace'));
 const AudioReencodePanel = lazy(() => import('@/components/admin/AudioReencodePanel'));
 const AudioDiagnosticPanel = lazy(() => import('@/components/admin/AudioDiagnosticPanel'));
 const AudioEngineDiagnosticsPanel = lazy(() => import('@/components/admin/AudioEngineDiagnosticsPanel'));
@@ -150,6 +151,7 @@ type Tab =
   | 'payment-sync'
   | 'content'
   | 'auto-playlists'
+  | 'playlist-builder'
   | 'artists'
   | 'artist-contracts'
   | 'payout-verification'
@@ -219,6 +221,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
+  { key: 'playlist-builder', label: '플레이리스트 빌더', icon: <Music size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'artist-contracts', label: '아티스트 계약', icon: <FileSignature size={14} /> },
   { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
@@ -276,6 +279,7 @@ const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
     tabs: [
       'content',
       'auto-playlists',
+      'playlist-builder',
       'audio-reencode',
       'audio-diagnostics',
       'audio-engine-diagnostics',
@@ -620,6 +624,7 @@ export default function AdminPage() {
           {tab === 'operation-logs' && <AdminOperationLogs />}
           {tab === 'content' && <ContentManagement />}
           {tab === 'auto-playlists' && <AutoPlaylistManager />}
+          {tab === 'playlist-builder' && <PlaylistBuilderWorkspace />}
           {tab === 'artists' && <ArtistApprovalList />}
           {tab === 'artist-contracts' && <ArtistContractsList />}
           {tab === 'payout-verification' && <PayoutVerificationList />}

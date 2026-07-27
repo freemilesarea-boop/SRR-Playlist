@@ -90,6 +90,11 @@ const PATTERN_RULES: Array<{ re: RegExp; msg: string }> = [
     msg: '필수 메타데이터/파일이 누락되어 승인할 수 없습니다.' },
   { re: /duplicate audio.*sha256/i, msg: '이미 등록된 음원과 동일한 파일입니다.' },
   { re: /monthly_upload_quota_exceeded/i, msg: '월간 업로드 한도를 초과했습니다.' },
+
+  // 플레이리스트 빌더(0466)
+  { re: /^admin_only$|\badmin_only\b/i, msg: '관리자 권한이 필요합니다.' },
+  { re: /cannot_edit_auto_playlist/i, msg: '자동(스마트) 플레이리스트는 수동 편집할 수 없습니다.' },
+  { re: /unknown_track_ids/i, msg: '존재하지 않는 트랙이 포함되어 저장할 수 없습니다.' },
   { re: /음원 .* super_admin\/content_admin/i, msg: '음원 관리 권한이 필요합니다.' },
 
   // 본인인증 / PII

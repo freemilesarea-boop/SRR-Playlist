@@ -17,6 +17,8 @@ import {
   summarizeIssues,
   suggestOrder,
   sameOrder,
+  toSaveTrackIds,
+  suggestCloneTitle,
   mapAdminTrack,
   enrichWithDashboard,
   enrichWithCandidatePool,
@@ -269,5 +271,33 @@ describe('mapping / enrichment', () => {
     const r = markAlreadyIn(base, ['y']);
     expect(r.find((t) => t.track_id === 'y')?.alreadyInPlaylist).toBe(true);
     expect(r.find((t) => t.track_id === 'x')?.alreadyInPlaylist).toBe(false);
+  });
+});
+
+describe('save payload + clone title', () => {
+  it('toSaveTrackIds preserves order and drops duplicates/empties', () => {
+    const ids = toSaveTrackIds([
+      { track_id: 'b' },
+      { track_id: 'a' },
+      { track_id: 'b' }, // dup
+      { track_id: '' }, // empty
+      { track_id: 'c' },
+    ]);
+    expect(ids).toEqual(['b', 'a', 'c']);
+  });
+  it('toSaveTrackIds returns empty for empty input', () => {
+    expect(toSaveTrackIds([])).toEqual([]);
+  });
+  it('suggestCloneTitle appends (사본)', () => {
+    expect(suggestCloneTitle('아침 재즈')).toBe('아침 재즈 (사본)');
+  });
+  it('suggestCloneTitle increments existing (사본)', () => {
+    expect(suggestCloneTitle('아침 재즈 (사본)')).toBe('아침 재즈 (사본 2)');
+    expect(suggestCloneTitle('아침 재즈 (사본 2)')).toBe('아침 재즈 (사본 3)');
+  });
+  it('suggestCloneTitle handles blank/nullish title', () => {
+    expect(suggestCloneTitle('')).toBe('제목 없음 (사본)');
+    expect(suggestCloneTitle(null)).toBe('제목 없음 (사본)');
+    expect(suggestCloneTitle(undefined)).toBe('제목 없음 (사본)');
   });
 });
