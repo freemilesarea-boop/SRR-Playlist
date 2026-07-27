@@ -26,6 +26,9 @@ import { useStorePlaybackPolicy } from '@/hooks/useStorePlaybackPolicy';
 // BRAND-PLAYLIST-ROTATION-4B — Queue 종료 시 다음 curated set 으로 순환.
 // play 모드 + Pool≥2 에서만 동작; break/closed/legacy/fallback 에서는 완전 비활성.
 import { useStorePlaylistRotation } from '@/hooks/useStorePlaylistRotation';
+// AI-LEARNING-ENGINE-1 — 매장 재생 피드백 수집(play/complete/skip/next/prev/pause/resume).
+// 기본 OFF(localStorage flag). fire-and-forget — 큐/정렬/재생에 영향 0 (learning-only).
+import { useStorePlaybackFeedback } from '@/hooks/useStorePlaybackFeedback';
 // AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
 // GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
 // 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
@@ -80,6 +83,8 @@ export default function StorePlayerPage() {
   const { decision: schedule } = useStorePlaybackPolicy({ storeId, enabled: !!storeId });
   // Queue 종료 기준 Playlist Set 순환. schedule 상태를 그대로 받아 play 모드에서만 동작.
   useStorePlaylistRotation({ storeId, enabled: !!storeId, decision: schedule });
+  // AI-LEARNING-ENGINE-1 — 재생 피드백 수집. 기본 OFF(flag), fire-and-forget, 재생 영향 0.
+  useStorePlaybackFeedback({ storeId, enabled: !!storeId });
   const isBreak = schedule.state === 'break';
   const isClosed = schedule.state === 'closed';
   const scheduleActive = isBreak || isClosed; // 재생 억제 중

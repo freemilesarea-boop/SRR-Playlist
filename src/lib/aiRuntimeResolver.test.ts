@@ -4,6 +4,7 @@ import {
   parseRuntimeMode,
   parseCandidateItems,
   runtimeScore,
+  effectiveRuntimeScore,
   composeRuntimeQueue,
   staticRuntimeQueue,
   computeShadowComparison,
@@ -218,5 +219,77 @@ describe('computeShadowComparison', () => {
     const cmp = computeShadowComparison(statics, [cand('a', 90), cand('b', 80), cand('c', 70)]);
     expect(cmp.topTrackDiffers).toBe(false);
     expect(cmp.orderDiffCount).toBe(0);
+  });
+});
+
+// =============================================================================
+// AI-LEARNING-ENGINE-1 (0465) — adaptive_score ranking
+// =============================================================================
+describe('effectiveRuntimeScore — adaptive ?? fit − penalty', () => {
+  it('uses fit when no adaptive_score (backward compatible)', () => {
+    expect(effectiveRuntimeScore({ fit_score: 80, guardrail_penalty: 10 })).toBe(70);
+    expect(effectiveRuntimeScore({ fit_score: 80, guardrail_penalty: 0 })).toBe(80);
+  });
+  it('prefers adaptive_score when present', () => {
+    expect(effectiveRuntimeScore({ fit_score: 95, guardrail_penalty: 0, adaptive_score: 75 })).toBe(75);
+    expect(effectiveRuntimeScore({ fit_score: 85, guardrail_penalty: 5, adaptive_score: 100 })).toBe(95);
+  });
+  it('adaptive_score of 0 is honored (not treated as missing)', () => {
+    expect(effectiveRuntimeScore({ fit_score: 90, guardrail_penalty: 0, adaptive_score: 0 })).toBe(0);
+  });
+});
+
+describe('parseCandidateItems — adaptive_score', () => {
+  it('parses adaptive_score from 0465 payload', () => {
+    const items = parseCandidateItems([
+      { track_id: 'a', fit_score: 85, adaptive_score: 100, fit_status: 'active', guardrail_penalty: 0 },
+    ]);
+    expect(items[0].adaptive_score).toBe(100);
+  });
+  it('defaults adaptive_score to fit_score when absent (0463 payload)', () => {
+    const items = parseCandidateItems([
+      { track_id: 'a', fit_score: 85, fit_status: 'active', guardrail_penalty: 0 },
+    ]);
+    expect(items[0].adaptive_score).toBe(85);
+  });
+});
+
+describe('composeRuntimeQueue — adaptive threshold gate', () => {
+  const statics = [track('a'), track('b'), track('c')];
+  function acand(
+    track_id: string, fit_score: number, adaptive_score: number, penalty = 0,
+  ): RuntimeCandidateItem {
+    return { track_id, fit_score, adaptive_score, fit_status: 'active', guardrail_penalty: penalty };
+  }
+
+  it('an adaptively-demoted track drops below min-fit even if fit is high', () => {
+    // fit 95 but store keeps skipping → adaptive 40; min 50 → excluded from AI queue
+    const res = composeRuntimeQueue(
+      statics,
+      [acand('a', 95, 40), acand('b', 85, 100), acand('c', 70, 70)],
+      { minimumFitScore: 50 },
+    );
+    expect(res.source).toBe('ai_preview');
+    expect(res.tracks.map((t) => t.id)).toEqual(['b', 'c']); // 'a' gated out by adaptive
+  });
+
+  it('an adaptively-promoted track passes the gate it would fail on fit alone', () => {
+    // fit 45 (< min 50) but loved → adaptive 65 → passes
+    const res = composeRuntimeQueue(
+      statics,
+      [acand('a', 45, 65)],
+      { minimumFitScore: 50 },
+    );
+    expect(res.source).toBe('ai_preview');
+    expect(res.tracks.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('no adaptive_score → identical to fit-based gate (regression guard)', () => {
+    const res = composeRuntimeQueue(
+      statics,
+      [cand('a', 40), cand('b', 80)],
+      { minimumFitScore: 50 },
+    );
+    expect(res.tracks.map((t) => t.id)).toEqual(['b']); // 'a' below 50 by fit
   });
 });

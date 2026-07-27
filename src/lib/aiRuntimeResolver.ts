@@ -11,7 +11,8 @@
  * 안전 규칙:
  *   • Candidate Source 는 반드시 Static Playlist 내부 Track 으로 제한(track_id join).
  *     → audio_url 없는 Track / 존재하지 않는 Track / blocked Track 삽입 불가능.
- *   • runtime_score = fit_score − penalty_score. 새 Score Formula 없음(DB 값만 사용).
+ *   • runtime_score = coalesce(adaptive_score, fit_score) − penalty_score.
+ *     새 Score Formula 없음(DB 값만 사용). adaptive_score 없으면 fit 로 대체 → 회귀 0.
  *   • Tie-break: 원래 order_index → track_id. Randomness 없음.
  *   • 결과가 비면 즉시 Static Fallback. 재생 중단/Queue empty 금지.
  *   • Network / mode gate / persistence 는 여기 없음 — service 레이어 담당.
@@ -34,12 +35,17 @@ export interface AiRuntimeModeInfo {
   source: string;
 }
 
-/** get_store_ai_runtime_queue / _ai_build_store_queue_core (0463) 의 queue item. */
+/** get_store_ai_runtime_queue / _ai_build_store_queue_core (0463/0465) 의 queue item. */
 export interface RuntimeCandidateItem {
   track_id: string;
   fit_score: number;
   fit_status: string; // active | review_needed | excluded | unscored
   guardrail_penalty: number;
+  /**
+   * AI-LEARNING-ENGINE-1 (0465) — 매장 학습이 적용된 adaptive score.
+   * 없으면(구 payload / 학습 미적용) fit_score 로 대체 → 0463 동작과 완전 동일.
+   */
+  adaptive_score?: number;
 }
 
 export type RuntimeQueueSource = 'static' | 'ai_preview' | 'static_fallback';
@@ -119,11 +125,14 @@ export function parseCandidateItems(raw: unknown): RuntimeCandidateItem[] {
     if (!x || typeof x !== 'object') continue;
     const o = x as Record<string, unknown>;
     if (typeof o.track_id !== 'string' || !o.track_id) continue;
+    const fit = toNum(o.fit_score, 0);
     out.push({
       track_id: o.track_id,
-      fit_score: toNum(o.fit_score, 0),
+      fit_score: fit,
       fit_status: typeof o.fit_status === 'string' ? o.fit_status : 'unscored',
       guardrail_penalty: toNum(o.guardrail_penalty, 0),
+      // adaptive_score 없으면 fit 로 대체(하위 호환). 0465 payload 는 항상 포함.
+      adaptive_score: toNum(o.adaptive_score, fit),
     });
   }
   return out;
@@ -133,9 +142,21 @@ export function parseCandidateItems(raw: unknown): RuntimeCandidateItem[] {
 // Scoring / ordering (pure, deterministic)
 // =============================================================================
 
-/** runtime_score = fit_score − penalty_score (DB 값만 사용). */
+/** runtime_score = fit_score − penalty_score (DB 값만 사용). 학습 이전 baseline. */
 export function runtimeScore(item: Pick<RuntimeCandidateItem, 'fit_score' | 'guardrail_penalty'>): number {
   return toNum(item.fit_score, 0) - toNum(item.guardrail_penalty, 0);
+}
+
+/**
+ * AI-LEARNING-ENGINE-1 — effective_score = coalesce(adaptive_score, fit_score) − penalty.
+ * 매장 반응 학습이 반영된 랭킹 점수. adaptive_score 없으면 runtimeScore 와 동일(하위 호환).
+ * DB _ai_build_store_queue_core 의 정렬 키(coalesce(adaptive_score, fit_score))와 정합.
+ */
+export function effectiveRuntimeScore(
+  item: Pick<RuntimeCandidateItem, 'fit_score' | 'guardrail_penalty' | 'adaptive_score'>,
+): number {
+  const base = item.adaptive_score == null ? toNum(item.fit_score, 0) : toNum(item.adaptive_score, 0);
+  return base - toNum(item.guardrail_penalty, 0);
 }
 
 function hasUsableAudio(t: TrackRow): boolean {
@@ -199,7 +220,7 @@ export function composeRuntimeQueue(
   for (const c of candidates) {
     if (tracks.length >= maxTracks) break;
     if (c.fit_status === 'excluded') continue;           // blocked/excluded
-    if (runtimeScore(c) < minFit) continue;              // below threshold (fit − penalty)
+    if (effectiveRuntimeScore(c) < minFit) continue;     // below threshold (adaptive ?? fit − penalty)
     const row = byId.get(c.track_id);
     if (!row) continue;                                  // not in this playlist / no audio
     if (used.has(row.id)) continue;                      // dedupe

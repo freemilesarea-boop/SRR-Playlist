@@ -1,7 +1,7 @@
 // AiCurationPanel — AI 큐레이션 관리 탭 라우터 (X6.49 분할 후 thin shell)
 //
-// 23개 sub-tab 을 dispatch 만 담당. 각 탭 구현은 다음 위치:
-//   - src/components/admin/aiCuration/*.tsx — 본 패널 전용 14개 tab
+// 24개 sub-tab 을 dispatch 만 담당. 각 탭 구현은 다음 위치:
+//   - src/components/admin/aiCuration/*.tsx — 본 패널 전용 15개 tab
 //   - src/components/admin/{QcQueueTab,BehaviorTab,BehaviorInsightTab,StoreLearningTab,
 //       EventQualityTab,GenreGuardrailTab,FeedbackSummaryTab,MdPolicyTab,AbuseMonitorTab,
 //       StoreGenrePolicyTab}.tsx — 다른 위치에서도 재사용되는 9개 tab
@@ -28,6 +28,7 @@ import AdminLearningTab from '@/components/admin/aiCuration/AdminLearningTab';
 import WeightTuningTab from '@/components/admin/aiCuration/WeightTuningTab';
 import AiRuntimePreviewTab from '@/components/admin/aiCuration/AiRuntimePreviewTab';
 import AiRuntimeControlTab from '@/components/admin/aiCuration/AiRuntimeControlTab';
+import AiLearningDashboardTab from '@/components/admin/aiCuration/AiLearningDashboardTab';
 
 import QcQueueTab from '@/components/admin/QcQueueTab';
 import BehaviorTab from '@/components/admin/BehaviorTab';
@@ -44,12 +45,13 @@ type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 
   | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview'
   | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight'
   | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy' | 'admin_learning'
-  | 'weight_tuning' | 'runtime_preview' | 'runtime_control';
+  | 'weight_tuning' | 'runtime_preview' | 'runtime_control' | 'learning_dashboard';
 
 const TABS: [SubTab, string][] = [
   ['perf', '운영 성과'],
   ['runtime_control', '🎛️ AI 런타임 제어'],
   ['runtime_preview', '🧪 AI 런타임 프리뷰'],
+  ['learning_dashboard', '📈 학습 현황'],
   ['admin_learning', '🧠 검수 패턴 학습'],
   ['weight_tuning', '⚖️ 가중치 튜닝'],
   ['store_genre_policy', '매장 장르 정책 (v1)'],
@@ -100,6 +102,7 @@ export default function AiCurationPanel() {
       {sub === 'perf' && <PerformanceTab />}
       {sub === 'runtime_control' && <AiRuntimeControlTab />}
       {sub === 'runtime_preview' && <AiRuntimePreviewTab />}
+      {sub === 'learning_dashboard' && <AiLearningDashboardTab />}
       {sub === 'admin_learning' && <AdminLearningTab />}
       {sub === 'weight_tuning' && <WeightTuningTab />}
       {sub === 'pending' && <PendingTab />}
