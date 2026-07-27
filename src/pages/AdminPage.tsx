@@ -37,6 +37,18 @@ import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacA
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { supabaseProjectRef } from '@/lib/supabase';
+import {
+  type AdminGroup,
+  ADMIN_GROUPS,
+  groupOfTab,
+  subgroupOfTab,
+  subgroupsOf,
+  groupHint,
+  isAdvancedTab,
+  labelForTab,
+  breadcrumbFor,
+  QUICK_TASKS,
+} from '@/lib/adminNav';
 
 // X6.39 — Lazy split — 41개 admin 탭 (탭 클릭 시 chunk 로드)
 const ArtistApprovalList = lazy(() => import('@/components/admin/ArtistApprovalList'));
@@ -249,89 +261,24 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
-/** 28개 탭을 의미 단위 6그룹으로 묶어 2-level 네비. 운영자가 평소 자주 가는 탭에 빠르게 도달. */
-type Group = '운영' | '회원' | '엔터프라이즈' | '매출/결제' | '아티스트' | '콘텐츠/오디오' | '설정';
-
-const GROUPS: Array<{ key: Group; tabs: Tab[] }> = [
-  { key: '운영', tabs: ['dashboard', 'business-live', 'brand-player', 'support-inquiries'] },
-  { key: '회원', tabs: ['members', 'curators', 'sales-agents', 'free-trials'] },
-  { key: '엔터프라이즈', tabs: ['enterprise-command-center', 'enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-noc', 'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-contracts', 'enterprise-monthly-settlements', 'enterprise-billing', 'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency', 'franchise'] },
-  { key: '매출/결제', tabs: ['streaming', 'streaming-v2', 'settlement-v2', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'operation-logs'] },
-  {
-    key: '아티스트',
-    tabs: [
-      'artists',
-      'artist-contracts',
-      'payout-intake',
-      'payout-verification',
-      'track-review',
-      'qc-review',
-      'artist-tracks',
-      'deleted-tracks',
-      'artist-settlements',
-    ],
-  },
-  {
-    key: '콘텐츠/오디오',
-    tabs: [
-      'content',
-      'auto-playlists',
-      'audio-reencode',
-      'audio-diagnostics',
-      'audio-engine-diagnostics',
-      'metadata-violations',
-      'upload-audit',
-      'ai-curation',
-      'clap-curation',
-      'ai-metadata',
-      'ai-taxonomy',
-      'ai-genre',
-      'ai-mood',
-      'ai-storetype',
-      'placement-audit',
-      'recommendation',
-      'upload-integrity',
-    ],
-  },
-  { key: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins'] },
-];
+/**
+ * IA (ADMIN-IA-SIMPLIFICATION-1) — 업무 중심 1차 메뉴(8) → 2차(subgroup) → 페이지(tab).
+ * 매핑/라벨/고급 노출은 @/lib/adminNav 단일 소스. 탭 key 는 불변 → 기존 딥링크 ?tab=X 전부 보존.
+ * 이전의 7개 기술 그룹 + Enterprise 전용 subgroup 을 8개 업무 그룹의 일반 subgroup 으로 통합.
+ */
+type Group = AdminGroup;
 
 function groupOf(tab: Tab): Group {
-  for (const g of GROUPS) {
-    if (g.tabs.includes(tab)) return g.key;
-  }
-  return '운영';
-}
-
-/**
- * IA/Nav 정리 — Enterprise 그룹 내 서브그룹 (2단계 nav, 기존 구조 무영향).
- *   • 기존 GROUPS['엔터프라이즈'].tabs 전체가 covered 되어야 함.
- *   • 기존 URL param ?tab=X 접근은 그대로 유지 (subgroup 자동 동기화).
- *   • 기존 Panel/RPC/API 무영향.
- */
-type EnterpriseSubgroup = '종합' | '브랜드·본사' | '매장 운영' | '음악·정책' | '청구·정산' | '시스템 관제';
-
-const ENTERPRISE_SUBGROUPS: Array<{ key: EnterpriseSubgroup; tabs: Tab[] }> = [
-  { key: '종합',       tabs: ['enterprise-command-center', 'enterprise-overview'] },
-  { key: '브랜드·본사', tabs: ['brand-registry', 'enterprise-accounts', 'enterprise-regions', 'franchise'] },
-  { key: '매장 운영',   tabs: ['store-monitoring', 'store-now-playing'] },
-  { key: '음악·정책',   tabs: ['policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency'] },
-  { key: '청구·정산',   tabs: ['enterprise-contracts', 'enterprise-billing', 'enterprise-monthly-settlements', 'enterprise-settlement-center'] },
-  { key: '시스템 관제', tabs: ['enterprise-noc', 'enterprise-operations'] },
-];
-
-function enterpriseSubgroupOf(tab: Tab): EnterpriseSubgroup {
-  for (const sg of ENTERPRISE_SUBGROUPS) {
-    if (sg.tabs.includes(tab)) return sg.key;
-  }
-  return '종합';
+  return groupOfTab(tab);
 }
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [group, setGroup] = useState<Group>(groupOf('dashboard'));
-  // IA/Nav — Enterprise 그룹 내 서브그룹 선택 상태 (기존 로직 무영향)
-  const [enterpriseSubgroup, setEnterpriseSubgroup] = useState<EnterpriseSubgroup>('종합');
+  // IA — 활성 그룹의 2차 서브그룹 선택 상태(모든 그룹 공통).
+  const [subgroup, setSubgroup] = useState<string>(subgroupOfTab('dashboard'));
+  // Progressive Disclosure — 고급/기술 탭 기본 숨김, 토글 시 노출.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
@@ -359,7 +306,7 @@ export default function AdminPage() {
         if (isValidTab(t)) {
           setTab(t);
           setGroup(groupOf(t));
-          if (groupOf(t) === '엔터프라이즈') setEnterpriseSubgroup(enterpriseSubgroupOf(t));
+          setSubgroup(subgroupOfTab(t));
         }
       } catch { /* silent */ }
     };
@@ -368,44 +315,51 @@ export default function AdminPage() {
     return () => window.removeEventListener('popstate', applyFromUrl);
   }, []);
 
-  const visibleTabs = TABS.filter((t) => !t.superOnly || perms?.is_super_admin);
-  const enterpriseTabs = visibleTabs.filter((t) =>
-    (GROUPS.find((g) => g.key === '엔터프라이즈')?.tabs ?? []).includes(t.key),
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => !t.superOnly || perms?.is_super_admin),
+    [perms],
+  );
+  const visibleKeys = useMemo(() => new Set(visibleTabs.map((t) => t.key)), [visibleTabs]);
+
+  // 활성 그룹의 서브그룹 목록(가시 탭이 하나라도 있는 서브그룹만).
+  const groupSubgroups = useMemo(
+    () => subgroupsOf(group).filter((s) => s.tabs.some((k) => visibleKeys.has(k as Tab))),
+    [group, visibleKeys],
+  );
+  const hasSubNav = groupSubgroups.length > 1;
+
+  // 현재 서브그룹의 탭(가시). 서브그룹이 하나뿐이면 그룹 전체.
+  const subgroupTabKeys = useMemo(() => {
+    if (!hasSubNav) return groupSubgroups.flatMap((s) => s.tabs);
+    const active = groupSubgroups.find((s) => s.name === subgroup) ?? groupSubgroups[0];
+    return active.tabs;
+  }, [groupSubgroups, hasSubNav, subgroup]);
+
+  // 고급 탭은 기본 숨김. 단, 현재 활성 탭은 항상 노출(딥링크 진입 대비).
+  const displayTabs = useMemo(() => {
+    const keys = new Set(subgroupTabKeys);
+    return visibleTabs.filter(
+      (t) => keys.has(t.key) && (!isAdvancedTab(t.key) || showAdvanced || t.key === tab),
+    );
+  }, [subgroupTabKeys, visibleTabs, showAdvanced, tab]);
+
+  const hiddenAdvancedCount = useMemo(
+    () => (showAdvanced ? 0 : subgroupTabKeys.filter((k) => isAdvancedTab(k) && k !== tab && visibleKeys.has(k as Tab)).length),
+    [subgroupTabKeys, showAdvanced, tab, visibleKeys],
   );
 
-  // 방탄 filtering — useMemo 로 안정화. 엔터프라이즈 그룹일 때는 반드시 서브그룹 필터만 적용.
-  // 원본 GROUPS['엔터프라이즈'] 전체 리스트가 실수로 노출되는 경로 없음.
-  const displayTabs = useMemo(() => {
-    if (group === '엔터프라이즈') {
-      const subgroupTabKeys = ENTERPRISE_SUBGROUPS.find((s) => s.key === enterpriseSubgroup)?.tabs ?? [];
-      const filtered = enterpriseTabs.filter((t) => subgroupTabKeys.includes(t.key));
-      // 서브그룹에 해당하는 탭이 하나도 없으면 (권한 등) '종합' 로 fallback — 빈 nav 방지
-      if (filtered.length === 0 && enterpriseSubgroup !== '종합') {
-        const jonghapKeys = ENTERPRISE_SUBGROUPS.find((s) => s.key === '종합')?.tabs ?? [];
-        return enterpriseTabs.filter((t) => jonghapKeys.includes(t.key));
-      }
-      return filtered;
-    }
-    // 다른 그룹은 기존 동작 그대로
-    return visibleTabs.filter((t) =>
-      (GROUPS.find((g) => g.key === group)?.tabs ?? []).includes(t.key),
-    );
-  }, [group, enterpriseSubgroup, enterpriseTabs, visibleTabs]);
-
-  // group 변경 시 enterpriseSubgroup 이 유효한지 확인. 엔터프라이즈로 이동했는데 서브그룹이
-  // 다른 그룹의 잔재라면 '종합' 으로 리셋. 반대로 다른 그룹이면 subgroup 무영향.
+  // group 변경 시 subgroup 이 유효하지 않으면 첫 서브그룹으로 리셋.
   useEffect(() => {
-    if (group === '엔터프라이즈') {
-      const valid = ENTERPRISE_SUBGROUPS.some((s) => s.key === enterpriseSubgroup);
-      if (!valid) setEnterpriseSubgroup('종합');
+    if (groupSubgroups.length > 0 && !groupSubgroups.some((s) => s.name === subgroup)) {
+      setSubgroup(groupSubgroups[0].name);
     }
-  }, [group, enterpriseSubgroup]);
+  }, [group, groupSubgroups, subgroup]);
 
   // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화
   function selectTab(next: Tab) {
     setTab(next);
     setGroup(groupOf(next));
-    if (groupOf(next) === '엔터프라이즈') setEnterpriseSubgroup(enterpriseSubgroupOf(next));
+    setSubgroup(subgroupOfTab(next));
   }
 
   // franchise 탭에서 벗어나면 deep-link / return 상태 클리어 (재진입 시 재발화 방지)
@@ -421,6 +375,7 @@ export default function AdminPage() {
     setPendingFranchiseReturnTo(returnTo);
     setTab('franchise');
     setGroup(groupOf('franchise'));
+    setSubgroup(subgroupOfTab('franchise'));
   }, []);
 
   const consumeFranchiseDeepLink = useCallback(() => {
@@ -433,34 +388,39 @@ export default function AdminPage() {
     if (target) {
       setTab(target);
       setGroup(groupOf(target));
+      setSubgroup(subgroupOfTab(target));
     }
   }, [pendingFranchiseReturnTo]);
 
-  // 그룹 클릭 시 그 그룹의 첫 가시 탭으로 자동 진입 — 빈 panel 회피
+  // 그룹의 첫 가시 탭(서브그룹 순서 유지). 빈 panel 회피용.
+  const firstVisibleInGroup = useCallback(
+    (g: Group): Tab | null => {
+      for (const s of subgroupsOf(g)) {
+        for (const k of s.tabs) {
+          if (visibleKeys.has(k as Tab)) return k as Tab;
+        }
+      }
+      return null;
+    },
+    [visibleKeys],
+  );
+
+  // 그룹 클릭 시 첫 서브그룹 + 그 그룹의 첫 가시 탭으로 진입.
   function selectGroup(next: Group) {
     setGroup(next);
-    // 엔터프라이즈 그룹은 서브그룹 '종합' + 그 서브그룹의 첫 가시 탭으로 고정 진입
-    if (next === '엔터프라이즈') {
-      setEnterpriseSubgroup('종합');
-      const first = visibleTabs.find((t) =>
-        (ENTERPRISE_SUBGROUPS.find((s) => s.key === '종합')?.tabs ?? []).includes(t.key),
-      );
-      if (first) setTab(first.key);
-      return;
-    }
-    const firstInGroup = visibleTabs.find((t) =>
-      (GROUPS.find((g) => g.key === next)?.tabs ?? []).includes(t.key),
-    );
-    if (firstInGroup) setTab(firstInGroup.key);
+    setShowAdvanced(false);
+    const subs = subgroupsOf(next).filter((s) => s.tabs.some((k) => visibleKeys.has(k as Tab)));
+    setSubgroup(subs[0]?.name ?? '');
+    const first = firstVisibleInGroup(next);
+    if (first) setTab(first);
   }
 
-  // 엔터프라이즈 서브그룹 클릭 시 그 서브그룹의 첫 가시 탭으로 자동 진입
-  function selectEnterpriseSubgroup(next: EnterpriseSubgroup) {
-    setEnterpriseSubgroup(next);
-    const first = visibleTabs.find((t) =>
-      (ENTERPRISE_SUBGROUPS.find((s) => s.key === next)?.tabs ?? []).includes(t.key),
-    );
-    if (first) setTab(first.key);
+  // 서브그룹 클릭 시 그 서브그룹의 첫 가시 탭으로 진입.
+  function selectSubgroup(next: string) {
+    setSubgroup(next);
+    const sg = subgroupsOf(group).find((s) => s.name === next);
+    const first = sg?.tabs.find((k) => visibleKeys.has(k as Tab)) as Tab | undefined;
+    if (first) setTab(first);
   }
 
   // OnboardingChecklist 용
@@ -479,7 +439,7 @@ export default function AdminPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
           <p className="text-xs text-ink-mute">
-            대시보드 · 회원 · 스트리밍 · 매출 · 구독 · 콘텐츠
+            홈 · 회원 · 음원 · 플레이리스트 · 매장 · 본사·브랜드 · 정산 · 운영·설정
           </p>
           <p className="text-[10px] font-mono text-ink-dim">
             Connected Supabase: <span className="text-accent">{supabaseProjectRef}</span>
@@ -490,63 +450,66 @@ export default function AdminPage() {
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
 
-      {/* 2-level nav — 1열: 그룹, 2열: 그룹 내 탭. 28개 한 줄 스크롤 → 의미 단위 묶음. */}
-      <nav className="space-y-2">
-        {/* 그룹 nav */}
+      {/* 업무 중심 2-level nav — 1차: 업무 그룹(8), 2차: 서브그룹, 페이지: 탭. 딥링크 key 불변. */}
+      <nav className="space-y-2" aria-label="관리자 메뉴">
+        {/* 1차: 업무 그룹 */}
         <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
           <div className="flex gap-1.5 pb-1 no-scrollbar">
-            {GROUPS.map((g) => {
-              const hasVisible = visibleTabs.some((t) => g.tabs.includes(t.key));
+            {ADMIN_GROUPS.map((g) => {
+              const tabs = subgroupsOf(g).flatMap((s) => s.tabs);
+              const hasVisible = tabs.some((k) => visibleKeys.has(k as Tab));
               if (!hasVisible) return null;
-              const isActive = group === g.key;
+              const isActive = group === g;
               return (
                 <button
-                  key={g.key}
-                  onClick={() => selectGroup(g.key)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider transition ${
+                  key={g}
+                  onClick={() => selectGroup(g)}
+                  aria-current={isActive ? 'page' : undefined}
+                  title={groupHint(g)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold tracking-wider transition ${
                     isActive
                       ? 'bg-ink text-bg ring-1 ring-ink'
                       : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
                   }`}
                 >
-                  {g.key}
+                  {g}
                 </button>
               );
             })}
           </div>
         </div>
-        {/* IA/Nav — 엔터프라이즈 그룹만 서브그룹 chip row 노출. 다른 그룹은 기존 그대로. */}
-        {group === '엔터프라이즈' && (
+        {/* 2차: 서브그룹(서브그룹이 2개 이상인 그룹만) */}
+        {hasSubNav && (
           <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
             <div className="flex gap-1.5 pb-1 no-scrollbar">
-              {ENTERPRISE_SUBGROUPS.map((sg) => {
-                const hasVisible = enterpriseTabs.some((t) => sg.tabs.includes(t.key));
-                if (!hasVisible) return null;
-                const isActive = enterpriseSubgroup === sg.key;
+              {groupSubgroups.map((sg) => {
+                const isActive = subgroup === sg.name;
                 return (
                   <button
-                    key={sg.key}
-                    onClick={() => selectEnterpriseSubgroup(sg.key)}
+                    key={sg.name}
+                    onClick={() => selectSubgroup(sg.name)}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       isActive
                         ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50'
                         : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
                     }`}
                   >
-                    {sg.key}
+                    {sg.name}
                   </button>
                 );
               })}
             </div>
           </div>
         )}
-        {/* 탭 nav (선택 그룹 내, 엔터프라이즈면 서브그룹 필터 적용) */}
+        {/* 페이지: 탭(현재 서브그룹, 고급 탭은 기본 숨김) */}
         <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-          <div className="flex gap-1.5 pb-1 no-scrollbar">
+          <div className="flex items-center gap-1.5 pb-1 no-scrollbar">
             {displayTabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => selectTab(t.key)}
+                aria-current={tab === t.key ? 'page' : undefined}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                   tab === t.key
                     ? 'bg-accent text-black'
@@ -554,12 +517,52 @@ export default function AdminPage() {
                 }`}
               >
                 {t.icon}
-                {t.label}
+                {labelForTab(t.key, t.label)}
               </button>
             ))}
+            {(hiddenAdvancedCount > 0 || showAdvanced) && (
+              <button
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-xs font-medium text-ink-mute ring-1 ring-line/15 transition hover:text-ink hover:ring-line/25"
+                aria-expanded={showAdvanced}
+              >
+                {showAdvanced ? '간단히' : `고급 ${hiddenAdvancedCount}`}
+              </button>
+            )}
           </div>
         </div>
+        {/* Breadcrumb — 현재 위치(그룹 > 서브그룹 > 페이지) */}
+        <ol className="flex flex-wrap items-center gap-1 px-0.5 text-[11px] text-ink-dim" aria-label="현재 위치">
+          {breadcrumbFor(tab, TABS.find((t) => t.key === tab)?.label ?? tab).map((c, i, arr) => (
+            <li key={`${c.label}-${i}`} className="flex items-center gap-1">
+              {c.tab && i < arr.length - 1 ? (
+                <button className="hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
+                  {c.label}
+                </button>
+              ) : (
+                <span className={i === arr.length - 1 ? 'text-ink-mute' : ''}>{c.label}</span>
+              )}
+              {i < arr.length - 1 && <span aria-hidden>›</span>}
+            </li>
+          ))}
+        </ol>
       </nav>
+
+      {/* 홈 — 업무 바로가기(기술 대시보드가 아닌 실제 업무 진입점) */}
+      {tab === 'dashboard' && (
+        <section aria-label="빠른 업무" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {QUICK_TASKS.filter((q) => visibleKeys.has(q.tab as Tab)).map((q) => (
+            <button
+              key={q.tab}
+              onClick={() => selectTab(q.tab as Tab)}
+              className="rounded-xl border border-line/10 bg-bg-card p-3 text-left transition hover:border-line/25 hover:bg-bg-hover"
+            >
+              <p className="text-sm font-semibold">{q.label}</p>
+              <p className="mt-0.5 text-[11px] text-ink-mute">{q.hint}</p>
+            </button>
+          ))}
+        </section>
+      )}
 
       {/* 한 탭 패널의 렌더 throw 가 관리자 페이지 전체를 화이트스크린시키지 않도록 격리.
           resetKey=tab 로 탭 전환 시 직전 탭의 에러 상태를 자동 초기화.
