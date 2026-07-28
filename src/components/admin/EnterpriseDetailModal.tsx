@@ -17,9 +17,23 @@ const TABS: ReadonlyArray<{ key: DetailTab; label: string }> = [
   { key: 'logs', label: '로그' },
 ];
 
+/**
+ * 운영 준비 상태 보드의 '즉시 처리' 액션 — 모두 기존 지원 기능에 연결된다(신규 백엔드 없음).
+ * 부모(EnterpriseAccountsPanel)가 자신이 이미 렌더하는 Dialog/탭 이동으로 매핑해 전달한다.
+ * 미제공(undefined) 시 카드는 안전한 상세 탭 이동 또는 명확한 Disabled 상태로 대체된다.
+ */
+export interface EnterpriseDetailActions {
+  /** 초대·코드 관리(InviteCodesModal): brand/hq/store 코드 확인·복사·재발급. */
+  onManageInvite?: () => void;
+  /** 정산·사업자 검토(SettlementReviewModal): 승인/반려/지급설정. */
+  onReviewSettlement?: () => void;
+  /** 지역 관리 화면(enterprise-regions 탭) 이동. */
+  onManageRegions?: () => void;
+}
+
 export default function EnterpriseDetailModal({
-  enterpriseId, enterpriseName, onClose,
-}: { enterpriseId: string; enterpriseName: string; onClose: () => void }) {
+  enterpriseId, enterpriseName, onClose, actions,
+}: { enterpriseId: string; enterpriseName: string; onClose: () => void; actions?: EnterpriseDetailActions }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const [data, setData] = useState<EnterpriseDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +84,7 @@ export default function EnterpriseDetailModal({
             ))}
           </div>
 
-          {tab === 'overview' && <OverviewTab d={data} onNavigate={setTab} />}
+          {tab === 'overview' && <OverviewTab d={data} onNavigate={setTab} actions={actions} />}
           {tab === 'stores' && <StoresTab d={data} />}
           {tab === 'billing' && <BillingTab d={data} />}
           {tab === 'music' && <MusicTab d={data} />}
@@ -84,11 +98,11 @@ export default function EnterpriseDetailModal({
 // ── 개요 (운영 Workspace) ────────────────────────────────────────────
 // 상단: 6개 운영 도메인 준비 상태 보드(브랜드/사업자/정산/초대·온보딩/지역/매장).
 // 하단: 본사·사업자 정보(2단), 초대·코드, 지역 카드. 상세 탭 키는 그대로 유지.
-function OverviewTab({ d, onNavigate }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void }) {
+function OverviewTab({ d, onNavigate, actions }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
   const e = d.enterprise; const bp = d.business_profile; const inv = d.invite;
   return (
     <div className="space-y-4">
-      <ReadinessBoard d={d} onNavigate={onNavigate} />
+      <ReadinessBoard d={d} onNavigate={onNavigate} actions={actions} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <AdminCard title="본사 기본 정보">
@@ -182,53 +196,89 @@ const READINESS_META: Record<ReadinessStatus, { tone: AdminToneName; label: stri
   missing:   { tone: 'warning', label: '미완료', Icon: MinusCircle },
 };
 
-function ReadinessBoard({ d, onNavigate }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void }) {
+function ReadinessBoard({ d, onNavigate, actions }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
   const items = computeEnterpriseReadiness(d);
   const incomplete = countIncomplete(items);
   const doneCount = items.length - incomplete;
   return (
     <AdminCard
       title="운영 준비 상태"
-      subtitle="브랜드·사업자·정산·초대·지역·매장 준비 현황 (한 화면 운영)"
+      subtitle="누락 항목을 카드에서 바로 처리 — 브랜드·사업자·정산·초대·지역·매장 (한 화면 운영)"
       action={
         <AdminBadge tone={incomplete === 0 ? 'success' : 'warning'}>
           {incomplete === 0 ? '전체 완료' : `준비 ${doneCount}/${items.length} · 확인필요 ${incomplete}`}
         </AdminBadge>
       }
     >
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
-        {items.map((it) => <ReadinessCard key={it.domain} item={it} onNavigate={onNavigate} />)}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((it) => <ReadinessCard key={it.domain} item={it} onNavigate={onNavigate} actions={actions} />)}
       </div>
     </AdminCard>
   );
 }
 
-function ReadinessCard({ item, onNavigate }: { item: ReadinessItem; onNavigate: (t: DetailTab) => void }) {
+/** 준비 카드의 실제 지원 액션 서술자. onClick 없으면 Disabled(reason 표시). */
+interface ResolvedAction { label: string; onClick?: () => void; reason?: string }
+
+/**
+ * actionKind(순수 서술자)를 부모가 넘긴 실제 지원 액션으로 매핑.
+ * 우선순위: 기존 Dialog/Mutation → 안전한 기존 탭 이동 → Disabled + 설명.
+ * 신규 백엔드 없음. 지원되지 않으면 가짜 버튼 대신 명확한 Disabled 상태.
+ */
+function resolveReadinessAction(item: ReadinessItem, onNavigate: (t: DetailTab) => void, actions?: EnterpriseDetailActions): ResolvedAction {
+  switch (item.actionKind) {
+    case 'invite': {
+      const label = item.domain === 'brand' ? '브랜드·코드 관리' : '초대코드 관리';
+      return actions?.onManageInvite
+        ? { label, onClick: actions.onManageInvite }
+        : { label, reason: '초대·코드 관리 화면 연결이 없습니다' };
+    }
+    case 'settlement': {
+      const label = item.domain === 'business' ? '사업자·정산 검토' : '정산 검토·지급설정';
+      if (actions?.onReviewSettlement) return { label, onClick: actions.onReviewSettlement };
+      // 대체: 계약·정산 상세 탭(읽기 전용)으로 안전 이동.
+      return { label: '계약·정산 탭 보기', onClick: () => onNavigate('billing') };
+    }
+    case 'regions':
+      return actions?.onManageRegions
+        ? { label: '지역 관리 이동', onClick: actions.onManageRegions }
+        : { label: '지역 관리 이동', reason: '지역 관리 화면 연결이 없습니다' };
+    case 'tab:stores':
+      return { label: '매장 탭 보기', onClick: () => onNavigate('stores') };
+    case 'tab:billing':
+      return { label: '계약·정산 탭 보기', onClick: () => onNavigate('billing') };
+  }
+}
+
+function ReadinessCard({ item, onNavigate, actions }: { item: ReadinessItem; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
   const meta = READINESS_META[item.status];
-  const clickable = item.jumpTab != null;
   const Icon = meta.Icon;
-  const body = (
-    <>
+  const act = resolveReadinessAction(item, onNavigate, actions);
+  const disabled = !act.onClick;
+  return (
+    <div className="flex flex-col rounded-xl border border-line/15 bg-bg p-3">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[11px] font-semibold text-ink-mute">{item.label}</span>
         <AdminBadge tone={meta.tone} icon={<Icon size={10} />}>{meta.label}</AdminBadge>
       </div>
       <div className="mt-1.5 text-sm font-bold text-ink">{item.headline}</div>
-      <p className="mt-0.5 line-clamp-2 text-[11px] text-ink-dim">{item.detail}</p>
-      {clickable && (
-        <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-accent">
-          이동 <ChevronRight size={10} />
-        </span>
-      )}
-    </>
-  );
-  const cls = 'rounded-xl border border-line/15 bg-bg p-3 text-left transition';
-  return clickable ? (
-    <button type="button" onClick={() => onNavigate(item.jumpTab!)} className={`${cls} hover:border-accent/40 hover:bg-bg-hover`}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
+      <p className="mt-0.5 text-[11px] text-ink-dim">{item.detail}</p>
+      <div className="mt-2 pt-2 border-t border-line/10">
+        {disabled ? (
+          <span className="inline-flex items-center gap-1 text-[10px] text-ink-dim" title={act.reason}>
+            <MinusCircle size={10} /> {act.reason ?? '지원 액션 없음'}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={act.onClick}
+            className="inline-flex items-center gap-0.5 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
+          >
+            {act.label} <ChevronRight size={11} />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

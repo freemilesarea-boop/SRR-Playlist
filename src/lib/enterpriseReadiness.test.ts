@@ -131,7 +131,7 @@ describe('regionReadiness', () => {
 describe('storeReadiness', () => {
   it('missing when total 0', () => {
     expect(storeReadiness(base()).status).toBe('missing');
-    expect(storeReadiness(base()).jumpTab).toBe('stores');
+    expect(storeReadiness(base()).actionKind).toBe('tab:stores');
   });
   it('attention when offline/error present', () => {
     const d = base();
@@ -149,6 +149,17 @@ describe('computeEnterpriseReadiness + countIncomplete', () => {
   it('returns 6 domains in fixed order', () => {
     const items = computeEnterpriseReadiness(base());
     expect(items.map((i) => i.domain)).toEqual(['brand', 'business', 'settlement', 'invite', 'region', 'store']);
+  });
+  it('maps each domain to its real supported action kind', () => {
+    const byDomain = Object.fromEntries(computeEnterpriseReadiness(base()).map((i) => [i.domain, i.actionKind]));
+    expect(byDomain).toEqual({
+      brand: 'invite',
+      business: 'settlement',
+      settlement: 'settlement',
+      invite: 'invite',
+      region: 'regions',
+      store: 'tab:stores',
+    });
   });
   it('empty enterprise is fully incomplete', () => {
     expect(countIncomplete(computeEnterpriseReadiness(base()))).toBe(6);
