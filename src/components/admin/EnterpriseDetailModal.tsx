@@ -1,11 +1,12 @@
 // Phase ENT-DETAIL-1 — 관리자 본사 상세 콘솔 (조회 전용, CS/운영용).
 // 탭: 개요 / 매장 / 계약·정산 / 음악·정책 / 로그. 코드/UUID 복사, 로딩·에러·empty 상태.
 import { useCallback, useEffect, useState } from 'react';
-import { Copy } from 'lucide-react';
+import { Copy, CheckCircle2, AlertTriangle, MinusCircle, CircleDashed, ChevronRight } from 'lucide-react';
 import { AdminModal, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
 import { adminGetEnterpriseDetail, type EnterpriseDetail, type EntDetailStore } from '@/lib/api/enterpriseDetailApi';
+import { computeEnterpriseReadiness, countIncomplete, type ReadinessItem, type ReadinessStatus } from '@/lib/enterpriseReadiness';
 
 type DetailTab = 'overview' | 'stores' | 'billing' | 'music' | 'logs';
 const TABS: ReadonlyArray<{ key: DetailTab; label: string }> = [
@@ -69,7 +70,7 @@ export default function EnterpriseDetailModal({
             ))}
           </div>
 
-          {tab === 'overview' && <OverviewTab d={data} />}
+          {tab === 'overview' && <OverviewTab d={data} onNavigate={setTab} />}
           {tab === 'stores' && <StoresTab d={data} />}
           {tab === 'billing' && <BillingTab d={data} />}
           {tab === 'music' && <MusicTab d={data} />}
@@ -80,11 +81,16 @@ export default function EnterpriseDetailModal({
   );
 }
 
-// ── 개요 ─────────────────────────────────────────────────────────────
-function OverviewTab({ d }: { d: EnterpriseDetail }) {
+// ── 개요 (운영 Workspace) ────────────────────────────────────────────
+// 상단: 6개 운영 도메인 준비 상태 보드(브랜드/사업자/정산/초대·온보딩/지역/매장).
+// 하단: 본사·사업자 정보(2단), 초대·코드, 지역 카드. 상세 탭 키는 그대로 유지.
+function OverviewTab({ d, onNavigate }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void }) {
   const e = d.enterprise; const bp = d.business_profile; const inv = d.invite;
   return (
     <div className="space-y-4">
+      <ReadinessBoard d={d} onNavigate={onNavigate} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <AdminCard title="본사 기본 정보">
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
           <KV k="enterprise_id" v={e.id} copy mono abbrev />
@@ -117,6 +123,7 @@ function OverviewTab({ d }: { d: EnterpriseDetail }) {
           </dl>
         ) : <AdminEmpty title="사업자 프로필 없음" description="아직 등록되지 않았습니다." />}
       </AdminCard>
+      </div>
 
       <AdminCard title="초대 / 코드">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -164,6 +171,64 @@ function OverviewTab({ d }: { d: EnterpriseDetail }) {
         )}
       </AdminCard>
     </div>
+  );
+}
+
+// ── 운영 준비 상태 보드 ──────────────────────────────────────────────
+const READINESS_META: Record<ReadinessStatus, { tone: AdminToneName; label: string; Icon: typeof CheckCircle2 }> = {
+  ready:     { tone: 'success', label: '완료',   Icon: CheckCircle2 },
+  partial:   { tone: 'info',    label: '부분',   Icon: CircleDashed },
+  attention: { tone: 'danger',  label: '주의',   Icon: AlertTriangle },
+  missing:   { tone: 'warning', label: '미완료', Icon: MinusCircle },
+};
+
+function ReadinessBoard({ d, onNavigate }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void }) {
+  const items = computeEnterpriseReadiness(d);
+  const incomplete = countIncomplete(items);
+  const doneCount = items.length - incomplete;
+  return (
+    <AdminCard
+      title="운영 준비 상태"
+      subtitle="브랜드·사업자·정산·초대·지역·매장 준비 현황 (한 화면 운영)"
+      action={
+        <AdminBadge tone={incomplete === 0 ? 'success' : 'warning'}>
+          {incomplete === 0 ? '전체 완료' : `준비 ${doneCount}/${items.length} · 확인필요 ${incomplete}`}
+        </AdminBadge>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+        {items.map((it) => <ReadinessCard key={it.domain} item={it} onNavigate={onNavigate} />)}
+      </div>
+    </AdminCard>
+  );
+}
+
+function ReadinessCard({ item, onNavigate }: { item: ReadinessItem; onNavigate: (t: DetailTab) => void }) {
+  const meta = READINESS_META[item.status];
+  const clickable = item.jumpTab != null;
+  const Icon = meta.Icon;
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[11px] font-semibold text-ink-mute">{item.label}</span>
+        <AdminBadge tone={meta.tone} icon={<Icon size={10} />}>{meta.label}</AdminBadge>
+      </div>
+      <div className="mt-1.5 text-sm font-bold text-ink">{item.headline}</div>
+      <p className="mt-0.5 line-clamp-2 text-[11px] text-ink-dim">{item.detail}</p>
+      {clickable && (
+        <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-accent">
+          이동 <ChevronRight size={10} />
+        </span>
+      )}
+    </>
+  );
+  const cls = 'rounded-xl border border-line/15 bg-bg p-3 text-left transition';
+  return clickable ? (
+    <button type="button" onClick={() => onNavigate(item.jumpTab!)} className={`${cls} hover:border-accent/40 hover:bg-bg-hover`}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
   );
 }
 
