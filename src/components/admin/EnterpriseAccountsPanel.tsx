@@ -48,6 +48,20 @@ import {
 import { toast } from '@/store/toastStore';
 import { LastLoginBadge } from '@/components/admin/ui';
 
+/**
+ * 어드민 셸의 기존 ?tab= 딥링크 이동을 재사용한다(AdminPage 의 popstate 핸들러가 적용).
+ * 라우트/탭 키를 변경하지 않고 기존 탭으로만 이동한다.
+ */
+function navigateAdminTab(tab: string) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    url.searchParams.delete('enterpriseId');
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  } catch { /* noop */ }
+}
+
 const STATUS_OPTIONS: ReadonlyArray<{ value: EnterpriseAccountStatus; label: string }> = [
   { value: 'active', label: '정상' },
   { value: 'invited', label: '초대중' },
@@ -357,7 +371,17 @@ export default function EnterpriseAccountsPanel() {
         <EnterpriseDetailModal
           enterpriseId={detailTarget.id}
           enterpriseName={detailTarget.enterprise_name}
-          onClose={() => setDetailTarget(null)} />
+          onClose={() => setDetailTarget(null)}
+          actions={{
+            // 준비 보드 → 기존 지원 Dialog/화면으로 즉시 이동(신규 백엔드 없음).
+            // 상세 모달을 닫고 대상 Dialog 를 열어 모달 중첩을 피한다.
+            onManageInvite: () => { const t = detailTarget; setDetailTarget(null); setInviteTarget(t); },
+            onReviewSettlement: () => { const t = detailTarget; setDetailTarget(null); setSettlementTarget(t); },
+            onManageRegions: () => { setDetailTarget(null); navigateAdminTab('enterprise-regions'); },
+            // 위험 작업 — 기존 EditModal(상태·권한)/DeleteConfirmModal(confirm) 재사용.
+            onEditAccount: () => { const t = detailTarget; setDetailTarget(null); setEditTarget(t); },
+            onDeleteAccount: () => { const t = detailTarget; setDetailTarget(null); setDeleteTarget(t); },
+          }} />
       )}
     </div>
   );
