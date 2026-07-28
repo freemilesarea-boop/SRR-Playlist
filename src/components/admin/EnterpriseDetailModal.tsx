@@ -1,12 +1,16 @@
 // Phase ENT-DETAIL-1 — 관리자 본사 상세 콘솔 (조회 전용, CS/운영용).
 // 탭: 개요 / 매장 / 계약·정산 / 음악·정책 / 로그. 코드/UUID 복사, 로딩·에러·empty 상태.
-import { useCallback, useEffect, useState } from 'react';
-import { Copy, CheckCircle2, AlertTriangle, MinusCircle, CircleDashed, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Copy, CheckCircle2, AlertTriangle, MinusCircle, CircleDashed, ChevronRight, ChevronDown } from 'lucide-react';
 import { AdminModal, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert, AdminStatCard } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
-import { adminGetEnterpriseDetail, type EnterpriseDetail, type EntDetailStore } from '@/lib/api/enterpriseDetailApi';
-import { computeEnterpriseReadiness, countIncomplete, type ReadinessItem, type ReadinessStatus } from '@/lib/enterpriseReadiness';
+import { adminGetEnterpriseDetail, type EnterpriseDetail, type EntDetailRegion, type EntDetailInviteClaim, type EntDetailStore } from '@/lib/api/enterpriseDetailApi';
+import {
+  computeEnterpriseReadiness, countIncomplete, settlementReadiness,
+  getEnterpriseRequiredActions, splitForDisplay,
+  type ReadinessItem, type ReadinessStatus, type ReadinessActionKind,
+} from '@/lib/enterpriseReadiness';
 
 type DetailTab = 'overview' | 'stores' | 'billing' | 'music' | 'logs';
 const TABS: ReadonlyArray<{ key: DetailTab; label: string }> = [
@@ -29,6 +33,10 @@ export interface EnterpriseDetailActions {
   onReviewSettlement?: () => void;
   /** 지역 관리 화면(enterprise-regions 탭) 이동. */
   onManageRegions?: () => void;
+  /** 계정 편집(EditModal): 상태·권한 변경 포함. */
+  onEditAccount?: () => void;
+  /** 계정 삭제(DeleteConfirmModal): 기존 confirm 절차 유지. */
+  onDeleteAccount?: () => void;
 }
 
 export default function EnterpriseDetailModal({
@@ -96,97 +104,234 @@ export default function EnterpriseDetailModal({
 }
 
 // ── 개요 (운영 Workspace) ────────────────────────────────────────────
-// 상단: 6개 운영 도메인 준비 상태 보드(브랜드/사업자/정산/초대·온보딩/지역/매장).
-// 하단: 본사·사업자 정보(2단), 초대·코드, 지역 카드. 상세 탭 키는 그대로 유지.
+// 순서: 계정 요약 → 운영 준비 상태 → 지금 처리할 작업 → 운영 연결 →
+//       사업자·정산 → 초대·코드 → 지역 → 고급 시스템 정보 → 위험 작업.
+// 운영자가 자주 쓰는 정보를 위로, 원시 시스템 값은 접힌 고급 영역으로.
+// 상세 탭 키/조회 데이터/기능은 그대로 유지(신규 백엔드 없음).
 function OverviewTab({ d, onNavigate, actions }: { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
-  const e = d.enterprise; const bp = d.business_profile; const inv = d.invite;
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <AccountSummary d={d} />
       <ReadinessBoard d={d} onNavigate={onNavigate} actions={actions} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <AdminCard title="본사 기본 정보">
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
-          <KV k="enterprise_id" v={e.id} copy mono abbrev />
-          <KV k="본사명" v={e.enterprise_name} />
-          <KV k="담당자" v={e.manager_name} />
-          <KV k="이메일" v={e.manager_email} copy />
-          <KV k="전화번호" v={e.manager_phone} copy />
-          <KV k="권한(role)" v={e.role} />
-          <KV k="생성" v={fmt(e.created_at)} />
-          <KV k="수정" v={fmt(e.updated_at)} />
-          <KV k="최근 로그인" v={fmt(e.last_login_at)} />
-          <KV k="삭제" v={e.deleted_at ? fmt(e.deleted_at) : '—'} />
-          <KV k="auth_user_id" v={e.auth_user_id} copy mono abbrev />
-          <KV k="온보딩 허용" v={e.onboarding_enabled ? 'Y' : 'N'} />
-        </dl>
-        {e.notes && <p className="mt-2 rounded bg-bg px-2 py-1.5 text-xs text-ink-mute">메모: {e.notes}</p>}
-      </AdminCard>
-
-      <AdminCard title="사업자 / 정산 담당">
-        {bp ? (
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
-            <KV k="상호" v={bp.company_name} />
-            <KV k="사업자번호" v={bp.business_number} copy />
-            <KV k="대표자" v={bp.representative_name} />
-            <KV k="주소" v={bp.business_address} />
-            <KV k="연락처" v={bp.contact_phone} copy />
-            <KV k="세금계산서 이메일" v={bp.tax_invoice_email} copy />
-            <KV k="정산담당" v={bp.settlement_contact_name} />
-            <KV k="정산담당 연락처" v={bp.settlement_contact_phone} copy />
-          </dl>
-        ) : <AdminEmpty title="사업자 프로필 없음" description="아직 등록되지 않았습니다." />}
-      </AdminCard>
+      <RequiredTasksPanel d={d} onNavigate={onNavigate} actions={actions} />
+      <OperationalConnections d={d} onNavigate={onNavigate} actions={actions} />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <BusinessCard d={d} onNavigate={onNavigate} actions={actions} />
+        <InviteCard d={d} onNavigate={onNavigate} actions={actions} />
       </div>
-
-      <AdminCard title="초대 / 코드">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <CodeRow label="HQ 초대코드" value={inv.hq_invite_code} />
-          <CodeRow label="매장 초대코드" value={inv.store_invite_code} />
-          <CodeRow label="브랜드 코드" value={inv.brand_code} />
-        </div>
-        {inv.invite_code_rotated_at && <p className="mt-2 text-[11px] text-ink-dim">코드 최근 재발급: {fmt(inv.invite_code_rotated_at)}</p>}
-        <p className="mt-1 text-[11px] text-ink-dim">코드 재발급/수정은 "초대코드 관리"(별도 confirm)에서 수행하세요.</p>
-
-        <p className="mt-3 mb-1 text-[11px] font-semibold text-ink-dim">가입/초대 claim 이력 ({inv.claims.length})</p>
-        {inv.claims.length === 0 ? (
-          <p className="text-xs text-ink-dim">claim 이력 없음</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
-              <thead><tr className="text-ink-dim"><th className="px-2 py-1 text-left">유형</th><th className="px-2 py-1 text-left">상태</th><th className="px-2 py-1 text-left">코드끝4</th><th className="px-2 py-1 text-left">입력값</th><th className="px-2 py-1 text-left">시각</th></tr></thead>
-              <tbody>
-                {inv.claims.map((c, i) => (
-                  <tr key={i} className="border-t border-line/10">
-                    <td className="px-2 py-1">{c.claim_type ?? '—'}</td>
-                    <td className="px-2 py-1"><AdminBadge tone={c.status === 'success' ? 'success' : c.status === 'failed' ? 'danger' : 'neutral'}>{c.status ?? '—'}</AdminBadge></td>
-                    <td className="px-2 py-1 font-mono">{c.invite_code_last4 ?? '—'}</td>
-                    <td className="px-2 py-1 text-ink-mute">{[c.store_name_input, c.region_name_input, c.brand_name_input].filter(Boolean).join(' / ') || '—'}</td>
-                    <td className="px-2 py-1 text-ink-dim">{fmt(c.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </AdminCard>
-
-      <AdminCard title={`지역 (${d.regions.length})`}>
-        {d.regions.length === 0 ? <AdminEmpty title="지역 없음" /> : (
-          <div className="flex flex-wrap gap-2">
-            {d.regions.map((r) => (
-              <div key={r.id} className="rounded-lg border border-line/20 bg-bg px-3 py-1.5 text-xs">
-                <span className="font-semibold text-ink">{r.region_name ?? '—'}</span>
-                {r.region_code && <span className="ml-1 font-mono text-ink-dim">{r.region_code}</span>}
-                <span className="ml-2 text-ink-mute">매장 {r.store_count ?? 0}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </AdminCard>
+      <RegionCard d={d} onNavigate={onNavigate} actions={actions} />
+      <AdvancedSystemInfo d={d} />
+      <DangerZone actions={actions} />
     </div>
   );
 }
+
+// 계정 요약 — 운영에 자주 쓰는 연락/권한 정보(원시 시스템 값은 고급 영역).
+function AccountSummary({ d }: { d: EnterpriseDetail }) {
+  const e = d.enterprise;
+  return (
+    <AdminCard title="계정 요약">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <KV k="본사명" v={e.enterprise_name} />
+        <KV k="담당자" v={e.manager_name} />
+        <KV k="권한" v={roleLabel(e.role)} />
+        <KV k="이메일" v={e.manager_email} copy />
+        <KV k="전화" v={e.manager_phone} copy />
+        <KV k="최근 로그인" v={fmt(e.last_login_at)} />
+      </dl>
+      {e.notes && <p className="mt-2 rounded bg-bg px-2 py-1.5 text-xs text-ink-mute">메모: {e.notes}</p>}
+    </AdminCard>
+  );
+}
+
+// 지금 처리할 작업 — 미완료/확인필요만. 완료 시 완료 메시지.
+function RequiredTasksPanel({ d, onNavigate, actions }: SectionProps) {
+  const tasks = getEnterpriseRequiredActions(d);
+  if (tasks.length === 0) {
+    return (
+      <AdminCard title="지금 처리할 작업">
+        <div className="flex items-start gap-2 rounded-lg border border-line/15 bg-bg p-3">
+          <AdminBadge tone="success" icon={<CheckCircle2 size={12} />}>완료</AdminBadge>
+          <div>
+            <p className="text-sm font-bold text-ink">필수 운영 설정 완료</p>
+            <p className="text-[11px] text-ink-dim">현재 추가로 처리할 필수 작업이 없습니다.</p>
+          </div>
+        </div>
+      </AdminCard>
+    );
+  }
+  return (
+    <AdminCard title="지금 처리할 작업" action={<AdminBadge tone="warning">{tasks.length}건</AdminBadge>}>
+      <div className="space-y-2">
+        {tasks.map((t) => (
+          <div key={t.id} className="flex flex-col gap-2 rounded-lg border border-line/15 bg-bg p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <AdminBadge tone={t.priority === 'required' ? 'danger' : 'neutral'}>{t.priority === 'required' ? '필수' : '권장'}</AdminBadge>
+                <span className="text-sm font-bold text-ink">{t.title}</span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-ink-dim">{t.description}</p>
+            </div>
+            <div className="shrink-0">
+              <ActionLink label={kindLabel(t.actionKind)} kind={t.actionKind} onNavigate={onNavigate} actions={actions} variant="button" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </AdminCard>
+  );
+}
+
+// 운영 연결 — 브랜드·HQ·매장·지역 관계를 한 카드로(현재 데이터 계약 범위만).
+function OperationalConnections({ d, onNavigate, actions }: SectionProps) {
+  const e = d.enterprise; const inv = d.invite; const s = d.store_summary;
+  return (
+    <AdminCard title="운영 연결" subtitle="브랜드 · HQ · 매장 · 지역">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <ConnTile label="브랜드" value={inv.brand_code ?? '미발급'} mono={!!inv.brand_code}>
+          {inv.brand_code && <CopyChip value={inv.brand_code} />}
+          <ActionLink label="초대·코드 관리" kind="invite" onNavigate={onNavigate} actions={actions} />
+        </ConnTile>
+        <ConnTile label="HQ" value={e.enterprise_name}>
+          <StatusBadge status={e.status} />
+        </ConnTile>
+        <ConnTile label="매장" value={`연결 ${s.total}개`}>
+          <ActionLink label="매장 보기" kind="tab:stores" onNavigate={onNavigate} actions={actions} />
+        </ConnTile>
+        <ConnTile label="지역" value={`연결 ${d.regions.length}개`}>
+          <ActionLink label="지역 관리" kind="regions" onNavigate={onNavigate} actions={actions} />
+        </ConnTile>
+      </div>
+    </AdminCard>
+  );
+}
+
+// 사업자 / 정산 — 관리자 수정 RPC 없음 → 편집 버튼 없이 검토 화면으로만 연결.
+function BusinessCard({ d, onNavigate, actions }: SectionProps) {
+  const bp = d.business_profile;
+  const settle = settlementReadiness(d);
+  const sMeta = READINESS_META[settle.status];
+  return (
+    <AdminCard title="사업자 / 정산" action={<ActionLink label="사업자·정산 검토" kind="settlement" onNavigate={onNavigate} actions={actions} />}>
+      {!bp ? (
+        <CompactEmpty title="미등록 또는 검토 필요" desc="계약 및 정산 진행 전에 확인이 필요합니다." />
+      ) : (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+          <KV k="상호명" v={bp.company_name} />
+          <KV k="사업자등록번호" v={bp.business_number} copy />
+          <KV k="대표자" v={bp.representative_name} />
+          <KV k="주소" v={bp.business_address} />
+          <KV k="연락처" v={bp.contact_phone} copy />
+          <KV k="세금계산서 이메일" v={bp.tax_invoice_email} copy />
+          <KV k="정산 담당" v={bp.settlement_contact_name} />
+          <KV k="정산 담당 연락처" v={bp.settlement_contact_phone} copy />
+        </dl>
+      )}
+      <div className="mt-2 flex items-center gap-1.5 border-t border-line/10 pt-2 text-[11px]">
+        <span className="text-ink-dim">정산 준비:</span>
+        <AdminBadge tone={sMeta.tone}>{settle.headline}</AdminBadge>
+      </div>
+    </AdminCard>
+  );
+}
+
+// 초대 / 코드 — 관리형 목록. rotate/generate 는 기존 InviteCodesModal 에서만.
+function InviteCard({ d, onNavigate, actions }: SectionProps) {
+  const inv = d.invite;
+  return (
+    <AdminCard title="초대 / 코드">
+      <div className="space-y-2">
+        <CodeManageRow label="HQ 초대코드" value={inv.hq_invite_code} onNavigate={onNavigate} actions={actions} />
+        <CodeManageRow label="매장 초대코드" value={inv.store_invite_code} onNavigate={onNavigate} actions={actions} />
+        <CodeManageRow label="브랜드 코드" value={inv.brand_code} onNavigate={onNavigate} actions={actions} />
+      </div>
+      {inv.invite_code_rotated_at && <p className="mt-2 text-[11px] text-ink-dim">코드 최근 재발급: {fmt(inv.invite_code_rotated_at)}</p>}
+      <ClaimHistory claims={inv.claims} />
+    </AdminCard>
+  );
+}
+
+// 지역 — 0개면 한 줄 empty, 있으면 3개 + 더보기.
+function RegionCard({ d, onNavigate, actions }: SectionProps) {
+  const [expanded, setExpanded] = useState(false);
+  const { shown, hiddenCount } = splitForDisplay(d.regions, expanded ? -1 : 3);
+  return (
+    <AdminCard title={`지역 (${d.regions.length})`} action={<ActionLink label="지역 관리" kind="regions" onNavigate={onNavigate} actions={actions} />}>
+      {d.regions.length === 0 ? (
+        <CompactEmpty title="연결된 지역 없음" desc="본사의 운영 지역이 아직 지정되지 않았습니다." />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {shown.map((r) => <RegionChip key={r.id} r={r} />)}
+          </div>
+          {hiddenCount > 0 && (
+            <button type="button" onClick={() => setExpanded(true)} className="mt-2 text-[11px] font-semibold text-accent hover:underline">
+              + {hiddenCount}개 더 보기
+            </button>
+          )}
+          {expanded && d.regions.length > 3 && (
+            <button type="button" onClick={() => setExpanded(false)} className="mt-2 ml-3 text-[11px] text-ink-dim hover:underline">접기</button>
+          )}
+        </>
+      )}
+    </AdminCard>
+  );
+}
+
+// 고급 시스템 정보 — 원시 ID/타임스탬프/플래그. 기본 접힘(disclosure).
+function AdvancedSystemInfo({ d }: { d: EnterpriseDetail }) {
+  const [open, setOpen] = useState(false);
+  const e = d.enterprise;
+  return (
+    <div className="rounded-xl bg-bg-card ring-1 ring-line/10">
+      <button
+        type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-sm font-bold text-ink">고급 시스템 정보</span>
+        <ChevronDown size={14} className={`text-ink-dim transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-line/10 px-4 pb-3">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 pt-3 sm:grid-cols-2">
+            <KV k="enterprise_id" v={e.id} copy mono abbrev />
+            <KV k="auth_user_id" v={e.auth_user_id} copy mono abbrev />
+            <KV k="brand_registry_id" v={e.brand_registry_id} copy mono abbrev />
+            <KV k="role (raw)" v={e.role} />
+            <KV k="생성일" v={fmt(e.created_at)} />
+            <KV k="수정일" v={fmt(e.updated_at)} />
+            <KV k="최근 로그인 (raw)" v={fmt(e.last_login_at)} />
+            <KV k="삭제일" v={e.deleted_at ? fmt(e.deleted_at) : '—'} />
+            <KV k="온보딩 허용" v={e.onboarding_enabled ? 'Y' : 'N'} />
+            <KV k="지역 자율등록" v={e.allow_self_register_region ? 'Y' : 'N'} />
+            <KV k="자동 온보딩" v={e.auto_onboarded ? 'Y' : 'N'} />
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 위험 작업 — 기존 EditModal(상태·권한) / DeleteConfirmModal(확인 절차) 재사용.
+// 실제 연결(actions)이 없으면 렌더하지 않음(빈 Danger Zone 생성 금지).
+function DangerZone({ actions }: { actions?: EnterpriseDetailActions }) {
+  if (!actions?.onEditAccount && !actions?.onDeleteAccount) return null;
+  return (
+    <AdminCard title="위험 작업">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {actions.onEditAccount && (
+          <AdminButton size="sm" variant="subtle" tone="warning" onClick={actions.onEditAccount}>계정 편집 (상태·권한)</AdminButton>
+        )}
+        {actions.onDeleteAccount && (
+          <AdminButton size="sm" variant="subtle" tone="danger" onClick={actions.onDeleteAccount}>계정 삭제</AdminButton>
+        )}
+      </div>
+      <p className="mt-2 text-[11px] text-ink-dim">상태 변경·권한 조정은 계정 편집에서, 삭제는 확인 절차를 거칩니다.</p>
+    </AdminCard>
+  );
+}
+
+type SectionProps = { d: EnterpriseDetail; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions };
 
 // ── 운영 준비 상태 보드 ──────────────────────────────────────────────
 const READINESS_META: Record<ReadinessStatus, { tone: AdminToneName; label: string; Icon: typeof CheckCircle2 }> = {
@@ -217,44 +362,70 @@ function ReadinessBoard({ d, onNavigate, actions }: { d: EnterpriseDetail; onNav
   );
 }
 
-/** 준비 카드의 실제 지원 액션 서술자. onClick 없으면 Disabled(reason 표시). */
-interface ResolvedAction { label: string; onClick?: () => void; reason?: string }
+/** actionKind → 실제 지원 액션 핸들러. onClick 없으면 미지원(reason). 단일 소스. */
+function kindHandler(kind: ReadinessActionKind, onNavigate: (t: DetailTab) => void, actions?: EnterpriseDetailActions): { onClick?: () => void; reason?: string } {
+  switch (kind) {
+    case 'invite':
+      return actions?.onManageInvite ? { onClick: actions.onManageInvite } : { reason: '초대·코드 관리 화면 연결이 없습니다' };
+    case 'settlement':
+      // 우선 검토 Dialog → 없으면 안전한 계약·정산 탭 이동(대체).
+      return actions?.onReviewSettlement ? { onClick: actions.onReviewSettlement } : { onClick: () => onNavigate('billing') };
+    case 'regions':
+      return actions?.onManageRegions ? { onClick: actions.onManageRegions } : { reason: '지역 관리 화면 연결이 없습니다' };
+    case 'tab:stores':
+      return { onClick: () => onNavigate('stores') };
+    case 'tab:billing':
+      return { onClick: () => onNavigate('billing') };
+  }
+}
+
+/** actionKind 기본 라벨(도메인 무관). */
+function kindLabel(kind: ReadinessActionKind): string {
+  switch (kind) {
+    case 'invite': return '초대·코드 관리';
+    case 'settlement': return '사업자·정산 검토';
+    case 'regions': return '지역 관리';
+    case 'tab:stores': return '매장 보기';
+    case 'tab:billing': return '계약·정산';
+  }
+}
 
 /**
- * actionKind(순수 서술자)를 부모가 넘긴 실제 지원 액션으로 매핑.
- * 우선순위: 기존 Dialog/Mutation → 안전한 기존 탭 이동 → Disabled + 설명.
- * 신규 백엔드 없음. 지원되지 않으면 가짜 버튼 대신 명확한 Disabled 상태.
+ * 공용 액션 버튼 — actionKind 를 실제 지원 액션으로 매핑해 렌더.
+ * 지원되면 버튼(또는 링크), 없으면 가짜 버튼 대신 명확한 Disabled + 설명.
  */
-function resolveReadinessAction(item: ReadinessItem, onNavigate: (t: DetailTab) => void, actions?: EnterpriseDetailActions): ResolvedAction {
-  switch (item.actionKind) {
-    case 'invite': {
-      const label = item.domain === 'brand' ? '브랜드·코드 관리' : '초대코드 관리';
-      return actions?.onManageInvite
-        ? { label, onClick: actions.onManageInvite }
-        : { label, reason: '초대·코드 관리 화면 연결이 없습니다' };
-    }
-    case 'settlement': {
-      const label = item.domain === 'business' ? '사업자·정산 검토' : '정산 검토·지급설정';
-      if (actions?.onReviewSettlement) return { label, onClick: actions.onReviewSettlement };
-      // 대체: 계약·정산 상세 탭(읽기 전용)으로 안전 이동.
-      return { label: '계약·정산 탭 보기', onClick: () => onNavigate('billing') };
-    }
-    case 'regions':
-      return actions?.onManageRegions
-        ? { label: '지역 관리 이동', onClick: actions.onManageRegions }
-        : { label: '지역 관리 이동', reason: '지역 관리 화면 연결이 없습니다' };
-    case 'tab:stores':
-      return { label: '매장 탭 보기', onClick: () => onNavigate('stores') };
-    case 'tab:billing':
-      return { label: '계약·정산 탭 보기', onClick: () => onNavigate('billing') };
+function ActionLink({ label, kind, onNavigate, actions, variant = 'link' }: {
+  label: string; kind: ReadinessActionKind; onNavigate: (t: DetailTab) => void;
+  actions?: EnterpriseDetailActions; variant?: 'link' | 'button';
+}) {
+  const h = kindHandler(kind, onNavigate, actions);
+  if (!h.onClick) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-ink-dim" title={h.reason}>
+        <MinusCircle size={10} /> {h.reason ?? '지원 액션 없음'}
+      </span>
+    );
   }
+  if (variant === 'button') {
+    return (
+      <AdminButton size="sm" tone="primary" variant="subtle" onClick={h.onClick}>{label}</AdminButton>
+    );
+  }
+  return (
+    <button type="button" onClick={h.onClick}
+      className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/10">
+      {label} <ChevronRight size={11} />
+    </button>
+  );
 }
 
 function ReadinessCard({ item, onNavigate, actions }: { item: ReadinessItem; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
   const meta = READINESS_META[item.status];
   const Icon = meta.Icon;
-  const act = resolveReadinessAction(item, onNavigate, actions);
-  const disabled = !act.onClick;
+  // 브랜드/사업자는 도메인 특화 라벨, 나머지는 기본 라벨.
+  const label = item.domain === 'brand' ? '브랜드·코드 관리'
+    : item.domain === 'business' ? '사업자·정산 검토'
+    : kindLabel(item.actionKind);
   return (
     <div className="flex flex-col rounded-xl border border-line/15 bg-bg p-3">
       <div className="flex items-center justify-between gap-1">
@@ -263,23 +434,115 @@ function ReadinessCard({ item, onNavigate, actions }: { item: ReadinessItem; onN
       </div>
       <div className="mt-1.5 text-sm font-bold text-ink">{item.headline}</div>
       <p className="mt-0.5 text-[11px] text-ink-dim">{item.detail}</p>
-      <div className="mt-2 pt-2 border-t border-line/10">
-        {disabled ? (
-          <span className="inline-flex items-center gap-1 text-[10px] text-ink-dim" title={act.reason}>
-            <MinusCircle size={10} /> {act.reason ?? '지원 액션 없음'}
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={act.onClick}
-            className="inline-flex items-center gap-0.5 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
-          >
-            {act.label} <ChevronRight size={11} />
-          </button>
-        )}
+      <div className="mt-2 border-t border-line/10 pt-2">
+        <ActionLink label={label} kind={item.actionKind} onNavigate={onNavigate} actions={actions} />
       </div>
     </div>
   );
+}
+
+// ── 공용 소형 UI 조각 ────────────────────────────────────────────────
+
+// 큰 Placeholder 박스 대신 한 줄 empty 상태(항목명/상태/설명).
+function CompactEmpty({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-dashed border-line/25 bg-bg px-3 py-2">
+      <MinusCircle size={13} className="mt-0.5 text-ink-dim" />
+      <div>
+        <p className="text-xs font-semibold text-ink">{title}</p>
+        <p className="text-[11px] text-ink-dim">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function ConnTile({ label, value, mono, children }: { label: string; value: string; mono?: boolean; children?: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-line/15 bg-bg p-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
+      <p className={`mt-0.5 truncate text-sm font-bold text-ink ${mono ? 'font-mono' : ''}`} title={value}>{value}</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function CopyChip({ value }: { value: string }) {
+  return (
+    <button type="button" onClick={() => doCopy(value)} title="복사"
+      className="inline-flex items-center gap-0.5 rounded-md bg-bg-card px-1.5 py-0.5 text-[11px] font-semibold text-ink-mute hover:bg-bg-hover">
+      <Copy size={10} /> 복사
+    </button>
+  );
+}
+
+// 초대/코드 관리형 행: 값(또는 '현재 없음') + 복사 + 관리 이동.
+function CodeManageRow({ label, value, onNavigate, actions }: { label: string; value: string | null; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line/15 bg-bg px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
+        {value
+          ? <code className="block truncate font-mono text-sm font-semibold text-ink" title={value}>{value}</code>
+          : <span className="text-xs text-ink-dim">현재 없음</span>}
+      </div>
+      {value && <CopyChip value={value} />}
+      <ActionLink label="초대·코드 관리" kind="invite" onNavigate={onNavigate} actions={actions} />
+    </div>
+  );
+}
+
+function RegionChip({ r }: { r: EntDetailRegion }) {
+  return (
+    <div className="rounded-lg border border-line/20 bg-bg px-3 py-1.5 text-xs">
+      <span className="font-semibold text-ink">{r.region_name ?? '—'}</span>
+      {r.region_code && <span className="ml-1 font-mono text-ink-dim">{r.region_code}</span>}
+      <span className="ml-2 text-ink-mute">매장 {r.store_count ?? 0}</span>
+    </div>
+  );
+}
+
+// claim 이력 — 0건이면 한 줄, 있으면 접을 수 있는 표.
+function ClaimHistory({ claims }: { claims: EntDetailInviteClaim[] }) {
+  const [open, setOpen] = useState(false);
+  if (claims.length === 0) {
+    return <p className="mt-2 border-t border-line/10 pt-2 text-[11px] text-ink-dim">가입/초대 claim 이력 없음</p>;
+  }
+  return (
+    <div className="mt-2 border-t border-line/10 pt-2">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        className="flex items-center gap-1 text-[11px] font-semibold text-ink-mute hover:text-ink">
+        <ChevronDown size={12} className={`transition ${open ? 'rotate-180' : ''}`} />
+        가입/초대 claim 이력 ({claims.length})
+      </button>
+      {open && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead><tr className="text-ink-dim"><th className="px-2 py-1 text-left">유형</th><th className="px-2 py-1 text-left">상태</th><th className="px-2 py-1 text-left">코드끝4</th><th className="px-2 py-1 text-left">입력값</th><th className="px-2 py-1 text-left">시각</th></tr></thead>
+            <tbody>
+              {claims.map((c, i) => (
+                <tr key={i} className="border-t border-line/10">
+                  <td className="px-2 py-1">{c.claim_type ?? '—'}</td>
+                  <td className="px-2 py-1"><AdminBadge tone={c.status === 'success' ? 'success' : c.status === 'failed' ? 'danger' : 'neutral'}>{c.status ?? '—'}</AdminBadge></td>
+                  <td className="px-2 py-1 font-mono">{c.invite_code_last4 ?? '—'}</td>
+                  <td className="px-2 py-1 text-ink-mute">{[c.store_name_input, c.region_name_input, c.brand_name_input].filter(Boolean).join(' / ') || '—'}</td>
+                  <td className="px-2 py-1 text-ink-dim">{fmt(c.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** role 코드 → 한국어 라벨(운영 표시용). 미매핑은 원문 유지. */
+function roleLabel(role: string | null): string | null {
+  if (!role) return role;
+  const map: Record<string, string> = {
+    owner: '본사 최고관리자', admin: '본사 관리자', enterprise_manager: '본사 담당자', viewer: '조회 전용',
+  };
+  return map[role] ?? role;
 }
 
 // ── 매장 ─────────────────────────────────────────────────────────────
@@ -457,22 +720,6 @@ function KV({ k, v, copy, mono, abbrev }: { k: string; v: string | null | undefi
         <span className={`text-xs text-ink ${mono ? 'font-mono' : ''}`}>{shown}</span>
         {copy && v && <button type="button" title="복사" onClick={() => doCopy(v)} className="rounded p-0.5 text-ink-dim hover:bg-bg-hover hover:text-ink"><Copy size={11} /></button>}
       </span>
-    </div>
-  );
-}
-
-function CodeRow({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-ink-dim">{label}</p>
-      {value ? (
-        <div className="mt-0.5 flex items-center gap-2">
-          <code className="flex-1 truncate rounded bg-bg px-2 py-1 font-mono text-sm font-semibold text-ink">{value}</code>
-          <button type="button" title="복사" onClick={() => doCopy(value)} className="rounded bg-bg p-1.5 hover:bg-bg-hover"><Copy size={11} /></button>
-        </div>
-      ) : (
-        <div className="mt-0.5 flex items-center gap-2 rounded bg-bg px-2 py-1 text-xs text-ink-dim">현재 없음 · 재발급 필요</div>
-      )}
     </div>
   );
 }

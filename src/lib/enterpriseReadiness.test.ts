@@ -4,6 +4,7 @@ import {
   computeEnterpriseReadiness, countIncomplete,
   brandReadiness, businessReadiness, settlementReadiness,
   inviteReadiness, regionReadiness, storeReadiness,
+  getEnterpriseRequiredActions, splitForDisplay,
 } from './enterpriseReadiness';
 import type { EnterpriseDetail } from '@/lib/api/enterpriseDetailApi';
 
@@ -178,6 +179,84 @@ describe('computeEnterpriseReadiness + countIncomplete', () => {
     d.regions = [{ id: 'r1', region_name: '서울', region_code: 'SE', status: 'active', store_count: 3, manager_name: null, last_policy_applied_at: null }];
     d.store_summary = { ...d.store_summary, total: 3, active: 3, playing: 2, offline_or_error: 0 };
     expect(countIncomplete(computeEnterpriseReadiness(d))).toBe(0);
+  });
+});
+
+function provisioned(): EnterpriseDetail {
+  const d = base();
+  d.invite = { hq_invite_code: 'HQ-1', store_invite_code: 'ST-1', brand_code: 'KUU', invite_code_rotated_at: null, claims: [] };
+  d.enterprise.brand_registry_id = 'br-1';
+  d.enterprise.onboarding_enabled = true;
+  d.business_profile = {
+    company_name: '쿠우쿠우(주)', business_number: '123-45-67890', representative_name: '홍길동',
+    business_address: null, contact_phone: null, tax_invoice_email: null,
+    settlement_contact_name: null, settlement_contact_phone: null, settlement_contact_email: null,
+  };
+  d.contract = contractStub();
+  d.regions = [{ id: 'r1', region_name: '서울', region_code: 'SE', status: 'active', store_count: 3, manager_name: null, last_policy_applied_at: null }];
+  d.store_summary = { ...d.store_summary, total: 3, active: 3, playing: 2, offline_or_error: 0 };
+  return d;
+}
+
+describe('getEnterpriseRequiredActions', () => {
+  it('surfaces business review as a required action when business missing', () => {
+    const a = getEnterpriseRequiredActions(base()).find((x) => x.id === 'business');
+    expect(a).toBeDefined();
+    expect(a!.priority).toBe('required');
+    expect(a!.actionKind).toBe('settlement');
+  });
+  it('surfaces invite as required when no codes', () => {
+    const a = getEnterpriseRequiredActions(base()).find((x) => x.id === 'invite');
+    expect(a?.priority).toBe('required');
+    expect(a?.actionKind).toBe('invite');
+  });
+  it('surfaces region as required when none', () => {
+    const a = getEnterpriseRequiredActions(base()).find((x) => x.id === 'region');
+    expect(a?.priority).toBe('required');
+    expect(a?.actionKind).toBe('regions');
+  });
+  it('surfaces store as recommended when none', () => {
+    const a = getEnterpriseRequiredActions(base()).find((x) => x.id === 'store');
+    expect(a?.priority).toBe('recommended');
+    expect(a?.actionKind).toBe('tab:stores');
+  });
+  it('surfaces settlement action when latest settlement needs attention', () => {
+    const d = base();
+    d.contract = contractStub();
+    d.settlements = [{ ...settlementStub(), status: 'held' }];
+    const a = getEnterpriseRequiredActions(d).find((x) => x.id === 'settlement');
+    expect(a?.title).toBe('정산 확인 필요');
+    expect(a?.actionKind).toBe('settlement');
+  });
+  it('returns empty when fully provisioned (완료 메시지 조건)', () => {
+    expect(getEnterpriseRequiredActions(provisioned())).toEqual([]);
+  });
+  it('excludes completed (ready) domains from the task list', () => {
+    const d = base();
+    d.regions = [{ id: 'r1', region_name: '서울', region_code: null, status: 'active', store_count: 1, manager_name: null, last_policy_applied_at: null }];
+    const ids = getEnterpriseRequiredActions(d).map((x) => x.id);
+    expect(ids).not.toContain('region');
+  });
+  it('orders required before recommended', () => {
+    const priorities = getEnterpriseRequiredActions(base()).map((x) => x.priority);
+    const firstRecommended = priorities.indexOf('recommended');
+    const lastRequired = priorities.lastIndexOf('required');
+    expect(lastRequired).toBeLessThan(firstRecommended);
+  });
+  it('produces no duplicate action ids (one per domain)', () => {
+    const ids = getEnterpriseRequiredActions(base()).map((x) => x.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('splitForDisplay', () => {
+  it('shows up to limit and reports the rest', () => {
+    const r = splitForDisplay([1, 2, 3, 4, 5], 3);
+    expect(r.shown).toEqual([1, 2, 3]);
+    expect(r.hiddenCount).toBe(2);
+  });
+  it('no hidden when within limit', () => {
+    expect(splitForDisplay([1, 2], 3)).toEqual({ shown: [1, 2], hiddenCount: 0 });
   });
 });
 

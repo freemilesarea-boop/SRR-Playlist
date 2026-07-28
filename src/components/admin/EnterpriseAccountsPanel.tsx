@@ -378,6 +378,9 @@ export default function EnterpriseAccountsPanel() {
             onManageInvite: () => { const t = detailTarget; setDetailTarget(null); setInviteTarget(t); },
             onReviewSettlement: () => { const t = detailTarget; setDetailTarget(null); setSettlementTarget(t); },
             onManageRegions: () => { setDetailTarget(null); navigateAdminTab('enterprise-regions'); },
+            // 위험 작업 — 기존 EditModal(상태·권한)/DeleteConfirmModal(confirm) 재사용.
+            onEditAccount: () => { const t = detailTarget; setDetailTarget(null); setEditTarget(t); },
+            onDeleteAccount: () => { const t = detailTarget; setDetailTarget(null); setDeleteTarget(t); },
           }} />
       )}
     </div>

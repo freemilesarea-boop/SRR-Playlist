@@ -141,3 +141,78 @@ export function computeEnterpriseReadiness(d: EnterpriseDetail): ReadinessItem[]
 export function countIncomplete(items: ReadinessItem[]): number {
   return items.filter((i) => i.status !== 'ready').length;
 }
+
+// ── 지금 처리할 작업 (Required / Recommended) ─────────────────────────
+
+export type EnterpriseRequiredPriority = 'required' | 'recommended';
+
+export interface EnterpriseRequiredAction {
+  /** 도메인 기반 고유 id (중복 방지). */
+  id: string;
+  title: string;
+  description: string;
+  priority: EnterpriseRequiredPriority;
+  /** 현재 구현된 actionKind 재사용 — React 계층이 실제 지원 액션으로 매핑. */
+  actionKind: ReadinessActionKind;
+}
+
+/** 운영에 필수인 도메인(정산·계약 진행 전 반드시 필요). 나머지는 recommended. */
+const REQUIRED_DOMAINS: ReadonlySet<ReadinessDomain> = new Set(['business', 'settlement', 'invite', 'region']);
+
+/** 미완료 도메인별 '지금 처리할 작업' 문구(운영자 관점, DB 필드명 아님). */
+function requiredCopy(item: ReadinessItem): { title: string; description: string } {
+  const s = item.status;
+  switch (item.domain) {
+    case 'brand':
+      return s === 'partial'
+        ? { title: '브랜드 레지스트리 미연결', description: '브랜드 코드는 있으나 레지스트리에 연결되지 않았습니다.' }
+        : { title: '브랜드 코드 미발급', description: '브랜드 코드가 아직 발급되지 않았습니다.' };
+    case 'business':
+      return { title: '사업자 정보 확인 필요', description: '계약·정산 진행 전에 사업자 정보를 검토하세요.' };
+    case 'settlement':
+      if (s === 'attention') return { title: '정산 확인 필요', description: item.detail };
+      return s === 'partial'
+        ? { title: '정산 조건 미완성', description: '계약 단가·수수료·정산방식이 완성되지 않았습니다.' }
+        : { title: '계약·정산 미설정', description: '등록된 계약이 없어 정산을 진행할 수 없습니다.' };
+    case 'invite':
+      if (s === 'attention') return { title: '초대 온보딩 비활성화', description: '초대 가입이 꺼져 있어 신규 연결이 불가합니다.' };
+      return s === 'partial'
+        ? { title: '초대코드 일부만 발급', description: '본사·매장 초대코드 중 일부만 발급되었습니다.' }
+        : { title: 'HQ·매장 초대코드 없음', description: '본사 연결을 위한 초대코드가 없습니다.' };
+    case 'region':
+      return { title: '지역 미연결', description: '본사의 운영 지역을 지정하세요.' };
+    case 'store':
+      return s === 'attention'
+        ? { title: '매장 오프라인/오류', description: item.detail }
+        : { title: '연결된 매장 없음', description: '아직 연결된 매장이 없습니다.' };
+  }
+}
+
+/**
+ * '지금 처리할 작업' 목록 — 완료(ready) 항목 제외, required 우선.
+ * 도메인당 최대 1개(중복 없음). 액션은 기존 actionKind 재사용.
+ * 모두 완료면 빈 배열(호출부에서 완료 메시지 표시).
+ */
+export function getEnterpriseRequiredActions(d: EnterpriseDetail): EnterpriseRequiredAction[] {
+  const rank: Record<EnterpriseRequiredPriority, number> = { required: 0, recommended: 1 };
+  return computeEnterpriseReadiness(d)
+    .filter((it) => it.status !== 'ready')
+    .map((it): EnterpriseRequiredAction => {
+      const copy = requiredCopy(it);
+      return {
+        id: it.domain,
+        title: copy.title,
+        description: copy.description,
+        priority: REQUIRED_DOMAINS.has(it.domain) ? 'required' : 'recommended',
+        actionKind: it.actionKind,
+      };
+    })
+    // required 먼저, 그 외 원래(도메인 고정) 순서 유지 — Array.prototype.sort 안정 정렬.
+    .sort((a, b) => rank[a.priority] - rank[b.priority]);
+}
+
+/** 목록을 limit개까지만 노출하고 나머지 개수를 반환(지역 '3개 + N개 더' 등). */
+export function splitForDisplay<T>(items: readonly T[], limit: number): { shown: T[]; hiddenCount: number } {
+  if (limit < 0) return { shown: [...items], hiddenCount: 0 };
+  return { shown: items.slice(0, limit), hiddenCount: Math.max(0, items.length - limit) };
+}
