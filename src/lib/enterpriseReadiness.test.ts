@@ -98,27 +98,74 @@ describe('businessReadiness', () => {
     };
     expect(businessReadiness(d).status).toBe('ready');
   });
+  it('partial when some core fields missing', () => {
+    const d = base();
+    d.business_profile = {
+      company_name: '쿠우쿠우(주)', business_number: null, representative_name: null,
+      business_address: null, contact_phone: null, tax_invoice_email: null,
+      settlement_contact_name: null, settlement_contact_phone: null, settlement_contact_email: null,
+    };
+    expect(businessReadiness(d).status).toBe('partial');
+  });
 });
 
 describe('settlementReadiness', () => {
   it('missing when no contract', () => { expect(settlementReadiness(base()).status).toBe('missing'); });
+  it('partial when contract lacks terms', () => {
+    const d = base();
+    d.contract = { ...contractStub(), monthly_store_price: null, commission_rate: null, settlement_method: null };
+    expect(settlementReadiness(d).status).toBe('partial');
+  });
   it('ready when terms complete', () => { const d = base(); d.contract = contractStub(); expect(settlementReadiness(d).status).toBe('ready'); });
-  it('attention when latest settlement held', () => {
-    const d = base(); d.contract = contractStub(); d.settlements = [{ ...settlementStub(), status: 'held' }];
+  it('attention when latest settlement held or below minimum', () => {
+    const d = base(); d.contract = contractStub();
+    d.settlements = [{ ...settlementStub(), status: 'held' }];
+    expect(settlementReadiness(d).status).toBe('attention');
+    d.settlements = [{ ...settlementStub(), below_minimum: true }];
     expect(settlementReadiness(d).status).toBe('attention');
   });
 });
 
-describe('inviteReadiness / regionReadiness / storeReadiness', () => {
-  it('invite missing when no codes', () => { expect(inviteReadiness(base()).status).toBe('missing'); });
-  it('region missing when none', () => { expect(regionReadiness(base()).status).toBe('missing'); });
-  it('store missing when total 0', () => {
+describe('inviteReadiness', () => {
+  it('missing when no codes', () => { expect(inviteReadiness(base()).status).toBe('missing'); });
+  it('ready when both codes + onboarding on', () => {
+    const d = base();
+    d.invite.hq_invite_code = 'HQ-1'; d.invite.store_invite_code = 'ST-1'; d.enterprise.onboarding_enabled = true;
+    expect(inviteReadiness(d).status).toBe('ready');
+  });
+  it('attention when onboarding off despite codes', () => {
+    const d = base();
+    d.invite.hq_invite_code = 'HQ-1'; d.invite.store_invite_code = 'ST-1'; d.enterprise.onboarding_enabled = false;
+    expect(inviteReadiness(d).status).toBe('attention');
+  });
+  it('partial when only one code and onboarding on', () => {
+    const d = base();
+    d.invite.hq_invite_code = 'HQ-1'; d.enterprise.onboarding_enabled = true;
+    expect(inviteReadiness(d).status).toBe('partial');
+  });
+});
+
+describe('regionReadiness', () => {
+  it('missing when none', () => { expect(regionReadiness(base()).status).toBe('missing'); });
+  it('ready with regions', () => {
+    const d = base();
+    d.regions = [{ id: 'r1', region_name: '서울', region_code: 'SE', status: 'active', store_count: 3, manager_name: null, last_policy_applied_at: null }];
+    expect(regionReadiness(d).status).toBe('ready');
+  });
+});
+
+describe('storeReadiness', () => {
+  it('missing when total 0', () => {
     expect(storeReadiness(base()).status).toBe('missing');
     expect(storeReadiness(base()).actionKind).toBe('tab:stores');
   });
-  it('store attention when offline/error', () => {
+  it('attention when offline/error present', () => {
     const d = base(); d.store_summary = { ...d.store_summary, total: 5, active: 4, offline_or_error: 1 };
     expect(storeReadiness(d).status).toBe('attention');
+  });
+  it('ready when all healthy', () => {
+    const d = base(); d.store_summary = { ...d.store_summary, total: 5, active: 5, playing: 3, offline_or_error: 0 };
+    expect(storeReadiness(d).status).toBe('ready');
   });
 });
 
@@ -176,6 +223,31 @@ describe('getEnterpriseRequiredActions', () => {
     const d = base();
     d.invite.brand_code = 'DEMO'; d.enterprise.brand_registry_id = 'reg-1'; d.player_binding = null;
     expect(getEnterpriseRequiredActions(d).some((x) => x.id === 'brand_player' && x.priority === 'required')).toBe(true);
+  });
+  it('surfaces business review as required (settlement action)', () => {
+    const a = getEnterpriseRequiredActions(base()).find((x) => x.id === 'business');
+    expect(a?.priority).toBe('required');
+    expect(a?.actionKind).toBe('settlement');
+  });
+  it('surfaces invite as required when no codes', () => {
+    expect(getEnterpriseRequiredActions(base()).find((x) => x.id === 'invite')?.priority).toBe('required');
+  });
+  it('surfaces region as required when none', () => {
+    expect(getEnterpriseRequiredActions(base()).find((x) => x.id === 'region')?.priority).toBe('required');
+  });
+  it('surfaces store as recommended when none', () => {
+    expect(getEnterpriseRequiredActions(base()).find((x) => x.id === 'store')?.priority).toBe('recommended');
+  });
+  it('surfaces settlement action when latest settlement needs attention', () => {
+    const d = base(); d.contract = contractStub(); d.settlements = [{ ...settlementStub(), status: 'held' }];
+    const a = getEnterpriseRequiredActions(d).find((x) => x.id === 'settlement');
+    expect(a?.title).toBe('정산 확인 필요');
+    expect(a?.actionKind).toBe('settlement');
+  });
+  it('excludes completed (ready) domains from the task list', () => {
+    const d = base();
+    d.regions = [{ id: 'r1', region_name: '서울', region_code: null, status: 'active', store_count: 1, manager_name: null, last_policy_applied_at: null }];
+    expect(getEnterpriseRequiredActions(d).map((x) => x.id)).not.toContain('region');
   });
   it('returns empty when fully provisioned', () => { expect(getEnterpriseRequiredActions(provisioned())).toEqual([]); });
   it('orders required before recommended', () => {
