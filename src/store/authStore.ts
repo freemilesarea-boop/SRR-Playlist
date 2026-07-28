@@ -88,7 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       if (typeof window !== 'undefined') window.__srrAuthSubBound = true;
 
-      supabase.auth.onAuthStateChange(async (_event, session) => {
+      supabase.auth.onAuthStateChange(async (event, session) => {
         const prevUserId = get().user?.id ?? null;
         const nextUserId = session?.user?.id ?? null;
         set({ session, user: session?.user ?? null, isAuthReady: true });
@@ -107,6 +107,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         // 신규 로그인 / 사용자 전환 → 게이팅 로드 (이 구간엔 loader 표시, 절대 signOut/redirect 안 함)
         await get().loadProfile(nextUserId);
+
+        // BRAND-HQ-RUNTIME-TRUTH-1 — 실제 로그인 이벤트에서만 enterprise_accounts.last_login_at 기록.
+        // SIGNED_IN 만 대상(INITIAL_SESSION/TOKEN_REFRESHED 제외 → 새로고침·세션복구마다 기록 안 함).
+        // enterprise 계정이 아니면 record_enterprise_login 이 0행 업데이트(무해) → 일반/아티스트/매장/admin 로그인 무회귀.
+        if (event === 'SIGNED_IN') {
+          void (async () => {
+            try {
+              const { recordEnterpriseLogin } = await import('@/lib/api/enterpriseAccountsApi');
+              await recordEnterpriseLogin(); // best-effort, 실패해도 로그인 유지(내부 silent)
+            } catch { /* noop */ }
+          })();
+        }
 
         // 가입 직후 pending signup 캐시 적용 + 비로그인 라이브러리 머지 (best-effort)
         void (async () => {

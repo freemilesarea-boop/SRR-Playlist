@@ -6,20 +6,22 @@ import type { EnterpriseDetail } from '@/lib/api/enterpriseDetailApi';
 export type ReadinessStatus = 'ready' | 'partial' | 'attention' | 'missing';
 
 export type ReadinessDomain =
-  | 'brand' | 'business' | 'settlement' | 'invite' | 'region' | 'store';
+  | 'brand_player' | 'brand_registry' | 'business' | 'settlement' | 'invite' | 'region' | 'store';
 
 /**
  * 준비 카드에서 실행할 '실제 지원 액션'의 종류(순수 서술자).
  * React 계층이 이 종류를 기존 Dialog/Mutation/Tab 이동으로 매핑한다.
  * 새 백엔드 기능을 만들지 않으며, 지원 액션이 없으면 안전한 탭 이동으로 대체한다.
- * - 'invite'     → 초대·코드 관리(InviteCodesModal): brand/hq/store 코드
- * - 'settlement' → 정산·사업자 검토(SettlementReviewModal): 승인/반려/지급설정
- * - 'regions'    → 지역 관리 화면(enterprise-regions 탭) 이동
- * - 'tab:stores' → 매장 상세 탭 이동
- * - 'tab:billing'→ 계약·정산 상세 탭 이동
+ * - 'brand-player'   → 브랜드 플레이어 관리(brand-player 탭, brand_accounts 연결/활성/복구)
+ * - 'brand-registry' → 브랜드 레지스트리 관리(brand-registry 탭, 자동가입 매칭)
+ * - 'invite'         → 초대·코드 관리(InviteCodesModal): hq/store 코드
+ * - 'settlement'     → 정산·사업자 검토(SettlementReviewModal): 승인/반려/지급설정
+ * - 'regions'        → 지역 관리 화면(enterprise-regions 탭) 이동
+ * - 'tab:stores'     → 매장 상세 탭 이동
+ * - 'tab:billing'    → 계약·정산 상세 탭 이동
  */
 export type ReadinessActionKind =
-  | 'invite' | 'settlement' | 'regions' | 'tab:stores' | 'tab:billing';
+  | 'brand-player' | 'brand-registry' | 'invite' | 'settlement' | 'regions' | 'tab:stores' | 'tab:billing';
 
 export interface ReadinessItem {
   domain: ReadinessDomain;
@@ -38,17 +40,53 @@ function nonEmpty(v: string | null | undefined): boolean {
   return typeof v === 'string' && v.trim().length > 0;
 }
 
-/** 브랜드 코드/레지스트리 연결 상태. */
-export function brandReadiness(d: EnterpriseDetail): ReadinessItem {
+/**
+ * 브랜드 플레이어 연결(Runtime-Truth) — 유일 근거는 brand_accounts 활성 링크.
+ * verify_store_code(0455) 와 동일 조건: brand_account 존재 AND status='active' AND deleted_at IS NULL.
+ * brand_code / brand_registry_id 로는 절대 Player Ready 를 판정하지 않는다.
+ */
+export function brandPlayerReadiness(d: EnterpriseDetail): ReadinessItem {
+  const b = d.player_binding ?? null;
+  const label = '브랜드 플레이어';
+  const warn = b && b.binding_count > 1 ? ` · ⚠ 연결 ${b.binding_count}건(정리 필요)` : '';
+  // 연결 자체가 없음(행 없음)
+  if (!b || !nonEmpty(b.brand_account_id)) {
+    return { domain: 'brand_player', label, status: 'missing', headline: '연결 안 됨',
+      detail: 'Player용 브랜드가 이 본사에 연결되지 않았습니다.', actionKind: 'brand-player' };
+  }
+  // 삭제 상태
+  if (nonEmpty(b.brand_account_deleted_at)) {
+    return { domain: 'brand_player', label, status: 'attention', headline: '복구 필요',
+      detail: `연결된 Player 브랜드가 삭제 상태입니다.${warn}`, actionKind: 'brand-player' };
+  }
+  // 비활성
+  if (b.brand_account_status !== 'active') {
+    return { domain: 'brand_player', label, status: 'attention', headline: '비활성',
+      detail: `Player 브랜드가 본사에 연결되어 있지만 비활성입니다.${warn}`, actionKind: 'brand-player' };
+  }
+  // 정상(active + 미삭제)
+  return { domain: 'brand_player', label, status: 'ready', headline: '사용 가능',
+    detail: `브랜드 ${b.brand_account_name ?? '연결됨'} · 활성 연결${warn}`, actionKind: 'brand-player' };
+}
+
+/**
+ * 브랜드 레지스트리(자동가입 매칭) — Player Runtime 과 무관. 항상 recommended 취급.
+ * enterprise_accounts.brand_code / brand_registry_id 만 사용. Player 실패 원인으로 표시하지 않음.
+ */
+export function brandRegistryReadiness(d: EnterpriseDetail): ReadinessItem {
   const code = d.invite.brand_code;
   const linked = nonEmpty(d.enterprise.brand_registry_id);
+  const label = '브랜드 레지스트리';
   if (nonEmpty(code) && linked) {
-    return { domain: 'brand', label: '브랜드', status: 'ready', headline: code!, detail: '브랜드 코드 발급 · 레지스트리 연결됨', actionKind: 'invite' };
+    return { domain: 'brand_registry', label, status: 'ready', headline: '연결됨',
+      detail: `브랜드 코드 ${code} · 자동가입 레지스트리 연결됨`, actionKind: 'brand-registry' };
   }
   if (nonEmpty(code)) {
-    return { domain: 'brand', label: '브랜드', status: 'partial', headline: code!, detail: '브랜드 코드는 있으나 레지스트리 미연결', actionKind: 'invite' };
+    return { domain: 'brand_registry', label, status: 'partial', headline: '레지스트리 미연결',
+      detail: '자동 가입 매칭용 레지스트리가 연결되지 않았습니다.', actionKind: 'brand-registry' };
   }
-  return { domain: 'brand', label: '브랜드', status: 'missing', headline: '미발급', detail: '브랜드 코드가 발급되지 않음', actionKind: 'invite' };
+  return { domain: 'brand_registry', label, status: 'missing', headline: '브랜드 코드 없음',
+    detail: '브랜드 코드가 발급되지 않았습니다.', actionKind: 'brand-registry' };
 }
 
 /** 사업자(회사) 정보 등록 상태. */
@@ -125,15 +163,16 @@ export function storeReadiness(d: EnterpriseDetail): ReadinessItem {
   return { domain: 'store', label: '매장', status: 'ready', headline: `활성 ${s.active} / ${s.total}`, detail: `재생중 ${s.playing} · 오프라인/오류 0`, actionKind: 'tab:stores' };
 }
 
-/** 6개 운영 도메인 준비 상태 (표시 순서 고정). */
+/** 운영 도메인 준비 상태 (표시 순서 고정). brand_player 를 최우선, brand_registry 는 말미. */
 export function computeEnterpriseReadiness(d: EnterpriseDetail): ReadinessItem[] {
   return [
-    brandReadiness(d),
+    brandPlayerReadiness(d),
     businessReadiness(d),
     settlementReadiness(d),
     inviteReadiness(d),
     regionReadiness(d),
     storeReadiness(d),
+    brandRegistryReadiness(d),
   ];
 }
 
@@ -156,17 +195,20 @@ export interface EnterpriseRequiredAction {
   actionKind: ReadinessActionKind;
 }
 
-/** 운영에 필수인 도메인(정산·계약 진행 전 반드시 필요). 나머지는 recommended. */
-const REQUIRED_DOMAINS: ReadonlySet<ReadinessDomain> = new Set(['business', 'settlement', 'invite', 'region']);
+/** 운영에 필수인 도메인. brand_player 는 Player Runtime 직결 → 필수. brand_registry 는 recommended. */
+const REQUIRED_DOMAINS: ReadonlySet<ReadinessDomain> = new Set(['brand_player', 'business', 'settlement', 'invite', 'region']);
 
 /** 미완료 도메인별 '지금 처리할 작업' 문구(운영자 관점, DB 필드명 아님). */
 function requiredCopy(item: ReadinessItem): { title: string; description: string } {
   const s = item.status;
   switch (item.domain) {
-    case 'brand':
+    case 'brand_player':
+      if (s === 'attention') return { title: `브랜드 플레이어 ${item.headline}`, description: item.detail };
+      return { title: '브랜드 플레이어 연결 필요', description: 'Player용 브랜드가 이 본사에 연결되지 않았습니다.' };
+    case 'brand_registry':
       return s === 'partial'
-        ? { title: '브랜드 레지스트리 미연결', description: '브랜드 코드는 있으나 레지스트리에 연결되지 않았습니다.' }
-        : { title: '브랜드 코드 미발급', description: '브랜드 코드가 아직 발급되지 않았습니다.' };
+        ? { title: '브랜드 레지스트리 확인 권장', description: '자동 가입 매칭용 레지스트리가 연결되지 않았습니다.' }
+        : { title: '브랜드 코드 없음', description: '브랜드 코드가 아직 발급되지 않았습니다.' };
     case 'business':
       return { title: '사업자 정보 확인 필요', description: '계약·정산 진행 전에 사업자 정보를 검토하세요.' };
     case 'settlement':

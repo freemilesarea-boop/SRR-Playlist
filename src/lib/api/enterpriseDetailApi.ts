@@ -167,8 +167,23 @@ export interface EntDetailAuditLog {
   error_code: string | null;
 }
 
+/** BRAND-HQ-RUNTIME-TRUTH-1 — 실제 Brand Player Binding(brand_accounts). Runtime 준비 상태의 유일 근거. */
+export interface EntDetailPlayerBinding {
+  brand_account_id: string | null;
+  brand_account_name: string | null;
+  brand_account_status: string | null;
+  brand_account_deleted_at: string | null;
+  enterprise_account_id: string | null;
+  /** verify_store_code 와 동일 조건: status='active' AND deleted_at IS NULL. */
+  is_active_binding: boolean;
+  /** 이 본사에 연결된 brand_accounts 행 수(>1 이면 이상 상태 경고). */
+  binding_count: number;
+}
+
 export interface EnterpriseDetail {
   enterprise: EntDetailEnterprise;
+  /** 실제 Player Binding. 구버전 RPC 호환 위해 optional. */
+  player_binding?: EntDetailPlayerBinding | null;
   business_profile: EntDetailBusinessProfile | null;
   invite: EntDetailInvite;
   regions: EntDetailRegion[];

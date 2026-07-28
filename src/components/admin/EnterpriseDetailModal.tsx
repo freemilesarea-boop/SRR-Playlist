@@ -7,7 +7,7 @@ import type { AdminToneName } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
 import { adminGetEnterpriseDetail, type EnterpriseDetail, type EntDetailRegion, type EntDetailInviteClaim, type EntDetailStore } from '@/lib/api/enterpriseDetailApi';
 import {
-  computeEnterpriseReadiness, countIncomplete, settlementReadiness,
+  computeEnterpriseReadiness, countIncomplete, settlementReadiness, brandPlayerReadiness,
   getEnterpriseRequiredActions, splitForDisplay,
   type ReadinessItem, type ReadinessStatus, type ReadinessActionKind,
 } from '@/lib/enterpriseReadiness';
@@ -33,6 +33,10 @@ export interface EnterpriseDetailActions {
   onReviewSettlement?: () => void;
   /** 지역 관리 화면(enterprise-regions 탭) 이동. */
   onManageRegions?: () => void;
+  /** 브랜드 플레이어 관리(brand-player 탭) 이동 — brand_accounts 연결/활성/복구. */
+  onManageBrandPlayer?: () => void;
+  /** 브랜드 레지스트리 관리(brand-registry 탭) 이동 — 자동가입 매칭. */
+  onManageBrandRegistry?: () => void;
   /** 계정 편집(EditModal): 상태·권한 변경 포함. */
   onEditAccount?: () => void;
   /** 계정 삭제(DeleteConfirmModal): 기존 confirm 절차 유지. */
@@ -137,7 +141,7 @@ function AccountSummary({ d }: { d: EnterpriseDetail }) {
         <KV k="권한" v={roleLabel(e.role)} />
         <KV k="이메일" v={e.manager_email} copy />
         <KV k="전화" v={e.manager_phone} copy />
-        <KV k="최근 로그인" v={fmt(e.last_login_at)} />
+        <KV k="최근 로그인" v={loginStatusText(e)} />
       </dl>
       {e.notes && <p className="mt-2 rounded bg-bg px-2 py-1.5 text-xs text-ink-mute">메모: {e.notes}</p>}
     </AdminCard>
@@ -182,15 +186,17 @@ function RequiredTasksPanel({ d, onNavigate, actions }: SectionProps) {
   );
 }
 
-// 운영 연결 — 브랜드·HQ·매장·지역 관계를 한 카드로(현재 데이터 계약 범위만).
+// 운영 연결 — 브랜드 플레이어(실제 Runtime)·HQ·매장·지역. 내부 테이블명은 노출하지 않음.
 function OperationalConnections({ d, onNavigate, actions }: SectionProps) {
-  const e = d.enterprise; const inv = d.invite; const s = d.store_summary;
+  const e = d.enterprise; const s = d.store_summary;
+  const bp = brandPlayerReadiness(d);
+  const bpMeta = READINESS_META[bp.status];
   return (
-    <AdminCard title="운영 연결" subtitle="브랜드 · HQ · 매장 · 지역">
+    <AdminCard title="운영 연결" subtitle="브랜드 플레이어 · HQ · 매장 · 지역">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <ConnTile label="브랜드" value={inv.brand_code ?? '미발급'} mono={!!inv.brand_code}>
-          {inv.brand_code && <CopyChip value={inv.brand_code} />}
-          <ActionLink label="초대·코드 관리" kind="invite" onNavigate={onNavigate} actions={actions} />
+        <ConnTile label="브랜드 플레이어" value={bp.headline}>
+          <AdminBadge tone={bpMeta.tone}>{bpMeta.label}</AdminBadge>
+          <ActionLink label="연결 관리" kind="brand-player" onNavigate={onNavigate} actions={actions} />
         </ConnTile>
         <ConnTile label="HQ" value={e.enterprise_name}>
           <StatusBadge status={e.status} />
@@ -296,6 +302,8 @@ function AdvancedSystemInfo({ d }: { d: EnterpriseDetail }) {
           <dl className="grid grid-cols-1 gap-x-4 gap-y-2 pt-3 sm:grid-cols-2">
             <KV k="enterprise_id" v={e.id} copy mono abbrev />
             <KV k="auth_user_id" v={e.auth_user_id} copy mono abbrev />
+            <KV k="로그인 계정 연결" v={e.auth_user_id ? '연결됨' : '미연결'} />
+            <KV k="앱 로그인 기록" v={e.last_login_at ? '있음' : '없음'} />
             <KV k="brand_registry_id" v={e.brand_registry_id} copy mono abbrev />
             <KV k="role (raw)" v={e.role} />
             <KV k="생성일" v={fmt(e.created_at)} />
@@ -365,6 +373,10 @@ function ReadinessBoard({ d, onNavigate, actions }: { d: EnterpriseDetail; onNav
 /** actionKind → 실제 지원 액션 핸들러. onClick 없으면 미지원(reason). 단일 소스. */
 function kindHandler(kind: ReadinessActionKind, onNavigate: (t: DetailTab) => void, actions?: EnterpriseDetailActions): { onClick?: () => void; reason?: string } {
   switch (kind) {
+    case 'brand-player':
+      return actions?.onManageBrandPlayer ? { onClick: actions.onManageBrandPlayer } : { reason: '브랜드 플레이어 관리 화면 연결이 없습니다' };
+    case 'brand-registry':
+      return actions?.onManageBrandRegistry ? { onClick: actions.onManageBrandRegistry } : { reason: '브랜드 레지스트리 관리 화면 연결이 없습니다' };
     case 'invite':
       return actions?.onManageInvite ? { onClick: actions.onManageInvite } : { reason: '초대·코드 관리 화면 연결이 없습니다' };
     case 'settlement':
@@ -382,6 +394,8 @@ function kindHandler(kind: ReadinessActionKind, onNavigate: (t: DetailTab) => vo
 /** actionKind 기본 라벨(도메인 무관). */
 function kindLabel(kind: ReadinessActionKind): string {
   switch (kind) {
+    case 'brand-player': return '브랜드 플레이어 관리';
+    case 'brand-registry': return '브랜드 레지스트리 관리';
     case 'invite': return '초대·코드 관리';
     case 'settlement': return '사업자·정산 검토';
     case 'regions': return '지역 관리';
@@ -422,10 +436,8 @@ function ActionLink({ label, kind, onNavigate, actions, variant = 'link' }: {
 function ReadinessCard({ item, onNavigate, actions }: { item: ReadinessItem; onNavigate: (t: DetailTab) => void; actions?: EnterpriseDetailActions }) {
   const meta = READINESS_META[item.status];
   const Icon = meta.Icon;
-  // 브랜드/사업자는 도메인 특화 라벨, 나머지는 기본 라벨.
-  const label = item.domain === 'brand' ? '브랜드·코드 관리'
-    : item.domain === 'business' ? '사업자·정산 검토'
-    : kindLabel(item.actionKind);
+  // 사업자는 도메인 특화 라벨, 나머지는 actionKind 기본 라벨.
+  const label = item.domain === 'business' ? '사업자·정산 검토' : kindLabel(item.actionKind);
   return (
     <div className="flex flex-col rounded-xl border border-line/15 bg-bg p-3">
       <div className="flex items-center justify-between gap-1">
@@ -534,6 +546,17 @@ function ClaimHistory({ claims }: { claims: EntDetailInviteClaim[] }) {
       )}
     </div>
   );
+}
+
+/**
+ * 최근 로그인 표시 — 모호한 "로그인 전" 단독 표기 제거.
+ * last_login_at(앱 기록)이 있으면 시각, 없으면 원인 구분:
+ * auth_user_id 없음 → 로그인 계정 미연결 / 있음 → 로그인 기록 없음.
+ */
+function loginStatusText(e: EnterpriseDetail['enterprise']): string {
+  if (e.last_login_at) return fmt(e.last_login_at);
+  if (!e.auth_user_id) return '로그인 계정 미연결';
+  return '로그인 기록 없음';
 }
 
 /** role 코드 → 한국어 라벨(운영 표시용). 미매핑은 원문 유지. */
