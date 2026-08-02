@@ -404,52 +404,76 @@ end $D$;
 --    0455 본문 유지 + study_cafe 판정 필터만 추가.
 -- ============================================================================
 create or replace function public._brand_generate_playlist(p_brand_id uuid, p_limit integer default 200)
- returns jsonb language plpgsql stable security definer set search_path to 'public'
+ returns jsonb
+ language plpgsql
+ stable security definer
+ set search_path to 'public'
 as $function$
-declare v jsonb; pol public.brand_music_policies%rowtype;
-  v_limit int := greatest(1, least(coalesce(p_limit,200),500));
-  v_seed text := to_char((now() at time zone 'Asia/Seoul')::date,'YYYYMMDD')||':'||p_brand_id::text;
-  v_industry text; v_is_study boolean; v_norm text;
+declare
+  v jsonb; pol public.brand_music_policies%rowtype;
+  v_blocked_g text[]; v_pref_g text[]; v_blocked_m text[]; v_pref_m text[];
+  v_limit int := greatest(1, least(coalesce(p_limit,200), 500));
+  v_seed text := to_char((now() at time zone 'Asia/Seoul')::date, 'YYYYMMDD') || ':' || p_brand_id::text;
+  -- 🆕 0463: study_cafe 하드필터 graft — Production 기존 로직 100% 보존, study 게이트만 주입.
+  v_industry text; v_is_study boolean;
 begin
   select * into pol from public.brand_music_policies where brand_id = p_brand_id;
+  -- 🆕 0463: store-type 판정. study_cafe 브랜드는 strict 하드필터(후보 부족 시에도 fallback 없음).
   select industry_type into v_industry from public.brand_accounts where id = p_brand_id;
-  -- normalize_store_label(0240) 이 없는 환경에서도 안전: 없으면 리터럴 별칭 집합으로만 판정.
-  begin
-    v_norm := public.normalize_store_label(v_industry);
-  exception when undefined_function then v_norm := null;
-  end;
-  v_is_study := coalesce(v_norm,'') = 'study_cafe'
+  v_is_study := coalesce(public.normalize_store_label(v_industry),'') = 'study_cafe'
     or lower(btrim(coalesce(v_industry,''))) in ('study_cafe','스터디카페','스터디 카페','독서실','study cafe','studycafe');
 
-  select coalesce(jsonb_agg(sub.x order by sub.x_score desc, sub.x_rot), '[]'::jsonb) into v from (
-    select jsonb_build_object(
-             'id', t.id, 'title', t.title, 'artist', t.artist,
-             'genre', coalesce(t.main_genre, t.genre), 'mood', t.mood,
-             'audio_url', t.audio_url, 'cover_url', t.cover_url,
-             'duration', t.duration, 'created_at', t.created_at) as x,
-      ( (case when pol.preferred_genres is not null and lower(coalesce(t.main_genre,t.genre,'')) = any(select lower(g) from unnest(pol.preferred_genres) g) then 25 else 0 end)
-      + (case when pol.preferred_moods  is not null and lower(coalesce(t.mood,''))            = any(select lower(m) from unnest(pol.preferred_moods)  m) then 15 else 0 end) )::numeric as x_score,
-      ('x'||substr(md5(t.id::text||v_seed),1,8))::bit(32)::bigint as x_rot
+  v_blocked_g := coalesce((select array_agg(distinct public._ai_norm_genre(g)) from unnest(coalesce(pol.blocked_genres,'{}')) g where public._ai_norm_genre(g) <> ''), '{}');
+  v_pref_g    := coalesce((select array_agg(distinct public._ai_norm_genre(g)) from unnest(coalesce(pol.preferred_genres,'{}')) g where public._ai_norm_genre(g) <> ''), '{}');
+  v_blocked_m := coalesce((select array_agg(distinct lower(btrim(m))) from unnest(coalesce(pol.blocked_moods,'{}')) m where btrim(m) <> ''), '{}');
+  v_pref_m    := coalesce((select array_agg(distinct lower(btrim(m))) from unnest(coalesce(pol.preferred_moods,'{}')) m where btrim(m) <> ''), '{}');
+
+  with base as (
+    select t.id, t.title, t.artist, t.genre, t.mood, t.audio_url, t.cover_url, t.duration, t.created_at,
+           t.owner_user_id, t.instrumental, t.lyric_type, t.vocal_type, f.energy as feat_energy,
+           coalesce((select array_agg(distinct public._ai_norm_genre(z)) from unnest(array_remove(array[t.main_genre, t.genre] || coalesce(t.genre_tags,'{}'), null)) z where public._ai_norm_genre(z) <> ''), '{}') as norm_genres,
+           lower(coalesce(t.mood,'') || ' ' || array_to_string(coalesce(t.mood_tags,'{}'),' ') || ' ' || array_to_string(coalesce(m.ai_moods,'{}'),' ')) as mood_blob
     from public.tracks t
+    left join public.track_audio_features f on f.track_id = t.id
+    left join public.track_ai_metadata m on m.track_id = t.id
     where t.audio_url is not null and length(btrim(t.audio_url)) > 0
       and t.cover_url is not null and length(btrim(t.cover_url)) > 0
       and (t.release_status = 'released' or t.release_status is null)
       and t.removed_at is null
-      and (t.visibility_status is null or t.visibility_status in ('approved','public'))
-      and (pol.vocal_policy is null or pol.vocal_policy <> 'instrumental_only'
-           or t.instrumental is true or t.lyric_type = 'instrumental' or t.vocal_type = 'instrumental')
-      and (pol.energy_min is null or t.energy_level is null or t.energy_level >= pol.energy_min)
-      and (pol.energy_max is null or t.energy_level is null or t.energy_level <= pol.energy_max)
-      and not (pol.blocked_genres is not null and lower(coalesce(t.main_genre,t.genre,'')) = any(select lower(g) from unnest(pol.blocked_genres) g))
-      and not (pol.blocked_moods  is not null and lower(coalesce(t.mood,''))            = any(select lower(m) from unnest(pol.blocked_moods)  m))
-      -- 🆕 0463: study_cafe 브랜드는 스터디카페 하드 필터 통과분만 큐 진입 (fallback 없음)
+      and (t.audio_health_status is null or t.audio_health_status in ('ok','unknown'))
+      -- 🆕 0463: study_cafe strict hard-filter (fallback 없음). 그 외 업종은 조건이 항상 true → 무변경.
       and (not v_is_study or coalesce((public._study_cafe_track_eligible(t.id)->>'eligible')::boolean, false))
-    limit v_limit
-  ) sub;
+  ),
+  filtered as (
+    select b.*,
+      (case when pol.vocal_policy = 'instrumental_only' then (b.instrumental is true or b.lyric_type = 'instrumental' or b.vocal_type = 'instrumental') else true end) as vocal_ok,
+      (case when b.feat_energy is null then true else (pol.energy_min is null or b.feat_energy >= pol.energy_min) and (pol.energy_max is null or b.feat_energy <= pol.energy_max) end) as energy_ok,
+      (exists (select 1 from unnest(v_blocked_g) bg where bg = any(b.norm_genres))) as blocked_g_hit,
+      (exists (select 1 from unnest(v_blocked_m) bm where b.mood_blob like '%'||bm||'%')) as blocked_m_hit,
+      (select count(*) from unnest(v_pref_g) pg where pg = any(b.norm_genres)) as pref_g_hits,
+      (select count(*) from unnest(v_pref_m) pm where b.mood_blob like '%'||pm||'%') as pref_m_hits
+    from base b
+  ),
+  eligible as (
+    select f.*,
+      (f.pref_g_hits*25 + f.pref_m_hits*15 + case when f.energy_ok then 5 else 0 end
+        + case when pol.vocal_policy='prefer_instrumental' and (f.instrumental is true or f.lyric_type='instrumental') then 10 else 0 end)::numeric as score,
+      ('x' || substr(md5(f.id::text || v_seed),1,8))::bit(32)::bigint as rot
+    from filtered f
+    where not f.blocked_g_hit and not f.blocked_m_hit and f.vocal_ok
+  ),
+  diversified as (
+    select e.*, row_number() over (partition by coalesce(lower(btrim(e.artist)), e.id::text) order by (case when e.energy_ok then 1 else 0 end) desc, e.score desc, e.rot) as artist_rank
+    from eligible e
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'title', d.title, 'artist', d.artist, 'genre', d.genre, 'mood', d.mood, 'audio_url', d.audio_url, 'cover_url', d.cover_url, 'duration', d.duration, 'created_at', d.created_at)
+           order by (case when d.energy_ok then 1 else 0 end) desc, d.score desc, d.rot), '[]'::jsonb) into v
+  from diversified d where d.artist_rank <= 4 limit v_limit;
   return v;
 end$function$;
 
 revoke all on function public._brand_generate_playlist(uuid, integer) from public, anon;
+grant execute on function public._brand_generate_playlist(uuid, integer) to service_role;
 
 -- ============================================================================
 -- F. store_genre_placement_rules — study_cafe 허용 장르 시드 (관리자 가시성/배치 일관성).
