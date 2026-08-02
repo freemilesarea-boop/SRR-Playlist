@@ -22,6 +22,35 @@ import {
   normalizeSignageSettings, normalizeTransitionMs, MIN_TRANSITION_MS, MAX_TRANSITION_MS,
 } from '@/lib/brandSignageSettings';
 import type { BrandListItem, BrandDetail, BrandVocalPolicy, SignageTransitionEffect } from '@/types/brand';
+import { BUSINESS_TAG_LABELS } from '@/lib/recommendationTaxonomy';
+import { isStudyCafeStoreType, STUDY_CAFE_POLICY_DESCRIPTOR } from '@/lib/studyCafePolicy';
+
+/** 업종 자유입력 + 선택 목록(datalist) 공용 id. 스터디카페 포함. */
+const STORE_TYPE_DATALIST_ID = 'brand-store-type-options';
+/** 등록/수정 업종 입력에 붙는 선택 가능한 업종 목록 (스터디카페 포함). */
+function StoreTypeOptions() {
+  return (
+    <datalist id={STORE_TYPE_DATALIST_ID}>
+      {Object.values(BUSINESS_TAG_LABELS).map((label) => (
+        <option key={label} value={label} />
+      ))}
+    </datalist>
+  );
+}
+
+/** 스터디카페 업종 선택 시 노출되는 정책 안내 카드 (§11 최소 표시). */
+function StudyCafePolicyNotice({ industry }: { industry: string }) {
+  if (!isStudyCafeStoreType(industry)) return null;
+  const d = STUDY_CAFE_POLICY_DESCRIPTOR;
+  return (
+    <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] leading-relaxed text-ink-dim">
+      <p className="font-semibold text-ink">스터디카페 전용 정책 (Strict)</p>
+      <p>허용 장르: {d.allowedGenres.join(' / ')}</p>
+      <p>Vocal Policy: {d.vocalPolicy} · Music Intensity: {d.musicIntensity}</p>
+      <p>허용 조건 미달 음원은 후보 풀·큐·fallback 에서 원천 차단됩니다.</p>
+    </div>
+  );
+}
 
 const VOCAL_LABELS: Record<BrandVocalPolicy, string> = {
   any: '제한 없음', vocal_ok: '보컬 허용', prefer_instrumental: '연주곡 선호', instrumental_only: '연주곡만',
@@ -177,7 +206,11 @@ function CreateBrandModal({ onClose, onCreated }: { onClose: () => void; onCreat
       footer={<><AdminButton tone="neutral" variant="subtle" onClick={onClose}>취소</AdminButton><AdminButton tone="primary" onClick={() => void submit()} disabled={saving}>{saving ? '생성 중…' : '생성'}</AdminButton></>}>
       <div className="space-y-3">
         <Field label="브랜드명 *"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 루베르 브랜드 플레이어" maxLength={80} /></Field>
-        <Field label="업종"><input className={inputCls} value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="예: 카페 / 와인바 / 병원" maxLength={50} /></Field>
+        <Field label="업종">
+          <input className={inputCls} value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="예: 카페 / 와인바 / 스터디카페" maxLength={50} list={STORE_TYPE_DATALIST_ID} />
+          <StoreTypeOptions />
+        </Field>
+        <StudyCafePolicyNotice industry={industry} />
         <Field label="설명"><textarea className={inputCls} value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} maxLength={300} /></Field>
         <Field label="연결 본사 (Enterprise)"><EnterpriseSelect value={enterpriseId} onChange={setEnterpriseId} /></Field>
         <p className="text-[11px] text-ink-dim">본사에 연결하면 그 본사의 매장 코드로 매장이 이 브랜드 플레이어에 진입합니다. 본사당 브랜드 1개.</p>
@@ -340,6 +373,9 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
 
             {/* 음악 정책 */}
             <AdminCard title="음악 정책" subtitle="차단 장르/무드는 강하게 제외, 선호는 가중치. 곡 부족 시 안전 fallback.">
+              {isStudyCafeStoreType(detail.brand.industry_type) && (
+                <div className="mb-3"><StudyCafePolicyNotice industry={detail.brand.industry_type ?? ''} /></div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="선호 장르 (쉼표)"><input className={inputCls} value={pref} onChange={(e) => setPref(e.target.value)} placeholder="pop, jazz, lofi" /></Field>
                 <Field label="차단 장르 (쉼표)"><input className={inputCls} value={block} onChange={(e) => setBlock(e.target.value)} placeholder="edm, metal, trap" /></Field>
