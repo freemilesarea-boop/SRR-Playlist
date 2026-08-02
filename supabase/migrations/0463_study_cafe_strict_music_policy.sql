@@ -24,9 +24,14 @@
 -- A. Store-type 라우팅 — study_cafe 로 정확히 매핑
 -- ============================================================================
 -- A-1) 슬러그 자체를 alias 로 등록 (normalize_store_label('study_cafe') = 'study_cafe').
-insert into public.store_type_alias(raw_label, taxonomy_slug, source) values
-  ('study_cafe', 'study_cafe', 'seed')
-on conflict (raw_label) do update set taxonomy_slug = excluded.taxonomy_slug, is_active = true;
+--   store_type_alias 서브시스템(0240)이 없는 환경에서도 안전하도록 존재 시에만 적용.
+do $$ begin
+  if to_regclass('public.store_type_alias') is not null then
+    insert into public.store_type_alias(raw_label, taxonomy_slug, source) values
+      ('study_cafe', 'study_cafe', 'seed')
+    on conflict (raw_label) do update set taxonomy_slug = excluded.taxonomy_slug, is_active = true;
+  end if;
+end $$;
 
 -- A-2) _ai_playlist_store_key 에 study_cafe 분기 추가.
 --   주의: '스터디카페' 는 '카페' 를 포함하므로 반드시 '카페|cafe' 분기보다 먼저 판정한다.
@@ -276,7 +281,14 @@ grant execute on function public._ai_check_store_guardrails(uuid, text) to authe
 -- ============================================================================
 -- D. _check_store_genre_placement — study_cafe strict 분기 추가 (자동 배치 게이트).
 --    0291(boutique) 본문 유지 + study_cafe strict 우선 판정.
+--    store_genre_placement 서브시스템(0258/0268/0290/0291)이 없는 환경에서는 건너뛴다
+--    (핵심 Runtime 하드필터는 _ai_check_store_guardrails/_brand_generate_playlist 가 담당).
 -- ============================================================================
+do $D$ begin
+  if to_regclass('public.store_genre_placement_rules') is not null
+     and exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                 where n.nspname='public' and p.proname='_normalize_genre_for_md') then
+    execute $ddl$
 create or replace function public._check_store_genre_placement(
   p_track_id uuid, p_store_slug text
 ) returns jsonb language sql stable parallel safe as $$
@@ -378,9 +390,14 @@ create or replace function public._check_store_genre_placement(
       )
   end;
 $$;
-
-revoke all on function public._check_store_genre_placement(uuid, text) from public, anon;
-grant execute on function public._check_store_genre_placement(uuid, text) to authenticated, service_role;
+    $ddl$;
+    revoke all on function public._check_store_genre_placement(uuid, text) from public, anon;
+    grant execute on function public._check_store_genre_placement(uuid, text) to authenticated, service_role;
+    raise notice '0463 D: _check_store_genre_placement study_cafe branch installed';
+  else
+    raise notice '0463 D: store_genre_placement subsystem absent — placement gate skipped (core runtime filter unaffected)';
+  end if;
+end $D$;
 
 -- ============================================================================
 -- E. _brand_generate_playlist — 브랜드 플레이어 큐: study_cafe 브랜드는 하드 필터.
@@ -392,11 +409,16 @@ as $function$
 declare v jsonb; pol public.brand_music_policies%rowtype;
   v_limit int := greatest(1, least(coalesce(p_limit,200),500));
   v_seed text := to_char((now() at time zone 'Asia/Seoul')::date,'YYYYMMDD')||':'||p_brand_id::text;
-  v_industry text; v_is_study boolean;
+  v_industry text; v_is_study boolean; v_norm text;
 begin
   select * into pol from public.brand_music_policies where brand_id = p_brand_id;
   select industry_type into v_industry from public.brand_accounts where id = p_brand_id;
-  v_is_study := coalesce(public.normalize_store_label(v_industry),'') = 'study_cafe'
+  -- normalize_store_label(0240) 이 없는 환경에서도 안전: 없으면 리터럴 별칭 집합으로만 판정.
+  begin
+    v_norm := public.normalize_store_label(v_industry);
+  exception when undefined_function then v_norm := null;
+  end;
+  v_is_study := coalesce(v_norm,'') = 'study_cafe'
     or lower(btrim(coalesce(v_industry,''))) in ('study_cafe','스터디카페','스터디 카페','독서실','study cafe','studycafe');
 
   select coalesce(jsonb_agg(sub.x order by sub.x_score desc, sub.x_rot), '[]'::jsonb) into v from (
@@ -433,13 +455,17 @@ revoke all on function public._brand_generate_playlist(uuid, integer) from publi
 -- F. store_genre_placement_rules — study_cafe 허용 장르 시드 (관리자 가시성/배치 일관성).
 --    Runtime hard filter 는 _study_cafe_track_eligible 가 담당하므로 보조적.
 -- ============================================================================
-insert into public.store_genre_placement_rules
-  (store_type, genre, vocal_policy, is_allowed, priority, source) values
-  ('study_cafe','lofi','instrumental',   true, 10, 'study_cafe_strict'),
-  ('study_cafe','ambient','instrumental',true, 10, 'study_cafe_strict'),
-  ('study_cafe','jazz','instrumental',   true, 10, 'study_cafe_strict')
-on conflict (store_type, genre, vocal_policy) do update set
-  is_allowed = excluded.is_allowed, priority = excluded.priority, source = excluded.source;
+do $$ begin
+  if to_regclass('public.store_genre_placement_rules') is not null then
+    insert into public.store_genre_placement_rules
+      (store_type, genre, vocal_policy, is_allowed, priority, source) values
+      ('study_cafe','lofi','instrumental',   true, 10, 'study_cafe_strict'),
+      ('study_cafe','ambient','instrumental',true, 10, 'study_cafe_strict'),
+      ('study_cafe','jazz','instrumental',   true, 10, 'study_cafe_strict')
+    on conflict (store_type, genre, vocal_policy) do update set
+      is_allowed = excluded.is_allowed, priority = excluded.priority, source = excluded.source;
+  end if;
+end $$;
 
 -- ============================================================================
 -- G. admin_get_study_cafe_policy_summary — 관리자/HQ 정책 확인 보드 (§11).
