@@ -10,7 +10,7 @@ import {
 import { toast } from '@/store/toastStore';
 import {
   adminListBrands, adminGetBrand, adminCreateBrand, adminUpdateBrand, adminSetBrandDeleted,
-  adminSetBrandEnterprise, adminUpsertBrandMusicPolicy, adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia,
+  adminSetBrandEnterprise, adminUpsertBrandMusicPolicy, adminPreviewBrandMusicPolicy, adminAddBrandMedia, adminUpdateBrandMedia, adminDeleteBrandMedia,
   adminUpsertBrandSignageSettings,
 } from '@/lib/api/brandPlayerApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
@@ -21,9 +21,14 @@ import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverl
 import {
   normalizeSignageSettings, normalizeTransitionMs, MIN_TRANSITION_MS, MAX_TRANSITION_MS,
 } from '@/lib/brandSignageSettings';
-import type { BrandListItem, BrandDetail, BrandVocalPolicy, SignageTransitionEffect } from '@/types/brand';
+import type { BrandListItem, BrandDetail, BrandVocalPolicy, SignageTransitionEffect, BrandPolicyMode, BrandPolicyPreview } from '@/types/brand';
 import { BUSINESS_TAG_LABELS } from '@/lib/recommendationTaxonomy';
 import { isStudyCafeStoreType, STUDY_CAFE_POLICY_DESCRIPTOR } from '@/lib/studyCafePolicy';
+import {
+  BRAND_POLICY_GENRES, BRAND_POLICY_MOODS, POLICY_MODE_LABELS, WARNING_LABELS,
+  validateCustomPolicy, clampStudyCafeBrandPolicy,
+  type BrandPolicyWarning, type TaxonomyOption,
+} from '@/lib/brandMusicPolicy';
 
 /** 업종 자유입력 + 선택 목록(datalist) 공용 id. 스터디카페 포함. */
 const STORE_TYPE_DATALIST_ID = 'brand-store-type-options';
@@ -55,8 +60,28 @@ function StudyCafePolicyNotice({ industry }: { industry: string }) {
 const VOCAL_LABELS: Record<BrandVocalPolicy, string> = {
   any: '제한 없음', vocal_ok: '보컬 허용', prefer_instrumental: '연주곡 선호', instrumental_only: '연주곡만',
 };
-const csv = (arr: string[] | null | undefined) => (arr ?? []).join(', ');
-const parseCsv = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
+/** taxonomy 슬러그 다중선택 칩. 값이 하나도 없으면 "제한 없음" 의미. */
+function ChipMulti({ options, selected, onToggle, tone = 'accent' }: {
+  options: readonly TaxonomyOption[]; selected: string[]; onToggle: (slug: string) => void;
+  tone?: 'accent' | 'danger';
+}) {
+  const onCls = tone === 'danger'
+    ? 'border-red-400/60 bg-red-500/15 text-red-200'
+    : 'border-accent/60 bg-accent/15 text-accent';
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = selected.includes(o.slug);
+        return (
+          <button key={o.slug} type="button" onClick={() => onToggle(o.slug)}
+            className={`rounded-full border px-2.5 py-1 text-[12px] transition ${on ? onCls : 'border-line/25 bg-bg text-ink-mute hover:border-line/50'}`}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function BrandPlayerPanel() {
   const [rows, setRows] = useState<BrandListItem[]>([]);
@@ -228,11 +253,17 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
   const [savingLink, setSavingLink] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const [pref, setPref] = useState(''); const [block, setBlock] = useState('');
-  const [prefM, setPrefM] = useState(''); const [blockM, setBlockM] = useState('');
+  // 음악 정책 "스튜디오" 폼 상태 (0464). 장르/무드는 taxonomy 슬러그 배열(칩).
+  const [policyMode, setPolicyMode] = useState<BrandPolicyMode>('inherit');
+  const [allowed, setAllowed] = useState<string[]>([]);
+  const [pref, setPref] = useState<string[]>([]); const [block, setBlock] = useState<string[]>([]);
+  const [prefM, setPrefM] = useState<string[]>([]); const [blockM, setBlockM] = useState<string[]>([]);
   const [eMin, setEMin] = useState(''); const [eMax, setEMax] = useState('');
+  const [bMin, setBMin] = useState(''); const [bMax, setBMax] = useState('');
   const [vocal, setVocal] = useState<BrandVocalPolicy>('any');
   const [autoGen, setAutoGen] = useState(true);
+  const [preview, setPreview] = useState<BrandPolicyPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
 
   // 사이니지 표시 설정(전환효과/시간 + presentation 표시옵션) — 폼 상태.
@@ -251,11 +282,15 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
       const d = await adminGetBrand(brandId);
       setDetail(d);
       const p = d.policy;
-      setPref(csv(p?.preferred_genres)); setBlock(csv(p?.blocked_genres));
-      setPrefM(csv(p?.preferred_moods)); setBlockM(csv(p?.blocked_moods));
+      setPolicyMode((p?.policy_mode as BrandPolicyMode) ?? 'inherit');
+      setAllowed(p?.allowed_genres ?? []);
+      setPref(p?.preferred_genres ?? []); setBlock(p?.blocked_genres ?? []);
+      setPrefM(p?.preferred_moods ?? []); setBlockM(p?.blocked_moods ?? []);
       setEMin(p?.energy_min != null ? String(p.energy_min) : ''); setEMax(p?.energy_max != null ? String(p.energy_max) : '');
+      setBMin(p?.bpm_min != null ? String(p.bpm_min) : ''); setBMax(p?.bpm_max != null ? String(p.bpm_max) : '');
       setVocal((p?.vocal_policy as BrandVocalPolicy) ?? 'any');
       setAutoGen(p?.auto_generate_enabled ?? true);
+      setPreview(null);
       setEnterpriseId(d.brand.enterprise_account_id);
       // signage: 레거시/null 은 default 로 정규화하여 로드.
       const s = normalizeSignageSettings(d.signage);
@@ -277,18 +312,65 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
     finally { setSavingLink(false); }
   }
 
+  const isStudy = isStudyCafeStoreType(detail?.brand.industry_type);
+  const num = (s: string) => (s.trim() === '' ? null : Number(s));
+
+  /** 현재 폼값을 preview override(jsonb) 로 직렬화 (inherit 이면 커스텀 필드 무시). */
+  function overridesFromForm(): Record<string, unknown> {
+    if (policyMode === 'inherit') return { policy_mode: 'inherit' };
+    return {
+      policy_mode: 'custom',
+      allowed_genres: allowed, blocked_genres: block, preferred_genres: pref,
+      blocked_moods: blockM, preferred_moods: prefM,
+      vocal_policy: vocal,
+      energy_min: num(eMin), energy_max: num(eMax),
+      bpm_min: num(bMin), bpm_max: num(bMax),
+    };
+  }
+
+  async function doPreview() {
+    setPreviewing(true);
+    try {
+      setPreview(await adminPreviewBrandMusicPolicy(brandId, overridesFromForm()));
+    } catch (e) { toast.error(`미리보기 실패: ${(e as Error).message}`); }
+    finally { setPreviewing(false); }
+  }
+
   async function savePolicy() {
+    // custom 모드는 서버 왕복 전에 로컬 선검증(장르/무드 슬러그·범위·겹침).
+    if (policyMode === 'custom') {
+      const v = validateCustomPolicy({
+        allowedGenres: allowed, blockedGenres: block, preferredGenres: pref,
+        blockedMoods: blockM, preferredMoods: prefM,
+        energyMin: num(eMin), energyMax: num(eMax), bpmMin: num(bMin), bpmMax: num(bMax),
+      });
+      if (!v.ok) { toast.error(v.error ?? '정책 값이 올바르지 않아요'); return; }
+    }
     setSavingPolicy(true);
     try {
-      await adminUpsertBrandMusicPolicy({
+      const res = await adminUpsertBrandMusicPolicy({
         brandId,
-        preferredGenres: parseCsv(pref), blockedGenres: parseCsv(block),
-        preferredMoods: parseCsv(prefM), blockedMoods: parseCsv(blockM),
-        energyMin: eMin.trim() === '' ? null : Number(eMin),
-        energyMax: eMax.trim() === '' ? null : Number(eMax),
-        vocalPolicy: vocal, autoGenerateEnabled: autoGen,
+        policyMode,
+        allowedGenres: policyMode === 'custom' ? allowed : [],
+        preferredGenres: policyMode === 'custom' ? pref : [],
+        blockedGenres: policyMode === 'custom' ? block : [],
+        preferredMoods: policyMode === 'custom' ? prefM : [],
+        blockedMoods: policyMode === 'custom' ? blockM : [],
+        energyMin: policyMode === 'custom' ? num(eMin) : null,
+        energyMax: policyMode === 'custom' ? num(eMax) : null,
+        bpmMin: policyMode === 'custom' ? num(bMin) : null,
+        bpmMax: policyMode === 'custom' ? num(bMax) : null,
+        vocalPolicy: policyMode === 'custom' ? vocal : null,
+        autoGenerateEnabled: autoGen,
       });
-      toast.success('음악 정책을 저장했어요'); onChanged();
+      const warns = (res.warnings ?? []) as BrandPolicyWarning[];
+      if (warns.length > 0) {
+        toast.success('저장했어요 — 스터디카페 하드 정책이 적용되었습니다');
+        for (const w of warns) toast.info(WARNING_LABELS[w] ?? w);
+      } else {
+        toast.success('음악 정책을 저장했어요');
+      }
+      await reload(); onChanged();
     } catch (e) { toast.error(`저장 실패: ${(e as Error).message}`); }
     finally { setSavingPolicy(false); }
   }
@@ -371,30 +453,115 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
               <div className="mt-3"><AdminButton tone="primary" size="sm" leftIcon={<Link2 size={13} />} onClick={() => void saveLink()} disabled={savingLink}>{savingLink ? '저장 중…' : '연결 저장'}</AdminButton></div>
             </AdminCard>
 
-            {/* 음악 정책 */}
-            <AdminCard title="음악 정책" subtitle="차단 장르/무드는 강하게 제외, 선호는 가중치. 곡 부족 시 안전 fallback.">
-              {isStudyCafeStoreType(detail.brand.industry_type) && (
+            {/* 음악 정책 스튜디오 (0464) */}
+            <AdminCard title="음악 정책 스튜디오" subtitle="업종 기본을 상속하거나 브랜드 커스텀 정책을 구성합니다. 업종 하드 정책(스터디카페)은 브랜드가 완화할 수 없습니다.">
+              {isStudy && (
                 <div className="mb-3"><StudyCafePolicyNotice industry={detail.brand.industry_type ?? ''} /></div>
               )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="선호 장르 (쉼표)"><input className={inputCls} value={pref} onChange={(e) => setPref(e.target.value)} placeholder="pop, jazz, lofi" /></Field>
-                <Field label="차단 장르 (쉼표)"><input className={inputCls} value={block} onChange={(e) => setBlock(e.target.value)} placeholder="edm, metal, trap" /></Field>
-                <Field label="선호 무드 (쉼표)"><input className={inputCls} value={prefM} onChange={(e) => setPrefM(e.target.value)} placeholder="calm, warm" /></Field>
-                <Field label="차단 무드 (쉼표)"><input className={inputCls} value={blockM} onChange={(e) => setBlockM(e.target.value)} placeholder="energetic" /></Field>
-                <Field label="에너지 최소 (0~1)"><input className={inputCls} value={eMin} onChange={(e) => setEMin(e.target.value)} placeholder="0.2" inputMode="decimal" /></Field>
-                <Field label="에너지 최대 (0~1)"><input className={inputCls} value={eMax} onChange={(e) => setEMax(e.target.value)} placeholder="0.8" inputMode="decimal" /></Field>
-                <Field label="보컬 정책">
-                  <select className={inputCls} value={vocal} onChange={(e) => setVocal(e.target.value as BrandVocalPolicy)}>
-                    {(Object.keys(VOCAL_LABELS) as BrandVocalPolicy[]).map((k) => <option key={k} value={k}>{VOCAL_LABELS[k]}</option>)}
-                  </select>
-                </Field>
-                <Field label="자동 플리 생성">
-                  <label className="flex items-center gap-2 py-2 text-sm text-ink-mute">
-                    <input type="checkbox" checked={autoGen} onChange={(e) => setAutoGen(e.target.checked)} /> 사용
-                  </label>
-                </Field>
+
+              {/* 정책 모드 토글 */}
+              <div className="mb-3 flex gap-2">
+                {(['inherit', 'custom'] as BrandPolicyMode[]).map((m) => (
+                  <button key={m} type="button" onClick={() => { setPolicyMode(m); setPreview(null); }}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm transition ${policyMode === m ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line/25 bg-bg text-ink-mute hover:border-line/50'}`}>
+                    <span className="font-semibold">{POLICY_MODE_LABELS[m]}</span>
+                    <span className="block text-[11px] text-ink-dim">
+                      {m === 'inherit' ? '업종 기본 정책만 적용' : '허용 장르·차단·범위 직접 설정'}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <div className="mt-3"><AdminButton tone="primary" size="sm" onClick={() => void savePolicy()} disabled={savingPolicy}>{savingPolicy ? '저장 중…' : '정책 저장'}</AdminButton></div>
+
+              {policyMode === 'inherit' ? (
+                <p className="rounded-lg border border-line/20 bg-bg-hover px-3 py-2 text-[12px] leading-relaxed text-ink-dim">
+                  이 브랜드는 업종 기본 정책만 적용합니다. 브랜드 커스텀 필터(허용/차단 장르·무드, 에너지/BPM, 보컬)는 저장 시 모두 비워집니다.
+                  {isStudy && ' 스터디카페 strict 하드 정책은 그대로 유지됩니다.'}
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="허용 장르 (비우면 전체 허용)">
+                      <ChipMulti options={BRAND_POLICY_GENRES} selected={allowed}
+                        onToggle={(s) => setAllowed(allowed.includes(s) ? allowed.filter((x) => x !== s) : [...allowed, s])} />
+                    </Field>
+                    <Field label="차단 장르">
+                      <ChipMulti options={BRAND_POLICY_GENRES} selected={block} tone="danger"
+                        onToggle={(s) => setBlock(block.includes(s) ? block.filter((x) => x !== s) : [...block, s])} />
+                    </Field>
+                    <Field label="선호 장르 (가중치)">
+                      <ChipMulti options={BRAND_POLICY_GENRES} selected={pref}
+                        onToggle={(s) => setPref(pref.includes(s) ? pref.filter((x) => x !== s) : [...pref, s])} />
+                    </Field>
+                    <Field label="차단 무드">
+                      <ChipMulti options={BRAND_POLICY_MOODS} selected={blockM} tone="danger"
+                        onToggle={(s) => setBlockM(blockM.includes(s) ? blockM.filter((x) => x !== s) : [...blockM, s])} />
+                    </Field>
+                    <Field label="선호 무드 (가중치)">
+                      <ChipMulti options={BRAND_POLICY_MOODS} selected={prefM}
+                        onToggle={(s) => setPrefM(prefM.includes(s) ? prefM.filter((x) => x !== s) : [...prefM, s])} />
+                    </Field>
+                    <Field label="보컬 정책">
+                      <select className={inputCls} value={vocal} onChange={(e) => setVocal(e.target.value as BrandVocalPolicy)}>
+                        {(Object.keys(VOCAL_LABELS) as BrandVocalPolicy[]).map((k) => <option key={k} value={k}>{VOCAL_LABELS[k]}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="에너지 최소 (0~1)"><input className={inputCls} value={eMin} onChange={(e) => setEMin(e.target.value)} placeholder="0.2" inputMode="decimal" /></Field>
+                    <Field label="에너지 최대 (0~1)"><input className={inputCls} value={eMax} onChange={(e) => setEMax(e.target.value)} placeholder="0.8" inputMode="decimal" /></Field>
+                    <Field label="BPM 최소 (0~300)"><input className={inputCls} value={bMin} onChange={(e) => setBMin(e.target.value)} placeholder="60" inputMode="numeric" /></Field>
+                    <Field label="BPM 최대 (0~300)"><input className={inputCls} value={bMax} onChange={(e) => setBMax(e.target.value)} placeholder="120" inputMode="numeric" /></Field>
+                  </div>
+
+                  {/* 스터디카페 하드 클램프 라이브 안내 — 저장 전에 실제 적용될 값을 알려줌 */}
+                  {isStudy && (() => {
+                    const { warnings } = clampStudyCafeBrandPolicy(
+                      { allowedGenres: allowed, vocalPolicy: vocal, energyMin: num(eMin), energyMax: num(eMax), bpmMin: num(bMin), bpmMax: num(bMax) },
+                      true,
+                    );
+                    if (warnings.length === 0) return null;
+                    return (
+                      <div className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200">
+                        <p className="font-semibold">저장 시 스터디카페 하드 정책으로 다음이 강제 적용됩니다:</p>
+                        <ul className="mt-1 list-disc pl-4">
+                          {warnings.map((w: BrandPolicyWarning) => <li key={w}>{WARNING_LABELS[w]}</li>)}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+
+              <div className="mt-3 flex items-center gap-2">
+                <label className="flex items-center gap-2 text-[12px] text-ink-mute">
+                  <input type="checkbox" checked={autoGen} onChange={(e) => setAutoGen(e.target.checked)} /> 자동 플리 생성
+                </label>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <AdminButton tone="primary" size="sm" onClick={() => void savePolicy()} disabled={savingPolicy}>{savingPolicy ? '저장 중…' : '정책 저장'}</AdminButton>
+                <AdminButton tone="neutral" variant="outline" size="sm" leftIcon={<Eye size={13} />} onClick={() => void doPreview()} disabled={previewing}>{previewing ? '계산 중…' : '후보 미리보기'}</AdminButton>
+              </div>
+
+              {/* 미리보기 결과 — 저장 안 해도 "이 설정이면 몇 곡 남는가" */}
+              {preview && (
+                <div className="mt-3 rounded-lg border border-line/20 bg-bg-hover px-3 py-2.5 text-[12px] text-ink-mute">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-lg font-semibold text-ink">{preview.eligible.toLocaleString()}</span>
+                    <span className="text-ink-dim">곡 재생 가능 · 전체 {preview.total.toLocaleString()}곡{preview.is_study ? ` · 업종통과 ${preview.industry_pass.toLocaleString()}` : ''}</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-ink-dim">
+                    {([
+                      ['업종', preview.blocked_by.industry], ['장르차단', preview.blocked_by.genre_block],
+                      ['비허용장르', preview.blocked_by.genre_not_allowed], ['무드차단', preview.blocked_by.mood_block],
+                      ['보컬', preview.blocked_by.vocal], ['에너지', preview.blocked_by.energy], ['BPM', preview.blocked_by.bpm],
+                    ] as [string, number][]).filter(([, n]) => n > 0).map(([label, n]) => (
+                      <span key={label} className="rounded bg-bg px-1.5 py-0.5">{label} −{n.toLocaleString()}</span>
+                    ))}
+                  </div>
+                  {preview.eligible === 0 && (
+                    <p className="mt-1.5 text-[11px] text-red-300">⚠ 이 설정으로는 재생 가능한 곡이 없습니다. 필터를 완화하세요.</p>
+                  )}
+                </div>
+              )}
             </AdminCard>
 
             {/* 이미지/동영상 사이니지 */}
