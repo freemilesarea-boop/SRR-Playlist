@@ -29,8 +29,9 @@ alter table public.brand_music_policies
   add column if not exists allowed_genres text[] not null default '{}'::text[],
   add column if not exists bpm_min int,
   add column if not exists bpm_max int,
-  add column if not exists preferred_instruments text[] not null default '{}'::text[], -- 예약(악기 메타 데이터 확보 후 후속 Phase). 현재 UI 미노출.
   add column if not exists updated_by uuid;
+-- 주: preferred_instruments 예약 컬럼은 실제 악기 메타데이터/사용처가 없어 이번 Phase 에서 추가하지
+--     않는다. 향후 악기 큐레이션 Phase 가 실제 데이터와 함께 도입될 때 별도 마이그레이션으로 추가한다.
 
 do $$
 begin
@@ -68,6 +69,21 @@ where policy_mode = 'inherit'
     or energy_max is not null
     or coalesce(vocal_policy, 'any') <> 'any'
   );
+
+-- ============================================================================
+-- A2. taxonomy_genres 에 'ambient' 정식 추가 — 스튜디오 허용 장르 whitelist 정합성 확보.
+--    근거(추측 아님):
+--      • _ai_norm_genre('ambient') = 'ambient' — 이미 시스템이 인식하는 canonical 토큰.
+--      • 0463 _study_cafe_track_eligible 은 lofi/ambient/jazz 3종을 업종 허용 장르로 이미 강제.
+--      • STUDY_CAFE_ALLOWED_GENRE_DISPLAY 에도 'Ambient / Ambience' 로 이미 노출.
+--      • 카탈로그에 ambient 로 정규화되는 트랙이 실제 존재.
+--    문제: taxonomy_genres 에 없어 admin_upsert 의 taxonomy 검증이 'ambient' 를 거부 →
+--          스터디카페 커스텀 whitelist 에 ambient 를 표현할 수 없고, whitelist 를 켜면
+--          업종이 허용하는 ambient 트랙이 의도치 않게 전부 차단됨. 이를 정식 등록으로 해소.
+--    additive · 멱등(ON CONFLICT DO NOTHING) · 기존 행 무변경.
+insert into public.taxonomy_genres (slug, name_ko, name_en, is_active, sort_order)
+values ('ambient', '앰비언트', 'Ambient', true, 95)
+on conflict (slug) do nothing;
 
 -- ============================================================================
 -- B. _brand_generate_playlist — 0463 본문 100% 보존 + 2개 additive 필터만 주입.
@@ -429,8 +445,10 @@ grant execute on function public.admin_preview_brand_music_policy(uuid, jsonb) t
 
 -- ============================================================================
 -- E2. admin_get_brand — 읽기 경로에 신규 정책 컬럼 노출(스튜디오 폼 prefill).
---    기존 본문 100% 보존 + policy 서브셀렉트에 4개 컬럼만 additive 로 추가.
---    (policy_mode / allowed_genres / bpm_min / bpm_max — 나머지 로직/컬럼 불변)
+--    기존 본문 보존 + policy 서브셀렉트에만 additive 추가:
+--      • 스튜디오 필드: policy_mode / allowed_genres / bpm_min / bpm_max
+--      • 감사 표시: updated_at / updated_by (+ auth.users LEFT JOIN 으로 updated_by_email)
+--    다른 섹션(brand/media/signage) 및 반환 구조는 불변.
 -- ============================================================================
 create or replace function public.admin_get_brand(p_id uuid)
  returns jsonb language plpgsql stable security definer set search_path to 'public'
@@ -443,10 +461,14 @@ begin
         select id, name, status, industry_type, description, code_hint, created_at, updated_at, deleted_at
         from public.brand_accounts where id = p_id) b),
     'policy', (select row_to_json(p) from (
-        select brand_id, preferred_genres, blocked_genres, preferred_moods, blocked_moods,
-               energy_min, energy_max, vocal_policy, daypart_policy, auto_generate_enabled,
-               policy_mode, allowed_genres, bpm_min, bpm_max
-        from public.brand_music_policies where brand_id = p_id) p),
+        select bmp.brand_id, bmp.preferred_genres, bmp.blocked_genres, bmp.preferred_moods, bmp.blocked_moods,
+               bmp.energy_min, bmp.energy_max, bmp.vocal_policy, bmp.daypart_policy, bmp.auto_generate_enabled,
+               bmp.policy_mode, bmp.allowed_genres, bmp.bpm_min, bmp.bpm_max,
+               -- 🆕 0464: 마지막 수정 시각/관리자(감사 표시용). updated_by → 이메일 해석(super-admin 전용 화면).
+               bmp.updated_at, bmp.updated_by, u.email as updated_by_email
+        from public.brand_music_policies bmp
+        left join auth.users u on u.id = bmp.updated_by
+        where bmp.brand_id = p_id) p),
     'media', (select coalesce(jsonb_agg(row_to_json(m) order by (m).sort_order, (m).created_at), '[]'::jsonb) from (
         select id, asset_type, title, image_url, display_duration_seconds, sort_order, starts_at, ends_at, status, created_at,
                mime_type, thumbnail_url, media_duration_seconds
@@ -465,8 +487,8 @@ declare n_cols int; n_fn int;
 begin
   select count(*) into n_cols from information_schema.columns
     where table_schema='public' and table_name='brand_music_policies'
-      and column_name in ('policy_mode','allowed_genres','bpm_min','bpm_max','updated_by','preferred_instruments');
+      and column_name in ('policy_mode','allowed_genres','bpm_min','bpm_max','updated_by');
   select count(*) into n_fn from pg_proc
     where proname in ('admin_upsert_brand_music_policy','admin_preview_brand_music_policy','_brand_generate_playlist');
-  raise notice '[0464] brand_music_policies 신규 컬럼 %/6, 대상 함수 % 개', n_cols, n_fn;
+  raise notice '[0464] brand_music_policies 신규 컬럼 %/5, 대상 함수 % 개', n_cols, n_fn;
 end$$;

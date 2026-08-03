@@ -34,6 +34,14 @@ describe('taxonomy option lists', () => {
     expect(ms.every((s) => s === s.toLowerCase())).toBe(true);
   });
 
+  it('includes ambient as a canonical study-cafe genre (0464 taxonomy fix)', () => {
+    // ambient is one of the 3 study-cafe allowed families and must be selectable in the picker.
+    expect(BRAND_POLICY_GENRES.some((g) => g.slug === 'ambient')).toBe(true);
+    expect(isValidPolicyGenre('ambient')).toBe(true);
+    // every study-cafe allowed genre must exist in the general picker/taxonomy mirror.
+    for (const g of STUDY_CAFE_POLICY_GENRES) expect(isValidPolicyGenre(g)).toBe(true);
+  });
+
   it('validates membership and resolves labels', () => {
     expect(isValidPolicyGenre('lofi')).toBe(true);
     expect(isValidPolicyGenre('bossa nova')).toBe(false);
@@ -97,6 +105,15 @@ describe('clampStudyCafeBrandPolicy — study cafe cannot relax the hard policy'
     expect(warnings).toEqual([]);
   });
 
+  it('keeps the full lofi/ambient/jazz study set without clamping (ambient no longer dropped)', () => {
+    const { values, warnings } = clampStudyCafeBrandPolicy(
+      { allowedGenres: ['lofi', 'ambient', 'jazz'], vocalPolicy: 'instrumental_only', energyMin: null, energyMax: 0.5, bpmMin: null, bpmMax: 110 },
+      true,
+    );
+    expect(values.allowedGenres).toEqual(['lofi', 'ambient', 'jazz']);
+    expect(warnings).toEqual([]);
+  });
+
   it('pulls energy_min / bpm_min down when they exceed the clamped max', () => {
     const { values } = clampStudyCafeBrandPolicy(
       { allowedGenres: [], vocalPolicy: 'instrumental_only', energyMin: 0.8, energyMax: 0.9, bpmMin: 150, bpmMax: 200 },
@@ -135,5 +152,11 @@ describe('validateCustomPolicy — mirrors server structural rejects', () => {
     expect(validateCustomPolicy({ ...base, energyMin: 0.8, energyMax: 0.2 }).ok).toBe(false);
     expect(validateCustomPolicy({ ...base, bpmMax: 400 }).ok).toBe(false);
     expect(validateCustomPolicy({ ...base, bpmMin: 150, bpmMax: 100 }).ok).toBe(false);
+  });
+  it('rejects NaN (non-numeric input) and non-integer BPM', () => {
+    expect(validateCustomPolicy({ ...base, energyMax: Number('abc') }).ok).toBe(false); // NaN
+    expect(validateCustomPolicy({ ...base, bpmMin: Number('12x') }).ok).toBe(false); // NaN
+    expect(validateCustomPolicy({ ...base, bpmMax: 90.5 }).ok).toBe(false); // non-integer
+    expect(validateCustomPolicy({ ...base, energyMin: -0.1 }).ok).toBe(false); // negative
   });
 });

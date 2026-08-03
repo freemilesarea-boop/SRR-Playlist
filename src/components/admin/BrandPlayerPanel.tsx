@@ -26,8 +26,9 @@ import { BUSINESS_TAG_LABELS } from '@/lib/recommendationTaxonomy';
 import { isStudyCafeStoreType, STUDY_CAFE_POLICY_DESCRIPTOR } from '@/lib/studyCafePolicy';
 import {
   BRAND_POLICY_GENRES, BRAND_POLICY_MOODS, POLICY_MODE_LABELS, WARNING_LABELS,
-  validateCustomPolicy, clampStudyCafeBrandPolicy,
-  type BrandPolicyWarning, type TaxonomyOption,
+  STUDY_CAFE_HARD, STUDY_CAFE_POLICY_GENRES,
+  validateCustomPolicy, clampStudyCafeBrandPolicy, genreLabel,
+  type BrandPolicyWarning, type TaxonomyOption, type BrandVocalPolicyLite,
 } from '@/lib/brandMusicPolicy';
 
 /** 업종 자유입력 + 선택 목록(datalist) 공용 id. 스터디카페 포함. */
@@ -244,6 +245,113 @@ function CreateBrandModal({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
+// ── 음악 정책 폼 직렬화(미저장 변경 감지용) ────────────────────────────
+interface PolicyFormState {
+  policyMode: BrandPolicyMode; allowed: string[]; pref: string[]; block: string[];
+  prefM: string[]; blockM: string[]; eMin: string; eMax: string; bMin: string; bMax: string;
+  vocal: BrandVocalPolicy; autoGen: boolean;
+}
+/** 정규화된 안정 문자열 — 폼 baseline 과 현재 상태를 비교해 "저장 안 한 변경" 을 판별. */
+function serializePolicyForm(f: PolicyFormState): string {
+  const s = (a: string[]) => [...a].map((x) => x.trim().toLowerCase()).filter(Boolean).sort();
+  if (f.policyMode === 'inherit') return JSON.stringify(['inherit', f.autoGen]);
+  return JSON.stringify([
+    'custom', s(f.allowed), s(f.block), s(f.pref), s(f.blockM), s(f.prefM),
+    f.eMin.trim(), f.eMax.trim(), f.bMin.trim(), f.bMax.trim(), f.vocal, f.autoGen,
+  ]);
+}
+
+/** 값 없음 표기. */
+const DASH = '—';
+function genresLabel(slugs: string[]): string {
+  return slugs.length ? slugs.map(genreLabel).join(', ') : DASH;
+}
+function rangeLabel(min: number | null, max: number | null): string {
+  if (min == null && max == null) return DASH;
+  return `${min ?? '·'} ~ ${max ?? '·'}`;
+}
+
+/**
+ * 최종 적용 정책(effective) 3계층 표시: 업종 강제값 / 브랜드 설정값 / 최종 적용값.
+ * 최종값은 서버와 동일한 study-cafe 클램프(clampStudyCafeBrandPolicy)로 계산 —
+ * 저장 전에 "실제로 무엇이 적용되는가" 를 관리자에게 그대로 보여준다.
+ */
+function EffectivePolicyView({ isStudy, form, num }: {
+  isStudy: boolean; form: PolicyFormState; num: (s: string) => number | null;
+}) {
+  const brandAllowed = form.policyMode === 'custom' ? form.allowed : [];
+  const brandVocal: BrandVocalPolicyLite = form.policyMode === 'custom' ? form.vocal : 'any';
+  const brandEMin = form.policyMode === 'custom' ? num(form.eMin) : null;
+  const brandEMax = form.policyMode === 'custom' ? num(form.eMax) : null;
+  const brandBMin = form.policyMode === 'custom' ? num(form.bMin) : null;
+  const brandBMax = form.policyMode === 'custom' ? num(form.bMax) : null;
+
+  const { values: fin } = clampStudyCafeBrandPolicy(
+    { allowedGenres: brandAllowed, vocalPolicy: brandVocal, energyMin: brandEMin, energyMax: brandEMax, bpmMin: brandBMin, bpmMax: brandBMax },
+    isStudy,
+  );
+
+  const VOCAL_SHORT: Record<BrandVocalPolicyLite, string> = {
+    any: '제한 없음', vocal_ok: '보컬 허용', prefer_instrumental: '연주곡 선호', instrumental_only: '연주곡만',
+  };
+  // 업종 강제값(하드 정책). 스터디카페만 강제, 그 외 업종은 강제 없음.
+  const industry = isStudy
+    ? {
+        allowed: `${STUDY_CAFE_POLICY_GENRES.map(genreLabel).join(', ')} (이 집합으로 제한)`,
+        vocal: VOCAL_SHORT.instrumental_only,
+        energy: `≤ ${STUDY_CAFE_HARD.energyMax}`,
+        bpm: `≤ ${STUDY_CAFE_HARD.bpmMax}`,
+      }
+    : { allowed: '제한 없음', vocal: '제한 없음', energy: '제한 없음', bpm: '제한 없음' };
+  const brand = form.policyMode === 'inherit'
+    ? { allowed: '업종 상속', vocal: '업종 상속', energy: '업종 상속', bpm: '업종 상속' }
+    : {
+        allowed: genresLabel(brandAllowed) + (brandAllowed.length ? '' : ' (전체 허용)'),
+        vocal: VOCAL_SHORT[brandVocal],
+        energy: rangeLabel(brandEMin, brandEMax),
+        bpm: rangeLabel(brandBMin, brandBMax),
+      };
+  const final = {
+    allowed: form.policyMode === 'inherit'
+      ? (isStudy ? industry.allowed : '전체 허용')
+      : genresLabel(fin.allowedGenres) + (fin.allowedGenres.length ? '' : ' (전체 허용)'),
+    vocal: VOCAL_SHORT[fin.vocalPolicy],
+    energy: rangeLabel(fin.energyMin, fin.energyMax),
+    bpm: rangeLabel(fin.bpmMin, fin.bpmMax),
+  };
+
+  const rows: [string, string, string, string][] = [
+    ['허용 장르', industry.allowed, brand.allowed, final.allowed],
+    ['보컬', industry.vocal, brand.vocal, final.vocal],
+    ['에너지', industry.energy, brand.energy, final.energy],
+    ['BPM', industry.bpm, brand.bpm, final.bpm],
+  ];
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg border border-line/20 bg-bg-hover">
+      <table className="w-full min-w-[420px] text-left text-[11px]">
+        <thead>
+          <tr className="text-ink-dim">
+            <th className="px-2.5 py-1.5 font-semibold">항목</th>
+            <th className="px-2.5 py-1.5 font-semibold">업종 강제값</th>
+            <th className="px-2.5 py-1.5 font-semibold">브랜드 설정값</th>
+            <th className="px-2.5 py-1.5 font-semibold text-accent">최종 적용값</th>
+          </tr>
+        </thead>
+        <tbody className="text-ink-mute">
+          {rows.map(([k, i, b, fv]) => (
+            <tr key={k} className="border-t border-line/10">
+              <td className="px-2.5 py-1.5 font-medium text-ink-dim">{k}</td>
+              <td className="px-2.5 py-1.5">{i}</td>
+              <td className="px-2.5 py-1.5">{b}</td>
+              <td className="px-2.5 py-1.5 font-semibold text-ink">{fv}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── 상세/편집 ────────────────────────────────────────────────────────
 function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; onClose: () => void; onChanged: () => void }) {
   const [detail, setDetail] = useState<BrandDetail | null>(null);
@@ -265,6 +373,8 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
   const [preview, setPreview] = useState<BrandPolicyPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [enterpriseId, setEnterpriseId] = useState<string | null>(null);
+  // 저장 시점 baseline(직렬화 문자열) — 현재 폼과 비교해 "저장 안 한 변경" 을 감지.
+  const [policyBaseline, setPolicyBaseline] = useState<string>('');
 
   // 사이니지 표시 설정(전환효과/시간 + presentation 표시옵션) — 폼 상태.
   const [sigEffect, setSigEffect] = useState<SignageTransitionEffect>('fade');
@@ -282,14 +392,25 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
       const d = await adminGetBrand(brandId);
       setDetail(d);
       const p = d.policy;
-      setPolicyMode((p?.policy_mode as BrandPolicyMode) ?? 'inherit');
-      setAllowed(p?.allowed_genres ?? []);
-      setPref(p?.preferred_genres ?? []); setBlock(p?.blocked_genres ?? []);
-      setPrefM(p?.preferred_moods ?? []); setBlockM(p?.blocked_moods ?? []);
-      setEMin(p?.energy_min != null ? String(p.energy_min) : ''); setEMax(p?.energy_max != null ? String(p.energy_max) : '');
-      setBMin(p?.bpm_min != null ? String(p.bpm_min) : ''); setBMax(p?.bpm_max != null ? String(p.bpm_max) : '');
-      setVocal((p?.vocal_policy as BrandVocalPolicy) ?? 'any');
-      setAutoGen(p?.auto_generate_enabled ?? true);
+      const loaded: PolicyFormState = {
+        policyMode: (p?.policy_mode as BrandPolicyMode) ?? 'inherit',
+        allowed: p?.allowed_genres ?? [],
+        pref: p?.preferred_genres ?? [], block: p?.blocked_genres ?? [],
+        prefM: p?.preferred_moods ?? [], blockM: p?.blocked_moods ?? [],
+        eMin: p?.energy_min != null ? String(p.energy_min) : '', eMax: p?.energy_max != null ? String(p.energy_max) : '',
+        bMin: p?.bpm_min != null ? String(p.bpm_min) : '', bMax: p?.bpm_max != null ? String(p.bpm_max) : '',
+        vocal: (p?.vocal_policy as BrandVocalPolicy) ?? 'any',
+        autoGen: p?.auto_generate_enabled ?? true,
+      };
+      setPolicyMode(loaded.policyMode);
+      setAllowed(loaded.allowed);
+      setPref(loaded.pref); setBlock(loaded.block);
+      setPrefM(loaded.prefM); setBlockM(loaded.blockM);
+      setEMin(loaded.eMin); setEMax(loaded.eMax);
+      setBMin(loaded.bMin); setBMax(loaded.bMax);
+      setVocal(loaded.vocal);
+      setAutoGen(loaded.autoGen);
+      setPolicyBaseline(serializePolicyForm(loaded));
       setPreview(null);
       setEnterpriseId(d.brand.enterprise_account_id);
       // signage: 레거시/null 은 default 로 정규화하여 로드.
@@ -314,6 +435,22 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
 
   const isStudy = isStudyCafeStoreType(detail?.brand.industry_type);
   const num = (s: string) => (s.trim() === '' ? null : Number(s));
+
+  const currentForm: PolicyFormState = { policyMode, allowed, pref, block, prefM, blockM, eMin, eMax, bMin, bMax, vocal, autoGen };
+  const policyDirty = policyBaseline !== '' && serializePolicyForm(currentForm) !== policyBaseline;
+
+  /** "업종 기본으로 초기화" — 상속 모드로 되돌리고 커스텀 필드를 비운다(저장 시 반영). */
+  function resetToInherit() {
+    setPolicyMode('inherit');
+    setAllowed([]); setPref([]); setBlock([]); setPrefM([]); setBlockM([]);
+    setEMin(''); setEMax(''); setBMin(''); setBMax(''); setVocal('any');
+    setPreview(null);
+  }
+  /** 미저장 변경이 있으면 닫기 전 확인. */
+  function handleClose() {
+    if (policyDirty && !confirm('저장하지 않은 음악 정책 변경이 있습니다. 닫을까요?')) return;
+    onClose();
+  }
 
   /** 현재 폼값을 preview override(jsonb) 로 직렬화 (inherit 이면 커스텀 필드 무시). */
   function overridesFromForm(): Record<string, unknown> {
@@ -430,8 +567,8 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
     }));
 
   return (
-    <AdminModal open onClose={onClose} title={detail?.brand.name ?? '브랜드 상세'} size="xl"
-      footer={<AdminButton tone="neutral" variant="subtle" onClick={onClose}>닫기</AdminButton>}>
+    <AdminModal open onClose={handleClose} title={detail?.brand.name ?? '브랜드 상세'} size="xl"
+      footer={<AdminButton tone="neutral" variant="subtle" onClick={handleClose}>닫기</AdminButton>}>
       {loading ? <AdminSkeleton variant="block" rows={6} />
         : err ? <AdminAlert tone="danger" title="조회 실패" description={err} />
         : detail && (
@@ -530,16 +667,37 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                 </>
               )}
 
+              {/* 최종 적용 정책(effective) — 업종 강제값 / 브랜드 설정값 / 최종 적용값 */}
+              <div className="mt-4">
+                <p className="text-[11px] font-semibold text-ink-mute">최종 적용 정책 (effective)</p>
+                <p className="text-[11px] text-ink-dim">업종 하드 정책이 브랜드 설정보다 항상 우선합니다. 아래 “최종 적용값”이 실제 재생에 사용됩니다.</p>
+                <EffectivePolicyView isStudy={isStudy} form={currentForm} num={num} />
+              </div>
+
               <div className="mt-3 flex items-center gap-2">
                 <label className="flex items-center gap-2 text-[12px] text-ink-mute">
-                  <input type="checkbox" checked={autoGen} onChange={(e) => setAutoGen(e.target.checked)} /> 자동 플리 생성
+                  <input type="checkbox" checked={autoGen} onChange={(e) => setAutoGen(e.target.checked)} /> AI 자동 큐레이션(플레이리스트 자동 생성)
                 </label>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <AdminButton tone="primary" size="sm" onClick={() => void savePolicy()} disabled={savingPolicy}>{savingPolicy ? '저장 중…' : '정책 저장'}</AdminButton>
                 <AdminButton tone="neutral" variant="outline" size="sm" leftIcon={<Eye size={13} />} onClick={() => void doPreview()} disabled={previewing}>{previewing ? '계산 중…' : '후보 미리보기'}</AdminButton>
+                <AdminButton tone="neutral" variant="ghost" size="sm" leftIcon={<RefreshCw size={13} />} onClick={resetToInherit} disabled={policyMode === 'inherit'}>업종 기본으로 초기화</AdminButton>
+                {policyDirty && (
+                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">● 저장되지 않은 변경</span>
+                )}
               </div>
+
+              {/* 마지막 수정 시각/관리자(감사) */}
+              {(detail.policy?.updated_at || detail.policy?.updated_by_email) && (
+                <p className="mt-2 text-[11px] text-ink-dim">
+                  마지막 수정: {detail.policy?.updated_at ? new Date(detail.policy.updated_at).toLocaleString('ko-KR') : '—'}
+                  {(detail.policy?.updated_by_email || detail.policy?.updated_by) && (
+                    <> · {detail.policy?.updated_by_email ?? `관리자 ${String(detail.policy?.updated_by).slice(0, 8)}`}</>
+                  )}
+                </p>
+              )}
 
               {/* 미리보기 결과 — 저장 안 해도 "이 설정이면 몇 곡 남는가" */}
               {preview && (

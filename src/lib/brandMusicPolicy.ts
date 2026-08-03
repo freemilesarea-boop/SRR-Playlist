@@ -46,6 +46,7 @@ export interface TaxonomyOption {
 /** Allowed/blocked/preferred genre slugs (mirror taxonomy_genres, is_active). */
 export const BRAND_POLICY_GENRES: readonly TaxonomyOption[] = [
   { slug: 'acoustic', label: '어쿠스틱' },
+  { slug: 'ambient', label: '앰비언트' }, // 0464: study-cafe 허용 3종(lofi/ambient/jazz) 정합성 — taxonomy 정식 등록
   { slug: 'ballad', label: '발라드' },
   { slug: 'classical', label: '클래식' },
   { slug: 'edm', label: 'EDM' },
@@ -136,7 +137,7 @@ export type BrandPolicyWarning =
   | 'bpm_max_clamped_110';
 
 export const WARNING_LABELS: Record<BrandPolicyWarning, string> = {
-  allowed_genres_clamped_to_study: '허용 장르가 스터디카페 허용집합(로파이·재즈)으로 제한되었습니다.',
+  allowed_genres_clamped_to_study: '허용 장르가 스터디카페 허용집합(로파이·앰비언트·재즈)으로 제한되었습니다.',
   vocal_forced_instrumental_only: '보컬 정책이 "연주곡만"으로 고정되었습니다.',
   'energy_max_clamped_0.5': '에너지 최대값이 0.5로 제한되었습니다.',
   bpm_max_clamped_110: 'BPM 최대값이 110으로 제한되었습니다.',
@@ -249,6 +250,12 @@ export function validateCustomPolicy(input: {
     return { ok: false, error: '허용 장르와 차단 장르가 겹칩니다.' };
   }
   const { energyMin, energyMax, bpmMin, bpmMax } = input;
+  // 숫자가 아닌 입력(예: "abc" → NaN)은 조용히 무시되지 않도록 명시적으로 거부한다.
+  for (const [v, name] of [[energyMin, '에너지 최소값'], [energyMax, '에너지 최대값'], [bpmMin, 'BPM 최소값'], [bpmMax, 'BPM 최대값']] as const) {
+    if (v != null && Number.isNaN(v)) return { ok: false, error: `${name}이(가) 숫자가 아닙니다.` };
+  }
+  if (bpmMin != null && !Number.isInteger(bpmMin)) return { ok: false, error: 'BPM 최소값은 정수여야 합니다.' };
+  if (bpmMax != null && !Number.isInteger(bpmMax)) return { ok: false, error: 'BPM 최대값은 정수여야 합니다.' };
   if (energyMin != null && (energyMin < 0 || energyMin > 1)) return { ok: false, error: '에너지 최소값은 0~1 범위여야 합니다.' };
   if (energyMax != null && (energyMax < 0 || energyMax > 1)) return { ok: false, error: '에너지 최대값은 0~1 범위여야 합니다.' };
   if (energyMin != null && energyMax != null && energyMin > energyMax) return { ok: false, error: '에너지 최소값이 최대값보다 큽니다.' };

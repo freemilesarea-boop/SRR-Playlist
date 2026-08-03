@@ -46,6 +46,12 @@ export interface BrandMusicPolicy {
   /** 0464: BPM 범위(분석값 없는 곡은 통과). */
   bpm_min?: number | null;
   bpm_max?: number | null;
+  /** 0464: 마지막 수정 시각(감사 표시용). */
+  updated_at?: string | null;
+  /** 0464: 마지막 수정 관리자 uuid. */
+  updated_by?: string | null;
+  /** 0464: 마지막 수정 관리자 이메일(admin_get_brand 가 auth.users 조인으로 해석). */
+  updated_by_email?: string | null;
 }
 
 /** admin_preview_brand_music_policy 반환 — 저장 전 후보 수 미리보기(0464). */
