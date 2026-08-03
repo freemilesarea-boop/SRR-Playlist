@@ -67,7 +67,7 @@ function ChipMulti({ options, selected, onToggle, tone = 'accent' }: {
   tone?: 'accent' | 'danger';
 }) {
   const onCls = tone === 'danger'
-    ? 'border-red-400/60 bg-red-500/15 text-red-200'
+    ? 'border-rose-400/60 bg-rose-500/20 text-rose-200'
     : 'border-accent/60 bg-accent/15 text-accent';
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -656,7 +656,7 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                     );
                     if (warnings.length === 0) return null;
                     return (
-                      <div className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200">
+                      <div className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-[11px] leading-relaxed text-amber-200">
                         <p className="font-semibold">저장 시 스터디카페 하드 정책으로 다음이 강제 적용됩니다:</p>
                         <ul className="mt-1 list-disc pl-4">
                           {warnings.map((w: BrandPolicyWarning) => <li key={w}>{WARNING_LABELS[w]}</li>)}
@@ -685,7 +685,7 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
                 <AdminButton tone="neutral" variant="outline" size="sm" leftIcon={<Eye size={13} />} onClick={() => void doPreview()} disabled={previewing}>{previewing ? '계산 중…' : '후보 미리보기'}</AdminButton>
                 <AdminButton tone="neutral" variant="ghost" size="sm" leftIcon={<RefreshCw size={13} />} onClick={resetToInherit} disabled={policyMode === 'inherit'}>업종 기본으로 초기화</AdminButton>
                 {policyDirty && (
-                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">● 저장되지 않은 변경</span>
+                  <span className="rounded-full border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-300">● 저장되지 않은 변경</span>
                 )}
               </div>
 
