@@ -25,6 +25,9 @@ export interface BrandListItem {
   blocked_genre_count: number | null;
 }
 
+/** 브랜드 정책 모드 — 업종 기본 상속 vs 브랜드 커스텀 (0464). */
+export type BrandPolicyMode = 'inherit' | 'custom';
+
 export interface BrandMusicPolicy {
   brand_id?: string;
   preferred_genres: string[];
@@ -36,6 +39,37 @@ export interface BrandMusicPolicy {
   vocal_policy: BrandVocalPolicy;
   daypart_policy: Record<string, unknown> | null;
   auto_generate_enabled: boolean;
+  /** 0464: 정책 모드. 레거시 행/RPC 응답에는 없을 수 있어 optional. */
+  policy_mode?: BrandPolicyMode;
+  /** 0464: 허용 장르 whitelist(비면 전체 허용). */
+  allowed_genres?: string[];
+  /** 0464: BPM 범위(분석값 없는 곡은 통과). */
+  bpm_min?: number | null;
+  bpm_max?: number | null;
+  /** 0464: 마지막 수정 시각(감사 표시용). */
+  updated_at?: string | null;
+  /** 0464: 마지막 수정 관리자 uuid. */
+  updated_by?: string | null;
+  /** 0464: 마지막 수정 관리자 이메일(admin_get_brand 가 auth.users 조인으로 해석). */
+  updated_by_email?: string | null;
+}
+
+/** admin_preview_brand_music_policy 반환 — 저장 전 후보 수 미리보기(0464). */
+export interface BrandPolicyPreview {
+  total: number;
+  industry_pass: number;
+  eligible: number;
+  blocked_by: {
+    industry: number;
+    genre_block: number;
+    genre_not_allowed: number;
+    mood_block: number;
+    vocal: number;
+    energy: number;
+    bpm: number;
+  };
+  is_study: boolean;
+  policy_mode: BrandPolicyMode;
 }
 
 /** 지원 이미지 전환 효과 (slide/zoom/kenburns 미지원). */

@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import type {
   BrandListItem, BrandDetail, StoreVerifyResult, BrandPlayerConfig,
-  BrandVocalPolicy, SignageTransitionEffect,
+  BrandVocalPolicy, SignageTransitionEffect, BrandPolicyMode, BrandPolicyPreview,
 } from '@/types/brand';
 
 // ── 사용자(매장) 경로 ────────────────────────────────────────────────
@@ -152,7 +152,11 @@ export async function adminUpsertBrandMusicPolicy(input: {
   preferredMoods?: string[] | null; blockedMoods?: string[] | null;
   energyMin?: number | null; energyMax?: number | null;
   vocalPolicy?: BrandVocalPolicy | null; autoGenerateEnabled?: boolean | null;
-}): Promise<{ success: boolean }> {
+  /** 0464 스튜디오: 정책 모드 + 허용 장르 whitelist + BPM 범위. */
+  policyMode?: BrandPolicyMode | null;
+  allowedGenres?: string[] | null;
+  bpmMin?: number | null; bpmMax?: number | null;
+}): Promise<{ success: boolean; policy_mode?: BrandPolicyMode; warnings?: string[] }> {
   const { data, error } = await supabase.rpc('admin_upsert_brand_music_policy', {
     p_brand_id: input.brandId,
     p_preferred_genres: input.preferredGenres ?? null,
@@ -164,9 +168,29 @@ export async function adminUpsertBrandMusicPolicy(input: {
     p_vocal_policy: input.vocalPolicy ?? null,
     p_daypart_policy: null,
     p_auto_generate_enabled: input.autoGenerateEnabled ?? null,
+    p_policy_mode: input.policyMode ?? null,
+    p_allowed_genres: input.allowedGenres ?? null,
+    p_bpm_min: input.bpmMin ?? null,
+    p_bpm_max: input.bpmMax ?? null,
   });
   if (error) throw error;
-  return data as { success: boolean };
+  return data as { success: boolean; policy_mode?: BrandPolicyMode; warnings?: string[] };
+}
+
+/**
+ * 저장 전 후보 수 미리보기(0464). p_overrides 로 미저장 폼값을 반영해 "저장하면 몇 곡 남는가"
+ * 를 서버가 런타임과 동일한 필터로 계산한다. 읽기전용(민감정보 없음).
+ */
+export async function adminPreviewBrandMusicPolicy(
+  brandId: string,
+  overrides?: Record<string, unknown> | null,
+): Promise<BrandPolicyPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_brand_music_policy', {
+    p_brand_id: brandId,
+    p_overrides: overrides ?? null,
+  });
+  if (error) throw error;
+  return data as BrandPolicyPreview;
 }
 
 export async function adminAddBrandMedia(input: {
