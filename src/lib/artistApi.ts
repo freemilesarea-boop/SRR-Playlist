@@ -9,7 +9,7 @@
  */
 
 import { supabase, supabaseProjectRef } from './supabase';
-import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPayload } from './artistBillingAccess';
+import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPayload, isArtistBillingRequiredError } from './artistBillingAccess';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
@@ -972,6 +972,12 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
       }
       if (!input.trackId && coverStoragePathVal) {
         try { await supabase.storage.from('covers').remove([coverStoragePathVal]); } catch { /* best-effort */ }
+      }
+      // ARTIST-BILLING-ACCESS-ENFORCEMENT — DB Trigger(_tg_artist_tracks_billing_guard)/RPC 가
+      // 결제 제한으로 raise 한 경우 표준 오류로 매핑(일반 서버 오류로만 보이지 않게).
+      if (isArtistBillingRequiredError(e)) {
+        void recordArtistBillingDenial(input.trackId ? 'track.resubmit_distribution' : 'track.submit_distribution', 'submit_rpc');
+        return { ok: false, error: '결제 또는 구독 갱신 후 아티스트 기능을 이용할 수 있습니다.', billing_required: true, redirect: '/subscription' };
       }
       void logUploadFailure(input, { storagePath: audioStoragePath, originalSha: audioSha256, finalSha: finalAudioSha, duration: audioDurationVal, transcoded: wasTranscoded, transcodingStatus, originalFilesize, finalFilesize, error: `submit-rpc: ${msg}` });
       if (msg.includes('row-level security') || err.code === '42501') {

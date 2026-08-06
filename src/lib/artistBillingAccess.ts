@@ -162,6 +162,64 @@ export function billingRequiredPayload(
   };
 }
 
+/** 서버(DB Trigger/RPC)에서 올라온 오류가 결제 제한 오류인지 판별. */
+export function isArtistBillingRequiredError(err: unknown): boolean {
+  const msg =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message?: unknown }).message ?? '')
+          : '';
+  return typeof msg === 'string' && msg.includes(ARTIST_BILLING_ERROR_CODE);
+}
+
+// ----------------------------------------------------------------------------
+// 제한 배너 컨텐츠 (순수 · 테스트 가능) — 컴포넌트는 이 값을 렌더만 한다.
+// ----------------------------------------------------------------------------
+export interface BillingBannerCta {
+  label: string;
+  to: '/subscription' | '/artist' | '/artist/settlements' | '/support';
+}
+export interface BillingBannerContent {
+  reason: ArtistBillingRestrictionReason;
+  title: string;
+  body: string;
+  /** 첫 항목이 primary CTA. */
+  ctas: BillingBannerCta[];
+}
+
+/** 제한 아티스트에게만 배너 컨텐츠 반환. active/exempt/비아티스트/미조회 → null. */
+export function artistBillingBannerContent(
+  access: ArtistBillingAccessResult | null,
+): BillingBannerContent | null {
+  if (!access || !access.isArtist || access.allowed) return null;
+  if (access.reason === 'cancelled') {
+    return {
+      reason: 'cancelled',
+      title: '정기결제가 취소되어 아티스트 기능이 제한되었습니다.',
+      body: '음원 등록, 기존 음원 수정, 유통 신청 및 아티스트 유료 기능을 이용하려면 구독을 다시 시작해 주세요.',
+      ctas: [
+        { label: '구독 다시 시작', to: '/subscription' },
+        { label: '기존 음원 보기', to: '/artist' },
+        { label: '정산 내역 보기', to: '/artist/settlements' },
+      ],
+    };
+  }
+  // unpaid / expired / invalid
+  return {
+    reason: access.reason,
+    title: '결제가 확인되지 않아 아티스트 기능이 제한되었습니다.',
+    body: '결제수단을 등록하거나 구독을 갱신하면 음원 등록, 기존 음원 수정 및 유통 신청 기능을 다시 이용할 수 있습니다.',
+    ctas: [
+      { label: '결제수단 등록', to: '/subscription' },
+      { label: '구독 확인', to: '/subscription' },
+      { label: '고객지원', to: '/support' },
+    ],
+  };
+}
+
 export class ArtistBillingRequiredError extends Error {
   readonly code = ARTIST_BILLING_ERROR_CODE;
   readonly payload: ArtistBillingRequiredPayload;

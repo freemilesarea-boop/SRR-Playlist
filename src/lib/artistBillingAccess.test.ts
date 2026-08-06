@@ -2,10 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyArtistBillingAccess,
   billingRequiredPayload,
+  artistBillingBannerContent,
+  isArtistBillingRequiredError,
   VALID_ARTIST_PLAN_TYPES,
   type ArtistBillingAccessInput,
   type ArtistBillingAccess,
+  type ArtistBillingAccessResult,
 } from './artistBillingAccess';
+
+function result(partial: Partial<ArtistBillingAccessResult> & { isArtist: boolean }): ArtistBillingAccessResult {
+  return { allowed: false, status: 'expired', reason: 'expired', restrictedAt: '2026-08-06T00:00:00Z', ...partial } as ArtistBillingAccessResult;
+}
 
 const NOW = '2026-08-06T00:00:00.000Z';
 const FUTURE = '2026-09-06T00:00:00.000Z';
@@ -178,6 +185,79 @@ describe('billingRequiredPayload', () => {
       expect(p.status).toBe('expired');
       expect(p.redirect).toBe('/subscription');
       expect(p.message).toContain('유통 신청');
+    }
+  });
+});
+
+describe('artistBillingBannerContent — banner copy per status', () => {
+  it('cancelled: 취소 문구 + 기존 음원 수정 언급 + 3 CTA(구독 다시 시작/기존 음원/정산)', () => {
+    const c = artistBillingBannerContent(result({ isArtist: true, status: 'cancelled', reason: 'cancelled' }));
+    expect(c).not.toBeNull();
+    expect(c!.title).toContain('정기결제가 취소되어');
+    expect(c!.body).toContain('기존 음원 수정');
+    expect(c!.ctas[0]).toEqual({ label: '구독 다시 시작', to: '/subscription' });
+    expect(c!.ctas.map((x) => x.label)).toEqual(['구독 다시 시작', '기존 음원 보기', '정산 내역 보기']);
+  });
+
+  it('expired: 결제 미확인 문구 + 기존 음원 수정 + CTA(결제수단 등록/구독 확인/고객지원)', () => {
+    const c = artistBillingBannerContent(result({ isArtist: true, status: 'expired', reason: 'expired' }));
+    expect(c!.title).toContain('결제가 확인되지 않아');
+    expect(c!.body).toContain('기존 음원 수정');
+    expect(c!.ctas.map((x) => x.label)).toEqual(['결제수단 등록', '구독 확인', '고객지원']);
+    expect(c!.ctas.find((x) => x.label === '고객지원')!.to).toBe('/support');
+  });
+
+  it('unpaid & invalid: 결제 미확인 배너 표시', () => {
+    expect(artistBillingBannerContent(result({ isArtist: true, status: 'unpaid', reason: 'unpaid' }))!.title).toContain('결제가 확인되지 않아');
+    expect(artistBillingBannerContent(result({ isArtist: true, status: 'invalid', reason: 'invalid' }))!.title).toContain('결제가 확인되지 않아');
+  });
+
+  it('ACTIVE 아티스트 → 배너 없음(null)', () => {
+    expect(artistBillingBannerContent({ allowed: true, status: 'active', reason: null, restrictedAt: null, isArtist: true })).toBeNull();
+  });
+
+  it('EXEMPT(admin/demo) → 배너 없음(null)', () => {
+    expect(artistBillingBannerContent({ allowed: true, status: 'exempt', reason: null, restrictedAt: null, isArtist: true })).toBeNull();
+  });
+
+  it('비아티스트(제한 상태여도) → 배너 없음(null)', () => {
+    expect(artistBillingBannerContent(result({ isArtist: false, status: 'expired', reason: 'expired' }))).toBeNull();
+  });
+
+  it('미조회(null) → 배너 없음(null)', () => {
+    expect(artistBillingBannerContent(null)).toBeNull();
+  });
+
+  it('모든 CTA 는 유효 라우트만 사용(404 방지)', () => {
+    const valid = new Set(['/subscription', '/artist', '/artist/settlements', '/support']);
+    for (const reason of ['cancelled', 'unpaid', 'expired', 'invalid'] as const) {
+      const c = artistBillingBannerContent(result({ isArtist: true, status: reason, reason }));
+      c!.ctas.forEach((cta) => expect(valid.has(cta.to)).toBe(true));
+    }
+  });
+});
+
+describe('isArtistBillingRequiredError — DB Trigger/RPC 오류 매핑', () => {
+  it('ARTIST_BILLING_REQUIRED 를 포함한 Error/문자열/객체를 인식', () => {
+    expect(isArtistBillingRequiredError(new Error('ARTIST_BILLING_REQUIRED'))).toBe(true);
+    expect(isArtistBillingRequiredError('foo ARTIST_BILLING_REQUIRED bar')).toBe(true);
+    expect(isArtistBillingRequiredError({ message: 'ARTIST_BILLING_REQUIRED' })).toBe(true);
+  });
+  it('무관한 오류는 false', () => {
+    expect(isArtistBillingRequiredError(new Error('row-level security'))).toBe(false);
+    expect(isArtistBillingRequiredError(null)).toBe(false);
+    expect(isArtistBillingRequiredError(undefined)).toBe(false);
+  });
+});
+
+describe('billingRequiredPayload — 기존 음원 수정 capability', () => {
+  it('track.edit 도 표준 페이로드 + /subscription redirect', () => {
+    const denied = classifyArtistBillingAccess(base({ subscriptions: [activeSub({ status: 'canceled', cancelRequestedAt: '2026-08-01T00:00:00Z' })] }), NOW);
+    if (!denied.allowed) {
+      const p = billingRequiredPayload(denied, 'track.edit');
+      expect(p.error).toBe('ARTIST_BILLING_REQUIRED');
+      expect(p.status).toBe('cancelled');
+      expect(p.redirect).toBe('/subscription');
     }
   });
 });
