@@ -34,6 +34,7 @@ const TrackSharePage = lazyWithRetry(() => import('@/pages/TrackSharePage'));
 const CuratorProfilePage = lazyWithRetry(() => import('@/pages/CuratorProfilePage'));
 const PaymentSuccessPage = lazyWithRetry(() => import('@/pages/PaymentSuccessPage'));
 const PaymentFailPage = lazyWithRetry(() => import('@/pages/PaymentFailPage'));
+const ArtistLayout = lazyWithRetry(() => import('@/components/artist/ArtistLayout'));
 const ArtistDashboardPage = lazyWithRetry(() => import('@/pages/ArtistDashboardPage'));
 const ArtistContractPage = lazyWithRetry(() => import('@/pages/ArtistContractPage'));
 const ArtistSettlementsPage = lazyWithRetry(() => import('@/pages/ArtistSettlementsPage'));
@@ -258,9 +259,12 @@ export default function App() {
                 {/* ---- 보호 (로그인 필요) ---- */}
                 <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
                 <Route path="/payment/fail" element={<RequireAuth><PaymentFailPage /></RequireAuth>} />
-                <Route path="/artist" element={<RequireAuth><ArtistDashboardPage /></RequireAuth>} />
-                <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
-                <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
+                {/* 아티스트 라우트는 공통 ArtistLayout 하위로 — 최상단 결제 제한 배너 항상 표시 */}
+                <Route element={<RequireAuth><ArtistLayout /></RequireAuth>}>
+                  <Route path="/artist" element={<ArtistDashboardPage />} />
+                  <Route path="/artist/contract" element={<ArtistContractPage />} />
+                  <Route path="/artist/settlements" element={<ArtistSettlementsPage />} />
+                </Route>
                 <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
                 <Route path="/business/player" element={<RequireAuth><StorePlayerPage /></RequireAuth>} />
                 <Route path="/brand" element={<RequireAuth><BrandPage /></RequireAuth>} />

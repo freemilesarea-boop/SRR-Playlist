@@ -69,6 +69,9 @@ const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIc
 
 export default function ArtistDashboardPage() {
   const { user, profile, loading: authLoading } = useAuthStore();
+  // ARTIST-BILLING-ACCESS-ENFORCEMENT — 결제 제한 배너는 공통 ArtistLayout 최상단에서
+  // 렌더된다. 업로드/유통 신청 클릭 시 서버 pre-check(uploadArtistTrack)가 billing_required
+  // 를 반환하면 아래 handleSubmit 에서 결제 페이지로 안내한다.
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [tracks, setTracks] = useState<MyArtistTrackRow[]>([]);
   // X6.36 — 본인 트랙 QC 리포트 (track_id → row)
@@ -1142,6 +1145,7 @@ function ArtistUploadForm({
   onCancelEdit?: () => void;
 }) {
   // 재제출 모드: editingTrack 의 기존 메타 preload. audio/cover 는 사용자가 재업로드 (새 파일).
+  const navigate = useNavigate();
   const isEditing = !!editingTrack;
   const [title, setTitle] = useState(editingTrack?.title ?? '');
   const [albumName, setAlbumName] = useState(editingTrack?.album_name ?? '');
@@ -1261,6 +1265,8 @@ function ArtistUploadForm({
       });
       if (!res.ok) {
         toast.error(res.error ?? '업로드 실패');
+        // 결제 제한으로 차단된 경우 결제 페이지로 안내(단순 Toast 로만 끝내지 않음).
+        if (res.billing_required) navigate(res.redirect ?? '/subscription');
         return;
       }
       // 표준화 메타데이터(선택형) 저장 — 자동 배치에 사용
