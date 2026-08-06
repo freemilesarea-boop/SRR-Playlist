@@ -34,6 +34,8 @@ function readEnv() {
     CRON_SECRET: Deno.env.get('CRON_SECRET') ?? '',
     // Kill Switch — 명확히 'true'/'1' 일 때만 실청구 허용(fail-closed).
     REBILL_ENABLED: Deno.env.get('BILLING_REBILL_ENABLED') ?? '',
+    // Legacy 복구 전용 Kill Switch — 미래 Scheduler 스위치와 분리(fail-closed).
+    LEGACY_RECOVERY_ENABLED: Deno.env.get('BILLING_LEGACY_RECOVERY_ENABLED') ?? '',
     PAYAPP_USERID: Deno.env.get('PAYAPP_USERID') ?? '',
     PAYAPP_LINKKEY: Deno.env.get('PAYAPP_LINKKEY') ?? '',
     PAYAPP_API_URL: Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html',
@@ -51,8 +53,10 @@ function resolveDryRun(body: { dry_run?: boolean } | null, killSwitch: boolean):
   if (!killSwitch) return true;
   return body?.dry_run !== false;
 }
-function resolveMode(raw: unknown): 'future_due' | 'legacy_review' {
-  return raw === 'legacy_review' ? 'legacy_review' : 'future_due';
+function resolveMode(raw: unknown): 'future_due' | 'legacy_review' | 'legacy_single_cycle_recovery' {
+  if (raw === 'legacy_review') return 'legacy_review';
+  if (raw === 'legacy_single_cycle_recovery') return 'legacy_single_cycle_recovery';
+  return 'future_due';
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REBILL_TIMEOUT_MS = 15_000;
@@ -166,6 +170,75 @@ serve(async (req: Request) => {
   const explicitIds = Array.isArray(body.subscription_ids) ? body.subscription_ids.filter((s) => UUID_RE.test(s)) : null;
   const executionId = (typeof body.execution_id === 'string' && body.execution_id.trim()) ? body.execution_id.trim().slice(0, 80)
     : `exec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // ── Legacy 단일 주기 복구 모드 (별도 Kill Switch, 미래 Scheduler 와 분리) ──
+  if (mode === 'legacy_single_cycle_recovery') {
+    const legacyKill = resolveKillSwitch(env.LEGACY_RECOVERY_ENABLED);
+    const recDryRun = !legacyKill || body.dry_run !== false;
+    const ids = explicitIds ?? [];
+    if (ids.length === 0) return json({ error: 'subscription_ids_required_for_recovery' }, 400);
+    let cands: Array<{ subscription_id: string; user_id: string; plan_type: string; amount: number }> = [];
+    try { cands = await rpc(env, 'legacy_recovery_charge_candidates', { p_subscription_ids: ids }); }
+    catch (e) { return json({ error: 'recovery_query_failed', detail: String(e) }, 500); }
+    const recTargets = cands.slice(0, limit);
+    if (recDryRun) {
+      return json({
+        ok: true, mode, dry_run: true, legacy_recovery_enabled: legacyKill, execution_id: executionId,
+        ran_at: new Date().toISOString(),
+        would_charge: recTargets.map((d) => ({ subscription_id: anonId(d.subscription_id), plan_type: d.plan_type, amount: d.amount })),
+        would_charge_total: recTargets.reduce((s, d) => s + d.amount, 0),
+      });
+    }
+    if (!env.PAYAPP_USERID || !env.PAYAPP_LINKKEY) return json({ error: 'payapp_credentials_missing' }, 500);
+    const recResults: Array<Record<string, unknown>> = [];
+    for (const d of recTargets) {
+      const r: Record<string, unknown> = { subscription_id: anonId(d.subscription_id), amount: d.amount };
+      try {
+        const chargeId = await rpc<string | null>(env, 'record_legacy_recovery_attempt', {
+          p_subscription_id: d.subscription_id, p_user_id: d.user_id, p_amount: d.amount, p_plan_type: d.plan_type, p_execution_id: executionId,
+        });
+        if (!chargeId) { r.status = 'skipped_duplicate_recovery'; recResults.push(r); continue; }
+        const rebillNo = await fetchRebillNo(env, d.subscription_id);
+        if (!rebillNo) {
+          await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'skipped', p_error: 'missing_rebill_no_at_charge_time' });
+          r.status = 'skipped_missing_rebill_no'; recResults.push(r); continue;
+        }
+        const orderNo = `swk_recovery_${d.subscription_id.slice(0, 8)}_${executionId.slice(0, 8)}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        await stampCharge(env, chargeId, executionId, orderNo);
+        await insertOrder(env, { user_id: d.user_id, subscription_id: d.subscription_id, order_no: orderNo, plan_type: d.plan_type, amount: d.amount });
+        await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'requesting', p_payapp_raw: { order_no: orderNo, execution_id: executionId } });
+        const dRow = { subscription_id: d.subscription_id, plan_name: null, amount: d.amount } as unknown as DueRowV2;
+        let pay: { ok: boolean; state: string; raw: Record<string, string> };
+        try { pay = await rebillPay(env, dRow, orderNo); }
+        catch (e) {
+          await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'unknown', p_error: String(e) });
+          r.status = 'unknown_pending_reconciliation'; r.order_no = orderNo; recResults.push(r); continue;
+        }
+        if (pay.ok) {
+          await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'awaiting_webhook', p_payapp_state: pay.state, p_payapp_raw: pay.raw });
+          r.status = 'accepted_awaiting_webhook';
+        } else {
+          await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'provider_rejected', p_payapp_state: pay.state, p_payapp_raw: pay.raw, p_error: pay.raw.errorMessage ?? 'rebillPay rejected' });
+          await fetch(`${env.SUPABASE_URL}/rest/v1/payment_orders?order_no=eq.${encodeURIComponent(orderNo)}`, {
+            method: 'PATCH', headers: { apikey: env.SERVICE_ROLE, Authorization: `Bearer ${env.SERVICE_ROLE}`, 'content-type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({ status: 'failed', raw_response: pay.raw }),
+          }).catch(() => undefined);
+          r.status = 'provider_rejected';
+        }
+        r.order_no = orderNo; r.payapp_state = pay.state;
+      } catch (e) { r.status = 'error'; r.error = String(e); }
+      recResults.push(r);
+    }
+    return json({
+      ok: true, mode, dry_run: false, legacy_recovery_enabled: legacyKill, execution_id: executionId,
+      ran_at: new Date().toISOString(), attempted: recTargets.length,
+      accepted: recResults.filter((r) => r.status === 'accepted_awaiting_webhook').length,
+      rejected: recResults.filter((r) => r.status === 'provider_rejected').length,
+      unknown: recResults.filter((r) => r.status === 'unknown_pending_reconciliation').length,
+      skipped: recResults.filter((r) => String(r.status).startsWith('skipped')).length,
+      results: recResults,
+    });
+  }
 
   // 대상 분류 조회(서버 확정). cutover 는 SQL 기본값(고정 상수) 사용.
   let all: DueRowV2[] = [];
