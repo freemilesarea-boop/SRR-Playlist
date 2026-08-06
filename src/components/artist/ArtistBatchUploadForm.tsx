@@ -27,6 +27,7 @@ import {
   type ReleaseType,
   type ArtistProfile,
 } from '@/lib/artistApi';
+import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPayload } from '@/lib/artistBillingAccess';
 import { toast } from '@/store/toastStore';
 import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
@@ -362,10 +363,16 @@ export default function ArtistBatchUploadForm({
       if (!me?.id) {
         return { error: '로그인 정보 확인이 지연됐어요. 새로고침 후 다시 시도해주세요.', profile: null };
       }
-      const [elig, profile] = await Promise.all([
+      const [elig, profile, billing] = await Promise.all([
         fetchArtistUploadEligibility(),
         fetchMyArtistProfile(me.id),
+        getArtistBillingAccess().catch(() => null),
       ]);
+      // ARTIST-BILLING-ACCESS-ENFORCEMENT-1 — 결제 제한 회원 일괄 업로드 선제 차단.
+      if (billing && billing.isArtist && !billing.allowed) {
+        await recordArtistBillingDenial('track.submit_distribution', 'artist_batch_upload');
+        return { error: billingRequiredPayload(billing, 'track.submit_distribution').message, profile: null };
+      }
       if (!elig.can_upload) return { error: formatEligibilityError(elig.reasons), profile: null };
       if (!profile || profile.approval_status !== 'approved') {
         return { error: '승인된 아티스트만 업로드할 수 있어요.', profile: null };

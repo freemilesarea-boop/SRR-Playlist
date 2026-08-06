@@ -53,6 +53,8 @@ import Alert from '@/components/Alert';
 import ArtistBatchUploadForm from '@/components/artist/ArtistBatchUploadForm';
 import UploadDebugPanel from '@/components/artist/UploadDebugPanel';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
+import { ArtistBillingRestrictionBanner } from '@/components/artist/ArtistBillingRestrictionBanner';
+import { useArtistBillingAccess } from '@/hooks/useArtistBillingAccess';
 import {
   emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
 } from '@/lib/trackMetadataOptions';
@@ -69,6 +71,8 @@ const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIc
 
 export default function ArtistDashboardPage() {
   const { user, profile, loading: authLoading } = useAuthStore();
+  // ARTIST-BILLING-ACCESS-ENFORCEMENT-1 — 결제 접근 상태(서버 판정). 제한 시 상단 배너.
+  const { access: billingAccess } = useArtistBillingAccess(profile?.account_type === 'artist');
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [tracks, setTracks] = useState<MyArtistTrackRow[]>([]);
   // X6.36 — 본인 트랙 QC 리포트 (track_id → row)
@@ -134,6 +138,7 @@ export default function ArtistDashboardPage() {
 
   return (
     <div className="space-y-6 px-4 pb-12 pt-6 sm:px-6">
+      <ArtistBillingRestrictionBanner access={billingAccess} />
       <header className="flex items-center gap-3">
         <Link to="/profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card" aria-label="뒤로">
           <ArrowLeft size={18} />

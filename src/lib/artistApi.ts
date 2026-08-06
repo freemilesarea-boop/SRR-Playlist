@@ -9,6 +9,7 @@
  */
 
 import { supabase, supabaseProjectRef } from './supabase';
+import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPayload } from './artistBillingAccess';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
 import { fetchQualityThresholds, analyzeAudioQuality, recordAudioQuality, type QualityResult } from './qualityGate';
@@ -274,6 +275,9 @@ export interface UploadResult {
   error?: string;
   /** 커버를 첨부했으나 업로드 실패 → 음원은 등록됨. UI 가 "커버 재등록 안내" 표시용 */
   cover_warning?: string;
+  /** ARTIST-BILLING-ACCESS-ENFORCEMENT-1 — 결제 제한으로 차단됨. UI 가 결제 페이지로 안내. */
+  billing_required?: boolean;
+  redirect?: string;
 }
 
 /**
@@ -581,6 +585,21 @@ export async function uploadArtistTrack(input: UploadInput): Promise<UploadResul
           };
         }
         return { ok: false, error: formatEligibilityError(eligibility.reasons) };
+      }
+    }
+
+    // ARTIST-BILLING-ACCESS-ENFORCEMENT-1 — 결제 취소·미결제·만료 회원 선제 차단.
+    // 서버 트리거(_tg_artist_tracks_billing_guard) + RLS 가 최종 방어선이며,
+    // 여기서는 빠른 실패 + 결제 페이지 안내 + 감사 기록을 담당한다.
+    if (!input.skipEligibilityCheck) {
+      stage = 'billing_access';
+      const capability = input.trackId ? 'track.resubmit_distribution' : 'track.submit_distribution';
+      const access = await getArtistBillingAccess().catch(() => null);
+      if (access && access.isArtist && !access.allowed) {
+        await recordArtistBillingDenial(capability, 'artist_upload');
+        const payload = billingRequiredPayload(access, capability);
+        log('billing access denied', { status: payload.status });
+        return { ok: false, error: payload.message, billing_required: true, redirect: payload.redirect };
       }
     }
 
