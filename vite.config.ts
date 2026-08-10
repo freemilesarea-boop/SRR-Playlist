@@ -7,9 +7,19 @@ import path from 'path';
 // 같은 빌드 안에서 한 번 평가되어 양쪽 모두 같은 값을 가짐.
 const BUILD_ID = Date.now().toString(36);
 
+// WEB-OPT-2 — index.html 의 emergency watchdog 이 build 스코프 가드를 쓸 수 있도록
+// %BUILD_ID% placeholder 를 빌드 시 실제 BUILD_ID 로 치환한다. (index.html 은 precache 제외됨)
+const injectBuildIdIntoHtml = {
+  name: 'srr-inject-build-id',
+  transformIndexHtml(html: string) {
+    return html.replace(/%BUILD_ID%/g, BUILD_ID);
+  },
+};
+
 export default defineConfig({
   plugins: [
     react(),
+    injectBuildIdIntoHtml,
     VitePWA({
       // injectManifest 로 전환 — custom src/sw.ts 에 push handler 통합.
       // workbox 의 precache 기능은 그대로 (precacheAndRoute(self.__WB_MANIFEST)).
@@ -74,6 +84,11 @@ export default defineConfig({
       // (이전 supabase storage CacheFirst 규칙이 오디오 Range 요청을 opaque 로 캐싱 → 206 깨짐).
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // WEB-OPT-2 — index.html 은 precache 에서 제외.
+        // 오래된 SW 가 구버전 index.html(→ 죽은 chunk hash)을 Cache Storage 에서 반환해
+        // 새로고침 백지가 되는 문제를 차단. hashed JS/CSS/asset precache 는 유지.
+        // NavigationRoute/NetworkFirst 신규 추가 없음 — 최소 수정으로 `/` 는 네트워크에서 최신 HTML.
+        globIgnores: ['index.html', '**/index.html'],
       },
     }),
   ],

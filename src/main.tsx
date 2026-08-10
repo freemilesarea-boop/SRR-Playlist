@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
-import { initSentry } from './lib/sentry';
+import { initSentry, captureServiceWorkerRecovery } from './lib/sentry';
 import { purgeBadAudioCaches } from './lib/swCache';
 import { redirectToProductionIfNeeded } from './lib/productionRedirect';
+import RootErrorBoundary from './components/RootErrorBoundary';
+import { BUILD_ID, SW_RELOAD_KEY, RECOVERY_LOG_KEY, shouldReloadForUpdatedSw, shouldRunOnce } from './lib/bootRecovery';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -13,6 +15,18 @@ redirectToProductionIfNeeded();
 
 // 0093 — Sentry 초기화 (DSN 없으면 silent skip, production 만 활성)
 void initSentry();
+
+// WEB-OPT-2 — index.html watchdog 이 남긴 긴급 복구 로그가 있으면 이번 로드에서 1회 Sentry 보고 후 정리.
+// (watchdog 은 bundle/Sentry 로드 전에 실행되므로, 복구 후 재부팅 시점에 여기서 보고한다.)
+try {
+  const raw = window.sessionStorage.getItem(RECOVERY_LOG_KEY);
+  if (raw) {
+    window.sessionStorage.removeItem(RECOVERY_LOG_KEY);
+    let payload: Record<string, unknown> = {};
+    try { payload = JSON.parse(raw) as Record<string, unknown>; } catch { payload = { raw_parse_failed: true }; }
+    void captureServiceWorkerRecovery(payload);
+  }
+} catch { /* noop */ }
 
 // 과거 SW 가 오디오 Range 요청을 opaque 로 잘못 캐싱한 캐시를 시작 시 1회 정리(모바일 재생 복구).
 void purgeBadAudioCaches();
@@ -34,32 +48,33 @@ void purgeBadAudioCaches();
 //   d) controllerchange 리스너 — build 당 1회 reload (sessionStorage 가드).
 //   e) sw.ts activate 시 SW_ACTIVATED postMessage — c/d 가 lazy 한 환경 우회.
 //
-// 기존 로직 유지:
-//   • BUILD_ID 기반 sessionStorage key → 배포마다 reload 1회 (무한 loop 방지)
-//   • push / notificationclick handler (sw.ts) 무영향
-//   • 오디오 runtimeCaching 미도입 유지
+// WEB-OPT-2 — reload 가드 통합:
+//   • controllerchange 와 SW_ACTIVATED 가 "동일한" build 스코프 키(SW_RELOAD_KEY)를 공유
+//     → 한 activation 에서 최대 1회만 reload (2~3회 연쇄 reload 방지).
+//   • 최초 방문(controller 없던 상태의 clientsClaim)에서는 reload 안 함(불필요한 첫방문 reload 방지).
+//   • 새 배포(새 BUILD_ID)면 키가 자동 소멸 → 복구 재시도 가능. 같은 build 무한 reload 없음.
+//   • push / notificationclick / 오디오 runtimeCaching 정책은 무변경.
 // ============================================================================
-const BUILD_ID = (import.meta.env.VITE_BUILD_ID as string | undefined) ?? 'dev';
-const SW_RELOAD_KEY = `sw-reloaded-${BUILD_ID}`;
-
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  // (1) controllerchange — 새 SW 가 page control 잡으면 즉시 reload (build 당 1회)
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
-    window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
-    console.warn('[sw] controllerchange — reloading once for build', BUILD_ID);
-    window.location.reload();
-  });
+  // 페이지 로드 시점에 이미 controller 가 있었는지 — 첫방문 clientsClaim reload 를 구분하기 위함.
+  const hadInitialController = !!navigator.serviceWorker.controller;
 
-  // (2) SW activate 시 보낸 push 메시지 — 같은 탭에 새 SW 가 들어왔음을 강제 통지
-  //     (controllerchange 가 lazy 한 환경에서도 동작)
+  const reloadForUpdatedSw = (source: string): void => {
+    const alreadyReloaded = !shouldRunOnce(window.sessionStorage.getItem(SW_RELOAD_KEY));
+    if (!shouldReloadForUpdatedSw({ hadInitialController, alreadyReloaded })) return;
+    window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
+    console.warn('[sw] reloading once for build', BUILD_ID, '(', source, ')');
+    window.location.reload();
+  };
+
+  // (1) controllerchange — 새 SW 가 page control 을 잡음 (기존 controller 가 있던 경우만 reload)
+  navigator.serviceWorker.addEventListener('controllerchange', () => reloadForUpdatedSw('controllerchange'));
+
+  // (2) SW activate 시 보낸 메시지 — 같은 탭에 새 SW 통지 (controllerchange 가 lazy 한 환경 우회).
+  //     동일 SW_RELOAD_KEY 공유 → controllerchange 와 합쳐 최대 1회.
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type !== 'SW_ACTIVATED') return;
-    const msgKey = `sw-msg-${e.data.buildId ?? BUILD_ID}`;
-    if (window.sessionStorage.getItem(msgKey)) return;
-    window.sessionStorage.setItem(msgKey, '1');
-    console.warn('[sw] SW_ACTIVATED message — reloading once');
-    window.location.reload();
+    reloadForUpdatedSw('sw-activated');
   });
 
   // (3) 명시적 SW 등록 — updateViaCache:'none' 로 SW 파일 자체 24h 브라우저 캐시 우회.
@@ -121,8 +136,10 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <RootErrorBoundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </RootErrorBoundary>
   </StrictMode>,
 );
