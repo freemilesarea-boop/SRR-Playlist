@@ -47,7 +47,7 @@ export const GROUP_TREE: NavGroupNode[] = [
     group: '회원',
     hint: '회원·아티스트·영업 계정 관리',
     subgroups: [
-      { name: '회원·큐레이터', tabs: ['members', 'curators'] },
+      { name: '회원·큐레이터', tabs: ['members', 'member-broadcast', 'curators'] },
       { name: '아티스트', tabs: ['artists', 'artist-contracts'] },
       { name: '영업·체험', tabs: ['sales-agents', 'sales-partners', 'free-trials'] },
     ],

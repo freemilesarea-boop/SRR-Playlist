@@ -59,3 +59,13 @@ content_path = "./supabase/templates/reset_password.html"
 [auth.email.template.email_change]
 subject = "[듣다] 이메일 변경을 확인해주세요"
 content_path = "./supabase/templates/change_email.html"
+
+# ── Edge Functions ──────────────────────────────────────────────
+# 회원 대량 메일 워커 — 내부에서 admin Bearer / x-cron-secret 를 직접 검증하므로
+# 게이트웨이 JWT 검증은 끈다(예약 발송 cron 호출 허용).
+[functions.dispatch-broadcast-emails]
+verify_jwt = false
+
+# 광고성 메일 무료 수신거부 공개 링크 — 비로그인 사용자가 브라우저로 접근.
+[functions.broadcast-unsubscribe]
+verify_jwt = false

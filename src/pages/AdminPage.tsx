@@ -27,6 +27,7 @@ import {
   Activity,
   MessageSquare,
   Compass,
+  Mail,
 } from 'lucide-react';
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -67,6 +68,7 @@ const AdminUsersList = lazy(() => import('@/components/admin/AdminUsersList'));
 const UploadIntegrityPanel = lazy(() => import('@/components/admin/UploadIntegrityPanel'));
 const BrandSettingsPanel = lazy(() => import('@/components/admin/BrandSettingsPanel'));
 const MembersList = lazy(() => import('@/components/admin/MembersList'));
+const MemberBroadcastPanel = lazy(() => import('@/components/admin/MemberBroadcastPanel'));
 const StreamingAnalytics = lazy(() => import('@/components/admin/StreamingAnalytics'));
 const StreamingV2Panel = lazy(() => import('@/components/admin/StreamingV2Panel'));
 const SettlementV2Panel = lazy(() => import('@/components/admin/SettlementV2Panel'));
@@ -131,6 +133,7 @@ type Tab =
   | 'business-live'
   | 'support-inquiries'
   | 'members'
+  | 'member-broadcast'
   | 'curators'
   | 'enterprise-overview'
   | 'enterprise-accounts'
@@ -199,6 +202,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'brand-player', label: '브랜드 플레이어', icon: <StoreIcon size={14} />, superOnly: true },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
+  { key: 'member-broadcast', label: '회원 메일 발송', icon: <Mail size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
   { key: 'enterprise-overview', label: '엔터프라이즈 현황', icon: <Building2 size={14} /> },
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
@@ -575,6 +579,7 @@ export default function AdminPage() {
           {tab === 'brand-player' && <BrandPlayerPanel />}
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
+          {tab === 'member-broadcast' && <MemberBroadcastPanel />}
           {tab === 'curators' && <CuratorsAdminPanel />}
           {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
           {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
