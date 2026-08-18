@@ -69,3 +69,7 @@ verify_jwt = false
 # 광고성 메일 무료 수신거부 공개 링크 — 비로그인 사용자가 브라우저로 접근.
 [functions.broadcast-unsubscribe]
 verify_jwt = false
+
+# 수강신청 PayApp 웹훅 — PayApp 이 JWT 없이 POST 하므로 공개.
+[functions.payapp-course-feedback]
+verify_jwt = false
