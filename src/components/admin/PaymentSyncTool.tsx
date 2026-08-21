@@ -585,7 +585,7 @@ export default function PaymentSyncTool() {
 //   state=70/71 → 환불
 const STATE_LABEL: Record<number, { label: string; tone: string }> = {
   1: { label: '요청수신', tone: 'bg-ink/10 text-ink-mute' },
-  4: { label: '승인대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200' },
+  4: { label: '결제완료', tone: 'bg-emerald-500/25 text-emerald-300' },
   8: { label: '결제취소', tone: 'bg-rose-500/25 text-red-300' },
   9: { label: '환불', tone: 'bg-rose-500/25 text-red-300' },
   10: { label: '입금대기', tone: 'bg-blue-500/25 text-slate-900 dark:text-blue-200' },

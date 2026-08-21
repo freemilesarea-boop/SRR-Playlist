@@ -106,6 +106,7 @@ export interface GenerateSettlementResult {
   skipped: number;
   payable: number;
   carried_over: number;
+  held_pii_incomplete?: number;
   total_gross: number;
   total_company_fee: number;
   total_sales_agent_fee: number;
