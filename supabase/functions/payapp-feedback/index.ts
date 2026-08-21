@@ -132,7 +132,7 @@ function stateLabel(state: number | null): string {
   if (state == null) return 'unknown';
   switch (state) {
     case 1: return '요청수신';
-    case 4: return '승인대기';
+    case 4: return '결제완료';
     case 8: return '요청취소';
     case 9: return '승인취소';
     case 10: return '입금대기';

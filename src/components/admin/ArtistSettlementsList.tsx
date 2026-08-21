@@ -492,15 +492,23 @@ function GenerateModal({
               <Kv label="총 유효 스트림" value={dryResult.total_pool_streams.toLocaleString() + '건'} />
               <Kv label="신규 생성" value={`${dryResult.generated}건`} />
               <Kv label="재생성 (version+1)" value={`${dryResult.overwritten}건`} />
-              <Kv label="스킵 (FINALIZED/PAID)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
+              <Kv label="스킵 (확정/지급완료)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
               <Kv label="지급 대상" value={`${dryResult.payable}건`} />
-              <Kv label="이월 (5만원 미만)" value={`${dryResult.carried_over}건`} />
+              <Kv label="이월 (최소 지급액 미만)" value={`${dryResult.carried_over}건`} />
+              <Kv label="보류 (계좌 미인증)" value={`${dryResult.skipped_artists.filter((a) => a.reason === 'pii_incomplete').length}건`} tone={dryResult.skipped_artists.some((a) => a.reason === 'pii_incomplete') ? 'text-yellow-700 dark:text-yellow-300' : ''} />
               <Kv label="총 최종 지급액" value={fmtKrw(dryResult.total_final_payout)} tone="text-accent font-bold" />
             </div>
-            {dryResult.skipped_artists.length > 0 && (
+            {dryResult.skipped_artists.filter((a) => a.reason === 'pii_incomplete').length > 0 && (
               <Alert tone="warning">
-                <strong>{dryResult.skipped_artists.length}건 스킵됨</strong> — finalized/paid
-                상태는 재계산 불가. 보정이 필요하면 adjustment row 로 별도 생성하세요.
+                <strong>{dryResult.skipped_artists.filter((a) => a.reason === 'pii_incomplete').length}건 보류 (계좌 미인증)</strong> — 정산
+                계좌 인증 전까지 <strong>지급만 보류</strong>됩니다. 금액은 정상 계산되며, 아티스트가 정산 계좌를 등록·인증하면 지급
+                대상으로 전환됩니다.
+              </Alert>
+            )}
+            {dryResult.skipped_artists.filter((a) => a.reason === 'finalized_or_paid').length > 0 && (
+              <Alert tone="warning">
+                <strong>{dryResult.skipped_artists.filter((a) => a.reason === 'finalized_or_paid').length}건 스킵됨</strong> — 이미
+                확정/지급된 정산은 재계산 불가. 보정이 필요하면 adjustment row 로 별도 생성하세요.
               </Alert>
             )}
           </div>
