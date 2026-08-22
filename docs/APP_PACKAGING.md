@@ -76,21 +76,30 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 - [ ] App ID(`com.deudda.app`) + 프로비저닝 프로파일
 - [ ] Xcode → Archive → App Store Connect 업로드
 
-## 6. OAuth(구글/카카오) 네이티브 연동 — **후속 작업**
+## 6. OAuth(구글/카카오) 네이티브 연동 — **코드 배선 완료 ✅ / 대시보드 설정 필요**
 
 이메일/비밀번호 로그인은 네이티브에서 **바로 동작**한다(리다이렉트 불필요).
-구글/카카오 OAuth는 네이티브에서 딥링크 왕복이 필요하므로 별도 배선이 필요하다:
+구글/카카오 OAuth는 커스텀 스킴 딥링크로 왕복하도록 **코드 배선이 완료**되어 있다:
 
-1. 딥링크 스킴 등록: `com.deudda.app://auth/callback`
-   - Android: `AndroidManifest.xml` intent-filter
-   - iOS: `Info.plist` `CFBundleURLTypes`
-2. `@capacitor/browser`로 OAuth URL 오픈 + `@capacitor/app`의 `appUrlOpen` 리스너로
-   콜백 수신 → `supabase.auth.exchangeCodeForSession(url)` 처리.
-3. `signInWithOAuth({ options: { redirectTo: 'com.deudda.app://auth/callback', skipBrowserRedirect: true }})`.
-4. **Supabase 대시보드** → Auth → URL Configuration에 위 redirect URL 허용목록 추가.
-5. 카카오: 카카오 개발자 콘솔에도 네이티브 리다이렉트 등록.
+### 배선된 것 (코드)
+- **딥링크 스킴** `com.deudda.app://auth/callback`
+  - Android: `android/app/src/main/AndroidManifest.xml` intent-filter (scheme=`com.deudda.app`)
+  - iOS: `ios/App/App/Info.plist` `CFBundleURLTypes`
+- **`src/lib/nativeAuth.ts`**
+  - `nativeOAuthSignIn(provider, scopes?)`: `signInWithOAuth({ redirectTo: 딥링크, skipBrowserRedirect: true })` →
+    `@capacitor/browser`로 시스템 브라우저 오픈.
+  - `initNativeAuthDeepLink(onResult)`: `@capacitor/app` `appUrlOpen` 리스너 → `?code=` 추출 →
+    `exchangeCodeForSession(code)` → 성공 시 `/auth/callback` 라우팅(웹과 동일한 첫 화면 분기).
+- **`authStore.signInWithGoogle/Kakao`**: `isNativeApp()`이면 위 네이티브 경로, 아니면 기존 웹 경로.
+- **`App.tsx`**: 마운트 시 `initNativeAuthDeepLink`를 라우터 `navigate`에 연결(웹은 no-op).
 
-> 디바이스 테스트가 필요해 이번 스캐폴드 단계에서는 문서화만. 웹은 기존 그대로 동작.
+### 출시 전 수동 설정 (대시보드 — 코드 아님)
+1. **Supabase** → Auth → URL Configuration → **Redirect URLs**에 `com.deudda.app://auth/callback` 추가.
+2. **카카오** 개발자 콘솔: 플랫폼에 앱 등록(패키지명/번들ID) — Supabase 콜백은 그대로, 네이티브 앱 등록만.
+3. **구글**: OAuth 클라이언트의 authorized redirect는 **Supabase 콜백 URL** 그대로 사용(딥링크는 Supabase→앱 단계라 구글 콘솔 변경 불필요).
+
+> ⚠️ 실기기(또는 시뮬레이터) 테스트 필요: 브라우저→딥링크 복귀는 에뮬레이터/디바이스에서만 확인 가능.
+> 웹 OAuth 동작은 **무변경**(가드로 분리).
 
 ## 7. 인앱결제(IAP) 전략 — **후속 작업**
 
@@ -110,8 +119,9 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 - [x] Capacitor 통합 + android/ios 네이티브 프로젝트 생성
 - [x] 네이티브 가드(SW 미등록, 상태바/스플래시/back) 배선
 - [x] 실시간 데이터 파이프라인(앱↔웹 공유, 0477)
+- [x] OAuth 네이티브 딥링크 **코드 배선**(스킴/브라우저/코드교환/라우팅)
+- [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성
-- [ ] OAuth 네이티브 딥링크 배선 + 대시보드 설정
 - [ ] IAP/결제 정책 결정
 - [ ] 서명 키 생성 + 스토어 계정
 - [ ] 내부 테스트(TestFlight / Play 내부 테스트) → 심사 제출

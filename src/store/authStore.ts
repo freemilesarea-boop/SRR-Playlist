@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { isNativeApp } from '@/lib/native';
 import type { UserRow } from '@/types/db';
 
 declare global {
@@ -261,6 +262,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithGoogle: async () => {
+    // 네이티브 앱: 커스텀 스킴 딥링크로 OAuth 왕복(nativeAuth). 웹: 기존 origin 리다이렉트.
+    if (isNativeApp()) {
+      const { nativeOAuthSignIn } = await import('@/lib/nativeAuth');
+      await nativeOAuthSignIn('google');
+      return;
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
@@ -269,14 +276,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithKakao: async () => {
+    // X6.11: 로그인 목적의 최소 scope 만 — profile_nickname + account_email.
+    // talk_message 는 별도 권한 심사 + 사용자 동의 부담이 커서 제거. 알림톡 발송이
+    // 필요해지면 비즈 메시지 (알림톡/친구톡 API) 로 별도 솔루션 사용 권장.
+    const kakaoScopes = 'profile_nickname account_email';
+    // 네이티브 앱: 커스텀 스킴 딥링크로 OAuth 왕복(nativeAuth). 웹: 기존 origin 리다이렉트.
+    if (isNativeApp()) {
+      const { nativeOAuthSignIn } = await import('@/lib/nativeAuth');
+      await nativeOAuthSignIn('kakao', kakaoScopes);
+      return;
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        // X6.11: 로그인 목적의 최소 scope 만 — profile_nickname + account_email.
-        // talk_message 는 별도 권한 심사 + 사용자 동의 부담이 커서 제거. 알림톡 발송이
-        // 필요해지면 비즈 메시지 (알림톡/친구톡 API) 로 별도 솔루션 사용 권장.
-        scopes: 'profile_nickname account_email',
+        scopes: kakaoScopes,
       },
     });
     if (error) throw error;
