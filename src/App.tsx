@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
@@ -165,6 +165,15 @@ export default function App() {
     // 페이지 정상 로드 도달 → chunk-reload flag clear (다음 chunk 실패 시 retry 가능)
     clearChunkReloadFlag();
   }, [init]);
+
+  // 네이티브 앱(Capacitor) OAuth 딥링크 콜백 → 코드 교환 후 라우팅. 웹에서는 no-op.
+  const navigate = useNavigate();
+  useEffect(() => {
+    void (async () => {
+      const { initNativeAuthDeepLink } = await import('@/lib/nativeAuth');
+      await initNativeAuthDeepLink((path) => navigate(path, { replace: true }));
+    })();
+  }, [navigate]);
 
   // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
   useEffect(() => installUnloadGuard(), []);
