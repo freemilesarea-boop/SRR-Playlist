@@ -6,10 +6,15 @@ import './index.css';
 import { initSentry } from './lib/sentry';
 import { purgeBadAudioCaches } from './lib/swCache';
 import { redirectToProductionIfNeeded } from './lib/productionRedirect';
+import { isNativeApp, initNativeShell } from './lib/native';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
-redirectToProductionIfNeeded();
+// 네이티브 앱(Capacitor)은 localhost origin 이라 대상 아님이지만, 방어적으로 명시 가드.
+if (!isNativeApp()) redirectToProductionIfNeeded();
+
+// Capacitor 네이티브 쉘 초기화(상태바/스플래시/하드웨어 back). 웹에서는 no-op.
+void initNativeShell();
 
 // 0093 — Sentry 초기화 (DSN 없으면 silent skip, production 만 활성)
 void initSentry();
@@ -42,7 +47,9 @@ void purgeBadAudioCaches();
 const BUILD_ID = (import.meta.env.VITE_BUILD_ID as string | undefined) ?? 'dev';
 const SW_RELOAD_KEY = `sw-reloaded-${BUILD_ID}`;
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+// 네이티브 앱(Capacitor)에서는 SW 를 등록하지 않는다 — 로컬 번들을 Capacitor 가 직접
+// 서빙하므로 SW precache/업데이트 리로드가 오히려 자산 로딩과 충돌한다. 웹/PWA 만 등록.
+if (!isNativeApp() && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   // (1) controllerchange — 새 SW 가 page control 잡으면 즉시 reload (build 당 1회)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
