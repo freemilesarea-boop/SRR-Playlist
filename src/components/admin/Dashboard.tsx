@@ -22,6 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import LiveStreamMonitor from './LiveStreamMonitor';
 import {
   fetchDashboardStats,
   fetchDailySeries,
@@ -115,6 +116,9 @@ export default function Dashboard() {
           오늘 집계 새로고침
         </button>
       </div>
+
+      {/* 실시간 스트리밍 모니터 (앱/웹 공용) */}
+      <LiveStreamMonitor />
 
       {/* 핵심 카드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
