@@ -119,6 +119,22 @@ export interface GenerateSettlementResult {
   }>;
 }
 
+export interface PendingSettlementAlert {
+  has_pending: boolean;
+  settlement_month: string | null;
+  pending_count: number;
+  held_count: number;
+  total_amount: number;
+}
+
+/** 관리자 배너용 — 지급 대기(pending/held) 최신 정산월 + 건수. 관리자만. */
+export async function adminPendingSettlementAlert(): Promise<PendingSettlementAlert | null> {
+  const { data, error } = await supabase.rpc('admin_pending_settlement_alert');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row ?? null) as PendingSettlementAlert | null;
+}
+
 export interface MySettlementRow {
   id: string;
   settlement_month: string;
