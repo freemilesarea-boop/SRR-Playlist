@@ -36,6 +36,8 @@ import Dashboard from '@/components/admin/Dashboard';
 import AdminNotificationsBell from '@/components/admin/AdminNotificationsBell';
 import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
+import { AdminAlert } from '@/components/admin/ui';
+import { adminPendingSettlementAlert, type PendingSettlementAlert } from '@/lib/artistSettlementApi';
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { supabaseProjectRef } from '@/lib/supabase';
@@ -290,6 +292,7 @@ export default function AdminPage() {
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
+  const [settlementAlert, setSettlementAlert] = useState<PendingSettlementAlert | null>(null);
 
   // Phase 1-5.1 — cross-탭 deep link: 정책 적용률 → 프랜차이즈 관리 (정책 탭) → 정책 생성 후 자동 복귀.
   // pendingFranchiseDeepLink: 한 번 자동 진입 후 consume.
@@ -299,6 +302,7 @@ export default function AdminPage() {
   const [pendingFranchiseReturnTo, setPendingFranchiseReturnTo] = useState<Tab | null>(null);
 
   useEffect(() => { fetchMyAdminPermissions().then(setPerms).catch(() => {}); }, []);
+  useEffect(() => { adminPendingSettlementAlert().then(setSettlementAlert).catch(() => {}); }, []);
 
   // URL param ?tab=X 지원 — Command Center Quick Actions / 외부 딥링크가 탭 이동을 트리거할 수 있게.
   // 초기 진입 + popstate 이벤트 모두 처리. 유효한 Tab key 인 경우만 반영.
@@ -457,6 +461,29 @@ export default function AdminPage() {
       </header>
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
+
+      {/* 매월 1일 자동 생성된 정산 지급 검토 알람 (관리자 전용, 지급 대기 있을 때만) */}
+      {settlementAlert?.has_pending && (
+        <AdminAlert
+          tone="warning"
+          title="정산 지급 검토 필요"
+          description={
+            `${settlementAlert.settlement_month ? Number(settlementAlert.settlement_month.slice(5, 7)) + '월' : '최근'} 아티스트 정산이 생성되어 지급 대기 중입니다 · ` +
+            `지급대상 ${settlementAlert.pending_count}건` +
+            (settlementAlert.held_count > 0 ? ` · 계좌 미인증 보류 ${settlementAlert.held_count}건` : '') +
+            ` · 대기 금액 ${settlementAlert.total_amount.toLocaleString()}원`
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => selectTab('artist-settlements')}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+            >
+              정산 탭으로 이동
+            </button>
+          }
+        />
+      )}
 
       {/* 업무 중심 2-level nav — 1차: 업무 그룹(8), 2차: 서브그룹, 페이지: 탭. 딥링크 key 불변. */}
       <nav className="space-y-2" aria-label="관리자 메뉴">
