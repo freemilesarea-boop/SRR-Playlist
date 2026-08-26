@@ -23,6 +23,7 @@ import {
   type BillingInvoice, type BillingInvoiceDetail, type BillingInvoiceStatus,
 } from '@/lib/api/enterpriseBillingApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
+import ConsolidatedBillingCard from '@/components/admin/ConsolidatedBillingCard';
 
 const PAGE_SIZE = 50;
 
@@ -173,6 +174,9 @@ export default function EnterpriseBillingPanel() {
         <AdminStatCard label="취소" value={kpi.cancelled} tone="neutral" icon={<XCircle size={14} />} />
         <AdminStatCard label="평균 매장당 금액" value={fmtKRW(kpi.avgPerStore)} tone="primary" icon={<History size={14} />} />
       </div>
+
+      {/* 일괄청구 설정 · 실시간 청구예정액 */}
+      <ConsolidatedBillingCard />
 
       {/* Filters */}
       <AdminSearch
