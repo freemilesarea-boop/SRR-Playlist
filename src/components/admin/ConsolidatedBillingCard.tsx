@@ -8,10 +8,10 @@
  * SQL: supabase/migrations/0479_enterprise_consolidated_billing.sql
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, RefreshCw, TrendingUp, Store } from 'lucide-react';
+import { Building2, RefreshCw, TrendingUp, Store, Check } from 'lucide-react';
 import { AdminBadge, AdminButton } from '@/components/admin/ui';
 import {
-  getConsolidatedBillingPreview, setEnterpriseConsolidatedBilling,
+  getConsolidatedBillingPreview, setEnterpriseConsolidatedBilling, setEnterpriseBrandCode,
   type ConsolidatedBillingPreviewRow,
 } from '@/lib/api/enterpriseBillingApi';
 
@@ -22,6 +22,8 @@ export default function ConsolidatedBillingCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [codeDraft, setCodeDraft] = useState<Record<string, string>>({});
+  const [savingCode, setSavingCode] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -59,6 +61,26 @@ export default function ConsolidatedBillingCard() {
     }
   }, [load]);
 
+  const saveCode = useCallback(async (row: ConsolidatedBillingPreviewRow) => {
+    const draft = (codeDraft[row.enterprise_account_id] ?? row.brand_code ?? '').trim();
+    if (draft === (row.brand_code ?? '')) return; // 변경 없음
+    setSavingCode(row.enterprise_account_id);
+    setError(null);
+    try {
+      await setEnterpriseBrandCode(row.enterprise_account_id, draft || null);
+      setCodeDraft((prev) => {
+        const nxt = { ...prev };
+        delete nxt[row.enterprise_account_id];
+        return nxt;
+      });
+      await load(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingCode(null);
+    }
+  }, [codeDraft, load]);
+
   const { enabledCount, projectedTotal, month } = useMemo(() => {
     const enabled = rows.filter((r) => r.consolidated_billing_enabled);
     return {
@@ -93,9 +115,12 @@ export default function ConsolidatedBillingCard() {
       </header>
 
       <p className="border-b border-line/10 px-4 py-2 text-[11px] leading-relaxed text-ink-mute">
-        브랜드를 <b className="text-ink-soft">일괄청구 ON</b> 으로 체크하면, 그 브랜드코드로 신규 가맹점이
+        브랜드를 <b className="text-ink-soft">일괄청구 ON</b> 으로 체크하면, 그 브랜드로 신규 가맹점이
         가입할 때마다 활성 매장이 자동 인식되어 청구예정액이 실시간으로 올라갑니다.
         매월 1일 대상 본사의 청구서(초안)가 자동 생성됩니다(발행·수금은 수동).
+        <br />
+        <b className="text-ink-soft">진입 코드</b>는 가맹점주가 매장 플레이어 진입·가입 시 입력하는 코드입니다.
+        REFINE·카공시대처럼 외우기 쉽게 설정하면 됩니다(대소문자 무시, 기존 STORE-코드도 계속 유효).
       </p>
 
       {error && (
@@ -126,7 +151,27 @@ export default function ConsolidatedBillingCard() {
                   <tr key={r.enterprise_account_id} className="border-b border-line/5 last:border-0">
                     <td className="px-4 py-2.5">
                       <div className="font-semibold text-ink">{r.enterprise_name || '—'}</div>
-                      <div className="font-mono text-[10px] text-ink-mute">{r.brand_code || '코드 없음'}</div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="text-[9px] uppercase tracking-wide text-ink-mute">진입코드</span>
+                        <input
+                          value={codeDraft[r.enterprise_account_id] ?? r.brand_code ?? ''}
+                          onChange={(e) => setCodeDraft((p) => ({ ...p, [r.enterprise_account_id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') void saveCode(r); }}
+                          placeholder="예: REFINE / 카공시대"
+                          className="w-32 rounded-md bg-bg-deep px-2 py-0.5 font-mono text-[11px] text-ink outline-none ring-line/20 focus:ring-1"
+                        />
+                        {(codeDraft[r.enterprise_account_id] ?? r.brand_code ?? '').trim() !== (r.brand_code ?? '') && (
+                          <button
+                            type="button"
+                            onClick={() => void saveCode(r)}
+                            disabled={savingCode === r.enterprise_account_id}
+                            title="진입 코드 저장"
+                            className="inline-flex items-center rounded-md bg-accent/15 px-1.5 py-0.5 text-accent ring-1 ring-accent/30 hover:bg-accent/25 disabled:opacity-50"
+                          >
+                            <Check size={12} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-2.5 text-right">
                       <span className="inline-flex items-center gap-1 tabular-nums text-ink-soft">

@@ -247,6 +247,23 @@ export async function setEnterpriseConsolidatedBilling(
   return data as { success: boolean; enterprise_account_id: string; enabled: boolean };
 }
 
+/**
+ * 본사의 '브랜드 진입 코드'(읽기 쉬운 brand_code) 설정/변경/제거 (관리자 전용).
+ * 가맹점주가 이 코드로 매장 플레이어 진입 + 가입한다(예: REFINE, 카공시대).
+ * 빈 문자열/undefined → 코드 제거. 대소문자 무시 유니크.
+ */
+export async function setEnterpriseBrandCode(
+  enterpriseAccountId: string,
+  brandCode: string | null,
+): Promise<{ success: boolean; enterprise_account_id: string; brand_code: string | null }> {
+  const { data, error } = await supabase.rpc('admin_set_enterprise_brand_code', {
+    p_enterprise_account_id: enterpriseAccountId,
+    p_brand_code:            brandCode ?? null,
+  });
+  if (error) { console.error('[billingApi] set brand_code failed', error); throw error; }
+  return data as { success: boolean; enterprise_account_id: string; brand_code: string | null };
+}
+
 // =============================================================================
 // HQ read-only
 // =============================================================================
