@@ -99,7 +99,7 @@ export default function BrandPage() {
             spellCheck={false}
             value={code}
             onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
-            placeholder="예: REFINE / 카공시대 / STORE-XXXXXX"
+            placeholder="운영중인 매장 브랜드명을 적어주세요"
             maxLength={40}
             disabled={loading}
             className="w-full rounded-2xl border border-line/30 bg-bg px-5 py-4 text-center text-xl font-bold tracking-[0.15em] text-ink outline-none ring-accent/40 placeholder:text-ink-dim/50 focus:ring-2 disabled:opacity-60"

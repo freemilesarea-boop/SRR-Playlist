@@ -157,7 +157,7 @@ export default function ConsolidatedBillingCard() {
                           value={codeDraft[r.enterprise_account_id] ?? r.brand_code ?? ''}
                           onChange={(e) => setCodeDraft((p) => ({ ...p, [r.enterprise_account_id]: e.target.value }))}
                           onKeyDown={(e) => { if (e.key === 'Enter') void saveCode(r); }}
-                          placeholder="예: REFINE / 카공시대"
+                          placeholder="브랜드명 (예: 카공시대)"
                           className="w-32 rounded-md bg-bg-deep px-2 py-0.5 font-mono text-[11px] text-ink outline-none ring-line/20 focus:ring-1"
                         />
                         {(codeDraft[r.enterprise_account_id] ?? r.brand_code ?? '').trim() !== (r.brand_code ?? '') && (
