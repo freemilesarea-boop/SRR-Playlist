@@ -219,7 +219,7 @@ export default function EnterpriseStoreSignupForm({
           <input
             type="text" required value={inviteCode}
             onChange={(e) => { setInviteCode(e.target.value); setVerified(null); }}
-            placeholder="예: REFINE / 카공시대 / STORE-4P8M2X"
+            placeholder="운영중인 매장 브랜드명 (또는 STORE 코드)"
             className="input flex-1 font-mono uppercase"
             autoCapitalize="characters"
           />
