@@ -202,6 +202,19 @@ export default function BrandPlayerPage() {
     navigate('/brand', { replace: true, state: { switchStore: true } });
   }, [brandId, pause, navigate]);
 
+  // 나가기 — 플레이어 종료. 저장된 매장 코드(device binding)는 '유지'해서 다음에 코드 없이
+  // 자동 연결되게 한다(clearBrandToken 호출 안 함). 재생만 정지하고 앱 홈으로 이동.
+  // (기존 버그: navigate('/brand') 만 하면 저장된 토큰 때문에 BrandPage 가 즉시 플레이어로
+  //  자동 재진입 → "나가지지 않음". 홈으로 나가면 자동진입 대상이 아니라 정상 종료됨.)
+  const exitPlayer = useCallback(() => {
+    const ok = window.confirm(
+      '브랜드 플레이어를 종료할까요?\n\n저장된 매장 코드는 유지되어, 다음에 코드 입력 없이 자동으로 다시 연결됩니다.',
+    );
+    if (!ok) return;
+    pause();
+    navigate('/');
+  }, [pause, navigate]);
+
   // heartbeat
   useBrandPlayerHeartbeat({ brandId: brandId ?? null, sessionToken: token, enabled: !!brandId && !!token });
 
@@ -276,7 +289,7 @@ export default function BrandPlayerPage() {
           <button onClick={() => void disconnectDevice()} title="이 기기의 매장 연결 해제" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
             <LogOut size={13} /> 연결 해제
           </button>
-          <button onClick={() => navigate('/brand')} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+          <button onClick={exitPlayer} title="플레이어 종료 (저장된 코드는 유지 — 다음에 자동 연결)" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
             <X size={14} /> 나가기
           </button>
         </div>

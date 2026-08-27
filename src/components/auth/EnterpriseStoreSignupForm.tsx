@@ -214,12 +214,12 @@ export default function EnterpriseStoreSignupForm({
           autoComplete="organization"
         />
       </Field>
-      <Field label="매장 초대코드 *" hint="본사가 매장에 전달한 코드를 입력해주세요.">
+      <Field label="매장 초대코드 · 브랜드 코드 *" hint="본사가 전달한 코드(예: REFINE, 카공시대 또는 STORE-XXXX)를 입력해주세요.">
         <div className="flex gap-2">
           <input
             type="text" required value={inviteCode}
             onChange={(e) => { setInviteCode(e.target.value); setVerified(null); }}
-            placeholder="예: STORE-4P8M2X"
+            placeholder="예: REFINE / 카공시대 / STORE-4P8M2X"
             className="input flex-1 font-mono uppercase"
             autoCapitalize="characters"
           />

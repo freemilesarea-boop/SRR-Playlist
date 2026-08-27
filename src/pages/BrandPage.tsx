@@ -75,10 +75,10 @@ export default function BrandPage() {
         </span>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">브랜드 플레이어</h1>
         <p className="text-sm leading-relaxed text-ink-mute">
-          본사에서 받은 <b className="text-ink">매장 코드</b>를 입력하면<br />
+          본사에서 받은 <b className="text-ink">매장 코드</b> 또는 <b className="text-ink">브랜드 코드</b>를 입력하면<br />
           우리 매장 전용 음악과 사이니지가 자동으로 재생돼요.
         </p>
-        <p className="text-xs text-ink-dim">이 브라우저에서는 다음부터 매장 코드 없이 자동으로 연결됩니다.</p>
+        <p className="text-xs text-ink-dim">이 브라우저에서는 다음부터 코드 없이 자동으로 연결됩니다.</p>
       </div>
 
       {notice && (
@@ -88,7 +88,7 @@ export default function BrandPage() {
       <form onSubmit={handleSubmit} className="w-full space-y-4">
         <div className="space-y-2">
           <label htmlFor="store-code" className="flex items-center gap-1.5 text-xs font-semibold text-ink-mute">
-            <KeyRound size={13} /> 매장 코드
+            <KeyRound size={13} /> 매장 코드 · 브랜드 코드
           </label>
           <input
             id="store-code"
@@ -99,7 +99,7 @@ export default function BrandPage() {
             spellCheck={false}
             value={code}
             onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
-            placeholder="예: STORE-XXXXXX"
+            placeholder="예: REFINE / 카공시대 / STORE-XXXXXX"
             maxLength={40}
             disabled={loading}
             className="w-full rounded-2xl border border-line/30 bg-bg px-5 py-4 text-center text-xl font-bold tracking-[0.15em] text-ink outline-none ring-accent/40 placeholder:text-ink-dim/50 focus:ring-2 disabled:opacity-60"
