@@ -232,8 +232,10 @@ export default function LoginPage() {
     if (t === 'individual') setMode('signup-individual');
     else if (t === 'business') setMode('signup-business');
     else if (t === 'artist') setMode('signup-artist');
-    // Phase 3-2+: 엔터프라이즈 본사 카드 → Brand Registry 자동 매칭 flow
-    else if (t === 'enterprise-hq') setMode('signup-enterprise-hq');
+    // 엔터프라이즈 본사 카드 → 발급된 HQ 초대코드(hq_invite_code) 가입 flow.
+    // (본사에 배포한 코드가 hq_invite_code 이므로 그 코드로 바로 가입. Brand Registry
+    //  자동매칭 flow 는 ?signup=enterprise-brand URL 로 유지.)
+    else if (t === 'enterprise-hq') setMode('signup-enterprise-hq-legacy');
     else setMode('signup-enterprise-store');
   }
 
