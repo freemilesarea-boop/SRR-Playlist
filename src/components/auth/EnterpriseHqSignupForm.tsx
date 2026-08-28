@@ -83,7 +83,8 @@ export default function EnterpriseHqSignupForm({
   }
 
   function validate(): string | null {
-    if (!verified) return '브랜드/초대코드 확인이 필요합니다.';
+    // 코드 검증은 제출 시 재검증(handleSubmit)에서 최종 확인 — 여기서는 입력값만 체크.
+    if (!brandName.trim() || !inviteCode.trim()) return '브랜드명과 초대코드를 입력해주세요.';
     if (!fullName.trim()) return '이름을 입력해주세요.';
     if (!email.trim()) return '이메일을 입력해주세요.';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
@@ -210,17 +211,13 @@ export default function EnterpriseHqSignupForm({
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">담당자 정보</p>
       <Field label="이름 *">
         <input
-          type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}
-          disabled={!verified}
-          className="input"
+          type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}          className="input"
           autoComplete="name"
         />
       </Field>
       <Field label="전화번호 *">
         <input
-          type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
-          disabled={!verified}
-          placeholder="010-0000-0000"
+          type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}          placeholder="010-0000-0000"
           className="input"
           autoComplete="tel"
         />
@@ -230,34 +227,28 @@ export default function EnterpriseHqSignupForm({
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">계정</p>
       <Field label="이메일 *">
         <input
-          type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-          disabled={!verified}
-          className="input"
+          type="email" required value={email} onChange={(e) => setEmail(e.target.value)}          className="input"
           autoComplete="email"
         />
       </Field>
       <Field label="비밀번호 *" hint="6자 이상">
         <input
           type="password" required minLength={6} value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={!verified}
-          className="input"
+          onChange={(e) => setPassword(e.target.value)}          className="input"
           autoComplete="new-password"
         />
       </Field>
       <Field label="비밀번호 확인 *">
         <input
           type="password" required minLength={6} value={passwordConfirm}
-          onChange={(e) => setPasswordConfirm(e.target.value)}
-          disabled={!verified}
-          className="input"
+          onChange={(e) => setPasswordConfirm(e.target.value)}          className="input"
           autoComplete="new-password"
         />
       </Field>
 
       {error && <Alert tone="error">{error}</Alert>}
 
-      <button type="submit" disabled={busy || !verified} className="btn-primary w-full py-3">
+      <button type="submit" disabled={busy} className="btn-primary w-full py-3">
         {busy ? '가입 중…' : '본사 담당자 가입'}
       </button>
     </form>
