@@ -106,10 +106,8 @@ export default function EnterpriseStoreSignupForm({
 
   function resolveRegionName(): string {
     if (!verified) return '';
-    if (verified.allow_self_register_region && verified.allowed_regions.length === 0) {
-      return regionNameManual.trim();
-    }
-    if (regionId === '__manual__' && verified.allow_self_register_region) {
+    // 🆕 등록된 지역이 없거나 "직접 입력"을 고르면 회원이 입력한 지역명을 사용(자가 등록).
+    if (verified.allowed_regions.length === 0 || regionId === '__manual__') {
       return regionNameManual.trim();
     }
     const found = verified.allowed_regions.find((r: EnterpriseInviteAllowedRegion) => r.id === regionId);
@@ -119,7 +117,7 @@ export default function EnterpriseStoreSignupForm({
   function validate(): string | null {
     if (!verified) return '브랜드/초대코드 확인이 필요합니다.';
     if (!storeName.trim()) return '매장명을 입력해주세요.';
-    if (!resolveRegionName()) return '지역을 선택하거나 입력해주세요.';
+    // 지역은 선택 입력 — 미입력 시 본사가 나중에 배정할 수 있어 가입을 막지 않는다.
     if (!fullName.trim()) return '담당자명을 입력해주세요.';
     if (!email.trim()) return '이메일을 입력해주세요.';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
@@ -197,9 +195,9 @@ export default function EnterpriseStoreSignupForm({
     }
   }
 
+  // 🆕 등록 지역이 없거나 "직접 입력" 선택 시 회원이 지역을 자가 입력(관리자 사전등록 불필요).
   const showManualRegion =
     verified !== null
-    && verified.allow_self_register_region
     && (verified.allowed_regions.length === 0 || regionId === '__manual__');
 
   return (
@@ -261,23 +259,25 @@ export default function EnterpriseStoreSignupForm({
       </Field>
 
       <Field
-        label="지역 *"
+        label="지역 (선택)"
         hint={
           !verified
             ? undefined
             : verified.allowed_regions.length === 0
-              ? verified.allow_self_register_region
-                ? '본사가 등록한 지역이 없어 직접 입력 가능합니다.'
-                : '본사 관리자에게 지역 등록을 요청해주세요.'
-              : verified.allow_self_register_region
-                ? '목록에 없으면 "직접 입력" 으로 신규 등록 가능합니다.'
-                : '본사 등록 지역에서만 선택 가능합니다.'
+              ? '선택 입력 — 우리 매장 지역을 직접 입력하세요. 입력하면 본사 관리자 페이지에 등록됩니다. 비워둬도 가입됩니다.'
+              : '선택 입력 — 목록에서 선택하거나 "직접 입력"으로 새 지역을 등록할 수 있습니다. 비워둬도 가입됩니다.'
         }
       >
         {!verified ? (
           <input className="input" disabled placeholder="브랜드/초대코드 확인 후 활성화" />
-        ) : verified.allowed_regions.length === 0 && !verified.allow_self_register_region ? (
-          <input className="input" disabled placeholder="본사 관리자에게 지역 등록을 요청해주세요" />
+        ) : verified.allowed_regions.length === 0 ? (
+          // 🆕 등록된 지역이 없으면 회원이 직접 입력(자가 등록). 관리자 사전 등록 불필요.
+          <input
+            type="text" value={regionNameManual}
+            onChange={(e) => setRegionNameManual(e.target.value)}
+            placeholder="지역 직접 입력 (예: 서울 송파)"
+            className="input"
+          />
         ) : (
           <>
             <select
@@ -290,9 +290,8 @@ export default function EnterpriseStoreSignupForm({
                   {r.region_name}{r.region_code ? ` (${r.region_code})` : ''}
                 </option>
               ))}
-              {verified.allow_self_register_region && (
-                <option value="__manual__">+ 직접 입력 (신규 등록)</option>
-              )}
+              {/* 🆕 항상 직접 입력(신규 등록) 가능 — 관리자 사전등록에 의존하지 않음 */}
+              <option value="__manual__">+ 직접 입력 (신규 등록)</option>
             </select>
             {showManualRegion && (
               <input
