@@ -158,7 +158,7 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
   }
 
   y -= 8; hline(y); y -= 26;
-  text('산출 내역', MX, y, 12, black); y -= 22;
+  text('지급 내역', MX, y, 12, black); y -= 22;
 
   const row = (label: string, value: number, opts: { sign?: boolean; strong?: boolean; note?: string } = {}) => {
     const c = opts.strong ? black : ink;
@@ -170,30 +170,28 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
     y -= 19;
   };
 
-  row('총 배분액 (스트리밍)', s.gross_settlement_amount);
-  row('회사 수수료', s.company_fee_amount, { sign: true });
-  if (Number(s.sales_agent_fee_amount) > 0) row('영업 수수료', s.sales_agent_fee_amount, { sign: true });
+  // 총 유효 스트림
+  text('총 유효 스트림', MX, y, 10, ink);
+  const tsHead = `${int(s.total_streams)} 회`;
+  text(tsHead, W - MX - (10 * 0.55 * tsHead.length), y, 10, ink, kor);
+  y -= 19;
+
   y -= 2; hline(y); y -= 18;
-  row('당월 순정산액', s.artist_net_settlement, { strong: true });
-  if (Number(s.previous_carried_amount) !== 0) {
-    row('전월 이월 승계', s.previous_carried_amount, { note: '최소 지급액 미만으로 이월된 누적분' });
-  }
-  y -= 2; hline(y); y -= 18;
-  row('정산 합계', s.total_settlement_amount, { strong: true });
+  row('정산 금액', s.total_settlement_amount, {
+    strong: true,
+    note: Number(s.previous_carried_amount) !== 0 ? '이월 누적분 포함' : undefined,
+  });
   row(`원천징수 (${taxPct}%)`, s.withholding_tax_amount, { sign: true, note: '소득세 3% + 지방소득세 0.3%' });
-  if (Number(s.carried_over_amount) > 0) {
-    row('차월 이월액', s.carried_over_amount, { note: '최소 지급액 미달분 — 다음 달 정산에 합산' });
-  }
 
   y -= 6; hline(y, 1.2, accent); y -= 28;
-  text('실지급액', MX, y, 14, black);
+  text('세후 입금액', MX, y, 14, black);
   const total = won(s.final_payout_amount);
   text(total, W - MX - (14 * 0.58 * total.length), y, 16, accent);
 
   y -= 40;
   hline(y); y -= 18;
   text('· 원천징수세액은 소득세법에 따라 지급자가 원천징수하여 신고·납부합니다.', MX, y, 8.5, ink); y -= 14;
-  text(`· 총 유효 스트림 ${int(s.total_streams)}회 · 트랙 ${s.items.length}곡의 상세 내역은 다음 장에 있습니다.`, MX, y, 8.5, ink); y -= 14;
+  text(`· 트랙 ${s.items.length}곡의 스트리밍 내역은 다음 장에 있습니다.`, MX, y, 8.5, ink); y -= 14;
   if (s.payout_memo) { text(`· 메모: ${s.payout_memo.slice(0, 90)}`, MX, y, 8.5, ink); y -= 14; }
   text('· 내역에 이견이 있으시면 앱 내 문의하기로 알려주세요.', MX, y, 8.5, ink);
   footer();
@@ -203,44 +201,39 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
   text(`${ymKo(s.settlement_month)} · 유효 스트림만 집계 (본인 재생 · 미리듣기 · 중복 재생 제외)`, MX, y, 9, ink);
   y -= 24;
 
-  const COL_T = MX, COL_I = MX + 232, COL_S = W - MX - 150, COL_A = W - MX - 70;
+  const COL_T = MX, COL_I = W - MX - 240, COL_S = W - MX - 70;
   const thead = () => {
     text('트랙', COL_T, y, 9, ink);
     text('ISRC', COL_I, y, 9, ink);
     text('스트림', COL_S, y, 9, ink);
-    text('배분액', COL_A, y, 9, ink);
     y -= 6; hline(y); y -= 15;
   };
   thead();
 
   if (s.items.length === 0) {
-    text('해당 월에 정산 대상 스트림이 없습니다. (이월 승계분만 지급)', MX, y, 9.5, ink);
+    text('해당 월에 집계된 유효 스트림이 없습니다.', MX, y, 9.5, ink);
     y -= 18;
   }
 
   for (const it of s.items) {
     if (y < 90) { footer(); header('스트리밍 내역서 (계속)'); thead(); }
-    const title = (it.track_title ?? it.track_code ?? '-').slice(0, 26);
+    const title = (it.track_title ?? it.track_code ?? '-').slice(0, 34);
     text(title, COL_T, y, 9.5, black);
     text((it.isrc ?? '-').slice(0, 18), COL_I, y, 8.5, ink, it.isrc ? mono : kor);
     const sc = int(it.stream_count);
-    text(sc, COL_S + 40 - sc.length * 5, y, 9.5, black, mono);
-    const am = int(it.amount);
-    text(am, COL_A + 62 - am.length * 5, y, 9.5, black, mono);
+    text(sc, COL_S + 56 - sc.length * 5, y, 9.5, black, mono);
     y -= 17;
   }
 
   y -= 4; hline(y, 1); y -= 18;
   text('합계', COL_T, y, 10.5, black);
   const ts = int(s.total_streams);
-  text(ts, COL_S + 40 - ts.length * 5.5, y, 10.5, black, mono);
-  const tg = int(s.gross_settlement_amount);
-  text(tg, COL_A + 62 - tg.length * 5.5, y, 10.5, black, mono);
+  text(ts, COL_S + 56 - ts.length * 5.5, y, 10.5, black, mono);
 
   y -= 26;
-  text('※ 배분액은 월 수익풀을 전체 유효 스트림 수로 나눈 단가에 트랙별 스트림을 곱해 산출합니다.', MX, y, 8, ink);
+  text('※ 유효 스트림은 30초 이상 재생 기준이며, 본인 재생·미리듣기·중복 재생은 제외됩니다.', MX, y, 8, ink);
   y -= 13;
-  text('※ 위 배분액은 수수료 차감 전 금액이며, 실지급액은 1면의 산출 내역을 따릅니다.', MX, y, 8, ink);
+  text('※ 지급 금액은 1면의 지급 내역을 따릅니다.', MX, y, 8, ink);
   footer();
 
   return await pdf.save();
@@ -255,15 +248,15 @@ function buildHtml(s: Snapshot): string {
   <h1 style="margin:0 0 18px;font-size:19px">${ymKo(s.settlement_month)} 정산 지급명세서</h1>
   <p style="margin:0 0 20px;font-size:14px;line-height:1.65;color:#3c3f4a">
     안녕하세요. ${ymKo(s.settlement_month)} 정산이 지급 완료되었습니다.<br>
-    상세 내역과 트랙별 스트리밍 내역서는 첨부된 PDF에서 확인하실 수 있습니다.
+    트랙별 스트리밍 내역서는 첨부된 PDF에서 확인하실 수 있습니다.
   </p>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
-    <tr><td style="padding:7px 0;color:#6b6e7b">정산 합계</td>
+    <tr><td style="padding:7px 0;color:#6b6e7b">정산 금액</td>
         <td style="padding:7px 0;text-align:right">${won(s.total_settlement_amount)}</td></tr>
     <tr><td style="padding:7px 0;color:#6b6e7b">원천징수 (${taxPct}%)</td>
         <td style="padding:7px 0;text-align:right;color:#8a8d99">- ${won(s.withholding_tax_amount)}</td></tr>
     <tr><td colspan="2" style="border-top:1px solid #e6e7ec;padding-top:2px"></td></tr>
-    <tr><td style="padding:10px 0;font-weight:700">실지급액</td>
+    <tr><td style="padding:10px 0;font-weight:700">세후 입금액</td>
         <td style="padding:10px 0;text-align:right;font-weight:700;font-size:17px;color:#5a4fdb">${won(s.final_payout_amount)}</td></tr>
   </table>
   <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#8a8d99">
