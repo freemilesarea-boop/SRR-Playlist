@@ -9,18 +9,28 @@
 //   - price   === payment_orders.amount  (가격 위변조 차단)
 // → 하나라도 불일치하면 권한 부여 금지. PayApp 재시도 폭주 방지 위해 응답은 항상 SUCCESS.
 //
-// pay_state 별 처리:
-//   1            결제 요청 수신 (완료 아님) → requested/pending 유지
-//   4            결제 완료 → paid/active + period 갱신 + membership_tier 부여
-//   10           가상계좌 대기 → waiting/payment_waiting
-//   8, 32        요청 취소 → canceled
-//   9, 64, 70, 71 승인 취소/부분 취소 → canceled + free 다운그레이드
+// pay_state 별 처리 (이 파일의 상수 기준 — 아래 PAYAPP_*_STATES 가 유일한 진실):
+//   1, 4, 10     pending  → 이 함수에서는 권한 변경 없음
+//   64           paid     → paid/active + period 갱신 + membership_tier 부여
+//   8, 32        cancel   → canceled (결제 완료 전 요청 취소)
+//   9, 70, 71    refund   → canceled + free 다운그레이드
 //   그 외        이벤트만 기록
 //
+// ⚠️ state=4 의 실제 처리 주체는 이 함수가 아니라 DB 트리거다.
+//   운영 실측상 이 가맹점의 PayApp 은 "실제 카드 결제완료"를 state=4 로 통보한다
+//   (state=64 는 소수). 그래서 payapp_webhook_events 의 BEFORE INSERT 트리거
+//   _trg_promote_state4_to_paid 가 검증된 state=4 (linkval_verified + price>0 +
+//   mul_no + 승인번호/rebill_no/매칭주문 중 하나)를 paid 로 승격시킨다.
+//   → 이 함수의 pending 분기는 "이미 트리거가 처리함"을 의미하지 미결제가 아니다.
+//   과거 이 주석이 4 와 64 를 서로 뒤바꿔 설명해 운영 오진을 유발했다(0482 에서 정정).
+//
 // 자동 정기결제 (2회차+) 대응:
-//   같은 order_no 로 새 mul_no 가 오면 renewal payment_orders 생성
+//   PayApp 재청구는 매 회차 var1 에 "최초 회차 order_no"를 그대로 echo 한다.
+//   따라서 _internal_apply_payapp_paid_event 는 그 order_no 의 주문이 이미 paid 면
+//   재사용하지 않고 회차별 renewal 주문을 새로 만든다 (0482).
 //   order_no = `${original}_renewal_${mul_no}`
 //   subscriptions 의 last_paid_at / current_period_* 갱신.
+//   (0482 이전에는 기존 paid 주문의 mul_no 를 덮어써서 회차 매출이 유실됐다.)
 //
 // 멱등성: payapp_webhook_events.event_key UNIQUE → 같은 payload 두 번 와도 1회 처리.
 //
