@@ -348,6 +348,22 @@ function FilterControls({ filter, onChange }: { filter: RecipientFilter; onChang
           <option value="">상태 전체</option>
         </select>
       </div>
+      <label className="flex items-start gap-2 rounded-lg bg-bg-card p-2.5 text-xs text-ink ring-1 ring-line/15">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={filter.payout_pii_incomplete === 'true'}
+          onChange={(e) =>
+            onChange({ ...filter, payout_pii_incomplete: e.target.checked ? 'true' : null })
+          }
+        />
+        <span>
+          정산 정보 미완비 아티스트만
+          <span className="mt-0.5 block text-[11px] text-ink-dim">
+            계좌는 등록했지만 실명·주민등록번호·원천징수 동의가 없어 정산금 지급이 보류된 회원
+          </span>
+        </span>
+      </label>
       <p className="text-[11px] text-ink-dim">탈퇴·비활성·마스킹 계정과 이메일 없는 계정은 항상 자동 제외됩니다.</p>
     </div>
   );

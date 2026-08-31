@@ -11,6 +11,12 @@ export interface RecipientFilter {
   plan?: string | null;
   role?: string | null;
   status?: string | null;
+  /**
+   * 정산 정보 미완비 아티스트만 (0487).
+   * 계좌는 등록됐으나 실명·주민등록번호·원천징수 동의가 없어 지급이 보류되는 회원.
+   * 'true' 문자열로 전달한다(서버는 p_filter->>'payout_pii_incomplete' 로 읽음).
+   */
+  payout_pii_incomplete?: 'true' | null;
 }
 
 export interface RecipientPreview {
