@@ -581,7 +581,7 @@ export default function ArtistSettlementDetail({
                               {j.status === 'sent' ? '발송됨' : j.status === 'failed' ? '실패' : '대기'}
                             </span>
                             {j.status === 'failed' && j.last_error && (
-                              <p className="mt-1 max-w-[260px] truncate text-[10px] text-red-500" title={j.last_error}>
+                              <p className="mt-1 max-w-[260px] truncate text-[10px] text-rose-300" title={j.last_error}>
                                 {j.last_error}
                               </p>
                             )}
