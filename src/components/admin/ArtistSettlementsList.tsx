@@ -250,14 +250,6 @@ export default function ArtistSettlementsList() {
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>
                       {STATUS_LABEL[r.status]}
                     </span>
-                    {(r.version ?? 1) > 1 && (
-                      <span
-                        className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-900 dark:bg-indigo-500/25 dark:text-indigo-200"
-                        title={`재생성 ${(r.version ?? 1) - 1}회 — 상세에서 이전 version 조회 가능`}
-                      >
-                        v{r.version}
-                      </span>
-                    )}
                     {r.is_manual_carryover && (
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900 dark:bg-amber-500/25 dark:text-amber-200"
                             title={`수동 이월 → ${r.carried_over_to_month ?? '?'}`}>
@@ -403,7 +395,11 @@ function GenerateModal({
     if (!dryResult) return;
     if (
       !window.confirm(
-        `${monthInput} 정산서를 실제 생성합니다.\n신규: ${dryResult.generated}건, 재생성(version+1): ${dryResult.overwritten}건, 스킵(FINALIZED/PAID): ${dryResult.skipped}건.\n기존 정산은 삭제되지 않고 이전 version 으로 보존됩니다. 계속할까요?`,
+        `${monthInput} 정산서를 실제 생성합니다.\n신규: ${dryResult.generated}건, 재산정 덮어쓰기: ${dryResult.overwritten}건, 스킵(이월 완료): ${dryResult.skipped}건.` +
+          (dryResult.paid_delta_adjusted
+            ? `\n지급완료 ${dryResult.paid_delta_adjusted}건은 행을 건드리지 않고 차액 ${fmtKrw(dryResult.paid_delta_total ?? 0)} 을 다음 정산월 조정으로 등록합니다.`
+            : '') +
+          `\n덮어쓰기 전 상태는 스냅샷으로 보존됩니다. 계속할까요?`,
       )
     )
       return;
@@ -443,10 +439,10 @@ function GenerateModal({
         </div>
 
         <Alert tone="warning">
-          반드시 <strong>dry-run</strong> 으로 먼저 검토하세요.{' '}
-          <strong>PENDING 상태 정산은 재생성 시 최신 데이터로 덮어쓰기 됩니다.
-          FINALIZED/PAID 상태만 잠금됩니다.</strong>{' '}
-          기존 정산은 삭제되지 않고 version 으로 보존되며, 최신 version 만 활성화됩니다.
+          반드시 <strong>dry-run</strong> 으로 먼저 검토하세요. dry-run 과 실제 생성은 동일한 결과를 냅니다.{' '}
+          <strong>대기·보류·확정 정산은 몇 번이든 다시 돌려 최신 데이터로 재산정됩니다.</strong>{' '}
+          덮어쓰기 직전 상태는 스냅샷으로 보존되어 상세 화면에서 조회할 수 있습니다.{' '}
+          <strong>지급완료(PAID) 정산만 예외</strong> — 실제 송금 기록이라 변경하지 않고, 재산정 차액을 다음 정산월 조정으로 등록합니다.
         </Alert>
 
         <label className="block space-y-1">
@@ -491,8 +487,8 @@ function GenerateModal({
               />
               <Kv label="총 유효 스트림" value={dryResult.total_pool_streams.toLocaleString() + '건'} />
               <Kv label="신규 생성" value={`${dryResult.generated}건`} />
-              <Kv label="재생성 (version+1)" value={`${dryResult.overwritten}건`} />
-              <Kv label="스킵 (확정/지급완료)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
+              <Kv label="재산정 (덮어쓰기)" value={`${dryResult.overwritten}건`} />
+              <Kv label="스킵 (이월 완료분)" value={`${dryResult.skipped}건`} tone={dryResult.skipped > 0 ? 'text-yellow-700 dark:text-yellow-300' : ''} />
               <Kv label="지급 대상" value={`${dryResult.payable}건`} />
               <Kv label="이월 (최소 지급액 미만)" value={`${dryResult.carried_over}건`} />
               <Kv label="보류 (계좌 미인증)" value={`${dryResult.skipped_artists.filter((a) => a.reason === 'pii_incomplete').length}건`} tone={dryResult.skipped_artists.some((a) => a.reason === 'pii_incomplete') ? 'text-yellow-700 dark:text-yellow-300' : ''} />
@@ -505,10 +501,18 @@ function GenerateModal({
                 대상으로 전환됩니다.
               </Alert>
             )}
-            {dryResult.skipped_artists.filter((a) => a.reason === 'finalized_or_paid').length > 0 && (
+            {(dryResult.paid_delta_adjusted ?? 0) > 0 && (
               <Alert tone="warning">
-                <strong>{dryResult.skipped_artists.filter((a) => a.reason === 'finalized_or_paid').length}건 스킵됨</strong> — 이미
-                확정/지급된 정산은 재계산 불가. 보정이 필요하면 adjustment row 로 별도 생성하세요.
+                <strong>지급완료 {dryResult.paid_delta_adjusted}건 차액 보정</strong> — 이미 송금된 정산은 기록을 그대로 두고,
+                재산정 차액 <strong>{fmtKrw(dryResult.paid_delta_total ?? 0)}</strong> 을{' '}
+                {dryResult.paid_delta_apply_to_month?.slice(0, 7)} 정산에 조정으로 반영합니다. 여러 번 다시 돌려도 중복 적립되지
+                않습니다.
+              </Alert>
+            )}
+            {dryResult.skipped > 0 && (
+              <Alert tone="warning">
+                <strong>{dryResult.skipped}건 스킵됨</strong> — 이미 다음 달로 이월 소비된 정산입니다. 덮어쓰면 다음 달 정산이
+                어긋나므로 건너뜁니다.
               </Alert>
             )}
           </div>
