@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CreditCard, ArrowRight } from 'lucide-react';
 import { getMyEnterprisePaymentContext, type EnterprisePaymentContext } from '@/lib/enterprisePaymentApi';
 import { PAYER_TYPE_LABEL } from '@/lib/enterprisePayment';
-import { formatKRW } from '@/lib/courseProduct';
+import { formatKRW } from '@/lib/paymentFormat';
 
 /**
  * 엔터프라이즈 결제가 필요한 사용자(가입 직후 등)에게 상단에 노출되는 결제 CTA.
