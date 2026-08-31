@@ -57,6 +57,9 @@ const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
 const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/SalespersonDashboardPage'));
 const FranchiseHqDashboardPage = lazyWithRetry(() => import('@/pages/FranchiseHqDashboardPage'));
 const EnterpriseHqMePage = lazyWithRetry(() => import('@/pages/EnterpriseHqMePage'));
+const EnterprisePayPage = lazyWithRetry(() => import('@/pages/EnterprisePayPage'));
+const EnterprisePaySuccessPage = lazyWithRetry(() => import('@/pages/EnterprisePaySuccessPage'));
+const EnterprisePayFailPage = lazyWithRetry(() => import('@/pages/EnterprisePayFailPage'));
 const EnterpriseHqOpsPage = lazyWithRetry(() => import('@/pages/EnterpriseHqOpsPage'));
 const EnterpriseOpsStoresPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoresPage'));
 const EnterpriseOpsStoreDetailPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoreDetailPage'));
@@ -292,6 +295,9 @@ export default function App() {
                 <Route path="/sales" element={<RequireAuth><SalespersonDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/hq" element={<RequireAuth><FranchiseHqDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/me" element={<RequireAuth><EnterpriseHqMePage /></RequireAuth>} />
+                <Route path="/enterprise/pay" element={<RequireAuth><EnterprisePayPage /></RequireAuth>} />
+                <Route path="/enterprise/pay/success" element={<RequireAuth><EnterprisePaySuccessPage /></RequireAuth>} />
+                <Route path="/enterprise/pay/fail" element={<RequireAuth><EnterprisePayFailPage /></RequireAuth>} />
                 <Route path="/enterprise/ops" element={<RequireAuth><EnterpriseHqOpsPage /></RequireAuth>} />
                 <Route path="/enterprise/operations/stores" element={<RequireAuth><EnterpriseOpsStoresPage /></RequireAuth>} />
                 <Route path="/enterprise/operations/stores/:storeId" element={<RequireAuth><EnterpriseOpsStoreDetailPage /></RequireAuth>} />

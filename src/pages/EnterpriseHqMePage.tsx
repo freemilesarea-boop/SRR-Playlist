@@ -41,6 +41,7 @@ import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import EnterpriseHqMonthlySettlementsCard from '@/components/enterprise/EnterpriseHqMonthlySettlementsCard';
 import EnterpriseHqBillingCard from '@/components/enterprise/EnterpriseHqBillingCard';
+import EnterprisePaymentBanner from '@/components/enterprise/EnterprisePaymentBanner';
 import EnterpriseHqContractCard from '@/components/enterprise/EnterpriseHqContractCard';
 
 export default function EnterpriseHqMePage() {
@@ -73,6 +74,7 @@ export default function EnterpriseHqMePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 pt-3 pb-12 sm:px-6">
+      <EnterprisePaymentBanner />
       <div className="flex items-center gap-2">
         <Link to="/profile"
           className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover">
