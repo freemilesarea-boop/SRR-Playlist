@@ -16,6 +16,7 @@ import {
   Save, Eye,
 } from 'lucide-react';
 import EnterpriseDetailModal from '@/components/admin/EnterpriseDetailModal';
+import EnterpriseBillingConfigModal from '@/components/admin/EnterpriseBillingConfigModal';
 import {
   adminGetEnterpriseSettlement,
   adminGetEnterpriseDocuments,
@@ -93,6 +94,7 @@ export default function EnterpriseAccountsPanel() {
   const [inviteTarget, setInviteTarget] = useState<EnterpriseAccount | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<EnterpriseAccount | null>(null);
   const [detailTarget, setDetailTarget] = useState<EnterpriseAccount | null>(null);
+  const [billingTarget, setBillingTarget] = useState<EnterpriseAccount | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // 딥링크: /admin?tab=enterprise-accounts&enterpriseId=xxx → 해당 본사 상세 자동 오픈
   const [pendingDetailId, setPendingDetailId] = useState<string | null>(() => {
@@ -278,15 +280,19 @@ export default function EnterpriseAccountsPanel() {
                       <LastLoginBadge iso={r.last_login_at} />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <RowActions
-                        row={r} busy={busyId === r.id}
-                        onDetail={() => setDetailTarget(r)}
-                        onEdit={() => setEditTarget(r)}
-                        onInvite={() => setInviteTarget(r)}
-                        onSettlement={() => setSettlementTarget(r)}
-                        onSetStatus={(s) => void handleSetStatus(r.id, s)}
-                        onDelete={() => setDeleteTarget(r)}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setBillingTarget(r)}
+                          className="rounded bg-bg-deep px-2 py-1 text-[11px] font-bold text-ink-mute hover:text-ink">청구설정</button>
+                        <RowActions
+                          row={r} busy={busyId === r.id}
+                          onDetail={() => setDetailTarget(r)}
+                          onEdit={() => setEditTarget(r)}
+                          onInvite={() => setInviteTarget(r)}
+                          onSettlement={() => setSettlementTarget(r)}
+                          onSetStatus={(s) => void handleSetStatus(r.id, s)}
+                          onDelete={() => setDeleteTarget(r)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -322,6 +328,8 @@ export default function EnterpriseAccountsPanel() {
                     className="rounded bg-accent/20 px-2 py-1 text-[11px] font-bold text-accent">
                     초대코드
                   </button>
+                  <button onClick={() => setBillingTarget(r)}
+                    className="rounded bg-bg-deep px-2 py-1 text-[11px] font-bold">청구설정</button>
                   <button onClick={() => setEditTarget(r)}
                     className="flex-1 rounded bg-bg-deep px-2 py-1 text-[11px] font-bold">편집</button>
                   <button onClick={() => setDeleteTarget(r)}
@@ -361,6 +369,13 @@ export default function EnterpriseAccountsPanel() {
         <InviteCodesModal target={inviteTarget}
           onClose={() => setInviteTarget(null)}
           onRotated={() => { void load(); }} />
+      )}
+      {billingTarget && (
+        <EnterpriseBillingConfigModal
+          enterpriseAccountId={billingTarget.id}
+          enterpriseName={billingTarget.enterprise_name}
+          onClose={() => setBillingTarget(null)}
+        />
       )}
       {settlementTarget && (
         <SettlementReviewModal target={settlementTarget}
