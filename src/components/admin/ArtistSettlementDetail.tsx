@@ -6,12 +6,12 @@ import {
   adminFinalizeSettlement,
   adminMarkSettlementPaid,
   adminMarkSettlementHeld,
-  adminSettlementVersionHistory,
+  adminSettlementRevisionHistory,
   type SettlementItem,
   type SettlementStatus,
   type SettlementPayoutAccountSummary,
   type SettlementAuditLog,
-  type SettlementVersionRow,
+  type SettlementRevisionRow,
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -93,7 +93,7 @@ export default function ArtistSettlementDetail({
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [holdModalOpen, setHoldModalOpen] = useState(false);
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
-  const [versions, setVersions] = useState<SettlementVersionRow[]>([]);
+  const [versions, setVersions] = useState<SettlementRevisionRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,13 +101,9 @@ export default function ArtistSettlementDetail({
     try {
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
       setData(d);
-      // X6.45: 동일 (월, 아티스트) 의 version 이력 조회 (재생성 시 누적)
+      // 0484: 재생성 스냅샷 이력 (덮어쓰기 직전 상태가 누적됨)
       try {
-        const vs = await adminSettlementVersionHistory(
-          d.settlement.settlement_month,
-          d.settlement.artist_user_id,
-        );
-        setVersions(vs);
+        setVersions(await adminSettlementRevisionHistory(settlementId));
       } catch {
         setVersions([]);
       }
@@ -443,10 +439,10 @@ export default function ArtistSettlementDetail({
               </section>
             )}
 
-            {versions.length > 1 && (
+            {versions.length > 0 && (
               <section>
                 <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
-                  버전 이력 ({versions.length}) — 재생성 시마다 version+1, 최신만 활성
+                  재생성 이력 ({versions.length}회) — 덮어쓰기 직전 상태가 스냅샷으로 보존됩니다
                 </h5>
                 <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">
                   <table className="w-full text-xs">
@@ -460,26 +456,42 @@ export default function ArtistSettlementDetail({
                       </tr>
                     </thead>
                     <tbody>
+                      <tr className="border-b border-line/10 bg-accent/5 last:border-b-0">
+                        <td className="px-3 py-2 font-mono">
+                          v{versions.length + 1}
+                          <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:bg-emerald-500/25 dark:text-emerald-300">
+                            현재
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">
+                          {data.settlement.status}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtKrw(data.settlement.total_settlement_amount)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtKrw(data.settlement.final_payout_amount)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
+                          {versions.length > 0
+                            ? `${new Date(versions[0].superseded_at).toLocaleString('ko-KR')} 재산정`
+                            : '최초 산정'}
+                        </td>
+                      </tr>
                       {versions.map((v) => (
-                        <tr
-                          key={v.id}
-                          className={`border-b border-line/10 last:border-b-0 ${
-                            v.id === data.settlement.id ? 'bg-accent/5' : ''
-                          }`}
-                        >
-                          <td className="px-3 py-2 font-mono">
-                            v{v.version}
-                            {v.is_current && (
-                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300">
-                                현재
-                              </span>
-                            )}
+                        <tr key={v.revision} className="border-b border-line/10 last:border-b-0">
+                          <td className="px-3 py-2 font-mono text-ink-mute">v{v.revision}</td>
+                          <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">
+                            {String(v.snapshot.status ?? '-')}
                           </td>
-                          <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">{v.status}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.total_settlement_amount)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.final_payout_amount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-ink-mute">
+                            {fmtKrw(Number(v.snapshot.total_settlement_amount ?? 0))}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-ink-mute">
+                            {fmtKrw(Number(v.snapshot.final_payout_amount ?? 0))}
+                          </td>
                           <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
-                            {new Date(v.created_at).toLocaleString('ko-KR')}
+                            {new Date(v.superseded_at).toLocaleString('ko-KR')} 대체됨
                           </td>
                         </tr>
                       ))}
@@ -487,7 +499,7 @@ export default function ArtistSettlementDetail({
                   </table>
                 </div>
                 <p className="mt-1 text-[10px] text-ink-dim">
-                  ※ 이전 version 은 봉인되어 finalize/지급 처리할 수 없습니다.
+                  ※ 이전 버전은 재생성 직전 스냅샷(읽기 전용)입니다. 현재 행만 finalize/지급 대상입니다.
                 </p>
               </section>
             )}
