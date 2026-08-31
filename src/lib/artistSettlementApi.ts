@@ -53,31 +53,18 @@ export interface AdminSettlementRow {
   // X6.28/X6.29 — auto-merge 추적 + paid 후 메모
   merged_into_settlement_id: string | null;
   payout_memo: string | null;
-  // X6.45 — 버전 관리 (pending/held 재생성 시 version+1, 최신만 is_current)
-  version: number;
-  is_current: boolean;
 }
 
-/** X6.45 — 동일 (월, 아티스트) 의 정산 version 이력 1건 */
-export interface SettlementVersionRow {
-  id: string;
-  settlement_month: string;
-  artist_user_id: string;
-  version: number;
-  is_current: boolean;
-  status: SettlementStatus;
-  gross_settlement_amount: number;
-  artist_net_settlement: number;
-  previous_carried_amount: number;
-  total_settlement_amount: number;
-  withholding_tax_amount: number;
-  final_payout_amount: number;
-  carried_over_amount: number;
-  meets_min_payout: boolean;
-  created_at: string;
-  updated_at: string | null;
-  finalized_at: string | null;
-  paid_at: string | null;
+/** 정산 재생성 이력 1건 — 덮어쓰기 직전 스냅샷 (0484). */
+export interface SettlementRevisionRow {
+  revision: number;
+  superseded_at: string;
+  superseded_by: string | null;
+  reason: string | null;
+  /** 덮어쓰기 직전의 artist_settlements 행 전체 */
+  snapshot: Record<string, unknown>;
+  /** 그 시점의 settlement_items 배열 */
+  items_snapshot: Array<Record<string, unknown>>;
 }
 
 export interface SettlementItem {
@@ -106,16 +93,41 @@ export interface GenerateSettlementResult {
   skipped: number;
   payable: number;
   carried_over: number;
+  held_pii_incomplete?: number;
   total_gross: number;
   total_company_fee: number;
   total_sales_agent_fee: number;
   total_final_payout: number;
   total_carried_over: number;
+  /** 지급완료(paid) 정산 재산정 차액을 조정 원장에 올린 건수 (0484) */
+  paid_delta_adjusted?: number;
+  /** 그 차액 합계 (원) */
+  paid_delta_total?: number;
+  /** 차액이 반영될 정산월 (YYYY-MM-DD) */
+  paid_delta_apply_to_month?: string;
   skipped_artists: Array<{
     artist_user_id: string;
     existing_status: string;
     reason: string;
+    /** reason='paid_immutable_delta_adjusted' 일 때의 차액 */
+    delta?: number;
   }>;
+}
+
+export interface PendingSettlementAlert {
+  has_pending: boolean;
+  settlement_month: string | null;
+  pending_count: number;
+  held_count: number;
+  total_amount: number;
+}
+
+/** 관리자 배너용 — 지급 대기(pending/held) 최신 정산월 + 건수. 관리자만. */
+export async function adminPendingSettlementAlert(): Promise<PendingSettlementAlert | null> {
+  const { data, error } = await supabase.rpc('admin_pending_settlement_alert');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row ?? null) as PendingSettlementAlert | null;
 }
 
 export interface MySettlementRow {
@@ -209,20 +221,70 @@ export async function adminListSettlements(opts?: {
   return (data ?? []) as AdminSettlementRow[];
 }
 
+/** 지급명세서 발송 잡 1건 (0486). */
+export interface SettlementStatementJob {
+  id: string;
+  status: 'pending' | 'sent' | 'failed' | 'canceled';
+  recipient_email: string;
+  subject: string;
+  attempts: number;
+  last_error: string | null;
+  sent_at: string | null;
+  pdf_path: string | null;
+  created_at: string;
+}
+
 /**
- * 동일 (월, 아티스트) 정산의 전체 version 이력 조회 (관리자).
- * 최신 version 이 is_current=true. 재생성 시마다 version+1 이 쌓임.
+ * 지급명세서 발송 큐잉 (관리자). 지급완료(paid) 정산만 대상.
+ * 발송 시점의 금액·트랙 내역이 스냅샷으로 동결된다 — 이후 재산정돼도 보낸 문서는 불변.
  */
-export async function adminSettlementVersionHistory(
-  settlementMonth: string,
-  artistUserId: string,
-): Promise<SettlementVersionRow[]> {
-  const { data, error } = await supabase.rpc('admin_settlement_version_history', {
-    p_settlement_month: settlementMonth,
-    p_artist_user_id: artistUserId,
+export async function adminQueueSettlementStatement(
+  settlementId: string,
+  opts: { recipientEmail?: string; resend?: boolean } = {},
+): Promise<{ ok: boolean; job_id: string; recipient_email: string }> {
+  const { data, error } = await supabase.rpc('admin_queue_settlement_statement', {
+    p_settlement_id: settlementId,
+    p_recipient_email: opts.recipientEmail ?? null,
+    p_resend: opts.resend ?? false,
   });
   if (error) throw error;
-  return (data ?? []) as SettlementVersionRow[];
+  return data as { ok: boolean; job_id: string; recipient_email: string };
+}
+
+/** 해당 정산의 명세서 발송 이력 (관리자). */
+export async function adminSettlementStatementJobs(
+  settlementId: string,
+): Promise<SettlementStatementJob[]> {
+  const { data, error } = await supabase.rpc('admin_settlement_statement_jobs', {
+    p_settlement_id: settlementId,
+  });
+  if (error) throw error;
+  return (data ?? []) as SettlementStatementJob[];
+}
+
+/** 큐잉된 명세서를 실제 발송 (PDF 생성 → 메일). edge function 호출. */
+export async function adminDispatchSettlementStatement(
+  jobId: string,
+): Promise<{ ok: boolean; sent: number; failed: number; results: Array<{ ok: boolean; error?: string }> }> {
+  const { data, error } = await supabase.functions.invoke('dispatch-settlement-statements', {
+    body: { job_id: jobId },
+  });
+  if (error) throw error;
+  return data as { ok: boolean; sent: number; failed: number; results: Array<{ ok: boolean; error?: string }> };
+}
+
+/**
+ * 정산 재생성 이력 조회 (관리자).
+ * 재생성 때마다 덮어쓰기 직전 상태가 스냅샷으로 쌓인다 (append-only).
+ */
+export async function adminSettlementRevisionHistory(
+  settlementId: string,
+): Promise<SettlementRevisionRow[]> {
+  const { data, error } = await supabase.rpc('admin_settlement_revision_history', {
+    p_settlement_id: settlementId,
+  });
+  if (error) throw error;
+  return (data ?? []) as SettlementRevisionRow[];
 }
 
 export interface SettlementPayoutAccountSummary {

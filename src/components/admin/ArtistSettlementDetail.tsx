@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Check, Pause, AlertTriangle, FileText, ArrowRightCircle } from 'lucide-react';
+import { X, Check, Pause, AlertTriangle, FileText, ArrowRightCircle, Mail } from 'lucide-react';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   adminSettlementDetail,
   adminFinalizeSettlement,
   adminMarkSettlementPaid,
   adminMarkSettlementHeld,
-  adminSettlementVersionHistory,
+  adminSettlementRevisionHistory,
+  adminQueueSettlementStatement,
+  adminSettlementStatementJobs,
+  adminDispatchSettlementStatement,
   type SettlementItem,
   type SettlementStatus,
   type SettlementPayoutAccountSummary,
   type SettlementAuditLog,
-  type SettlementVersionRow,
+  type SettlementRevisionRow,
+  type SettlementStatementJob,
 } from '@/lib/artistSettlementApi';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -93,7 +97,8 @@ export default function ArtistSettlementDetail({
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [holdModalOpen, setHoldModalOpen] = useState(false);
   const [carryoverModalOpen, setCarryoverModalOpen] = useState(false);
-  const [versions, setVersions] = useState<SettlementVersionRow[]>([]);
+  const [versions, setVersions] = useState<SettlementRevisionRow[]>([]);
+  const [stmtJobs, setStmtJobs] = useState<SettlementStatementJob[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,15 +106,17 @@ export default function ArtistSettlementDetail({
     try {
       const d = (await adminSettlementDetail(settlementId)) as unknown as DetailData;
       setData(d);
-      // X6.45: 동일 (월, 아티스트) 의 version 이력 조회 (재생성 시 누적)
+      // 0484: 재생성 스냅샷 이력 (덮어쓰기 직전 상태가 누적됨)
       try {
-        const vs = await adminSettlementVersionHistory(
-          d.settlement.settlement_month,
-          d.settlement.artist_user_id,
-        );
-        setVersions(vs);
+        setVersions(await adminSettlementRevisionHistory(settlementId));
       } catch {
         setVersions([]);
+      }
+      // 0486: 지급명세서 발송 이력
+      try {
+        setStmtJobs(await adminSettlementStatementJobs(settlementId));
+      } catch {
+        setStmtJobs([]);
       }
     } catch (e) {
       setError(friendlyError(e));
@@ -131,6 +138,42 @@ export default function ArtistSettlementDetail({
       onChanged?.();
     } catch (e) {
       toast.error(friendlyError(e, 'Finalize 실패'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 0486: 지급명세서 발송 — 큐잉 후 즉시 발송(PDF 생성 → 메일). 실패해도 지급 상태는 불변.
+  async function handleSendStatement(overrideEmail?: string) {
+    if (!data) return;
+    const alreadySent = stmtJobs.some((j) => j.status === 'sent');
+    const to = data.payout_account?.account_holder ?? '아티스트';
+    if (
+      !window.confirm(
+        overrideEmail
+          ? `테스트 발송: ${overrideEmail} 로 명세서를 보냅니다.\n아티스트에게는 발송되지 않습니다.`
+          : `${to} 님에게 ${data.settlement.settlement_month.slice(0, 7)} 정산 지급명세서를 발송합니다.\n` +
+            `수신 이메일은 정산 산정 시점에 저장된 아티스트 이메일입니다.\n` +
+            `실지급액 ${fmtKrw(data.settlement.final_payout_amount)} · 원천징수 내역과 트랙별 스트리밍 내역서가 PDF로 첨부됩니다.` +
+            (alreadySent ? '\n\n⚠ 이미 발송된 명세서입니다. 재발송하시겠습니까?' : ''),
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const q = await adminQueueSettlementStatement(settlementId, {
+        resend: alreadySent || Boolean(overrideEmail),
+        recipientEmail: overrideEmail,
+      });
+      const r = await adminDispatchSettlementStatement(q.job_id);
+      if (r.sent > 0) {
+        toast.success(`명세서를 ${q.recipient_email} 로 발송했어요.`);
+      } else {
+        toast.error(`발송 실패: ${r.results?.[0]?.error ?? '알 수 없는 오류'}`);
+      }
+      setStmtJobs(await adminSettlementStatementJobs(settlementId));
+    } catch (e) {
+      toast.error(friendlyError(e, '명세서 발송 실패'));
     } finally {
       setBusy(false);
     }
@@ -443,10 +486,10 @@ export default function ArtistSettlementDetail({
               </section>
             )}
 
-            {versions.length > 1 && (
+            {versions.length > 0 && (
               <section>
                 <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
-                  버전 이력 ({versions.length}) — 재생성 시마다 version+1, 최신만 활성
+                  재생성 이력 ({versions.length}회) — 덮어쓰기 직전 상태가 스냅샷으로 보존됩니다
                 </h5>
                 <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">
                   <table className="w-full text-xs">
@@ -460,26 +503,42 @@ export default function ArtistSettlementDetail({
                       </tr>
                     </thead>
                     <tbody>
+                      <tr className="border-b border-line/10 bg-accent/5 last:border-b-0">
+                        <td className="px-3 py-2 font-mono">
+                          v{versions.length + 1}
+                          <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:bg-emerald-500/25 dark:text-emerald-300">
+                            현재
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">
+                          {data.settlement.status}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtKrw(data.settlement.total_settlement_amount)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtKrw(data.settlement.final_payout_amount)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
+                          {versions.length > 0
+                            ? `${new Date(versions[0].superseded_at).toLocaleString('ko-KR')} 재산정`
+                            : '최초 산정'}
+                        </td>
+                      </tr>
                       {versions.map((v) => (
-                        <tr
-                          key={v.id}
-                          className={`border-b border-line/10 last:border-b-0 ${
-                            v.id === data.settlement.id ? 'bg-accent/5' : ''
-                          }`}
-                        >
-                          <td className="px-3 py-2 font-mono">
-                            v{v.version}
-                            {v.is_current && (
-                              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 dark:text-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-300">
-                                현재
-                              </span>
-                            )}
+                        <tr key={v.revision} className="border-b border-line/10 last:border-b-0">
+                          <td className="px-3 py-2 font-mono text-ink-mute">v{v.revision}</td>
+                          <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">
+                            {String(v.snapshot.status ?? '-')}
                           </td>
-                          <td className="px-3 py-2 font-mono text-[10px] uppercase text-ink-mute">{v.status}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.total_settlement_amount)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{fmtKrw(v.final_payout_amount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-ink-mute">
+                            {fmtKrw(Number(v.snapshot.total_settlement_amount ?? 0))}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-ink-mute">
+                            {fmtKrw(Number(v.snapshot.final_payout_amount ?? 0))}
+                          </td>
                           <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
-                            {new Date(v.created_at).toLocaleString('ko-KR')}
+                            {new Date(v.superseded_at).toLocaleString('ko-KR')} 대체됨
                           </td>
                         </tr>
                       ))}
@@ -487,8 +546,55 @@ export default function ArtistSettlementDetail({
                   </table>
                 </div>
                 <p className="mt-1 text-[10px] text-ink-dim">
-                  ※ 이전 version 은 봉인되어 finalize/지급 처리할 수 없습니다.
+                  ※ 이전 버전은 재생성 직전 스냅샷(읽기 전용)입니다. 현재 행만 finalize/지급 대상입니다.
                 </p>
+              </section>
+            )}
+
+            {stmtJobs.length > 0 && (
+              <section>
+                <h5 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  지급명세서 발송 이력 ({stmtJobs.length})
+                </h5>
+                <div className="overflow-hidden rounded-xl bg-bg-card ring-1 ring-line/10">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
+                      <tr>
+                        <th className="px-3 py-2 text-left">상태</th>
+                        <th className="px-3 py-2 text-left">수신</th>
+                        <th className="px-3 py-2 text-right">발송 시각</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stmtJobs.map((j) => (
+                        <tr key={j.id} className="border-b border-line/10 last:border-b-0">
+                          <td className="px-3 py-2">
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                                j.status === 'sent'
+                                  ? 'bg-emerald-100 text-slate-900 dark:bg-emerald-500/25 dark:text-emerald-300'
+                                  : j.status === 'failed'
+                                    ? 'bg-red-100 text-slate-900 dark:bg-red-500/25 dark:text-red-300'
+                                    : 'bg-amber-100 text-slate-900 dark:bg-amber-500/25 dark:text-amber-300'
+                              }`}
+                            >
+                              {j.status === 'sent' ? '발송됨' : j.status === 'failed' ? '실패' : '대기'}
+                            </span>
+                            {j.status === 'failed' && j.last_error && (
+                              <p className="mt-1 max-w-[260px] truncate text-[10px] text-rose-300" title={j.last_error}>
+                                {j.last_error}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-ink-mute">{j.recipient_email}</td>
+                          <td className="px-3 py-2 text-right text-[10px] text-ink-dim">
+                            {j.sent_at ? new Date(j.sent_at).toLocaleString('ko-KR') : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             )}
 
@@ -539,6 +645,32 @@ export default function ArtistSettlementDetail({
                   className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-50"
                 >
                   <Pause size={12} /> 보류
+                </button>
+              )}
+              {data.settlement.status === 'paid' && (
+                <button
+                  onClick={() => {
+                    const email = window.prompt(
+                      '테스트로 명세서를 받아볼 이메일을 입력하세요.\n(아티스트에게는 발송되지 않습니다 — PDF 레이아웃 확인용)',
+                    );
+                    if (email && email.includes('@')) void handleSendStatement(email.trim());
+                  }}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-lg bg-bg-card px-4 py-2 text-xs font-bold text-ink ring-1 ring-line/20 hover:bg-bg-hover disabled:opacity-50"
+                  title="지정한 이메일로만 보내 PDF 레이아웃을 먼저 확인합니다"
+                >
+                  <Mail size={12} /> 테스트 발송
+                </button>
+              )}
+              {data.settlement.status === 'paid' && (
+                <button
+                  onClick={() => void handleSendStatement()}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50"
+                  title="원천징수 내역 + 트랙별 스트리밍 내역서를 PDF로 첨부해 아티스트 이메일로 발송"
+                >
+                  <Mail size={12} />
+                  {stmtJobs.some((j) => j.status === 'sent') ? '명세서 재발송' : '명세서 발송'}
                 </button>
               )}
               {data.settlement.status === 'paid' && (

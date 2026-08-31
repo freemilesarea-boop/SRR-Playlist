@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
@@ -34,6 +34,10 @@ const TrackSharePage = lazyWithRetry(() => import('@/pages/TrackSharePage'));
 const CuratorProfilePage = lazyWithRetry(() => import('@/pages/CuratorProfilePage'));
 const PaymentSuccessPage = lazyWithRetry(() => import('@/pages/PaymentSuccessPage'));
 const PaymentFailPage = lazyWithRetry(() => import('@/pages/PaymentFailPage'));
+const CoursesPage = lazyWithRetry(() => import('@/pages/CoursesPage'));
+const CourseEnrollSuccessPage = lazyWithRetry(() => import('@/pages/CourseEnrollSuccessPage'));
+const CourseEnrollFailPage = lazyWithRetry(() => import('@/pages/CourseEnrollFailPage'));
+const ArtistLayout = lazyWithRetry(() => import('@/components/artist/ArtistLayout'));
 const ArtistDashboardPage = lazyWithRetry(() => import('@/pages/ArtistDashboardPage'));
 const ArtistContractPage = lazyWithRetry(() => import('@/pages/ArtistContractPage'));
 const ArtistSettlementsPage = lazyWithRetry(() => import('@/pages/ArtistSettlementsPage'));
@@ -53,6 +57,9 @@ const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
 const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/SalespersonDashboardPage'));
 const FranchiseHqDashboardPage = lazyWithRetry(() => import('@/pages/FranchiseHqDashboardPage'));
 const EnterpriseHqMePage = lazyWithRetry(() => import('@/pages/EnterpriseHqMePage'));
+const EnterprisePayPage = lazyWithRetry(() => import('@/pages/EnterprisePayPage'));
+const EnterprisePaySuccessPage = lazyWithRetry(() => import('@/pages/EnterprisePaySuccessPage'));
+const EnterprisePayFailPage = lazyWithRetry(() => import('@/pages/EnterprisePayFailPage'));
 const EnterpriseHqOpsPage = lazyWithRetry(() => import('@/pages/EnterpriseHqOpsPage'));
 const EnterpriseOpsStoresPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoresPage'));
 const EnterpriseOpsStoreDetailPage = lazyWithRetry(() => import('@/pages/EnterpriseOpsStoreDetailPage'));
@@ -162,6 +169,15 @@ export default function App() {
     clearChunkReloadFlag();
   }, [init]);
 
+  // 네이티브 앱(Capacitor) OAuth 딥링크 콜백 → 코드 교환 후 라우팅. 웹에서는 no-op.
+  const navigate = useNavigate();
+  useEffect(() => {
+    void (async () => {
+      const { initNativeAuthDeepLink } = await import('@/lib/nativeAuth');
+      await initNativeAuthDeepLink((path) => navigate(path, { replace: true }));
+    })();
+  }, [navigate]);
+
   // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
   useEffect(() => installUnloadGuard(), []);
 
@@ -258,9 +274,15 @@ export default function App() {
                 {/* ---- 보호 (로그인 필요) ---- */}
                 <Route path="/payment/success" element={<RequireAuth><PaymentSuccessPage /></RequireAuth>} />
                 <Route path="/payment/fail" element={<RequireAuth><PaymentFailPage /></RequireAuth>} />
-                <Route path="/artist" element={<RequireAuth><ArtistDashboardPage /></RequireAuth>} />
-                <Route path="/artist/contract" element={<RequireAuth><ArtistContractPage /></RequireAuth>} />
-                <Route path="/artist/settlements" element={<RequireAuth><ArtistSettlementsPage /></RequireAuth>} />
+                <Route path="/courses" element={<RequireAuth><CoursesPage /></RequireAuth>} />
+                <Route path="/enroll/success" element={<RequireAuth><CourseEnrollSuccessPage /></RequireAuth>} />
+                <Route path="/enroll/fail" element={<RequireAuth><CourseEnrollFailPage /></RequireAuth>} />
+                {/* 아티스트 라우트는 공통 ArtistLayout 하위로 — 최상단 결제 제한 배너 항상 표시 */}
+                <Route element={<RequireAuth><ArtistLayout /></RequireAuth>}>
+                  <Route path="/artist" element={<ArtistDashboardPage />} />
+                  <Route path="/artist/contract" element={<ArtistContractPage />} />
+                  <Route path="/artist/settlements" element={<ArtistSettlementsPage />} />
+                </Route>
                 <Route path="/business" element={<RequireAuth><BusinessPage /></RequireAuth>} />
                 <Route path="/business/player" element={<RequireAuth><StorePlayerPage /></RequireAuth>} />
                 <Route path="/brand" element={<RequireAuth><BrandPage /></RequireAuth>} />
@@ -273,6 +295,9 @@ export default function App() {
                 <Route path="/sales" element={<RequireAuth><SalespersonDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/hq" element={<RequireAuth><FranchiseHqDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/me" element={<RequireAuth><EnterpriseHqMePage /></RequireAuth>} />
+                <Route path="/enterprise/pay" element={<RequireAuth><EnterprisePayPage /></RequireAuth>} />
+                <Route path="/enterprise/pay/success" element={<RequireAuth><EnterprisePaySuccessPage /></RequireAuth>} />
+                <Route path="/enterprise/pay/fail" element={<RequireAuth><EnterprisePayFailPage /></RequireAuth>} />
                 <Route path="/enterprise/ops" element={<RequireAuth><EnterpriseHqOpsPage /></RequireAuth>} />
                 <Route path="/enterprise/operations/stores" element={<RequireAuth><EnterpriseOpsStoresPage /></RequireAuth>} />
                 <Route path="/enterprise/operations/stores/:storeId" element={<RequireAuth><EnterpriseOpsStoreDetailPage /></RequireAuth>} />

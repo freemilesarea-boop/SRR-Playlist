@@ -44,6 +44,7 @@ import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
 import PushNotificationToggle from '@/components/PushNotificationToggle';
 import EnterpriseHqProfileCard from '@/components/profile/EnterpriseHqProfileCard';
 import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCard';
+import EnterprisePaymentBanner from '@/components/enterprise/EnterprisePaymentBanner';
 import AudioOutputSection from '@/components/settings/AudioOutputSection';
 import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import {
@@ -208,6 +209,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-8 px-4 pb-8 pt-6 sm:px-6">
+      <EnterprisePaymentBanner />
       <header className="flex items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-2xl font-bold text-bg">
           {(profile?.nickname ?? user?.email ?? '?').slice(0, 1).toUpperCase()}

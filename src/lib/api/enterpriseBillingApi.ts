@@ -209,6 +209,62 @@ export async function updateBillingInvoiceAdjustments(
 }
 
 // =============================================================================
+// 일괄청구(consolidated billing) — 토글 + 실시간 청구예정액
+// SQL: supabase/migrations/0479_enterprise_consolidated_billing.sql
+// =============================================================================
+
+export interface ConsolidatedBillingPreviewRow {
+  enterprise_account_id: string;
+  enterprise_name: string | null;
+  brand_code: string | null;
+  consolidated_billing_enabled: boolean;
+  active_store_count: number;
+  monthly_store_price: number;
+  projected_amount: number;              // 활성매장 × 단가 (실시간)
+  current_month: string;                 // YYYY-MM-01
+  current_invoice_id: string | null;
+  current_invoice_status: BillingInvoiceStatus | null;
+  current_invoice_total: number | null;
+}
+
+/** 활성 본사별 실시간 청구예정액 + 일괄청구 on/off 상태 (관리자 전용). */
+export async function getConsolidatedBillingPreview(): Promise<ConsolidatedBillingPreviewRow[]> {
+  const { data, error } = await supabase.rpc('admin_enterprise_consolidated_billing_preview');
+  if (error) { console.error('[billingApi] consolidated preview failed', error); throw error; }
+  return (data ?? []) as ConsolidatedBillingPreviewRow[];
+}
+
+/** 브랜드(본사) 일괄청구 대상 on/off 토글 (관리자 전용). */
+export async function setEnterpriseConsolidatedBilling(
+  enterpriseAccountId: string,
+  enabled: boolean,
+): Promise<{ success: boolean; enterprise_account_id: string; enabled: boolean }> {
+  const { data, error } = await supabase.rpc('admin_set_enterprise_consolidated_billing', {
+    p_enterprise_account_id: enterpriseAccountId,
+    p_enabled:               enabled,
+  });
+  if (error) { console.error('[billingApi] set consolidated failed', error); throw error; }
+  return data as { success: boolean; enterprise_account_id: string; enabled: boolean };
+}
+
+/**
+ * 본사의 '브랜드 진입 코드'(읽기 쉬운 brand_code) 설정/변경/제거 (관리자 전용).
+ * 가맹점주가 이 코드로 매장 플레이어 진입 + 가입한다(예: REFINE, 카공시대).
+ * 빈 문자열/undefined → 코드 제거. 대소문자 무시 유니크.
+ */
+export async function setEnterpriseBrandCode(
+  enterpriseAccountId: string,
+  brandCode: string | null,
+): Promise<{ success: boolean; enterprise_account_id: string; brand_code: string | null }> {
+  const { data, error } = await supabase.rpc('admin_set_enterprise_brand_code', {
+    p_enterprise_account_id: enterpriseAccountId,
+    p_brand_code:            brandCode ?? null,
+  });
+  if (error) { console.error('[billingApi] set brand_code failed', error); throw error; }
+  return data as { success: boolean; enterprise_account_id: string; brand_code: string | null };
+}
+
+// =============================================================================
 // HQ read-only
 // =============================================================================
 
