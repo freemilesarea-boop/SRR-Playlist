@@ -4,7 +4,7 @@ import { Building2, Loader2, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { formatKRW, normalizePhone } from '@/lib/courseProduct';
+import { formatKRW, normalizePhone } from '@/lib/paymentFormat';
 import { PAYER_TYPE_LABEL } from '@/lib/enterprisePayment';
 import {
   getMyEnterprisePaymentContext, createEnterprisePayment,

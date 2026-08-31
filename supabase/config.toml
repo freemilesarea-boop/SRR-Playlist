@@ -70,10 +70,6 @@ verify_jwt = false
 [functions.broadcast-unsubscribe]
 verify_jwt = false
 
-# 수강신청 PayApp 웹훅 — PayApp 이 JWT 없이 POST 하므로 공개.
-[functions.payapp-course-feedback]
-verify_jwt = false
-
 # 엔터프라이즈 정기결제 PayApp 웹훅 — 공개.
 [functions.enterprise-payment-feedback]
 verify_jwt = false

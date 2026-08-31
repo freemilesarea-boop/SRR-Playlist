@@ -16,7 +16,7 @@ import {
 
 // AdminPage TABS 의 실제 key 목록(회귀 방지 — 무손실 재배치 검증용).
 const EXISTING_TAB_KEYS = [
-  'dashboard', 'business-live', 'brand-player', 'support-inquiries', 'members', 'member-broadcast', 'course-products', 'curators',
+  'dashboard', 'business-live', 'brand-player', 'support-inquiries', 'members', 'member-broadcast', 'curators',
   'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements',
   'store-monitoring', 'store-now-playing', 'policy-deployment', 'policy-automation',
   'enterprise-announcements', 'enterprise-emergency', 'enterprise-noc', 'enterprise-command-center',

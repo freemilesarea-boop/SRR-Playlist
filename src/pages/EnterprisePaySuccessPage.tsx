@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, Clock, ArrowRight } from 'lucide-react';
 import { getMyEnterpriseOrderStatus, type EnterpriseOrderStatus } from '@/lib/enterprisePaymentApi';
-import { formatKRW } from '@/lib/courseProduct';
+import { formatKRW } from '@/lib/paymentFormat';
 
 export default function EnterprisePaySuccessPage() {
   const [params] = useSearchParams();
