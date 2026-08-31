@@ -221,6 +221,58 @@ export async function adminListSettlements(opts?: {
   return (data ?? []) as AdminSettlementRow[];
 }
 
+/** 지급명세서 발송 잡 1건 (0486). */
+export interface SettlementStatementJob {
+  id: string;
+  status: 'pending' | 'sent' | 'failed' | 'canceled';
+  recipient_email: string;
+  subject: string;
+  attempts: number;
+  last_error: string | null;
+  sent_at: string | null;
+  pdf_path: string | null;
+  created_at: string;
+}
+
+/**
+ * 지급명세서 발송 큐잉 (관리자). 지급완료(paid) 정산만 대상.
+ * 발송 시점의 금액·트랙 내역이 스냅샷으로 동결된다 — 이후 재산정돼도 보낸 문서는 불변.
+ */
+export async function adminQueueSettlementStatement(
+  settlementId: string,
+  opts: { recipientEmail?: string; resend?: boolean } = {},
+): Promise<{ ok: boolean; job_id: string; recipient_email: string }> {
+  const { data, error } = await supabase.rpc('admin_queue_settlement_statement', {
+    p_settlement_id: settlementId,
+    p_recipient_email: opts.recipientEmail ?? null,
+    p_resend: opts.resend ?? false,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; job_id: string; recipient_email: string };
+}
+
+/** 해당 정산의 명세서 발송 이력 (관리자). */
+export async function adminSettlementStatementJobs(
+  settlementId: string,
+): Promise<SettlementStatementJob[]> {
+  const { data, error } = await supabase.rpc('admin_settlement_statement_jobs', {
+    p_settlement_id: settlementId,
+  });
+  if (error) throw error;
+  return (data ?? []) as SettlementStatementJob[];
+}
+
+/** 큐잉된 명세서를 실제 발송 (PDF 생성 → 메일). edge function 호출. */
+export async function adminDispatchSettlementStatement(
+  jobId: string,
+): Promise<{ ok: boolean; sent: number; failed: number; results: Array<{ ok: boolean; error?: string }> }> {
+  const { data, error } = await supabase.functions.invoke('dispatch-settlement-statements', {
+    body: { job_id: jobId },
+  });
+  if (error) throw error;
+  return data as { ok: boolean; sent: number; failed: number; results: Array<{ ok: boolean; error?: string }> };
+}
+
 /**
  * 정산 재생성 이력 조회 (관리자).
  * 재생성 때마다 덮어쓰기 직전 상태가 스냅샷으로 쌓인다 (append-only).
