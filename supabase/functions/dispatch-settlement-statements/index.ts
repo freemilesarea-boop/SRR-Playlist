@@ -27,8 +27,10 @@ const MODULE_LOAD_AT = new Date().toISOString();
 const BUCKET = 'settlement-statements';
 const RESEND_FROM_FALLBACK = '듣다 <no-reply@deudda.com>';
 
+// 렌더링 실측 검증을 마친 파일로 고정한다(버전 핀). 다른 빌드로 바꾸면
+// 글리프 누락·공백 폭 문제가 재발할 수 있으므로 교체 시 반드시 재검증할 것.
 const NOTO_SANS_KR_URL =
-  'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/OTF/Korean/NotoSansKR-Regular.otf';
+  'https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans-kr@0.4.3/400Regular/NotoSansKR_400Regular.ttf';
 let cachedFontBytes: Uint8Array | null = null;
 
 async function loadKoreanFont(): Promise<Uint8Array> {
@@ -108,7 +110,10 @@ interface Snapshot {
 async function buildPdf(s: Snapshot): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const kor = await pdf.embedFont(await loadKoreanFont(), { subset: true });
+  // subset:true 는 pdf-lib 의 CJK 서브셋 처리 결함으로 글리프가 통째로 누락된다
+  // (실측: '정산 지급명세서'→'지급명세', '27,107 원'→'7 7'). 전체 임베드가 유일한 안전책.
+  // 대가로 PDF 가 약 3MB 가 되지만 메일 첨부 한도 내이며, 문서 정확성이 우선이다.
+  const kor = await pdf.embedFont(await loadKoreanFont(), { subset: false });
   const mono = await pdf.embedFont(StandardFonts.Helvetica);
 
   const black = rgb(0.09, 0.09, 0.11);
@@ -120,11 +125,27 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
   const MX = 48;
   const taxPct = ((Number(s.withholding_tax_ratio) || 0.033) * 100).toFixed(1);
 
-  let page = pdf.addPage([W, H]);
+  let page;            // header() 가 첫 페이지를 만든다 (여기서 만들면 1면이 백지가 된다)
   let y = 0;
 
-  const text = (t: string, x: number, yy: number, size = 10, color = ink, font = kor) =>
-    page.drawText(t ?? '', { x, y: yy, size, font, color });
+  // 임베디드 CJK 폰트의 space 글리프 폭이 뷰어에서 어긋나 어절 사이가 벌어진다.
+  // 공백은 글리프로 그리지 않고 어절을 직접 배치한다.
+  const SPACE_EM = 0.26;
+  const widthOf = (t: string, size: number, font: any) =>
+    String(t ?? '').split(' ').reduce(
+      (w, seg, i) => w + font.widthOfTextAtSize(seg, size) + (i ? size * SPACE_EM : 0), 0);
+  const text = (t: string, x: number, yy: number, size = 10, color = ink, font = kor) => {
+    const str = String(t ?? '');
+    if (!str.includes(' ')) { page.drawText(str, { x, y: yy, size, font, color }); return; }
+    let cx = x;
+    for (const seg of str.split(' ')) {
+      if (seg) { page.drawText(seg, { x: cx, y: yy, size, font, color }); cx += font.widthOfTextAtSize(seg, size); }
+      cx += size * SPACE_EM;
+    }
+  };
+  // 우측 정렬 — 글자수 추정이 아니라 실제 폭으로 배치
+  const textR = (t: string, right: number, yy: number, size = 10, color = ink, font = kor) =>
+    text(t, right - widthOf(t, size, font), yy, size, color, font);
   const hline = (yy: number, thickness = 0.5, color = line) =>
     page.drawLine({ start: { x: MX, y: yy }, end: { x: W - MX, y: yy }, thickness, color });
 
@@ -166,14 +187,14 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
     if (opts.note) text(opts.note, MX + 150, y, 8, ink);
     const v = (opts.sign && value > 0 ? '- ' : '') + won(value);
     const size = opts.strong ? 11 : 10;
-    text(v, W - MX - (size * 0.55 * v.length), y, size, opts.strong ? black : c, kor);
+    textR(v, W - MX, y, size, opts.strong ? black : c, kor);
     y -= 19;
   };
 
   // 총 유효 스트림
   text('총 유효 스트림', MX, y, 10, ink);
   const tsHead = `${int(s.total_streams)} 회`;
-  text(tsHead, W - MX - (10 * 0.55 * tsHead.length), y, 10, ink, kor);
+  textR(tsHead, W - MX, y, 10, ink, kor);
   y -= 19;
 
   y -= 2; hline(y); y -= 18;
@@ -186,7 +207,7 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
   y -= 6; hline(y, 1.2, accent); y -= 28;
   text('세후 입금액', MX, y, 14, black);
   const total = won(s.final_payout_amount);
-  text(total, W - MX - (14 * 0.58 * total.length), y, 16, accent);
+  textR(total, W - MX, y, 16, accent);
 
   y -= 40;
   hline(y); y -= 18;
@@ -221,14 +242,14 @@ async function buildPdf(s: Snapshot): Promise<Uint8Array> {
     text(title, COL_T, y, 9.5, black);
     text((it.isrc ?? '-').slice(0, 18), COL_I, y, 8.5, ink, it.isrc ? mono : kor);
     const sc = int(it.stream_count);
-    text(sc, COL_S + 56 - sc.length * 5, y, 9.5, black, mono);
+    textR(sc, COL_S + 56, y, 9.5, black, mono);
     y -= 17;
   }
 
   y -= 4; hline(y, 1); y -= 18;
   text('합계', COL_T, y, 10.5, black);
   const ts = int(s.total_streams);
-  text(ts, COL_S + 56 - ts.length * 5.5, y, 10.5, black, mono);
+  textR(ts, COL_S + 56, y, 10.5, black, mono);
 
   y -= 26;
   text('※ 유효 스트림은 30초 이상 재생 기준이며, 본인 재생·미리듣기·중복 재생은 제외됩니다.', MX, y, 8, ink);
