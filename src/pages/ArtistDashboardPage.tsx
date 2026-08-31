@@ -402,13 +402,13 @@ function UploadGate({
     );
   }
   // payoutMasked 는 verified 후 안내 카드/요약 표시에 사용
-  void payoutMasked; void onPayoutSubmitted;
+  void onPayoutSubmitted;
 
   // 모두 OK — 업로드 폼 + (참고용) 계좌 요약 카드
   // 재제출 모드(editingTrack)는 무조건 단일 업로드. 신규는 단일/일괄 토글.
   return (
     <>
-      <VerifiedPayoutSummary payout={payout} />
+      <VerifiedPayoutSummary payout={payout} masked={payoutMasked} />
       {editingTrack ? (
         <ArtistUploadForm
           onUploaded={onUploaded}
@@ -465,9 +465,43 @@ function UploadModeSwitcher({
   );
 }
 
-function VerifiedPayoutSummary({ payout }: { payout: PayoutAccount | null }) {
+function VerifiedPayoutSummary({
+  payout,
+  masked: maskedAcct,
+}: {
+  payout: PayoutAccount | null;
+  masked: PayoutAccountMasked | null;
+}) {
   if (!payout) return null;
   const masked = maskAccountNumber(payout.account_number);
+
+  // 계좌 인증(verification_status)과 지급 요건(실명·주민번호·원천징수 동의)은 별개다.
+  // 구 폼으로 계좌만 등록한 사용자는 verified 지만 지급이 보류되므로,
+  // '확인 완료' 로 표시하면 "다 됐는데 왜 입금이 안 되지" 로 이어진다.
+  const piiIncomplete = maskedAcct != null && !maskedAcct.is_pii_complete;
+
+  if (piiIncomplete) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl bg-amber-500/20 p-3 ring-1 ring-amber-500/30">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
+          <Wallet size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-slate-900 dark:text-amber-200">
+            정산 정보 추가 입력이 필요합니다
+          </p>
+          <p className="text-[11px] text-slate-700 dark:text-amber-100/80">
+            계좌는 등록됐지만 실명·주민등록번호·원천징수 동의가 없어 <strong>정산금 지급이 보류</strong>됩니다.
+            아래 정산 탭에서 마저 입력해주세요.
+          </p>
+          <p className="mt-0.5 truncate text-[11px] text-slate-600 dark:text-amber-100/60">
+            {payout.bank_name} · {masked} · {payout.account_holder}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/20 p-3 ring-1 ring-emerald-500/30">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
