@@ -1,6 +1,17 @@
 -- ============================================================================
--- 0487_enterprise_store_signup_region_optional.sql
+-- 0490_enterprise_store_signup_region_optional.sql
 -- Phase ENTERPRISE-STORE-SIGNUP-REGION-SELFSERVE-1
+--
+-- 번호 이력: 0465 → 0487(#526) → 0490.
+--   #526 과 #527 이 같은 날 각각 0487 을 써서 prefix 가 중복됐고
+--   lint:migrations(duplicate-prefix)가 그때부터 실패하고 있었다.
+--   prod 적용 여부를 확인한 결과 0487_broadcast_filter_payout_pii_incomplete(#527)만
+--   적용돼 있고 이 파일은 미적용이라, 적용된 쪽을 두고 이 파일을 옮겼다.
+--   (docs/migrations.md — allowlist 확장은 이미 prod 반영된 경우에만.)
+--
+-- ⚠ 이 마이그레이션은 아직 prod 에 적용되지 않았다. #526 의 프론트엔드는 이미 배포돼
+--   지역을 선택 입력으로 받는데 서버 함수는 여전히 region_name 을 필수로 요구하므로,
+--   지역을 비우고 가입하면 실패한다. 적용 필요.
 --
 -- 목적: 엔터프라이즈 가맹(매장 셀프) 회원가입에서 "지역(region)"을 회원이 직접
 --   입력·등록할 수 있게 한다.
@@ -53,7 +64,7 @@ declare
 begin
   if v_uid is null then raise exception 'unauthorized'; end if;
   if v_store_name = '' then raise exception 'store_name required'; end if;
-  -- 🆕 0487: 지역(region)은 선택 입력 — required 예외 제거(미입력이어도 가입 진행).
+  -- 🆕 0490: 지역(region)은 선택 입력 — required 예외 제거(미입력이어도 가입 진행).
 
   -- users.account_type='business' AND withdrawn_at IS NULL (0362 일관 기준)
   select * into v_user from public.users where id = v_uid;
@@ -75,7 +86,7 @@ begin
   v_last4 := right(upper(btrim(coalesce(p_invite_code, ''))), 4);
   select * into v_ea from public.enterprise_accounts where id = v_ea_id;
 
-  -- region 매칭/자가등록 — 🆕 0487
+  -- region 매칭/자가등록 — 🆕 0490
   --   • 지역이 입력되면: 기존 등록 지역과 매칭, 없으면 회원이 입력한 지역을 신규 등록.
   --     관리자 사전 등록 불필요(allow_self_register_region 설정과 무관). 신규 지역은
   --     enterprise_regions(status='active', created_by=회원)로 저장되어 관리자 페이지
@@ -161,5 +172,5 @@ do $$
 declare n int;
 begin
   select count(*) into n from pg_proc where proname = 'claim_enterprise_store_account';
-  raise notice '[0487] claim_enterprise_store_account 정의 % 개 (지역 회원 자가입력/등록)', n;
+  raise notice '[0490] claim_enterprise_store_account 정의 % 개 (지역 회원 자가입력/등록)', n;
 end$$;

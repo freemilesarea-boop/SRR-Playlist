@@ -10,11 +10,14 @@ import {
   labelForTab,
   businessLabel,
   breadcrumbFor,
-  QUICK_TASKS,
+  WORK_QUEUE_TABS,
+  MERGED_TABS,
+  resolveMergedTab,
   TAB_LABEL_OVERRIDE,
 } from './adminNav';
 
-// AdminPage TABS 의 실제 key 목록(회귀 방지 — 무손실 재배치 검증용).
+// 관리자에 존재하는 전체 탭 key(회귀 방지 — 무손실 재배치/병합 검증용).
+// = AdminPage TABS 의 key + 병합으로 nav 에서 빠졌지만 딥링크로 살아 있는 구 key.
 const EXISTING_TAB_KEYS = [
   'dashboard', 'business-live', 'brand-player', 'support-inquiries', 'members', 'member-broadcast', 'curators',
   'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements',
@@ -36,12 +39,23 @@ describe('IA structure', () => {
     expect(ADMIN_GROUPS.length).toBeLessThanOrEqual(9);
     expect(ADMIN_GROUPS.length).toBe(8);
   });
-  it('every existing tab is placed exactly once (no feature loss, no duplicate)', () => {
-    const placed = [...ALL_NAV_TAB_KEYS].sort();
+  it('every existing tab is either placed or merged — exactly once (no feature loss)', () => {
+    // 화면을 합치면 구 탭 key 는 nav 에서 빠지지만 딥링크는 살아 있어야 한다.
+    // 따라서 불변식은 "트리에 배치" 또는 "MERGED_TABS 로 연결" 둘 중 하나.
+    const reachable = [...ALL_NAV_TAB_KEYS, ...Object.keys(MERGED_TABS)].sort();
     const existing = [...EXISTING_TAB_KEYS].sort();
-    expect(placed).toEqual(existing);
-    // no duplicates
-    expect(new Set(ALL_NAV_TAB_KEYS).size).toBe(ALL_NAV_TAB_KEYS.length);
+    expect(reachable).toEqual(existing);
+    // no duplicates — 배치와 병합에 동시에 들어가면 안 됨
+    expect(new Set(reachable).size).toBe(reachable.length);
+  });
+  it('merged tabs point at a tab that is actually placed in the tree', () => {
+    for (const [from, target] of Object.entries(MERGED_TABS)) {
+      expect(ALL_NAV_TAB_KEYS).toContain(target.tab);
+      expect(ALL_NAV_TAB_KEYS).not.toContain(from);
+      expect(target.view.length).toBeGreaterThan(0);
+      // 병합 대상이 또 병합되어 있으면 안 됨(체인 금지)
+      expect(resolveMergedTab(target.tab)).toBeNull();
+    }
   });
   it('no subgroup nesting beyond one level (group → subgroup → tab)', () => {
     for (const g of GROUP_TREE) {
@@ -80,9 +94,13 @@ describe('groupOfTab / subgroupOfTab', () => {
 
 describe('progressive disclosure (advanced tabs)', () => {
   it('flags technical/diagnostic tabs as advanced', () => {
-    expect(isAdvancedTab('enterprise-command-center')).toBe(true);
     expect(isAdvancedTab('audio-engine-diagnostics')).toBe(true);
     expect(isAdvancedTab('streaming-v2')).toBe(true);
+    expect(isAdvancedTab('placement-audit')).toBe(true);
+  });
+  it('does not keep merged-away keys in the advanced list', () => {
+    // 병합된 구 key 는 더 이상 탭이 아니므로 '고급' 토글 대상도 아니다.
+    for (const from of Object.keys(MERGED_TABS)) expect(isAdvancedTab(from)).toBe(false);
   });
   it('keeps everyday tabs visible', () => {
     expect(isAdvancedTab('members')).toBe(false);
@@ -93,7 +111,7 @@ describe('progressive disclosure (advanced tabs)', () => {
 
 describe('label rename (technical → business)', () => {
   it('overrides technical tab labels', () => {
-    expect(labelForTab('enterprise-command-center', '엔터프라이즈 Command Center')).toBe('통합 관제');
+    expect(labelForTab('enterprise-overview', '엔터프라이즈 현황')).toBe('통합 관제');
     expect(labelForTab('ai-curation', 'AI 큐레이션')).toBe('추천 후보');
   });
   it('keeps original label when no override', () => {
@@ -111,12 +129,17 @@ describe('label rename (technical → business)', () => {
   });
 });
 
-describe('quick tasks', () => {
-  it('point to real, everyday tabs', () => {
-    expect(QUICK_TASKS.length).toBeGreaterThanOrEqual(4);
-    for (const q of QUICK_TASKS) {
-      expect(EXISTING_TAB_KEYS).toContain(q.tab);
-      expect(isAdvancedTab(q.tab)).toBe(false);
+describe('home work queue', () => {
+  it('points to real, everyday tabs', () => {
+    const tabs = Object.values(WORK_QUEUE_TABS);
+    expect(tabs.length).toBeGreaterThanOrEqual(4);
+    for (const t of tabs) {
+      expect(EXISTING_TAB_KEYS).toContain(t);
+      // 병합된 구 key 를 가리킬 수 있다 — 그 경우 통합 탭 기준으로 판정한다.
+      const canonical = resolveMergedTab(t)?.tab ?? t;
+      expect(ALL_NAV_TAB_KEYS).toContain(canonical);
+      // 처리 대기는 기본 화면이어야 한다 — '고급' 토글 뒤에 숨은 탭으로 보내면 안 됨.
+      expect(isAdvancedTab(canonical)).toBe(false);
     }
   });
 });
@@ -146,9 +169,18 @@ describe('deep-link keys resolve to a job group (regression)', () => {
     }
   });
   it('advanced deep-link tabs are still placed (reachable via ?tab=)', () => {
-    // command-center 는 고급(기본 숨김)이지만 그룹에 배치되어 딥링크 접근 가능해야 한다.
-    expect(isAdvancedTab('enterprise-command-center')).toBe(true);
-    expect(groupOfTab('enterprise-command-center')).toBe('본사·브랜드');
+    // 고급(기본 숨김) 탭도 그룹에 배치되어 딥링크 접근이 가능해야 한다.
+    expect(isAdvancedTab('placement-audit')).toBe(true);
+    expect(ALL_NAV_TAB_KEYS).toContain('placement-audit');
+    expect(groupOfTab('placement-audit')).toBe('플레이리스트');
+  });
+  it('merged-away deep links resolve to the merged tab position', () => {
+    // 화면이 합쳐져도 구 링크는 통합 탭의 자리를 가리켜야 한다(엉뚱한 그룹 폴백 금지).
+    for (const [from, target] of Object.entries(MERGED_TABS)) {
+      expect(groupOfTab(from)).toBe(groupOfTab(target.tab));
+      expect(subgroupOfTab(from)).toBe(subgroupOfTab(target.tab));
+      expect(groupOfTab(from)).not.toBe('운영·설정');
+    }
   });
 });
 

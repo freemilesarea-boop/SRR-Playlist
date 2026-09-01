@@ -1,4 +1,17 @@
-import { useCallback, useState } from 'react';
+/**
+ * PayoutVerificationList — 정산 계좌 목록/승인.
+ *
+ * list_pending_payout_accounts 는 이름과 달리 전 계좌를 반환한다(pending 우선 정렬).
+ * 예전엔 그걸 그대로 한 표에 쏟아붓기만 해서, "계좌는 verified 인데 지급 요건(실명·
+ * 주민번호·계좌·원천징수 동의) 미완비" 인 행이 102건 사이에 묻혀 있었다. 그 상태는
+ * 지급이 보류되는데도 아티스트 화면엔 초록 '확인 완료' 로 보여서(8/31 #525) 2026-05-17~
+ * 06-01 등록자 24건이 6월부터 방치됐다.
+ *
+ * 그래서 상태 필터를 둔다 — 특히 '정보 미완비' 를 한 번에 뽑을 수 있게.
+ * 판정은 서버가 내려주는 is_pii_complete 를 그대로 쓴다(홈 처리 대기 줄의
+ * payout_incomplete, 0489 와 같은 기준).
+ */
+import { useCallback, useMemo, useState } from 'react';
 import { Wallet, Check, X, Clock } from 'lucide-react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
@@ -10,6 +23,12 @@ import {
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import RevealPiiButton from './RevealPiiButton';
+import {
+  PAYOUT_ACCOUNT_FILTERS as FILTERS,
+  matchesPayoutAccountFilter as matchesFilter,
+  countByPayoutAccountFilter,
+  type PayoutAccountFilter,
+} from '@/lib/payoutAccountFilter';
 
 function taxLabel(t: string): string {
   switch (t) {
@@ -26,10 +45,27 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
 };
 
-export default function PayoutVerificationList() {
+/**
+ * 계좌 인증됨 + 지급 요건 미충족 = 실제로는 지급이 나가지 않는 상태.
+ * 초록 '승인됨' 하나로 표시하면 관리자도 "다 된 계좌"로 읽는다 — 아티스트 화면에서
+ * 같은 모순을 8/31 #525 가 고쳤는데 관리자 화면엔 그대로 남아 있었다.
+ */
+function statusLabelFor(r: AdminPayoutRow): { label: string; tone: string } {
+  if (r.verification_status === 'verified' && !r.is_pii_complete) {
+    return { label: '승인됨 · 지급 보류', tone: 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50' };
+  }
+  return STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
+}
+
+export default function PayoutVerificationList({
+  initialFilter = 'all',
+}: {
+  initialFilter?: PayoutAccountFilter;
+} = {}) {
   const [rows, setRows] = useState<AdminPayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<PayoutAccountFilter>(initialFilter);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,7 +109,8 @@ export default function PayoutVerificationList() {
     await load();
   }
 
-  const pendingCount = rows.filter((r) => r.verification_status === 'pending').length;
+  const counts = useMemo(() => countByPayoutAccountFilter(rows), [rows]);
+  const visibleRows = useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
 
   return (
     <div className="space-y-3">
@@ -83,7 +120,7 @@ export default function PayoutVerificationList() {
             <Wallet size={16} className="text-accent" /> 정산 계좌 확인
           </h2>
           <p className="text-xs text-ink-mute">
-            확인 대기 {pendingCount}건 · 계좌번호는 본인+관리자만 조회 가능
+            확인 대기 {counts.pending}건 · 정보 미완비 {counts.incomplete}건 · 계좌번호는 본인+관리자만 조회 가능
           </p>
         </div>
       </div>
@@ -92,6 +129,33 @@ export default function PayoutVerificationList() {
         주민등록번호 / 계좌번호는 민감 PII 입니다. 본인 명의 + 동의 + 13자리 검증 확인 후
         승인해주세요. 원본 보기 시 audit log 가 영구 기록됩니다.
       </Alert>
+
+      {/* 상태 필터 — '정보 미완비'(인증됨 + 지급 요건 미충족)를 한 번에 뽑기 위한 것이 핵심 */}
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => {
+          const active = filter === f.key;
+          const n = counts[f.key] ?? 0;
+          // 미완비는 0 이 아니면 처리해야 할 건이라 눈에 띄게.
+          const alert = f.key === 'incomplete' && n > 0;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              aria-pressed={active}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                active
+                  ? 'bg-accent text-black'
+                  : alert
+                    ? 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50 hover:bg-amber-500/30'
+                    : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink'
+              }`}
+            >
+              {f.label} {n}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="overflow-x-auto rounded-2xl bg-bg-card ring-1 ring-line/10">
         <table className="w-full min-w-[760px] text-sm">
@@ -114,15 +178,17 @@ export default function PayoutVerificationList() {
                 </td>
               </tr>
             )}
-            {!loading && rows.length === 0 && (
+            {!loading && visibleRows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
-                  등록된 정산 계좌가 없어요.
+                  {rows.length === 0
+                    ? '등록된 정산 계좌가 없어요.'
+                    : '이 상태에 해당하는 계좌가 없어요.'}
                 </td>
               </tr>
             )}
-            {rows.map((r) => {
-              const s = STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
+            {visibleRows.map((r) => {
+              const s = statusLabelFor(r);
               // X6.21: pending 상태에서도 reveal 가능. 운영자가 RRN/계좌를 확인해야
               // 승인 결정을 내릴 수 있으므로 verified 조건 제거. is_pii_complete 만 체크.
               const canReveal = r.is_pii_complete;

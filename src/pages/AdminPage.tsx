@@ -32,6 +32,7 @@ import {
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
 import Dashboard from '@/components/admin/Dashboard';
+import AdminWorkQueueBar from '@/components/admin/AdminWorkQueueBar';
 import AdminNotificationsBell from '@/components/admin/AdminNotificationsBell';
 import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
@@ -40,6 +41,7 @@ import { adminPendingSettlementAlert, type PendingSettlementAlert } from '@/lib/
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { supabaseProjectRef } from '@/lib/supabase';
+import type { ControlCenterView } from '@/components/admin/EnterpriseControlCenterPanel';
 import {
   type AdminGroup,
   ADMIN_GROUPS,
@@ -50,7 +52,7 @@ import {
   isAdvancedTab,
   labelForTab,
   breadcrumbFor,
-  QUICK_TASKS,
+  resolveMergedTab,
 } from '@/lib/adminNav';
 
 // X6.39 — Lazy split — 41개 admin 탭 (탭 클릭 시 chunk 로드)
@@ -60,8 +62,9 @@ const ArtistTrackManagementList = lazy(() => import('@/components/admin/ArtistTr
 const ArtistSettlementsList = lazy(() => import('@/components/admin/ArtistSettlementsList'));
 const TrackReviewList = lazy(() => import('@/components/admin/TrackReviewList'));
 const QcReviewQueuePanel = lazy(() => import('@/components/admin/QcReviewQueuePanel'));
-const PayoutVerificationList = lazy(() => import('@/components/admin/PayoutVerificationList'));
-const PayoutIntakeAdminPanel = lazy(() => import('@/components/admin/PayoutIntakeAdminPanel'));
+// '계좌 확인' + '정산 정보 신청' → '정산 계좌' 한 화면(PayoutAccountsPanel).
+// 두 패널은 그 안에서 뷰별로 lazy 로드된다.
+const PayoutAccountsPanel = lazy(() => import('@/components/admin/PayoutAccountsPanel'));
 const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
 const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
 const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
@@ -97,7 +100,9 @@ const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPane
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
-const EnterpriseOverviewPanel = lazy(() => import('@/components/admin/EnterpriseOverviewPanel'));
+// 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
+// 네 패널은 EnterpriseControlCenterPanel 안에서 뷰별로 lazy 로드된다.
+const EnterpriseControlCenterPanel = lazy(() => import('@/components/admin/EnterpriseControlCenterPanel'));
 const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/EnterpriseAccountsPanel'));
 const EnterpriseRegionsPanel = lazy(() => import('@/components/admin/EnterpriseRegionsPanel'));
 const EnterpriseMonthlySettlementsPanel = lazy(() => import('@/components/admin/EnterpriseMonthlySettlementsPanel'));
@@ -109,11 +114,8 @@ const EnterpriseAnnouncementsPanel = lazy(() => import('@/components/admin/Enter
 const EnterpriseBillingPanel = lazy(() => import('@/components/admin/EnterpriseBillingPanel'));
 const EnterpriseContractsPanel = lazy(() => import('@/components/admin/EnterpriseContractsPanel'));
 const EnterpriseEmergencyBroadcastPanel = lazy(() => import('@/components/admin/EnterpriseEmergencyBroadcastPanel'));
-const EnterpriseNocPanel = lazy(() => import('@/components/admin/EnterpriseNocPanel'));
-const EnterpriseOperationsPanel = lazy(() => import('@/components/admin/EnterpriseOperationsPanel'));
 const EnterpriseSettlementCenterPanel = lazy(() => import('@/components/admin/EnterpriseSettlementCenterPanel'));
 const BrandRegistryPanel = lazy(() => import('@/components/admin/BrandRegistryPanel'));
-const EnterpriseCommandCenterPanel = lazy(() => import('@/components/admin/EnterpriseCommandCenterPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -206,7 +208,9 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'member-broadcast', label: '회원 메일 발송', icon: <Mail size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
-  { key: 'enterprise-overview', label: '엔터프라이즈 현황', icon: <Building2 size={14} /> },
+  // enterprise-noc / -operations / -command-center 가 여기로 병합됨(adminNav.MERGED_TABS).
+  // 구 딥링크는 계속 동작하며 통합 화면의 해당 뷰로 열린다.
+  { key: 'enterprise-overview', label: '통합 관제', icon: <Compass size={14} /> },
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
   { key: 'enterprise-monthly-settlements', label: '본사 월 정산', icon: <Wallet size={14} /> },
@@ -216,9 +220,6 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'policy-automation', label: '자동 음악 스케줄', icon: <ShieldCheck size={14} /> },
   { key: 'enterprise-announcements', label: '안내/광고 음원', icon: <Music size={14} /> },
   { key: 'enterprise-emergency', label: '긴급 방송', icon: <Music size={14} /> },
-  { key: 'enterprise-noc', label: '운영센터', icon: <Activity size={14} /> },
-  { key: 'enterprise-command-center', label: '엔터프라이즈 Command Center', icon: <Compass size={14} />, superOnly: true },
-  { key: 'enterprise-operations', label: '운영 관제', icon: <Activity size={14} />, superOnly: true },
   { key: 'enterprise-settlement-center', label: '정산·청구 통합', icon: <Wallet size={14} />, superOnly: true },
   { key: 'brand-registry', label: '브랜드 관리', icon: <Building2 size={14} />, superOnly: true },
   { key: 'enterprise-billing', label: '본사 청구', icon: <Wallet size={14} /> },
@@ -239,8 +240,8 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'artist-contracts', label: '아티스트 계약', icon: <FileSignature size={14} /> },
-  { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
-  { key: 'payout-intake', label: '정산 정보 신청', icon: <Wallet size={14} /> },
+  // payout-verification 은 이 탭으로 병합됨(adminNav.MERGED_TABS) — 구 딥링크는 계속 동작.
+  { key: 'payout-intake', label: '정산 계좌', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'qc-review', label: 'AI QC 검수', icon: <Sparkles size={14} /> },
   { key: 'artist-tracks', label: '음원 관리', icon: <Music size={14} /> },
@@ -285,6 +286,9 @@ export default function AdminPage() {
   const [subgroup, setSubgroup] = useState<string>(subgroupOfTab('dashboard'));
   // Progressive Disclosure — 고급/기술 탭 기본 숨김, 토글 시 노출.
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // 병합된 탭의 구 딥링크(?tab=<구 key>)로 들어왔을 때 통합 화면이 열어야 할 뷰.
+  // 일반 진입은 null → 통합 화면의 기본 뷰.
+  const [mergedView, setMergedView] = useState<string | null>(null);
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
@@ -310,11 +314,16 @@ export default function AdminPage() {
     const applyFromUrl = () => {
       try {
         const params = new URLSearchParams(window.location.search);
-        const t = params.get('tab');
+        const raw = params.get('tab');
+        // 병합으로 없어진 탭 key 로 들어온 링크는 통합 탭 + 해당 뷰로 보낸다.
+        // (구 딥링크를 깨지 않기 위한 것 — isValidTab 검사보다 먼저 풀어야 한다.)
+        const merged = raw ? resolveMergedTab(raw) : null;
+        const t = merged ? merged.tab : raw;
         if (isValidTab(t)) {
           setTab(t);
           setGroup(groupOf(t));
           setSubgroup(subgroupOfTab(t));
+          setMergedView(merged?.view ?? null);
         }
       } catch { /* silent */ }
     };
@@ -327,6 +336,19 @@ export default function AdminPage() {
     () => TABS.filter((t) => !t.superOnly || perms?.is_super_admin),
     [perms],
   );
+
+  /**
+   * '통합 관제' 안의 뷰 권한. 병합 전 각 탭의 노출 규칙을 그대로 옮긴 것 —
+   * 시스템 운영(구 enterprise-operations)과 사업 현황(구 enterprise-command-center)은
+   * superOnly 탭이었다. 화면을 합쳤다고 접근 범위가 넓어지면 안 된다.
+   */
+  const allowedControlViews = useMemo<ControlCenterView[]>(
+    () => (perms?.is_super_admin
+      ? ['franchises', 'stores', 'system', 'business']
+      : ['franchises', 'stores']),
+    [perms],
+  );
+  const controlCenterView = (mergedView ?? 'franchises') as ControlCenterView;
   const visibleKeys = useMemo(() => new Set(visibleTabs.map((t) => t.key)), [visibleTabs]);
 
   // 활성 그룹의 서브그룹 목록(가시 탭이 하나라도 있는 서브그룹만).
@@ -363,11 +385,16 @@ export default function AdminPage() {
     }
   }, [group, groupSubgroups, subgroup]);
 
-  // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화
+  // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화.
+  // 병합된 구 key 가 들어와도 통합 탭으로 풀어준다.
   function selectTab(next: Tab) {
-    setTab(next);
-    setGroup(groupOf(next));
-    setSubgroup(subgroupOfTab(next));
+    const merged = resolveMergedTab(next);
+    const target = (merged ? merged.tab : next) as Tab;
+    setTab(target);
+    setGroup(groupOf(target));
+    setSubgroup(subgroupOfTab(target));
+    // 일반 클릭은 통합 화면의 기본 뷰로 — 이전 딥링크의 뷰가 남아 있으면 안 된다.
+    setMergedView(merged?.view ?? null);
   }
 
   // franchise 탭에서 벗어나면 deep-link / return 상태 클리어 (재진입 시 재발화 방지)
@@ -458,8 +485,10 @@ export default function AdminPage() {
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
 
-      {/* 매월 1일 자동 생성된 정산 지급 검토 알람 (관리자 전용, 지급 대기 있을 때만) */}
-      {settlementAlert?.has_pending && (
+      {/* 매월 1일 자동 생성된 정산 지급 검토 알람 (관리자 전용, 지급 대기 있을 때만).
+          홈에서는 처리 대기 줄의 '정산 지급' 카드가 같은 내용을 보여주므로 배너를 생략한다
+          (같은 숫자를 한 화면에 두 번 띄우지 않기 위함). 다른 탭에서는 그대로 뜬다. */}
+      {tab !== 'dashboard' && settlementAlert?.has_pending && (
         <AdminAlert
           tone="warning"
           title="정산 지급 검토 필요"
@@ -579,20 +608,14 @@ export default function AdminPage() {
         </ol>
       </nav>
 
-      {/* 홈 — 업무 바로가기(기술 대시보드가 아닌 실제 업무 진입점) */}
+      {/* 홈 — 처리 대기(실시간 건수). 정적 바로가기(QUICK_TASKS)의 상위 호환이라 그것을 대체한다:
+          같은 업무 진입점이면서 "지금 몇 건 밀려 있는지"까지 보여준다. */}
       {tab === 'dashboard' && (
-        <section aria-label="빠른 업무" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {QUICK_TASKS.filter((q) => visibleKeys.has(q.tab as Tab)).map((q) => (
-            <button
-              key={q.tab}
-              onClick={() => selectTab(q.tab as Tab)}
-              className="rounded-xl border border-line/10 bg-bg-card p-3 text-left transition hover:border-line/25 hover:bg-bg-hover"
-            >
-              <p className="text-sm font-semibold">{q.label}</p>
-              <p className="mt-0.5 text-[11px] text-ink-mute">{q.hint}</p>
-            </button>
-          ))}
-        </section>
+        <AdminWorkQueueBar
+          // 병합된 구 key 로 가리킬 수 있으므로 가시성도 통합 탭 기준으로 본다.
+          isTabVisible={(t) => visibleKeys.has(((resolveMergedTab(t)?.tab ?? t) as Tab))}
+          onNavigate={(t) => selectTab(t as Tab)}
+        />
       )}
 
       {/* 한 탭 패널의 렌더 throw 가 관리자 페이지 전체를 화이트스크린시키지 않도록 격리.
@@ -608,7 +631,12 @@ export default function AdminPage() {
           {tab === 'members' && <MembersList />}
           {tab === 'member-broadcast' && <MemberBroadcastPanel />}
           {tab === 'curators' && <CuratorsAdminPanel />}
-          {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
+          {tab === 'enterprise-overview' && (
+            <EnterpriseControlCenterPanel
+              initialView={controlCenterView}
+              allowedViews={allowedControlViews}
+            />
+          )}
           {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
           {tab === 'enterprise-monthly-settlements' && <EnterpriseMonthlySettlementsPanel />}
@@ -628,9 +656,6 @@ export default function AdminPage() {
           {tab === 'enterprise-billing' && <EnterpriseBillingPanel />}
           {tab === 'enterprise-contracts' && <EnterpriseContractsPanel />}
           {tab === 'enterprise-emergency' && <EnterpriseEmergencyBroadcastPanel />}
-          {tab === 'enterprise-noc' && <EnterpriseNocPanel />}
-          {tab === 'enterprise-command-center' && <EnterpriseCommandCenterPanel />}
-          {tab === 'enterprise-operations' && <EnterpriseOperationsPanel />}
           {tab === 'enterprise-settlement-center' && <EnterpriseSettlementCenterPanel />}
           {tab === 'brand-registry' && <BrandRegistryPanel />}
           {tab === 'franchise' && (
@@ -657,8 +682,9 @@ export default function AdminPage() {
           {tab === 'auto-playlists' && <AutoPlaylistManager />}
           {tab === 'artists' && <ArtistApprovalList />}
           {tab === 'artist-contracts' && <ArtistContractsList />}
-          {tab === 'payout-verification' && <PayoutVerificationList />}
-          {tab === 'payout-intake' && <PayoutIntakeAdminPanel />}
+          {tab === 'payout-intake' && (
+            <PayoutAccountsPanel initialView={mergedView === 'accounts' ? 'accounts' : 'intake'} />
+          )}
           {tab === 'track-review' && <TrackReviewList />}
           {tab === 'qc-review' && <QcReviewQueuePanel />}
           {tab === 'artist-tracks' && <ArtistTrackManagementList />}
