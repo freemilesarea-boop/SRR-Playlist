@@ -92,7 +92,8 @@ export const GROUP_TREE: NavGroupNode[] = [
     group: '정산',
     hint: '아티스트 정산·본사 청구·결제',
     subgroups: [
-      { name: '아티스트 정산', tabs: ['artist-settlements', 'payout-intake', 'payout-verification'] },
+      // payout-verification 은 payout-intake('정산 계좌')로 병합 — MERGED_TABS 참조.
+      { name: '아티스트 정산', tabs: ['artist-settlements', 'payout-intake'] },
       { name: '본사·매장 청구', tabs: ['enterprise-billing', 'enterprise-monthly-settlements', 'enterprise-settlement-center'] },
       { name: '결제·매출', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'streaming-v2', 'settlement-v2'] },
     ],
@@ -112,6 +113,35 @@ export const ADMIN_GROUPS: AdminGroup[] = GROUP_TREE.map((g) => g.group);
 
 /** IA 트리에 배치된 전체 탭 key(중복 배치 검증용). */
 export const ALL_NAV_TAB_KEYS: string[] = GROUP_TREE.flatMap((g) => g.subgroups.flatMap((s) => s.tabs));
+
+// ---------------------------------------------------------------------------
+// 병합된 탭 (Consolidation)
+// ---------------------------------------------------------------------------
+/**
+ * 두 화면을 하나로 합칠 때, 없어진 쪽 탭 key 가 가리킬 곳.
+ *
+ * IA 원칙상 기존 딥링크 `?tab=<key>` 는 절대 깨지면 안 되므로, 구 key 를 지우는 대신
+ * "통합 탭 + 통합 화면 안의 어느 뷰로 열지" 를 여기에 남긴다. nav 에는 통합 탭 하나만
+ * 보이고(구 key 는 GROUP_TREE 에서 빠짐), 구 링크로 들어오면 통합 화면의 해당 뷰가 열린다.
+ */
+export interface MergedTabTarget {
+  /** 통합된 탭 key */
+  tab: string;
+  /** 통합 화면 안에서 처음 보여줄 뷰 */
+  view: string;
+}
+
+export const MERGED_TABS: Record<string, MergedTabTarget> = {
+  // '계좌 확인' + '정산 정보 신청' → '정산 계좌' 한 화면.
+  // 계좌 인증(verified)과 지급 요건(PII 완비)이 별개인데 화면이 갈라져 있어,
+  // "verified 인데 지급 보류" 상태가 어느 쪽에서도 안 보이던 문제(8/31 #525)를 없앤다.
+  'payout-verification': { tab: 'payout-intake', view: 'accounts' },
+};
+
+/** 병합으로 없어진 탭이면 이동할 곳, 아니면 null. */
+export function resolveMergedTab(tabKey: string): MergedTabTarget | null {
+  return MERGED_TABS[tabKey] ?? null;
+}
 
 /**
  * 기본 숨김(고급/기술) 탭 — Progressive Disclosure. key/route 유지, 기본 노출만 축소.
@@ -143,6 +173,8 @@ export function isAdvancedTab(tabKey: string): boolean {
  * 여기 없는 key 는 기존 라벨을 그대로 사용한다.
  */
 export const TAB_LABEL_OVERRIDE: Record<string, string> = {
+  // 신청·확인·미완비를 한 화면에서 다루므로 '정산 정보 신청' 보다 넓은 이름으로.
+  'payout-intake': '정산 계좌',
   'enterprise-command-center': '통합 관제',
   'enterprise-overview': '전체 현황',
   'enterprise-noc': '관제 센터',
@@ -264,6 +296,8 @@ export const WORK_QUEUE_TABS = {
   trackReview: 'track-review',
   artistApproval: 'artists',
   payout: 'payout-intake',
+  /** 정산 계좌 화면의 '계좌 목록' 뷰로 바로 여는 구 key(MERGED_TABS 경유). */
+  payoutAccounts: 'payout-verification',
   settlements: 'artist-settlements',
   inquiries: 'support-inquiries',
   stores: 'store-monitoring',

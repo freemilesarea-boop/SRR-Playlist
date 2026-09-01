@@ -11,10 +11,13 @@ import {
   businessLabel,
   breadcrumbFor,
   WORK_QUEUE_TABS,
+  MERGED_TABS,
+  resolveMergedTab,
   TAB_LABEL_OVERRIDE,
 } from './adminNav';
 
-// AdminPage TABS 의 실제 key 목록(회귀 방지 — 무손실 재배치 검증용).
+// 관리자에 존재하는 전체 탭 key(회귀 방지 — 무손실 재배치/병합 검증용).
+// = AdminPage TABS 의 key + 병합으로 nav 에서 빠졌지만 딥링크로 살아 있는 구 key.
 const EXISTING_TAB_KEYS = [
   'dashboard', 'business-live', 'brand-player', 'support-inquiries', 'members', 'member-broadcast', 'curators',
   'enterprise-overview', 'enterprise-accounts', 'enterprise-regions', 'enterprise-monthly-settlements',
@@ -36,12 +39,23 @@ describe('IA structure', () => {
     expect(ADMIN_GROUPS.length).toBeLessThanOrEqual(9);
     expect(ADMIN_GROUPS.length).toBe(8);
   });
-  it('every existing tab is placed exactly once (no feature loss, no duplicate)', () => {
-    const placed = [...ALL_NAV_TAB_KEYS].sort();
+  it('every existing tab is either placed or merged — exactly once (no feature loss)', () => {
+    // 화면을 합치면 구 탭 key 는 nav 에서 빠지지만 딥링크는 살아 있어야 한다.
+    // 따라서 불변식은 "트리에 배치" 또는 "MERGED_TABS 로 연결" 둘 중 하나.
+    const reachable = [...ALL_NAV_TAB_KEYS, ...Object.keys(MERGED_TABS)].sort();
     const existing = [...EXISTING_TAB_KEYS].sort();
-    expect(placed).toEqual(existing);
-    // no duplicates
-    expect(new Set(ALL_NAV_TAB_KEYS).size).toBe(ALL_NAV_TAB_KEYS.length);
+    expect(reachable).toEqual(existing);
+    // no duplicates — 배치와 병합에 동시에 들어가면 안 됨
+    expect(new Set(reachable).size).toBe(reachable.length);
+  });
+  it('merged tabs point at a tab that is actually placed in the tree', () => {
+    for (const [from, target] of Object.entries(MERGED_TABS)) {
+      expect(ALL_NAV_TAB_KEYS).toContain(target.tab);
+      expect(ALL_NAV_TAB_KEYS).not.toContain(from);
+      expect(target.view.length).toBeGreaterThan(0);
+      // 병합 대상이 또 병합되어 있으면 안 됨(체인 금지)
+      expect(resolveMergedTab(target.tab)).toBeNull();
+    }
   });
   it('no subgroup nesting beyond one level (group → subgroup → tab)', () => {
     for (const g of GROUP_TREE) {
@@ -117,8 +131,11 @@ describe('home work queue', () => {
     expect(tabs.length).toBeGreaterThanOrEqual(4);
     for (const t of tabs) {
       expect(EXISTING_TAB_KEYS).toContain(t);
+      // 병합된 구 key 를 가리킬 수 있다 — 그 경우 통합 탭 기준으로 판정한다.
+      const canonical = resolveMergedTab(t)?.tab ?? t;
+      expect(ALL_NAV_TAB_KEYS).toContain(canonical);
       // 처리 대기는 기본 화면이어야 한다 — '고급' 토글 뒤에 숨은 탭으로 보내면 안 됨.
-      expect(isAdvancedTab(t)).toBe(false);
+      expect(isAdvancedTab(canonical)).toBe(false);
     }
   });
 });

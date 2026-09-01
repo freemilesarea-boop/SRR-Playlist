@@ -15,9 +15,9 @@ export interface AdminWorkQueueCounts {
   track_review: number;
   /** 아티스트 승인 대기 (artists) */
   artist_approval: number;
-  /** 정산 정보 신청 대기 (payout-intake) */
+  /** 정산 정보 신청 대기 (정산 계좌 → 신청 대기) */
   payout_intake: number;
-  /** 계좌 확인 대기 (payout-verification) */
+  /** 계좌 확인 대기 (정산 계좌 → 계좌 목록) */
   payout_verify: number;
   /** 계좌는 verified 인데 지급 요건 미완비 — 어느 탭에도 카운트가 없던 사각지대 */
   payout_incomplete: number;

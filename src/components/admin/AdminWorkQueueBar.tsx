@@ -70,7 +70,9 @@ function buildItems(c: AdminWorkQueueCounts): QueueItem[] {
     {
       key: 'payout',
       label: '정산 계좌',
-      tab: WORK_QUEUE_TABS.payout,
+      // 미완비가 있으면 '계좌 목록' 뷰로 바로 보낸다 — 그 건이 보이는 화면이 거기다.
+      // (구 key 는 MERGED_TABS 가 통합 탭의 해당 뷰로 풀어준다.)
+      tab: c.payout_incomplete > 0 ? WORK_QUEUE_TABS.payoutAccounts : WORK_QUEUE_TABS.payout,
       icon: <Wallet size={14} />,
       count: payoutTotal,
       // 미완비는 '계좌는 확인됐지만 지급이 안 나가는' 상태라 별도로 짚어준다.

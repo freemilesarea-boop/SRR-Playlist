@@ -51,6 +51,7 @@ import {
   isAdvancedTab,
   labelForTab,
   breadcrumbFor,
+  resolveMergedTab,
 } from '@/lib/adminNav';
 
 // X6.39 — Lazy split — 41개 admin 탭 (탭 클릭 시 chunk 로드)
@@ -60,8 +61,9 @@ const ArtistTrackManagementList = lazy(() => import('@/components/admin/ArtistTr
 const ArtistSettlementsList = lazy(() => import('@/components/admin/ArtistSettlementsList'));
 const TrackReviewList = lazy(() => import('@/components/admin/TrackReviewList'));
 const QcReviewQueuePanel = lazy(() => import('@/components/admin/QcReviewQueuePanel'));
-const PayoutVerificationList = lazy(() => import('@/components/admin/PayoutVerificationList'));
-const PayoutIntakeAdminPanel = lazy(() => import('@/components/admin/PayoutIntakeAdminPanel'));
+// '계좌 확인' + '정산 정보 신청' → '정산 계좌' 한 화면(PayoutAccountsPanel).
+// 두 패널은 그 안에서 뷰별로 lazy 로드된다.
+const PayoutAccountsPanel = lazy(() => import('@/components/admin/PayoutAccountsPanel'));
 const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
 const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
 const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
@@ -239,8 +241,8 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
   { key: 'artists', label: '아티스트 승인', icon: <Mic2 size={14} /> },
   { key: 'artist-contracts', label: '아티스트 계약', icon: <FileSignature size={14} /> },
-  { key: 'payout-verification', label: '계좌 확인', icon: <Wallet size={14} /> },
-  { key: 'payout-intake', label: '정산 정보 신청', icon: <Wallet size={14} /> },
+  // payout-verification 은 이 탭으로 병합됨(adminNav.MERGED_TABS) — 구 딥링크는 계속 동작.
+  { key: 'payout-intake', label: '정산 계좌', icon: <Wallet size={14} /> },
   { key: 'track-review', label: '음원 검수', icon: <Mic2 size={14} /> },
   { key: 'qc-review', label: 'AI QC 검수', icon: <Sparkles size={14} /> },
   { key: 'artist-tracks', label: '음원 관리', icon: <Music size={14} /> },
@@ -285,6 +287,9 @@ export default function AdminPage() {
   const [subgroup, setSubgroup] = useState<string>(subgroupOfTab('dashboard'));
   // Progressive Disclosure — 고급/기술 탭 기본 숨김, 토글 시 노출.
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // 병합된 탭의 구 딥링크(?tab=<구 key>)로 들어왔을 때 통합 화면이 열어야 할 뷰.
+  // 일반 진입은 null → 통합 화면의 기본 뷰.
+  const [mergedView, setMergedView] = useState<string | null>(null);
   const [playlists, setPlaylists] = useState<PlaylistRow[]>([]);
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [perms, setPerms] = useState<AdminPermissions | null>(null);
@@ -310,11 +315,16 @@ export default function AdminPage() {
     const applyFromUrl = () => {
       try {
         const params = new URLSearchParams(window.location.search);
-        const t = params.get('tab');
+        const raw = params.get('tab');
+        // 병합으로 없어진 탭 key 로 들어온 링크는 통합 탭 + 해당 뷰로 보낸다.
+        // (구 딥링크를 깨지 않기 위한 것 — isValidTab 검사보다 먼저 풀어야 한다.)
+        const merged = raw ? resolveMergedTab(raw) : null;
+        const t = merged ? merged.tab : raw;
         if (isValidTab(t)) {
           setTab(t);
           setGroup(groupOf(t));
           setSubgroup(subgroupOfTab(t));
+          setMergedView(merged?.view ?? null);
         }
       } catch { /* silent */ }
     };
@@ -363,11 +373,16 @@ export default function AdminPage() {
     }
   }, [group, groupSubgroups, subgroup]);
 
-  // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화
+  // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화.
+  // 병합된 구 key 가 들어와도 통합 탭으로 풀어준다.
   function selectTab(next: Tab) {
-    setTab(next);
-    setGroup(groupOf(next));
-    setSubgroup(subgroupOfTab(next));
+    const merged = resolveMergedTab(next);
+    const target = (merged ? merged.tab : next) as Tab;
+    setTab(target);
+    setGroup(groupOf(target));
+    setSubgroup(subgroupOfTab(target));
+    // 일반 클릭은 통합 화면의 기본 뷰로 — 이전 딥링크의 뷰가 남아 있으면 안 된다.
+    setMergedView(merged?.view ?? null);
   }
 
   // franchise 탭에서 벗어나면 deep-link / return 상태 클리어 (재진입 시 재발화 방지)
@@ -585,7 +600,8 @@ export default function AdminPage() {
           같은 업무 진입점이면서 "지금 몇 건 밀려 있는지"까지 보여준다. */}
       {tab === 'dashboard' && (
         <AdminWorkQueueBar
-          isTabVisible={(t) => visibleKeys.has(t as Tab)}
+          // 병합된 구 key 로 가리킬 수 있으므로 가시성도 통합 탭 기준으로 본다.
+          isTabVisible={(t) => visibleKeys.has(((resolveMergedTab(t)?.tab ?? t) as Tab))}
           onNavigate={(t) => selectTab(t as Tab)}
         />
       )}
@@ -652,8 +668,9 @@ export default function AdminPage() {
           {tab === 'auto-playlists' && <AutoPlaylistManager />}
           {tab === 'artists' && <ArtistApprovalList />}
           {tab === 'artist-contracts' && <ArtistContractsList />}
-          {tab === 'payout-verification' && <PayoutVerificationList />}
-          {tab === 'payout-intake' && <PayoutIntakeAdminPanel />}
+          {tab === 'payout-intake' && (
+            <PayoutAccountsPanel initialView={mergedView === 'accounts' ? 'accounts' : 'intake'} />
+          )}
           {tab === 'track-review' && <TrackReviewList />}
           {tab === 'qc-review' && <QcReviewQueuePanel />}
           {tab === 'artist-tracks' && <ArtistTrackManagementList />}
