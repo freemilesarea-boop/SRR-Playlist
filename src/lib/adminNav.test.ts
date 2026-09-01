@@ -10,7 +10,7 @@ import {
   labelForTab,
   businessLabel,
   breadcrumbFor,
-  QUICK_TASKS,
+  WORK_QUEUE_TABS,
   TAB_LABEL_OVERRIDE,
 } from './adminNav';
 
@@ -111,12 +111,14 @@ describe('label rename (technical → business)', () => {
   });
 });
 
-describe('quick tasks', () => {
-  it('point to real, everyday tabs', () => {
-    expect(QUICK_TASKS.length).toBeGreaterThanOrEqual(4);
-    for (const q of QUICK_TASKS) {
-      expect(EXISTING_TAB_KEYS).toContain(q.tab);
-      expect(isAdvancedTab(q.tab)).toBe(false);
+describe('home work queue', () => {
+  it('points to real, everyday tabs', () => {
+    const tabs = Object.values(WORK_QUEUE_TABS);
+    expect(tabs.length).toBeGreaterThanOrEqual(4);
+    for (const t of tabs) {
+      expect(EXISTING_TAB_KEYS).toContain(t);
+      // 처리 대기는 기본 화면이어야 한다 — '고급' 토글 뒤에 숨은 탭으로 보내면 안 됨.
+      expect(isAdvancedTab(t)).toBe(false);
     }
   });
 });

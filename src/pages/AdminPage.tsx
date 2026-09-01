@@ -32,6 +32,7 @@ import {
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
 import Dashboard from '@/components/admin/Dashboard';
+import AdminWorkQueueBar from '@/components/admin/AdminWorkQueueBar';
 import AdminNotificationsBell from '@/components/admin/AdminNotificationsBell';
 import AdminErrorBoundary from '@/components/admin/AdminErrorBoundary';
 import { fetchMyAdminPermissions, type AdminPermissions } from '@/lib/adminRbacApi';
@@ -50,7 +51,6 @@ import {
   isAdvancedTab,
   labelForTab,
   breadcrumbFor,
-  QUICK_TASKS,
 } from '@/lib/adminNav';
 
 // X6.39 — Lazy split — 41개 admin 탭 (탭 클릭 시 chunk 로드)
@@ -458,8 +458,10 @@ export default function AdminPage() {
 
       <OnboardingChecklist tracks={tracks} playlists={playlists} />
 
-      {/* 매월 1일 자동 생성된 정산 지급 검토 알람 (관리자 전용, 지급 대기 있을 때만) */}
-      {settlementAlert?.has_pending && (
+      {/* 매월 1일 자동 생성된 정산 지급 검토 알람 (관리자 전용, 지급 대기 있을 때만).
+          홈에서는 처리 대기 줄의 '정산 지급' 카드가 같은 내용을 보여주므로 배너를 생략한다
+          (같은 숫자를 한 화면에 두 번 띄우지 않기 위함). 다른 탭에서는 그대로 뜬다. */}
+      {tab !== 'dashboard' && settlementAlert?.has_pending && (
         <AdminAlert
           tone="warning"
           title="정산 지급 검토 필요"
@@ -579,20 +581,13 @@ export default function AdminPage() {
         </ol>
       </nav>
 
-      {/* 홈 — 업무 바로가기(기술 대시보드가 아닌 실제 업무 진입점) */}
+      {/* 홈 — 처리 대기(실시간 건수). 정적 바로가기(QUICK_TASKS)의 상위 호환이라 그것을 대체한다:
+          같은 업무 진입점이면서 "지금 몇 건 밀려 있는지"까지 보여준다. */}
       {tab === 'dashboard' && (
-        <section aria-label="빠른 업무" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {QUICK_TASKS.filter((q) => visibleKeys.has(q.tab as Tab)).map((q) => (
-            <button
-              key={q.tab}
-              onClick={() => selectTab(q.tab as Tab)}
-              className="rounded-xl border border-line/10 bg-bg-card p-3 text-left transition hover:border-line/25 hover:bg-bg-hover"
-            >
-              <p className="text-sm font-semibold">{q.label}</p>
-              <p className="mt-0.5 text-[11px] text-ink-mute">{q.hint}</p>
-            </button>
-          ))}
-        </section>
+        <AdminWorkQueueBar
+          isTabVisible={(t) => visibleKeys.has(t as Tab)}
+          onNavigate={(t) => selectTab(t as Tab)}
+        />
       )}
 
       {/* 한 탭 패널의 렌더 throw 가 관리자 페이지 전체를 화이트스크린시키지 않도록 격리.

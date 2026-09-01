@@ -251,18 +251,22 @@ export function breadcrumbFor(tabKey: string, pageLabel: string): Crumb[] {
 }
 
 // ---------------------------------------------------------------------------
-// Home Quick Tasks — 기술 대시보드가 아니라 실제 업무 바로가기
+// Home Work Queue — 홈 '처리 대기' 카드가 보내는 탭
 // ---------------------------------------------------------------------------
-export interface QuickTask {
-  label: string;
-  tab: string;
-  hint: string;
-}
-export const QUICK_TASKS: QuickTask[] = [
-  { label: '회원 찾기', tab: 'members', hint: '회원·계정 상태 확인' },
-  { label: '음원 검수', tab: 'track-review', hint: '검수 대기 음원 처리' },
-  { label: '플레이리스트 만들기', tab: 'playlist-builder', hint: '제작·편집' },
-  { label: '매장 장애 확인', tab: 'store-monitoring', hint: '점검 필요 매장' },
-  { label: '본사 계정 관리', tab: 'enterprise-accounts', hint: '본사·담당자' },
-  { label: '정산 처리', tab: 'artist-settlements', hint: '지급 대기 확인' },
-];
+/**
+ * 홈 상단 처리 대기 카드의 이동 대상. 라벨/아이콘/건수는 AdminWorkQueueBar 가 갖고,
+ * 여기에는 탭 key 만 둔다(이 파일은 순수 로직 — 유닛 테스트가 "실제 존재하는 탭이고
+ * 고급(기본 숨김) 탭이 아님" 을 잠근다).
+ *
+ * 이전의 정적 QUICK_TASKS 를 대체한다 — 같은 업무 진입점이면서 대기 건수까지 보여준다.
+ */
+export const WORK_QUEUE_TABS = {
+  trackReview: 'track-review',
+  artistApproval: 'artists',
+  payout: 'payout-intake',
+  settlements: 'artist-settlements',
+  inquiries: 'support-inquiries',
+  stores: 'store-monitoring',
+} as const;
+
+export type WorkQueueTabKey = (typeof WORK_QUEUE_TABS)[keyof typeof WORK_QUEUE_TABS];
