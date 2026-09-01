@@ -158,7 +158,6 @@ export default function EnterpriseNocPanel() {
       description="모든 매장을 실시간 관제합니다. 7초 폴링."
       badge={
         <span className="flex items-center gap-2">
-          <AdminBadge tone="primary" variant="subtle">Phase 8 · V1</AdminBadge>
           {lastTick && (
             <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -278,10 +277,10 @@ export default function EnterpriseNocPanel() {
         </AdminCard>
       </div>
 
-      {/* Store Health + Live Timeline */}
+      {/* 매장 상태 + 최근 이벤트 */}
       <div className="grid gap-3 lg:grid-cols-2">
         <AdminCard
-          title={<span className="flex items-center gap-2"><Heart size={13} /> Store Health ({filteredHealth.length}/{healthList.length})</span>}
+          title={<span className="flex items-center gap-2"><Heart size={13} /> 매장 상태 ({filteredHealth.length}/{healthList.length})</span>}
           action={
             <input type="text" value={healthSearch} onChange={(e) => setHealthSearch(e.target.value)}
               placeholder="매장/본사/지역 검색"
@@ -318,7 +317,7 @@ export default function EnterpriseNocPanel() {
           )}
         </AdminCard>
 
-        <AdminCard title={<span className="flex items-center gap-2"><History size={13} /> Live Timeline (최근 24h)</span>}>
+        <AdminCard title={<span className="flex items-center gap-2"><History size={13} /> 최근 이벤트 (24시간)</span>}>
           {events.length === 0 ? (
             <div className="text-[11px] text-ink-mute">최근 이벤트가 없습니다.</div>
           ) : (

@@ -37,7 +37,6 @@ export default function EnterpriseOverviewPanel() {
   return (
     <AdminSection
       title={<><Building2 size={14} /> 엔터프라이즈 종합</>}
-      badge={<span className={adminTypography.hint}>(X6.90)</span>}
       description="모든 프랜차이즈 본사를 한 곳에서 관리합니다. 본사 계정은 자기 브랜드만 보입니다."
       action={
         <AdminButton

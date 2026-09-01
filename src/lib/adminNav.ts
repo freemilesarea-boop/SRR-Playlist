@@ -74,16 +74,18 @@ export const GROUP_TREE: NavGroupNode[] = [
     group: '매장',
     hint: '매장 상태·재생·정책·관제',
     subgroups: [
-      { name: '상태·장애', tabs: ['business-live', 'store-monitoring', 'store-now-playing'] },
+      // brand-player 는 매장 재생 화면이라 상태·장애와 같은 성격. 관제 서브그룹은
+      // 4개 관제 화면이 '통합 관제' 한 탭으로 합쳐지면서 없어졌다(MERGED_TABS 참조).
+      { name: '상태·장애', tabs: ['business-live', 'store-monitoring', 'store-now-playing', 'brand-player'] },
       { name: '재생·정책', tabs: ['policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency'] },
-      { name: '관제', tabs: ['enterprise-noc', 'enterprise-operations', 'brand-player'] },
     ],
   },
   {
     group: '본사·브랜드',
     hint: '본사·브랜드·프랜차이즈·지역',
     subgroups: [
-      { name: '전체 현황', tabs: ['enterprise-overview', 'enterprise-command-center'] },
+      // 프랜차이즈 현황 · 매장 관제 · 시스템 운영 · 사업 현황을 한 탭 네 뷰로.
+      { name: '전체 현황', tabs: ['enterprise-overview'] },
       { name: '본사·브랜드', tabs: ['enterprise-accounts', 'brand-registry', 'enterprise-regions'] },
       { name: '프랜차이즈·계약', tabs: ['franchise', 'enterprise-contracts'] },
     ],
@@ -136,6 +138,14 @@ export const MERGED_TABS: Record<string, MergedTabTarget> = {
   // 계좌 인증(verified)과 지급 요건(PII 완비)이 별개인데 화면이 갈라져 있어,
   // "verified 인데 지급 보류" 상태가 어느 쪽에서도 안 보이던 문제(8/31 #525)를 없앤다.
   'payout-verification': { tab: 'payout-intake', view: 'accounts' },
+
+  // 관제 4화면 → '통합 관제'(enterprise-overview) 한 탭.
+  // 넷은 겹치는 KPI 때문에 비슷해 보이지만 실제 축이 다르다 — 프랜차이즈 현황 /
+  // 매장 실시간 / 시스템 자동화 / 사업 지표. 그래서 지우지 않고 뷰로 묶는다.
+  // 1차 메뉴에 관제 항목이 두 그룹에 흩어져 넷이나 있던 것을 하나로 줄이는 게 목적.
+  'enterprise-noc': { tab: 'enterprise-overview', view: 'stores' },
+  'enterprise-operations': { tab: 'enterprise-overview', view: 'system' },
+  'enterprise-command-center': { tab: 'enterprise-overview', view: 'business' },
 };
 
 /** 병합으로 없어진 탭이면 이동할 곳, 아니면 null. */
@@ -156,10 +166,7 @@ export const ADVANCED_TABS: ReadonlySet<string> = new Set<string>([
   'ai-taxonomy',
   'placement-audit',
   'recommendation',
-  'enterprise-noc',
-  'enterprise-operations',
   'brand-player',
-  'enterprise-command-center',
   'streaming-v2',
   'settlement-v2',
 ]);
@@ -175,10 +182,8 @@ export function isAdvancedTab(tabKey: string): boolean {
 export const TAB_LABEL_OVERRIDE: Record<string, string> = {
   // 신청·확인·미완비를 한 화면에서 다루므로 '정산 정보 신청' 보다 넓은 이름으로.
   'payout-intake': '정산 계좌',
-  'enterprise-command-center': '통합 관제',
-  'enterprise-overview': '전체 현황',
-  'enterprise-noc': '관제 센터',
-  'enterprise-operations': '운영 관제',
+  // 프랜차이즈·매장·시스템·사업 네 뷰를 담은 통합 화면.
+  'enterprise-overview': '통합 관제',
   'ai-curation': '추천 후보',
   'clap-curation': '유사곡 추천',
   'streaming-v2': '스트리밍(신규)',
@@ -233,14 +238,19 @@ for (const g of GROUP_TREE) {
   }
 }
 
+/** 병합된 구 key 는 통합 탭 기준으로 본다. 그 외는 그대로. */
+function canonicalTab(tabKey: string): string {
+  return MERGED_TABS[tabKey]?.tab ?? tabKey;
+}
+
 /** 탭 key 의 1차 그룹. 미배치 key 는 '운영·설정'로 폴백(무손실). */
 export function groupOfTab(tabKey: string): AdminGroup {
-  return _groupOf.get(tabKey) ?? '운영·설정';
+  return _groupOf.get(canonicalTab(tabKey)) ?? '운영·설정';
 }
 
 /** 탭 key 의 2차 서브그룹 이름(그룹 내). 미배치는 그룹 첫 서브그룹. */
 export function subgroupOfTab(tabKey: string): string {
-  const found = _subOf.get(tabKey);
+  const found = _subOf.get(canonicalTab(tabKey));
   if (found) return found;
   const g = groupOfTab(tabKey);
   return GROUP_TREE.find((n) => n.group === g)?.subgroups[0]?.name ?? '';
@@ -269,7 +279,9 @@ export interface Crumb {
 }
 
 /** 현재 탭의 위치 경로: 그룹 > 서브그룹 > 페이지. */
-export function breadcrumbFor(tabKey: string, pageLabel: string): Crumb[] {
+export function breadcrumbFor(rawTabKey: string, pageLabel: string): Crumb[] {
+  // 구 딥링크로 들어와도 통합 탭 기준의 경로를 보여준다.
+  const tabKey = canonicalTab(rawTabKey);
   const group = groupOfTab(tabKey);
   const sub = subgroupOfTab(tabKey);
   const node = groupNode(group);

@@ -41,6 +41,7 @@ import { adminPendingSettlementAlert, type PendingSettlementAlert } from '@/lib/
 import { fetchPlaylists, fetchTracks } from '@/lib/api';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 import { supabaseProjectRef } from '@/lib/supabase';
+import type { ControlCenterView } from '@/components/admin/EnterpriseControlCenterPanel';
 import {
   type AdminGroup,
   ADMIN_GROUPS,
@@ -99,7 +100,9 @@ const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPane
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
-const EnterpriseOverviewPanel = lazy(() => import('@/components/admin/EnterpriseOverviewPanel'));
+// 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
+// 네 패널은 EnterpriseControlCenterPanel 안에서 뷰별로 lazy 로드된다.
+const EnterpriseControlCenterPanel = lazy(() => import('@/components/admin/EnterpriseControlCenterPanel'));
 const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/EnterpriseAccountsPanel'));
 const EnterpriseRegionsPanel = lazy(() => import('@/components/admin/EnterpriseRegionsPanel'));
 const EnterpriseMonthlySettlementsPanel = lazy(() => import('@/components/admin/EnterpriseMonthlySettlementsPanel'));
@@ -111,11 +114,8 @@ const EnterpriseAnnouncementsPanel = lazy(() => import('@/components/admin/Enter
 const EnterpriseBillingPanel = lazy(() => import('@/components/admin/EnterpriseBillingPanel'));
 const EnterpriseContractsPanel = lazy(() => import('@/components/admin/EnterpriseContractsPanel'));
 const EnterpriseEmergencyBroadcastPanel = lazy(() => import('@/components/admin/EnterpriseEmergencyBroadcastPanel'));
-const EnterpriseNocPanel = lazy(() => import('@/components/admin/EnterpriseNocPanel'));
-const EnterpriseOperationsPanel = lazy(() => import('@/components/admin/EnterpriseOperationsPanel'));
 const EnterpriseSettlementCenterPanel = lazy(() => import('@/components/admin/EnterpriseSettlementCenterPanel'));
 const BrandRegistryPanel = lazy(() => import('@/components/admin/BrandRegistryPanel'));
-const EnterpriseCommandCenterPanel = lazy(() => import('@/components/admin/EnterpriseCommandCenterPanel'));
 const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
@@ -208,7 +208,9 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'member-broadcast', label: '회원 메일 발송', icon: <Mail size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
-  { key: 'enterprise-overview', label: '엔터프라이즈 현황', icon: <Building2 size={14} /> },
+  // enterprise-noc / -operations / -command-center 가 여기로 병합됨(adminNav.MERGED_TABS).
+  // 구 딥링크는 계속 동작하며 통합 화면의 해당 뷰로 열린다.
+  { key: 'enterprise-overview', label: '통합 관제', icon: <Compass size={14} /> },
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
   { key: 'enterprise-monthly-settlements', label: '본사 월 정산', icon: <Wallet size={14} /> },
@@ -218,9 +220,6 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'policy-automation', label: '자동 음악 스케줄', icon: <ShieldCheck size={14} /> },
   { key: 'enterprise-announcements', label: '안내/광고 음원', icon: <Music size={14} /> },
   { key: 'enterprise-emergency', label: '긴급 방송', icon: <Music size={14} /> },
-  { key: 'enterprise-noc', label: '운영센터', icon: <Activity size={14} /> },
-  { key: 'enterprise-command-center', label: '엔터프라이즈 Command Center', icon: <Compass size={14} />, superOnly: true },
-  { key: 'enterprise-operations', label: '운영 관제', icon: <Activity size={14} />, superOnly: true },
   { key: 'enterprise-settlement-center', label: '정산·청구 통합', icon: <Wallet size={14} />, superOnly: true },
   { key: 'brand-registry', label: '브랜드 관리', icon: <Building2 size={14} />, superOnly: true },
   { key: 'enterprise-billing', label: '본사 청구', icon: <Wallet size={14} /> },
@@ -337,6 +336,19 @@ export default function AdminPage() {
     () => TABS.filter((t) => !t.superOnly || perms?.is_super_admin),
     [perms],
   );
+
+  /**
+   * '통합 관제' 안의 뷰 권한. 병합 전 각 탭의 노출 규칙을 그대로 옮긴 것 —
+   * 시스템 운영(구 enterprise-operations)과 사업 현황(구 enterprise-command-center)은
+   * superOnly 탭이었다. 화면을 합쳤다고 접근 범위가 넓어지면 안 된다.
+   */
+  const allowedControlViews = useMemo<ControlCenterView[]>(
+    () => (perms?.is_super_admin
+      ? ['franchises', 'stores', 'system', 'business']
+      : ['franchises', 'stores']),
+    [perms],
+  );
+  const controlCenterView = (mergedView ?? 'franchises') as ControlCenterView;
   const visibleKeys = useMemo(() => new Set(visibleTabs.map((t) => t.key)), [visibleTabs]);
 
   // 활성 그룹의 서브그룹 목록(가시 탭이 하나라도 있는 서브그룹만).
@@ -619,7 +631,12 @@ export default function AdminPage() {
           {tab === 'members' && <MembersList />}
           {tab === 'member-broadcast' && <MemberBroadcastPanel />}
           {tab === 'curators' && <CuratorsAdminPanel />}
-          {tab === 'enterprise-overview' && <EnterpriseOverviewPanel />}
+          {tab === 'enterprise-overview' && (
+            <EnterpriseControlCenterPanel
+              initialView={controlCenterView}
+              allowedViews={allowedControlViews}
+            />
+          )}
           {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
           {tab === 'enterprise-monthly-settlements' && <EnterpriseMonthlySettlementsPanel />}
@@ -639,9 +656,6 @@ export default function AdminPage() {
           {tab === 'enterprise-billing' && <EnterpriseBillingPanel />}
           {tab === 'enterprise-contracts' && <EnterpriseContractsPanel />}
           {tab === 'enterprise-emergency' && <EnterpriseEmergencyBroadcastPanel />}
-          {tab === 'enterprise-noc' && <EnterpriseNocPanel />}
-          {tab === 'enterprise-command-center' && <EnterpriseCommandCenterPanel />}
-          {tab === 'enterprise-operations' && <EnterpriseOperationsPanel />}
           {tab === 'enterprise-settlement-center' && <EnterpriseSettlementCenterPanel />}
           {tab === 'brand-registry' && <BrandRegistryPanel />}
           {tab === 'franchise' && (

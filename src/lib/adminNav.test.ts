@@ -94,9 +94,13 @@ describe('groupOfTab / subgroupOfTab', () => {
 
 describe('progressive disclosure (advanced tabs)', () => {
   it('flags technical/diagnostic tabs as advanced', () => {
-    expect(isAdvancedTab('enterprise-command-center')).toBe(true);
     expect(isAdvancedTab('audio-engine-diagnostics')).toBe(true);
     expect(isAdvancedTab('streaming-v2')).toBe(true);
+    expect(isAdvancedTab('placement-audit')).toBe(true);
+  });
+  it('does not keep merged-away keys in the advanced list', () => {
+    // 병합된 구 key 는 더 이상 탭이 아니므로 '고급' 토글 대상도 아니다.
+    for (const from of Object.keys(MERGED_TABS)) expect(isAdvancedTab(from)).toBe(false);
   });
   it('keeps everyday tabs visible', () => {
     expect(isAdvancedTab('members')).toBe(false);
@@ -107,7 +111,7 @@ describe('progressive disclosure (advanced tabs)', () => {
 
 describe('label rename (technical → business)', () => {
   it('overrides technical tab labels', () => {
-    expect(labelForTab('enterprise-command-center', '엔터프라이즈 Command Center')).toBe('통합 관제');
+    expect(labelForTab('enterprise-overview', '엔터프라이즈 현황')).toBe('통합 관제');
     expect(labelForTab('ai-curation', 'AI 큐레이션')).toBe('추천 후보');
   });
   it('keeps original label when no override', () => {
@@ -165,9 +169,18 @@ describe('deep-link keys resolve to a job group (regression)', () => {
     }
   });
   it('advanced deep-link tabs are still placed (reachable via ?tab=)', () => {
-    // command-center 는 고급(기본 숨김)이지만 그룹에 배치되어 딥링크 접근 가능해야 한다.
-    expect(isAdvancedTab('enterprise-command-center')).toBe(true);
-    expect(groupOfTab('enterprise-command-center')).toBe('본사·브랜드');
+    // 고급(기본 숨김) 탭도 그룹에 배치되어 딥링크 접근이 가능해야 한다.
+    expect(isAdvancedTab('placement-audit')).toBe(true);
+    expect(ALL_NAV_TAB_KEYS).toContain('placement-audit');
+    expect(groupOfTab('placement-audit')).toBe('플레이리스트');
+  });
+  it('merged-away deep links resolve to the merged tab position', () => {
+    // 화면이 합쳐져도 구 링크는 통합 탭의 자리를 가리켜야 한다(엉뚱한 그룹 폴백 금지).
+    for (const [from, target] of Object.entries(MERGED_TABS)) {
+      expect(groupOfTab(from)).toBe(groupOfTab(target.tab));
+      expect(subgroupOfTab(from)).toBe(subgroupOfTab(target.tab));
+      expect(groupOfTab(from)).not.toBe('운영·설정');
+    }
   });
 });
 
