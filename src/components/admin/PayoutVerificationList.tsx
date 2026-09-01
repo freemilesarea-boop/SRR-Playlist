@@ -45,6 +45,18 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
 };
 
+/**
+ * 계좌 인증됨 + 지급 요건 미충족 = 실제로는 지급이 나가지 않는 상태.
+ * 초록 '승인됨' 하나로 표시하면 관리자도 "다 된 계좌"로 읽는다 — 아티스트 화면에서
+ * 같은 모순을 8/31 #525 가 고쳤는데 관리자 화면엔 그대로 남아 있었다.
+ */
+function statusLabelFor(r: AdminPayoutRow): { label: string; tone: string } {
+  if (r.verification_status === 'verified' && !r.is_pii_complete) {
+    return { label: '승인됨 · 지급 보류', tone: 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50' };
+  }
+  return STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
+}
+
 export default function PayoutVerificationList({
   initialFilter = 'all',
 }: {
@@ -176,7 +188,7 @@ export default function PayoutVerificationList({
               </tr>
             )}
             {visibleRows.map((r) => {
-              const s = STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
+              const s = statusLabelFor(r);
               // X6.21: pending 상태에서도 reveal 가능. 운영자가 RRN/계좌를 확인해야
               // 승인 결정을 내릴 수 있으므로 verified 조건 제거. is_pii_complete 만 체크.
               const canReveal = r.is_pii_complete;

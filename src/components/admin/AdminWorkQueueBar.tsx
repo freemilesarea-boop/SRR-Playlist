@@ -39,10 +39,27 @@ interface QueueItem {
 
 const NUM = (n: number) => n.toLocaleString('ko-KR');
 
-/** 대기 0 건이면 neutral 로 눌러 시선에서 빼고, 긴급 사유가 있으면 danger. */
-function toneFor(count: number, urgent = false): Tone {
+/**
+ * 카드 테두리 톤. adminTones 에는 border 변형이 없어 여기서 정의한다.
+ * danger 만 테두리로 튀게 한다 — 여섯 장 모두 색 테두리를 두르면 어느 것도 급해 보이지
+ * 않는다. 밀린 일(warning)은 숫자 색으로만 구분한다.
+ */
+const BORDER: Record<Tone, string> = {
+  danger:  'border-rose-400/50 hover:border-rose-400/70',
+  warning: 'border-line/10 hover:border-line/25',
+  neutral: 'border-line/10 hover:border-line/25',
+};
+
+/**
+ * 대기 0 건이면 neutral 로 눌러 시선에서 뺀다.
+ *
+ * danger 는 "지금 무언가 고장나 있다"(매장 재생 오류, 긴급 문의)에만 쓴다.
+ * 밀린 잔고 — 미완비 계좌, 지급 보류 정산 — 는 양이 많아도 warning 이다.
+ * 안 그러면 카드 여섯 장이 늘 빨갛고, 진짜 장애가 묻힌다.
+ */
+function toneFor(count: number, broken = false): Tone {
   if (count === 0) return 'neutral';
-  return urgent ? 'danger' : 'warning';
+  return broken ? 'danger' : 'warning';
 }
 
 function buildItems(c: AdminWorkQueueCounts): QueueItem[] {
@@ -79,7 +96,7 @@ function buildItems(c: AdminWorkQueueCounts): QueueItem[] {
       detail: payoutTotal > 0
         ? `신청 ${NUM(c.payout_intake)} · 확인 ${NUM(c.payout_verify)} · 미완비 ${NUM(c.payout_incomplete)}`
         : undefined,
-      tone: toneFor(payoutTotal, c.payout_incomplete > 0),
+      tone: toneFor(payoutTotal),
     },
     {
       key: 'inquiries',
@@ -116,7 +133,7 @@ function buildItems(c: AdminWorkQueueCounts): QueueItem[] {
           `${NUM(c.settlement_amount)}원` +
           (c.settlement_held > 0 ? ` · 보류 ${NUM(c.settlement_held)}` : '')
         : undefined,
-      tone: toneFor(settlementTotal, c.settlement_held > 0),
+      tone: toneFor(settlementTotal),
     });
   }
 
@@ -158,15 +175,15 @@ export default function AdminWorkQueueBar({
 
   const items = buildItems(counts).filter((it) => isTabVisible(it.tab));
   if (items.length === 0) return null;
-  const totalPending = items.reduce((s, it) => s + it.count, 0);
+  // 건수를 전부 더한 합계는 내지 않는다 — 검수 '곡', 정산 '행', 매장 '대' 는 단위가
+  // 달라서 더한 값이 실제 수량이 아니다. 대기가 아예 없을 때만 그 사실을 알린다.
+  const allClear = items.every((it) => it.count === 0);
 
   return (
     <section aria-label="처리 대기" className="space-y-2">
       <div className="flex items-center gap-2">
         <h2 className={adminTypography.heading.h3}>처리 대기</h2>
-        <span className={adminTypography.hint}>
-          {totalPending === 0 ? '대기 중인 업무가 없습니다' : `총 ${NUM(totalPending)}건`}
-        </span>
+        {allClear && <span className={adminTypography.hint}>대기 중인 업무가 없습니다</span>}
         <button
           type="button"
           onClick={() => void load()}
@@ -187,14 +204,15 @@ export default function AdminWorkQueueBar({
               type="button"
               onClick={() => onNavigate(it.tab)}
               className={`rounded-xl border bg-bg-card p-3 text-left transition hover:bg-bg-hover ${
-                idle ? 'border-line/10 hover:border-line/25' : 'border-line/25 hover:border-line/40'
+                idle ? BORDER.neutral : BORDER[it.tone]
               }`}
             >
               <div className="flex items-center justify-between gap-1">
                 <span className={`${adminTypography.caption} truncate`}>{it.label}</span>
                 <span className={idle ? 'text-ink-dim' : tone.textMute}>{it.icon}</span>
               </div>
-              <p className={`mt-1 ${adminTypography.number.medium} ${idle ? 'text-ink-dim' : ''}`}>
+              {/* 숫자에 톤을 실어야 어느 카드가 급한지 한눈에 보인다 — 아이콘 색만으로는 약하다. */}
+              <p className={`mt-1 ${adminTypography.number.medium} ${idle ? 'text-ink-dim' : tone.text}`}>
                 {NUM(it.count)}
               </p>
               <p className={`mt-0.5 truncate ${adminTypography.hint}`} title={it.detail}>
