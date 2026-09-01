@@ -10,6 +10,7 @@ import {
   Trash2,
   Music,
   ArrowLeft,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
@@ -86,6 +87,8 @@ export default function ArtistDashboardPage() {
   const [payoutMasked, setPayoutMasked] = useState<PayoutAccountMasked | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTrack, setEditingTrack] = useState<MyArtistTrackRow | null>(null);
+  // ARTIST-HIDE-REJECTED — 거절(탈락) 음원은 기본 접힘. "펼치기"로만 노출.
+  const [showRejected, setShowRejected] = useState(false);
   const [plan, setPlan] = useState<ArtistPlanInfo | null>(null);
   // X6.16 — 정산 보류 상태
   const [holdStatus, setHoldStatus] = useState<SettlementHoldStatus | null>(null);
@@ -212,40 +215,84 @@ export default function ArtistDashboardPage() {
         <StreamingAnalyticsSection summary={summary} daily={daily} loading={loading} />
       )}
 
-      {/* 내 음원 목록 */}
-      <section className="space-y-3">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-lg font-bold tracking-tight">내 음원 ({tracks.length})</h2>
-          <span className="text-xs text-ink-mute">최신순</span>
-        </div>
-        {loading ? (
-          <div className="space-y-2">
-            {[0, 1].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl bg-bg-card" />
-            ))}
-          </div>
-        ) : tracks.length === 0 ? (
-          <p className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-line/10">
-            아직 업로드한 음원이 없어요.
-          </p>
-        ) : (
-          <ul className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-            {tracks.map((t) => (
-              <MyTrackRow
-                key={t.track_id}
-                track={t}
-                qc={qcMap.get(t.track_id) ?? null}
-                onChanged={load}
-                onEdit={() => {
-                  setEditingTrack(t);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onOpenQcDetail={() => setQcDetailTrack({ id: t.track_id, title: t.title })}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* 내 음원 목록 — 거절(탈락) 음원은 기본 접힘 */}
+      {(() => {
+        const rejectedTracks = tracks.filter((t) => t.visibility_status === 'rejected');
+        const activeTracks = tracks.filter((t) => t.visibility_status !== 'rejected');
+        const renderRow = (t: MyArtistTrackRow) => (
+          <MyTrackRow
+            key={t.track_id}
+            track={t}
+            qc={qcMap.get(t.track_id) ?? null}
+            onChanged={load}
+            onEdit={() => {
+              setEditingTrack(t);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onOpenQcDetail={() => setQcDetailTrack({ id: t.track_id, title: t.title })}
+          />
+        );
+        return (
+          <section className="space-y-3">
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-lg font-bold tracking-tight">내 음원 ({activeTracks.length})</h2>
+              <span className="text-xs text-ink-mute">최신순</span>
+            </div>
+            {loading ? (
+              <div className="space-y-2">
+                {[0, 1].map((i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-xl bg-bg-card" />
+                ))}
+              </div>
+            ) : activeTracks.length === 0 && rejectedTracks.length === 0 ? (
+              <p className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-line/10">
+                아직 업로드한 음원이 없어요.
+              </p>
+            ) : (
+              <>
+                {activeTracks.length > 0 ? (
+                  <ul className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
+                    {activeTracks.map(renderRow)}
+                  </ul>
+                ) : (
+                  <p className="rounded-2xl bg-bg-card/60 p-6 text-center text-sm text-ink-mute ring-1 ring-line/10">
+                    표시할 음원이 없어요. (거절된 음원은 아래에서 확인할 수 있어요.)
+                  </p>
+                )}
+
+                {/* 거절(탈락) 음원 — 기본 접힘, 펼치기로만 노출 */}
+                {rejectedTracks.length > 0 && (
+                  <div className="rounded-2xl bg-bg-card/50 ring-1 ring-line/10">
+                    <button
+                      type="button"
+                      onClick={() => setShowRejected((v) => !v)}
+                      aria-expanded={showRejected}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-semibold text-ink-mute">
+                        <EyeOff size={14} />
+                        거절된 음원 {rejectedTracks.length}개
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-ink-mute">
+                        {showRejected ? '숨기기' : '펼치기'}
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${showRejected ? 'rotate-180' : ''}`}
+                        />
+                      </span>
+                    </button>
+                    {showRejected && (
+                      <ul className="overflow-hidden border-t border-line/10">
+                        {rejectedTracks.map(renderRow)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        );
+      })()}
 
       {/* X6.37 — QC 상세 모달 */}
       {qcDetailTrack && (
