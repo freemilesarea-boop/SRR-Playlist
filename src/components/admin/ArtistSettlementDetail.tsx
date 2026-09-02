@@ -47,6 +47,8 @@ interface DetailData {
     sales_agent_commission_rate: number | null;
     artist_net_settlement: number;
     previous_carried_amount: number;
+    /** 0492: 그 달에 적용된 보정 합계. 이월과 별개다(예전엔 이월에 합산돼 오독을 낳았다). */
+    adjustment_amount?: number;
     total_settlement_amount: number;
     meets_min_payout: boolean;
     withholding_tax_amount: number;
@@ -276,9 +278,17 @@ export default function ArtistSettlementDetail({
                   label="④ 직전월 이월금"
                   value={data.settlement.previous_carried_amount > 0 ? `+${fmtKrw(data.settlement.previous_carried_amount)}` : '0'}
                 />
+                {/* 0492: 보정은 이월과 다른 돈이다. 합쳐 보여주면 "지급 완료인데 이월금 있음"
+                    처럼 읽혀 오독을 낳는다(2026-08 실제 사례). 0 이면 줄을 띄우지 않는다. */}
+                {(data.settlement.adjustment_amount ?? 0) !== 0 && (
+                  <Row
+                    label="④-1 보정 (소급 정산)"
+                    value={`${(data.settlement.adjustment_amount ?? 0) > 0 ? '+' : '−'}${fmtKrw(Math.abs(data.settlement.adjustment_amount ?? 0))}`}
+                  />
+                )}
                 <hr className="my-1 border-line/20" />
                 <Row
-                  label="총 정산액 (이월 포함)"
+                  label="총 정산액 (이월·보정 포함)"
                   value={fmtKrw(data.settlement.total_settlement_amount)}
                   bold
                 />
