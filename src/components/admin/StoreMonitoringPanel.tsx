@@ -212,8 +212,8 @@ export default function StoreMonitoringPanel() {
 
   return (
     <AdminSection
-      title={<><Activity size={14} /> 매장 상태 (Central Monitoring)</>}
-      badge={<span className={adminTypography.hint}>(Phase 1-3 v2 · 15s 자동 새로고침)</span>}
+      title={<><Activity size={14} /> 매장 상태</>}
+      badge={<span className={adminTypography.hint}>15초마다 자동 새로고침</span>}
       description="매장별 heartbeat / 정책 / 기기 / 버전 / 오류 통합 관제. 행 클릭 시 상세 모달."
       action={
         <AdminButton tone="neutral" variant="subtle" size="sm"

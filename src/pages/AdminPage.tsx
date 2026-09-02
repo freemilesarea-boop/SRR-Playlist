@@ -22,7 +22,6 @@ import {
   HardDrive,
   ShieldCheck,
   Gift,
-  Image as ImageIcon,
   Bell,
   Activity,
   MessageSquare,
@@ -65,18 +64,20 @@ const QcReviewQueuePanel = lazy(() => import('@/components/admin/QcReviewQueuePa
 // '계좌 확인' + '정산 정보 신청' → '정산 계좌' 한 화면(PayoutAccountsPanel).
 // 두 패널은 그 안에서 뷰별로 lazy 로드된다.
 const PayoutAccountsPanel = lazy(() => import('@/components/admin/PayoutAccountsPanel'));
+// 병합된 통합 탭 — 안의 개별 패널들은 각자 뷰로 lazy 로드된다(adminNav.MERGED_TABS).
+const AiClassificationPanel = lazy(() => import('@/components/admin/AiClassificationPanel'));
+const StoreStatusPanel = lazy(() => import('@/components/admin/StoreStatusPanel'));
+const UploadChecksPanel = lazy(() => import('@/components/admin/UploadChecksPanel'));
+const ShadowV2Panel = lazy(() => import('@/components/admin/ShadowV2Panel'));
+const SiteConfigPanel = lazy(() => import('@/components/admin/SiteConfigPanel'));
 const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
 const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
 const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
 const FreeTrialsPanel = lazy(() => import('@/components/admin/FreeTrialsPanel'));
 const AdminUsersList = lazy(() => import('@/components/admin/AdminUsersList'));
-const UploadIntegrityPanel = lazy(() => import('@/components/admin/UploadIntegrityPanel'));
-const BrandSettingsPanel = lazy(() => import('@/components/admin/BrandSettingsPanel'));
 const MembersList = lazy(() => import('@/components/admin/MembersList'));
 const MemberBroadcastPanel = lazy(() => import('@/components/admin/MemberBroadcastPanel'));
 const StreamingAnalytics = lazy(() => import('@/components/admin/StreamingAnalytics'));
-const StreamingV2Panel = lazy(() => import('@/components/admin/StreamingV2Panel'));
-const SettlementV2Panel = lazy(() => import('@/components/admin/SettlementV2Panel'));
 const RevenueManagement = lazy(() => import('@/components/admin/RevenueManagement'));
 const SubscriptionRequests = lazy(() => import('@/components/admin/SubscriptionRequests'));
 const ContentManagement = lazy(() => import('@/components/admin/ContentManagement'));
@@ -87,16 +88,11 @@ const AudioReencodePanel = lazy(() => import('@/components/admin/AudioReencodePa
 const AudioDiagnosticPanel = lazy(() => import('@/components/admin/AudioDiagnosticPanel'));
 const AudioEngineDiagnosticsPanel = lazy(() => import('@/components/admin/AudioEngineDiagnosticsPanel'));
 const MetadataViolationsList = lazy(() => import('@/components/admin/MetadataViolationsList'));
-const UploadAuditPanel = lazy(() => import('@/components/admin/UploadAuditPanel'));
 const AiCurationPanel = lazy(() => import('@/components/admin/AiCurationPanel'));
 const ClapRecommendationPanel = lazy(() => import('@/components/admin/ClapRecommendationPanel'));
 const TrackAiMetadataPanel = lazy(() => import('@/components/admin/TrackAiMetadataPanel'));
 const TaxonomyManagerPanel = lazy(() => import('@/components/admin/TaxonomyManagerPanel'));
-const GenrePredictionPanel = lazy(() => import('@/components/admin/GenrePredictionPanel'));
-const MoodPredictionPanel = lazy(() => import('@/components/admin/MoodPredictionPanel'));
-const StoreTypePredictionPanel = lazy(() => import('@/components/admin/StoreTypePredictionPanel'));
 const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAuditPanel'));
-const SiteSettingsPanel = lazy(() => import('@/components/admin/SiteSettingsPanel'));
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
@@ -106,8 +102,6 @@ const EnterpriseControlCenterPanel = lazy(() => import('@/components/admin/Enter
 const EnterpriseAccountsPanel = lazy(() => import('@/components/admin/EnterpriseAccountsPanel'));
 const EnterpriseRegionsPanel = lazy(() => import('@/components/admin/EnterpriseRegionsPanel'));
 const EnterpriseMonthlySettlementsPanel = lazy(() => import('@/components/admin/EnterpriseMonthlySettlementsPanel'));
-const StoreMonitoringPanel = lazy(() => import('@/components/admin/StoreMonitoringPanel'));
-const StoreNowPlayingPanel = lazy(() => import('@/components/admin/StoreNowPlayingPanel'));
 const PolicyDeploymentPanel = lazy(() => import('@/components/admin/PolicyDeploymentPanel'));
 const PolicyAutomationPanel = lazy(() => import('@/components/admin/PolicyAutomationPanel'));
 const EnterpriseAnnouncementsPanel = lazy(() => import('@/components/admin/EnterpriseAnnouncementsPanel'));
@@ -116,7 +110,6 @@ const EnterpriseContractsPanel = lazy(() => import('@/components/admin/Enterpris
 const EnterpriseEmergencyBroadcastPanel = lazy(() => import('@/components/admin/EnterpriseEmergencyBroadcastPanel'));
 const EnterpriseSettlementCenterPanel = lazy(() => import('@/components/admin/EnterpriseSettlementCenterPanel'));
 const BrandRegistryPanel = lazy(() => import('@/components/admin/BrandRegistryPanel'));
-const BusinessLivePanel = lazy(() => import('@/components/admin/BusinessLivePanel'));
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
 const BrandPlayerPanel = lazy(() => import('@/components/admin/BrandPlayerPanel'));
@@ -202,7 +195,6 @@ type Tab =
 
 const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: boolean }> = [
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
-  { key: 'business-live', label: '매장 실시간', icon: <Activity size={14} /> },
   { key: 'brand-player', label: '브랜드 플레이어', icon: <StoreIcon size={14} />, superOnly: true },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
@@ -214,8 +206,8 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
   { key: 'enterprise-monthly-settlements', label: '본사 월 정산', icon: <Wallet size={14} /> },
+  // business-live / store-now-playing 병합 (adminNav.MERGED_TABS) — 구 딥링크 유지.
   { key: 'store-monitoring', label: '매장 상태', icon: <Activity size={14} /> },
-  { key: 'store-now-playing', label: '실시간 재생', icon: <Music size={14} /> },
   { key: 'policy-deployment', label: '음악 배포 현황', icon: <ShieldCheck size={14} /> },
   { key: 'policy-automation', label: '자동 음악 스케줄', icon: <ShieldCheck size={14} /> },
   { key: 'enterprise-announcements', label: '안내/광고 음원', icon: <Music size={14} /> },
@@ -229,8 +221,8 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'sales-partners', label: '영업 파트너 신청', icon: <Handshake size={14} /> },
   { key: 'free-trials', label: '무료 체험', icon: <Gift size={14} /> },
   { key: 'streaming', label: '스트리밍', icon: <Headphones size={14} /> },
-  { key: 'streaming-v2', label: '스트리밍 v2 (Shadow)', icon: <Headphones size={14} />, superOnly: true },
-  { key: 'settlement-v2', label: '정산 v2 (Shadow)', icon: <Wallet size={14} />, superOnly: true },
+  // settlement-v2 병합.
+  { key: 'streaming-v2', label: 'v2 관측 (Shadow)', icon: <Headphones size={14} />, superOnly: true },
   { key: 'revenue', label: '매출', icon: <Wallet size={14} /> },
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'promotions', label: '프로모션', icon: <Ticket size={14} /> },
@@ -250,21 +242,20 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'audio-diagnostics', label: '오디오 진단', icon: <Stethoscope size={14} /> },
   { key: 'audio-engine-diagnostics', label: '오디오 엔진 진단', icon: <Activity size={14} />, superOnly: true },
   { key: 'metadata-violations', label: '메타데이터 위반 의심', icon: <AlertTriangle size={14} /> },
-  { key: 'upload-audit', label: '업로드/스토리지 점검', icon: <HardDrive size={14} /> },
+  // upload-integrity 병합.
+  { key: 'upload-audit', label: '업로드 점검', icon: <HardDrive size={14} /> },
   { key: 'ai-curation', label: 'AI 큐레이션', icon: <Sparkles size={14} /> },
   { key: 'clap-curation', label: 'CLAP 추천', icon: <Sparkles size={14} /> },
   { key: 'ai-metadata', label: 'AI 메타데이터', icon: <Sparkles size={14} /> },
   { key: 'ai-taxonomy', label: 'AI 분류 체계', icon: <Sparkles size={14} /> },
-  { key: 'ai-genre', label: 'AI 장르 분류', icon: <Sparkles size={14} /> },
-  { key: 'ai-mood', label: 'AI 무드 분류', icon: <Sparkles size={14} /> },
-  { key: 'ai-storetype', label: 'AI 매장 유형', icon: <Sparkles size={14} /> },
+  // ai-mood / ai-storetype 병합.
+  { key: 'ai-genre', label: 'AI 분류', icon: <Sparkles size={14} /> },
   { key: 'placement-audit', label: 'AI 배치 진단', icon: <ShieldCheck size={14} /> },
+  // brand(로고) 병합.
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
-  { key: 'upload-integrity', label: '업로드 무결성', icon: <ShieldCheck size={14} /> },
-  { key: 'brand', label: '브랜드 로고', icon: <ImageIcon size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
 ];
 
@@ -625,7 +616,6 @@ export default function AdminPage() {
         {/* dashboard 는 eager 라 Suspense 밖에서 즉시 렌더 */}
         {tab === 'dashboard' && <Dashboard />}
         <Suspense fallback={<TabSkeleton />}>
-          {tab === 'business-live' && <BusinessLivePanel />}
           {tab === 'brand-player' && <BrandPlayerPanel />}
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
@@ -640,8 +630,7 @@ export default function AdminPage() {
           {tab === 'enterprise-accounts' && <EnterpriseAccountsPanel />}
           {tab === 'enterprise-regions' && <EnterpriseRegionsPanel />}
           {tab === 'enterprise-monthly-settlements' && <EnterpriseMonthlySettlementsPanel />}
-          {tab === 'store-monitoring' && <StoreMonitoringPanel />}
-          {tab === 'store-now-playing' && <StoreNowPlayingPanel />}
+          {tab === 'store-monitoring' && <StoreStatusPanel initialView={mergedView ?? undefined} />}
           {tab === 'policy-deployment' && (
             <PolicyDeploymentPanel
               onRequestFranchisePolicyNav={requestFranchisePolicyNav}
@@ -671,8 +660,7 @@ export default function AdminPage() {
           {tab === 'sales-partners' && <SalesPartnerApplications />}
           {tab === 'free-trials' && <FreeTrialsPanel />}
           {tab === 'streaming' && <StreamingAnalytics />}
-          {tab === 'streaming-v2' && <StreamingV2Panel />}
-          {tab === 'settlement-v2' && <SettlementV2Panel />}
+          {tab === 'streaming-v2' && <ShadowV2Panel initialView={mergedView ?? undefined} />}
           {tab === 'revenue' && <RevenueManagement />}
           {tab === 'subscriptions' && <SubscriptionRequests />}
           {tab === 'promotions' && <PromotionCodes />}
@@ -693,21 +681,17 @@ export default function AdminPage() {
           {tab === 'audio-diagnostics' && <AudioDiagnosticPanel />}
           {tab === 'audio-engine-diagnostics' && <AudioEngineDiagnosticsPanel />}
           {tab === 'metadata-violations' && <MetadataViolationsList />}
-          {tab === 'upload-audit' && <UploadAuditPanel />}
+          {tab === 'upload-audit' && <UploadChecksPanel initialView={mergedView ?? undefined} />}
           {tab === 'ai-curation' && <AiCurationPanel />}
           {tab === 'clap-curation' && <ClapRecommendationPanel />}
           {tab === 'ai-metadata' && <TrackAiMetadataPanel />}
           {tab === 'ai-taxonomy' && <TaxonomyManagerPanel />}
-          {tab === 'ai-genre' && <GenrePredictionPanel />}
-          {tab === 'ai-mood' && <MoodPredictionPanel />}
-          {tab === 'ai-storetype' && <StoreTypePredictionPanel />}
+          {tab === 'ai-genre' && <AiClassificationPanel initialView={mergedView ?? undefined} />}
           {tab === 'placement-audit' && <PlacementAuditPanel />}
-          {tab === 'site-settings' && <SiteSettingsPanel />}
+          {tab === 'site-settings' && <SiteConfigPanel initialView={mergedView ?? undefined} />}
           {tab === 'site-notices' && <SiteNoticesManagerPanel />}
           {tab === 'artist-settlements' && <ArtistSettlementsList />}
           {tab === 'recommendation' && <RecommendationTester />}
-          {tab === 'upload-integrity' && <UploadIntegrityPanel />}
-          {tab === 'brand' && <BrandSettingsPanel />}
           {tab === 'admins' && <AdminUsersList />}
         </Suspense>
       </AdminErrorBoundary>

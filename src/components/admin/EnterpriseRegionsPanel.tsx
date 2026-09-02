@@ -157,7 +157,6 @@ export default function EnterpriseRegionsPanel() {
   return (
     <AdminSection
       title={<><MapPin size={14} /> 지역 관리</>}
-      badge={<span className={adminTypography.hint}>(Phase 1-2 v2)</span>}
       description="본사별 지역 (서울/경기/부산 등) 관리. 지역에 매장과 기본 정책을 연결할 수 있습니다."
       action={
         <div className="flex items-center gap-2">

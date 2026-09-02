@@ -58,8 +58,10 @@ export const GROUP_TREE: NavGroupNode[] = [
     subgroups: [
       { name: '검수·QC', tabs: ['track-review', 'qc-review', 'metadata-violations'] },
       { name: '음원 목록', tabs: ['artist-tracks', 'deleted-tracks'] },
-      { name: '분석·메타', tabs: ['ai-metadata', 'ai-genre', 'ai-mood', 'ai-storetype', 'ai-taxonomy'] },
-      { name: '오디오 점검', tabs: ['audio-reencode', 'audio-diagnostics', 'audio-engine-diagnostics', 'upload-audit', 'upload-integrity'] },
+      // ai-mood / ai-storetype 는 ai-genre('AI 분류')로 병합 — MERGED_TABS 참조.
+      { name: '분석·메타', tabs: ['ai-metadata', 'ai-genre', 'ai-taxonomy'] },
+      // upload-integrity 는 upload-audit('업로드 점검')으로 병합.
+      { name: '오디오 점검', tabs: ['audio-reencode', 'audio-diagnostics', 'audio-engine-diagnostics', 'upload-audit'] },
     ],
   },
   {
@@ -76,7 +78,8 @@ export const GROUP_TREE: NavGroupNode[] = [
     subgroups: [
       // brand-player 는 매장 재생 화면이라 상태·장애와 같은 성격. 관제 서브그룹은
       // 4개 관제 화면이 '통합 관제' 한 탭으로 합쳐지면서 없어졌다(MERGED_TABS 참조).
-      { name: '상태·장애', tabs: ['business-live', 'store-monitoring', 'store-now-playing', 'brand-player'] },
+      // business-live / store-now-playing 는 store-monitoring('매장 상태')으로 병합.
+      { name: '상태·장애', tabs: ['store-monitoring', 'brand-player'] },
       { name: '재생·정책', tabs: ['policy-deployment', 'policy-automation', 'enterprise-announcements', 'enterprise-emergency'] },
     ],
   },
@@ -97,7 +100,8 @@ export const GROUP_TREE: NavGroupNode[] = [
       // payout-verification 은 payout-intake('정산 계좌')로 병합 — MERGED_TABS 참조.
       { name: '아티스트 정산', tabs: ['artist-settlements', 'payout-intake'] },
       { name: '본사·매장 청구', tabs: ['enterprise-billing', 'enterprise-monthly-settlements', 'enterprise-settlement-center'] },
-      { name: '결제·매출', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'streaming-v2', 'settlement-v2'] },
+      // settlement-v2 는 streaming-v2('v2 관측')로 병합.
+      { name: '결제·매출', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'streaming-v2'] },
     ],
   },
   {
@@ -105,7 +109,8 @@ export const GROUP_TREE: NavGroupNode[] = [
     hint: '문의·로그·서비스 설정·권한',
     subgroups: [
       { name: '운영', tabs: ['support-inquiries', 'operation-logs'] },
-      { name: '설정', tabs: ['site-settings', 'site-notices', 'brand', 'admins'] },
+      // brand(로고)는 site-settings('사이트 설정')로 병합.
+      { name: '설정', tabs: ['site-settings', 'site-notices', 'admins'] },
     ],
   },
 ];
@@ -146,6 +151,24 @@ export const MERGED_TABS: Record<string, MergedTabTarget> = {
   'enterprise-noc': { tab: 'enterprise-overview', view: 'stores' },
   'enterprise-operations': { tab: 'enterprise-overview', view: 'system' },
   'enterprise-command-center': { tab: 'enterprise-overview', view: 'business' },
+
+  // AI 예측 3화면 → 'AI 분류' 한 탭. 같은 일을 필드만 바꿔 하는 화면이라
+  // 메뉴에서 셋을 구분해 기억할 이유가 없다(적용 로직은 필드별로 그대로 유지).
+  'ai-mood': { tab: 'ai-genre', view: 'mood' },
+  'ai-storetype': { tab: 'ai-genre', view: 'storetype' },
+
+  // 매장 실시간 3화면 → '매장 상태' 한 탭. 셋 다 "지금 매장이 어떤가"를 본다.
+  'business-live': { tab: 'store-monitoring', view: 'live' },
+  'store-now-playing': { tab: 'store-monitoring', view: 'now-playing' },
+
+  // shadow 관측 2화면 → 'v2 관측' 한 탭 (둘 다 flag OFF · 실서비스 무관).
+  'settlement-v2': { tab: 'streaming-v2', view: 'settlement' },
+
+  // 업로드 점검 2화면 → '업로드 점검' 한 탭.
+  'upload-integrity': { tab: 'upload-audit', view: 'integrity' },
+
+  // 브랜드 로고 → 사이트 설정 안으로(로고 하나 올리는 화면이 1차 메뉴를 차지했었다).
+  'brand': { tab: 'site-settings', view: 'brand' },
 };
 
 /** 병합으로 없어진 탭이면 이동할 곳, 아니면 null. */
@@ -162,13 +185,11 @@ export const ADVANCED_TABS: ReadonlySet<string> = new Set<string>([
   'audio-diagnostics',
   'audio-engine-diagnostics',
   'upload-audit',
-  'upload-integrity',
   'ai-taxonomy',
   'placement-audit',
   'recommendation',
   'brand-player',
   'streaming-v2',
-  'settlement-v2',
 ]);
 
 export function isAdvancedTab(tabKey: string): boolean {
@@ -186,9 +207,13 @@ export const TAB_LABEL_OVERRIDE: Record<string, string> = {
   'enterprise-overview': '통합 관제',
   'ai-curation': '추천 후보',
   'clap-curation': '유사곡 추천',
-  'streaming-v2': '스트리밍(신규)',
-  'settlement-v2': '정산(신규)',
+  'streaming-v2': 'v2 관측(Shadow)',
   'placement-audit': '배치 점검',
+  // 병합 통합 탭 — 안에서 뷰로 나뉜다.
+  'ai-genre': 'AI 분류',
+  'store-monitoring': '매장 상태',
+  'upload-audit': '업로드 점검',
+  'site-settings': '사이트 설정',
 };
 
 export function labelForTab(tabKey: string, fallback: string): string {
