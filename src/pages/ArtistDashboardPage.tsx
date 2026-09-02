@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
   Mic2,
@@ -31,6 +31,8 @@ import {
   fetchMyPayoutAccountMasked,
   submitArtistPayoutAccountV2,
   fetchMySettlementHoldStatus,
+  fetchMyPayoutAccountChanges,
+  payoutChangeFieldLabels,
   TAX_CONSENT_TEXT,
   type ArtistProfile,
   type MyArtistTrackRow,
@@ -42,6 +44,7 @@ import {
   type TaxWithholdingType,
   type SettlementHoldStatus,
   type SettlementHoldReason,
+  type MyPayoutAccountChange,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
 import { fetchMyArtistPlan, type ArtistPlanInfo, planBadgeTone } from '@/lib/artistPlanApi';
@@ -169,8 +172,11 @@ export default function ArtistDashboardPage() {
       )}
 
       {/* X6.18 — 정산 정보 입력 폼: UploadGate 의존성 제거.
-          payout 미verified 면 항상 노출 → 보류 카드 CTA 스크롤이 항상 작동. */}
-      {!loading && payout?.verification_status !== 'verified' && (
+          payout 미verified 면 항상 노출 → 보류 카드 CTA 스크롤이 항상 작동.
+          0495 — verified 여도 노출한다. 계좌가 바뀌었을 때(이사·주거래은행 변경 등)
+          아티스트가 스스로 신청할 곳이 없어서 지금까지 전부 운영팀 문의로 들어왔다.
+          verified 상태에서는 폼 대신 등록 정보 + '계좌 변경 신청' 버튼만 보인다. */}
+      {!loading && (
         <PayoutAccountSection
           payout={payout}
           masked={payoutMasked}
@@ -719,13 +725,26 @@ function PayoutAccountSection({
   const [consentChecked, setConsentChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 0495 — verified 계좌를 바꾸려는 경우. 버튼을 눌러야 폼이 열린다(오조작 방지).
+  const [changeMode, setChangeMode] = useState(false);
+  const [changes, setChanges] = useState<MyPayoutAccountChange[]>([]);
 
   const status = payout?.verification_status;
-  // 폼 노출 조건 (X6.14):
+  const piiComplete = !!masked?.is_pii_complete;
+  // 승인 완료 = 더 손댈 게 없는 상태. 이때만 '변경 신청' 진입점을 보여준다.
+  const isSettled = status === 'verified' && piiComplete;
+
+  // 폼 노출 조건 (X6.14 + 0495):
   //   - PII 미완료 (legal_name/rrn/계좌/동의 중 하나라도 없음) → 폼 표시
   //   - 반려됨 → 폼 표시
-  //   - verified → 호출되지 않음
-  const showForm = !masked || !masked.is_pii_complete || status === 'rejected';
+  //   - verified + 완비 → 폼 숨김. 단 '계좌 변경 신청'을 누르면 연다.
+  const showForm = !masked || !piiComplete || status === 'rejected' || changeMode;
+
+  useEffect(() => {
+    void fetchMyPayoutAccountChanges(5).then(setChanges);
+  }, [payout?.verification_status, payout?.updated_at]);
+
+  const openChange = changes.find((c) => c.status === 'pending');
 
   function formatRrn(raw: string): string {
     // 숫자만 추출 후 6-7 형식으로 표시
@@ -763,7 +782,14 @@ function PayoutAccountSection({
       // 입력 RRN/계좌 즉시 폐기 (메모리에 남기지 않음)
       setResidentNumber('');
       setAccountNumber('');
-      toast.success('정산 계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.');
+      setChangeMode(false);
+      setConsentChecked(false);
+      toast.success(
+        isSettled
+          ? '계좌 변경을 신청했어요. 관리자 확인 전까지 정산 지급은 잠시 보류됩니다.'
+          : '정산 계좌가 등록됐어요. 관리자 확인 후 업로드가 활성화됩니다.',
+      );
+      setChanges(await fetchMyPayoutAccountChanges(5));
       await onSubmitted();
     } catch (e) {
       const msg = friendlyError(e, '계좌 등록 실패');
@@ -774,26 +800,34 @@ function PayoutAccountSection({
     }
   }
 
-  const title =
-    status === 'pending'
-      ? '관리자 계좌 확인 대기 중입니다'
-      : status === 'rejected'
-        ? '계좌 확인이 반려되었습니다'
-        : '정산 계좌를 등록해주세요';
+  const title = changeMode
+    ? '정산 계좌 변경 신청'
+    : isSettled
+      ? '정산 계좌'
+      : status === 'pending'
+        ? '관리자 계좌 확인 대기 중입니다'
+        : status === 'rejected'
+          ? '계좌 확인이 반려되었습니다'
+          : '정산 계좌를 등록해주세요';
 
-  const description =
-    status === 'pending'
-      ? '등록하신 계좌가 관리자 확인 중입니다. 평균 1영업일 이내 처리됩니다.'
-      : status === 'rejected'
-        ? '아래 사유를 확인하고 정확한 정보로 다시 등록해주세요.'
-        : '아티스트 음원 업로드 전, 정산받을 본인 명의 계좌를 등록해주세요. (MVP 는 관리자 수동 확인)';
+  const description = changeMode
+    ? '새 계좌 정보를 입력해주세요. 신청 후 관리자 확인 전까지 정산 지급은 보류됩니다.'
+    : isSettled
+      ? '등록된 계좌로 정산금이 지급됩니다. 계좌가 바뀌었다면 아래에서 변경을 신청해주세요.'
+      : status === 'pending'
+        ? '등록하신 계좌가 관리자 확인 중입니다. 평균 1영업일 이내 처리됩니다.'
+        : status === 'rejected'
+          ? '아래 사유를 확인하고 정확한 정보로 다시 등록해주세요.'
+          : '아티스트 음원 업로드 전, 정산받을 본인 명의 계좌를 등록해주세요. (MVP 는 관리자 수동 확인)';
 
   const statusBadge =
     status === 'rejected'
       ? { label: '반려됨', tone: 'bg-red-500/25 text-slate-900 dark:text-red-100 ring-1 ring-red-400/40' }
       : status === 'pending'
         ? { label: '확인 대기 중', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-100 ring-1 ring-yellow-400/40' }
-        : null;
+        : isSettled
+          ? { label: '확인 완료', tone: 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/40' }
+          : null;
 
   return (
     <form id="payout-account-form" onSubmit={onSubmit} className="space-y-3 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
@@ -820,6 +854,69 @@ function PayoutAccountSection({
           )}
         </div>
       </div>
+
+      {/* 0495 — 승인 완료 상태: 등록 정보 + 변경 신청 진입점.
+          예전엔 이 상태에서 섹션 자체가 렌더되지 않아 아티스트가 계좌를 바꿀 방법이
+          없었다(전부 운영팀 문의로 유입). 폼은 버튼을 눌러야 열린다 — 계좌 변경은
+          정산금이 나가는 곳을 바꾸는 일이라 실수로 열리면 안 된다. */}
+      {isSettled && !changeMode && (
+        <div className="space-y-2">
+          <div className="space-y-1 rounded-lg bg-bg-deep/50 p-3 text-[12px] ring-1 ring-line/10">
+            <Row2 label="실명" value={masked?.legal_name ?? '—'} />
+            <Row2 label="은행" value={masked?.bank_name ?? '—'} />
+            <Row2 label="계좌번호" value={masked?.masked_account_number ?? '—'} />
+            <Row2 label="예금주" value={masked?.account_holder ?? '—'} />
+            <Row2 label="원천징수" value={taxWithholdingLabel(masked?.tax_withholding_type ?? 'business_income_3_3')} />
+          </div>
+
+          {openChange ? (
+            <Alert tone="info" title="계좌 변경 신청 확인 중">
+              {payoutChangeFieldLabels(openChange.changed_fields)} 변경을 신청하셨습니다.
+              관리자 확인이 끝나면 새 계좌로 지급됩니다. 확인 전까지 정산 지급은 보류됩니다.
+            </Alert>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setChangeMode(true)}
+              className="w-full rounded-xl bg-bg-soft py-2.5 text-[13px] font-semibold text-ink ring-1 ring-line/15 hover:bg-bg-hover"
+            >
+              계좌 변경 신청
+            </button>
+          )}
+
+          <p className="text-[11px] leading-relaxed text-ink-dim">
+            계좌를 바꾸면 관리자 재확인이 필요합니다. 확인 전까지 정산 지급이 보류되니
+            지급일 직전 변경은 피해주세요.
+          </p>
+
+          {/* 최근 신청 이력 — 처리 결과(특히 거절 사유)를 본인이 확인할 수 있어야 한다. */}
+          {changes.filter((c) => c.change_type === 'update').length > 0 && (
+            <div className="rounded-lg bg-bg-deep/40 p-2.5 ring-1 ring-line/10">
+              <p className="text-[11px] font-semibold text-ink-mute">변경 신청 이력</p>
+              <ul className="mt-1.5 space-y-1">
+                {changes.filter((c) => c.change_type === 'update').map((c) => (
+                  <li key={c.change_id} className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="text-ink-dim">
+                      {new Date(c.created_at).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })}
+                    </span>
+                    <span className="text-ink">{payoutChangeFieldLabels(c.changed_fields)}</span>
+                    <span
+                      className={
+                        c.status === 'approved' ? 'text-emerald-300'
+                        : c.status === 'rejected' ? 'text-red-300'
+                        : 'text-amber-300'
+                      }
+                    >
+                      {c.status === 'approved' ? '승인됨' : c.status === 'rejected' ? '거절됨' : '확인 중'}
+                    </span>
+                    {c.review_note && <span className="text-ink-mute">· {c.review_note}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* pending 상태: 마스킹된 PII 정보 표시 (재등록은 verified 전까지 불가) */}
       {status === 'pending' && masked && masked.is_pii_complete && (
@@ -940,10 +1037,27 @@ function PayoutAccountSection({
             disabled={busy || !consentChecked}
             className="btn-primary w-full py-2.5"
           >
-            {busy ? '등록 중…' : status === 'rejected' ? '정산 계좌 다시 등록' : '정산 계좌 등록'}
+            {busy
+              ? (changeMode ? '신청 중…' : '등록 중…')
+              : changeMode
+                ? '계좌 변경 신청하기'
+                : status === 'rejected'
+                  ? '정산 계좌 다시 등록'
+                  : '정산 계좌 등록'}
           </button>
+          {changeMode && (
+            <button
+              type="button"
+              onClick={() => { setChangeMode(false); setError(null); }}
+              className="w-full rounded-xl py-2 text-[12px] font-semibold text-ink-mute hover:text-ink"
+            >
+              취소
+            </button>
+          )}
           <p className="text-[11px] text-ink-dim">
-            등록 후 관리자 확인까지 평균 1영업일이 소요됩니다.
+            {changeMode
+              ? '신청 후 관리자 확인까지 평균 1영업일이 소요되며, 그동안 정산 지급은 보류됩니다.'
+              : '등록 후 관리자 확인까지 평균 1영업일이 소요됩니다.'}
           </p>
         </>
       )}

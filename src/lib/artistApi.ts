@@ -1811,3 +1811,85 @@ export * from './artist/moderation';
 export * from './artist/payoutAdmin';
 export * from './artist/streaming';
 export * from './artist/internal';
+
+// ---------- PAYOUT ACCOUNT CHANGE REQUESTS (0495) ----------
+//
+// 계좌 변경은 "신청 → 관리자 승인" 이다. submit_artist_payout_account_v2 가
+// 지급에 영향 있는 항목의 변경을 감지하면 verification_status 를 pending 으로
+// 되돌리고 이력 행을 남긴다. 아래는 그 이력 조회용.
+
+export type PayoutChangeStatus = 'pending' | 'approved' | 'rejected';
+
+export interface MyPayoutAccountChange {
+  change_id: string;
+  change_type: 'create' | 'update';
+  changed_fields: string[];
+  prev_bank_name: string | null;
+  prev_masked_account_number: string | null;
+  new_bank_name: string | null;
+  new_masked_account_number: string | null;
+  new_account_holder: string | null;
+  status: PayoutChangeStatus;
+  review_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export async function fetchMyPayoutAccountChanges(
+  limit = 10,
+): Promise<MyPayoutAccountChange[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_my_payout_account_changes', {
+      p_limit: limit,
+    });
+    if (error) return [];
+    return (data ?? []) as MyPayoutAccountChange[];
+  } catch {
+    return [];
+  }
+}
+
+export interface AdminPayoutAccountChange extends MyPayoutAccountChange {
+  account_id: string | null;
+  user_id: string;
+  artist_name: string | null;
+  email: string | null;
+  prev_legal_name: string | null;
+  prev_account_holder: string | null;
+  prev_verification_status: string | null;
+  new_legal_name: string | null;
+  /** 신청 시점 지급 대기 스냅샷 — 지급 직전 변경일수록 먼저 봐야 한다. */
+  pending_settlement_count: number;
+  pending_settlement_amount: number;
+}
+
+export async function listPayoutAccountChanges(
+  status: PayoutChangeStatus | 'all' = 'pending',
+  limit = 100,
+): Promise<AdminPayoutAccountChange[]> {
+  try {
+    const { data, error } = await supabase.rpc('admin_list_payout_account_changes', {
+      p_status: status,
+      p_limit: limit,
+    });
+    if (error) return [];
+    return (data ?? []) as AdminPayoutAccountChange[];
+  } catch {
+    return [];
+  }
+}
+
+/** 변경 항목 한글 라벨 — 관리자/아티스트 화면 공용. */
+export const PAYOUT_CHANGE_FIELD_LABEL: Record<string, string> = {
+  account_number: '계좌번호',
+  bank_name: '은행',
+  account_holder: '예금주',
+  legal_name: '실명',
+  tax_withholding_type: '원천징수 유형',
+  resident_registration_number: '주민등록번호',
+};
+
+export function payoutChangeFieldLabels(fields: string[] | null | undefined): string {
+  if (!fields || fields.length === 0) return '—';
+  return fields.map((f) => PAYOUT_CHANGE_FIELD_LABEL[f] ?? f).join(' · ');
+}

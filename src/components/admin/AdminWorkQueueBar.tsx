@@ -30,6 +30,13 @@ interface QueueItem {
   label: string;
   /** 이동할 admin 탭 key */
   tab: string;
+  /**
+   * 통합 탭 안에서 열 뷰(선택). 구 탭 key 가 있는 경우는 MERGED_TABS 가 풀어주지만,
+   * 애초에 별도 탭이었던 적이 없는 뷰(0495 '변경 신청')는 가리킬 구 key 가 없다.
+   * 그런 뷰를 위해 MERGED_TABS 에 가짜 key 를 만드는 대신 여기서 직접 전달한다
+   * (MERGED_TABS 의 key 는 '실제로 존재했던 탭' 이라는 불변식을 지키기 위해).
+   */
+  view?: string;
   icon: React.ReactNode;
   count: number;
   /** 숫자 아래 한 줄 — 내역 분해나 강조 사유 */
@@ -87,14 +94,27 @@ function buildItems(c: AdminWorkQueueCounts): QueueItem[] {
     {
       key: 'payout',
       label: '정산 계좌',
-      // 미완비가 있으면 '계좌 목록' 뷰로 바로 보낸다 — 그 건이 보이는 화면이 거기다.
-      // (구 key 는 MERGED_TABS 가 통합 탭의 해당 뷰로 풀어준다.)
-      tab: c.payout_incomplete > 0 ? WORK_QUEUE_TABS.payoutAccounts : WORK_QUEUE_TABS.payout,
+      // 어느 뷰로 보낼지는 '가장 급한 것' 기준. 카드를 늘리지 않고 목적지만 바꾼다.
+      //   변경 신청 > 미완비 > 나머지
+      // 변경 신청이 1순위인 이유: 이미 승인돼 정산이 잡혀 있는 계좌가 바뀐 건이라
+      // 방치하면 그 아티스트의 지급이 계속 보류된다(0495).
+      // (구/alias key 는 MERGED_TABS 가 통합 탭의 해당 뷰로 풀어준다.)
+      tab: c.payout_change > 0 || c.payout_incomplete > 0
+        ? WORK_QUEUE_TABS.payoutAccounts
+        : WORK_QUEUE_TABS.payout,
+      view: c.payout_change > 0 ? 'changes' : undefined,
       icon: <Wallet size={14} />,
       count: payoutTotal,
-      // 미완비는 '계좌는 확인됐지만 지급이 안 나가는' 상태라 별도로 짚어준다.
+      // 카드 폭에 서너 토막은 안 들어간다 — 예전엔 네 번째가 '변경 2 …' 로 잘려
+      // 정작 카드를 그 뷰로 보내는 이유가 안 보였다. 그래서 0 은 빼고 급한 순으로
+      // 최대 세 토막만 쓴다(전체 내역은 탭에서 본다).
       detail: payoutTotal > 0
-        ? `신청 ${NUM(c.payout_intake)} · 확인 ${NUM(c.payout_verify)} · 미완비 ${NUM(c.payout_incomplete)}`
+        ? [
+            c.payout_change > 0 ? `변경 ${NUM(c.payout_change)}` : null,
+            c.payout_incomplete > 0 ? `미완비 ${NUM(c.payout_incomplete)}` : null,
+            c.payout_verify > 0 ? `확인 ${NUM(c.payout_verify)}` : null,
+            c.payout_intake > 0 ? `신청 ${NUM(c.payout_intake)}` : null,
+          ].filter(Boolean).slice(0, 3).join(' · ')
         : undefined,
       tone: toneFor(payoutTotal),
     },
@@ -144,7 +164,7 @@ export default function AdminWorkQueueBar({
   onNavigate,
   isTabVisible,
 }: {
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, view?: string) => void;
   /** 권한상 이 관리자에게 보이는 탭인지. 안 보이는 탭 카드는 렌더하지 않는다
    *  (클릭해도 아무 일 없는 카드를 남기지 않기 위함 — 기존 바로가기와 같은 규칙). */
   isTabVisible: (tab: string) => boolean;
@@ -202,7 +222,7 @@ export default function AdminWorkQueueBar({
             <button
               key={it.key}
               type="button"
-              onClick={() => onNavigate(it.tab)}
+              onClick={() => onNavigate(it.tab, it.view)}
               className={`rounded-xl border bg-bg-card p-3 text-left transition hover:bg-bg-hover ${
                 idle ? BORDER.neutral : BORDER[it.tone]
               }`}
