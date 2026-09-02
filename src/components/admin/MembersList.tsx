@@ -4,7 +4,9 @@ import {
   fetchMemberList,
   updateUserRole,
   updateUserPlan,
+  memberCategory,
   type MemberRow,
+  type MemberCategory,
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
@@ -35,12 +37,22 @@ function fmtDate(s: string | null): string {
   });
 }
 
+// 0491 — 회원 유형 배지 (아티스트 / 본사 / 가맹 / 사업자 / 일반)
+const CATEGORY_BADGE: Record<MemberCategory, { label: string; className: string }> = {
+  artist: { label: '🎤 아티스트', className: 'bg-purple-500/15 text-purple-500 dark:text-purple-300 ring-purple-400/20' },
+  hq: { label: '🏢 본사', className: 'bg-amber-500/15 text-amber-600 dark:text-amber-300 ring-amber-400/25' },
+  franchise: { label: '🏬 가맹', className: 'bg-sky-500/15 text-sky-600 dark:text-sky-300 ring-sky-400/25' },
+  business: { label: '🏪 사업자', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-emerald-400/25' },
+  individual: { label: '👤 일반', className: 'bg-ink/5 text-ink-mute ring-line/10' },
+};
+
 export default function MembersList() {
   const [rows, setRows] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [plan, setPlan] = useState<string>('');
   const [role, setRole] = useState<string>('');
+  const [category, setCategory] = useState<'' | MemberCategory>('');
   const [status, setStatus] = useState<'' | 'active' | 'withdrawn' | 'cancel_scheduled'>('');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
@@ -54,6 +66,7 @@ export default function MembersList() {
         plan: plan || undefined,
         role: role || undefined,
         status: status || undefined,
+        category: category || undefined,
       });
       setRows(data);
     } catch (e) {
@@ -66,7 +79,7 @@ export default function MembersList() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, role, status]);
+  }, [plan, role, status, category]);
 
   // 검색은 디바운스
   useEffect(() => {
@@ -148,6 +161,18 @@ export default function MembersList() {
             </button>
           )}
         </div>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value as '' | MemberCategory)}
+          className="input w-auto text-sm"
+        >
+          <option value="">전체 유형</option>
+          <option value="artist">아티스트</option>
+          <option value="hq">본사</option>
+          <option value="franchise">가맹</option>
+          <option value="business">사업자</option>
+          <option value="individual">일반</option>
+        </select>
         <select value={plan} onChange={(e) => setPlan(e.target.value)} className="input w-auto text-sm">
           <option value="">전체 플랜</option>
           <option value="free">무료</option>
@@ -215,11 +240,22 @@ export default function MembersList() {
                     <p className="text-xs text-ink-mute">{m.email ?? m.id.slice(0, 8)}</p>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-semibold ring-1 ring-line/10">
-                      {(m.account_type ?? 'individual') === 'business'
-                        ? '🏪 사업자'
-                        : (m.account_type === 'artist' ? '🎤 아티스트' : '👤 일반')}
-                    </span>
+                    {(() => {
+                      const cat = memberCategory(m);
+                      const badge = CATEGORY_BADGE[cat];
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${badge.className}`}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
+                    {(m.is_enterprise_hq || m.is_franchise_store) && m.enterprise_name && (
+                      <span className="ml-1 inline-flex rounded-full bg-ink/5 px-1.5 py-0.5 text-[9px] font-medium text-ink-mute ring-1 ring-line/10">
+                        {m.enterprise_name}
+                      </span>
+                    )}
                     {m.account_type === 'artist' && m.plan_type === 'student_artist' && (
                       <span className="ml-1 inline-flex rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
                         PRO

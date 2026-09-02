@@ -68,6 +68,25 @@ export interface MemberRow {
   has_promotion?: boolean;
   // X6.10 Phase 2 — 아티스트 플랜 (artist 계정만 의미 있음)
   plan_type?: 'general_artist' | 'student_artist' | 'admin' | 'legacy_student' | null;
+  // 0491 — 엔터프라이즈 소속 분류 (본사/가맹)
+  is_enterprise_hq?: boolean;
+  is_franchise_store?: boolean;
+  enterprise_name?: string | null;
+}
+
+// 0491 — 회원 유형 카테고리 (표시/필터 공용). 우선순위: artist > hq > franchise > business > individual
+export type MemberCategory = 'artist' | 'hq' | 'franchise' | 'business' | 'individual';
+
+export function memberCategory(m: {
+  account_type?: MemberRow['account_type'] | null;
+  is_enterprise_hq?: boolean;
+  is_franchise_store?: boolean;
+}): MemberCategory {
+  if (m.account_type === 'artist') return 'artist';
+  if (m.is_enterprise_hq) return 'hq';
+  if (m.is_franchise_store) return 'franchise';
+  if (m.account_type === 'business') return 'business';
+  return 'individual';
 }
 
 export interface MemberDetail {
@@ -216,10 +235,11 @@ export async function fetchMemberList(opts: {
   plan?: string;
   role?: string;
   status?: 'active' | 'withdrawn' | 'cancel_scheduled';
+  category?: MemberCategory;
   limit?: number;
   offset?: number;
 } = {}): Promise<MemberRow[]> {
-  // 0056 시그니처: (p_limit, p_offset, p_search, p_plan, p_role, p_status)
+  // 0491 시그니처: (p_limit, p_offset, p_search, p_plan, p_role, p_status, p_category)
   const { data, error } = await supabase.rpc('admin_member_list', {
     p_limit: opts.limit ?? 100,
     p_offset: opts.offset ?? 0,
@@ -227,6 +247,7 @@ export async function fetchMemberList(opts: {
     p_plan: opts.plan ?? null,
     p_role: opts.role ?? null,
     p_status: opts.status ?? null,
+    p_category: opts.category ?? null,
   });
   if (error) throw error;
   return (data ?? []) as MemberRow[];
