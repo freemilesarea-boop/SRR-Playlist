@@ -187,9 +187,25 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
           <Alert tone="error">조회 실패</Alert>
         ) : (
           <>
-            <pre className="overflow-x-auto rounded-xl bg-bg-card p-3 text-[11px]">
-              {JSON.stringify(data.settlement, null, 2)}
-            </pre>
+            {/* 0492: 원시 JSON 대신 산출 내역. 이월과 보정은 성격이 다른 돈이라 따로 보여준다
+                (합쳐 보이던 탓에 "지급 완료인데 이월금 있음"으로 읽히는 오독이 있었다). */}
+            <dl className="space-y-1 rounded-xl bg-bg-card p-3 text-xs ring-1 ring-line/10">
+              <DetailRow label="당월 정산액 (net)" value={num(data.settlement.artist_net_settlement)} />
+              <DetailRow label="직전월 이월금" value={num(data.settlement.previous_carried_amount)} signed />
+              {num(data.settlement.adjustment_amount) !== 0 && (
+                <DetailRow label="보정 (소급 정산)" value={num(data.settlement.adjustment_amount)} signed />
+              )}
+              <div className="my-1 border-t border-line/20" />
+              <DetailRow label="총 정산액" value={num(data.settlement.total_settlement_amount)} bold />
+              {data.settlement.meets_min_payout ? (
+                <>
+                  <DetailRow label="원천징수" value={-num(data.settlement.withholding_tax_amount)} signed muted />
+                  <DetailRow label="최종 지급액" value={num(data.settlement.final_payout_amount)} bold accent />
+                </>
+              ) : (
+                <DetailRow label="다음 달 이월" value={num(data.settlement.carried_over_amount)} muted />
+              )}
+            </dl>
             <section>
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mute">
                 트랙별 상세 ({data.items.length})
@@ -212,6 +228,31 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** settlement jsonb 의 숫자 필드를 안전하게 읽는다(RPC 는 Record<string, unknown> 반환). */
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function DetailRow({
+  label, value, bold, accent, muted, signed,
+}: {
+  label: string; value: number;
+  bold?: boolean; accent?: boolean; muted?: boolean; signed?: boolean;
+}) {
+  const text = signed && value !== 0
+    ? `${value > 0 ? '+' : '−'}₩${Math.abs(value).toLocaleString('ko-KR')}`
+    : `₩${value.toLocaleString('ko-KR')}`;
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className={muted ? 'text-ink-dim' : 'text-ink-mute'}>{label}</dt>
+      <dd className={`tabular-nums ${bold ? 'font-bold' : ''} ${accent ? 'text-accent' : muted ? 'text-ink-dim' : 'text-ink'}`}>
+        {text}
+      </dd>
     </div>
   );
 }
