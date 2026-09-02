@@ -145,7 +145,6 @@ export default function EnterpriseContractsPanel() {
     <AdminSection
       title={<span className="flex items-center gap-2"><FileSignature size={16} /> 계약 관리</span>}
       description="본사 계약을 등록·관리합니다. 활성 계약의 단가/수수료/정산 조건이 청구 생성에 자동 반영됩니다."
-      badge={<AdminBadge tone="primary" variant="subtle">Phase 4-12 · V1</AdminBadge>}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <AdminButton tone="neutral" variant="subtle" size="sm"

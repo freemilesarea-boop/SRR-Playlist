@@ -43,7 +43,7 @@ export default function AbuseMonitorTab() {
       <div className="rounded-xl bg-bg-card p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-1 text-sm font-bold">
-            <ShieldAlert size={14} className="text-rose-300" /> 어뷰징 모니터 (X6.0)
+            <ShieldAlert size={14} className="text-rose-300" /> 어뷰징 모니터
           </h3>
           <button onClick={() => void load()} disabled={loading}
             className="inline-flex items-center gap-1 rounded bg-bg-deep px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-50">

@@ -175,11 +175,13 @@ describe('deep-link keys resolve to a job group (regression)', () => {
     expect(groupOfTab('placement-audit')).toBe('플레이리스트');
   });
   it('merged-away deep links resolve to the merged tab position', () => {
-    // 화면이 합쳐져도 구 링크는 통합 탭의 자리를 가리켜야 한다(엉뚱한 그룹 폴백 금지).
+    // 화면이 합쳐져도 구 링크는 통합 탭의 자리를 가리켜야 한다.
+    // '폴백으로 빠지지 않았다'는 것은 통합 탭이 실제로 트리에 배치돼 있다는 사실로 확인한다
+    // (그룹 이름으로 판정하면 통합 탭이 정말 그 그룹인 경우와 구분되지 않는다).
     for (const [from, target] of Object.entries(MERGED_TABS)) {
+      expect(ALL_NAV_TAB_KEYS).toContain(target.tab);
       expect(groupOfTab(from)).toBe(groupOfTab(target.tab));
       expect(subgroupOfTab(from)).toBe(subgroupOfTab(target.tab));
-      expect(groupOfTab(from)).not.toBe('운영·설정');
     }
   });
 });
