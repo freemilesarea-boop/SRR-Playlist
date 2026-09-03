@@ -258,6 +258,26 @@ artist_has_paid_access = status in ('active','cancel_scheduled')
 
 비교가 필요하면 `_internal_apply_payapp_paid_event` 의 `v_tier_target` 과 동일한 매핑을 거칠 것.
 
+### 플랜은 금액으로 추정하지 말 것 (0499 / 0500)
+
+금액은 플랜을 구분하지 못한다.
+
+| 금액 | 가능한 plan_type |
+|---|---|
+| 4,900원 | `individual` 또는 `artist_student` |
+| 6,900원 | `business` 또는 `artist_general` |
+
+과거 `_trg_promote_state4_to_paid` 와 payapp-feedback EF 가 금액으로 추정해서:
+
+- `artist_student` 결제 → `subscriptions.plan_type = 'individual'` (라벨 오류, 46건)
+- `artist_general` 결제 → `subscriptions.plan_type = 'business'` → `membership_tier='business'`
+  → `tracks_artist_insert` RLS 는 `tier='individual'` 을 요구하므로 **결제한 일반 아티스트가
+  음원을 등록하지 못하는 기능 버그**
+
+**단일 진실 원천은 `payment_orders.plan_type`** — 결제창을 띄울 때 서버가 확정한 값이다.
+`_internal_apply_payapp_event`(모든 webhook/replay 경로가 지나는 깔때기)가 order_no 로 주문을
+찾아 `plan_type` 을 확정하고, 주문을 못 찾은 경우에만 금액 추정으로 폴백한다.
+
 ## PayApp 콘솔 설정
 
 | 항목 | 값 |
