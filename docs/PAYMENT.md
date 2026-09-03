@@ -239,6 +239,25 @@ artist_has_paid_access = status in ('active','cancel_scheduled')
   migration 이전에 프론트만 배포하면 `has_paid_membership` 이 옛 기준(membership_tier)이라
   정지 유저에게 재결제 카드가 뜨지 않는다.
 
+## 아티스트 플랜과 membership_tier 매핑 (0497)
+
+`users.membership_tier` 는 CHECK 상 `free/individual/business` 만 저장 가능하다.
+아티스트 플랜은 tier 로 매핑해서 저장한다.
+
+| payment_orders.plan_type | users.membership_tier |
+|---|---|
+| individual | individual |
+| business | business |
+| artist_general (6,900) | individual |
+| artist_student (4,900) | individual |
+
+⚠️ **plan_type 과 membership_tier 를 문자열로 직접 비교하면 안 된다.** 아티스트 플랜에서
+항상 false 가 된다. `get_my_payment_status.membership_applied` 가 이 실수로 아티스트 플랜
+결제 53건(회원 47명, 2026-06-10~)에 대해 결제 성공 페이지에서 "아직 반영되지 않음" 을
+띄웠고, 이미 결제한 회원에게 재결제를 안내했다 (0497 에서 수정).
+
+비교가 필요하면 `_internal_apply_payapp_paid_event` 의 `v_tier_target` 과 동일한 매핑을 거칠 것.
+
 ## PayApp 콘솔 설정
 
 | 항목 | 값 |
