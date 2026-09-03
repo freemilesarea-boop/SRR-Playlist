@@ -12,6 +12,7 @@ import {
 } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
 import { validatePromotionCode, type PromotionValidation } from '@/lib/adminApi';
+import { isPausedSubscription, resumeNotice, resumeCheckoutTarget } from '@/lib/subscriptionResume';
 import type { SubscriptionType } from '@/types/db';
 import Alert from '@/components/Alert';
 
@@ -157,6 +158,14 @@ export default function SubscriptionPage() {
   // membership_tier 는 webhook(state=64/refund 등) 가 직접 set 하는 단일 진실 원천.
   const tier = freshTier ?? profile?.membership_tier ?? 'free';
   const current: PlanKey = tierToPlanKey(tier);
+  // RESUME-PAUSED-SUBSCRIPTION-1 — 정지(해지 예약) 상태에서는 membership_tier 가 유예
+  // 기간 동안 남아 있어 요금제 카드가 '이용 중' 으로 잠겨 재결제가 불가능했다.
+  // 정지 상태면 잠금을 풀어 언제든 바로 다시 결제할 수 있게 한다.
+  const paused = isPausedSubscription(activeSub);
+  const resume = resumeNotice(activeSub);
+  // 아티스트 요금제는 상품이 달라 이 페이지 카드로 결제하면 안 된다 — 대시보드로 안내.
+  const resumeTarget = resumeCheckoutTarget(activeSub?.plan_type);
+  const resumeHere = paused && resumeTarget.kind === 'plan';
 
   async function startPayappCheckout(
     planUi: 'personal' | 'business',
@@ -276,7 +285,8 @@ export default function SubscriptionPage() {
   }, [user?.id]);
 
   async function requestPlan(plan: PlanKey) {
-    if (!user || plan === current) return;
+    // 정지 상태면 현재 tier 와 같은 요금제라도 재결제를 허용한다.
+    if (!user || (plan === current && !resumeHere)) return;
     if (plan === 'free') {
       // membership_tier 는 서버(webhook/정산 RPC)만 변경 가능 — 클라이언트가 직접 내릴 수 없다.
       // 활성 구독이 있으면 정식 해지 플로우(PayApp 정기결제 해지 + 기간 종료 시 free 회수)를 사용.
@@ -357,7 +367,9 @@ export default function SubscriptionPage() {
       {/* 플랜 카드 (요약) */}
       <div className="grid gap-3 md:grid-cols-3">
         {PLANS.map((p) => {
-          const isCurrent = current === p.key;
+          // 정지 상태에서는 '이용 중' 잠금 없이 재결제 CTA 를 노출한다.
+          const isCurrent = current === p.key && !resumeHere;
+          const isResumeTarget = current === p.key && resumeHere && p.key !== 'free';
           const isPending = pending?.requested_plan === p.key;
           const isBusy = busy === p.key;
           return (
@@ -412,7 +424,9 @@ export default function SubscriptionPage() {
                     ? '이용 중'
                     : isPending
                       ? '신청 대기 중'
-                      : p.cta}
+                      : isResumeTarget
+                        ? '다시 결제하고 이어서 이용'
+                        : p.cta}
               </button>
             </div>
           );
@@ -490,10 +504,26 @@ export default function SubscriptionPage() {
       </section>
 
       {/* 현재 구독 상태 + 취소 버튼 */}
-      {activeSub && activeSub.status === 'cancel_scheduled' && (
-        <Alert tone="warning" title={`${activeSub.plan_type === 'business' ? '사업자' : '일반'} 구독 취소 예약됨`}>
-          <strong>{fmtPeriodEnd(activeSub.current_period_end)}</strong>까지 Premium 기능을 이용할 수
-          있어요. 이후 자동으로 무료 플랜으로 전환됩니다.
+      {resume && activeSub && (
+        <Alert tone="warning" title={resume.title}>
+          <p className="leading-relaxed">{resume.body}</p>
+          {resumeTarget.kind === 'plan' ? (
+            <button
+              onClick={() => setPhoneModal({ plan: resumeTarget.plan, phone: '' })}
+              disabled={busy !== null}
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-black hover:opacity-90 disabled:opacity-60"
+            >
+              {resume.ctaLabel}
+            </button>
+          ) : (
+            // 아티스트 요금제(월 6,900 / 4,900)는 대시보드 결제 카드에서 진행.
+            <Link
+              to="/artist#payment-required"
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-black hover:opacity-90"
+            >
+              {resume.ctaLabel}
+            </Link>
+          )}
         </Alert>
       )}
       {activeSub && activeSub.status === 'active' && (
@@ -528,6 +558,11 @@ export default function SubscriptionPage() {
         <p className="text-xs leading-relaxed text-ink-mute">
           <strong>해지 정책:</strong> 구독을 취소해도 현재 결제 기간이 끝날 때까지 Premium 기능을
           이용할 수 있어요. 다음 결제일부터 자동결제가 중단됩니다.
+        </p>
+        <p className="text-xs leading-relaxed text-ink-mute">
+          <strong>재개 정책:</strong> 구독을 정지했더라도 이전 요금제 기간이 끝나기를 기다릴 필요
+          없이 언제든 바로 다시 결제해 이용을 재개할 수 있어요. 재결제한 시점부터 새 결제
+          주기(1개월)가 시작됩니다.
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=듣다 매장 구독 문의"

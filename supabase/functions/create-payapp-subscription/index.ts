@@ -164,12 +164,18 @@ serve(async (req) => {
 
   const orderNo = generateOrderNo(user.id);
 
-  // 기존 pending 구독이 있으면 그걸 갱신, 없으면 신규
+  // 기존 pending 구독이 있으면 그걸 갱신, 없으면 신규.
+  // RESUME-PAUSED-SUBSCRIPTION-1: 정지(cancel_scheduled) 구독은 건드리지 않는다.
+  // 재결제는 항상 새 pending row 로 진행되고, 결제 성공 webhook 이 그 row 를 활성화하며
+  // 이전 정지 구독을 대체 처리한다(migration 0495). 정지 상태여도 재결제는 막지 않는다.
+  // 재시도로 pending 이 여러 건 쌓여 있어도 실패하지 않도록 최신 1건만 집는다.
   const { data: existing } = await sb
     .from('subscriptions')
     .select('id, status')
     .eq('user_id', user.id)
     .in('status', ['pending', 'payment_waiting'])
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   let subscriptionId: string;
