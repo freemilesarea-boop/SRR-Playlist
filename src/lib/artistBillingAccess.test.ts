@@ -65,6 +65,27 @@ describe('classifyArtistBillingAccess — allowed', () => {
     expect(r.allowed).toBe(true);
   });
 
+  it('0496 — 해지 예약(cancel_scheduled)이어도 결제한 기간이 남아 있으면 allowed', () => {
+    const r = classifyArtistBillingAccess(
+      base({ subscriptions: [activeSub({
+        status: 'cancel_scheduled', cancelRequestedAt: '2026-08-01T00:00:00Z', currentPeriodEnd: FUTURE,
+      })] }),
+      NOW,
+    );
+    expect(r).toEqual<ArtistBillingAccess>({ allowed: true, status: 'active', reason: null, restrictedAt: null });
+  });
+
+  it('0496 — 아티스트 요금제도 유예기간 동안 allowed', () => {
+    const r = classifyArtistBillingAccess(
+      base({ subscriptions: [activeSub({
+        status: 'cancel_scheduled', planType: 'artist_general',
+        cancelRequestedAt: '2026-08-01T00:00:00Z', currentPeriodEnd: FUTURE,
+      })] }),
+      NOW,
+    );
+    expect(r.allowed).toBe(true);
+  });
+
   it('re-payment recovery: previously expired sub + new active sub → allowed', () => {
     const r = classifyArtistBillingAccess(
       base({ subscriptions: [
@@ -79,16 +100,26 @@ describe('classifyArtistBillingAccess — allowed', () => {
 });
 
 describe('classifyArtistBillingAccess — restricted', () => {
-  it('cancel_requested_at set → cancelled even if period_end future', () => {
+  it('해지 예약 + 기간 지남 → cancelled', () => {
     const r = classifyArtistBillingAccess(
-      base({ subscriptions: [activeSub({ cancelRequestedAt: '2026-08-01T00:00:00Z', status: 'cancel_scheduled' })] }),
+      base({ subscriptions: [activeSub({
+        status: 'cancel_scheduled', cancelRequestedAt: '2026-07-20T00:00:00Z', currentPeriodEnd: PAST,
+      })] }),
       NOW,
     );
     expect(r.allowed).toBe(false);
     if (!r.allowed) {
       expect(r.reason).toBe('cancelled');
-      expect(r.restrictedAt).toBe('2026-08-01T00:00:00Z');
+      expect(r.restrictedAt).toBe('2026-07-20T00:00:00Z');
     }
+  });
+
+  it('환불건은 기간이 남아 있어도 차단 (0496)', () => {
+    const r = classifyArtistBillingAccess(
+      base({ subscriptions: [activeSub({ refundedAt: '2026-08-01T00:00:00Z' })] }),
+      NOW,
+    );
+    expect(r.allowed).toBe(false);
   });
 
   it('status canceled → cancelled', () => {
@@ -190,10 +221,10 @@ describe('billingRequiredPayload', () => {
 });
 
 describe('artistBillingBannerContent — banner copy per status', () => {
-  it('cancelled: 취소 문구 + 기존 음원 수정 언급 + 3 CTA(구독 다시 시작/기존 음원/정산)', () => {
+  it('cancelled: 기간 종료 문구 + 기존 음원 수정 언급 + 3 CTA(구독 다시 시작/기존 음원/정산)', () => {
     const c = artistBillingBannerContent(result({ isArtist: true, status: 'cancelled', reason: 'cancelled' }));
     expect(c).not.toBeNull();
-    expect(c!.title).toContain('정기결제가 취소되어');
+    expect(c!.title).toContain('구독 기간이 끝나');
     expect(c!.body).toContain('기존 음원 수정');
     expect(c!.ctas[0]).toEqual({ label: '구독 다시 시작', to: '/subscription' });
     expect(c!.ctas.map((x) => x.label)).toEqual(['구독 다시 시작', '기존 음원 보기', '정산 내역 보기']);

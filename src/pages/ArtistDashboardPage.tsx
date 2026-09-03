@@ -652,8 +652,8 @@ function PaymentRequiredCard({
   // 헤드라인 / 안내 문구 동적
   const resumeHeading = `유통 재개 — 월 ${priceWon.toLocaleString('ko-KR')}원 요금제 다시 결제`;
   const resumeDescription =
-    `구독이 정지된 상태라 음원 등록·유통 신청이 제한돼요. 이전 요금제 기간이 끝나기를 기다릴 필요 없이 ` +
-    `지금 바로 다시 결제하면 즉시 이어서 진행할 수 있어요. 결제하는 시점부터 새 결제 주기(1개월)가 시작됩니다.`;
+    `구독 기간이 끝나 음원 등록·유통 신청이 제한된 상태예요. 지금 바로 다시 결제하면 즉시 이어서 ` +
+    `진행할 수 있고, 결제하는 시점부터 새 결제 주기(1개월)가 시작됩니다.`;
   const heading = isPro
     ? `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 수강생 PRO 요금제 결제`
     : `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 요금제 결제`;

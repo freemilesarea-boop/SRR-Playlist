@@ -55,18 +55,19 @@ describe('remainingGraceDays', () => {
 });
 
 describe('resumeNotice', () => {
-  it('유예가 남았으면 종료일을 알리고 즉시 재결제를 안내한다', () => {
+  it('유예가 남았으면 그때까지 그대로 이용 가능함을 알린다', () => {
     const n = resumeNotice(sub(), NOW);
     expect(n).not.toBeNull();
     expect(n?.remainingDays).toBe(11);
     expect(n?.body).toContain('2026년 9월 14일');
+    expect(n?.body).toContain('그대로 이용할 수 있고');
     expect(n?.body).toContain('새 결제 주기');
     expect(n?.ctaLabel).toContain('다시 결제');
   });
   it('유예가 끝났으면 남은 기간 문구 없이 재결제만 안내', () => {
     const n = resumeNotice(sub({ status: 'canceled', current_period_end: '2026-08-01T00:00:00.000Z' }), NOW);
     expect(n?.remainingDays).toBe(0);
-    expect(n?.body).not.toContain('남아 있어도');
+    expect(n?.body).not.toContain('그대로 이용할 수 있고');
   });
   it('정지 상태가 아니면 null', () => {
     expect(resumeNotice(sub({ status: 'active', cancel_requested_at: null }), NOW)).toBeNull();
