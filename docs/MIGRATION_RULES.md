@@ -69,6 +69,31 @@ Lint 가 감지하는 변수 suffix:
 
 ## 기타 권장 사항
 
+### 0. 기존 함수 재정의 전 — 최신 정의를 **대소문자 무시**로 찾을 것 (필수)
+
+`CREATE OR REPLACE FUNCTION` 으로 기존 함수를 다시 쓸 때는, 본문의 출발점이 반드시
+**현재 프로덕션에 적용된 마지막 정의**여야 한다. 중간의 핫픽스를 못 보고 옛 버전 위에
+쓰면 그 핫픽스가 조용히 사라진다.
+
+```bash
+# ✅ 대소문자 무시 (핫픽스가 대문자로 작성된 경우가 있다)
+grep -rlni "create or replace function public.<이름>" supabase/migrations | sort
+
+# ❌ 이것만 쓰면 대문자로 작성된 핫픽스를 놓친다
+grep -rln "create or replace function public.<이름>" supabase/migrations
+```
+
+**실제 사고 (2026-09-03):** `0495` 가 `get_artist_upload_eligibility` 를 `0063` 기준으로
+다시 작성하면서, 그 사이의 `0067_eligibility_ambiguous_fix`(대문자 `CREATE OR REPLACE`)
+를 덮어썼다. `RETURNS TABLE` 의 OUT 컬럼과 bare 컬럼 참조가 다시 충돌해
+`42702 column reference "contract_status" is ambiguous` 가 부활했고, 모든 로그인
+아티스트의 화면이 깨졌다(‘아티스트 관리’ 버튼 사라짐 + 결제 요구 카드 노출).
+`0498` 로 복구.
+
+관련 규칙: `RETURNS TABLE` 의 OUT 컬럼과 이름이 같은 테이블 컬럼은 **항상 alias 로 정규화**
+(`u.contract_status`, `ap.approval_status` 등). PL/pgSQL 기본 `variable_conflict=error` 라
+bare 참조는 런타임에 42702 로 죽는다.
+
 ### 1. `CREATE OR REPLACE FUNCTION` 시 파라미터 추가 주의
 
 PostgreSQL 은 파라미터 시그니처가 다르면 **새 overload** 를 생성. `default` 만 추가해도 mismatch.
