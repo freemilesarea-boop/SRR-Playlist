@@ -44,6 +44,7 @@ import {
   type SettlementHoldReason,
 } from '@/lib/artistApi';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
+import { useArtistBillingAccess } from '@/hooks/useArtistBillingAccess';
 import { fetchMyArtistPlan, type ArtistPlanInfo, planBadgeTone } from '@/lib/artistPlanApi';
 import { CreditCard, Wallet, FileSignature, GraduationCap, Music2, Shield } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -70,6 +71,8 @@ const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIc
 
 export default function ArtistDashboardPage() {
   const { user, profile, loading: authLoading } = useAuthStore();
+  // RESUME-PAUSED-SUBSCRIPTION-1 — 정지(해지) 상태면 결제 카드 문구를 '재개' 로 바꾼다.
+  const { access: billingAccess } = useArtistBillingAccess(true);
   // ARTIST-BILLING-ACCESS-ENFORCEMENT — 결제 제한 배너는 공통 ArtistLayout 최상단에서
   // 렌더된다. 업로드/유통 신청 클릭 시 서버 pre-check(uploadArtistTrack)가 billing_required
   // 를 반환하면 아래 handleSubmit 에서 결제 페이지로 안내한다.
@@ -164,7 +167,6 @@ export default function ArtistDashboardPage() {
           status={holdStatus}
           eligibility={eligibility}
           payout={payout}
-          membershipTier={profile?.membership_tier ?? null}
         />
       )}
 
@@ -191,7 +193,7 @@ export default function ArtistDashboardPage() {
           eligibility={eligibility}
           payout={payout}
           payoutMasked={payoutMasked}
-          membershipTier={profile?.membership_tier ?? null}
+          billingPaused={billingAccess?.reason === 'cancelled'}
           userEmail={user?.email ?? ''}
           plan={plan}
           editingTrack={editingTrack}
@@ -392,7 +394,7 @@ function UploadGate({
   eligibility,
   payout,
   payoutMasked,
-  membershipTier,
+  billingPaused,
   userEmail,
   plan,
   editingTrack,
@@ -403,7 +405,8 @@ function UploadGate({
   eligibility: UploadEligibility | null;
   payout: PayoutAccount | null;
   payoutMasked: PayoutAccountMasked | null;
-  membershipTier: 'free' | 'individual' | 'business' | null;
+  /** 이전에 결제한 이력이 있고 지금은 정지(해지) 상태 — 재결제 문구 분기용. */
+  billingPaused: boolean;
   userEmail: string;
   plan: ArtistPlanInfo | null;
   editingTrack?: MyArtistTrackRow | null;
@@ -415,16 +418,14 @@ function UploadGate({
     return <div className="h-24 animate-pulse rounded-2xl bg-bg-card" />;
   }
 
-  // 결제 확인 — artist 결제 흐름 (artist_general / artist_student) 시,
-  // membership_tier 가 'individual' 처럼 표시될 수도 있고 plan 별 별도 추적이
-  // 필요할 수 있으나 X6.22 시점에는 기존 isPaid 로직 그대로 활용.
-  const isPaid =
-    eligibility.has_paid_membership ||
-    membershipTier === 'individual' ||
-    membershipTier === 'business';
+  // RESUME-PAUSED-SUBSCRIPTION-1 — 결제 확인은 서버 판정(has_paid_membership) 하나만
+  // 신뢰한다. 0495 이후 이 값은 실제 게이트(artist_has_paid_access)와 동일하다.
+  // membership_tier 를 OR 로 얹으면 해지 유예기간 동안 "결제됨" 으로 보여서, 유통은
+  // 0467 트리거에 막히는데 재결제 카드는 뜨지 않는 교착이 생긴다.
+  const isPaid = eligibility.has_paid_membership === true;
 
   if (!isPaid) {
-    return <PaymentRequiredCard userEmail={userEmail} plan={plan} />;
+    return <PaymentRequiredCard userEmail={userEmail} plan={plan} paused={billingPaused} />;
   }
 
   // 계약 단계 게이트 (0057). RPC 결과가 없는 환경(0057 미적용)에서는 통과 처리.
@@ -628,7 +629,16 @@ function ContractRequiredCard({
   );
 }
 
-function PaymentRequiredCard({ userEmail, plan }: { userEmail: string; plan: ArtistPlanInfo | null }) {
+function PaymentRequiredCard({
+  userEmail,
+  plan,
+  paused = false,
+}: {
+  userEmail: string;
+  plan: ArtistPlanInfo | null;
+  /** 정지(해지) 후 재개 흐름이면 문구를 '다시 시작' 으로 바꾼다. */
+  paused?: boolean;
+}) {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -640,6 +650,10 @@ function PaymentRequiredCard({ userEmail, plan }: { userEmail: string; plan: Art
   const isGeneralArtist = plan?.plan_type === 'general_artist';
 
   // 헤드라인 / 안내 문구 동적
+  const resumeHeading = `유통 재개 — 월 ${priceWon.toLocaleString('ko-KR')}원 요금제 다시 결제`;
+  const resumeDescription =
+    `구독이 정지된 상태라 음원 등록·유통 신청이 제한돼요. 이전 요금제 기간이 끝나기를 기다릴 필요 없이 ` +
+    `지금 바로 다시 결제하면 즉시 이어서 진행할 수 있어요. 결제하는 시점부터 새 결제 주기(1개월)가 시작됩니다.`;
   const heading = isPro
     ? `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 수강생 PRO 요금제 결제`
     : `음원 업로드 — 월 ${priceWon.toLocaleString('ko-KR')}원 요금제 결제`;
@@ -677,8 +691,10 @@ function PaymentRequiredCard({ userEmail, plan }: { userEmail: string; plan: Art
           <CreditCard size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold">{heading}</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">{description}</p>
+          <h2 className="text-sm font-bold">{paused ? resumeHeading : heading}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+            {paused ? resumeDescription : description}
+          </p>
         </div>
       </div>
       <input
@@ -690,7 +706,11 @@ function PaymentRequiredCard({ userEmail, plan }: { userEmail: string; plan: Art
         autoComplete="tel"
       />
       <button onClick={onPay} disabled={busy} className="btn-primary w-full py-2.5">
-        {busy ? '결제창 준비중…' : `PayApp 으로 ${priceWon.toLocaleString('ko-KR')}원 결제하기`}
+        {busy
+          ? '결제창 준비중…'
+          : paused
+            ? `PayApp 으로 ${priceWon.toLocaleString('ko-KR')}원 결제하고 바로 재개하기`
+            : `PayApp 으로 ${priceWon.toLocaleString('ko-KR')}원 결제하기`}
       </button>
       <p className="text-[11px] text-ink-dim">
         결제 사용자: {userEmail} · 매월 자동 결제 · 마이페이지에서 즉시 해지 가능
@@ -1011,15 +1031,12 @@ function computeHoldPrimaryAction(
   status: SettlementHoldStatus,
   eligibility: UploadEligibility | null,
   payout: PayoutAccount | null,
-  membershipTier: 'free' | 'individual' | 'business' | null,
   navigate: (to: string) => void,
 ): HoldPrimaryAction {
   const reasons = new Set(status.hold_reasons);
 
-  const isPaid =
-    eligibility?.has_paid_membership === true ||
-    membershipTier === 'individual' ||
-    membershipTier === 'business';
+  // RESUME-PAUSED-SUBSCRIPTION-1 — UploadGate 와 동일 기준(서버 판정)만 사용.
+  const isPaid = eligibility?.has_paid_membership === true;
   if (!isPaid) {
     return {
       label: '결제 진행하기',
@@ -1101,17 +1118,16 @@ function computeHoldPrimaryAction(
 }
 
 function SettlementHoldCard({
-  status, eligibility, payout, membershipTier,
+  status, eligibility, payout,
 }: {
   status: SettlementHoldStatus;
   eligibility: UploadEligibility | null;
   payout: PayoutAccount | null;
-  membershipTier: 'free' | 'individual' | 'business' | null;
 }) {
   const navigate = useNavigate();
   const formatAmount = (n: number) => `${n.toLocaleString('ko-KR')}원`;
   const uniqueReasons = Array.from(new Set(status.hold_reasons));
-  const primary = computeHoldPrimaryAction(status, eligibility, payout, membershipTier, navigate);
+  const primary = computeHoldPrimaryAction(status, eligibility, payout, navigate);
   const isDisabled = primary.variant === 'disabled';
 
   return (

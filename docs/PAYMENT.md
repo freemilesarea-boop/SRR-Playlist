@@ -188,13 +188,40 @@ event_key = `payapp:${mul_no}:${rebill_no}:${pay_state}:${price}`
 - 같은 payload 2회 호출 → 첫 INSERT 만 성공, 두 번째는 23505 (unique violation) → 즉시 SUCCESS
 - `payment_orders` / `subscriptions` 중복 변경 0회 보장
 
-## 해지 정책 (MVP)
+## 해지 정책 (현행 — 0056 이후)
 
-**해지 즉시 이용권이 종료되며 `users.membership_tier='free'` 로 다운그레이드됩니다.** 남은 기간에 대한 환불은 자동 처리되지 않습니다 — 고객센터 수동 처리.
+사용자가 해지하면 `cancel-payapp-subscription` 이 PayApp `rebillCancel` 을 먼저 호출하고,
+성공했을 때만 DB 를 바꾼다.
 
-향후 "만료일까지 권한 유지" 정책으로 바꾸려면:
-1. `cancel-payapp-subscription/index.ts` 의 `users.update({ membership_tier: 'free' })` 부분 제거
-2. `current_period_end` 도래 시 free 다운그레이드하는 별도 cron job 추가 (예: Vercel cron `0 1 * * *` 또는 Supabase scheduled function)
+- `subscriptions.status='cancel_scheduled'`, `auto_renew=false`, `cancel_requested_at=now()`
+- `users.membership_tier` 는 **`current_period_end` 까지 유지**(유예기간)
+- 유예 종료 시 `expire_my_scheduled_cancellation()`(로그인 시) /
+  `admin_expire_scheduled_cancellations()` 가 `canceled` + `free` 로 회수
+- 남은 기간 환불은 자동 처리하지 않는다 — 고객센터 수동 처리
+
+⚠️ 아티스트 유료 기능(음원 등록/유통 신청)은 유예기간과 무관하게 **해지 요청 즉시** 제한된다
+(0467 `artist_has_paid_access` 는 `cancel_requested_at is null` 을 요구).
+
+## 정지 후 재개 정책 (0495)
+
+**정지(해지 예약/해지)한 유저는 이전 요금제 기간이 끝나기를 기다릴 필요 없이 언제든 바로 다시
+결제해 유통을 재개할 수 있다.**
+
+| 지점 | 동작 |
+|---|---|
+| `/subscription` | 정지 상태면 요금제 카드의 '이용 중' 잠금 해제 + 상단에 재개 배너/CTA |
+| 아티스트 대시보드 | `has_paid_membership=false` → 재결제 카드 노출(문구는 '유통 재개') |
+| `create-payapp-subscription` | 정지 구독을 건드리지 않고 **새 pending 구독**으로 결제 진행 |
+| `_internal_apply_payapp_paid_event` | 결제 성공 시 `cancel_requested_at` / `cancel_reason` 제거 + `auto_renew=true` → 게이트 즉시 통과. 대체된 이전 정지 구독은 `current_period_end` 를 결제시각에서 끊음 |
+| `expire_*_scheduled_cancellation(s)` | 유효한 다른 활성 구독이 있으면 `free` 강등 금지 |
+| `admin_force_activate_membership` | 관리자 강제 활성화도 동일하게 해지 흔적 제거 |
+
+- 재결제 시점부터 **새 결제 주기(1개월)** 가 시작된다. PayApp 정기결제는 등록일 기준으로
+  매월 청구되므로 남은 유예 일수를 청구 주기에 얹지 않는다(잔여분 보상은 필요 시 수동 처리).
+- 배포 순서: migration `0495_resume_paused_subscription.sql` 적용 →
+  `supabase functions deploy create-payapp-subscription` → 프론트 배포.
+  migration 이전에 프론트만 배포하면 `has_paid_membership` 이 옛 기준(membership_tier)이라
+  정지 유저에게 재결제 카드가 뜨지 않는다.
 
 ## PayApp 콘솔 설정
 
