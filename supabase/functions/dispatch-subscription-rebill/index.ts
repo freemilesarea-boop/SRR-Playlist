@@ -105,14 +105,16 @@ async function stampCharge(env: ReturnType<typeof readEnv>, chargeId: string, ex
   }).catch(() => undefined);
 }
 
-async function rebillPay(env: ReturnType<typeof readEnv>, d: DueRowV2, orderNo: string): Promise<{ ok: boolean; state: string; raw: Record<string, string> }> {
+async function rebillPay(env: ReturnType<typeof readEnv>, d: DueRowV2, orderNo: string, rebillNo: string): Promise<{ ok: boolean; state: string; raw: Record<string, string> }> {
   // 서버 플랜 가격만 사용. recvemail/recvphone(개인정보)은 전송하지 않음 — 영수증은
   // PayApp 에 등록된 정기결제 프로파일이 처리.
   const params = new URLSearchParams();
   params.set('cmd', 'rebillPay');
   params.set('userid', env.PAYAPP_USERID);
   params.set('linkkey', env.PAYAPP_LINKKEY);
-  params.set('rebill_no', ''); // rebill_no 는 chargeable 대상에 대해 별도 서버 조회로 주입(아래 참조)
+  // BUGFIX: 이전에는 빈 문자열을 보냈다. fetchRebillNo 로 조회해 놓고도 rebillPay 에
+  // 전달하지 않아 PayApp 이 모든 청구를 거절했을 것이다(Kill Switch off 라 운영 미노출).
+  params.set('rebill_no', rebillNo);
   params.set('goodname', d.plan_name ?? '듣다 정기이용권');
   params.set('goodprice', String(d.amount));
   params.set('price', String(d.amount));
@@ -209,7 +211,7 @@ serve(async (req: Request) => {
         await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'requesting', p_payapp_raw: { order_no: orderNo, execution_id: executionId } });
         const dRow = { subscription_id: d.subscription_id, plan_name: null, amount: d.amount } as unknown as DueRowV2;
         let pay: { ok: boolean; state: string; raw: Record<string, string> };
-        try { pay = await rebillPay(env, dRow, orderNo); }
+        try { pay = await rebillPay(env, dRow, orderNo, rebillNo); }
         catch (e) {
           await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'unknown', p_error: String(e) });
           r.status = 'unknown_pending_reconciliation'; r.order_no = orderNo; recResults.push(r); continue;
@@ -318,7 +320,7 @@ serve(async (req: Request) => {
 
       let pay: { ok: boolean; state: string; raw: Record<string, string> };
       try {
-        pay = await rebillPay({ ...env, PAYAPP_LINKKEY: env.PAYAPP_LINKKEY }, { ...d }, orderNo);
+        pay = await rebillPay({ ...env, PAYAPP_LINKKEY: env.PAYAPP_LINKKEY }, { ...d }, orderNo, rebillNo);
       } catch (e) {
         // Timeout / 네트워크 불명확 → 즉시 재시도하지 않고 unknown 으로 두어 reconciliation 대상화.
         await rpc(env, 'mark_rebill_charge_result', { p_charge_id: chargeId, p_status: 'unknown', p_error: String(e) });
