@@ -556,13 +556,12 @@ export default function SubscriptionPage() {
           자동 반영돼요.
         </p>
         <p className="text-xs leading-relaxed text-ink-mute">
-          <strong>해지 정책:</strong> 구독을 취소해도 현재 결제 기간이 끝날 때까지 Premium 기능을
-          이용할 수 있어요. 다음 결제일부터 자동결제가 중단됩니다.
+          <strong>해지 정책:</strong> 구독을 취소해도 결제한 이용 기간이 끝날 때까지는 음원 등록·유통
+          신청을 포함한 유료 기능을 그대로 이용할 수 있어요. 다음 결제일부터 자동결제가 중단됩니다.
         </p>
         <p className="text-xs leading-relaxed text-ink-mute">
-          <strong>재개 정책:</strong> 구독을 정지했더라도 이전 요금제 기간이 끝나기를 기다릴 필요
-          없이 언제든 바로 다시 결제해 이용을 재개할 수 있어요. 재결제한 시점부터 새 결제
-          주기(1개월)가 시작됩니다.
+          <strong>재개 정책:</strong> 정지했더라도 기간이 끝나기를 기다릴 필요 없이 언제든 바로 다시
+          결제해 이용을 이어갈 수 있어요. 재결제한 시점부터 새 결제 주기(1개월)가 시작됩니다.
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=듣다 매장 구독 문의"

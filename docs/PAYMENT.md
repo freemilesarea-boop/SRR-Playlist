@@ -199,8 +199,24 @@ event_key = `payapp:${mul_no}:${rebill_no}:${pay_state}:${price}`
   `admin_expire_scheduled_cancellations()` 가 `canceled` + `free` 로 회수
 - 남은 기간 환불은 자동 처리하지 않는다 — 고객센터 수동 처리
 
-⚠️ 아티스트 유료 기능(음원 등록/유통 신청)은 유예기간과 무관하게 **해지 요청 즉시** 제한된다
-(0467 `artist_has_paid_access` 는 `cancel_requested_at is null` 을 요구).
+### 유예기간 = 전부 이용 가능 (0496)
+
+**결제한 이용기간(`current_period_end`)이 남아 있으면 해지했더라도 음원 등록·유통 신청을 포함한
+유료 기능을 전부 이용할 수 있다.** 0467 이 요구하던 `cancel_requested_at is null` 조건을 없애고
+기간 만료 하나로 통일했다.
+
+```
+artist_has_paid_access = status in ('active','cancel_scheduled')
+                         AND refunded_at is null
+                         AND current_period_end > now()
+                         AND plan_type in (individual, business, artist_general, artist_student)
+```
+
+- 환불건(`refunded_at`)은 기간이 남아 있어도 계속 차단 — 환불은 이용권 회수다.
+- `canceled` / `refunded` / `expired` 상태는 차단.
+- 기간이 지나면 만료 배치가 상태를 바꾸기 전이라도 자동으로 다시 차단된다.
+- 이 함수 하나가 tracks 트리거 · tracks/track_audio_quality RLS · storage(audio/covers) INSERT ·
+  `get_artist_upload_eligibility` · `get_artist_billing_access` 의 공통 게이트다.
 
 ## 정지 후 재개 정책 (0495)
 
@@ -209,7 +225,7 @@ event_key = `payapp:${mul_no}:${rebill_no}:${pay_state}:${price}`
 
 | 지점 | 동작 |
 |---|---|
-| `/subscription` | 정지 상태면 요금제 카드의 '이용 중' 잠금 해제 + 상단에 재개 배너/CTA |
+| `/subscription` | 정지 상태면 요금제 카드의 '이용 중' 잠금 해제 + 상단에 재개 배너/CTA (유예 중이면 "언제까지 그대로 이용 가능" 안내) |
 | 아티스트 대시보드 | `has_paid_membership=false` → 재결제 카드 노출(문구는 '유통 재개') |
 | `create-payapp-subscription` | 정지 구독을 건드리지 않고 **새 pending 구독**으로 결제 진행 |
 | `_internal_apply_payapp_paid_event` | 결제 성공 시 `cancel_requested_at` / `cancel_reason` 제거 + `auto_renew=true` → 게이트 즉시 통과. 대체된 이전 정지 구독은 `current_period_end` 를 결제시각에서 끊음 |
@@ -218,8 +234,8 @@ event_key = `payapp:${mul_no}:${rebill_no}:${pay_state}:${price}`
 
 - 재결제 시점부터 **새 결제 주기(1개월)** 가 시작된다. PayApp 정기결제는 등록일 기준으로
   매월 청구되므로 남은 유예 일수를 청구 주기에 얹지 않는다(잔여분 보상은 필요 시 수동 처리).
-- 배포 순서: migration `0495_resume_paused_subscription.sql` 적용 →
-  `supabase functions deploy create-payapp-subscription` → 프론트 배포.
+- 배포 순서: migration `0495_resume_paused_subscription.sql` → `0496_grace_period_full_access.sql`
+  적용 → `supabase functions deploy create-payapp-subscription` → 프론트 배포.
   migration 이전에 프론트만 배포하면 `has_paid_membership` 이 옛 기준(membership_tier)이라
   정지 유저에게 재결제 카드가 뜨지 않는다.
 

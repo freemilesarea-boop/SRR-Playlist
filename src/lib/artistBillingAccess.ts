@@ -54,6 +54,8 @@ export interface ArtistSubscriptionSnapshot {
   canceledAt: string | null;
   currentPeriodEnd: string | null;
   createdAt?: string | null;
+  /** 환불 시각. 환불건은 기간이 남아 있어도 이용권 회수(0496). */
+  refundedAt?: string | null;
 }
 
 export interface ArtistBillingAccessInput {
@@ -90,9 +92,11 @@ export function classifyArtistBillingAccess(
   if (DEMO_PREMIUM_ACCOUNT_IDS.has(input.userId)) return allow('exempt');
 
   // 유효 결제 접근 존재?
+  // 0496 — 결제한 이용기간(current_period_end)이 남아 있으면 해지 예약(유예) 상태여도
+  // 전부 허용한다. 환불건은 기간과 무관하게 제외.
   const hasActive = input.subscriptions.some((s) => {
-    if (s.status !== 'active') return false;
-    if (s.cancelRequestedAt) return false;
+    if (s.status !== 'active' && s.status !== 'cancel_scheduled') return false;
+    if (s.refundedAt) return false;
     if (!s.currentPeriodEnd) return false;
     const end = Date.parse(s.currentPeriodEnd);
     if (Number.isNaN(end) || end <= now) return false;
@@ -126,7 +130,7 @@ export function classifyArtistBillingAccess(
 // ----------------------------------------------------------------------------
 
 const RESTRICTION_MESSAGE: Record<ArtistBillingRestrictionReason, string> = {
-  cancelled: '정기결제가 취소되어 아티스트 기능이 제한되었습니다. 구독을 다시 시작하면 이용할 수 있습니다.',
+  cancelled: '구독 기간이 끝나 아티스트 기능이 제한되었습니다. 구독을 다시 시작하면 이용할 수 있습니다.',
   unpaid: '결제가 확인되지 않아 아티스트 기능이 제한되었습니다. 결제수단을 등록하거나 구독을 시작해 주세요.',
   expired: '구독이 만료되어 아티스트 기능이 제한되었습니다. 구독을 갱신하면 다시 이용할 수 있습니다.',
   invalid: '결제 상태를 확인할 수 없어 아티스트 기능이 제한되었습니다. 고객지원에 문의해 주세요.',
@@ -198,7 +202,9 @@ export function artistBillingBannerContent(
   if (access.reason === 'cancelled') {
     return {
       reason: 'cancelled',
-      title: '정기결제가 취소되어 아티스트 기능이 제한되었습니다.',
+      // 0496 — 결제한 이용기간이 남아 있으면 제한하지 않으므로, 이 배너는 기간까지
+      // 모두 끝난 뒤에만 뜬다.
+      title: '구독 기간이 끝나 아티스트 기능이 제한되었습니다.',
       body: '음원 등록, 기존 음원 수정, 유통 신청 및 아티스트 유료 기능을 이용하려면 구독을 다시 시작해 주세요.',
       ctas: [
         { label: '구독 다시 시작', to: '/subscription' },
