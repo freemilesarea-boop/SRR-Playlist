@@ -1865,10 +1865,17 @@ export default function Player() {
           // 이 트랙의 네트워크 재시도 예산과 연속 자동스킵 streak 을 되돌린다.
           // (기존에는 수동 ▶ 클릭에서만 초기화돼, 24시간 매장에서 한 곡이 며칠에 걸쳐
           //  순간 끊김 3회를 누적하면 그 뒤로는 첫 blip 에 바로 영구 정지했다.)
+          // 실제 소리 여부를 전역에 반영 — 배포 리로드 게이트가 이 값을 본다.
+          if (ev === 'playing') usePlaybackHealthStore.getState().setAudioActive(!el.paused);
+          if (ev === 'pause' || ev === 'emptied') usePlaybackHealthStore.getState().setAudioActive(false);
           if (ev === 'playing' && !el.paused) {
             const tid = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id;
             if (tid) networkRetriedRef.current.delete(tid);
             autoSkipStreakRef.current = 0;
+            // 소리가 실제로 나기 시작 → 자동재생 차단 안내 해제
+            if (usePlaybackHealthStore.getState().autoplayBlocked) {
+              usePlaybackHealthStore.getState().setAutoplayBlocked(false);
+            }
           }
           // Phase 3-2 — engine event 마다 health check
           checkAudioHealth(`event:${ev}`);
@@ -2251,7 +2258,8 @@ export default function Player() {
         // 계속 재시도하게 두고(화면을 한 번 건드리는 순간 즉시 붙는다), 안내만 남긴다.
         if (businessMode) {
           setErrored(true);
-          toast.info('자동 재생이 잠시 막혔어요. 화면을 한 번 터치/클릭하면 바로 이어집니다.');
+          // 무인 매장에서는 토스트를 아무도 못 본다 — 전체화면 안내(PlaybackBlockedOverlay)를 띄운다.
+          usePlaybackHealthStore.getState().setAutoplayBlocked(true);
           return;
         }
         pause();

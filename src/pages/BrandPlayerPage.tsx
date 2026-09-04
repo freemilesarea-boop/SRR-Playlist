@@ -16,6 +16,7 @@ import { useBrandPlayerHeartbeat } from '@/hooks/useBrandPlayerHeartbeat';
 import BrandVisualStage from '@/components/brand/BrandVisualStage';
 import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
+import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
@@ -276,6 +277,9 @@ export default function BrandPlayerPage() {
 
   return (
     <div className="fixed inset-0 z-[90] flex flex-col bg-black text-white" data-presentation-mode={presentation}>
+      {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다.
+          전체화면(presentation) 위에도 떠야 하므로 z-[120] (BrandPresentationOverlays 보다 위). */}
+      <PlaybackBlockedOverlay />
       {/* 상단 최소 바 (presentation 모드에서 숨김) */}
       <header className={`flex items-center justify-between gap-3 px-5 py-3 ${presentation ? 'hidden' : ''}`}>
         <div className="flex items-center gap-2 text-xs font-semibold">

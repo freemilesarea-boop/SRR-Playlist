@@ -18,11 +18,27 @@ interface PlaybackHealthState {
   /** 오늘(로컬 날짜 기준) 재생 시작한 곡 수 */
   todayPlayCount: number;
   todayKey: string;
+  /**
+   * BRAND-PLAYER-24H — 브라우저 자동재생 정책에 막혀 소리가 시작되지 못한 상태.
+   * 무인 매장에서는 토스트로는 아무도 못 보므로 전체화면 안내를 띄우는 근거가 된다.
+   */
+  autoplayBlocked: boolean;
+  /** 새 빌드가 준비됐지만 재생 중이라 리로드를 미뤄둔 상태. */
+  swUpdatePending: boolean;
+  /**
+   * 오디오가 **실제로** 소리를 내고 있는가 (audio element 의 playing/pause 이벤트 기준).
+   * store.playing 은 "재생 의도"라 오류로 멈춘 플레이어도 true 로 남는다. 배포 리로드를
+   * 미룰지 판단할 때는 의도가 아니라 실제 재생 여부를 봐야 한다.
+   */
+  audioActive: boolean;
 
   setOnline: (v: boolean) => void;
   reportPlaybackError: (name: string | null) => void;
   setWakeLock: (supported: boolean, active: boolean) => void;
   incTodayPlay: () => void;
+  setAutoplayBlocked: (v: boolean) => void;
+  setSwUpdatePending: (v: boolean) => void;
+  setAudioActive: (v: boolean) => void;
 }
 
 function todayStr(): string {
@@ -38,6 +54,9 @@ export const usePlaybackHealthStore = create<PlaybackHealthState>((set, get) => 
   wakeLockActive: false,
   todayPlayCount: 0,
   todayKey: todayStr(),
+  autoplayBlocked: false,
+  swUpdatePending: false,
+  audioActive: false,
 
   setOnline: (v) => set({ online: v }),
   reportPlaybackError: (name) =>
@@ -48,4 +67,7 @@ export const usePlaybackHealthStore = create<PlaybackHealthState>((set, get) => 
     if (k !== get().todayKey) set({ todayKey: k, todayPlayCount: 1 });
     else set((s) => ({ todayPlayCount: s.todayPlayCount + 1 }));
   },
+  setAutoplayBlocked: (v) => set({ autoplayBlocked: v }),
+  setSwUpdatePending: (v) => set({ swUpdatePending: v }),
+  setAudioActive: (v) => set({ audioActive: v }),
 }));

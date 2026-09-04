@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
@@ -94,6 +95,8 @@ export default function StorePlayerPage() {
 
   return (
     <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white">
+      {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
+      <PlaybackBlockedOverlay />
       {/* 상단 바: 상태 + 나가기 */}
       <header className="flex items-center justify-between gap-3 px-5 py-3 sm:px-8">
         <div className="flex items-center gap-2 text-xs font-semibold">
