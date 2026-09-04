@@ -115,9 +115,16 @@ export default function BrandPlayerPage() {
   }, [presentation, enterPresentation, exitPresentation]);
 
   // 매장/키오스크 모드: crossfade off + wake lock (전역) — store player 와 동일
+  //
+  // BRAND-PLAYER-24H-DEFAULT — 브랜드 플레이어는 24시간 연속 재생이 기본이다.
+  // 브랜드 플레이어에는 매장 스케줄 훅(useStorePlaybackPolicy)을 붙이지 않으므로 영업시간
+  // break/closed 로 음악이 끊기지 않는다. 다만 scheduleSuppressed 는 playerStore 의 전역
+  // 상태라, 같은 탭에서 매장 플레이어(/business/player)를 먼저 쓰다가 넘어온 경우 게이트가
+  // 남아 있으면 setQueue 가 playing=false 로 큐만 깔고 정지한다. 진입 시 명시적으로 푼다.
   useEffect(() => {
     setBusinessMode(true);
     enableForBusinessMode();
+    usePlayerStore.getState().setScheduleSuppression(null);
   }, [setBusinessMode, enableForBusinessMode]);
 
   // 브랜드/서비스 로고 로드(멱등). AppShell 밖 kiosk 라우트에서도 로고 확보.
