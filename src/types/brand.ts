@@ -155,6 +155,53 @@ export interface BrandPlayerConfig {
   /** 0452 이후 항상 포함(레거시는 default). */
   signage: SignageSettings;
   playlist: TrackRow[];
+  /**
+   * 0508 — 이 플레이리스트의 버전. 매일 09:00 KST 스냅샷이 새로 만들어질 때 바뀐다.
+   * 플레이어는 이 값만 폴링하다가 값이 달라지면 큐를 무중단 교체한다.
+   * (스냅샷 이전 레거시 응답에는 없을 수 있어 optional)
+   */
+  playlist_version?: string;
+  /** 0508 — 브랜드 재생 정책(24시간/영업시간) 판정 결과. */
+  playback?: BrandPlaybackWindow;
+}
+
+/** 0508 — 지금 재생해도 되는지에 대한 서버 판정. */
+export interface BrandPlaybackWindow {
+  mode: 'always_on' | 'business_hours';
+  should_play: boolean;
+  reason?: 'open' | 'closed_hours' | 'closed_day' | 'brand_not_found';
+  local_time?: string;
+  open_time?: string | null;
+  close_time?: string | null;
+  timezone?: string;
+}
+
+/** 0508 — 가벼운 폴링 응답 (큐 전체를 받지 않는다). */
+export interface BrandPlaylistVersion {
+  playlist_version: string;
+  track_count: number;
+  new_release_count: number;
+  playback: BrandPlaybackWindow;
+}
+
+/** 0508 — 관리자: 브랜드별 재생 정책. */
+export interface BrandPlaybackPolicy {
+  brand_id: string;
+  brand_name: string;
+  playback_mode: 'always_on' | 'business_hours';
+  open_time: string | null;
+  close_time: string | null;
+  playback_timezone: string;
+  /** 0=일 … 6=토. null 이면 매일. */
+  playback_days: number[] | null;
+  now: BrandPlaybackWindow;
+  today: {
+    service_date: string;
+    track_count: number;
+    new_release_count: number;
+    total_hours: number;
+    generated_at: string;
+  } | null;
 }
 
 /** 매장 코드 검증 실패 사유 → 사용자 메시지 매핑 */

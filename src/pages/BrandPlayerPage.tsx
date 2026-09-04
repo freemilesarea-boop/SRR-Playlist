@@ -13,6 +13,7 @@ import { getBrandPlayerConfig, verifyBrandDeviceBinding, revokeBrandDeviceByToke
 import { getBrandToken, clearBrandToken } from '@/lib/brandSession';
 import { filterPlayableTracks } from '@/lib/trackPlayability';
 import { useBrandPlayerHeartbeat } from '@/hooks/useBrandPlayerHeartbeat';
+import { useBrandDailyPlaylistSync } from '@/hooks/useBrandDailyPlaylistSync';
 import BrandVisualStage from '@/components/brand/BrandVisualStage';
 import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
@@ -52,6 +53,8 @@ export default function BrandPlayerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const queuedBrandRef = useRef<string | null>(null); // 이 브랜드로 큐 세팅했는지
+  // BRAND-DAILY-PLAYLIST-1 — 지금 큐에 깔린 플레이리스트의 서버 버전(매일 09:00 KST 갱신).
+  const [playlistVersion, setPlaylistVersion] = useState<string | null>(null);
 
   // Presentation Fullscreen: 저장 이미지만 전체화면 노출 (음악·audio element 불변, 전역 <Player> 그대로 재생).
   // presentation=chrome 숨김, fallback=Fullscreen API 미지원/거부 시 CSS 기반 뷰포트 덮기.
@@ -152,6 +155,8 @@ export default function BrandPlayerPage() {
         setRepeat('all'); // 24h 무한 반복
         setQueue(playable, 0, playlistRow, null, { dailySeedShuffle: true });
         queuedBrandRef.current = brandId;
+        // 이 큐가 어떤 버전인지 기록 → 이후 폴링은 이 값과 다를 때만 무중단 교체한다.
+        setPlaylistVersion(cfg.playlist_version ?? null);
       }
     } catch (err) {
       // config 실패: 기존 큐 유지 (재생 중단 금지). 최초 로드 실패만 화면 에러 노출.
@@ -225,6 +230,22 @@ export default function BrandPlayerPage() {
 
   // heartbeat
   useBrandPlayerHeartbeat({ brandId: brandId ?? null, sessionToken: token, enabled: !!brandId && !!token });
+
+  // BRAND-DAILY-PLAYLIST-1 — 매일 09:00 KST 새 플레이리스트를 무중단 반영(09:01~09:05).
+  // 영업시간 모드 브랜드면 같은 응답으로 재생/정지도 맞춘다. 기본(24시간)은 영향 없음.
+  const onPlaylistSwapped = useCallback((version: string, count: number) => {
+    setPlaylistVersion(version);
+    setConfig((prev) => (prev ? { ...prev, playlist_version: version } : prev));
+    if (import.meta.env.DEV) console.debug('[BrandPlayer] 새 플레이리스트 무중단 반영', { version, count });
+  }, []);
+
+  useBrandDailyPlaylistSync({
+    brandId: brandId ?? null,
+    sessionToken: token,
+    enabled: !!brandId && !!token && queuedBrandRef.current === brandId,
+    playlistVersion,
+    onSwapped: onPlaylistSwapped,
+  });
 
   // debug dump
   useEffect(() => {
