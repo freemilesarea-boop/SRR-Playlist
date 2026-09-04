@@ -2244,6 +2244,16 @@ export default function Player() {
       }
       if (e?.name === 'NotAllowedError') {
         if (import.meta.env.DEV) console.warn(`[Player] play() NotAllowedError (${label}) — autoplay 차단됨`);
+        // BRAND-PLAYER-UNATTENDED-RECOVERY-1 — 매장/브랜드 플레이어는 여기서 pause() 하면 끝난다.
+        // 서비스워커 자동 업데이트로 페이지가 스스로 리로드되면 사용자 제스처가 없는 상태로
+        // 재생이 시작되는데, 그때 autoplay 가 한 번 막히면 playing=false 가 되고 자동 복구가
+        // 전부 죽어 무인 매장은 영구 무음이 된다. playing=true 를 유지해 Recovery Manager 가
+        // 계속 재시도하게 두고(화면을 한 번 건드리는 순간 즉시 붙는다), 안내만 남긴다.
+        if (businessMode) {
+          setErrored(true);
+          toast.info('자동 재생이 잠시 막혔어요. 화면을 한 번 터치/클릭하면 바로 이어집니다.');
+          return;
+        }
         pause();
         toast.info('재생 버튼을 한 번 눌러주세요. (모바일은 자동재생이 제한돼요)');
         return;
