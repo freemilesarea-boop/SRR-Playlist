@@ -10,6 +10,7 @@ import { isNativeApp, initNativeShell } from './lib/native';
 import { useBusinessStore } from './store/businessStore';
 import { usePlaybackHealthStore } from './store/playbackHealthStore';
 import { shouldDeferReload, registerApplyUpdate } from './lib/swUpdateGate';
+import { suppressUnloadWarningOnce } from './lib/playbackGuard';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -69,6 +70,9 @@ function applyReload(reason: string): void {
   if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
   window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
   console.warn(`[sw] reloading for build ${BUILD_ID} (${reason})`);
+  // beforeunload 경고("변경한 내용이 저장되지 않을 수 있습니다")를 띄우지 않는다.
+  // 우리가 의도한 리로드인데 모달이 뜨면 무인 매장에서는 아무도 안 눌러 그대로 멈춘다.
+  suppressUnloadWarningOnce();
   window.location.reload();
 }
 
