@@ -76,6 +76,27 @@ interface PlayerState {
     context?: PlaylistContext | null,
     opts?: { dailySeedShuffle?: boolean },
   ) => void;
+  /**
+   * BRAND-DAILY-PLAYLIST-1 — **재생을 끊지 않고** 큐만 교체한다.
+   *
+   * 매일 아침 9시(KST) 서버가 새 브랜드 플레이리스트를 발행하면 무인 매장의 플레이어가
+   * 이를 반영해야 하는데, setQueue 는 currentTime=0 + index 재설정이라 재생 중인 곡이
+   * 끊긴다. 24시간 도는 매장에서는 그 끊김이 그대로 사고다.
+   *
+   * 이 액션은 지금 나오고 있는 곡을 그대로 둔 채(같은 track id 를 새 큐의 활성 index 에
+   * 배치) 나머지 목록만 갈아끼운다. Player 는 track id 가 바뀔 때만 audio.src 를
+   * 재설정하므로 오디오는 전혀 건드려지지 않는다.
+   *
+   * - 새 목록에 현재 곡이 없으면 맨 앞에 끼워 넣어 끝까지 재생시키고 다음 곡부터 새 목록.
+   * - 새 목록이 비었으면 아무것도 하지 않는다(무음 방지).
+   * - playing / currentTime / duration / liveSeek 을 절대 건드리지 않는다.
+   */
+  replaceQueueKeepingCurrent: (
+    tracks: TrackRow[],
+    playlist?: PlaylistRow | null,
+    context?: PlaylistContext | null,
+    opts?: { dailySeedShuffle?: boolean },
+  ) => void;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -263,6 +284,47 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // 4C — 새 Queue 로드 = 세대 증가. 진행 중이던 Cycle Signal 을 stale 로 만든다.
       queueGeneration: get().queueGeneration + 1,
     });
+  },
+
+  // BRAND-DAILY-PLAYLIST-1 — 무중단 큐 교체. 상세 계약은 인터페이스 주석 참조.
+  replaceQueueKeepingCurrent: (tracks, playlist, context, opts) => {
+    const filtered = dedupeByTrackId(tracks.filter(isPlayableTrack));
+    // 새 목록이 비었으면 지금 돌고 있는 것을 유지한다 — 교체가 무음의 원인이 되면 안 된다.
+    if (filtered.length === 0) return;
+
+    const { queue, index, shuffle } = get();
+    const current = queue[index] ?? null;
+
+    let nextQueue = filtered;
+    let nextIndex = 0;
+    if (current) {
+      const pos = filtered.findIndex((t) => t.id === current.id);
+      if (pos >= 0) {
+        nextIndex = pos;
+      } else {
+        // 새 정책에서 빠진 곡이어도 지금 나오는 중이면 끝까지 들려준다.
+        nextQueue = [current, ...filtered];
+        nextIndex = 0;
+      }
+    }
+
+    const shuffleOrder = shuffle
+      ? (opts?.dailySeedShuffle
+          ? buildSeededShuffleOrder(nextQueue.length, nextIndex, todayKstSeed())
+          : buildShuffleOrder(nextQueue.length, nextIndex))
+      : [];
+
+    set({
+      queue: nextQueue,
+      index: nextIndex,
+      shuffleOrder,
+      // 호출측이 명시하지 않으면 기존 컨텍스트를 유지한다(집계 기준이 흔들리지 않도록).
+      playlist: playlist === undefined ? get().playlist : playlist,
+      playlistContext: context === undefined ? get().playlistContext : context,
+      // 진행 중이던 Cycle 완료 Signal 을 stale 로 만든다.
+      queueGeneration: get().queueGeneration + 1,
+    });
+    // playing / currentTime / duration / pendingSeekSec / liveSeek 은 의도적으로 미변경.
   },
 
   // BRAND-PLAYLIST-ROTATION-4 — 스케줄 억제 중 play()/toggle() 는 재생 시작을 거부한다.

@@ -178,3 +178,85 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
     expect(S().queueGeneration).toBe(g0 + 1);
   });
 });
+
+describe('replaceQueueKeepingCurrent (BRAND-DAILY-PLAYLIST-1 — 무중단 큐 교체)', () => {
+  beforeEach(() => {
+    usePlayerStore.setState({
+      queue: [], index: 0, playing: false, shuffle: false, repeat: 'off',
+      currentTime: 0, duration: 0, pendingSeekSec: null, liveSeek: null,
+      shuffleOrder: [], queueGeneration: 0,
+      scheduleSuppressed: false, scheduleSuppressReason: null,
+    });
+  });
+
+  it('현재 재생 중인 곡을 그대로 두고 나머지만 교체한다 (audio.src 재설정 없음)', () => {
+    S().setQueue([track('a'), track('b'), track('c')], 1);
+    usePlayerStore.setState({ currentTime: 42, duration: 180 });
+    expect(S().queue[S().index].id).toBe('b');
+
+    S().replaceQueueKeepingCurrent([track('x'), track('b'), track('y'), track('z')]);
+
+    // 활성 트랙 id 가 그대로 → Player 의 track sync effect 가 src 를 건드리지 않는다
+    expect(S().queue[S().index].id).toBe('b');
+    expect(S().queue.map((t) => t.id)).toEqual(['x', 'b', 'y', 'z']);
+    expect(S().currentTime).toBe(42);
+    expect(S().duration).toBe(180);
+  });
+
+  it('playing 상태를 바꾸지 않는다 (교체가 음악을 멈추면 안 된다)', () => {
+    S().setQueue([track('a'), track('b')], 0);
+    S().play();
+    S().replaceQueueKeepingCurrent([track('a'), track('c')]);
+    expect(S().playing).toBe(true);
+  });
+
+  it('새 목록에 현재 곡이 빠졌으면 맨 앞에 끼워 끝까지 재생시킨다', () => {
+    S().setQueue([track('a'), track('b')], 0);
+    S().play();
+    S().replaceQueueKeepingCurrent([track('c'), track('d')]);
+    expect(S().queue.map((t) => t.id)).toEqual(['a', 'c', 'd']);
+    expect(S().index).toBe(0);
+    expect(S().queue[S().index].id).toBe('a');
+    expect(S().playing).toBe(true);
+  });
+
+  it('새 목록이 비면 아무것도 하지 않는다 (무음 방지)', () => {
+    S().setQueue([track('a'), track('b')], 0);
+    S().play();
+    const before = S().queue.map((t) => t.id);
+    S().replaceQueueKeepingCurrent([]);
+    expect(S().queue.map((t) => t.id)).toEqual(before);
+    expect(S().playing).toBe(true);
+  });
+
+  it('재생 불가/중복 트랙은 걸러낸다', () => {
+    S().setQueue([track('a')], 0);
+    const broken = { id: 'bad', audio_url: null } as unknown as TrackRow;
+    S().replaceQueueKeepingCurrent([track('a'), broken, track('b'), track('b')]);
+    expect(S().queue.map((t) => t.id)).toEqual(['a', 'b']);
+  });
+
+  it('shuffle 이면 새 길이에 맞는 순서를 현재 곡부터 다시 만든다', () => {
+    S().setQueue([track('a'), track('b'), track('c')], 0);
+    S().setShuffle(true);
+    S().replaceQueueKeepingCurrent([track('a'), track('d'), track('e'), track('f')]);
+    expect(S().shuffleOrder).toHaveLength(4);
+    expect(S().shuffleOrder[0]).toBe(S().index);
+    expect([...S().shuffleOrder].sort((x, y) => x - y)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('queueGeneration 을 올려 이전 큐의 Cycle Signal 을 stale 로 만든다', () => {
+    S().setQueue([track('a')], 0);
+    const g = S().queueGeneration;
+    S().replaceQueueKeepingCurrent([track('a'), track('b')]);
+    expect(S().queueGeneration).toBe(g + 1);
+  });
+
+  it('playlist/context 를 생략하면 기존 값을 유지한다', () => {
+    const pl = { id: 'p1', title: 'brand' } as never;
+    S().setQueue([track('a')], 0, pl, { type: 'catalog', id: 'p1' });
+    S().replaceQueueKeepingCurrent([track('a'), track('b')]);
+    expect(S().playlist).toBe(pl);
+    expect(S().playlistContext).toEqual({ type: 'catalog', id: 'p1' });
+  });
+});

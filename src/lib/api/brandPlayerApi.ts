@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   BrandListItem, BrandDetail, StoreVerifyResult, BrandPlayerConfig,
   BrandVocalPolicy, SignageTransitionEffect, BrandPolicyMode, BrandPolicyPreview,
+  BrandPlaylistVersion, BrandPlaybackPolicy,
 } from '@/types/brand';
 
 // ── 사용자(매장) 경로 ────────────────────────────────────────────────
@@ -25,6 +26,20 @@ export async function getBrandPlayerConfig(brandId: string, sessionToken: string
   });
   if (error) throw error;
   return data as BrandPlayerConfig;
+}
+
+/**
+ * 0508 — 플레이리스트 버전만 확인하는 가벼운 폴링.
+ * 매일 09:00 KST 서버가 새 스냅샷을 만들면 version 이 바뀐다. 값이 달라졌을 때만
+ * getBrandPlayerConfig 로 새 목록을 받아 무중단 교체한다.
+ */
+export async function getBrandPlaylistVersion(brandId: string, sessionToken: string): Promise<BrandPlaylistVersion> {
+  const { data, error } = await supabase.rpc('get_brand_playlist_version', {
+    p_brand_id: brandId,
+    p_session_token: sessionToken,
+  });
+  if (error) throw error;
+  return data as BrandPlaylistVersion;
 }
 
 // ── BRAND-DEVICE-BINDING-1: 기기 Binding 서버 검증/폐기/목록 ──────────────
@@ -269,4 +284,41 @@ export async function adminDeleteBrandMedia(assetId: string): Promise<{ success:
   const { data, error } = await supabase.rpc('admin_delete_brand_media', { p_asset_id: assetId });
   if (error) throw error;
   return data as { success: boolean };
+}
+
+// ── 0508 관리자: 브랜드별 재생 정책 (24시간 / 영업시간) ──────────────
+export async function adminGetBrandPlaybackPolicy(brandId: string): Promise<BrandPlaybackPolicy> {
+  const { data, error } = await supabase.rpc('admin_get_brand_playback_policy', { p_brand_id: brandId });
+  if (error) throw error;
+  return data as BrandPlaybackPolicy;
+}
+
+export async function adminSetBrandPlaybackPolicy(input: {
+  brandId: string;
+  playbackMode: 'always_on' | 'business_hours';
+  openTime?: string | null;
+  closeTime?: string | null;
+  timezone?: string;
+  days?: number[] | null;
+}): Promise<BrandPlaybackPolicy> {
+  const { data, error } = await supabase.rpc('admin_set_brand_playback_policy', {
+    p_brand_id: input.brandId,
+    p_playback_mode: input.playbackMode,
+    p_open_time: input.openTime ?? null,
+    p_close_time: input.closeTime ?? null,
+    p_timezone: input.timezone ?? 'Asia/Seoul',
+    p_days: input.days ?? null,
+  });
+  if (error) throw error;
+  return data as BrandPlaybackPolicy;
+}
+
+/** 오늘 플레이리스트 즉시 재생성 (09:00 스냅샷을 기다리지 않고). */
+export async function adminRegenerateBrandDailyPlaylist(brandId: string): Promise<{
+  ok: boolean; reason?: string; service_date?: string;
+  track_count?: number; new_release_count?: number; total_hours?: number;
+}> {
+  const { data, error } = await supabase.rpc('admin_regenerate_brand_daily_playlist', { p_brand_id: brandId });
+  if (error) throw error;
+  return data as { ok: boolean };
 }

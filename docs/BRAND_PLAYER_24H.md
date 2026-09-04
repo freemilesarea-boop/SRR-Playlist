@@ -346,3 +346,85 @@ chrome.exe --kiosk --autoplay-policy=no-user-gesture-required https://deudda.com
 
 배포 전 영향 조회: 차단 대상이 될 계정 8개 중 **브랜드/매장 플레이어를 써 본 계정 0개**
 (5개는 `test-store-*@deudda.local` 시드 계정). 지금 재생 중인 매장은 영향 없음.
+
+---
+
+## 매일 09:00 KST 새 플레이리스트 — 재생을 끊지 않고 반영 (0508)
+
+### 왜 필요했나
+
+브랜드 플레이리스트는 지금까지 **요청할 때마다** 계산됐다(`_brand_generate_playlist`).
+순서는 KST 날짜 seed 로 매일 바뀌었지만, 24시간 돌고 있는 플레이어는 진입 후
+config 를 다시 부르지 않는다. 결과적으로 **매장에 한번 걸린 목록은 브라우저를 새로
+켤 때까지 그대로**였고, 새로 발매된 곡이 영원히 들어가지 않았다.
+
+### 서버 (매일 09:00 KST)
+
+```
+pg_cron 'srr-brand-daily-playlist'  0 0 * * *  (UTC) = 09:00 KST
+  └─ cron_generate_brand_daily_playlists()
+       └─ 브랜드마다 generate_brand_daily_playlist(brand_id, force := true)
+            └─ _brand_generate_playlist()  ← 관리자가 정해둔 규칙(brand_music_policies)
+                 · 최근 14일 발매곡에 +18점 가산 (preferred_genre 1개=25점보다 작게)
+                   → 신곡이 자연스럽게 섞이되 정책을 뒤집지는 않는다
+            └─ brand_daily_playlists 에 그날의 스냅샷 + 버전 고정
+```
+
+안전장치:
+
+- 곡이 **0곡**으로 나오면 기존 스냅샷을 지우지 않고 그대로 둔다 → 무음이 되지 않는다.
+- 브랜드 하나가 실패해도 예외를 삼키고 나머지 브랜드는 계속 생성한다.
+- 스냅샷이 아직 없으면 `get_brand_player_config` 가 즉석 생성으로 폴백한다.
+
+### 클라이언트 (09:01~09:05 반영, 무중단)
+
+```
+useBrandDailyPlaylistSync
+  · get_brand_playlist_version  ← 큐 전체가 아니라 버전만 (가벼운 폴링)
+  · 09:00~09:10 KST 는 1분 주기, 그 외에는 10분 주기
+    (느린 주기여도 다음 09:01 을 지나치지 않게 대기 시간에 상한을 건다)
+  · 버전이 달라지면 config 를 받아 playerStore.replaceQueueKeepingCurrent()
+```
+
+`replaceQueueKeepingCurrent` 가 무중단의 핵심이다:
+
+- 지금 나오는 곡을 **같은 track id 그대로** 새 큐의 활성 index 에 둔다.
+  `Player` 는 track id 가 바뀔 때만 `audio.src` 를 다시 설정하므로 오디오는 전혀
+  건드려지지 않는다 — `currentTime` 도 그대로다.
+- 새 목록에서 현재 곡이 빠졌으면 맨 앞에 끼워 넣어 끝까지 들려주고, 다음 곡부터
+  새 목록으로 넘어간다.
+- 새 목록이 비었으면 아무것도 하지 않는다.
+- `playing` / `currentTime` / `duration` / `liveSeek` 을 **절대** 건드리지 않는다.
+
+`setQueue` 는 `currentTime=0` + index 재설정이라 이 경로에 쓰면 안 된다. 24시간 도는
+매장에서 그 끊김은 그대로 사고다.
+
+### 브랜드별 재생 정책 (24시간 / 영업시간)
+
+`brand_accounts` 에 `playback_mode`(기본 `always_on`), `open_time`, `close_time`,
+`playback_timezone`, `playback_days` 를 추가했다. 기본값이 24시간이므로 **기존 브랜드는
+동작이 전혀 바뀌지 않는다**.
+
+관리자 페이지 → 브랜드 플레이어 → 브랜드 상세 → "재생 정책 · 오늘의 플레이리스트"
+카드에서 브랜드마다 설정한다:
+
+| 항목 | 의미 |
+|---|---|
+| 24시간 재생 (기본) | 화면이 켜져 있는 동안 계속 재생 |
+| 영업시간에만 재생 | 지정한 시각·요일에만 소리가 난다. 22:00~02:00 처럼 자정을 넘겨도 된다 |
+| 지금 다시 만들기 | 09시를 기다리지 않고 오늘 플레이리스트 즉시 재생성 (재생은 안 끊긴다) |
+
+영업시간 모드일 때 플레이어는 폴링 응답의 `playback.should_play` 로
+`setScheduleSuppression('closed')` / `null` 을 맞춘다. `always_on` 브랜드는 이 경로에
+아예 걸리지 않는다.
+
+### 관련 함수
+
+| 함수 | 용도 |
+|---|---|
+| `generate_brand_daily_playlist(brand_id, force)` | 스냅샷 1건 생성 |
+| `cron_generate_brand_daily_playlists()` | 09:00 KST 전 브랜드 일괄 |
+| `get_brand_playlist_version(brand_id, token)` | 플레이어 폴링용(가벼움) |
+| `resolve_brand_playback_window(brand_id)` | 지금 재생해도 되는지 |
+| `admin_get_brand_playback_policy` / `admin_set_brand_playback_policy` | 관리자 조회/설정 |
+| `admin_regenerate_brand_daily_playlist(brand_id)` | 관리자 수동 재생성 |

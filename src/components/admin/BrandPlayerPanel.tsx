@@ -17,6 +17,7 @@ import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/e
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import { isVideoAsset, formatMediaDuration, formatBytes, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES } from '@/lib/brandMediaType';
 import BrandSignage from '@/components/brand/BrandSignage';
+import BrandPlaybackPolicyCard from '@/components/admin/BrandPlaybackPolicyCard';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import {
   normalizeSignageSettings, normalizeTransitionMs, MIN_TRANSITION_MS, MAX_TRANSITION_MS,
@@ -589,6 +590,9 @@ function BrandDetailModal({ brandId, onClose, onChanged }: { brandId: string; on
               </div>
               <div className="mt-3"><AdminButton tone="primary" size="sm" leftIcon={<Link2 size={13} />} onClick={() => void saveLink()} disabled={savingLink}>{savingLink ? '저장 중…' : '연결 저장'}</AdminButton></div>
             </AdminCard>
+
+            {/* 재생 정책 (24시간 / 영업시간) + 오늘의 플레이리스트 (0508) */}
+            <BrandPlaybackPolicyCard brandId={brandId} />
 
             {/* 음악 정책 스튜디오 (0464) */}
             <AdminCard title="음악 정책 스튜디오" subtitle="업종 기본을 상속하거나 브랜드 커스텀 정책을 구성합니다. 업종 하드 정책(스터디카페)은 브랜드가 완화할 수 없습니다.">
