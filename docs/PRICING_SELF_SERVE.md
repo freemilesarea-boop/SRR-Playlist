@@ -61,6 +61,14 @@
 | `NTS_BUSINESS_API_KEY` | Supabase → Project Settings → Edge Functions → Secrets | 선택(없으면 manual_review) |
 | `NTS_BUSINESS_API_URL` | 동일 | 선택 (기본 `https://api.odcloud.kr/api/nts-businessman/v1/validate`) |
 
+**아티스트 계정은 거절한다** (0509). 가맹 가입과 같은 규칙이다 — `account_type='artist'`
+를 바꾸면 아티스트 대시보드/정산이 깨진다(0499 회귀 이력). 아티스트가 매장·본사를
+하려면 별도 계정을 만들어야 하며, 그래야 아티스트의 업로드/유통/정산 권리가
+계정 전환에 휘말리지 않는다.
+
+0502 는 화면(`canApplyHq`)에서만 막고 서버 함수에는 검사가 없어서 RPC 직접 호출로
+우회할 수 있었다. 0509 에서 서버에도 같은 검사를 넣어 두 곳의 규칙을 맞췄다.
+
 ## 3. 엔터프라이즈 가맹 (본사 코드 필수)
 
 ```
