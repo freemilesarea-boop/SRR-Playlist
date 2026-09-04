@@ -17,6 +17,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
+import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -908,6 +909,13 @@ export default function Player() {
   // NETWORK(코드2) 오류 곡당 1회 자동 재시도 추적.
   // X6.62: 매장모드 신뢰성 — Set → Map (트랙별 retry 횟수). 매장 3회 / 일반 1회.
   const networkRetriedRef = useRef<Map<string, number>>(new Map());
+  // BRAND-PLAYER-UNATTENDED-RECOVERY-1 — 매장/브랜드 무인 운영 자동 스킵 추적.
+  //   • streak: 연속 자동 스킵 횟수 (정상 재생 1회로 리셋)
+  //   • pendingId: 자동 스킵 예약이 걸린 트랙 (중복 예약 방지)
+  // 전 곡이 실패하는 전면 장애(네트워크 단절)에서 3초마다 큐를 무한 순회하며
+  // 서버를 두드리는 것을 막기 위해 streak 이 쌓이면 백오프한다.
+  const autoSkipStreakRef = useRef<number>(0);
+  const autoSkipPendingIdRef = useRef<string | null>(null);
   function clearMetaTimer() {
     if (metaTimerRef.current !== null) { window.clearTimeout(metaTimerRef.current); metaTimerRef.current = null; }
   }
@@ -1853,6 +1861,15 @@ export default function Player() {
             currentTime: el.currentTime,
             crossfadeInProgress: crossfading,
           });
+          // BRAND-PLAYER-UNATTENDED-RECOVERY-1 — 실제로 소리가 나기 시작하면
+          // 이 트랙의 네트워크 재시도 예산과 연속 자동스킵 streak 을 되돌린다.
+          // (기존에는 수동 ▶ 클릭에서만 초기화돼, 24시간 매장에서 한 곡이 며칠에 걸쳐
+          //  순간 끊김 3회를 누적하면 그 뒤로는 첫 blip 에 바로 영구 정지했다.)
+          if (ev === 'playing' && !el.paused) {
+            const tid = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id;
+            if (tid) networkRetriedRef.current.delete(tid);
+            autoSkipStreakRef.current = 0;
+          }
           // Phase 3-2 — engine event 마다 health check
           checkAudioHealth(`event:${ev}`);
         };
@@ -2492,33 +2509,73 @@ export default function Player() {
     }
 
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
-    const isPermanent = err?.code === 3 /* DECODE */ || err?.code === 4 /* SRC_NOT_SUPPORTED */;
+    const isPermanent = isPermanentMediaError(err?.code);
     if (current && isPermanent) {
       sessionFailedTrackIds.add(current.id);
     }
 
-    // X6.62: 매장모드 + 영구 오류 + 큐가 1곡 초과 시 자동 다음곡 (무인 운영 무음 방지).
-    // 매장 사업자는 손가락 댈 수 없는 환경 — 곡 1개 손상되면 자동 skip 해서 음악 유지.
-    // 일반 사용자는 기존 동작 (정지 + 에러 표시) 유지.
-    if (current && isPermanent && playing && businessMode && queue.length > 1) {
+    // ── BRAND-PLAYER-UNATTENDED-RECOVERY-1 ────────────────────────────────
+    // 매장/브랜드 플레이어는 손댈 사람이 없는 무인 환경이다. 여기서 pause() 를 부르면
+    // store.playing=false 가 되고, 그 순간 자동 복구가 전부 죽는다:
+    //   · health monitor 의 모든 감지 조건이 state.playing===true 를 요구
+    //   · Recovery Manager 의 shouldAttemptPlay() 가 store.playing 을 보고 차단
+    //   · useWakeLock 이 풀려 화면이 꺼짐
+    // 실제로 프로덕션에서 브랜드 플레이어 세션이 heartbeat 는 계속 보내면서
+    // 같은 곡에 2일간 멈춰 있는 사례가 확인됐다. 그래서 매장모드에서는 정지시키지 않고
+    // 다음 곡으로 넘겨 음악을 이어간다.
+    //
+    // X6.62 는 영구 오류(DECODE/SRC_NOT_SUPPORTED)만 자동 스킵했는데, 매장에서 가장
+    // 흔한 실패는 Wi-Fi 순간 끊김(NETWORK, code=2)이다. 재시도를 모두 소진한 네트워크
+    // 오류도 같이 넘긴다.
+    const networkExhausted = err?.code === 2 && retryCount >= maxRetries;
+    const autoSkip = shouldAutoSkipUnattended({
+      businessMode, playing, errorCode: err?.code, retryCount, maxRetries,
+    });
+    if (current && autoSkip) {
+      const failedId = current.id;
+      if (autoSkipPendingIdRef.current !== failedId) {
+        autoSkipPendingIdRef.current = failedId;
+        autoSkipStreakRef.current += 1;
+        // 전 곡이 실패하는 전면 장애면 큐를 3초마다 무한 순회하게 된다.
+        // 연속 5회부터는 30초 간격으로 물러나서 복구를 기다린다.
+        const streak = autoSkipStreakRef.current;
+        const delayMs = autoSkipDelayMs(streak);
 
-      console.warn('[audio] 매장모드 영구 오류 — 자동 다음곡 시도 (3s 후)', { id: current.id });
-      // X6.67 — 매장 자동 스킵된 트랙 = 검수자/아티스트가 인지 못함. Sentry 로 운영 알림.
-      void captureBusinessError(new Error('PERMANENT_AUDIO_ERROR_AUTO_SKIPPED'), 'player.permanent_error_business', {
-        trackId: current.id, title: current.title,
-        audioUrl: current.audio_url,
-        codeName, code: err?.code ?? null,
-        queueLength: queue.length,
-      });
-      window.setTimeout(() => {
-        // 여전히 같은 곡이 멈춰있고 매장모드면 next() 호출
-        const st = usePlayerStore.getState();
-        if (st.playing === false && st.queue[st.index]?.id === current.id) {
-          st.next();
-          // playing 다시 true 로 (next() 가 다음 트랙 set 후 자동 play 호출됨)
+        console.warn('[audio] 매장모드 재생 실패 — 자동 다음곡', {
+          id: failedId, codeName, isPermanent, networkExhausted, streak, delayMs,
+        });
+        void captureBusinessError(
+          new Error(isPermanent ? 'PERMANENT_AUDIO_ERROR_AUTO_SKIPPED' : 'NETWORK_AUDIO_ERROR_AUTO_SKIPPED'),
+          'player.auto_skip_business',
+          {
+            trackId: failedId, title: current.title, audioUrl: current.audio_url,
+            codeName, code: err?.code ?? null, queueLength: queue.length,
+            retries: retryCount, streak,
+          },
+        );
+
+        window.setTimeout(() => {
+          autoSkipPendingIdRef.current = null;
+          const st = usePlayerStore.getState();
+          // 그 사이 사용자가 곡을 바꿨거나 직접 멈췄으면 개입하지 않는다.
+          if (st.queue[st.index]?.id !== failedId) return;
+          if (st.queue.length > 1) {
+            st.next({ cause: 'manual_next' });
+          } else {
+            // 큐가 1곡뿐이면 넘길 곳이 없다 — 같은 곡을 처음부터 다시 시도.
+            // 트랙 id 가 안 바뀌므로 errored 자동 리셋(트랙 변경 effect)이 안 걸린다. 직접 푼다.
+            setErrored(false);
+            lastTrackIdRef.current = null;   // src 재설정 + load 유도
+            usePlayerStore.setState({ currentTime: 0, pendingSeekSec: null });
+          }
           usePlayerStore.setState({ playing: true });
-        }
-      }, 3000);
+        }, delayMs);
+      }
+
+      // 매장모드에서는 pause() 하지 않는다. playing=true 를 유지해야
+      // health monitor / Recovery Manager / wake lock 이 계속 살아 있다.
+      setErrored(true);
+      return;
     }
 
     // 재생 에러 = "곡 종료"가 아니다 → 다음 곡으로 자동 이동하지 않고 현재 곡에서 정지.
