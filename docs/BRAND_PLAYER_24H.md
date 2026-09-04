@@ -184,3 +184,36 @@ select public.admin_brand_player_health_summary(1440);
 Routine `매장 플레이어 장애 감시 (긴급 알림)` — 매시 :40 에 이 세션으로 발사되어
 `detect_brand_player_incidents()` 를 돌리고, 열린 장애가 있으면 **[긴급]** 메시지를 띄운다.
 정상이면 조용히 넘어간다. (실시간 경보는 Slack/푸시가 담당하고, 이건 백스톱이다)
+
+---
+
+# 7. "모든 브랜드 플레이어는 24시간이 기본"
+
+## 코드 차원 보장
+
+| 항목 | 상태 |
+|---|---|
+| 무한 반복 | `BrandPlayerPage` 진입 시 `setShuffle(true)` + `setRepeat('all')` 하드코딩 — 브랜드별 설정 없음 |
+| 영업시간 정지 | **없음** — 스케줄 훅(`useStorePlaybackPolicy`)은 `/business/player` 에만 붙는다. 브랜드 플레이어는 break/closed 로 끊기지 않는다 |
+| 스케줄 게이트 잔류 | 진입 시 `setScheduleSuppression(null)` 로 명시적 해제. `scheduleSuppressed` 는 playerStore 전역 상태라, 같은 탭에서 매장 플레이어를 먼저 쓰다 넘어오면 게이트가 남아 큐만 깔리고 정지할 수 있었다 |
+| 서버측 정지 스케줄 | `brand_runtime_rules` 전 브랜드 0건, `store_playback_schedule_overrides` 0건 |
+| 세션 만료 | `brand_player_sessions.expires_at` 전부 null |
+
+## 브랜드별 곡 풀 (24시간 반복 주기)
+
+| 브랜드 | 곡 | 분량 | 아티스트 |
+|---|---|---|---|
+| ming (test) | 800 | 38.6시간 | 140팀 |
+| **데모** (테스트용) | **237** | **10.3시간** | 40팀 |
+| 루베르 콘텐츠 스튜디오 | 128 | 5.6시간 | 26팀 |
+| 카공시대 | 128 | 5.5시간 | 26팀 |
+
+데모 브랜드는 87곡(3.7시간)이었다. 24시간 운영 기준으로 하루 6~7바퀴를 돌아 반복감이 커서
+장르를 `lofi` 단독에서 lofi/ambient/jazz 계열로 넓히고 mood 차단을 9개 → 2개로 줄여
+**237곡(10.3시간)** 으로 확장했다. 매장 배경음악 성격은 유지하려고 `instrumental_only` 는
+그대로 뒀다(보컬까지 풀면 274곡이지만 데모는 실제 매장 시연용이라 성격을 바꾸지 않았다).
+
+스터디카페 두 곳(루베르·카공시대)은 `_study_cafe_track_eligible`(0463) 하드필터가
+lofi/ambient/jazz + 보컬 없음 + 매우 차분함만 통과시키므로 브랜드 정책으로 더 넓힐 수 없다.
+곡을 늘리려면 그 조건을 만족하는 음원을 추가해야 한다 (오디오 분석 완료 필수 — 분석값이
+없는 곡은 하드필터에서 자동 탈락한다).
