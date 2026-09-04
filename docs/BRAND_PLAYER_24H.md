@@ -120,3 +120,67 @@
 `playback_events_v2` 에 최근 14일간 `player_error` **0건**, `play_start` 60건뿐이다
 (활성 구독 63건). 브랜드 플레이어에서 재생 이벤트가 사실상 안 올라와, 이런 장애가 나도
 DB만 봐서는 알 수 없다. 별도 확인 필요.
+
+---
+
+# 6. 장애 자동 알림 (0505)
+
+매장 음악이 멈추면 **민원이 들어오기 전에** 먼저 안다.
+
+```
+pg_cron (5분)  →  cron_check_brand_player_health()
+                  → detect_brand_player_incidents()
+                     · 0504 판정으로 stalled/offline 감지
+                     · brand_player_incidents 에 open / resolve
+                     · admin_notifications insert
+                     · _notify_brand_player_alert() 로 채널 발사
+```
+
+## 알림 채널
+
+| 채널 | 상태 | 설정 |
+|---|---|---|
+| 관리자 화면 종 아이콘 | ✅ 동작 | `admin_notifications` (항상) |
+| **Slack** | ✅ **동작 확인** | `admin_settings.notification_slack_webhook_url` |
+| 이메일 | ⚠️ 조건부 | `notification_email_to` (contact@swk.today) — 엣지함수 시크릿 필요 |
+| **앱 푸시(Web Push)** | ⚠️ 조건부 | ① `BRAND_ALERT_SECRET` 시크릿 ② 관리자가 앱에서 알림 허용 |
+| Claude 릴레이 | ❌ 불가 | Anthropic webhook 이 서명 없는 POST 거부(401) → Routine(시간별)로 대체 |
+
+## 알림 정책
+
+- **incident 단위 dedup** — 같은 장애로 5분마다 알림이 오지 않는다. 열 때 1회, 복구될 때 1회.
+  미해소가 길어지면 1시간 간격 리마인드.
+- **offline 은 20분 유예** — 새로고침/짧은 끊김으로 알림이 튀지 않게.
+- **stalled 는 즉시** — 화면은 켜져 있는데 소리만 죽은 상태라 명백한 장애다.
+- 채널 전송 실패가 감지 자체를 막지 않는다 (전부 예외 격리).
+
+## 활성화에 필요한 것 (운영자 작업)
+
+**① 앱 푸시 / 이메일 활성화**
+
+Supabase SQL Editor 에서 시크릿을 꺼낸다 (이 값은 채팅/문서에 남기지 않는다):
+```sql
+select decrypted_secret from vault.decrypted_secrets where name = 'brand_alert_secret';
+```
+→ Supabase Dashboard → Project Settings → **Edge Functions → Secrets** 에
+`BRAND_ALERT_SECRET` = (위 값) 추가.
+
+**② 앱 푸시 수신 등록**
+
+`push_subscriptions` 가 현재 **0행**이다. 관리자가 앱/웹에서 알림을 허용해야 푸시가 나간다
+(내 정보 화면의 알림 토글). 등록 전에는 푸시만 skip 되고 Slack/이메일은 정상 동작한다.
+
+## 조회
+
+```sql
+-- 지금 열린 장애
+select * from public.admin_list_brand_player_incidents();
+-- 세션별 실시간 상태
+select public.admin_brand_player_health_summary(1440);
+```
+
+## Claude 쪽 감시
+
+Routine `매장 플레이어 장애 감시 (긴급 알림)` — 매시 :40 에 이 세션으로 발사되어
+`detect_brand_player_incidents()` 를 돌리고, 열린 장애가 있으면 **[긴급]** 메시지를 띄운다.
+정상이면 조용히 넘어간다. (실시간 경보는 Slack/푸시가 담당하고, 이건 백스톱이다)
