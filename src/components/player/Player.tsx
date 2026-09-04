@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
+import { resolveStallAction, isEscalation, type StallAction } from '@/lib/stallWatchdog';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -1432,6 +1433,106 @@ export default function Player() {
     };
     // activeRef 는 ref function (안정), businessMode 변경 시만 heartbeat 재설정
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessMode]);
+
+  /* ============================================
+   * BRAND-PLAYER-SELF-HEAL-1 — 무인 매장 정지 자동 복구 워치독
+   * ============================================
+   * Phase 3-2 health monitor 는 `active-stalled` 를 이미 감지하지만 **이벤트 기반**이라,
+   * 오디오가 진짜로 멈춰서 timeupdate 가 끊기면 재평가할 계기 자체가 사라진다.
+   * (`waiting` 이 한 번 튀고 네트워크가 안 돌아오는 경우가 정확히 이 사각지대다 —
+   *  그 순간엔 아직 정지 2.5초가 안 돼서 아무것도 안 잡히고, 이후엔 아무도 다시 안 본다.)
+   * 서버는 stalled 로 보고 알림까지 띄우는데 매장 화면은 가만히 있는 상태가 여기서 나온다.
+   *
+   * 그래서 매장 모드에서만 3초 tick 으로 재생 위치를 직접 확인하고, 정지가 이어지면
+   * 사다리를 올라간다: 8초 nudge → 20초 reload → 35초 skip (stallWatchdog.ts).
+   * 곡이 바뀌면 처음부터 다시 — 네트워크가 죽어 있어도 포기하지 않고, 돌아오면 저절로 낫는다.
+   *
+   * 일반 청취자에게는 interval 자체가 생성되지 않는다(동작 변화 0).
+   */
+  const stallProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({
+    trackId: null, ct: 0, ts: 0,
+  });
+  const stallLastActionRef = useRef<StallAction>('none');
+
+  useEffect(() => {
+    if (!businessMode) return;
+
+    const tick = () => {
+      const st = healthStateRef.current;
+      const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
+      if (!el) return;
+
+      const store = usePlayerStore.getState();
+      const health = usePlaybackHealthStore.getState();
+      const trackId = store.queue[store.index]?.id ?? null;
+      const now = performance.now();
+      const prog = stallProgressRef.current;
+      const ct = el.currentTime;
+
+      // 진행했거나 곡이 바뀌었으면 기준점을 갱신하고 사다리를 초기화한다.
+      if (prog.trackId !== trackId || Math.abs(ct - prog.ct) >= 0.01) {
+        stallProgressRef.current = { trackId, ct, ts: now };
+        stallLastActionRef.current = 'none';
+        return;
+      }
+
+      const action = resolveStallAction({
+        businessMode: true,
+        playing: store.playing,
+        paused: el.paused,
+        ended: el.ended,
+        crossfading: st.crossfading,
+        suppressed: store.scheduleSuppressed,
+        autoplayBlocked: health.autoplayBlocked,
+        subscriptionBlocked: health.subscriptionBlocked,
+        stalledMs: now - prog.ts,
+      });
+      // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
+      if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
+      stallLastActionRef.current = action;
+
+      const stalledSec = Math.round((now - prog.ts) / 1000);
+      console.warn('[audio:selfheal] 매장 재생 정지 감지 — 자동 복구', {
+        action, stalledSec, trackId, currentTime: ct,
+        readyState: el.readyState, networkState: el.networkState,
+        online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      });
+
+      if (action === 'nudge') {
+        // Recovery Manager 에 위임 — cooldown/escalation/로그가 이미 그 안에 있다.
+        void recoverAudioRef.current?.('stalled', { source: 'stall-watchdog', stalledSec });
+        return;
+      }
+
+      if (action === 'reload') {
+        // 같은 위치로 소스를 다시 잡는다 (onError NETWORK 재시도와 같은 방식).
+        const resumeAt = ct;
+        try {
+          el.load();
+          const onceCanPlay = () => {
+            el.removeEventListener('canplay', onceCanPlay);
+            try {
+              if (resumeAt > 0 && Number.isFinite(el.duration) && resumeAt < el.duration) {
+                el.currentTime = resumeAt;
+              }
+            } catch { /* noop */ }
+            const pr = el.play();
+            if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 칸(skip)이 처리 */ });
+          };
+          el.addEventListener('canplay', onceCanPlay, { once: true });
+        } catch { /* 다음 칸(skip)이 처리 */ }
+        return;
+      }
+
+      // skip — 이 파일/이 위치가 문제다. cause 는 기본값(manual_next):
+      // 자연 종료가 아니므로 플레이리스트 Cycle 완료 Signal 을 내면 안 된다.
+      usePlaybackHealthStore.getState().reportPlaybackError('STALL_SKIP');
+      store.next();
+    };
+
+    const id = window.setInterval(tick, 3_000);
+    return () => window.clearInterval(id);
   }, [businessMode]);
 
   /* ============================================
