@@ -26,6 +26,7 @@ const PlaylistPage = lazyWithRetry(() => import('@/pages/PlaylistPage'));
 const BusinessPage = lazyWithRetry(() => import('@/pages/BusinessPage'));
 const LibraryPage = lazyWithRetry(() => import('@/pages/LibraryPage'));
 const SubscriptionPage = lazyWithRetry(() => import('@/pages/SubscriptionPage'));
+const PricingPage = lazyWithRetry(() => import('@/pages/PricingPage'));
 const AdminPage = lazyWithRetry(() => import('@/pages/AdminPage'));
 const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
 const ChartPage = lazyWithRetry(() => import('@/pages/ChartPage'));
@@ -283,6 +284,7 @@ export default function App() {
                 <Route path="/brand/player/:brandId" element={<RequireAuth><BrandPlayerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
+                <Route path="/pricing" element={<RequireAuth><PricingPage /></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
                 <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
                 <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
