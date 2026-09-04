@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, Tag, type LucideIcon } from 'lucide-react';
+import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, Tag, CreditCard, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import BrandLogo from '@/components/BrandLogo';
 import SidebarLibrarySection from '@/components/SidebarLibrarySection';
@@ -10,6 +10,7 @@ const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }
   { to: '/charts', label: '차트', Icon: BarChart3, end: false },
   { to: '/library', label: '보관함', Icon: Heart, end: false },
   { to: '/my/playlists', label: '내 플레이리스트', Icon: ListMusic, end: false },
+  { to: '/pricing', label: '요금제', Icon: CreditCard, end: false },
   { to: '/business', label: '매장', Icon: Store, end: false },
   { to: '/brand', label: '브랜드', Icon: Tag, end: false },
   { to: '/profile', label: '내 정보', Icon: User, end: false },
