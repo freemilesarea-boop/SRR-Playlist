@@ -7,6 +7,9 @@ import { initSentry } from './lib/sentry';
 import { purgeBadAudioCaches } from './lib/swCache';
 import { redirectToProductionIfNeeded } from './lib/productionRedirect';
 import { isNativeApp, initNativeShell } from './lib/native';
+import { useBusinessStore } from './store/businessStore';
+import { usePlaybackHealthStore } from './store/playbackHealthStore';
+import { shouldDeferReload, registerApplyUpdate } from './lib/swUpdateGate';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -47,15 +50,62 @@ void purgeBadAudioCaches();
 const BUILD_ID = (import.meta.env.VITE_BUILD_ID as string | undefined) ?? 'dev';
 const SW_RELOAD_KEY = `sw-reloaded-${BUILD_ID}`;
 
+// ----------------------------------------------------------------------------
+// BRAND-PLAYER-24H — 매장 재생 중에는 자동 리로드를 미룬다.
+//
+// 새 빌드가 뜨면 SW 가 페이지를 스스로 리로드하는데, 24시간 무인 매장에서는
+// **배포 한 번 = 전 매장 음악 중단** 이 된다. 리로드 직후에는 사용자 제스처가 없어
+// 브라우저 자동재생 정책에 막히고, 아무도 없는 매장은 그대로 무음이 된다.
+// (프로덕션에서 배포 직후 두 매장이 동시에 재생목록 1번 곡으로 리셋된 뒤 소리가
+//  나지 않는 상태가 실제로 관측됐다.)
+//
+// 재생 중이면 미루고, 멈춰 있으면 즉시 적용한다(이미 문제 상태라 리로드가 오히려 복구).
+// 상한(12시간)을 넘기면 적용해서 키오스크가 옛 빌드에 갇히지 않게 한다.
+// ----------------------------------------------------------------------------
+let deferredSince: number | null = null;
+let deferTimer: number | null = null;
+
+function applyReload(reason: string): void {
+  if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
+  window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
+  console.warn(`[sw] reloading for build ${BUILD_ID} (${reason})`);
+  window.location.reload();
+}
+
+/** 즉시 적용 or 미루기. 미룬 경우 재생이 멈추는 순간 다시 판단한다. */
+function requestReload(reason: string): void {
+  if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
+
+  const defer = shouldDeferReload({
+    businessMode: useBusinessStore.getState().businessMode,
+    audioActive: usePlaybackHealthStore.getState().audioActive,
+    deferredSince,
+    now: Date.now(),
+  });
+
+  if (!defer) { applyReload(reason); return; }
+
+  if (deferredSince === null) {
+    deferredSince = Date.now();
+    console.warn('[sw] 매장 재생 중 — 업데이트 적용을 미룹니다', { build: BUILD_ID, reason });
+  }
+  usePlaybackHealthStore.getState().setSwUpdatePending(true);
+
+  // 재생이 멈추거나 상한을 넘기면 적용. 30초 폴링이면 충분하다(정확도 요구 없음).
+  if (deferTimer === null) {
+    deferTimer = window.setInterval(() => requestReload('deferred-recheck'), 30_000);
+  }
+}
+
+// 운영자가 "지금 적용" 을 누른 경로 — 사용자 제스처가 있으므로 미루지 않는다.
+registerApplyUpdate(() => applyReload('manual'));
+
 // 네이티브 앱(Capacitor)에서는 SW 를 등록하지 않는다 — 로컬 번들을 Capacitor 가 직접
 // 서빙하므로 SW precache/업데이트 리로드가 오히려 자산 로딩과 충돌한다. 웹/PWA 만 등록.
 if (!isNativeApp() && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   // (1) controllerchange — 새 SW 가 page control 잡으면 즉시 reload (build 당 1회)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
-    window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
-    console.warn('[sw] controllerchange — reloading once for build', BUILD_ID);
-    window.location.reload();
+    requestReload('controllerchange');
   });
 
   // (2) SW activate 시 보낸 push 메시지 — 같은 탭에 새 SW 가 들어왔음을 강제 통지
@@ -65,8 +115,8 @@ if (!isNativeApp() && typeof window !== 'undefined' && 'serviceWorker' in naviga
     const msgKey = `sw-msg-${e.data.buildId ?? BUILD_ID}`;
     if (window.sessionStorage.getItem(msgKey)) return;
     window.sessionStorage.setItem(msgKey, '1');
-    console.warn('[sw] SW_ACTIVATED message — reloading once');
-    window.location.reload();
+    console.warn('[sw] SW_ACTIVATED message — 리로드 판단');
+    requestReload('sw-activated');
   });
 
   // (3) 명시적 SW 등록 — updateViaCache:'none' 로 SW 파일 자체 24h 브라우저 캐시 우회.
