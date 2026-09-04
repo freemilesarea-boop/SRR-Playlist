@@ -76,7 +76,11 @@ async function rpc<T>(env: ReturnType<typeof readEnv>, fn: string, body: Record<
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`RPC ${fn} failed: ${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
+  // BUGFIX: void 반환 RPC(mark_rebill_charge_result 등)는 본문이 비어 있어 res.json() 이
+  // "Unexpected end of JSON input" 으로 죽는다. 이미 성공한 호출을 실패로 만들고
+  // 청구 흐름이 PayApp 호출 직전에 중단된다.
+  const text = await res.text();
+  return (text.trim().length > 0 ? JSON.parse(text) : null) as T;
 }
 
 function anonId(id: string): string {
