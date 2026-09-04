@@ -31,6 +31,12 @@ interface PlaybackHealthState {
    * 미룰지 판단할 때는 의도가 아니라 실제 재생 여부를 봐야 한다.
    */
   audioActive: boolean;
+  /**
+   * 매장 모드인데 구독이 만료/미결제라 재생이 차단된 상태.
+   * 무료 등급으로 매장 플레이어를 돌리면 곡당 25초만 나오고 멈춰서 "음악이 중간에
+   * 끊긴다" 로 보인다 — 매장에서는 미리듣기를 주지 않고 이유를 명시한다.
+   */
+  subscriptionBlocked: boolean;
 
   setOnline: (v: boolean) => void;
   reportPlaybackError: (name: string | null) => void;
@@ -39,6 +45,7 @@ interface PlaybackHealthState {
   setAutoplayBlocked: (v: boolean) => void;
   setSwUpdatePending: (v: boolean) => void;
   setAudioActive: (v: boolean) => void;
+  setSubscriptionBlocked: (v: boolean) => void;
 }
 
 function todayStr(): string {
@@ -57,6 +64,7 @@ export const usePlaybackHealthStore = create<PlaybackHealthState>((set, get) => 
   autoplayBlocked: false,
   swUpdatePending: false,
   audioActive: false,
+  subscriptionBlocked: false,
 
   setOnline: (v) => set({ online: v }),
   reportPlaybackError: (name) =>
@@ -70,4 +78,5 @@ export const usePlaybackHealthStore = create<PlaybackHealthState>((set, get) => 
   setAutoplayBlocked: (v) => set({ autoplayBlocked: v }),
   setSwUpdatePending: (v) => set({ swUpdatePending: v }),
   setAudioActive: (v) => set({ audioActive: v }),
+  setSubscriptionBlocked: (v) => set({ subscriptionBlocked: v }),
 }));
