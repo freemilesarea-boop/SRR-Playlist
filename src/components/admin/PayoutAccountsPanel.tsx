@@ -11,23 +11,26 @@
  *   · 신청 대기  — payout_intake_submissions 승인/반려 (PayoutIntakeAdminPanel)
  *   · 계좌 목록  — artist_payout_accounts 승인/거절 + 상태 필터 (PayoutVerificationList)
  *                  필터에 '정보 미완비' 가 있어 위 사각지대를 한 번에 뽑을 수 있다.
+ *   · 변경 신청  — 이미 승인된 계좌가 바뀐 건 (0495). 신규 등록과 위험도가 달라 따로 둔다.
  *
  * 기존 패널을 복제하지 않고 그대로 재사용한다 — 승인/거절/PII reveal 로직 무변경.
  * 구 딥링크 ?tab=payout-verification 는 adminNav.MERGED_TABS 가 이 화면의 'accounts'
  * 뷰로 연결한다(딥링크 보존).
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { FileText, Wallet } from 'lucide-react';
+import { FileText, ShieldAlert, Wallet } from 'lucide-react';
 import { adminTypography } from '@/lib/adminTypography';
 
 const PayoutIntakeAdminPanel = lazy(() => import('./PayoutIntakeAdminPanel'));
 const PayoutVerificationList = lazy(() => import('./PayoutVerificationList'));
+const PayoutAccountChangesList = lazy(() => import('./PayoutAccountChangesList'));
 
-export type PayoutAccountsView = 'intake' | 'accounts';
+export type PayoutAccountsView = 'intake' | 'accounts' | 'changes';
 
 const VIEWS: Array<{ key: PayoutAccountsView; label: string; hint: string; icon: React.ReactNode }> = [
   { key: 'intake', label: '신청 대기', hint: '회원이 낸 정산 정보 신청 승인·반려', icon: <FileText size={13} /> },
   { key: 'accounts', label: '계좌 목록', hint: '등록된 정산 계좌 승인·거절 · 미완비 확인', icon: <Wallet size={13} /> },
+  { key: 'changes', label: '변경 신청', hint: '이미 승인된 계좌의 변경 승인 · 승인 전까지 지급 자동 보류', icon: <ShieldAlert size={13} /> },
 ];
 
 export default function PayoutAccountsPanel({
@@ -69,6 +72,7 @@ export default function PayoutAccountsPanel({
       <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl bg-bg-card" />}>
         {view === 'intake' && <PayoutIntakeAdminPanel />}
         {view === 'accounts' && <PayoutVerificationList initialFilter="all" />}
+        {view === 'changes' && <PayoutAccountChangesList />}
       </Suspense>
     </div>
   );

@@ -378,14 +378,15 @@ export default function AdminPage() {
 
   // 탭 직접 클릭(예: 외부 링크) 시 그룹 + 서브그룹 자동 동기화.
   // 병합된 구 key 가 들어와도 통합 탭으로 풀어준다.
-  function selectTab(next: Tab) {
+  function selectTab(next: Tab, viewOverride?: string) {
     const merged = resolveMergedTab(next);
     const target = (merged ? merged.tab : next) as Tab;
     setTab(target);
     setGroup(groupOf(target));
     setSubgroup(subgroupOfTab(target));
     // 일반 클릭은 통합 화면의 기본 뷰로 — 이전 딥링크의 뷰가 남아 있으면 안 된다.
-    setMergedView(merged?.view ?? null);
+    // viewOverride 는 호출측이 특정 뷰를 지목한 경우(홈 처리 대기 줄)에만 쓴다.
+    setMergedView(viewOverride ?? merged?.view ?? null);
   }
 
   // franchise 탭에서 벗어나면 deep-link / return 상태 클리어 (재진입 시 재발화 방지)
@@ -605,7 +606,7 @@ export default function AdminPage() {
         <AdminWorkQueueBar
           // 병합된 구 key 로 가리킬 수 있으므로 가시성도 통합 탭 기준으로 본다.
           isTabVisible={(t) => visibleKeys.has(((resolveMergedTab(t)?.tab ?? t) as Tab))}
-          onNavigate={(t) => selectTab(t as Tab)}
+          onNavigate={(t, view) => selectTab(t as Tab, view)}
         />
       )}
 
@@ -671,7 +672,7 @@ export default function AdminPage() {
           {tab === 'artists' && <ArtistApprovalList />}
           {tab === 'artist-contracts' && <ArtistContractsList />}
           {tab === 'payout-intake' && (
-            <PayoutAccountsPanel initialView={mergedView === 'accounts' ? 'accounts' : 'intake'} />
+            <PayoutAccountsPanel initialView={mergedView === 'accounts' || mergedView === 'changes' ? mergedView : 'intake'} />
           )}
           {tab === 'track-review' && <TrackReviewList />}
           {tab === 'qc-review' && <QcReviewQueuePanel />}

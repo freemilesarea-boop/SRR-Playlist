@@ -21,6 +21,12 @@ export interface AdminWorkQueueCounts {
   payout_verify: number;
   /** 계좌는 verified 인데 지급 요건 미완비 — 어느 탭에도 카운트가 없던 사각지대 */
   payout_incomplete: number;
+  /**
+   * 계좌 변경 신청 대기 (정산 계좌 → 변경 신청, 0495).
+   * payout_verify 에 포함되는 값이지만 따로 센다 — 신규 등록과 달리
+   * "이미 승인된 계좌가 바뀐 것" 이라 정산이 이미 잡혀 있을 수 있다.
+   */
+  payout_change: number;
   /** 지급 대기 정산월 (super admin 만 채워짐) */
   settlement_month: string | null;
   settlement_pending: number;
@@ -41,6 +47,7 @@ const EMPTY: AdminWorkQueueCounts = {
   payout_intake: 0,
   payout_verify: 0,
   payout_incomplete: 0,
+  payout_change: 0,
   settlement_month: null,
   settlement_pending: 0,
   settlement_held: 0,
