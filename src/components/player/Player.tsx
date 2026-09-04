@@ -55,6 +55,7 @@ import BusinessExcludeButton from '@/components/player/BusinessExcludeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
+import { resolveStoreGate } from '@/lib/storePlaybackGate';
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
@@ -412,14 +413,31 @@ export default function Player() {
   }, [current?.id]);
 
   // 재생 시작 시 게이트: anonymous 차단 + free 미리듣기 초과 차단 (모든 진입점 단일 choke, fallback)
+  //
+  // BRAND-PLAYER-SUBSCRIPTION-GATE-1 — 매장 모드에서는 무료 등급에 미리듣기를 주지 않는다.
+  // 25초만 나오고 멈추면 무인 매장에서는 "음악이 중간에 끊긴다" 와 구분이 안 되고,
+  // 점주도 운영자도 원인을 알 수 없다. 재생을 시작하지 않고 이유를 전체화면으로 명시한다.
+  // (데모 계정은 membership 이 premium 으로 해석돼 이 게이트에 걸리지 않는다 — 의도된 무제한)
   useEffect(() => {
+    const gate = resolveStoreGate({ membership, businessMode });
+    if (gate === 'allow') {
+      if (usePlaybackHealthStore.getState().subscriptionBlocked) {
+        usePlaybackHealthStore.getState().setSubscriptionBlocked(false);
+      }
+      return;
+    }
+    if (gate === 'subscription_required') {
+      usePlaybackHealthStore.getState().setSubscriptionBlocked(true);
+      if (playing) pause();
+      return;
+    }
     if (!playing) return;
-    if (membership === 'anonymous') {
+    if (gate === 'login_required') {
       pause();
       toast.info('로그인 후 이용해주세요.');
       openGate('login');
     } else if (
-      membership === 'free' &&
+      gate === 'preview' &&
       previewBlockedRef.current &&
       pvTrackIdRef.current === current?.id
     ) {
@@ -427,7 +445,7 @@ export default function Player() {
       openGate('upsell');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, membership, current?.id]);
+  }, [playing, membership, businessMode, current?.id]);
 
   /* ---------- 0093 MediaSession API: 잠금화면 / 이어폰 / Bluetooth 컨트롤 ---------- */
   useEffect(() => {
@@ -2028,6 +2046,8 @@ export default function Player() {
   // 0104 — 무료회원 25초 미리듣기 강제. 실제 청취 delta 누적 (seek 점프/뮤트/일시정지 제외).
   function enforcePreviewLimit(t: number) {
     if (membership !== 'free') return;
+    // 매장 모드는 미리듣기 자체가 없다(전체화면 차단) — 누적/업셀 모달 skip
+    if (businessMode) return;
     // 곡 변경은 effect 가 리셋 — 여기선 같은 곡 기준으로 누적
     if (pvTrackIdRef.current !== current?.id) {
       previewLastTRef.current = t;

@@ -10,15 +10,21 @@
  *
  *  2. 업데이트 대기 — 재생 중에는 자동 리로드를 미루므로(swUpdateGate), 운영자가
  *     원할 때 직접 적용할 수 있는 경로를 남긴다. 재생을 끊지 않도록 작은 칩으로만.
+ *
+ *  3. 구독 만료 — 무료 등급으로 매장 플레이어를 돌리면 곡당 25초만 나오고 멈춰서
+ *     "음악이 중간에 끊긴다" 로 보인다. 매장에서는 미리듣기를 주지 않고 이유를 명시한다.
+ *     이 화면은 눌러서 닫을 수 없다 — 결제 전까지 재생이 불가능한 상태이기 때문.
  */
+import { Link } from 'react-router-dom';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { applyPendingUpdateNow } from '@/lib/swUpdateGate';
-import { Play, RefreshCw } from 'lucide-react';
+import { Play, RefreshCw, CreditCard } from 'lucide-react';
 
 export default function PlaybackBlockedOverlay() {
   const autoplayBlocked = usePlaybackHealthStore((s) => s.autoplayBlocked);
   const swUpdatePending = usePlaybackHealthStore((s) => s.swUpdatePending);
+  const subscriptionBlocked = usePlaybackHealthStore((s) => s.subscriptionBlocked);
   const setAutoplayBlocked = usePlaybackHealthStore((s) => s.setAutoplayBlocked);
   const play = usePlayerStore((s) => s.play);
 
@@ -26,6 +32,35 @@ export default function PlaybackBlockedOverlay() {
     // 이 클릭이 곧 사용자 제스처 — 브라우저 자동재생 제한이 풀린다.
     setAutoplayBlocked(false);
     play();
+  }
+
+  // 구독 차단이 최우선 — 결제 전까지는 어떤 조작으로도 재생이 안 된다.
+  if (subscriptionBlocked) {
+    return (
+      <div className="fixed inset-0 z-[130] flex flex-col items-center justify-center gap-6 bg-black/97 px-8 text-center">
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-amber-400/15 ring-2 ring-amber-400/40">
+          <CreditCard size={42} className="text-amber-300" />
+        </div>
+        <div>
+          <p className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+            구독이 만료되어 매장 재생이 중단되었습니다
+          </p>
+          <p className="mt-3 text-base leading-relaxed text-white/70 sm:text-lg">
+            결제가 확인되지 않아 매장 음악을 재생할 수 없습니다.<br />
+            결제를 완료하시면 즉시 이어서 재생됩니다.
+          </p>
+        </div>
+        <Link
+          to="/pricing"
+          className="rounded-full bg-white px-7 py-3.5 text-base font-bold text-black transition hover:opacity-90"
+        >
+          결제하고 이어서 이용하기
+        </Link>
+        <p className="text-xs text-white/40">
+          이미 결제하셨다면 잠시 후 자동으로 재생이 시작됩니다.
+        </p>
+      </div>
+    );
   }
 
   if (autoplayBlocked) {
