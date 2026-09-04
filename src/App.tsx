@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { usePlayerStore } from '@/store/playerStore';
+import { useBusinessStore } from '@/store/businessStore';
 import { useThemeStore } from '@/store/themeStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -147,6 +148,8 @@ export default function App() {
   const initTheme = useThemeStore((s) => s.init);
   const refreshTimeSlot = useThemeStore((s) => s.refreshTimeSlot);
   const playing = usePlayerStore((s) => s.playing);
+  // 매장/브랜드 플레이어 모드 — wake lock 을 재생 여부와 분리해서 유지하기 위해 필요.
+  const businessMode = useBusinessStore((s) => s.businessMode);
 
   const initPlayback = usePlaybackSettingsStore((s) => s.init);
 
@@ -180,7 +183,10 @@ export default function App() {
   useEffect(() => installUnloadGuard(), []);
 
   // 화면 꺼짐 방지 — 어떤 모드든 재생 중이면 wake lock (개인/매장 공통).
-  useWakeLock(playing);
+  // BRAND-PLAYER-UNATTENDED-RECOVERY-1: 매장/브랜드 플레이어는 재생이 잠깐 끊겨도
+  // 화면을 살려둬야 한다. playing 에만 걸어두면 오류로 멈추는 순간 wake lock 이 풀려
+  // 모니터/PC 가 잠들고, 그때부터는 자동 복구 자체가 불가능해진다.
+  useWakeLock(playing || businessMode);
   useTrackVisit();
 
   if (!isSupabaseConfigured) {
