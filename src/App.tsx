@@ -10,7 +10,7 @@ import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
 import { OPERATOR_ROUTE_PATHS } from '@/lib/operatorRouteRegistry';
-import { installUnloadGuard } from '@/lib/playbackGuard';
+import { installUnloadGuard, reloadApp } from '@/lib/playbackGuard';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
@@ -87,7 +87,7 @@ function RouteFallback() {
       <p>불러오는 중…</p>
       {stuck && (
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => reloadApp('route-fallback-stuck')}
           className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-bold text-white ring-1 ring-white/15 hover:bg-accent-soft"
         >
           새로고침

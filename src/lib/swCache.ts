@@ -5,6 +5,8 @@
  * 잘못된 캐시/SW 를 정리해야 한다.
  */
 
+import { reloadApp } from '@/lib/playbackGuard';
+
 const BAD_AUDIO_CACHE_RE = /audio|supabase-audio|runtime/i;
 
 /** 잘못 캐시된 오디오 관련 캐시만 삭제 (앱 시작 시 1회, best-effort). 다른 캐시는 보존. */
@@ -70,6 +72,6 @@ export async function resetServiceWorkerAndCaches(): Promise<void> {
     }
   } catch { /* noop */ }
   try { window.sessionStorage.removeItem('sw-reloaded'); } catch { /* noop */ }
-  // 강제 새로고침 (캐시 우회)
-  window.location.reload();
+  // 강제 새로고침 (캐시 우회) — beforeunload 경고에 막히지 않도록 reloadApp 경유
+  reloadApp('sw-cache-reset');
 }
