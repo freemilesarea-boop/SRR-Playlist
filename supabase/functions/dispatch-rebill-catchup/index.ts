@@ -66,7 +66,10 @@ async function rpc<T>(env: Env, fn: string, body: Record<string, unknown> = {}):
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`RPC ${fn} failed: ${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
+  // void 반환 RPC(mark_rebill_charge_result 등)는 본문이 비어 있다. res.json() 을 그대로
+  // 부르면 "Unexpected end of JSON input" 으로 죽으면서, 이미 성공한 호출을 실패로 만든다.
+  const text = await res.text();
+  return (text.trim().length > 0 ? JSON.parse(text) : null) as T;
 }
 
 interface CatchupCycle {
@@ -228,20 +231,18 @@ Deno.serve(async (req: Request) => {
       cycle_period_end: c.cycle_period_end, cycle: `${c.cycle_index}/${c.cycles_owed}`,
     };
     try {
+      // rebill_no 를 먼저 확보한다. subscription_rebill_charges.rebill_no 는 NOT NULL 이라
+      // 이 값 없이는 청구 기록 자체를 만들 수 없다(= 청구도 못 한다). 겸사겸사 청구 직전
+      // 구독 상태(active/auto_renew/해지요청 없음)도 여기서 재확인된다.
+      const rebillNo = await fetchRebillNo(env, c.subscription_id);
+      if (!rebillNo) { r.status = 'skipped_missing_rebill_no'; results.push(r); continue; }
+
       // (구독, 회차) 멱등키 — 이미 시도/성공한 회차면 null 반환 → 건너뜀
       const chargeId = await rpc<string | null>(env, 'record_rebill_charge_attempt', {
-        p_subscription_id: c.subscription_id, p_user_id: c.user_id, p_rebill_no: null,
+        p_subscription_id: c.subscription_id, p_user_id: c.user_id, p_rebill_no: rebillNo,
         p_amount: c.amount, p_plan_type: c.plan_type, p_cycle_period_end: c.cycle_period_end, p_order_no: null,
       });
       if (!chargeId) { r.status = 'skipped_duplicate_cycle'; results.push(r); continue; }
-
-      const rebillNo = await fetchRebillNo(env, c.subscription_id);
-      if (!rebillNo) {
-        await rpc(env, 'mark_rebill_charge_result', {
-          p_charge_id: chargeId, p_status: 'skipped', p_error: 'missing_rebill_no_or_not_active_at_charge_time',
-        });
-        r.status = 'skipped_missing_rebill_no'; results.push(r); continue;
-      }
 
       const orderNo = `swk_catchup_${c.subscription_id.slice(0, 8)}_${executionId.slice(0, 12)}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       await stampCharge(env, chargeId, executionId, orderNo);
