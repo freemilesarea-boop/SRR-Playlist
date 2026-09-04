@@ -44,13 +44,36 @@ webhook 이 이 값을 **결제시각 + 1개월** 로 밀어버리기 때문에,
 | `non_chargeable_tier` | `membership_tier='free'` |
 | `cycle_already_processed` | 이미 시도/성공한 회차 |
 
-## 4. 실행 절차
+## 4. 어디서 실행하나
+
+**본인 PC의 터미널에서 실행한다.** 어딘가에 올리는 파일이 아니라, PayApp/Supabase 로 요청을
+한 번 쏘는 명령이다. (맥: 터미널.app / 윈도우: PowerShell)
+
+`$SUPABASE_URL`, `$CRON_SECRET` 은 각자 값으로 바꿔 넣는다.
+
+| 값 | 어디서 확인 |
+|---|---|
+| `SUPABASE_URL` | `https://nsoesrvwkxqifjcxzvol.supabase.co` (운영 프로젝트) |
+| `CRON_SECRET` | Supabase Dashboard → Project Settings → **Edge Functions → Secrets** |
+
+`CRON_SECRET` 이 없으면 대신 service_role 키로 호출해도 된다 (Project Settings → API →
+`service_role`). 헤더만 바꾼다:
+
+```
+-H "Authorization: Bearer <service_role 키>"
+```
+
+> ⚠️ **Kill Switch 는 Supabase Edge Functions Secrets 에 넣어야 한다.** 이 함수는 Supabase
+> 에서 돌기 때문에 Vercel 환경변수는 읽지 않는다. (Vercel 쪽 `BILLING_REBILL_ENABLED` 는
+> `/api/cron/subscription-rebill` 핸들러 전용이라 이 작업과 무관하다.)
+
+## 5. 실행 절차
 
 ### (1) dry run — 지금 바로 가능, 돈 안 나감
 
 ```bash
-curl -X POST "$SUPABASE_URL/functions/v1/dispatch-rebill-catchup" \
-  -H "x-cron-secret: $CRON_SECRET" \
+curl -X POST "https://nsoesrvwkxqifjcxzvol.supabase.co/functions/v1/dispatch-rebill-catchup" \
+  -H "x-cron-secret: <CRON_SECRET>" \
   -H "content-type: application/json" \
   -d '{"dry_run":true,"limit":100,"max_cycles":6}'
 ```
@@ -60,7 +83,9 @@ curl -X POST "$SUPABASE_URL/functions/v1/dispatch-rebill-catchup" \
 
 ### (2) 실청구
 
-1. Vercel(또는 Supabase Functions) 환경변수에 `BILLING_REBILL_ENABLED=true` 설정
+1. Supabase Dashboard → Project Settings → Edge Functions → Secrets 에
+   `BILLING_REBILL_ENABLED = true` 추가
+   (CLI 로는 `supabase secrets set BILLING_REBILL_ENABLED=true`)
 2. 소수 건으로 먼저 확인:
 
 ```bash
@@ -87,7 +112,7 @@ order by created_at desc;
 **작업이 끝나면 `BILLING_REBILL_ENABLED` 를 다시 끄거나**, 상시 자동청구로 전환할지 결정한다.
 켜둔 채로 두면 이 함수가 언제든 실청구 가능한 상태가 된다.
 
-## 5. 실패 처리
+## 6. 실패 처리
 
 | status | 대응 |
 |---|---|
@@ -97,7 +122,7 @@ order by created_at desc;
 | `skipped_missing_rebill_no` | 청구 직전 상태 변경(해지 등). 정상 동작 |
 | `skipped_duplicate_cycle` | 이미 처리된 회차. 정상 동작 |
 
-## 6. 상시 자동청구(월 정기)로 전환할 때
+## 7. 상시 자동청구(월 정기)로 전환할 때
 
 `dispatch-rebill-catchup` 은 밀린 회차가 1건뿐인 정상 상태에서는 일반 월 청구와 동일하게
 동작하므로, 일 1회 스케줄로 걸면 그대로 월 정기청구가 된다.
