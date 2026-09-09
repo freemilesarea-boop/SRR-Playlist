@@ -39,6 +39,33 @@ describe('AndroidManifest.xml', () => {
   });
 });
 
+describe('백그라운드 재생', () => {
+  it('iOS: UIBackgroundModes 만으로는 부족하다 — AVAudioSession .playback 이 설정돼 있다', () => {
+    // 기본 카테고리(soloAmbient)는 화면 잠금/백그라운드에서 음소거된다.
+    const appDelegate = repoFile('ios/App/App/AppDelegate.swift');
+    expect(appDelegate).toContain('import AVFoundation');
+    expect(appDelegate).toContain('AVAudioSession.sharedInstance().setCategory(.playback');
+  });
+
+  it('Android: mediaPlayback 포그라운드 서비스가 선언돼 있다', () => {
+    const manifest = repoFile('android/app/src/main/AndroidManifest.xml');
+    expect(manifest).toContain('android.permission.FOREGROUND_SERVICE');
+    expect(manifest).toContain('android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK');
+    expect(manifest).toContain('.StorePlaybackService');
+    expect(manifest).toContain('android:foregroundServiceType="mediaPlayback"');
+  });
+
+  it('Android: 앱 로컬 플러그인이 MainActivity 에 등록돼 있다 (자동 검색되지 않는다)', () => {
+    expect(repoFile('android/app/src/main/java/com/deudda/app/MainActivity.java'))
+      .toContain('registerPlugin(StorePlaybackServicePlugin.class)');
+  });
+
+  it('Android: 서비스가 Android 14+ 의 타입 명시 startForeground 를 쓴다', () => {
+    const svc = repoFile('android/app/src/main/java/com/deudda/app/StorePlaybackService.java');
+    expect(svc).toContain('FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK');
+  });
+});
+
 describe('푸시 알림 네이티브 설정', () => {
   it('Android: POST_NOTIFICATIONS 권한 (Android 13+ 런타임 권한)', () => {
     expect(repoFile('android/app/src/main/AndroidManifest.xml')).toContain('android.permission.POST_NOTIFICATIONS');
