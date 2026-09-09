@@ -24,6 +24,7 @@
     "cap:ios": "npm run cap:sync && cap open ios"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^7.1.0",
     "@capacitor/app": "^7.1.2",
     "@capacitor/browser": "^7.0.5",
     "@capacitor/core": "^7.6.8",

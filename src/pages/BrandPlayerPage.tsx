@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2, LogOut, Repeat as SwitchIcon } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
+import { isNativeApp } from '@/lib/native';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
@@ -75,7 +76,13 @@ export default function BrandPlayerPage() {
     // Fullscreen API 미지원/거부: CSS 기반 presentation (완전한 OS 전체화면은 불가)
     setFallback(true);
     setPresentation(true);
-    toast.info('브라우저 전체화면을 사용할 수 없어 화면 내 프레젠테이션 모드로 표시합니다. ESC로 종료하세요.');
+    // iOS 네이티브 쉘(WKWebView)은 Fullscreen API 자체가 없어 항상 이 경로로 온다.
+    // 태블릿엔 ESC 키가 없으므로 화면 내 종료 버튼(BrandFullscreenControls)을 함께 안내한다.
+    toast.info(
+      isNativeApp()
+        ? '화면 내 프레젠테이션 모드로 표시합니다. 종료하려면 화면을 눌러 나타나는 종료 버튼을 사용하세요.'
+        : '브라우저 전체화면을 사용할 수 없어 화면 내 프레젠테이션 모드로 표시합니다. ESC 또는 화면의 종료 버튼으로 종료하세요.',
+    );
   }, []);
 
   const exitPresentation = useCallback(() => {

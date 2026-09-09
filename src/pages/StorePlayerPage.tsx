@@ -14,6 +14,7 @@ import AutoCover from '@/components/AutoCover';
 import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
+import { isNativeApp } from '@/lib/native';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
 // 프랜차이즈 연결 매장만 적용; 일반 매장은 hook 이 no-op.
 import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
@@ -50,6 +51,7 @@ export default function StorePlayerPage() {
   const next = usePlayerStore((s) => s.next);
   const prev = usePlayerStore((s) => s.prev);
 
+  const nativeApp = isNativeApp();
   const { online, failedCount, wakeLockSupported, wakeLockActive, todayPlayCount } =
     usePlaybackHealthStore();
   const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
@@ -276,14 +278,22 @@ export default function StorePlayerPage() {
 
         {!wakeLockSupported && (
           <p className="text-[11px] text-white/50">
-            이 브라우저는 화면 꺼짐 방지를 지원하지 않아요. 기기의 <b>화면 자동 잠금</b>을 해제해두시면 더 안정적입니다.
+            이 기기는 화면 꺼짐 방지를 지원하지 않아요. 기기의 <b>화면 자동 잠금</b>을 해제해두시면 더 안정적입니다.
           </p>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-white/55">
             <MonitorSmartphone size={13} className="shrink-0" />
-            브라우저를 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">창을 완전히 닫으면 음악은 중단됩니다.</b>
+            {nativeApp ? (
+              <>
+                앱을 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">앱을 완전히 종료하면 음악은 중단됩니다.</b>
+              </>
+            ) : (
+              <>
+                브라우저를 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">창을 완전히 닫으면 음악은 중단됩니다.</b>
+              </>
+            )}
           </p>
           <InstallAppButton variant="ghost" label="매장용 앱 설치" />
         </div>

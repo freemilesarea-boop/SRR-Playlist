@@ -101,7 +101,46 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 > ⚠️ 실기기(또는 시뮬레이터) 테스트 필요: 브라우저→딥링크 복귀는 에뮬레이터/디바이스에서만 확인 가능.
 > 웹 OAuth 동작은 **무변경**(가드로 분리).
 
-## 7. 인앱결제(IAP) 전략 — **후속 작업**
+## 7. 매장·브랜드 운영 기능의 네이티브 지원 — **배선 완료 ✅**
+
+앱은 웹과 **같은 번들**을 로드하므로 `/business`, `/business/player`, `/brand`,
+`/brand/player/:brandId`, `/enterprise/*`, `/ops/*` 등 **모든 라우트가 앱에 그대로 들어 있다**
+(플랫폼으로 화면을 잘라내는 분기는 없다 — `isNativeApp()` 사용처는 SW/OAuth/셸 초기화뿐).
+
+다만 매장 24시간 무인 재생은 **네이티브 쉘 설정이 없으면 앱에서만 조용히 깨진다.**
+아래는 그 설정과 근거다. 회귀는 `src/lib/nativeStoreCapabilities.test.ts` 가 막는다.
+
+| 항목 | 설정 | 없으면 생기는 일 |
+| --- | --- | --- |
+| 백그라운드 오디오(iOS) | `Info.plist` → `UIBackgroundModes: [audio]` | 화면 잠금·홈 이동 즉시 **재생 정지** |
+| 화면 꺼짐 방지 | `@capacitor-community/keep-awake` + Android `WAKE_LOCK` 권한 | 화면 꺼짐 → WebView 스로틀 → 재생 끊김 |
+| 자동재생 | Capacitor 기본값 (`setMediaPlaybackRequiresUserGesture(false)`, `mediaTypesRequiringUserActionForPlayback = []`) | — (웹의 autoplay 차단 이슈가 앱에선 발생하지 않음) |
+
+### 7-1. 화면 꺼짐 방지 드라이버 (`src/lib/screenAwake.ts`)
+
+iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없다.** 그래서 웹 API 만
+쓰면 아이패드 매장에서 화면이 꺼진다. `screenAwake.ts` 가 실행 환경별로 드라이버를 고른다:
+
+- 네이티브 쉘 → `KeepAwake` 플러그인
+- 웹/PWA → `navigator.wakeLock`
+- 둘 다 없음 → `unsupported` (UI 가 "기기 자동 잠금 해제" 안내)
+
+`useWakeLock()` 은 이 드라이버만 쓰고, 상태는 `playbackHealthStore` 로 흘러
+매장 플레이어의 **화면 꺼짐 방지** 표시에 그대로 반영된다.
+
+### 7-2. 앱에서 동작이 다른 지점 (의도된 차이)
+
+| 기능 | 웹/PWA | 네이티브 앱 |
+| --- | --- | --- |
+| "홈 화면에 추가" 설치 배너 | 표시 | **숨김** (`isStandalone()` 이 네이티브에서 true) |
+| Web Push 알림 | 지원(VAPID 설정 시) | **미지원** — SW 미등록. `usePushSubscription` 이 `supported:false` 로 즉시 끊는다(가드가 없으면 `serviceWorker.ready` 가 영원히 pending) |
+| 브랜드 프레젠테이션 전체화면 | Fullscreen API | CSS 폴백(iOS 는 Fullscreen API 없음) + 화면 내 종료 버튼 |
+| 오디오 Range 캐시 | SW 가 캐시 | **없음** — 네트워크 의존. 매장 회선 안정성 확인 필요 |
+
+> **남은 작업**: 네이티브 푸시(FCM/APNs)와 오프라인 오디오 캐시는 별도 과제.
+> 현재는 "앱에서 조용히 실패"가 아니라 "명시적으로 미지원"으로 처리돼 있다.
+
+## 8. 인앱결제(IAP) 전략 — **후속 작업**
 
 현재 결제는 PayApp 웹 정기결제. 스토어 정책:
 - **디지털 구독**을 앱에서 판매하면 원칙적으로 Apple/Google 인앱결제(수수료 15~30%) 강제.
@@ -114,12 +153,14 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 
 > 출시 초기엔 (A)로 심사 통과 후, 결제 정책은 별도 의사결정.
 
-## 8. 체크리스트 (출시까지)
+## 9. 체크리스트 (출시까지)
 
 - [x] Capacitor 통합 + android/ios 네이티브 프로젝트 생성
 - [x] 네이티브 가드(SW 미등록, 상태바/스플래시/back) 배선
 - [x] 실시간 데이터 파이프라인(앱↔웹 공유, 0477)
 - [x] OAuth 네이티브 딥링크 **코드 배선**(스킴/브라우저/코드교환/라우팅)
+- [x] 매장/브랜드 네이티브 지원(백그라운드 오디오·화면 꺼짐 방지·설치 배너/푸시 가드)
+- [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성
 - [ ] IAP/결제 정책 결정

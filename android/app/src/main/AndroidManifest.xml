@@ -47,4 +47,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 매장/브랜드 플레이어의 화면 꺼짐 방지(@capacitor-community/keep-awake).
+         화면이 꺼지면 WebView 가 스로틀되어 24시간 연속 재생이 끊긴다. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>

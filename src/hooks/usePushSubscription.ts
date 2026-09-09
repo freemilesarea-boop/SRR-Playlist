@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isNativeApp } from '@/lib/native';
 import { useAuthStore } from '@/store/authStore';
 
 interface PushStatus {
@@ -21,6 +22,9 @@ interface PushStatus {
  * - subscribe(): 권한 요청 → PushManager.subscribe → save_push_subscription RPC
  * - unsubscribe(): subscription.unsubscribe + delete_push_subscription RPC
  * - 미지원 브라우저(iOS Safari, FF private 등)는 supported=false
+ * - 네이티브 쉘(iOS/Android 앱)은 Service Worker 를 등록하지 않으므로 Web Push 불가.
+ *   navigator.serviceWorker.ready 가 영원히 pending 이라 명시적으로 supported=false 로 끊는다
+ *   (가드가 없으면 subscribe() 가 busy 상태로 멈춘다).
  *
  * VAPID public key 는 VITE_VAPID_PUBLIC_KEY 환경변수에서 읽음. 미설정 시 supported=false.
  */
@@ -38,6 +42,7 @@ export function usePushSubscription() {
   useEffect(() => {
     const vapidPub = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
     const supported =
+      !isNativeApp() &&
       typeof window !== 'undefined' &&
       'Notification' in window &&
       'serviceWorker' in navigator &&
