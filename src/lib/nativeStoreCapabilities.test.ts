@@ -39,6 +39,31 @@ describe('AndroidManifest.xml', () => {
   });
 });
 
+describe('푸시 알림 네이티브 설정', () => {
+  it('Android: POST_NOTIFICATIONS 권한 (Android 13+ 런타임 권한)', () => {
+    expect(repoFile('android/app/src/main/AndroidManifest.xml')).toContain('android.permission.POST_NOTIFICATIONS');
+  });
+
+  it('Android: google-services.json 이 있으면 플러그인이 적용된다 (없으면 빌드는 그대로 성공)', () => {
+    const gradle = repoFile('android/app/build.gradle');
+    expect(gradle).toContain('com.google.gms.google-services');
+    expect(gradle).toContain('google-services.json');
+  });
+
+  it('iOS: AppDelegate 가 APNs 토큰을 Capacitor 로 넘긴다', () => {
+    // 이 두 콜백이 없으면 iOS 에서 registration 이벤트가 영원히 오지 않는다.
+    const appDelegate = repoFile('ios/App/App/AppDelegate.swift');
+    expect(appDelegate).toContain('didRegisterForRemoteNotificationsWithDeviceToken');
+    expect(appDelegate).toContain('capacitorDidRegisterForRemoteNotifications');
+    expect(appDelegate).toContain('didFailToRegisterForRemoteNotificationsWithError');
+    expect(appDelegate).toContain('capacitorDidFailToRegisterForRemoteNotifications');
+  });
+
+  it('iOS: aps-environment 엔타이틀먼트가 있다', () => {
+    expect(repoFile('ios/App/App/App.entitlements')).toContain('aps-environment');
+  });
+});
+
 describe('capacitor 의존성', () => {
   const pkg = JSON.parse(repoFile('package.json')) as {
     dependencies: Record<string, string>;
@@ -46,5 +71,9 @@ describe('capacitor 의존성', () => {
 
   it('KeepAwake 플러그인이 런타임 의존성으로 설치돼 있다', () => {
     expect(pkg.dependencies['@capacitor-community/keep-awake']).toBeTruthy();
+  });
+
+  it('PushNotifications 플러그인이 런타임 의존성으로 설치돼 있다', () => {
+    expect(pkg.dependencies['@capacitor/push-notifications']).toBeTruthy();
   });
 });

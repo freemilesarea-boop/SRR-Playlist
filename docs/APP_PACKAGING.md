@@ -133,7 +133,7 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 | 기능 | 웹/PWA | 네이티브 앱 |
 | --- | --- | --- |
 | "홈 화면에 추가" 설치 배너 | 표시 | **숨김** (`isStandalone()` 이 네이티브에서 true) |
-| Web Push 알림 | 지원(VAPID 설정 시) | **미지원** — SW 미등록. `usePushSubscription` 이 `supported:false` 로 즉시 끊는다(가드가 없으면 `serviceWorker.ready` 가 영원히 pending) |
+| 푸시 알림 | Web Push (VAPID) | **OS 푸시**(FCM/APNs) — SW 가 없어 Web Push 불가. 같은 토글 UI 로 내부 경로만 갈린다 (§7-4) |
 | 브랜드 프레젠테이션 전체화면 | Fullscreen API | CSS 폴백(iOS 는 Fullscreen API 없음) + 화면 내 종료 버튼 |
 | 오프라인 음원 저장 | IndexedDB (SW 아님) | **동일하게 동작** — 하나의 구현으로 웹·앱 공통 |
 
@@ -170,8 +170,56 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 관리: 운영 콘솔 → 오디오 진단 패널에 저장 곡 수·용량·상한과 "오프라인 저장 음원 비우기" 버튼.
 매장 플레이어 하단에는 저장 상태가 읽기 전용으로 표시된다.
 
-> **남은 작업**: 네이티브 푸시(FCM/APNs)는 별도 과제.
-> 현재는 "앱에서 조용히 실패"가 아니라 "명시적으로 미지원"으로 처리돼 있다.
+### 7-4. 푸시 알림 — 웹은 Web Push, 앱은 OS 푸시
+
+앱은 Service Worker 를 등록하지 않으므로 Web Push 를 쓸 수 없다. 대신 OS 푸시를 쓰고,
+**토글 UI(`PushNotificationToggle`)와 훅(`usePushSubscription`)은 그대로 공유**한다 — 내부 경로만 갈린다.
+
+| | 토큰 | 전송 |
+| --- | --- | --- |
+| 웹 / PWA | Web Push 구독(endpoint·p256dh·auth) | `web-push` + VAPID |
+| Android | FCM 등록 토큰 | FCM HTTP v1 (서비스 계정 OAuth2) |
+| iOS | APNs 디바이스 토큰 | APNs HTTP/2 (p8 키 ES256 JWT) |
+
+iOS 에 Firebase SDK 를 넣지 않고 **APNs 를 직접** 쓴다 — `GoogleService-Info.plist` 나
+Firebase pod 없이 동작하고 전송 경로가 짧다.
+
+**구성**
+
+- 토큰 저장: `public.device_push_tokens` (migration `0510`). `unique(token)` 에
+  `user_id` 갱신을 걸어, 같은 기기에서 계정을 바꾸면 **주인이 옮겨간다**
+  (안 그러면 이전 사용자에게 알림이 계속 간다).
+- 클라이언트: `src/lib/nativePush.ts` — 권한 요청 → `register()` → `registration`
+  이벤트로 토큰 수신(15초 타임아웃) → `save_device_push_token` RPC.
+- 알림 탭: payload 의 `url` 로 앱 내부 라우팅. **`safeInAppPath()` 가 내부 경로만 허용**한다
+  (외부 URL·커스텀 스킴·프로토콜 상대 URL 은 홈으로 — 알림 payload 를 믿고 아무 데나 보내지 않는다).
+- 서버: `send-push` 가 웹 구독과 네이티브 토큰에 **동시 발송**하고, 만료 토큰
+  (FCM `UNREGISTERED` / APNs `410`·`BadDeviceToken`)은 즉시 정리한다.
+  자격증명이 없는 플랫폼은 `skipped` — 에러가 아니라 미설정이며 나머지 경로는 정상 발송된다.
+
+**출시 전 수동 설정 (자격증명 — 코드 아님)**
+
+1. **Android**: Firebase 프로젝트 생성 → Android 앱(`com.deudda.app`) 등록 →
+   `google-services.json` 을 `android/app/` 에 저장.
+   Gradle 은 파일이 있을 때만 플러그인을 적용하므로, **없어도 빌드는 그대로 성공**한다(푸시만 비활성).
+2. **iOS**: Xcode → Signing & Capabilities → **+ Push Notifications** 추가
+   (`ios/App/App/App.entitlements` 가 타깃에 연결된다).
+   Apple Developer → Keys 에서 APNs 키(.p8) 발급.
+   > `AppDelegate.swift` 의 `didRegisterForRemoteNotificationsWithDeviceToken` /
+   > `didFailToRegisterForRemoteNotificationsWithError` 는 이미 배선돼 있다.
+   > **이 두 콜백이 없으면 iOS 에서 토큰이 영원히 오지 않는다**(앱 푸시가 조용히 동작 안 함) —
+   > 회귀는 `src/lib/nativeStoreCapabilities.test.ts` 가 막는다.
+3. **Edge Function Secrets** (`.env.example` 의 "네이티브 앱 푸시" 항목 참고):
+   ```bash
+   supabase secrets set FCM_SERVICE_ACCOUNT_JSON="$(cat service-account.json)"
+   supabase secrets set APNS_KEY_P8="$(cat AuthKey_XXXX.p8)" \
+     APNS_KEY_ID=XXXXXXXXXX APNS_TEAM_ID=YYYYYYYYYY APNS_BUNDLE_ID=com.deudda.app
+   # 개발(TestFlight 이전) 빌드로 테스트할 때만:
+   supabase secrets set APNS_ENV=sandbox   # + App.entitlements 를 development 로
+   ```
+
+> ⚠️ 실기기 테스트 필수 — 시뮬레이터는 APNs 토큰을 받지 못한다.
+> `send-push` 응답의 `ready` / `native_results` 로 어느 경로가 설정됐고 무엇이 실패했는지 확인할 수 있다.
 
 ## 8. 인앱결제(IAP) 전략 — **후속 작업**
 
@@ -194,6 +242,8 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 - [x] OAuth 네이티브 딥링크 **코드 배선**(스킴/브라우저/코드교환/라우팅)
 - [x] 매장/브랜드 네이티브 지원(백그라운드 오디오·화면 꺼짐 방지·설치 배너/푸시 가드)
 - [x] 오프라인 음원 저장(IndexedDB 선반입 · LRU · 손상 캐시 자가 폐기)
+- [x] 네이티브 푸시 **코드 배선**(토큰 저장 · FCM/APNs 발송 · 탭 라우팅)
+- [ ] 푸시 자격증명 설정(google-services.json · APNs p8 · Edge Secrets) + 실기기 테스트
 - [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성

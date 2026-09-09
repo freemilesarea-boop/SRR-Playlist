@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isNativeApp } from '@/lib/native';
+import {
+  checkNativePushPermission,
+  disableNativePush,
+  enableNativePush,
+  nativePushSupported,
+} from '@/lib/nativePush';
 import { useAuthStore } from '@/store/authStore';
 
 interface PushStatus {
@@ -22,9 +28,9 @@ interface PushStatus {
  * - subscribe(): 권한 요청 → PushManager.subscribe → save_push_subscription RPC
  * - unsubscribe(): subscription.unsubscribe + delete_push_subscription RPC
  * - 미지원 브라우저(iOS Safari, FF private 등)는 supported=false
- * - 네이티브 쉘(iOS/Android 앱)은 Service Worker 를 등록하지 않으므로 Web Push 불가.
- *   navigator.serviceWorker.ready 가 영원히 pending 이라 명시적으로 supported=false 로 끊는다
- *   (가드가 없으면 subscribe() 가 busy 상태로 멈춘다).
+ * - 네이티브 쉘(iOS/Android 앱)은 Service Worker 가 없어 Web Push 를 쓸 수 없으므로
+ *   OS 푸시(FCM/APNs)로 대체한다. 같은 훅/같은 토글 UI 를 쓰고 내부 경로만 갈린다
+ *   (Web Push 분기는 serviceWorker.ready 가 네이티브에서 영원히 pending 이라 진입 자체를 막는다).
  *
  * VAPID public key 는 VITE_VAPID_PUBLIC_KEY 환경변수에서 읽음. 미설정 시 supported=false.
  */
@@ -38,8 +44,25 @@ export function usePushSubscription() {
     error: null,
   }));
 
+  // 네이티브 앱: OS 푸시 토큰을 이 기기에 저장해두고 해제 시 서버에서 지운다.
+  const [nativeToken, setNativeToken] = useState<string | null>(null);
+  const native = nativePushSupported();
+
   // 마운트 시 지원 여부 + 현재 구독 상태 점검
   useEffect(() => {
+    if (native) {
+      let alive = true;
+      void (async () => {
+        const permission = await checkNativePushPermission();
+        if (!alive) return;
+        // 권한이 이미 허용돼 있으면 등록된 것으로 본다(토큰은 켤 때 확보).
+        setStatus({ supported: true, permission, subscribed: permission === 'granted', busy: false, error: null });
+      })();
+      return () => {
+        alive = false;
+      };
+    }
+
     const vapidPub = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
     const supported =
       !isNativeApp() &&
@@ -82,11 +105,28 @@ export function usePushSubscription() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [native]);
 
   async function subscribe(): Promise<boolean> {
     if (!status.supported || !userId) return false;
     setStatus((s) => ({ ...s, busy: true, error: null }));
+
+    if (native) {
+      const r = await enableNativePush();
+      if (!r.ok) {
+        setStatus((s) => ({
+          ...s,
+          busy: false,
+          permission: r.error === 'permission_denied' ? 'denied' : s.permission,
+          error: r.error === 'permission_denied' ? null : (r.error ?? '알림 등록 실패'),
+        }));
+        return false;
+      }
+      setNativeToken(r.token ?? null);
+      setStatus({ supported: true, permission: 'granted', subscribed: true, busy: false, error: null });
+      return true;
+    }
+
     try {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') {
@@ -123,6 +163,14 @@ export function usePushSubscription() {
   async function unsubscribe(): Promise<boolean> {
     if (!status.supported) return false;
     setStatus((s) => ({ ...s, busy: true, error: null }));
+
+    if (native) {
+      const ok = await disableNativePush(nativeToken);
+      setStatus((s) => ({ ...s, subscribed: !ok, busy: false, error: ok ? null : '알림 해제 실패' }));
+      if (ok) setNativeToken(null);
+      return ok;
+    }
+
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
