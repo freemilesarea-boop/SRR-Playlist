@@ -91,6 +91,22 @@ describe('푸시 알림 네이티브 설정', () => {
   });
 });
 
+describe('가상기기 실행 경로', () => {
+  const pkgScripts = (JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> }).scripts;
+
+  it('에뮬레이터 실행 스크립트가 npm script 로 연결돼 있다', () => {
+    expect(pkgScripts['android:emu']).toContain('scripts/run-emulator.sh');
+    expect(pkgScripts['android:build']).toContain('assembleDebug');
+  });
+
+  it('실행 스크립트가 존재하고 에뮬레이터↔호스트 주소를 쓴다', () => {
+    const sh = repoFile('scripts/run-emulator.sh');
+    // 10.0.2.2 = 에뮬레이터에서 본 호스트 PC 의 localhost. 틀리면 라이브 리로드가 붙지 않는다.
+    expect(sh).toContain('10.0.2.2');
+    expect(sh).toContain('cap run android');
+  });
+});
+
 describe('capacitor 의존성', () => {
   const pkg = JSON.parse(repoFile('package.json')) as {
     dependencies: Record<string, string>;

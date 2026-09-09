@@ -31,6 +31,10 @@
 
 ## 3. 로컬 개발 워크플로
 
+> 🖥️ **가상기기(에뮬레이터)에서 바로 확인하려면** → [`docs/EMULATOR_QA.md`](./EMULATOR_QA.md)
+> `npm run android:emu` 한 줄로 에뮬레이터 부팅 → 빌드 → 설치까지 처리한다.
+> 백그라운드 재생 확인 절차도 그 문서에 있다.
+
 ```bash
 npm install
 npm run cap:sync        # vite build(:no-lint) + cap sync — dist를 android/ios에 복사
