@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { screenAwakeMode } from '@/lib/screenAwake';
 
 /**
  * 매장 재생 모드 / 플레이어 안정성 상태 공유 스토어.
@@ -57,7 +58,8 @@ export const usePlaybackHealthStore = create<PlaybackHealthState>((set, get) => 
   failedCount: 0,
   lastErrorAt: null,
   lastErrorName: null,
-  wakeLockSupported: typeof navigator !== 'undefined' && 'wakeLock' in navigator,
+  // 네이티브 쉘은 navigator.wakeLock 이 없어도 KeepAwake 플러그인으로 화면을 켜둘 수 있다.
+  wakeLockSupported: screenAwakeMode() !== 'unsupported',
   wakeLockActive: false,
   todayPlayCount: 0,
   todayKey: todayStr(),

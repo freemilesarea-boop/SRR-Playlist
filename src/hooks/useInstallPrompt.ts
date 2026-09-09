@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { isNativeApp } from '@/lib/native';
+import { screenAwakeMode } from '@/lib/screenAwake';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -7,6 +9,10 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
+  // 네이티브 쉘(App Store / Play 스토어로 설치된 앱)은 이미 '설치된 앱'이다.
+  // WebView 는 display-mode: standalone 이 아니므로 명시 가드가 없으면
+  // 앱 안에서 "홈 화면에 추가" 배너가 다시 뜬다.
+  if (isNativeApp()) return true;
   // iOS Safari
   if ((navigator as unknown as { standalone?: boolean }).standalone) return true;
   return window.matchMedia?.('(display-mode: standalone)').matches ?? false;
@@ -45,7 +51,7 @@ export function useInstallPrompt() {
   return { canInstall: !!event, installed, prompt };
 }
 
+/** @deprecated 화면 꺼짐 방지 지원 여부는 screenAwakeMode() 를 쓴다(네이티브 포함). */
 export function wakeLockSupported(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return 'wakeLock' in navigator;
+  return screenAwakeMode() !== 'unsupported';
 }

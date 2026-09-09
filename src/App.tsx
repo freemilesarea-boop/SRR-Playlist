@@ -179,6 +179,14 @@ export default function App() {
     })();
   }, [navigate]);
 
+  // 네이티브 푸시 알림 탭 → 알림에 담긴 앱 내부 경로로 이동. 웹에서는 no-op.
+  useEffect(() => {
+    void (async () => {
+      const { initNativePushRouting } = await import('@/lib/nativePush');
+      await initNativePushRouting((path) => navigate(path));
+    })();
+  }, [navigate]);
+
   // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
   useEffect(() => installUnloadGuard(), []);
 

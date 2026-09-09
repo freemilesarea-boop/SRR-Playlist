@@ -1,6 +1,10 @@
 // supabase/functions/send-push/index.ts
 //
-// Web Push 알림 발송. 다른 edge function 또는 운영자가 호출.
+// 푸시 알림 발송 — Web Push + 네이티브 앱(FCM/APNs) 동시.
+//
+// 한 사용자가 웹(PWA)과 앱을 함께 쓸 수 있으므로 양쪽 모두에 보낸다.
+// 자격증명이 없는 경로는 'skipped' 로 표시하고 나머지는 정상 발송한다
+// (예: VAPID 만 설정된 현재 상태에서도 웹 발송은 그대로 동작).
 //
 // 요청:
 //   POST /send-push
@@ -15,13 +19,21 @@
 //   }
 //
 // 환경변수:
-//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:...)
+//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:...)   — Web Push
+//   FCM_SERVICE_ACCOUNT_JSON                                          — Android
+//   APNS_KEY_P8, APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID, APNS_ENV  — iOS
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 // deno-lint-ignore-file no-explicit-any
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import webpush from 'npm:web-push@3.6.7';
+import {
+  nativePushReadiness,
+  readNativePushEnv,
+  sendNativePush,
+  type NativeToken,
+} from '../_shared/nativePush.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,8 +83,14 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
   const env = readEnv();
-  if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE) {
-    return json({ error: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY 미설정' }, 500);
+  const nativeEnv = readNativePushEnv((k) => Deno.env.get(k) ?? undefined);
+  const ready = {
+    web: !!env.VAPID_PUBLIC && !!env.VAPID_PRIVATE,
+    ...nativePushReadiness(nativeEnv),
+  };
+  // 하나도 설정돼 있지 않을 때만 실패. 일부만 설정된 상태는 정상 운영 경로다.
+  if (!ready.web && !ready.android && !ready.ios) {
+    return json({ error: 'push_not_configured', detail: 'VAPID / FCM / APNS 자격증명이 모두 미설정', ready }, 500);
   }
   if (!env.SUPABASE_URL || !env.SERVICE_ROLE) {
     return json({ error: 'SUPABASE env 미설정' }, 500);
@@ -103,19 +121,28 @@ serve(async (req: Request) => {
     icon: payload.icon as string | undefined,
   };
 
-  // 사용자의 구독 목록 조회
-  let subs: Sub[];
+  // 사용자의 구독 목록 조회 — 웹(브라우저)과 네이티브(앱)를 각각.
+  let subs: Sub[] = [];
+  let devices: NativeToken[] = [];
   try {
-    subs = await rpc<Sub[]>(env, 'list_push_subscriptions_for', { p_user_id: userId });
+    [subs, devices] = await Promise.all([
+      ready.web
+        ? rpc<Sub[]>(env, 'list_push_subscriptions_for', { p_user_id: userId })
+        : Promise.resolve([] as Sub[]),
+      rpc<NativeToken[]>(env, 'list_device_push_tokens_for', { p_user_id: userId }),
+    ]);
   } catch (e) {
     return json({ error: 'list_failed', detail: String(e) }, 500);
   }
 
-  if (subs.length === 0) {
-    return json({ ok: true, sent: 0, candidates: 0 });
+  const candidates = subs.length + devices.length;
+  if (candidates === 0) {
+    return json({ ok: true, sent: 0, candidates: 0, ready });
   }
 
-  webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC, env.VAPID_PRIVATE);
+  if (ready.web) {
+    webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC, env.VAPID_PRIVATE);
+  }
 
   const results: Array<{ endpoint: string; status: 'sent' | 'gone' | 'failed'; error?: string }> = [];
   for (const s of subs) {
@@ -144,13 +171,34 @@ serve(async (req: Request) => {
     }
   }
 
+  // 네이티브 앱 발송 — 만료 토큰(gone)은 즉시 정리해 다음 발송에서 빠진다.
+  const nativeResults = devices.length > 0
+    ? await sendNativePush(nativeEnv, devices, notification)
+    : [];
+  for (const r of nativeResults) {
+    if (r.status !== 'gone') continue;
+    try {
+      await rpc(env, 'delete_device_push_token_by_value', { p_token: r.token });
+    } catch {
+      /* noop */
+    }
+  }
+
+  const count = (status: string) =>
+    results.filter((r) => r.status === status).length + nativeResults.filter((r) => r.status === status).length;
+
   return json({
     ok: true,
     user_id: userId,
-    candidates: subs.length,
-    sent: results.filter((r) => r.status === 'sent').length,
-    gone: results.filter((r) => r.status === 'gone').length,
-    failed: results.filter((r) => r.status === 'failed').length,
+    ready,
+    candidates,
+    web_candidates: subs.length,
+    native_candidates: devices.length,
+    sent: count('sent'),
+    gone: count('gone'),
+    failed: count('failed'),
+    skipped: nativeResults.filter((r) => r.status === 'skipped').length,
     results,
+    native_results: nativeResults,
   });
 });

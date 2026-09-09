@@ -58,7 +58,8 @@ export default function PushNotificationToggle({
       <div className="flex items-start gap-2 rounded-xl bg-bg-card p-3 text-xs text-ink-dim ring-1 ring-line/10">
         <AlertCircle size={14} className="mt-0.5 shrink-0" />
         <div>
-          이 브라우저는 푸시 알림을 지원하지 않거나 VAPID 키가 설정되지 않았어요. Chrome / Edge 또는 PWA 설치 후 사용 가능.
+          이 기기에서는 푸시 알림을 쓸 수 없어요. 브라우저는 Chrome / Edge 또는 PWA 설치 후,
+          앱은 알림 권한을 허용하면 사용할 수 있습니다.
         </div>
       </div>
     );

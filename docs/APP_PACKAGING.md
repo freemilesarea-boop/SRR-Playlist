@@ -101,7 +101,127 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 > ⚠️ 실기기(또는 시뮬레이터) 테스트 필요: 브라우저→딥링크 복귀는 에뮬레이터/디바이스에서만 확인 가능.
 > 웹 OAuth 동작은 **무변경**(가드로 분리).
 
-## 7. 인앱결제(IAP) 전략 — **후속 작업**
+## 7. 매장·브랜드 운영 기능의 네이티브 지원 — **배선 완료 ✅**
+
+앱은 웹과 **같은 번들**을 로드하므로 `/business`, `/business/player`, `/brand`,
+`/brand/player/:brandId`, `/enterprise/*`, `/ops/*` 등 **모든 라우트가 앱에 그대로 들어 있다**
+(플랫폼으로 화면을 잘라내는 분기는 없다 — `isNativeApp()` 사용처는 SW/OAuth/셸 초기화뿐).
+
+다만 매장 24시간 무인 재생은 **네이티브 쉘 설정이 없으면 앱에서만 조용히 깨진다.**
+아래는 그 설정과 근거다. 회귀는 `src/lib/nativeStoreCapabilities.test.ts` 가 막는다.
+
+| 항목 | 설정 | 없으면 생기는 일 |
+| --- | --- | --- |
+| 백그라운드 오디오(iOS) | `Info.plist` → `UIBackgroundModes: [audio]` | 화면 잠금·홈 이동 즉시 **재생 정지** |
+| 화면 꺼짐 방지 | `@capacitor-community/keep-awake` + Android `WAKE_LOCK` 권한 | 화면 꺼짐 → WebView 스로틀 → 재생 끊김 |
+| 자동재생 | Capacitor 기본값 (`setMediaPlaybackRequiresUserGesture(false)`, `mediaTypesRequiringUserActionForPlayback = []`) | — (웹의 autoplay 차단 이슈가 앱에선 발생하지 않음) |
+
+### 7-1. 화면 꺼짐 방지 드라이버 (`src/lib/screenAwake.ts`)
+
+iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없다.** 그래서 웹 API 만
+쓰면 아이패드 매장에서 화면이 꺼진다. `screenAwake.ts` 가 실행 환경별로 드라이버를 고른다:
+
+- 네이티브 쉘 → `KeepAwake` 플러그인
+- 웹/PWA → `navigator.wakeLock`
+- 둘 다 없음 → `unsupported` (UI 가 "기기 자동 잠금 해제" 안내)
+
+`useWakeLock()` 은 이 드라이버만 쓰고, 상태는 `playbackHealthStore` 로 흘러
+매장 플레이어의 **화면 꺼짐 방지** 표시에 그대로 반영된다.
+
+### 7-2. 앱에서 동작이 다른 지점 (의도된 차이)
+
+| 기능 | 웹/PWA | 네이티브 앱 |
+| --- | --- | --- |
+| "홈 화면에 추가" 설치 배너 | 표시 | **숨김** (`isStandalone()` 이 네이티브에서 true) |
+| 푸시 알림 | Web Push (VAPID) | **OS 푸시**(FCM/APNs) — SW 가 없어 Web Push 불가. 같은 토글 UI 로 내부 경로만 갈린다 (§7-4) |
+| 브랜드 프레젠테이션 전체화면 | Fullscreen API | CSS 폴백(iOS 는 Fullscreen API 없음) + 화면 내 종료 버튼 |
+| 오프라인 음원 저장 | IndexedDB (SW 아님) | **동일하게 동작** — 하나의 구현으로 웹·앱 공통 |
+
+### 7-3. 오프라인 음원 저장 (`src/lib/audioCache/`)
+
+**Service Worker 로 오디오를 캐시하지 않는다** — 의도된 정책이다. SW 가 Range 요청을
+가로채면 206 부분응답이 깨져 시킹이 망가진다(`src/sw.ts`, `vite.config.ts` 주석 참고).
+그래서 웹에도 오디오 캐시는 원래 없었다.
+
+대신 **파일 전체를 IndexedDB 에 받아두고 재생 시 object URL 로 물리는** 방식을 쓴다:
+
+- SW 가 필요 없다 → SW 를 등록하지 않는 **네이티브 앱에서도 그대로 동작**한다.
+- Cache API 를 쓰지 않으므로 `purgeBadAudioCaches()` / "캐시·SW 초기화" 에 지워지지 않고,
+  진단 패널의 "⚠ 오디오 관련 캐시 존재" 경고에도 걸리지 않는다.
+- object URL 은 Range 시킹이 로컬에서 정상 동작한다.
+
+동작:
+
+1. 매장·브랜드 플레이어가 `useAudioCachePrefetch` 로 **앞으로 나올 곡을 미리 받는다**
+   (온라인일 때만·한 번에 하나씩). 매장은 같은 로테이션을 반복하므로 한 바퀴면 전곡이 로컬에 남는다.
+2. 재생 시 `playbackSrcFor(audio_url)` 가 **동기로** 조회 — 준비된 곡은 object URL,
+   아니면 원본 URL(= 캐시 도입 전과 동일). 트랙 전환 hot path 에 await 를 넣지 않는다.
+3. 상한(기본 1GB, 기기 quota 의 절반 이내) 초과 시 **오래 안 쓴 곡부터 자동 삭제**.
+   재생 중인 곡은 삭제 대상에서 제외된다.
+4. 캐시본으로 재생하다 media error 가 나면 그 곡의 캐시를 **폐기**해 다음 차례에
+   네트워크로 다시 받는다(무인 매장에서 손상 캐시가 영구 고착되는 것 방지).
+
+> ⚠️ Player 의 `timeupdate`/`loadedmetadata`/`durationchange` 가드는 `currentSrc` 와
+> `audio_url` 의 **경로 비교**에 걸려 있었다. 캐시 적중 시 src 는 `blob:` 이라 경로 비교가
+> 불가능하므로, 판정을 `audioSourceMatch()` 한 곳으로 모았다(3-상태: match/mismatch/unknown,
+> unknown 은 기존 `activeRef` 폴백). 이 판정이 틀리면 **진행률·duration·자동재생이 통째로 죽는다** —
+> 수정 시 `audioCachePolicy.test.ts` 를 반드시 확인할 것.
+
+관리: 운영 콘솔 → 오디오 진단 패널에 저장 곡 수·용량·상한과 "오프라인 저장 음원 비우기" 버튼.
+매장 플레이어 하단에는 저장 상태가 읽기 전용으로 표시된다.
+
+### 7-4. 푸시 알림 — 웹은 Web Push, 앱은 OS 푸시
+
+앱은 Service Worker 를 등록하지 않으므로 Web Push 를 쓸 수 없다. 대신 OS 푸시를 쓰고,
+**토글 UI(`PushNotificationToggle`)와 훅(`usePushSubscription`)은 그대로 공유**한다 — 내부 경로만 갈린다.
+
+| | 토큰 | 전송 |
+| --- | --- | --- |
+| 웹 / PWA | Web Push 구독(endpoint·p256dh·auth) | `web-push` + VAPID |
+| Android | FCM 등록 토큰 | FCM HTTP v1 (서비스 계정 OAuth2) |
+| iOS | APNs 디바이스 토큰 | APNs HTTP/2 (p8 키 ES256 JWT) |
+
+iOS 에 Firebase SDK 를 넣지 않고 **APNs 를 직접** 쓴다 — `GoogleService-Info.plist` 나
+Firebase pod 없이 동작하고 전송 경로가 짧다.
+
+**구성**
+
+- 토큰 저장: `public.device_push_tokens` (migration `0510`). `unique(token)` 에
+  `user_id` 갱신을 걸어, 같은 기기에서 계정을 바꾸면 **주인이 옮겨간다**
+  (안 그러면 이전 사용자에게 알림이 계속 간다).
+- 클라이언트: `src/lib/nativePush.ts` — 권한 요청 → `register()` → `registration`
+  이벤트로 토큰 수신(15초 타임아웃) → `save_device_push_token` RPC.
+- 알림 탭: payload 의 `url` 로 앱 내부 라우팅. **`safeInAppPath()` 가 내부 경로만 허용**한다
+  (외부 URL·커스텀 스킴·프로토콜 상대 URL 은 홈으로 — 알림 payload 를 믿고 아무 데나 보내지 않는다).
+- 서버: `send-push` 가 웹 구독과 네이티브 토큰에 **동시 발송**하고, 만료 토큰
+  (FCM `UNREGISTERED` / APNs `410`·`BadDeviceToken`)은 즉시 정리한다.
+  자격증명이 없는 플랫폼은 `skipped` — 에러가 아니라 미설정이며 나머지 경로는 정상 발송된다.
+
+**출시 전 수동 설정 (자격증명 — 코드 아님)**
+
+1. **Android**: Firebase 프로젝트 생성 → Android 앱(`com.deudda.app`) 등록 →
+   `google-services.json` 을 `android/app/` 에 저장.
+   Gradle 은 파일이 있을 때만 플러그인을 적용하므로, **없어도 빌드는 그대로 성공**한다(푸시만 비활성).
+2. **iOS**: Xcode → Signing & Capabilities → **+ Push Notifications** 추가
+   (`ios/App/App/App.entitlements` 가 타깃에 연결된다).
+   Apple Developer → Keys 에서 APNs 키(.p8) 발급.
+   > `AppDelegate.swift` 의 `didRegisterForRemoteNotificationsWithDeviceToken` /
+   > `didFailToRegisterForRemoteNotificationsWithError` 는 이미 배선돼 있다.
+   > **이 두 콜백이 없으면 iOS 에서 토큰이 영원히 오지 않는다**(앱 푸시가 조용히 동작 안 함) —
+   > 회귀는 `src/lib/nativeStoreCapabilities.test.ts` 가 막는다.
+3. **Edge Function Secrets** (`.env.example` 의 "네이티브 앱 푸시" 항목 참고):
+   ```bash
+   supabase secrets set FCM_SERVICE_ACCOUNT_JSON="$(cat service-account.json)"
+   supabase secrets set APNS_KEY_P8="$(cat AuthKey_XXXX.p8)" \
+     APNS_KEY_ID=XXXXXXXXXX APNS_TEAM_ID=YYYYYYYYYY APNS_BUNDLE_ID=com.deudda.app
+   # 개발(TestFlight 이전) 빌드로 테스트할 때만:
+   supabase secrets set APNS_ENV=sandbox   # + App.entitlements 를 development 로
+   ```
+
+> ⚠️ 실기기 테스트 필수 — 시뮬레이터는 APNs 토큰을 받지 못한다.
+> `send-push` 응답의 `ready` / `native_results` 로 어느 경로가 설정됐고 무엇이 실패했는지 확인할 수 있다.
+
+## 8. 인앱결제(IAP) 전략 — **후속 작업**
 
 현재 결제는 PayApp 웹 정기결제. 스토어 정책:
 - **디지털 구독**을 앱에서 판매하면 원칙적으로 Apple/Google 인앱결제(수수료 15~30%) 강제.
@@ -114,12 +234,17 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 
 > 출시 초기엔 (A)로 심사 통과 후, 결제 정책은 별도 의사결정.
 
-## 8. 체크리스트 (출시까지)
+## 9. 체크리스트 (출시까지)
 
 - [x] Capacitor 통합 + android/ios 네이티브 프로젝트 생성
 - [x] 네이티브 가드(SW 미등록, 상태바/스플래시/back) 배선
 - [x] 실시간 데이터 파이프라인(앱↔웹 공유, 0477)
 - [x] OAuth 네이티브 딥링크 **코드 배선**(스킴/브라우저/코드교환/라우팅)
+- [x] 매장/브랜드 네이티브 지원(백그라운드 오디오·화면 꺼짐 방지·설치 배너/푸시 가드)
+- [x] 오프라인 음원 저장(IndexedDB 선반입 · LRU · 손상 캐시 자가 폐기)
+- [x] 네이티브 푸시 **코드 배선**(토큰 저장 · FCM/APNs 발송 · 탭 라우팅)
+- [ ] 푸시 자격증명 설정(google-services.json · APNs p8 · Edge Secrets) + 실기기 테스트
+- [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성
 - [ ] IAP/결제 정책 결정
