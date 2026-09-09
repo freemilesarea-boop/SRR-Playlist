@@ -3,6 +3,7 @@ import { Stethoscope, RefreshCw, Play, CheckCircle2, XCircle, Smartphone, Activi
 import { fetchTracks } from '@/lib/api';
 import { probeTrackAudio, capturePlaybackTimeline, mediaErrName, type AudioProbe, type PlaybackEvent } from '@/lib/audioDiagnostics';
 import { getSwDiagnostics, resetServiceWorkerAndCaches, type SwDiagnostics } from '@/lib/swCache';
+import { audioCacheStats, clearAudioCache, formatCacheSize, type AudioCacheStats } from '@/lib/audioCache';
 import type { TrackRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
@@ -23,8 +24,22 @@ export default function AudioDiagnosticPanel() {
   const [timelines, setTimelines] = useState<Record<string, { timeline: PlaybackEvent[]; outcome: string; errorCode: number | null } | 'running'>>({});
   const [running, setRunning] = useState(false);
   const [sw, setSw] = useState<SwDiagnostics | null>(null);
+  const [offline, setOffline] = useState<AudioCacheStats | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => { void getSwDiagnostics().then(setSw); }, []);
+  useEffect(() => { void audioCacheStats().then(setOffline); }, []);
+
+  async function clearOfflineAudio() {
+    setClearing(true);
+    try {
+      await clearAudioCache();
+      setOffline(await audioCacheStats());
+      toast.success('오프라인 저장 음원을 비웠습니다.');
+    } finally {
+      setClearing(false);
+    }
+  }
 
   async function runTimeline(r: Row) {
     setTimelines((p) => ({ ...p, [r.id]: 'running' }));
@@ -119,6 +134,33 @@ export default function AudioDiagnosticPanel() {
           캐시/SW 초기화 후 새로고침
         </button>
         <p className="text-ink-dim">기존 SW 등록 해제 + 모든 캐시 삭제 후 새로고침합니다. 모바일에서 재생이 안 되면 이 버튼을 누른 뒤 다시 시도하세요.</p>
+      </div>
+
+      {/* 오프라인 오디오 캐시(IndexedDB) — SW 캐시와 별개.
+          Cache API 를 쓰지 않으므로 위의 "캐시/SW 초기화" 로는 지워지지 않는다. */}
+      <div className="space-y-2 rounded-xl bg-bg-soft/50 p-3 text-[11px] ring-1 ring-line/10">
+        <p className="font-bold text-ink">오프라인 음원 저장 (이 기기)</p>
+        {offline ? (
+          offline.available ? (
+            <div className="space-y-0.5 font-mono text-ink-mute">
+              <p>저장된 곡: <b className="text-ink">{offline.count}곡</b> · {formatCacheSize(offline.bytes)}</p>
+              <p>상한: {formatCacheSize(offline.limitBytes)} (초과 시 오래 안 쓴 곡부터 자동 삭제)</p>
+            </div>
+          ) : (
+            <p className="text-ink-mute">이 브라우저에서는 오프라인 저장을 쓸 수 없습니다(IndexedDB 사용 불가).</p>
+          )
+        ) : <p className="text-ink-mute">확인 중…</p>}
+        <button
+          onClick={() => { void clearOfflineAudio(); }}
+          disabled={clearing || !offline?.available || offline.count === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-bg-hover px-3 py-1.5 text-xs font-bold text-ink ring-1 ring-line/15 hover:bg-bg-card disabled:opacity-40"
+        >
+          {clearing ? '비우는 중…' : '오프라인 저장 음원 비우기'}
+        </button>
+        <p className="text-ink-dim">
+          매장 재생 중 앞으로 나올 곡을 미리 받아둡니다. 인터넷이 끊겨도 저장된 곡은 계속 재생됩니다.
+          저장은 이 기기 안에만 남고 파일로 꺼낼 수 없습니다.
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

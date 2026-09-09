@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
-  Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock,
+  Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock, HardDriveDownload,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -15,6 +15,8 @@ import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
+import { formatCacheSize } from '@/lib/audioCache';
+import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
 // 프랜차이즈 연결 매장만 적용; 일반 매장은 hook 이 no-op.
 import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
@@ -52,6 +54,8 @@ export default function StorePlayerPage() {
   const prev = usePlayerStore((s) => s.prev);
 
   const nativeApp = isNativeApp();
+  // 오프라인 대비 선반입 — 매장은 같은 로테이션을 반복하므로 한 바퀴면 전곡이 로컬에 남는다.
+  const cacheStats = useAudioCachePrefetch(true);
   const { online, failedCount, wakeLockSupported, wakeLockActive, todayPlayCount } =
     usePlaybackHealthStore();
   const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
@@ -269,6 +273,13 @@ export default function StorePlayerPage() {
             tone={wakeLockActive ? 'text-emerald-300' : 'text-white/50'}
           />
         </div>
+
+        {cacheStats?.available && cacheStats.count > 0 && (
+          <p className="flex items-center gap-1.5 text-[11px] text-white/50">
+            <HardDriveDownload size={12} className="shrink-0" />
+            오프라인 저장 {cacheStats.count}곡 · {formatCacheSize(cacheStats.bytes)} — 인터넷이 끊겨도 저장된 곡은 계속 재생됩니다.
+          </p>
+        )}
 
         {failedCount > 0 && (
           <p className="flex items-center gap-1.5 text-[11px] text-amber-300">

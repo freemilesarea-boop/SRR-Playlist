@@ -135,9 +135,42 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 | "홈 화면에 추가" 설치 배너 | 표시 | **숨김** (`isStandalone()` 이 네이티브에서 true) |
 | Web Push 알림 | 지원(VAPID 설정 시) | **미지원** — SW 미등록. `usePushSubscription` 이 `supported:false` 로 즉시 끊는다(가드가 없으면 `serviceWorker.ready` 가 영원히 pending) |
 | 브랜드 프레젠테이션 전체화면 | Fullscreen API | CSS 폴백(iOS 는 Fullscreen API 없음) + 화면 내 종료 버튼 |
-| 오디오 Range 캐시 | SW 가 캐시 | **없음** — 네트워크 의존. 매장 회선 안정성 확인 필요 |
+| 오프라인 음원 저장 | IndexedDB (SW 아님) | **동일하게 동작** — 하나의 구현으로 웹·앱 공통 |
 
-> **남은 작업**: 네이티브 푸시(FCM/APNs)와 오프라인 오디오 캐시는 별도 과제.
+### 7-3. 오프라인 음원 저장 (`src/lib/audioCache/`)
+
+**Service Worker 로 오디오를 캐시하지 않는다** — 의도된 정책이다. SW 가 Range 요청을
+가로채면 206 부분응답이 깨져 시킹이 망가진다(`src/sw.ts`, `vite.config.ts` 주석 참고).
+그래서 웹에도 오디오 캐시는 원래 없었다.
+
+대신 **파일 전체를 IndexedDB 에 받아두고 재생 시 object URL 로 물리는** 방식을 쓴다:
+
+- SW 가 필요 없다 → SW 를 등록하지 않는 **네이티브 앱에서도 그대로 동작**한다.
+- Cache API 를 쓰지 않으므로 `purgeBadAudioCaches()` / "캐시·SW 초기화" 에 지워지지 않고,
+  진단 패널의 "⚠ 오디오 관련 캐시 존재" 경고에도 걸리지 않는다.
+- object URL 은 Range 시킹이 로컬에서 정상 동작한다.
+
+동작:
+
+1. 매장·브랜드 플레이어가 `useAudioCachePrefetch` 로 **앞으로 나올 곡을 미리 받는다**
+   (온라인일 때만·한 번에 하나씩). 매장은 같은 로테이션을 반복하므로 한 바퀴면 전곡이 로컬에 남는다.
+2. 재생 시 `playbackSrcFor(audio_url)` 가 **동기로** 조회 — 준비된 곡은 object URL,
+   아니면 원본 URL(= 캐시 도입 전과 동일). 트랙 전환 hot path 에 await 를 넣지 않는다.
+3. 상한(기본 1GB, 기기 quota 의 절반 이내) 초과 시 **오래 안 쓴 곡부터 자동 삭제**.
+   재생 중인 곡은 삭제 대상에서 제외된다.
+4. 캐시본으로 재생하다 media error 가 나면 그 곡의 캐시를 **폐기**해 다음 차례에
+   네트워크로 다시 받는다(무인 매장에서 손상 캐시가 영구 고착되는 것 방지).
+
+> ⚠️ Player 의 `timeupdate`/`loadedmetadata`/`durationchange` 가드는 `currentSrc` 와
+> `audio_url` 의 **경로 비교**에 걸려 있었다. 캐시 적중 시 src 는 `blob:` 이라 경로 비교가
+> 불가능하므로, 판정을 `audioSourceMatch()` 한 곳으로 모았다(3-상태: match/mismatch/unknown,
+> unknown 은 기존 `activeRef` 폴백). 이 판정이 틀리면 **진행률·duration·자동재생이 통째로 죽는다** —
+> 수정 시 `audioCachePolicy.test.ts` 를 반드시 확인할 것.
+
+관리: 운영 콘솔 → 오디오 진단 패널에 저장 곡 수·용량·상한과 "오프라인 저장 음원 비우기" 버튼.
+매장 플레이어 하단에는 저장 상태가 읽기 전용으로 표시된다.
+
+> **남은 작업**: 네이티브 푸시(FCM/APNs)는 별도 과제.
 > 현재는 "앱에서 조용히 실패"가 아니라 "명시적으로 미지원"으로 처리돼 있다.
 
 ## 8. 인앱결제(IAP) 전략 — **후속 작업**
@@ -160,7 +193,8 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 - [x] 실시간 데이터 파이프라인(앱↔웹 공유, 0477)
 - [x] OAuth 네이티브 딥링크 **코드 배선**(스킴/브라우저/코드교환/라우팅)
 - [x] 매장/브랜드 네이티브 지원(백그라운드 오디오·화면 꺼짐 방지·설치 배너/푸시 가드)
-- [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인)
+- [x] 오프라인 음원 저장(IndexedDB 선반입 · LRU · 손상 캐시 자가 폐기)
+- [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성
 - [ ] IAP/결제 정책 결정

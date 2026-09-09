@@ -60,6 +60,16 @@ import { resolveStoreGate } from '@/lib/storePlaybackGate';
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
+import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+
+/**
+ * 이 audio element 가 해당 트랙을 물고 있는지 (오프라인 캐시의 blob: src 포함).
+ * 세 개의 이벤트 가드(timeupdate / loadedmetadata / durationchange)가 공유한다.
+ */
+function matchesTrack(audioUrl: string | null | undefined, currentSrc: string | null | undefined) {
+  return audioSourceMatch(audioUrl, currentSrc, { origin: window.location.origin, blobOwner });
+}
+
 
 /** HTMLMediaElement.error.code → 사람 읽기용 이름 */
 const MEDIA_ERROR_CODES: Record<number, string> = {
@@ -1217,10 +1227,13 @@ export default function Player() {
       // 1) 이전 src 의 play 프로미스 abort
       audio.pause();
       // 2) 새 src 적용
+      // 오프라인 캐시가 준비돼 있으면 로컬 object URL, 아니면 원본 네트워크 URL.
+      // 동기 조회만 한다 — 트랙 전환 hot path 에 await 를 넣지 않는다.
+      const playbackSrc = playbackSrcFor(current.audio_url);
       if (import.meta.env.DEV) {
-        console.debug('[Player] src set', { id: current.id, url: current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
+        console.debug('[Player] src set', { id: current.id, url: current.audio_url, cached: playbackSrc !== current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
       }
-      audio.src = current.audio_url;
+      audio.src = playbackSrc;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
       clearMetaTimer();
@@ -1611,7 +1624,7 @@ export default function Player() {
 
     // Phase 5-2 — src 재설정 idempotent guard.
     // preload effect 가 이미 nextAudio.src 를 세팅했으면 재설정 skip → 브라우저 재fetch 방지.
-    const nextUrl = nextTrack.audio_url;
+    const nextUrl = playbackSrcFor(nextTrack.audio_url);
     const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
     // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
     audioDebugWarn('[audio:engine:crossfade-start]', {
@@ -1826,7 +1839,7 @@ export default function Player() {
     if (!nextAudio) return;
 
     // 이미 같은 src 로 로드되어 있으면 재설정 skip (browser 재fetch 방지).
-    const nextUrl = nextTrack.audio_url;
+    const nextUrl = playbackSrcFor(nextTrack.audio_url);
     const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
     if (alreadyLoaded) {
       preloadedNextIdRef.current = nextTrack.id;
@@ -2031,16 +2044,11 @@ export default function Player() {
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
     const target = e.currentTarget;
     // X6.2.13 — activeRef 가드 완화. currentSrc / current.audio_url 매칭 기반.
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) return; // 다른 트랙 audio 의 timeupdate 무시
-      } catch {
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    // 오프라인 캐시 적중 시 src 는 blob: object URL 이라 경로 비교가 불가능하다 → 공용 판정 사용.
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      if (m === 'mismatch') return; // 다른 트랙 audio 의 timeupdate 무시
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     const t = target.currentTime;
 
@@ -2211,20 +2219,12 @@ export default function Player() {
     // X6.2.13 — activeRef 가드 완화. metadata 가 어떤 audio 에서 fire 됐든,
     // 그 audio 의 currentSrc 가 현재 트랙의 audio_url 과 같은 path 면 처리.
     // (매장 모드 / crossfade 등 activeIdx 가 다른 audio 를 가리킬 때 progress 0:00 멈춤 해결)
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) {
-          // preload 된 next track 의 metadata — 현재 트랙 progress 와 무관, 무시
-          return;
-        }
-      } catch {
-        // URL parse 실패 시 fallback — activeRef 검사로
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      // preload 된 next track 의 metadata — 현재 트랙 progress 와 무관, 무시
+      if (m === 'mismatch') return;
+      // 판정 불가 시 fallback — activeRef 검사로
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     if (import.meta.env.DEV) {
       console.debug('[Player] loadedmetadata', { id: current?.id, duration: d, readyState: target.readyState, currentSrc: target.currentSrc });
@@ -2253,16 +2253,10 @@ export default function Player() {
     const d = target.duration;
     if (!Number.isFinite(d) || d <= 0) return;
     // current track 매칭
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) return;
-      } catch {
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      if (m === 'mismatch') return;
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     setDuration(d);
     clearMetaTimer();
@@ -2550,6 +2544,12 @@ export default function Player() {
     const target = e.currentTarget;
     const err = target.error;
     const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
+    // 오프라인 캐시본(blob:)으로 재생하다 실패 → 손상된 캐시로 보고 폐기한다.
+    // 그대로 두면 무인 매장에서 그 곡이 돌아올 때마다 계속 실패한다. 폐기하면
+    // 다음 차례에 네트워크로 다시 받아 스스로 복구된다.
+    if ((target.currentSrc || target.src).startsWith('blob:') && current?.audio_url) {
+      void dropCachedAudio(current.audio_url);
+    }
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
     void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });

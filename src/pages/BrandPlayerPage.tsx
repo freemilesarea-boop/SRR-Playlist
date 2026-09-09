@@ -7,6 +7,7 @@ import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, S
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { isNativeApp } from '@/lib/native';
+import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
@@ -42,6 +43,8 @@ export default function BrandPlayerPage() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
+  // 무인 매장 — 회선이 끊겨도 저장된 곡으로 재생이 이어지도록 미리 받아둔다.
+  useAudioCachePrefetch(true);
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
   // BRAND-PLAYER-UX-4 — 브랜드/서비스 로고(사이니지 미디어 없을 때 Priority 2). 기존 필드 재사용.
