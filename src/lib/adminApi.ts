@@ -56,7 +56,16 @@ export interface MemberRow {
   created_at: string;
   last_seen_at: string | null;
   total_streams: number;
+  /**
+   * 실제 재생 시간(초). 세션 경과 기준 — 매장 태블릿 화면이 꺼져 있어도 집계된다.
+   * 0514 이전에는 stream_events 만 세어서 매장 재생이 통째로 빠져 있었다.
+   */
   total_listened_seconds: number;
+  /**
+   * 엄격 검증 시간(초). playing + visible + !muted + volume>=0.1 이 전부 참인 구간만.
+   * 정산 기준값이며, 화면이 꺼진 매장은 실제 재생보다 작게 나온다.
+   */
+  total_verified_seconds: number;
   // 0056 — 회원 상태
   withdrawn_at: string | null;
   has_cancel_scheduled: boolean;
@@ -114,7 +123,16 @@ export interface MemberDetail {
     plan_used_this_month?: number;
   };
   total_streams: number;
+  /**
+   * 실제 재생 시간(초). 세션 경과 기준 — 매장 태블릿 화면이 꺼져 있어도 집계된다.
+   * 0514 이전에는 stream_events 만 세어서 매장 재생이 통째로 빠져 있었다.
+   */
   total_listened_seconds: number;
+  /**
+   * 엄격 검증 시간(초). playing + visible + !muted + volume>=0.1 이 전부 참인 구간만.
+   * 정산 기준값이며, 화면이 꺼진 매장은 실제 재생보다 작게 나온다.
+   */
+  total_verified_seconds: number;
   last_seen_at: string | null;
   recent_visits: Array<{ path: string; created_at: string }>;
   recent_plays: Array<{

@@ -334,7 +334,10 @@ export default function MembersList() {
                   <td className="px-3 py-2.5 text-right text-xs tabular-nums">
                     {m.total_streams}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs tabular-nums text-ink-mute">
+                  <td
+                    className="px-3 py-2.5 text-right text-xs tabular-nums text-ink-mute"
+                    title={`정산 기준(검증) ${fmtTime(m.total_verified_seconds)} — 화면이 꺼진 매장은 실제 재생보다 작게 잡힙니다`}
+                  >
                     {fmtTime(m.total_listened_seconds)}
                   </td>
                   <td className="px-3 py-2.5 text-right text-xs text-ink-mute">

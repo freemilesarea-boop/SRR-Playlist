@@ -18,9 +18,10 @@
  * ── 이 모듈이 하는 일 ───────────────────────────────────────────────────────
  * 정지 경과 시간만 보고 다음 칸을 고른다. 실행은 Player 가 한다.
  *
- *   8초  → nudge   재생을 다시 건다 (탭 스로틀링·일시적 정지)
- *   20초 → reload  같은 위치로 소스를 다시 잡는다 (버퍼 고갈)
- *   35초 → skip    다음 곡으로 넘긴다 (이 파일이 문제)
+ *   8초   → nudge        재생을 다시 건다 (탭 스로틀링·일시적 정지)
+ *   20초  → reload       같은 위치로 소스를 다시 잡는다 (버퍼 고갈)
+ *   35초  → skip         다음 곡으로 넘긴다 (이 파일이 문제)
+ *   150초 → reload_page  페이지를 다시 띄운다 (skip 조차 듣지 않는 상태)
  *
  * 곡이 바뀌면 사다리는 처음부터 다시 시작한다 — **매장은 포기하지 않는다.**
  * 네트워크가 죽어 있으면 곡당 35초씩 넘기며 계속 시도하고, 돌아오면 저절로 낫는다.
@@ -29,7 +30,7 @@
  *   사용자가 멈춘 것을 마음대로 다시 트는 일은 없어야 한다.
  */
 
-export type StallAction = 'none' | 'nudge' | 'reload' | 'skip';
+export type StallAction = 'none' | 'nudge' | 'reload' | 'skip' | 'reload_page';
 
 /** 재생을 다시 건다. 가장 싸고 대부분의 일시적 정지를 고친다. */
 export const NUDGE_AFTER_MS = 8_000;
@@ -37,6 +38,19 @@ export const NUDGE_AFTER_MS = 8_000;
 export const RELOAD_AFTER_MS = 20_000;
 /** 다음 곡으로. 여기까지 왔으면 이 파일/이 위치가 문제다. */
 export const SKIP_AFTER_MS = 35_000;
+/**
+ * 페이지를 통째로 다시 띄운다 — 마지막 칸.
+ *
+ * 왜 필요한가: 숙대점(2026-09-10)에서 skip 까지 올라간 뒤 곡이 바뀌지 않아
+ * **34분간 같은 곡에 멈춰 있었다.** 사다리 끝에 도달하면 isEscalation 이 재실행을
+ * 막기 때문에, skip 이 듣지 않는 상황에서는 그 뒤로 아무 일도 일어나지 않는다.
+ * 매장은 조용해지고 사람이 올 때까지 그대로다.
+ *
+ * 리로드는 오디오 엘리먼트·큐·워커를 전부 새로 만든다. 무인 매장에서 가장 확실한
+ * 복구 수단이다. 자동재생이 막히면 전체화면 안내(PlaybackBlockedOverlay)가 뜨므로
+ * 최소한 "화면을 누르면 된다" 는 상태까지는 간다 — 조용한 정지보다 낫다.
+ */
+export const RELOAD_PAGE_AFTER_MS = 150_000;
 
 export interface StallInput {
   /** 매장/브랜드 플레이어인가. false 면 무조건 'none'. */
@@ -76,6 +90,7 @@ export function resolveStallAction(i: StallInput): StallAction {
   // paused/ended 는 "정지"가 아니다 — 다른 로직(neither-playing, onEnded)의 몫.
   if (i.paused || i.ended) return 'none';
 
+  if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return 'reload_page';
   if (i.stalledMs >= SKIP_AFTER_MS) return 'skip';
   if (i.stalledMs >= RELOAD_AFTER_MS) return 'reload';
   if (i.stalledMs >= NUDGE_AFTER_MS) return 'nudge';
@@ -83,7 +98,7 @@ export function resolveStallAction(i: StallInput): StallAction {
 }
 
 /** 사다리에서 이 칸이 저 칸보다 뒤인가 (되돌아가지 않게). */
-const ORDER: Record<StallAction, number> = { none: 0, nudge: 1, reload: 2, skip: 3 };
+const ORDER: Record<StallAction, number> = { none: 0, nudge: 1, reload: 2, skip: 3, reload_page: 4 };
 export function isEscalation(from: StallAction, to: StallAction): boolean {
   return ORDER[to] > ORDER[from];
 }
