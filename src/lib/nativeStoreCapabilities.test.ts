@@ -124,6 +124,15 @@ describe('가상기기 실행 경로', () => {
     expect(sh).toContain('$HOME/Android/Sdk');
   });
 
+  it('.env 가 템플릿 상태면 걸러낸다', () => {
+    // 예전 검사는 '^VITE_SUPABASE_URL=https' 였는데, 템플릿의
+    // your-project-ref.supabase.co 도 https 로 시작해서 그대로 통과했다.
+    // 실제로 사용자 맥에서 "✓ .env 확인" 이 뜬 뒤 앱이 설정 화면만 보여줬다.
+    const sh = repoFile('scripts/run-emulator.sh');
+    expect(sh).toContain('your-project-ref');
+    expect(sh).toContain('your-anon-key');
+  });
+
   it('Gradle 이 SDK 를 못 찾는 흔한 실패를 미리 막는다', () => {
     // local.properties 가 없으면 assembleDebug 가 'SDK location not found' 로 죽는다.
     expect(repoFile('scripts/run-emulator.sh')).toContain('local.properties');
