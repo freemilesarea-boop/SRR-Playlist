@@ -41,6 +41,8 @@
  *   - 서버사이드 / Node 환경에서 navigator 가 없을 수 있어 typeof 가드.
  *   - 잘못된 false positive 방지 위해 화이트리스트 우선 매칭 후 휴리스틱.
  */
+import { isNativeApp } from '@/lib/native';
+
 export type InAppBrowserName =
   | 'kakaotalk'
   | 'instagram'
@@ -117,6 +119,19 @@ export function detectInAppBrowser(): InAppDetection {
     return { isInApp: false, name: null, label: null, userAgent: '', matchedBy: null };
   }
   const ua = navigator.userAgent;
+  // 우리 앱(Capacitor)은 인앱 브라우저가 아니다.
+  //
+  // 안드로이드 WebView UA 에는 "; wv)" 가 들어가서 아래 catch-all 패턴에 걸린다.
+  // 그대로 두면 우리 앱에서 Google 로그인을 누를 때마다 "Chrome 에서 열어주세요"
+  // 모달이 떠서 앱으로는 로그인 자체가 불가능하다.
+  //
+  // 우리 앱은 OAuth 를 WebView 안에서 열지 않는다 — nativeAuth.ts 가
+  // @capacitor/browser 로 시스템 브라우저(Android 커스텀탭 / iOS SFSafariViewController)를
+  // 띄우고 딥링크로 돌아온다. 그건 Google 이 요구하는 바로 그 "보안 브라우저" 라
+  // disallowed_useragent 대상이 아니다.
+  if (isNativeApp()) {
+    return { isInApp: false, name: null, label: null, userAgent: ua, matchedBy: null };
+  }
   // 1) 화이트리스트 우선 매칭 (정확한 앱 식별)
   for (const p of PATTERNS) {
     if (p.regex.test(ua)) {
@@ -160,6 +175,9 @@ export function isAndroidDevice(): boolean {
  */
 export function isPwaStandalone(): boolean {
   if (typeof window === 'undefined') return false;
+  // 위와 같은 이유 — 네이티브 앱은 display-mode 가 standalone 으로 보이지만
+  // OAuth 는 시스템 브라우저로 나가므로 차단 대상이 아니다.
+  if (isNativeApp()) return false;
   if ((navigator as unknown as { standalone?: boolean }).standalone) return true;
   try {
     return window.matchMedia?.('(display-mode: standalone)').matches ?? false;

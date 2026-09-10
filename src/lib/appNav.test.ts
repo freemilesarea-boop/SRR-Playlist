@@ -33,11 +33,23 @@ describe('bottomNavItems', () => {
     expect(items[0].to).toBe('/business');
   });
 
-  it('앱이라도 매장/브랜드가 아니면 개인 감상 메뉴를 유지한다', () => {
-    // 앱을 개인 감상용으로 깐 사람에게 매장을 첫 칸에 두면 오히려 헷갈린다.
+  it('앱이라도 매장/브랜드가 아니면 홈이 첫 칸 — 다만 매장은 남는다', () => {
+    // 앱을 개인 감상용으로 깐 사람에게 매장을 첫 칸에 두면 헷갈린다.
+    // 그렇다고 매장을 빼면, 로그인 전(profile 없음) 점주가 가입 동선을 못 찾는다.
     expect(bottomNavItems({ ...web, native: true }).map((i) => i.to)).toEqual([
-      '/', '/search', '/charts', '/library', '/profile',
+      '/', '/business', '/search', '/library', '/profile',
     ]);
+  });
+
+  it('어떤 조합에서도 매장 탭은 사라지지 않는다', () => {
+    for (const native of [true, false]) {
+      for (const storeAccount of [true, false]) {
+        for (const hasBrand of [true, false]) {
+          const items = bottomNavItems({ native, storeAccount, hasBrand, isCurator: false });
+          expect(items.map((i) => i.to)).toContain('/business');
+        }
+      }
+    }
   });
 
   it('하단탭은 어떤 조합에서도 5칸을 넘지 않는다', () => {

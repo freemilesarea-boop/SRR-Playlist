@@ -68,13 +68,15 @@ export function bottomNavItems(ctx: NavContext): NavItem[] {
     return [HOME, CHARTS, LIBRARY, STORE, PROFILE];
   }
 
+  // 아직 로그인 전이거나 개인 감상용으로 앱을 깐 사람 — 홈을 앞에 두되
+  // 매장은 반드시 남긴다. 앱을 깐 이유가 매장인 사람이 로그인 전에 들어오면
+  // 매장 탭이 없어서 가입 동선을 못 찾는다.
+  if (!ctx.storeAccount && !ctx.hasBrand) {
+    return [HOME, STORE, SEARCH, LIBRARY, PROFILE];
+  }
+
   const items: NavItem[] = [STORE];
   if (ctx.hasBrand) items.push(BRAND);
   items.push(SEARCH, LIBRARY, PROFILE);
-
-  // 매장 계정이 아니면(개인 감상용으로 앱을 깐 사람) 홈을 앞에 둔다.
-  if (!ctx.storeAccount && !ctx.hasBrand) {
-    return [HOME, SEARCH, CHARTS, LIBRARY, PROFILE];
-  }
   return items.slice(0, 5);
 }

@@ -118,6 +118,26 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
   });
 });
 
+describe('앱에서의 로그인 · 결제 경로', () => {
+  it('우리 앱은 인앱 브라우저 차단 대상에서 제외된다', () => {
+    // 안드로이드 WebView UA 의 "; wv)" 때문에 우리 앱이 스스로를 차단해
+    // 앱으로는 Google 로그인이 아예 불가능했다.
+    expect(repoFile('src/lib/inAppBrowser.ts')).toContain('if (isNativeApp())');
+  });
+
+  it.each([
+    'src/pages/SubscriptionPage.tsx',
+    'src/pages/PricingPage.tsx',
+    'src/pages/EnterprisePayPage.tsx',
+  ])('%s 는 결제창을 openExternalUrl 로 연다', (file) => {
+    // 앱에서 window.location.href 로 결제창에 넘기면 WebView 가 통째로 나가버리고
+    // 돌아올 길이 없다. 카드사 앱을 띄우는 intent:// 스킴도 WebView 에서는 실패한다.
+    const src = repoFile(file);
+    expect(src).toContain('openExternalUrl(res.payurl');
+    expect(src).not.toContain('window.location.href = res.payurl');
+  });
+});
+
 describe('가상기기 실행 경로', () => {
   const pkgScripts = (JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> }).scripts;
 

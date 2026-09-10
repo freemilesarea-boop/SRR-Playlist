@@ -16,6 +16,7 @@ import {
   Store, Building2, Network, Check, ShieldCheck, Loader2, Copy, ArrowLeft, AlertTriangle,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { openExternalUrl } from '@/lib/externalNav';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import { friendlyError } from '@/lib/errorMessages';
@@ -185,7 +186,17 @@ function StorePanel({ ctx, price, defaultPhone }: {
         promotion_code: promo ? promoInput.trim() : null,
       });
       // 권한 부여는 절대 프론트에서 하지 않는다 — PayApp 웹훅에서만.
-      if (res.ok && res.payurl) { window.location.href = res.payurl; return; }
+      // 앱에서는 WebView 를 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
+      if (res.ok && res.payurl) {
+        await openExternalUrl(res.payurl, {
+          onReturn: () => {
+            // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는
+            // 서버 상태를 다시 읽어 화면만 갱신한다(반영에 몇 초 걸릴 수 있음).
+            void useAuthStore.getState().refreshProfile();
+          },
+        });
+        return;
+      }
       toast.error(res.error ?? '결제를 시작하지 못했어요.');
     } catch (e) {
       toast.error(friendlyError(e, '결제 시작 실패'));

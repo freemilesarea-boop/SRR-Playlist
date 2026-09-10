@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { openExternalUrl } from '@/lib/externalNav';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { friendlyError } from '@/lib/errorMessages';
@@ -184,7 +185,14 @@ export default function SubscriptionPage() {
       });
       if (res.ok && res.payurl) {
         // PayApp 결제창으로 이동. 권한 부여는 절대 여기서 X — feedbackurl 웹훅에서만.
-        window.location.href = res.payurl;
+        // 앱에서는 WebView 를 그대로 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
+        await openExternalUrl(res.payurl, {
+          onReturn: () => {
+            // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는
+            // 서버 상태를 다시 읽어 화면만 갱신한다(반영에 몇 초 걸릴 수 있음).
+            void useAuthStore.getState().refreshProfile();
+          },
+        });
         return;
       }
       // 결제 직전 서버 재검증에서 프로모션 사유가 오면 친화 메시지로 표시
