@@ -7,6 +7,7 @@ import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, S
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { isNativeApp } from '@/lib/native';
+import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
@@ -140,6 +141,16 @@ export default function BrandPlayerPage() {
     enableForBusinessMode();
     usePlayerStore.getState().setScheduleSuppression(null);
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
+  // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
+  useEffect(() => {
+    void logPlaybackDiagnostic('session_start', {
+      reason: takeReloadReason(),
+      playerMode: 'brand',
+    });
+    return watchPageLifecycle('brand');
+  }, []);
 
   // 브랜드/서비스 로고 로드(멱등). AppShell 밖 kiosk 라우트에서도 로고 확보.
   useEffect(() => { void loadBrandSettings(); }, [loadBrandSettings]);

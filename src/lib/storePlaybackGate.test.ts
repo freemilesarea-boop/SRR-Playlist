@@ -37,3 +37,25 @@ describe('isStorePlaybackBlocked', () => {
     expect(isStorePlaybackBlocked(input({ membership: 'premium' }))).toBe(false);
   });
 });
+
+// 0511/0512 — reloadApp 사유 분류. 자동재생 차단이 배포 때문인지 탭 정리 때문인지
+// 구분하려면 이 분류가 맞아야 한다(숙대점 조사에서 구분 불가였던 지점).
+describe('classifyReloadReason', () => {
+  it('서비스워커 갱신 → sw_update', async () => {
+    const { classifyReloadReason } = await import('./playbackGuard');
+    expect(classifyReloadReason('sw build abc123 (updatefound)')).toBe('sw_update');
+    expect(classifyReloadReason('sw-cache-reset')).toBe('sw_update');
+  });
+  it('청크 로드 실패 → chunk_error', async () => {
+    const { classifyReloadReason } = await import('./playbackGuard');
+    expect(classifyReloadReason('chunk-load-failed (build x, attempt 1)')).toBe('chunk_error');
+  });
+  it('자가 복구 → self_heal', async () => {
+    const { classifyReloadReason } = await import('./playbackGuard');
+    expect(classifyReloadReason('route-fallback-stuck')).toBe('self_heal');
+  });
+  it('분류 불가 → unknown', async () => {
+    const { classifyReloadReason } = await import('./playbackGuard');
+    expect(classifyReloadReason('something else')).toBe('unknown');
+  });
+});

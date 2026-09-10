@@ -15,6 +15,7 @@ import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
+import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
@@ -70,6 +71,16 @@ export default function StorePlayerPage() {
     setBusinessMode(true);
     enableForBusinessMode();
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
+  // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
+  useEffect(() => {
+    void logPlaybackDiagnostic('session_start', {
+      reason: takeReloadReason(),
+      playerMode: 'store',
+    });
+    return watchPageLifecycle('store');
+  }, []);
 
   // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
   const storeId = useAuthStore((s) => s.user?.id ?? null);

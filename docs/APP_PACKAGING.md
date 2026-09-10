@@ -31,6 +31,10 @@
 
 ## 3. 로컬 개발 워크플로
 
+> 🖥️ **가상기기(에뮬레이터)에서 바로 확인하려면** → [`docs/EMULATOR_QA.md`](./EMULATOR_QA.md)
+> `npm run android:emu` 한 줄로 에뮬레이터 부팅 → 빌드 → 설치까지 처리한다.
+> 백그라운드 재생 확인 절차도 그 문서에 있다.
+
 ```bash
 npm install
 npm run cap:sync        # vite build(:no-lint) + cap sync — dist를 android/ios에 복사
@@ -112,7 +116,8 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 
 | 항목 | 설정 | 없으면 생기는 일 |
 | --- | --- | --- |
-| 백그라운드 오디오(iOS) | `Info.plist` → `UIBackgroundModes: [audio]` | 화면 잠금·홈 이동 즉시 **재생 정지** |
+| 백그라운드 오디오(iOS) | `Info.plist` `UIBackgroundModes: [audio]` **+ AVAudioSession `.playback`** | 둘 중 하나만 있으면 화면 잠금·홈 이동 시 **재생 정지** (§7-5) |
+| 백그라운드 오디오(Android) | `mediaPlayback` 포그라운드 서비스 | 백그라운드 프로세스 오디오가 시스템에 의해 중단됨 (§7-5) |
 | 화면 꺼짐 방지 | `@capacitor-community/keep-awake` + Android `WAKE_LOCK` 권한 | 화면 꺼짐 → WebView 스로틀 → 재생 끊김 |
 | 자동재생 | Capacitor 기본값 (`setMediaPlaybackRequiresUserGesture(false)`, `mediaTypesRequiringUserActionForPlayback = []`) | — (웹의 autoplay 차단 이슈가 앱에선 발생하지 않음) |
 
@@ -169,6 +174,45 @@ iOS WKWebView 에는 **Screen Wake Lock API(`navigator.wakeLock`) 자체가 없�
 
 관리: 운영 콘솔 → 오디오 진단 패널에 저장 곡 수·용량·상한과 "오프라인 저장 음원 비우기" 버튼.
 매장 플레이어 하단에는 저장 상태가 읽기 전용으로 표시된다.
+
+### 7-5. 백그라운드 재생 — 플랫폼별로 요구사항이 다르다
+
+앱을 닫거나 화면을 잠가도 매장 음악이 계속 나와야 한다. **플랫폼마다 필요한 것이 다르고,
+하나라도 빠지면 조용히 멈춘다.**
+
+#### iOS — 두 가지가 모두 필요하다
+
+1. `Info.plist` → `UIBackgroundModes: [audio]`
+2. `AppDelegate` → `AVAudioSession.setCategory(.playback)`
+
+**1번만으로는 동작하지 않는다.** iOS 의 기본 오디오 세션 카테고리(`soloAmbient`)는
+앱이 백그라운드로 가거나 화면이 잠기면 음소거되고, 무음 스위치에도 꺼진다.
+`.playback` 이라야 두 경우 모두에서 재생이 이어진다(매장 BGM 에 맞는 카테고리).
+
+`setActive(true)` 는 호출하지 않는다 — 카테고리만 지정해두면 WKWebView 가 실제 재생을
+시작할 때 iOS 가 세션을 활성화한다. 실행 즉시 활성화하면 재생도 하기 전에 다른 앱의
+오디오를 끊는다.
+
+#### Android — 포그라운드 서비스가 필요하다
+
+안드로이드는 백그라운드 프로세스의 오디오를 언제든 중단시킨다(메모리 압박 · Doze).
+`mediaPlayback` 타입 포그라운드 서비스가 떠 있으면 프로세스가 보호된다.
+
+- `StorePlaybackService` — 상태바 알림(중요도 LOW)을 띄우고 프로세스를 살려둔다.
+  **소리는 그대로 WebView 의 `<audio>` 가 낸다** — 서비스는 오디오 파이프라인을 건드리지 않는다.
+- `StorePlaybackServicePlugin` — JS 다리. 앱 로컬 플러그인은 자동 검색되지 않으므로
+  `MainActivity.onCreate` 에서 `registerPlugin()` 으로 등록한다(빠지면 호출이 무시된다).
+- `storePlaybackService.ts` — **매장 모드 + 재생 중**일 때만 켠다(`shouldKeepAlive`).
+  개인 감상까지 상시 알림을 띄우지 않기 위한 제한이다.
+- Android 14(API 34)+ 는 `startForeground` 에 서비스 타입을 명시해야 한다 — 처리됨.
+
+> 📋 **Play Console**: `mediaPlayback` 은 포그라운드 서비스 타입 신고 대상이다.
+> 앱 콘텐츠 → 포그라운드 서비스 권한에서 "매장 배경음악 재생"으로 용도를 신고해야 심사를 통과한다.
+
+#### 웹 / PWA
+
+브라우저 탭이 살아 있는 동안만 재생된다. 앱과 달리 OS 차원의 보장이 없다 —
+매장은 앱 설치를 권장한다.
 
 ### 7-4. 푸시 알림 — 웹은 Web Push, 앱은 OS 푸시
 
@@ -244,6 +288,8 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 - [x] 오프라인 음원 저장(IndexedDB 선반입 · LRU · 손상 캐시 자가 폐기)
 - [x] 네이티브 푸시 **코드 배선**(토큰 저장 · FCM/APNs 발송 · 탭 라우팅)
 - [ ] 푸시 자격증명 설정(google-services.json · APNs p8 · Edge Secrets) + 실기기 테스트
+- [x] 백그라운드 재생(iOS AVAudioSession `.playback` · Android mediaPlayback 포그라운드 서비스)
+- [ ] Play Console 포그라운드 서비스 타입 신고(mediaPlayback)
 - [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
 - [ ] 앱 아이콘/스플래시 에셋 생성

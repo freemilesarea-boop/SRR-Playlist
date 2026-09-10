@@ -33,6 +33,12 @@
 
         </activity>
 
+        <!-- 매장 음악 백그라운드 재생 유지(소리는 WebView 가 낸다 — 이 서비스는 프로세스 보호용). -->
+        <service
+            android:name=".StorePlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -55,4 +61,10 @@
     <!-- 푸시 알림(FCM). Android 13(API 33)+ 는 런타임 권한이 필요하다.
          권한 요청은 @capacitor/push-notifications 의 requestPermissions() 가 수행. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 백그라운드 음악 재생. 포그라운드 서비스가 없으면 안드로이드가 백그라운드
+         프로세스의 오디오를 중단시킨다(메모리 압박 · Doze). mediaPlayback 타입은
+         음악 앱의 정당한 용도이며, Play Console 의 FGS 타입 신고 대상이다. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 </manifest>

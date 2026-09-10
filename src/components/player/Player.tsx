@@ -61,6 +61,7 @@ import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
 
 /**
  * 이 audio element 가 해당 트랙을 물고 있는지 (오프라인 캐시의 blob: src 포함).
@@ -389,6 +390,8 @@ export default function Player() {
   const membership = resolveMembership(session, gateProfile);
   const openGate = useGateStore((s) => s.open);
   const pvTrackIdRef = useRef<string | null>(null);
+  // 직전 리로드 사유 — 마운트 시 1회 회수(sessionStorage 1회성). 자동재생 차단 기록에 함께 남긴다.
+  const lastReloadReasonRef = useRef<DiagnosticReason>(takeReloadReason());
   const previewSecRef = useRef(0);
   const previewBlockedRef = useRef(false);
   const previewLastTRef = useRef(0);
@@ -2375,6 +2378,12 @@ export default function Player() {
           setErrored(true);
           // 무인 매장에서는 토스트를 아무도 못 본다 — 전체화면 안내(PlaybackBlockedOverlay)를 띄운다.
           usePlaybackHealthStore.getState().setAutoplayBlocked(true);
+          // 직전 리로드 사유와 함께 남긴다 — 배포 때문인지 탭 정리 때문인지 구분하려면 이게 필요하다.
+          void logPlaybackDiagnostic('autoplay_blocked', {
+            reason: lastReloadReasonRef.current,
+            playerMode: 'store',
+            context: { trackId: current?.id ?? null, online: navigator.onLine },
+          });
           return;
         }
         pause();
@@ -2549,6 +2558,22 @@ export default function Player() {
     // 다음 차례에 네트워크로 다시 받아 스스로 복구된다.
     if ((target.currentSrc || target.src).startsWith('blob:') && current?.audio_url) {
       void dropCachedAudio(current.audio_url);
+    }
+    // 곡이 중간에 끊긴 기록 — 숙대점에서 20초짜리 세션 272건의 원인을 못 찾았던 공백을 메운다.
+    if (businessMode) {
+      void logPlaybackDiagnostic('track_cut_short', {
+        reason: navigator.onLine ? 'media_error' : 'network',
+        playerMode: 'store',
+        context: {
+          trackId: current?.id ?? null,
+          playedSeconds: Math.round(target.currentTime),
+          durationSeconds: Number.isFinite(target.duration) ? Math.round(target.duration) : null,
+          errorCode: err?.code ?? null,
+          codeName,
+          readyState: target.readyState,
+          networkState: target.networkState,
+        },
+      });
     }
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
