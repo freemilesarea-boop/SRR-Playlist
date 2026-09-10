@@ -31,18 +31,31 @@ export ANDROID_HOME=/path/to/Sdk
 ## 1. 실행
 
 ```bash
-npm run android:emu           # 라이브 리로드 — 코드 고치면 바로 반영
-npm run android:emu -- --apk  # 번들 빌드 — 배포본과 같은 조건
+npm run android:emu              # 가상기기 + 라이브 리로드 (코드 고치면 즉시 반영)
+npm run android:emu -- --apk     # 가상기기 + 번들 빌드 (배포본과 동일 조건)
+npm run android:emu -- --device  # USB 로 연결한 실제 태블릿에 설치
 ```
 
 가상기기가 꺼져 있으면 스크립트가 첫 번째 AVD 를 자동으로 켠다.
+`android/local.properties` 가 없으면 자동 생성한다(Gradle 의 `SDK location not found` 방지).
 
-**백그라운드 재생·오프라인 캐시는 `--apk` 모드로 확인한다.** 라이브 리로드는 PC 의
-개발 서버에 의존하므로 "회선 차단" 상황을 재현할 수 없다.
+**백그라운드 재생·오프라인 캐시는 `--apk` 또는 `--device` 로 확인한다.**
+라이브 리로드는 PC 의 개발 서버에 의존하므로 "회선 차단" 상황을 재현할 수 없다.
+
+> 라이브 리로드는 `adb reverse` + `localhost` 를 쓴다. 흔히 쓰는 `10.0.2.2` 는
+> **표준 에뮬레이터에서만** 통해서 실제 매장 태블릿에서는 안 붙는다.
+
+### 매장 태블릿에 직접 넣기
+
+```bash
+# 태블릿: 설정 → 휴대전화 정보 → 빌드번호 7번 탭 → 개발자 옵션 → USB 디버깅 ON
+adb devices                      # 기기가 보이는지 확인 (허용 팝업 수락)
+npm run android:emu -- --device
+```
 
 빌드만 따로 돌리려면:
 ```bash
-npm run android:build         # ./gradlew assembleDebug
+npm run android:build            # ./gradlew assembleDebug
 ```
 
 ---
@@ -100,3 +113,40 @@ npm run android:build         # ./gradlew assembleDebug
 ```bash
 adb logcat | grep -iE "deudda|StorePlaybackService|Capacitor"
 ```
+
+
+---
+
+## 4. 출시까지 남은 것 (스토어 제출)
+
+앱 코드는 준비돼 있다. 아래는 **사람만 할 수 있는 것**들이다.
+
+### 4-1. 지금 바로 가능 (자격증명 불필요)
+
+```bash
+npm run android:emu -- --device   # 매장 태블릿에 설치해서 실사용 검증
+```
+
+이 상태로도 **백그라운드 재생 · 오프라인 음원 저장 · 화면 꺼짐 방지**가 전부 동작한다.
+푸시만 빠진다. 회선 문제로 급하다면 이 debug 빌드를 매장에 먼저 넣어도 된다.
+
+### 4-2. Play 스토어 제출
+
+| 항목 | 필요한 것 |
+| --- | --- |
+| 서명 키 | `keytool` 로 keystore 생성 → `android/app` 서명 설정. **키는 커밋 금지** |
+| 앱 아이콘/스플래시 | `npm i -D @capacitor/assets` → `npx capacitor-assets generate` |
+| 릴리스 빌드 | Android Studio → Build → Generate Signed Bundle (`.aab`) |
+| 개발자 계정 | Google Play Console (등록비 $25 1회) |
+| **포그라운드 서비스 신고** | 앱 콘텐츠 → 포그라운드 서비스 권한 → `mediaPlayback` 을 "매장 배경음악 재생" 으로 신고. **미신고 시 반려** |
+| 푸시(선택) | Firebase 프로젝트 → `google-services.json` 을 `android/app/` 에 저장 |
+
+> `google-services.json` 이 없어도 빌드는 성공한다(푸시만 비활성).
+
+### 4-3. iOS
+
+macOS + Xcode 필요. `npm run cap:ios` → Signing & Capabilities 에서
+**Push Notifications** 추가 → Archive → App Store Connect.
+APNs 키(.p8)는 Apple Developer → Keys 에서 발급.
+
+자세한 절차는 [`APP_PACKAGING.md`](./APP_PACKAGING.md) §5~§7.
