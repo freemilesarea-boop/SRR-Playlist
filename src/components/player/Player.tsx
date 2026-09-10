@@ -62,6 +62,11 @@ import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
 import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
+import { startBackgroundTicker } from '@/lib/backgroundTicker';
+import { reloadApp } from '@/lib/playbackGuard';
+
+/** 자가치유 리로드 시각(부팅 루프 방지용). sessionStorage 라 탭이 닫히면 초기화된다. */
+const SELF_HEAL_RELOAD_KEY = 'deudda:selfheal-reload-at';
 
 /**
  * 이 audio element 가 해당 트랙을 물고 있는지 (오프라인 캐시의 blob: src 포함).
@@ -1541,14 +1546,45 @@ export default function Player() {
         return;
       }
 
+      if (action === 'reload_page') {
+        // 마지막 칸 — skip 조차 듣지 않는 상태(숙대점 34분 정지가 이 경우였다).
+        // 페이지를 다시 띄우면 오디오 엘리먼트·큐·워커가 전부 새로 만들어진다.
+        // 부팅 루프 방지: 자가치유 리로드는 10분에 한 번까지만.
+        const RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
+        let last = 0;
+        try { last = Number(sessionStorage.getItem(SELF_HEAL_RELOAD_KEY) ?? '0'); } catch { /* noop */ }
+        if (Date.now() - last < RELOAD_COOLDOWN_MS) {
+          // 쿨다운 중이면 사다리를 되돌려 skip 부터 다시 시도한다(가만히 있지 않는다).
+          stallLastActionRef.current = 'reload';
+          return;
+        }
+        try { sessionStorage.setItem(SELF_HEAL_RELOAD_KEY, String(Date.now())); } catch { /* noop */ }
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: { action: 'reload_page', stalledSec, trackId, online: navigator.onLine },
+        });
+        console.warn('[audio:selfheal] skip 실패 — 페이지 재시작', { stalledSec, trackId });
+        reloadApp('self-heal stall reload');
+        return;
+      }
+
       // skip — 이 파일/이 위치가 문제다. cause 는 기본값(manual_next):
       // 자연 종료가 아니므로 플레이리스트 Cycle 완료 Signal 을 내면 안 된다.
       usePlaybackHealthStore.getState().reportPlaybackError('STALL_SKIP');
+      void logPlaybackDiagnostic('track_cut_short', {
+        reason: 'skip',
+        playerMode: 'store',
+        context: { action: 'stall_skip', stalledSec, trackId, playedSeconds: Math.round(ct) },
+      });
       store.next();
     };
 
-    const id = window.setInterval(tick, 3_000);
-    return () => window.clearInterval(id);
+    // 화면이 꺼지면 메인 스레드 타이머는 스로틀링된다 — 정작 복구가 필요한 그 상황에서
+    // 워치독이 잠든다(숙대점 34분 정지). Web Worker 타이머는 그 영향을 훨씬 덜 받는다.
+    const ticker = startBackgroundTicker(tick, 3_000);
+    if (import.meta.env.DEV) console.debug('[audio:selfheal] 워치독 시작', { ticker: ticker.kind });
+    return () => ticker.stop();
   }, [businessMode]);
 
   /* ============================================
