@@ -99,11 +99,26 @@ describe('가상기기 실행 경로', () => {
     expect(pkgScripts['android:build']).toContain('assembleDebug');
   });
 
-  it('실행 스크립트가 존재하고 에뮬레이터↔호스트 주소를 쓴다', () => {
+  it('라이브 리로드가 가상기기·실기기 양쪽에서 붙는다 (adb reverse + localhost)', () => {
     const sh = repoFile('scripts/run-emulator.sh');
-    // 10.0.2.2 = 에뮬레이터에서 본 호스트 PC 의 localhost. 틀리면 라이브 리로드가 붙지 않는다.
-    expect(sh).toContain('10.0.2.2');
+    // 10.0.2.2 는 표준 에뮬레이터에서만 통해서 실제 매장 태블릿에서는 안 붙는다.
+    // adb reverse + localhost 라야 양쪽 모두 동작한다.
+    expect(sh).toContain('adb');
+    expect(sh).toContain('reverse tcp:5173 tcp:5173');
+    expect(sh).toContain('--host localhost');
+    expect(sh).not.toContain('--host 10.0.2.2');
     expect(sh).toContain('cap run android');
+  });
+
+  it('실기기 모드와 번들 빌드 모드를 지원한다', () => {
+    const sh = repoFile('scripts/run-emulator.sh');
+    expect(sh).toContain('--device');
+    expect(sh).toContain('--apk');
+  });
+
+  it('Gradle 이 SDK 를 못 찾는 흔한 실패를 미리 막는다', () => {
+    // local.properties 가 없으면 assembleDebug 가 'SDK location not found' 로 죽는다.
+    expect(repoFile('scripts/run-emulator.sh')).toContain('local.properties');
   });
 });
 
