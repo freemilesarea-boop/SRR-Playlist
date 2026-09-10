@@ -27,10 +27,35 @@ ok()  { echo "${GRN}✓${OFF} $1"; }
 # ---------- 1. 사전 점검 ----------
 command -v node >/dev/null || die "Node.js 가 필요합니다 (>=20)."
 
-SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
-[[ -d "$SDK" ]] || die "Android SDK 를 찾을 수 없습니다: $SDK" \
-  "Android Studio 설치 후 SDK Manager 에서 'Android SDK Platform 35' 를 받으세요." \
-  "다른 위치라면: export ANDROID_HOME=/path/to/Sdk"
+# SDK 위치 — OS 마다 기본 경로가 다르다.
+#   macOS : ~/Library/Android/sdk   (Android Studio 기본값)
+#   Linux : ~/Android/Sdk
+# 환경변수가 있으면 그걸 우선하고, 없으면 후보를 순서대로 찾는다.
+SDK=""
+for candidate in \
+  "${ANDROID_HOME:-}" \
+  "${ANDROID_SDK_ROOT:-}" \
+  "$HOME/Library/Android/sdk" \
+  "$HOME/Android/Sdk" \
+  "/usr/local/share/android-sdk" \
+  "/opt/homebrew/share/android-sdk"
+do
+  if [[ -n "$candidate" && -d "$candidate" ]]; then SDK="$candidate"; break; fi
+done
+
+if [[ -z "$SDK" ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    die "Android SDK 를 찾을 수 없습니다." \
+      "맥에서 가장 빠른 설치:" \
+      "  brew install --cask android-studio" \
+      "설치 후 Android Studio 를 한 번 실행해 초기 마법사를 끝내면 SDK 가 받아집니다." \
+      "(기본 위치: ~/Library/Android/sdk)" \
+      "이미 있다면: export ANDROID_HOME=/path/to/sdk"
+  fi
+  die "Android SDK 를 찾을 수 없습니다." \
+    "Android Studio 설치 후 SDK Manager 에서 'Android SDK Platform 35' 를 받으세요." \
+    "다른 위치라면: export ANDROID_HOME=/path/to/Sdk"
+fi
 
 ADB="$SDK/platform-tools/adb"
 EMULATOR="$SDK/emulator/emulator"
