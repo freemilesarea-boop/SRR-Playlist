@@ -35,6 +35,16 @@ export function nativePlatform(): string {
 export async function initNativeShell(): Promise<void> {
   if (!isNativeApp()) return;
 
+  // 레이아웃 오버라이드 훅. 앱은 폭이 태블릿(≥1024px)이라 Tailwind 의 lg: 분기가
+  // 그대로 걸려 데스크톱 사이드바 레이아웃이 뜬다 — 매장 태블릿에는 맞지 않는다.
+  // index.css 의 .native-shell 블록이 이 클래스를 보고 터치 우선 레이아웃으로 되돌린다.
+  try {
+    document.documentElement.classList.add('native-shell');
+    document.documentElement.dataset.nativePlatform = nativePlatform();
+  } catch {
+    /* DOM 없는 환경 — skip */
+  }
+
   // 상태바: 다크 테마 고정(앱 배경 #0a0a0a 와 일치).
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar');

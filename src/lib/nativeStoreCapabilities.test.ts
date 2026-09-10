@@ -91,6 +91,33 @@ describe('푸시 알림 네이티브 설정', () => {
   });
 });
 
+describe('앱 전용 셸(터치 레이아웃)', () => {
+  // 매장 태블릿은 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
+  // 그러면 데스크톱 사이드바 레이아웃이 뜨는데, 손가락으로 쓰는 기기에는 맞지 않는다.
+  // index.css 의 .native-shell 규칙이 이를 되돌리는데, 그 규칙은 컴포넌트에 붙은
+  // 클래스 훅에 의존한다 — 한쪽만 이름이 바뀌면 조용히 깨지므로 양쪽을 함께 고정한다.
+  const css = repoFile('src/index.css');
+
+  it('네이티브 표식을 <html> 에 붙인다', () => {
+    expect(repoFile('src/lib/native.ts')).toContain("classList.add('native-shell')");
+  });
+
+  it.each([
+    ['app-sidebar', 'src/components/Sidebar.tsx'],
+    ['app-bottom-nav', 'src/components/BottomNav.tsx'],
+    ['app-player', 'src/components/player/Player.tsx'],
+    ['app-main', 'src/components/AppShell.tsx'],
+  ])('%s 훅이 CSS 와 컴포넌트 양쪽에 있다', (hook, file) => {
+    expect(css).toContain(`.native-shell .${hook}`);
+    expect(repoFile(file)).toContain(hook);
+  });
+
+  it('앱을 켰을 때 역할에 맞는 화면으로 보내는 훅이 셸에 붙어 있다', () => {
+    // 이게 빠지면 매장 태블릿이 재부팅 후 마케팅 홈에 머물고, 아무도 안 누르면 무음이 된다.
+    expect(repoFile('src/components/AppShell.tsx')).toContain('useNativeLanding()');
+  });
+});
+
 describe('가상기기 실행 경로', () => {
   const pkgScripts = (JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> }).scripts;
 

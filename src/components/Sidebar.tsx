@@ -3,18 +3,20 @@ import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, Tag, Cre
 import { useAuthStore } from '@/store/authStore';
 import BrandLogo from '@/components/BrandLogo';
 import SidebarLibrarySection from '@/components/SidebarLibrarySection';
+import { sidebarNavItems, type NavIconKey } from '@/lib/appNav';
 
-const items: Array<{ to: string; label: string; Icon: LucideIcon; end: boolean }> = [
-  { to: '/', label: '홈', Icon: Home, end: true },
-  { to: '/search', label: '검색', Icon: Search, end: false },
-  { to: '/charts', label: '차트', Icon: BarChart3, end: false },
-  { to: '/library', label: '보관함', Icon: Heart, end: false },
-  { to: '/my/playlists', label: '내 플레이리스트', Icon: ListMusic, end: false },
-  { to: '/pricing', label: '요금제', Icon: CreditCard, end: false },
-  { to: '/business', label: '매장', Icon: Store, end: false },
-  { to: '/brand', label: '브랜드', Icon: Tag, end: false },
-  { to: '/profile', label: '내 정보', Icon: User, end: false },
-];
+const ICONS: Record<NavIconKey, LucideIcon> = {
+  home: Home,
+  search: Search,
+  chart: BarChart3,
+  library: Heart,
+  playlists: ListMusic,
+  pricing: CreditCard,
+  store: Store,
+  brand: Tag,
+  profile: User,
+  studio: Wand2,
+};
 
 /** mono 2자리 인덱스 — DEUDDA Product spec p02/p07 sidebar 의 NAV 01/02/.. 표기 */
 function navNo(i: number): string {
@@ -23,11 +25,10 @@ function navNo(i: number): string {
 
 export default function Sidebar() {
   const isCurator = useAuthStore((s) => s.profile?.is_curator ?? false);
-  const navItems = isCurator
-    ? [...items, { to: '/curator/studio', label: '스튜디오', Icon: Wand2, end: false }]
-    : items;
+  // 앱에서는 이 사이드바 자체를 index.css(.native-shell)가 숨긴다 — 하단탭이 대신한다.
+  const navItems = sidebarNavItems({ native: false, isCurator, storeAccount: false, hasBrand: false });
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
+    <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
       {/* Brand — DEUDDA Product spec: 로고 마크 + "DEUDDA." (영문 wordmark, period 포함) */}
       <div className="px-5 pt-5 pb-4">
         <Link to="/" className="inline-flex items-center gap-2.5 group">
@@ -43,7 +44,9 @@ export default function Sidebar() {
 
       <div className="flex-1 overflow-y-auto">
         <nav className="space-y-0.5 px-3 py-1">
-          {navItems.map(({ to, label, Icon, end }, idx) => (
+          {navItems.map(({ to, label, icon, end }, idx) => {
+            const Icon = ICONS[icon];
+            return (
             <NavLink key={to} to={to} end={end}>
               {({ isActive }) => (
                 <span
@@ -64,7 +67,8 @@ export default function Sidebar() {
                 </span>
               )}
             </NavLink>
-          ))}
+            );
+          })}
         </nav>
 
         {/* 내 라이브러리 — 좋아요한 곡 + 팔로우 플리 (사용자 어디서든 빠른 접근) */}

@@ -191,3 +191,39 @@ input[type='range']::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .eq-bars > span { animation: none; height: 8px; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * 앱(네이티브 쉘) 레이아웃 오버라이드
+ *
+ * 매장 태블릿은 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
+ * 그러면 데스크톱용 사이드바 레이아웃이 뜨는데, 손가락으로 쓰는 매장 기기에는
+ * 맞지 않는다(마우스 hover 없음 · 점주가 쓰는 메뉴는 매장/브랜드뿐).
+ *
+ * 그래서 앱에서는 폭과 무관하게 "터치 우선" 레이아웃으로 되돌린다.
+ * .native-shell 은 initNativeShell() 이 <html> 에 붙인다 — 웹에는 절대 붙지 않으므로
+ * 아래 규칙은 브라우저 사용자에게 영향이 없다.
+ * ───────────────────────────────────────────────────────────── */
+.native-shell .app-sidebar {
+  display: none !important;
+}
+.native-shell .app-main {
+  padding-left: 0 !important;
+}
+.native-shell .app-bottom-nav {
+  display: block !important;
+}
+/* 플레이어 바를 하단탭 위로. lg: 에서 사이드바(15rem) 만큼 밀려 있던 것을 되돌린다. */
+.native-shell .app-player {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 5.5rem !important;
+  max-width: 48rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+/* 터치 목표 확대 — 매장에서는 기기를 세워두고 서서 누른다. */
+.native-shell .app-bottom-nav a > span {
+  min-height: 56px;
+  justify-content: center;
+  font-size: 12px;
+}
