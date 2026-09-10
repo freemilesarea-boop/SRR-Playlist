@@ -116,6 +116,14 @@ describe('가상기기 실행 경로', () => {
     expect(sh).toContain('--apk');
   });
 
+  it('macOS 의 Android SDK 기본 경로를 찾는다', () => {
+    // 맥의 Android Studio 기본 경로는 ~/Library/Android/sdk 다.
+    // 리눅스 경로(~/Android/Sdk)만 보면 맥 사용자는 SDK 를 깔아도 못 찾는다.
+    const sh = repoFile('scripts/run-emulator.sh');
+    expect(sh).toContain('$HOME/Library/Android/sdk');
+    expect(sh).toContain('$HOME/Android/Sdk');
+  });
+
   it('Gradle 이 SDK 를 못 찾는 흔한 실패를 미리 막는다', () => {
     // local.properties 가 없으면 assembleDebug 가 'SDK location not found' 로 죽는다.
     expect(repoFile('scripts/run-emulator.sh')).toContain('local.properties');
