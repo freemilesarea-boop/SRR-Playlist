@@ -71,8 +71,23 @@ fi
 [[ -f .env ]] || die ".env 가 없습니다." \
   "cp .env.example .env  후 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 를 채우세요." \
   "(값이 없으면 앱이 '설정 필요' 화면만 보여줍니다)"
-grep -q '^VITE_SUPABASE_URL=https' .env \
-  || echo "${YEL}!${OFF} .env 의 VITE_SUPABASE_URL 이 비어 보입니다 — 앱이 설정 안내 화면을 띄울 수 있습니다."
+# 템플릿 그대로면 앱이 "설정 필요" 화면만 띄운다. 값이 채워졌는지 실제로 확인한다
+# (예전 검사는 '^VITE_SUPABASE_URL=https' 였는데 템플릿의 your-project-ref 도 https 라 통과했다).
+if grep -qE '^VITE_SUPABASE_URL=.*your-project-ref' .env \
+   || grep -qE '^VITE_SUPABASE_ANON_KEY=your-anon-key' .env \
+   || ! grep -qE '^VITE_SUPABASE_URL=https://[a-z0-9]+\.supabase\.co' .env \
+   || ! grep -qE '^VITE_SUPABASE_ANON_KEY=ey' .env; then
+  die ".env 가 아직 채워지지 않았습니다 (템플릿 상태)." \
+    "터미널에 값을 입력하면 파일이 바뀌지 않습니다 — 파일에 직접 써야 합니다." \
+    "아래를 통째로 복사해 붙여넣으세요(값은 본인 프로젝트 것으로):" \
+    "" \
+    "  cat > .env <<'ENVEOF'" \
+    "  VITE_SUPABASE_URL=https://<프로젝트ref>.supabase.co" \
+    "  VITE_SUPABASE_ANON_KEY=<anon public key>" \
+    "  ENVEOF" \
+    "" \
+    "anon key: Supabase 대시보드 → Project Settings → API → anon public"
+fi
 ok ".env 확인"
 
 # ---------- 2. 기기 준비 ----------
