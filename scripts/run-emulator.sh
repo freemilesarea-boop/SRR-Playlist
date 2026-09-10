@@ -62,6 +62,10 @@ EMULATOR="$SDK/emulator/emulator"
 [[ -x "$ADB" ]] || die "adb 가 없습니다: $ADB" "SDK Manager → SDK Tools → 'Android SDK Platform-Tools' 설치."
 ok "Android SDK: $SDK"
 
+# ---------- 1-b. JDK 선택 ----------
+# Gradle 이 못 쓰는 JDK(예: Android Studio 2026 의 JDK 25)를 걸러낸다.
+. "$(dirname "${BASH_SOURCE[0]}")/pick-jdk.sh"
+
 # Gradle 이 SDK 위치를 못 찾는 흔한 실패를 미리 막는다.
 if [[ ! -f android/local.properties ]]; then
   echo "sdk.dir=$SDK" > android/local.properties
@@ -124,6 +128,25 @@ else
   ok "가상기기 준비됨: $(running_devices | head -1)"
 fi
 
+# cap run 은 대상이 둘 이상이면 화살표 메뉴를 띄우고 멈춘다
+# (부팅된 에뮬레이터 + 꺼져 있는 AVD 가 같이 잡힌다).
+# 스크립트가 이미 기기를 준비했으니 시리얼을 직접 넘겨 그 프롬프트를 건너뛴다.
+DEVICE_ID="$(running_devices | head -1)"
+[[ -n "$DEVICE_ID" ]] || die "설치할 기기를 찾지 못했습니다." "확인: $ADB devices"
+
+# cap run 이 실패해도(플러그인 미탐지 등) 앱은 깔려야 한다 — Gradle 로 직접 넣는다.
+install_with_gradle() {
+  echo "${YEL}!${OFF} cap run 실패 — Gradle 로 직접 설치합니다."
+  echo "${DIM}(이 경로로 설치하면 라이브 리로드는 붙지 않고 번들된 화면이 뜬다.)${OFF}"
+  ( cd android && ./gradlew --console=plain installDebug ) \
+    || die "Gradle 빌드 실패." \
+      "위 오류를 그대로 붙여넣어 주세요." \
+      "'Unsupported class file major version' 이 보이면 JDK 문제입니다:" \
+      "  brew install --cask temurin@21"
+  "$ADB" -s "$DEVICE_ID" shell am start -n com.deudda.app/.MainActivity >/dev/null
+  ok "설치 완료 — 기기에서 '듣다' 를 확인하세요."
+}
+
 # ---------- 3. 빌드 & 설치 ----------
 if [[ "$MODE" == "live" ]]; then
   echo "${DIM}라이브 리로드 — 개발 서버를 띄우고 앱이 그걸 바라봅니다.${OFF}"
@@ -145,14 +168,23 @@ if [[ "$MODE" == "live" ]]; then
   # adb reverse: 기기의 localhost:5173 → PC 의 5173.
   # 10.0.2.2 는 표준 에뮬레이터에서만 통한다 — 실제 태블릿에서는 안 붙는다.
   # reverse + localhost 는 가상기기·실기기 양쪽에서 동일하게 동작한다.
-  "$ADB" reverse tcp:5173 tcp:5173 >/dev/null 2>&1 \
+  "$ADB" -s "$DEVICE_ID" reverse tcp:5173 tcp:5173 >/dev/null 2>&1 \
     || echo "${YEL}!${OFF} adb reverse 실패 — 라이브 리로드가 안 붙으면 --apk 로 실행하세요."
 
-  npx cap run android --live-reload --host localhost --port 5173
+  npx cap run android --target "$DEVICE_ID" --live-reload --host localhost --port 5173 \
+    || install_with_gradle
   wait $VITE_PID
 else
   echo "${DIM}번들 빌드 — 배포본과 같은 조건(백그라운드 재생·오프라인 캐시 확인용).${OFF}"
   npm run build:no-lint
   npx cap sync android
-  npx cap run android
+  npx cap run android --target "$DEVICE_ID" || install_with_gradle
+
+  if "$ADB" -s "$DEVICE_ID" shell pm list packages 2>/dev/null | grep -q 'com\.deudda\.app'; then
+    ok "설치 확인 — 기기 앱 목록에서 '듣다' 를 여세요."
+  else
+    die "빌드는 끝났는데 앱이 설치되지 않았습니다." \
+      "확인: $ADB -s $DEVICE_ID shell pm list packages | grep deudda" \
+      "수동 설치: $ADB -s $DEVICE_ID install -r android/app/build/outputs/apk/debug/app-debug.apk"
+  fi
 fi

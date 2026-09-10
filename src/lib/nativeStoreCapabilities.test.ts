@@ -96,7 +96,23 @@ describe('가상기기 실행 경로', () => {
 
   it('에뮬레이터 실행 스크립트가 npm script 로 연결돼 있다', () => {
     expect(pkgScripts['android:emu']).toContain('scripts/run-emulator.sh');
-    expect(pkgScripts['android:build']).toContain('assembleDebug');
+    expect(pkgScripts['android:build']).toContain('scripts/android-build.sh');
+    expect(repoFile('scripts/android-build.sh')).toContain('assembleDebug');
+  });
+
+  it('Gradle 을 돌리기 전에 쓸 수 있는 JDK 를 고른다', () => {
+    // Android Studio 2026 의 번들 JDK 는 25 라서 Gradle 8.11 이 못 읽는다
+    // ('Unsupported class file major version 69'). 두 진입점 모두 이 검사를 거쳐야 한다.
+    expect(repoFile('scripts/run-emulator.sh')).toContain('pick-jdk.sh');
+    expect(repoFile('scripts/android-build.sh')).toContain('pick-jdk.sh');
+  });
+
+  it('설치 대상 기기를 직접 넘긴다 (cap run 의 선택 프롬프트에서 멈추지 않게)', () => {
+    // 부팅된 에뮬레이터와 꺼져 있는 AVD 가 같이 잡히면 cap run 이 화살표 메뉴를 띄우고
+    // 멈춰서 앱이 아예 설치되지 않는다.
+    const sh = repoFile('scripts/run-emulator.sh');
+    expect(sh).toContain('--target "$DEVICE_ID"');
+    expect(sh).toContain('install_with_gradle');
   });
 
   it('라이브 리로드가 가상기기·실기기 양쪽에서 붙는다 (adb reverse + localhost)', () => {

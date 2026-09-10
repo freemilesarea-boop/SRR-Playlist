@@ -13,10 +13,16 @@
    - `Android SDK Platform 35`
    - `Android SDK Platform-Tools`
    - `Android Emulator`
-2. **Device Manager → Create Device**
+2. **JDK 21 설치** — Android Studio 가 들고 오는 JDK 는 버전이 너무 높아 Gradle 이 못 쓴다.
+   ```bash
+   brew install --cask temurin@21
+   ```
+   > 설치만 해두면 된다. 실행 스크립트가 알아서 찾아 쓴다.
+   > `JAVA_HOME` 을 직접 잡아둔 게 있어도 맞는 버전이 아니면 스크립트가 무시한다.
+3. **Device Manager → Create Device**
    - 권장: **Pixel 7 / API 34 이상**
    - 이미지는 **Google Play** 버전으로 (푸시까지 확인하려면 필수)
-3. 저장소 준비
+4. 저장소 준비
    ```bash
    npm ci
    cp .env.example .env     # VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 채우기
@@ -38,6 +44,7 @@ npm run android:emu -- --device  # USB 로 연결한 실제 태블릿에 설치
 
 가상기기가 꺼져 있으면 스크립트가 첫 번째 AVD 를 자동으로 켠다.
 `android/local.properties` 가 없으면 자동 생성한다(Gradle 의 `SDK location not found` 방지).
+설치 대상 기기도 스크립트가 직접 지정하므로 "Please choose a target device" 메뉴에서 멈추지 않는다.
 
 **백그라운드 재생·오프라인 캐시는 `--apk` 또는 `--device` 로 확인한다.**
 라이브 리로드는 PC 의 개발 서버에 의존하므로 "회선 차단" 상황을 재현할 수 없다.
@@ -55,7 +62,7 @@ npm run android:emu -- --device
 
 빌드만 따로 돌리려면:
 ```bash
-npm run android:build            # ./gradlew assembleDebug
+npm run android:build            # JDK 선택 → 웹 빌드 → cap sync → ./gradlew assembleDebug
 ```
 
 ---
@@ -108,6 +115,10 @@ npm run android:build            # ./gradlew assembleDebug
 | 라이브 리로드에서 화면이 안 뜸 | 방화벽이 5173 포트를 막는지 확인. `--apk` 모드로 우회 |
 | 백그라운드에서 음악이 끊김 | 상태바 알림 유무 확인 → 없으면 서비스 미시작 (logcat 확인) |
 | 빌드 실패 `SDK location not found` | `android/local.properties` 에 `sdk.dir=/path/to/Sdk` |
+| 빌드 실패 `Unsupported class file major version 69` | JDK 25 를 쓰고 있다. `brew install --cask temurin@21` 후 재실행 |
+| 빌드 실패 `invalid source release: 21` | JDK 17 이하를 쓰고 있다. 위와 같이 JDK 21 설치 |
+| `Please choose a target device` 에서 멈춤 | 스크립트 대신 `npx cap run` 을 직접 돌린 경우다. `npm run android:emu` 로 실행 |
+| 앱 목록에 "듣다" 가 없음 | 설치가 안 된 것이다. `adb shell pm list packages \| grep deudda` 로 확인 후 `npm run android:emu -- --apk` 재실행 |
 
 로그 보기:
 ```bash
