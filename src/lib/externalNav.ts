@@ -34,12 +34,19 @@ export async function openExternalUrl(url: string, opts: OpenExternalOptions = {
   }
 
   const { Browser } = await import('@capacitor/browser');
+  let handle: { remove: () => Promise<void> } | null = null;
   if (opts.onReturn) {
     // 한 번만 듣고 뗀다 — 결제 한 건에 리스너 하나.
-    const handle = await Browser.addListener('browserFinished', () => {
-      void handle.remove();
+    handle = await Browser.addListener('browserFinished', () => {
+      void handle?.remove();
       opts.onReturn?.();
     });
   }
-  await Browser.open({ url });
+  try {
+    await Browser.open({ url });
+  } catch (e) {
+    // 브라우저를 못 열었으면 리스너가 영원히 남는다 — 떼고 에러를 그대로 올린다.
+    await handle?.remove();
+    throw e;
+  }
 }

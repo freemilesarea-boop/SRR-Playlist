@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nativeLandingPath, isStoreAccount, type NativeLandingInput } from './nativeLanding';
+import { nativeLandingPath, isStoreAccount, landingGate, type NativeLandingInput } from './nativeLanding';
 
 const base: NativeLandingInput = {
   currentPath: '/',
@@ -60,5 +60,39 @@ describe('nativeLandingPath', () => {
 
   it('개인 회원은 기존대로 홈에 머문다', () => {
     expect(nativeLandingPath({ ...base, hasPlayerSession: true })).toBeNull();
+  });
+});
+
+describe('landingGate — 언제 판단할 차례인가', () => {
+  const base = { native: true, profileReady: true, userId: 'u1', landedForUser: null as string | null };
+
+  it('웹에서는 아무것도 하지 않는다', () => {
+    expect(landingGate({ ...base, native: false })).toBe('skip');
+  });
+
+  it('프로필 로드 전에는 미룬다 — 매장 계정을 개인으로 오인한다', () => {
+    expect(landingGate({ ...base, profileReady: false })).toBe('skip');
+  });
+
+  it('로그인 전에는 판단을 쓰지 않고 풀어둔다', () => {
+    // 예전에는 여기서 "끝냈다" 로 표시해버려서, 앱에서 로그인한 직후에는
+    // 역할별 진입이 아예 동작하지 않았다(로그인 화면이 홈으로 보내면 홈에 머묾).
+    expect(landingGate({ ...base, userId: null })).toBe('reset');
+  });
+
+  it('로그인하면 그 사용자에 대해 한 번 판단한다', () => {
+    expect(landingGate(base)).toBe('evaluate');
+    expect(landingGate({ ...base, landedForUser: 'u1' })).toBe('skip');
+  });
+
+  it('다른 사용자로 로그인하면 다시 판단한다', () => {
+    expect(landingGate({ ...base, userId: 'u2', landedForUser: 'u1' })).toBe('evaluate');
+  });
+
+  it('로그인 → 로그아웃 → 같은 계정 재로그인 에서도 다시 판단한다', () => {
+    // reset 이 플래그를 풀어주므로 재로그인 시 evaluate 로 돌아온다.
+    expect(landingGate({ ...base, landedForUser: 'u1' })).toBe('skip');
+    expect(landingGate({ ...base, userId: null, landedForUser: 'u1' })).toBe('reset');
+    expect(landingGate({ ...base, landedForUser: null })).toBe('evaluate');
   });
 });

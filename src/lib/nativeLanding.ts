@@ -55,3 +55,32 @@ export function nativeLandingPath(input: NativeLandingInput): string | null {
 
   return null;
 }
+
+/**
+ * 이번 렌더에서 착륙 판단을 할 차례인가.
+ *
+ * 로그인 전에는 판단하지 않는다. 예전에는 로그인 전에도 한 번 보고 "끝냈다" 로
+ * 표시해버려서, 앱에서 로그인한 직후에는 역할별 진입이 아예 동작하지 않았다
+ * (로그인 화면이 홈으로 보내면 그대로 홈에 머물렀다).
+ * 사용자별로 한 번씩 판단하고, 로그아웃하면 다시 판단할 수 있게 푼다.
+ */
+export interface LandingGateInput {
+  native: boolean;
+  /** 프로필 로드가 끝났는가 — 끝나기 전에 보면 매장 계정을 개인으로 오인한다 */
+  profileReady: boolean;
+  /** 로그인한 사용자 id. 비로그인이면 null */
+  userId: string | null;
+  /** 이미 판단을 마친 사용자 id */
+  landedForUser: string | null;
+}
+
+export type LandingGate = 'evaluate' | 'skip' | 'reset';
+
+export function landingGate(input: LandingGateInput): LandingGate {
+  if (!input.native) return 'skip';
+  if (!input.profileReady) return 'skip';
+  // 비로그인 — 판단을 쓰지 않고 다음 로그인을 위해 풀어둔다.
+  if (!input.userId) return 'reset';
+  if (input.landedForUser === input.userId) return 'skip';
+  return 'evaluate';
+}
