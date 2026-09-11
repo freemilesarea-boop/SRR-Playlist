@@ -383,7 +383,8 @@ export default function BusinessScheduler() {
       {/* 프로필 + 영업시간 */}
       <section className="space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">매장 정보</h3>
-        <div className="grid gap-2 sm:grid-cols-2">
+        {/* 태블릿에서는 매장명·업종·시작·종료가 한 줄에 들어간다 — 스크롤 없이 한눈에 본다. */}
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <input
             value={profile?.store_name ?? ''}
             onChange={(e) =>
@@ -499,7 +500,11 @@ export default function BusinessScheduler() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            {/* 태블릿에서는 오전·오후·저녁을 가로로 나란히 — 하루 전체 설정이 한 화면에 들어온다.
+                세로로 쌓으면 저녁 슬롯을 보려고 스크롤해야 해서 시간 관계가 안 보인다.
+                xl(≥1280px)부터인 이유: 한 칸에 시간 입력 2개 + 플리 선택 + 자동 버튼이
+                들어가야 해서, 1024~1279px(아이패드 가로 등)에서는 빠듯하다. */}
+            <div className="grid gap-2 xl:grid-cols-3">
               {SLOT_NAMES.map((name) => (
                 <SimpleSlotCard
                   key={name}
@@ -561,7 +566,7 @@ export default function BusinessScheduler() {
         <button
           onClick={() => void saveSimpleSchedule()}
           disabled={savingSimple || !synced}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card transition hover:opacity-95 disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card transition hover:opacity-95 disabled:opacity-60 lg:mx-auto lg:max-w-md"
         >
           <Save size={16} />
           {savingSimple
@@ -621,7 +626,7 @@ function SplitSlotGroup({
           <p className="text-[10px] text-ink-dim">{sub}</p>
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="grid gap-2 xl:grid-cols-3">
         {SLOT_NAMES.map((name) => (
           <SimpleSlotCard
             key={name}
