@@ -137,6 +137,7 @@ npm run android:build            # JDK 선택 → 웹 빌드 → cap sync → ./
 | 빌드 실패 `Unsupported class file major version 69` | JDK 25 를 쓰고 있다. `brew install --cask temurin@21` 후 재실행 |
 | 빌드 실패 `invalid source release: 21` | JDK 17 이하를 쓰고 있다. 위와 같이 JDK 21 설치 |
 | `Please choose a target device` 에서 멈춤 | 스크립트 대신 `npx cap run` 을 직접 돌린 경우다. `npm run android:emu` 로 실행 |
+| 가상기기에서 키보드 입력이 안 됨 | AVD 의 `hw.keyboard` 가 꺼진 것. 스크립트가 자동으로 켜지만 **실행 중인 기기는 껐다 켜야** 반영된다 |
 | 앱 목록에 "듣다" 가 없음 | 설치가 안 된 것이다. `adb shell pm list packages \| grep deudda` 로 확인 후 `npm run android:emu -- --apk` 재실행 |
 
 로그 보기:

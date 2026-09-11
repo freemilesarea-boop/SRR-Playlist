@@ -97,6 +97,31 @@ ok ".env 확인"
 # ---------- 2. 기기 준비 ----------
 running_devices() { "$ADB" devices | awk '/\tdevice$/ {print $1}'; }
 
+# avdmanager CLI 로 만든 AVD 는 hw.keyboard 가 꺼져 있다. 그러면 맥 키보드로 친 글자가
+# 기기로 들어가지 않아서 로그인 폼에 아무것도 입력할 수 없다(Android Studio 의
+# Device Manager 로 만들면 켜져 있어서 이 문제가 안 보인다).
+# 부팅 전에 config.ini 를 고쳐둔다 — 실행 중에는 반영되지 않는다.
+enable_avd_keyboard() {  # $1 = AVD 이름
+  local avd="$1"
+  local home="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+  local ini="$home/$avd.avd/config.ini"
+  [[ -f "$ini" ]] || return 0
+  grep -q '^hw.keyboard=yes$' "$ini" && return 0
+  # sed -i 는 맥(BSD)과 리눅스(GNU) 문법이 달라 임시 파일로 처리한다.
+  local tmp; tmp="$(mktemp)"
+  grep -v '^hw\.keyboard=' "$ini" > "$tmp"
+  echo 'hw.keyboard=yes' >> "$tmp"
+  mv "$tmp" "$ini"
+  ok "가상기기 키보드 활성화 (hw.keyboard=yes)"
+}
+
+# 하드웨어 키보드가 켜지면 안드로이드는 화면 키보드를 숨긴다. 둘 다 쓰이도록 켜둔다 —
+# 매장 태블릿은 화면 키보드로 입력하므로 그 동선도 여기서 같이 확인해야 한다.
+enable_soft_keyboard() {  # $1 = 기기 시리얼
+  "$ADB" -s "$1" shell settings put secure show_ime_with_hard_keyboard 1 >/dev/null 2>&1 || true
+}
+
+
 if [[ "$TARGET" == "device" ]]; then
   if [[ -z "$(running_devices)" ]]; then
     die "연결된 기기가 없습니다." \
@@ -116,6 +141,7 @@ elif [[ -z "$(running_devices)" ]]; then
   echo "$AVDS" | sed 's/^/  - /'
   AVD="$(echo "$AVDS" | head -1)"
   echo "${DIM}첫 번째 기기로 부팅합니다: $AVD${OFF}"
+  enable_avd_keyboard "$AVD"
   nohup "$EMULATOR" -avd "$AVD" -netdelay none -netspeed full >/dev/null 2>&1 &
   echo -n "부팅 대기 중"
   "$ADB" wait-for-device
@@ -123,9 +149,20 @@ elif [[ -z "$(running_devices)" ]]; then
     echo -n "."; sleep 2
   done
   echo
+  enable_soft_keyboard "$(running_devices | head -1)"
   ok "가상기기 준비됨: $(running_devices | head -1)"
 else
-  ok "가상기기 준비됨: $(running_devices | head -1)"
+  DEV="$(running_devices | head -1)"
+  enable_soft_keyboard "$DEV"
+  # 이미 떠 있는 기기는 config.ini 를 고쳐도 반영되지 않는다 — 껐다 켜야 한다고 알린다.
+  RUNNING_AVD="$("$ADB" -s "$DEV" emu avd name 2>/dev/null | head -1 | tr -d '\r')"
+  AVD_INI="${ANDROID_AVD_HOME:-$HOME/.android/avd}/$RUNNING_AVD.avd/config.ini"
+  if [[ -n "$RUNNING_AVD" && -f "$AVD_INI" ]] && ! grep -q '^hw.keyboard=yes$' "$AVD_INI"; then
+    enable_avd_keyboard "$RUNNING_AVD"
+    echo "${YEL}!${OFF} 키보드 설정을 고쳤지만 실행 중인 기기에는 적용되지 않습니다."
+    echo "  ${DIM}가상기기를 껐다 켜면 맥 키보드로 입력할 수 있습니다.${OFF}"
+  fi
+  ok "가상기기 준비됨: $DEV"
 fi
 
 # cap run 은 대상이 둘 이상이면 화살표 메뉴를 띄우고 멈춘다
