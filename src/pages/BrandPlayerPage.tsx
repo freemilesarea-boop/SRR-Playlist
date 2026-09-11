@@ -21,6 +21,7 @@ import BrandVisualStage from '@/components/brand/BrandVisualStage';
 import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
+import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
@@ -347,6 +348,10 @@ export default function BrandPlayerPage() {
           </button>
         </div>
       </header>
+
+      {/* 폰 브라우저로 틀어둔 경우 — 백그라운드 전환 시 끊김 위험(숙대점 2026-09-11).
+          presentation(사이니지 전체화면)에서는 숨긴다 — 매장 손님에게 보이는 화면이다. */}
+      {!presentation && <MobileBrowserPlaybackWarning className="mx-5 mb-2 sm:mx-8" />}
 
       {/* 사이니지 (화면 대부분) — presentation 진입 시 이 컨테이너만 Fullscreen 대상.
           audio 는 전역 <Player> 소유 → fullscreen/chrome 토글이 audio element 에 영향 없음. */}

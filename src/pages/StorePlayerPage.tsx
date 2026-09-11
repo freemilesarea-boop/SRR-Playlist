@@ -15,6 +15,7 @@ import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
+import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -303,6 +304,9 @@ export default function StorePlayerPage() {
             이 기기는 화면 꺼짐 방지를 지원하지 않아요. 기기의 <b>화면 자동 잠금</b>을 해제해두시면 더 안정적입니다.
           </p>
         )}
+
+        {/* 폰 브라우저로 틀어둔 경우 — 백그라운드 전환 시 끊김 위험(숙대점 2026-09-11). */}
+        <MobileBrowserPlaybackWarning />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-white/55">
