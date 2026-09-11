@@ -243,9 +243,41 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 
 **출시 전 수동 설정 (자격증명 — 코드 아님)**
 
-1. **Android**: Firebase 프로젝트 생성 → Android 앱(`com.deudda.app`) 등록 →
-   `google-services.json` 을 `android/app/` 에 저장.
-   Gradle 은 파일이 있을 때만 플러그인을 적용하므로, **없어도 빌드는 그대로 성공**한다(푸시만 비활성).
+1. **Android** — Firebase 프로젝트 만들기부터 (처음이면 이 순서대로)
+
+   FCM 은 무료 요금제(Spark)로 충분하다. 결제 등록 없이 된다.
+
+   **(1) 프로젝트 생성** — <https://console.firebase.google.com>
+   - `프로젝트 추가` → 이름 입력(예: `deudda`)
+   - 이름 아래에 **프로젝트 ID** 가 자동으로 생기는데 **나중에 못 바꾼다**. 확인하고 넘어간다.
+   - **Google 애널리틱스는 꺼도 된다** — 푸시에는 필요 없고 설정 단계만 늘어난다.
+   - `프로젝트 만들기` → 30초쯤 기다린다.
+
+   **(2) Android 앱 등록**
+   - 프로젝트 개요 옆 **톱니 → 프로젝트 설정 → 내 앱 → Android**
+   - **Android 패키지 이름에 정확히 `com.deudda.app`** 를 넣는다.
+     여기가 한 글자라도 다르면 빌드는 되는데 **알림만 조용히 안 온다**. 가장 흔한 실패다.
+   - 앱 닉네임은 선택. **디버그 서명 인증서(SHA-1)는 비워도 된다** —
+     푸시에는 필요 없다(네이티브 구글 로그인 SDK 를 쓸 때만 필요한데, 이 앱은
+     시스템 브라우저 방식이라 해당 없음).
+   - `앱 등록` → **`google-services.json` 다운로드** → `android/app/` 에 저장.
+   - 그다음 화면의 **Gradle 수정 안내는 건너뛴다** — Capacitor 플러그인이 이미 처리한다.
+     `다음 → 다음 → 콘솔로 이동`.
+
+   **(3) 서비스 계정 키 발급** (서버가 FCM 에 보낼 때 쓴다)
+   - **프로젝트 설정 → 서비스 계정 → `새 비공개 키 생성`** → JSON 다운로드
+   - ⚠️ **이건 비밀키다.** 저장소에 커밋하지 말고, 채팅·메신저에 붙여넣지 말 것.
+     유출되면 그 프로젝트로 아무나 알림을 보낼 수 있다.
+   - Supabase 대시보드 → **Edge Functions → Secrets** → 이름 `FCM_SERVICE_ACCOUNT_JSON`,
+     값에 **JSON 파일 내용 전체**를 그대로 붙여넣는다(줄바꿈·따옴표 손대지 말 것).
+
+   **(4) 확인**
+   ```bash
+   npm run push:doctor
+   ```
+
+   > `google-services.json` 이 없어도 **빌드는 그대로 성공**한다(푸시만 비활성).
+   > Gradle 이 파일이 있을 때만 플러그인을 적용하기 때문이다.
 2. **iOS**: Xcode → Signing & Capabilities → **+ Push Notifications** 추가
    (`ios/App/App/App.entitlements` 가 타깃에 연결된다).
    Apple Developer → Keys 에서 APNs 키(.p8) 발급.
