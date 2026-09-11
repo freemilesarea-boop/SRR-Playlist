@@ -35,6 +35,16 @@ export function nativePlatform(): string {
 export async function initNativeShell(): Promise<void> {
   if (!isNativeApp()) return;
 
+  // 가장 먼저 — 이 아래에서 찍히는 로그부터 logcat 에서 읽을 수 있어야 한다.
+  // Capacitor 는 객체 인자를 [object Object] 로 뭉개서, 그냥 두면 진단 정보가 통째로
+  // 사라진다(기기에서만 나는 문제를 쫓을 때 치명적).
+  try {
+    const { installNativeConsoleJson } = await import('@/lib/nativeConsole');
+    installNativeConsoleJson();
+  } catch {
+    /* 로그 포맷 때문에 부팅을 막지는 않는다 */
+  }
+
   // 레이아웃 오버라이드 훅. 앱은 폭이 태블릿(≥1024px)이라 Tailwind 의 lg: 분기가
   // 그대로 걸려 데스크톱 사이드바 레이아웃이 뜬다 — 매장 태블릿에는 맞지 않는다.
   // index.css 의 .native-shell 블록이 이 클래스를 보고 터치 우선 레이아웃으로 되돌린다.

@@ -34,8 +34,13 @@ echo
 
 # Capacitor : 플러그인 호출/오류 (Browser.open, PushNotifications 등)
 # chromium  : WebView 안의 console.* 와 자바스크립트 예외
+# 미디어    : 음악이 안 나오거나 길이가 --:-- 로 멈추면 디코더가 답을 준다.
+#             (WebView 는 오디오를 MediaCodec 으로 푼다 — 코덱이 없거나 실패하면
+#              loadedmetadata 가 영영 안 오고, 그 이유는 이 태그들에만 남는다.)
 # 그 외 태그는 앱 크래시(AndroidRuntime)와 액티비티 전환(ActivityManager).
 "$ADB" -s "$DEV" logcat \
   Capacitor:V Capacitor/Console:V Capacitor/Plugin:V \
   chromium:V AndroidRuntime:E ActivityManager:I \
+  cr_MediaCodecBridge:V cr_media:V MediaCodec:W MediaCodecList:W \
+  ACodec:W CCodec:W OMXClient:W AudioTrack:W MediaPlayer:W \
   '*:S'
