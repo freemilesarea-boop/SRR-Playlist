@@ -187,6 +187,17 @@ check_device_capabilities() {  # $1 = 기기 시리얼
     echo "  ${DIM}이메일 로그인으로 테스트하거나, Google Play 이미지로 AVD 를 새로 만드세요.${OFF}"
   fi
 
+  # 한글. 기본 AVD 는 영어만 올라와 있어서 회원가입·매장명 입력을 아예 테스트할 수
+  # 없다(맥 키보드로 쳐도 안 들어간다 — 에뮬레이터는 조합된 글자가 아니라 키코드를
+  # 넘긴다). 여기서 미리 말해주지 않으면 폼 앞에서야 알게 된다.
+  local locale
+  locale="$("$ADB" -s "$dev" shell getprop persist.sys.locale 2>/dev/null | tr -d '\r')"
+  if [[ "$locale" != ko* ]]; then
+    echo "${YEL}!${OFF} 시스템 언어가 한국어가 아닙니다 — ${YEL}한글 입력이 안 됩니다${OFF}."
+    echo "  ${DIM}회원가입·매장명처럼 한글을 쳐야 하는 화면을 테스트할 수 없습니다.${OFF}"
+    echo "  ${DIM}npm run android:korean 을 한 번 실행하세요.${OFF}"
+  fi
+
   # 푸시(FCM)는 Play 서비스가 메시지를 받아 앱에 전달한다. 없으면 토큰조차 안 나온다.
   gms="$("$ADB" -s "$dev" shell pm list packages com.google.android.gms 2>/dev/null | tr -d '\r')"
   if [[ -z "$gms" ]]; then

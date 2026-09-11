@@ -247,3 +247,23 @@ macOS + Xcode 필요. `npm run cap:ios` → Signing & Capabilities 에서
 APNs 키(.p8)는 Apple Developer → Keys 에서 발급.
 
 자세한 절차는 [`APP_PACKAGING.md`](./APP_PACKAGING.md) §5~§7.
+
+## 한글 입력
+
+기본 AVD 는 영어만 올라와 있다. 맥 키보드로 한글을 쳐도 들어가지 않는데,
+에뮬레이터가 조합된 글자가 아니라 키코드를 그대로 넘기기 때문이다. 회원가입,
+매장명, 담당자명처럼 한글이 필요한 화면은 이 상태로는 테스트가 불가능하다.
+
+```bash
+npm run android:korean
+```
+
+시스템 언어에 한국어를 추가한다(그러면 Gboard 가 한글 자판을 같이 올린다).
+AOSP 이미지는 한 번에 끝나고, Google Play 이미지는 adb 로 언어를 못 바꾸므로
+설정 화면을 열어주고 순서를 안내한다.
+
+자판 없이 당장 입력해야 하면 **복사·붙여넣기**가 가장 빠르다. 맥에서 한글을
+복사한 뒤 입력란을 길게 눌러 붙여넣으면 된다(Android Studio 에뮬레이터는 맥
+클립보드를 공유한다. 안 되면 '...' → Settings → Clipboard sharing).
+
+`npm run android:emu` 는 설치 전에 언어를 확인해서, 한국어가 아니면 먼저 알려준다.

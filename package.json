@@ -25,7 +25,8 @@
     "android:emu": "bash scripts/run-emulator.sh",
     "android:build": "bash scripts/android-build.sh",
     "push:doctor": "node scripts/push-doctor.mjs",
-    "android:log": "bash scripts/android-log.sh"
+    "android:log": "bash scripts/android-log.sh",
+    "android:korean": "bash scripts/android-korean.sh"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^7.1.0",
