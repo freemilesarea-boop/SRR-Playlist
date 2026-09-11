@@ -623,7 +623,7 @@ function BroadcastDetailModal({
             <div className="h-2 w-full overflow-hidden rounded-full bg-bg-deep">
               <div className="h-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${playedRate}%` }} />
             </div>
-            <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px]">
+            <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[10px] sm:grid-cols-7">
               <Stat label="전체"  value={detail.summary.total}   />
               <Stat label="대기"  value={detail.summary.pending} tone="text-amber-300" />
               <Stat label="재생중" value={detail.summary.playing} tone="text-blue-300" />
@@ -639,8 +639,8 @@ function BroadcastDetailModal({
             <div className="border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-mute">
               대상 매장 ({detail.targets.length} / {detail.summary.total})
             </div>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-72 overflow-y-auto overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[640px]">
                 <thead className="sticky top-0 bg-bg-deep">
                   <tr className="border-b border-line/10 text-[10px] uppercase tracking-wider text-ink-dim">
                     <th className="px-3 py-2">매장 ID</th>

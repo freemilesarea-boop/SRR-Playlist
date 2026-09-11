@@ -559,7 +559,8 @@ export default function WeightTuningTab() {
         </p>
         {overrides.length === 0 && <p className="text-[11px] text-ink-dim">override 없음 — 모든 트랙이 base config 가중치 사용 중</p>}
         {overrides.length > 0 && (
-          <table className="w-full text-[11px]">
+          <div className="overflow-x-auto">
+          <table className="w-full text-[11px] min-w-[640px]">
             <thead>
               <tr className="text-left text-ink-mute">
                 <th className="pb-1">매장</th>
@@ -596,6 +597,7 @@ export default function WeightTuningTab() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

@@ -256,7 +256,7 @@ export default function PaymentSyncTool() {
                     </span>
                   )}
                 </p>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
                   <Stat
                     label="대상 webhook"
                     value={autoResult.scanned ?? autoResult.fetched ?? 0}

@@ -151,7 +151,7 @@ function BulkAiTab({ trackIds, busy, setBusy, onDone }: { trackIds: string[]; bu
       {preview && (
         <div className="rounded-xl bg-bg-card p-3">
           <h4 className="mb-2 text-xs font-bold">Preview 결과</h4>
-          <div className="grid grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <Stat label="총 후보" v={preview.total} />
             <Stat label="통과" v={preview.applied} color="emerald" />
             <Stat label="신뢰도 부족" v={preview.skipped_low_conf} color="amber" />
@@ -247,7 +247,7 @@ function BulkExcludeTab({ trackIds, busy, setBusy, onDone }: { trackIds: string[
 
       {preview && (
         <div className="rounded-xl bg-bg-card p-3">
-          <div className="grid grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <Stat label="조합 총합" v={preview.combos_total} />
             <Stat label="트랙" v={preview.track_count} />
             <Stat label="신규" v={preview.inserted} color="rose" />

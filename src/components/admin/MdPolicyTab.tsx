@@ -281,8 +281,8 @@ export default function MdPolicyTab() {
               {loading ? '로딩 중…' : '필터 조건 해당 곡 없음'}
             </p>
           ) : (
-            <div className="max-h-[480px] overflow-y-auto">
-              <table className="w-full text-left text-[11px]">
+            <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
+              <table className="w-full text-left text-[11px] min-w-[640px]">
                 <thead className="sticky top-0 bg-bg-card text-ink-dim">
                   <tr className="border-b border-line/10">
                     <th className="px-1.5 py-1">상태</th>

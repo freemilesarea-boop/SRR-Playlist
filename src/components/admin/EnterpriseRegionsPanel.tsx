@@ -590,7 +590,7 @@ function RegionDetailModal({
         </AdminCard>
 
         <AdminCard title="매장 / 접속">
-          <dl className="grid grid-cols-4 gap-2 text-[11px]">
+          <dl className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
             <KV k="전체 매장" v={`${region.store_count.toLocaleString('ko-KR')}개`} />
             <KV k="온라인" v={`${(region.online_count ?? 0).toLocaleString('ko-KR')}개`} />
             <KV k="오프라인" v={`${(region.offline_count ?? 0).toLocaleString('ko-KR')}개`} />

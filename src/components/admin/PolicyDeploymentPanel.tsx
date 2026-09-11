@@ -699,7 +699,7 @@ function LogCard({ r, onOpen }: { r: PolicyDeployment; onOpen: (id: string) => v
         <AdminBadge tone={meta.tone}>{meta.ko}</AdminBadge>
       </div>
       <div className="mt-2"><SuccessRateBar rate={r.success_rate} /></div>
-      <div className="mt-2 grid grid-cols-4 gap-1 text-center text-[11px]">
+      <div className="mt-2 grid grid-cols-2 gap-1 text-center text-[11px] sm:grid-cols-4">
         <div><div className="font-bold tabular-nums">{r.target_store_count}</div><div className="text-[10px] text-ink-dim">대상</div></div>
         <div><div className="font-bold tabular-nums text-emerald-300">{r.success_count}</div><div className="text-[10px] text-ink-dim">성공</div></div>
         <div><div className="font-bold tabular-nums text-amber-300">{r.pending_count}</div><div className="text-[10px] text-ink-dim">대기</div></div>
@@ -1044,7 +1044,7 @@ function DetailModal({
           </div>
 
           {/* Distribution */}
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <DistCard label="성공" value={dist.success} tone="success" />
             <DistCard label="대기" value={dist.pending} tone="warning" />
             <DistCard label="실패" value={dist.failed}  tone="danger"  />
@@ -1057,8 +1057,8 @@ function DetailModal({
             <div className="border-b border-line/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-ink-mute">
               매장 적용 현황 ({targets.length})
             </div>
-            <div className="max-h-[420px] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[560px]">
                 <thead className="sticky top-0 bg-bg-deep">
                   <tr className="border-b border-line/10 text-[10px] uppercase tracking-wider text-ink-dim">
                     <th className="px-3 py-2">매장 / 지역</th>
