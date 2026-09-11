@@ -76,9 +76,58 @@ describe('resolveStallAction — 손대면 안 되는 상황', () => {
     expect(resolveStallAction(healthy({ ...stuck, crossfading: true }))).toBe('none');
   });
 
-  it('paused / ended 는 정지가 아니다 (다른 로직의 몫)', () => {
-    expect(resolveStallAction(healthy({ ...stuck, paused: true }))).toBe('none');
+  it('ended 는 정지가 아니라 정상 종료 — onEnded 의 몫', () => {
     expect(resolveStallAction(healthy({ ...stuck, ended: true }))).toBe('none');
+  });
+});
+
+// ── 숙대점 14분 무음 회귀 방지 (BRAND-PLAYER-SELF-HEAL-2) ────────────────────
+// 2026-09-11, 하트비트는 살아 있는데 같은 곡에서 14분간 소리가 안 났다. 이틀간 6번.
+// 원인: paused 로 굳은 정지를 워치독이 checkAudioHealth 에 넘겼는데, 그 점검은
+// 이벤트에서만 불린다(timeupdate·canplay·ended·visibility·focus·online·pageshow).
+// 오디오가 멈춰 있으면 그 이벤트가 하나도 오지 않아 되살릴 계기가 사라진다.
+// 증거: store_playback_diagnostics 전체 이력에 playback_stalled·track_cut_short 0건
+//       — 사다리를 단 한 번도 올라간 적이 없었다.
+describe('paused 고착 — playing 의도는 살아 있는데 엘리먼트만 멈춘 경우', () => {
+  /** 재생 의도는 true 인데 audio element 가 paused 로 굳은 상태. */
+  const pausedStuck = (ms: number): StallInput =>
+    healthy({ playing: true, paused: true, stalledMs: ms });
+
+  it('8초 넘게 paused 면 재생을 다시 건다 — 이게 이 상태의 정답', () => {
+    expect(resolveStallAction(pausedStuck(NUDGE_AFTER_MS))).toBe('nudge');
+  });
+
+  it('nudge 로 안 풀리면 사다리를 끝까지 올라간다', () => {
+    expect(resolveStallAction(pausedStuck(RELOAD_AFTER_MS))).toBe('reload');
+    expect(resolveStallAction(pausedStuck(SKIP_AFTER_MS))).toBe('skip');
+    // 여기까지 와야 페이지가 강제로 다시 뜬다. 이게 없으면 14분 무음이 반복된다.
+    expect(resolveStallAction(pausedStuck(RELOAD_PAGE_AFTER_MS))).toBe('reload_page');
+    expect(resolveStallAction(pausedStuck(30 * 60_000))).toBe('reload_page');
+  });
+
+  it('8초 전에는 손대지 않는다 — 곡 전환 중 잠깐 paused 인 순간을 건드리면 안 된다', () => {
+    expect(resolveStallAction(pausedStuck(NUDGE_AFTER_MS - 1))).toBe('none');
+  });
+
+  it('사용자가 직접 누른 일시정지는 그대로 둔다 (playing=false)', () => {
+    // 이게 깨지면 손님이 멈춘 음악을 앱이 제멋대로 다시 튼다.
+    expect(resolveStallAction({ ...pausedStuck(RELOAD_PAGE_AFTER_MS), playing: false })).toBe('none');
+  });
+
+  it('일반 청취자에게는 여전히 아무 일도 없다 (businessMode=false)', () => {
+    expect(resolveStallAction({ ...pausedStuck(RELOAD_PAGE_AFTER_MS), businessMode: false })).toBe('none');
+  });
+
+  it('자동재생 차단·구독차단·스케줄 억제·크로스페이드는 paused 여도 건드리지 않는다', () => {
+    // 각각 별도 경로가 처리한다. 여기서 겹쳐 손대면 서로 방해한다.
+    expect(resolveStallAction({ ...pausedStuck(SKIP_AFTER_MS), autoplayBlocked: true })).toBe('none');
+    expect(resolveStallAction({ ...pausedStuck(SKIP_AFTER_MS), subscriptionBlocked: true })).toBe('none');
+    expect(resolveStallAction({ ...pausedStuck(SKIP_AFTER_MS), suppressed: true })).toBe('none');
+    expect(resolveStallAction({ ...pausedStuck(SKIP_AFTER_MS), crossfading: true })).toBe('none');
+  });
+
+  it('곡이 끝나서 paused 인 것은 정지가 아니다', () => {
+    expect(resolveStallAction({ ...pausedStuck(SKIP_AFTER_MS), ended: true })).toBe('none');
   });
 });
 

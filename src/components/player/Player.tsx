@@ -1511,7 +1511,25 @@ export default function Player() {
       });
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
+      const prevAction = stallLastActionRef.current;
       stallLastActionRef.current = action;
+
+      // SELF-HEAL-2 — paused 로 굳은 정지는 지금껏 계측에 한 번도 안 잡혔다
+      // (숙대점 조사 시점 playback_stalled 0건). 사다리 첫 칸에서 한 번만 남겨
+      // 다음엔 추측하지 않는다. nudge 로 바로 풀리는 흔한 경우까지 보여야
+      // "몇 번이나 이 상태에 빠지는지" 를 알 수 있다.
+      if (el.paused && prevAction === 'none') {
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            kind: 'paused_stall', action,
+            stalledSec: Math.round((now - prog.ts) / 1000),
+            trackId, readyState: el.readyState,
+            online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+          },
+        });
+      }
 
       const stalledSec = Math.round((now - prog.ts) / 1000);
       console.warn('[audio:selfheal] 매장 재생 정지 감지 — 자동 복구', {

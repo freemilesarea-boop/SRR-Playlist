@@ -18,10 +18,15 @@
  * ── 이 모듈이 하는 일 ───────────────────────────────────────────────────────
  * 정지 경과 시간만 보고 다음 칸을 고른다. 실행은 Player 가 한다.
  *
- *   8초   → nudge        재생을 다시 건다 (탭 스로틀링·일시적 정지)
+ *   8초   → nudge        재생을 다시 건다 (탭 스로틀링·일시적 정지·paused 고착)
  *   20초  → reload       같은 위치로 소스를 다시 잡는다 (버퍼 고갈)
  *   35초  → skip         다음 곡으로 넘긴다 (이 파일이 문제)
  *   150초 → reload_page  페이지를 다시 띄운다 (skip 조차 듣지 않는 상태)
+ *
+ * 정지의 두 얼굴을 모두 본다:
+ *   • 재생 중인데 위치가 안 움직임 (버퍼·디코더)
+ *   • paused 로 굳음 — playing 의도는 살아 있는데 엘리먼트만 멈춤
+ *     (SELF-HEAL-2, 숙대점 2026-09-11. 아래 resolveStallAction 주석 참고)
  *
  * 곡이 바뀌면 사다리는 처음부터 다시 시작한다 — **매장은 포기하지 않는다.**
  * 네트워크가 죽어 있으면 곡당 35초씩 넘기며 계속 시도하고, 돌아오면 저절로 낫는다.
@@ -57,7 +62,10 @@ export interface StallInput {
   businessMode: boolean;
   /** 재생 의도(store.playing). false = 사용자가 멈춘 것 → 건드리지 않는다. */
   playing: boolean;
-  /** audio element 가 실제로 paused 인가. */
+  /**
+   * audio element 가 실제로 paused 인가.
+   * playing(재생 의도)이 true 인데 이게 true 면 버그 상태다 — 사다리를 태운다.
+   */
   paused: boolean;
   /** 곡이 끝난 상태인가 (ended 는 정지가 아니라 정상 종료). */
   ended: boolean;
@@ -87,8 +95,26 @@ export function resolveStallAction(i: StallInput): StallAction {
   if (!i.playing || i.suppressed) return 'none';
   // 각각 별도 경로가 이미 처리한다. 여기서 겹쳐 손대면 서로 방해한다.
   if (i.autoplayBlocked || i.subscriptionBlocked || i.crossfading) return 'none';
-  // paused/ended 는 "정지"가 아니다 — 다른 로직(neither-playing, onEnded)의 몫.
-  if (i.paused || i.ended) return 'none';
+  // ended 는 정지가 아니라 정상 종료 — onEnded 가 다음 곡을 건다.
+  if (i.ended) return 'none';
+  // paused 는 여기서 함께 본다(BRAND-PLAYER-SELF-HEAL-2).
+  //
+  // 예전에는 paused 도 'none' 으로 넘기고 checkAudioHealth 의
+  // neither-playing-while-playing-state 에 맡겼다. 그런데 그 점검은 **이벤트에서만**
+  // 불린다(timeupdate · canplay · ended · visibility · focus · online · pageshow ·
+  // crossfade). 오디오가 paused 로 굳으면 그 이벤트가 하나도 오지 않는다 —
+  // timeupdate 는 재생 중에만 오고, 매장 화면은 계속 떠 있어 visibility/focus 도
+  // 안 바뀐다. 결국 되살릴 계기가 영영 사라진다. 이 파일 맨 위가 경고한 바로 그
+  // 함정인데, paused 분기만 그 이벤트 경로로 되돌려 보내고 있었다.
+  //
+  // 숙대점 2026-09-11: 하트비트는 살아 있는데 같은 곡에 14분 정지. 이틀간 6번.
+  // store_playback_diagnostics 전체 이력에 playback_stalled·track_cut_short 가
+  // 0건이었다 — 사다리를 단 한 번도 올라간 적이 없다는 뜻이다.
+  //
+  // 되살려도 안전한 이유: 위에서 businessMode 와 playing 을 이미 걸렀다.
+  // playing 은 **재생 의도**다. 의도는 재생인데 엘리먼트만 paused 면 버그 상태다.
+  // 사용자가 직접 누른 일시정지는 playing=false 라 여기까지 오지 않는다.
+  // 첫 칸(nudge = play())이 이 상태의 정답이기도 하다.
 
   if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return 'reload_page';
   if (i.stalledMs >= SKIP_AFTER_MS) return 'skip';
