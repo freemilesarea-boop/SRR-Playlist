@@ -5,13 +5,27 @@
  * 네이티브는 origin 이 capacitor://localhost 라 외부 브라우저가 되돌아올 수 없으므로,
  * 커스텀 스킴 딥링크(com.deudda.app://auth/callback)로 앱을 다시 깨워 코드를 교환한다.
  *
- * 흐름(PKCE):
+ * 흐름:
  *   1) signInWithOAuth({ redirectTo: 딥링크, skipBrowserRedirect: true }) → provider URL 획득
- *      (이 때 PKCE code_verifier 가 WebView localStorage 에 저장됨)
  *   2) @capacitor/browser 로 시스템 브라우저(커스텀탭/SFSafariVC) 오픈
  *   3) provider→supabase→딥링크 리다이렉트 → OS 가 앱을 appUrlOpen 으로 깨움
- *   4) 딥링크의 ?code= 를 exchangeCodeForSession 으로 세션 교환(같은 WebView 라 verifier 접근 OK)
+ *   4) 딥링크에 실려 온 자격증명으로 세션 수립
  *   5) onAuthStateChange 발화 → 프로필 로드 → /auth/callback 라우트로 이동해 첫 화면 분기
+ *
+ * 4) 에서 자격증명이 오는 형태가 두 가지다. 어느 쪽이 오는지는 supabase 클라이언트의
+ * flowType 이 정한다:
+ *   - implicit (supabase-js 기본값, 지금 우리 설정) → 프래그먼트에 토큰:
+ *       com.deudda.app://auth/callback#access_token=...&refresh_token=...
+ *   - pkce                                        → 쿼리에 코드:
+ *       com.deudda.app://auth/callback?code=...
+ *
+ * 예전에는 ?code= 만 읽었다. 우리 클라이언트는 flowType 을 지정하지 않아 줄곧
+ * implicit 이었으므로, 구글 인증이 서버에서 멀쩡히 끝나고 딥링크까지 돌아와도
+ * 앱은 "코드가 없다" 며 매번 로그인 실패로 처리했다. 웹에서만 되던 이유는
+ * detectSessionInUrl:true 가 /auth/callback 페이지에서 프래그먼트를 알아서
+ * 읽어줬기 때문이다 — 딥링크에는 그 경로가 없다.
+ *
+ * 그래서 양쪽을 모두 받는다. 나중에 flowType 을 pkce 로 바꿔도 그대로 동작한다.
  *
  * 왕복이 "끝났다"는 신호가 반드시 온다는 보장은 없다. 딥링크가 허용목록에 없거나,
  * 기기에 브라우저가 없거나, 사용자가 그냥 탭을 닫으면 3)이 영영 오지 않는다. 예전에는
@@ -126,6 +140,45 @@ export async function nativeOAuthSignIn(
   return outcome;
 }
 
+/**
+ * 딥링크에 실려 온 것이 무엇인지 판별한다.
+ *
+ * 순수 함수로 떼어놓은 이유는, 이 판별이 틀리면 로그인이 통째로 죽는데 기기 없이는
+ * 재현이 어렵기 때문이다. 여기만 테스트로 고정해두면 나머지는 배선일 뿐이다.
+ */
+export type OAuthCallback =
+  | { kind: 'code'; code: string }
+  | { kind: 'tokens'; accessToken: string; refreshToken: string }
+  | { kind: 'error'; message: string };
+
+export function parseOAuthCallback(url: string): OAuthCallback {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return { kind: 'error', message: 'invalid_url' };
+  }
+
+  // 에러는 쿼리로도 프래그먼트로도 온다(provider 와 flowType 에 따라 다르다).
+  const hash = new URLSearchParams(u.hash.replace(/^#/, ''));
+  const error =
+    u.searchParams.get('error_description') ??
+    u.searchParams.get('error') ??
+    hash.get('error_description') ??
+    hash.get('error');
+  // 에러를 먼저 본다 — 에러와 자격증명이 같이 오는 경우는 없고, 섞여 있다면 에러가 진실이다.
+  if (error) return { kind: 'error', message: error };
+
+  const code = u.searchParams.get('code');
+  if (code) return { kind: 'code', code };
+
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+  if (accessToken && refreshToken) return { kind: 'tokens', accessToken, refreshToken };
+
+  return { kind: 'error', message: 'no_credentials' };
+}
+
 let deepLinkBound = false;
 
 /**
@@ -164,25 +217,24 @@ export async function initNativeAuthDeepLink(
       /* 이미 닫혔을 수 있음 */
     }
 
-    let code: string | null = null;
-    let providerError: string | null = null;
-    try {
-      const u = new URL(url);
-      code = u.searchParams.get('code');
-      providerError =
-        u.searchParams.get('error_description') ?? u.searchParams.get('error');
-    } catch {
-      /* URL 파싱 실패 → 실패 처리 */
-    }
-
-    if (providerError || !code) {
+    const parsed = parseOAuthCallback(url);
+    if (parsed.kind === 'error') {
+      console.warn('[native-oauth] callback error', parsed.message);
       settlePending('provider_error');
       onResult(FAIL_ROUTE);
       return;
     }
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    // pkce 면 코드를 교환하고, implicit 이면 받은 토큰으로 세션을 세운다.
+    const { error } =
+      parsed.kind === 'code'
+        ? await supabase.auth.exchangeCodeForSession(parsed.code)
+        : await supabase.auth.setSession({
+            access_token: parsed.accessToken,
+            refresh_token: parsed.refreshToken,
+          });
     if (error) {
+      console.warn('[native-oauth] session failed', error.message);
       settlePending('exchange_failed');
       onResult(FAIL_ROUTE);
       return;

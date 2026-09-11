@@ -254,7 +254,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
         <div
           role="alert"
           aria-live="assertive"
-          className="fixed inset-x-0 top-0 z-[130] flex items-center justify-center gap-2 bg-gradient-to-r from-rose-600 to-red-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-black/40"
+          className="pointer-events-none fixed inset-x-0 top-0 z-[130] flex items-center justify-center gap-2 bg-gradient-to-r from-rose-600 to-red-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-black/40"
         >
           <Megaphone size={16} className="animate-pulse" />
           <div className="flex flex-col">
@@ -265,7 +265,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
       )}
 
       {debug && error && (
-        <div className="fixed bottom-24 left-1/2 z-[130] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
+        <div className="pointer-events-none fixed bottom-24 left-1/2 z-[130] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
           <AlertCircle size={10} className="inline mr-1" />
           emergency poll error: {error}
         </div>

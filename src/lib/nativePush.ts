@@ -38,10 +38,26 @@ function platformOrNull(): 'ios' | 'android' | null {
   return p === 'ios' || p === 'android' ? p : null;
 }
 
-/** Capacitor 플러그인 동적 로드 — 웹 번들 초기 로드에 끼지 않도록. */
+/**
+ * Capacitor 플러그인 동적 로드 — 웹 번들 초기 로드에 끼지 않도록.
+ *
+ * 반드시 객체에 담아서 돌려준다. 플러그인을 async 함수에서 그대로 반환하면
+ * 앱에서 푸시가 통째로 죽는다. 이유는 이렇다:
+ *
+ *   Capacitor 플러그인은 Proxy 다. 어떤 속성을 읽든 "네이티브 메서드" 로 간주하고
+ *   호출을 넘긴다. 그래서 `.then` 도 함수처럼 보인다.
+ *   자바스크립트는 Promise 를 resolve 할 때 그 값이 thenable 이면 한 번 더 풀려고
+ *   `.then()` 을 부른다. 즉 `return mod.PushNotifications` 는
+ *   `PushNotifications.then()` 이라는 존재하지 않는 네이티브 호출이 되고,
+ *   안드로이드가 "not implemented" 로 거절한다.
+ *
+ * 증상이 고약하다 — 호출부가 전부 try/catch 로 감싸고 있어서 조용히 실패한다.
+ * 권한 조회는 'default' 를, 등록은 error 를 돌려주므로 화면상으로는 "아직 안 켰네"
+ * 와 구분이 안 된다. 서버 자격증명을 아무리 맞춰도 토큰 자체가 만들어지지 않는다.
+ */
 async function loadPlugin() {
   const mod = await import('@capacitor/push-notifications');
-  return mod.PushNotifications;
+  return { push: mod.PushNotifications };
 }
 
 /** Capacitor 의 권한 상태를 Web Push 어휘로 정규화. */
@@ -55,7 +71,7 @@ export function normalizePermission(receive: string): NativePushPermission {
 export async function checkNativePushPermission(): Promise<NativePushPermission> {
   if (!nativePushSupported()) return 'default';
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     const s = await PushNotifications.checkPermissions();
     return normalizePermission(s.receive);
   } catch {
@@ -83,7 +99,7 @@ async function saveToken(token: string): Promise<void> {
 export async function enableNativePush(): Promise<{ ok: boolean; token?: string; error?: string }> {
   if (!nativePushSupported()) return { ok: false, error: 'not_native' };
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
 
     const perm = await PushNotifications.requestPermissions();
     if (normalizePermission(perm.receive) !== 'granted') {
@@ -121,7 +137,7 @@ export async function disableNativePush(token: string | null): Promise<boolean> 
       const { error } = await supabase.rpc('delete_device_push_token', { p_token: token });
       if (error) throw error;
     }
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     await PushNotifications.unregister();
     return true;
   } catch {
@@ -139,7 +155,7 @@ export async function initNativePushRouting(navigate: (path: string) => void): P
   if (!nativePushSupported() || tapBound) return;
   tapBound = true;
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const data = action.notification?.data as Record<string, unknown> | undefined;
       const url = typeof data?.url === 'string' ? data.url : '/';
