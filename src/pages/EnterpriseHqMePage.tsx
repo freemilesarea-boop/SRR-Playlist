@@ -968,7 +968,8 @@ function StoreStatsCard({ stats }: { stats: import('@/lib/api/enterpriseHqApi').
       <h3 className="text-sm font-bold flex items-center gap-1.5">
         <Store size={14} /> 매장 현황
       </h3>
-      <div className="mt-3 grid grid-cols-5 gap-2">
+      {/* 폰(390px)에서 5칸이면 한 칸이 58px — 숫자는 들어가도 라벨이 잘려 무슨 수치인지 모른다. */}
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
         {items.map((it) => (
           <div key={it.label} className="rounded-lg bg-bg-deep p-2 text-center">
             <div className={`flex items-center justify-center gap-1 text-[10px] ${it.tone}`}>

@@ -174,6 +174,44 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
   });
 
   it.each([
+    ['src/pages/ArtistDashboardPage.tsx', '아티스트 대시보드'],
+    ['src/pages/ArtistSettlementsPage.tsx', '아티스트 정산'],
+    ['src/pages/ArtistContractPage.tsx', '아티스트 계약서'],
+  ])('%s (%s) 도 태블릿에서 폭을 잡는다', (file) => {
+    // 정산 계좌·업로드 폼과 계약서가 1200px 을 가로지르면 읽고 쓰기 어렵다.
+    // (엔터프라이즈 본사 화면들은 이미 max-w-6xl/3xl 이라 그대로 둔다.)
+    expect(repoFile(file)).toMatch(/lg:mx-auto lg:max-w-(3xl|4xl|5xl)/);
+  });
+
+  it('본사 · 아티스트 화면에 폰 기준 4칸 이상 격자가 없다', () => {
+    // 390px 에서 4칸이면 한 칸이 75px — 숫자는 들어가도 라벨이 잘려 무슨 수치인지 모른다.
+    // 관리자 패널(components/admin)은 운영자용 데스크톱 화면이라 이 규칙 밖이다.
+    const files = [
+      'src/pages/EnterpriseHqMePage.tsx',
+      'src/pages/EnterpriseHqOpsPage.tsx',
+      'src/pages/EnterpriseHqIntelPage.tsx',
+      'src/pages/EnterpriseHqNotificationsPage.tsx',
+      'src/pages/EnterpriseOpsStoresPage.tsx',
+      'src/pages/EnterpriseOpsStoreDetailPage.tsx',
+      'src/pages/FranchiseHqDashboardPage.tsx',
+      'src/pages/ArtistDashboardPage.tsx',
+      'src/pages/ArtistSettlementsPage.tsx',
+      'src/pages/ArtistContractPage.tsx',
+      'src/components/enterprise/EnterpriseHqMonthlySettlementsCard.tsx',
+    ];
+    const offenders: string[] = [];
+    for (const f of files) {
+      for (const m of repoFile(f).matchAll(/className=["`]([^"`]*)["`]/g)) {
+        // 접두사 없는(= 폰부터 적용되는) grid-cols-4 이상만 문제.
+        if (/(?:^|\s)grid-cols-(?:[4-9]|1[0-2])(?=\s|$)/.test(m[1])) {
+          offenders.push(`${f}: ${m[1].slice(0, 60)}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it.each([
     ['src/pages/ProfilePage.tsx', '내 정보'],
     ['src/pages/ChartPage.tsx', '차트'],
   ])('%s (%s) 는 태블릿에서 폭을 잡는다', (file) => {

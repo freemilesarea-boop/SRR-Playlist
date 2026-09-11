@@ -172,7 +172,7 @@ function HqDetailModal({
                 </div>
                 <StatusBadge status={settlement.status} />
               </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
                 <KV k="활성 매장" v={`${settlement.active_store_count.toLocaleString('ko-KR')}개`} />
                 <KV k="단가" v={`${settlement.monthly_store_price.toLocaleString('ko-KR')}원`} />
                 <KV k="수수료율" v={`${settlement.commission_rate}%`} />
@@ -182,7 +182,7 @@ function HqDetailModal({
               </dl>
               {/* 0390 — 적용된 계약 스냅샷 (생성 시점 고정) */}
               {(settlement.rate_source || settlement.contract_no || settlement.settlement_method) && (
-                <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px] border-t border-line/10 pt-2">
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px] border-t border-line/10 pt-2 sm:grid-cols-3">
                   <KV k="적용 출처" v={settlement.rate_source ? SETTLEMENT_RATE_SOURCE_LABEL[settlement.rate_source] : '—'} />
                   <KV k="계약번호" v={settlement.contract_no ?? '—'} />
                   <KV k="정산방법" v={settlement.settlement_method ?? '—'} />
@@ -264,7 +264,7 @@ function HqCarryoverChainCard({
         <Coins size={11} /> 이월 정산 흐름
       </p>
 
-      <dl className="grid grid-cols-3 gap-2 text-[11px]">
+      <dl className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
         <div>
           <dt className="text-[10px] text-ink-dim">지난 달에서 이월</dt>
           <dd className="mt-0.5 font-mono tabular-nums">{prev.toLocaleString('ko-KR')}원</dd>

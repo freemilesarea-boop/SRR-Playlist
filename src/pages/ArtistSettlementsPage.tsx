@@ -62,7 +62,8 @@ export default function ArtistSettlementsPage() {
   }, []);
 
   return (
-    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6">
+    // 정산 목록 — 기간(왼쪽)과 금액(오른쪽)이 양 끝으로 갈라지면 한 줄로 안 읽힌다.
+    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6 lg:mx-auto lg:max-w-4xl">
       <header className="flex items-center gap-3">
         <Link to="/artist" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card">
           <ArrowLeft size={18} />

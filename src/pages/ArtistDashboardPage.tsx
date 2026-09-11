@@ -142,7 +142,10 @@ export default function ArtistDashboardPage() {
   const isApproved = artist?.approval_status === 'approved';
 
   return (
-    <div className="space-y-6 px-4 pb-12 pt-6 sm:px-6">
+    // 정산 계좌 · 음원 업로드 폼과 곡 목록이 함께 있는 화면이다.
+    // 폭을 안 잡으면 태블릿에서 입력칸 하나가 1200px 을 가로지른다.
+    // 곡 목록도 써야 하므로 폼 전용 화면보다는 넉넉하게 잡는다.
+    <div className="space-y-6 px-4 pb-12 pt-6 sm:px-6 lg:mx-auto lg:max-w-5xl">
       <header className="flex items-center gap-3">
         <Link to="/profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card" aria-label="뒤로">
           <ArrowLeft size={18} />
