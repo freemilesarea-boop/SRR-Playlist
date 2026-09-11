@@ -164,13 +164,29 @@ npm run android:build            # JDK 선택 → 웹 빌드 → cap sync → ./
 - 매장 플레이어 하단 **"화면 꺼짐 방지"** 가 `켜짐` 이면 정상
 - (에뮬레이터에서는 체감이 어렵다 — 표시만 확인)
 
-### 2-4. 푸시 (자격증명 설정 후에만)
+### 2-4. 푸시
 
-`google-services.json` 을 `android/app/` 에 넣고 Edge Secrets 를 설정한 뒤:
-1. 프로필 → 알림 켜기 → 권한 허용
-2. 테스트 알림 발송 → ✅ 수신 확인
+설정이 어디까지 됐는지는 이걸로 확인한다:
+```bash
+npm run push:doctor
+```
 
-미설정 상태에서는 알림 토글이 "쓸 수 없음"으로 표시되는 것이 정상이다.
+**앱(안드로이드)에서 푸시를 받으려면 세 가지가 다 있어야 한다.**
+
+| 무엇 | 어디서 | 어디에 |
+| --- | --- | --- |
+| `google-services.json` | Firebase 콘솔 → 프로젝트 설정 → 내 앱 → **Android 앱 추가**<br>패키지명은 반드시 `com.deudda.app` | `android/app/` 에 저장 |
+| `FCM_SERVICE_ACCOUNT_JSON` | 같은 Firebase 프로젝트 → 프로젝트 설정 → **서비스 계정** → 새 비공개 키 생성 (JSON) | Supabase → Edge Functions → **Secrets** 에 JSON **전체**를 한 값으로 |
+| 서버 코드 | 이미 배포됨 (`send-push` v5, FCM/APNs 지원) | — |
+
+넣은 뒤:
+1. `npm run push:doctor` → 전부 `[OK]`
+2. `npm run android:emu -- --apk` 로 다시 설치
+3. 앱에서 내 정보 → 알림 켜기 → 권한 허용
+4. **테스트 알림** → ✅ 수신 확인
+
+> `google-services.json` 이 없어도 **빌드는 성공한다**. 푸시만 비활성이다.
+> 웹(PWA) 푸시는 별도로 `VAPID_*` 세 개가 필요하다 — 앱 푸시와 독립이다.
 
 ---
 

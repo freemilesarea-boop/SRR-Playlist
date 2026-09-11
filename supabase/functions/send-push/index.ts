@@ -64,6 +64,27 @@ function readEnv() {
   };
 }
 
+/**
+ * user JWT 검증 → user_id 반환. 실패 시 null.
+ *
+ * 앱/웹 클라이언트는 service_role 키를 가질 수 없다(가지면 안 된다). 대신 자기
+ * JWT 로 호출하고, 아래에서 "본인에게만" 으로 제한한다.
+ * PushNotificationToggle 의 테스트 알림과 useBusinessAutoSwitch 의 시간대 전환
+ * 알림이 이 경로를 쓴다.
+ */
+async function verifyUserJwt(env: ReturnType<typeof readEnv>, token: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: env.SERVICE_ROLE, Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data?.id as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function rpc<T>(env: ReturnType<typeof readEnv>, fn: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
@@ -96,11 +117,22 @@ serve(async (req: Request) => {
     return json({ error: 'SUPABASE env 미설정' }, 500);
   }
 
-  // 인증: service_role JWT 만 허용 (운영 내부 호출만)
+  // 인증 (배포본과 동일한 이중 경로):
+  //   service_role  → 임의 user_id 로 발송 (cron · 서버 내부)
+  //   user JWT      → 본인에게만
+  // 여기를 service_role 전용으로 좁히면 앱의 "테스트 알림" 버튼이 401 로 죽는다.
   const authHeader = req.headers.get('authorization') ?? '';
-  if (authHeader !== `Bearer ${env.SERVICE_ROLE}`) {
-    return json({ error: 'unauthorized' }, 401);
+  if (!authHeader.startsWith('Bearer ')) return json({ error: 'unauthorized' }, 401);
+  const token = authHeader.slice(7);
+
+  let isServiceRole = false;
+  let userIdFromJwt: string | null = null;
+  if (token === env.SERVICE_ROLE) {
+    isServiceRole = true;
+  } else {
+    userIdFromJwt = await verifyUserJwt(env, token);
   }
+  if (!isServiceRole && !userIdFromJwt) return json({ error: 'unauthorized' }, 401);
 
   let payload: any;
   try {
@@ -112,6 +144,11 @@ serve(async (req: Request) => {
   const userId = payload.user_id as string | undefined;
   const title = (payload.title as string | undefined) ?? 'DEUDDA';
   if (!userId) return json({ error: 'user_id required' }, 400);
+
+  // user JWT 로 왔으면 본인에게만.
+  if (!isServiceRole && userId !== userIdFromJwt) {
+    return json({ error: 'cannot send push to other users' }, 403);
+  }
 
   const notification = {
     title,
