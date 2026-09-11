@@ -173,6 +173,15 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     }
   });
 
+  it.each([
+    ['src/pages/ProfilePage.tsx', '내 정보'],
+    ['src/pages/ChartPage.tsx', '차트'],
+  ])('%s (%s) 는 태블릿에서 폭을 잡는다', (file) => {
+    // 목록·설정형 화면은 폭을 안 잡으면 라벨(왼쪽)과 값/화살표(오른쪽)가
+    // 1000px 넘게 떨어져 한 줄로 안 읽힌다.
+    expect(repoFile(file)).toMatch(/lg:mx-auto lg:max-w-(3xl|4xl)/);
+  });
+
   it('결제 폼이 태블릿에서 화면을 가로지르지 않는다', () => {
     // 연락처 입력칸 하나가 1200px 을 가로지르면 어디에 무엇을 쓰는지 안 보인다.
     expect(repoFile('src/pages/PricingPage.tsx')).toContain('lg:mx-auto lg:max-w-2xl');

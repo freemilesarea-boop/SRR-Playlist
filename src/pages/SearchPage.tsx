@@ -244,12 +244,14 @@ export default function SearchPage() {
             <h2 className="flex items-center gap-1.5 px-1 text-sm font-bold tracking-tight">
               <Sparkles size={14} className="text-ink-mute" /> 빠른 카테고리
             </h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {/* 폰에서는 손가락이 닿는 큰 칸(격자), 태블릿에서는 글자 길이에 맞춘 칩.
+                태블릿에서 격자로 두면 한 칸이 240px 이라 "카페" 두 글자가 가운데 떠 있다. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:flex lg:flex-wrap">
               {QUICK_KEYWORDS.map((k) => (
                 <button
                   key={k}
                   onClick={() => onSubmitChip(k)}
-                  className="rounded-2xl bg-bg-card px-3 py-3 text-sm font-semibold ring-1 ring-line/10 transition hover:-translate-y-0.5 hover:shadow-card"
+                  className="rounded-2xl bg-bg-card px-3 py-3 text-sm font-semibold ring-1 ring-line/10 transition hover:-translate-y-0.5 hover:shadow-card lg:px-5"
                 >
                   {k}
                 </button>
