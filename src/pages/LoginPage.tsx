@@ -6,6 +6,12 @@ import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isKakaoLoginEnabled } from '@/lib/kakao';
 import { detectInAppBrowser, isPwaStandalone, type InAppBrowserName } from '@/lib/inAppBrowser';
+import {
+  isBrowserOpenFailure,
+  nativeOAuthMessage,
+  NO_BROWSER_MESSAGE,
+  PROVIDER_BLOCKED_MESSAGE,
+} from '@/lib/oauthOutcome';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
@@ -176,18 +182,20 @@ export default function LoginPage() {
     }
     setGoogleBusy(true);
     try {
-      await signInWithGoogle();
-      // redirectTo 로 페이지 이동되므로 도달 시점은 거의 없음
+      // 웹: redirectTo 로 페이지가 떠나므로 null 이 오거나 아예 도달하지 않는다.
+      // 앱: 시스템 브라우저 왕복이 끝날 때까지 기다렸다가 결말을 돌려준다.
+      const outcome = await signInWithGoogle();
+      if (outcome) setError(nativeOAuthMessage(outcome));
     } catch (err) {
       // raw provider 에러 노출 금지 — 사용자에게는 친절한 안내만.
       const raw = err instanceof Error ? err.message : '';
-      const friendly =
-        '앱 내 브라우저 또는 회사/학교 Google 계정에서는 로그인이 제한될 수 있습니다. ' +
-        'Chrome 또는 Safari에서 다시 시도하거나, 이메일로 가입/로그인해주세요.';
       // 진단용으로 콘솔에만 raw 흔적.
-       
+
       if (raw) console.warn('[google-oauth]', raw);
-      setError(friendly);
+      setError(isBrowserOpenFailure(raw) ? NO_BROWSER_MESSAGE : PROVIDER_BLOCKED_MESSAGE);
+    } finally {
+      // 예전에는 성공 경로에서 이걸 풀지 않았다. 웹은 페이지가 떠나니 티가 안 났지만
+      // 앱은 같은 화면에 남아서 버튼이 "Google 처리 중…" 으로 영구히 잠겼다.
       setGoogleBusy(false);
     }
   }
@@ -196,7 +204,8 @@ export default function LoginPage() {
     setError(null);
     setKakaoBusy(true);
     try {
-      await signInWithKakao();
+      const outcome = await signInWithKakao();
+      if (outcome) setError(nativeOAuthMessage(outcome));
     } catch (err) {
       const raw = err instanceof Error ? err.message : '';
       // Supabase 에서 카카오 provider 비활성화일 때 raw JSON 메시지가 노출되는 것 방지.
@@ -206,6 +215,8 @@ export default function LoginPage() {
       setError(friendly);
       const { toast } = await import('@/store/toastStore');
       toast.error(friendly);
+    } finally {
+      // 구글과 같은 이유 — 앱에서는 성공/취소 어느 쪽이든 이 화면에 남으므로 반드시 푼다.
       setKakaoBusy(false);
     }
   }

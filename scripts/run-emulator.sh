@@ -171,6 +171,36 @@ fi
 DEVICE_ID="$(running_devices | head -1)"
 [[ -n "$DEVICE_ID" ]] || die "설치할 기기를 찾지 못했습니다." "확인: $ADB devices"
 
+# ---------- 2-b. 기기 능력 점검 ----------
+# 구글 로그인과 푸시는 앱 코드가 아니라 "기기에 무엇이 깔려 있느냐" 에 먼저 막힌다.
+# AOSP 이미지로 만든 AVD 에는 브라우저도 Play 서비스도 없어서 둘 다 조용히 실패한다.
+# 그걸 모르면 앱 코드를 붙잡고 몇 시간을 버리게 되므로, 설치 전에 먼저 말해준다.
+check_device_capabilities() {  # $1 = 기기 시리얼
+  local dev="$1" browser gms
+
+  # 커스텀탭(구글 로그인)을 띄울 수 있는가 — https 를 처리할 액티비티가 있어야 한다.
+  browser="$("$ADB" -s "$dev" shell cmd package resolve-activity -a android.intent.action.VIEW \
+    -d https://example.com 2>/dev/null | tr -d '\r' | grep -i 'packageName=' | head -1)"
+  if [[ -z "$browser" ]]; then
+    echo "${YEL}!${OFF} 이 기기에는 웹 브라우저가 없습니다 — ${YEL}구글 로그인이 동작하지 않습니다${OFF}."
+    echo "  ${DIM}구글 로그인은 시스템 브라우저(커스텀탭)를 띄워야 하는데 띄울 앱이 없습니다.${OFF}"
+    echo "  ${DIM}이메일 로그인으로 테스트하거나, Google Play 이미지로 AVD 를 새로 만드세요.${OFF}"
+  fi
+
+  # 푸시(FCM)는 Play 서비스가 메시지를 받아 앱에 전달한다. 없으면 토큰조차 안 나온다.
+  gms="$("$ADB" -s "$dev" shell pm list packages com.google.android.gms 2>/dev/null | tr -d '\r')"
+  if [[ -z "$gms" ]]; then
+    echo "${YEL}!${OFF} 이 기기에는 Google Play 서비스가 없습니다 — ${YEL}푸시 알림이 오지 않습니다${OFF}."
+    echo "  ${DIM}서버 설정이 다 맞아도 기기가 FCM 메시지를 받을 수 없습니다.${OFF}"
+    echo "  ${DIM}푸시까지 확인하려면 Device Manager 에서 시스템 이미지를${OFF}"
+    echo "  ${DIM}'Google Play' 로 골라 AVD 를 새로 만들거나, 실제 기기(--device)로 테스트하세요.${OFF}"
+  fi
+}
+
+if [[ "$TARGET" != "device" ]]; then
+  check_device_capabilities "$DEVICE_ID"
+fi
+
 # cap run 이 실패해도(플러그인 미탐지 등) 앱은 깔려야 한다 — Gradle 로 직접 넣는다.
 install_with_gradle() {
   echo "${YEL}!${OFF} cap run 실패 — Gradle 로 직접 설치합니다."
