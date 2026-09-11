@@ -1,3 +1,4 @@
+import { COMPANY_INFO } from '@/lib/companyInfo';
 import { Instagram } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BrandLogo from '@/components/BrandLogo';
@@ -31,14 +32,6 @@ const SUPPORT_LINKS: LinkItem[] = [
   { label: '개인정보 처리방침', href: '/privacy' },
 ];
 
-const COMPANY_INFO: { label: string; value: string }[] = [
-  { label: '상호', value: '루베르 콘텐츠 스튜디오' },
-  { label: '대표', value: '이승현' },
-  { label: '사업자번호', value: '234-52-00922' },
-  { label: '통신판매업', value: '2026-서울성동-0724 호' },
-  { label: '주소', value: '서울특별시 성동구 왕십리로 326 세신빌딩 6층 614호' },
-  { label: '이메일', value: 'freemilesarea@gmail.com' },
-];
 
 // Footer 는 사이트 전체 분위기와 일관된 다크 톤을 항상 유지 (라이트 모드여도 다크)
 // Spotify / Apple Music 의 짙은 푸터 패턴.

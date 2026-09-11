@@ -1,22 +1,9 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Search, BarChart3, Heart, Store, User, Wand2, ListMusic, Tag, CreditCard, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import BrandLogo from '@/components/BrandLogo';
 import SidebarLibrarySection from '@/components/SidebarLibrarySection';
-import { sidebarNavItems, type NavIconKey } from '@/lib/appNav';
-
-const ICONS: Record<NavIconKey, LucideIcon> = {
-  home: Home,
-  search: Search,
-  chart: BarChart3,
-  library: Heart,
-  playlists: ListMusic,
-  pricing: CreditCard,
-  store: Store,
-  brand: Tag,
-  profile: User,
-  studio: Wand2,
-};
+import { sidebarNavItems } from '@/lib/appNav';
+import { NAV_ICONS } from '@/components/navIcons';
 
 /** mono 2자리 인덱스 — DEUDDA Product spec p02/p07 sidebar 의 NAV 01/02/.. 표기 */
 function navNo(i: number): string {
@@ -45,7 +32,7 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto">
         <nav className="space-y-0.5 px-3 py-1">
           {navItems.map(({ to, label, icon, end }, idx) => {
-            const Icon = ICONS[icon];
+            const Icon = NAV_ICONS[icon];
             return (
             <NavLink key={to} to={to} end={end}>
               {({ isActive }) => (

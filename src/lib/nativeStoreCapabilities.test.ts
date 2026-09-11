@@ -92,10 +92,10 @@ describe('푸시 알림 네이티브 설정', () => {
 });
 
 describe('앱 전용 셸(터치 레이아웃)', () => {
-  // 매장 태블릿은 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
-  // 그러면 데스크톱 사이드바 레이아웃이 뜨는데, 손가락으로 쓰는 기기에는 맞지 않는다.
-  // index.css 의 .native-shell 규칙이 이를 되돌리는데, 그 규칙은 컴포넌트에 붙은
-  // 클래스 훅에 의존한다 — 한쪽만 이름이 바뀌면 조용히 깨지므로 양쪽을 함께 고정한다.
+  // 매장 태블릿은 CSS 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
+  // 그러면 데스크톱 레이아웃(사이드바 + 1500px 본문)이 뜨는데, 손가락으로 쓰는 기기에는
+  // 맞지 않는다. index.css 의 .native-shell 규칙이 이를 되돌리는데, 그 규칙은 컴포넌트에
+  // 붙은 클래스 훅에 의존한다 — 한쪽만 이름이 바뀌면 조용히 깨지므로 양쪽을 함께 고정한다.
   const css = repoFile('src/index.css');
 
   it('네이티브 표식을 <html> 에 붙인다', () => {
@@ -107,14 +107,34 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     ['app-bottom-nav', 'src/components/BottomNav.tsx'],
     ['app-player', 'src/components/player/Player.tsx'],
     ['app-main', 'src/components/AppShell.tsx'],
+    ['app-footer', 'src/components/AppShell.tsx'],
   ])('%s 훅이 CSS 와 컴포넌트 양쪽에 있다', (hook, file) => {
     expect(css).toContain(`.native-shell .${hook}`);
     expect(repoFile(file)).toContain(hook);
   });
 
+  it('본문 폭을 제한한다 — 태블릿에서 한 줄이 화면 끝까지 늘어나지 않도록', () => {
+    expect(css).toContain('.native-shell .app-main > main');
+  });
+
   it('앱을 켰을 때 역할에 맞는 화면으로 보내는 훅이 셸에 붙어 있다', () => {
     // 이게 빠지면 매장 태블릿이 재부팅 후 마케팅 홈에 머물고, 아무도 안 누르면 무음이 된다.
     expect(repoFile('src/components/AppShell.tsx')).toContain('useNativeLanding()');
+  });
+
+  it('사업자 정보가 앱에서도 표시된다 (전자상거래법)', () => {
+    // 앱은 푸터를 숨기므로, 그 정보가 전체 메뉴로 옮겨졌는지 확인한다.
+    // 값은 companyInfo.ts 한 곳에서만 관리한다 — 두 군데면 한쪽만 바뀌어 어긋난다.
+    expect(repoFile('src/components/native/NativeMoreSheet.tsx')).toContain('COMPANY_INFO');
+    expect(repoFile('src/components/common/Footer.tsx')).toContain("from '@/lib/companyInfo'");
+    expect(repoFile('src/lib/companyInfo.ts')).toContain('사업자번호');
+  });
+
+  it('하단탭 마지막 칸이 전체 메뉴를 연다', () => {
+    // 앱에는 사이드바가 없다. 이 통로가 없으면 브랜드·결제·관리자 화면에 갈 방법이 없다.
+    const nav = repoFile('src/components/BottomNav.tsx');
+    expect(nav).toContain('NativeMoreSheet');
+    expect(nav).toContain("item.action === 'more'");
   });
 });
 

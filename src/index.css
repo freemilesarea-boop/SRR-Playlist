@@ -193,16 +193,17 @@ input[type='range']::-moz-range-thumb {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * 앱(네이티브 쉘) 레이아웃 오버라이드
+ * 앱(네이티브 쉘) 레이아웃
  *
- * 매장 태블릿은 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
- * 그러면 데스크톱용 사이드바 레이아웃이 뜨는데, 손가락으로 쓰는 매장 기기에는
- * 맞지 않는다(마우스 hover 없음 · 점주가 쓰는 메뉴는 매장/브랜드뿐).
+ * 매장 태블릿은 CSS 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
+ * 그러면 데스크톱용 레이아웃(사이드바 + 1500px 본문)이 뜨는데, 손가락으로 쓰는
+ * 기기에는 맞지 않는다 — hover 가 없고, 본문이 화면 끝까지 늘어나 한 줄이 너무 길어진다.
  *
- * 그래서 앱에서는 폭과 무관하게 "터치 우선" 레이아웃으로 되돌린다.
- * .native-shell 은 initNativeShell() 이 <html> 에 붙인다 — 웹에는 절대 붙지 않으므로
+ * .native-shell 은 initNativeShell() 이 <html> 에 붙인다. 웹에는 절대 붙지 않으므로
  * 아래 규칙은 브라우저 사용자에게 영향이 없다.
  * ───────────────────────────────────────────────────────────── */
+
+/* --- 뼈대: 사이드바 대신 하단탭 --- */
 .native-shell .app-sidebar {
   display: none !important;
 }
@@ -221,9 +222,45 @@ input[type='range']::-moz-range-thumb {
   margin-left: auto !important;
   margin-right: auto !important;
 }
-/* 터치 목표 확대 — 매장에서는 기기를 세워두고 서서 누른다. */
-.native-shell .app-bottom-nav a > span {
+
+/* --- 읽는 폭 --- */
+/* 본문이 화면 끝까지 늘어나면 카드 하나가 1900px 이 되어 제목과 값이 양 끝으로
+   갈라진다 — 눈이 따라가지 못한다. 그렇다고 너무 좁히면 큰 태블릿에서 휑해진다.
+   1200px 이 그 사이다(10인치 1280px 기기에서는 거의 꽉 차고, 큰 기기에서는 잡아준다). */
+.native-shell .app-main > main {
+  max-width: 75rem !important;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* --- 글자 크기 --- */
+/* 매장 태블릿은 손에 드는 폰이 아니라 벽/카운터에 세워두고 한 걸음 떨어져 본다.
+   rem 기반이라 루트만 키우면 화면 전체가 비례해서 커진다. */
+.native-shell {
+  font-size: 17px;
+}
+
+/* --- 터치 --- */
+.native-shell button,
+.native-shell a,
+.native-shell [role='button'] {
+  /* 300ms 탭 지연 제거 + 길게 눌렀을 때 파란 하이라이트 제거 */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 하단탭은 서서 누른다 — 손가락 하나가 확실히 들어가는 높이. */
+.native-shell .app-bottom-nav li > a > span,
+.native-shell .app-bottom-nav li > button > span {
   min-height: 56px;
-  justify-content: center;
   font-size: 12px;
+}
+/* --- 웹 전용 장식 숨김 --- */
+/* 회사 정보·약관 푸터는 웹 문서용이다. 앱에서는 "더보기" 전체 메뉴가 대신한다
+   (약관/개인정보 링크도 거기 있다 — 스토어 심사 요건). */
+.native-shell .app-footer {
+  display: none !important;
+}
+/* 푸터가 사라지면 하단탭/플레이어에 가려질 여백만 남기면 된다. */
+.native-shell .app-footer-space {
+  padding-bottom: 9rem !important;
 }

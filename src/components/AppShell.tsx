@@ -63,8 +63,11 @@ export default function AppShell() {
           <Outlet />
         </main>
         {/* Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한 padding-bottom 으로 마지막 줄 보호 */}
-        <div className="pb-44">
-          <Footer />
+        {/* app-footer / app-footer-space — 앱에서는 index.css 가 푸터를 숨기고 여백만 남긴다. */}
+        <div className="app-footer-space pb-44">
+          <div className="app-footer">
+            <Footer />
+          </div>
         </div>
       </div>
 

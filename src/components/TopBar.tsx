@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import ThemeQuickToggle from './ThemeQuickToggle';
+import { isNativeApp } from '@/lib/native';
 
 /** 경로 → 한국어 페이지명 매핑 (DEUDDA TopBar breadcrumb 용) */
 function pageTitle(pathname: string): { eyebrow?: string; title: string } {
@@ -37,27 +38,37 @@ function pageTitle(pathname: string): { eyebrow?: string; title: string } {
  * 중앙: 검색 affordance (/search 로 이동).
  * 우측: ThemeQuickToggle.
  * 모바일은 기존 BottomNav 가 담당하므로 hidden.
+ *
+ * 앱(태블릿)은 폭이 lg 를 넘어 이 바가 그대로 뜬다. 다만 웹 문서용 장식은 뺀다:
+ *   - "DEUDDA / 매장 모드 / STORE" 브레드크럼 — 앱에는 주소창이 없어 현재 위치는
+ *     하단탭이 이미 알려준다. 제목만 남긴다.
+ *   - "/search" 단축키 칩 — 태블릿에는 칠 키보드가 없다.
  */
 export default function TopBar() {
   const loc = useLocation();
   const { eyebrow, title } = pageTitle(loc.pathname);
   const onSearchPage = loc.pathname.startsWith('/search');
+  const native = isNativeApp();
 
   return (
     <div className="sticky top-0 z-20 hidden lg:block pt-safe">
       <div className="flex items-center gap-3 border-b border-line/10 bg-bg/85 px-6 py-3 backdrop-blur-xl">
         {/* 좌측 — DEUDDA Product spec breadcrumb: "DEUDDA / 페이지명" */}
-        <nav aria-label="페이지 위치" className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-[0.18em]">
-          <span className="text-ink">DEUDDA</span>
-          <span className="mx-2 text-ink-dim">/</span>
-          <span className="text-ink-mute">{title}</span>
-          {eyebrow && (
-            <>
-              <span className="mx-2 text-ink-dim">/</span>
-              <span className="text-accent">{eyebrow}</span>
-            </>
-          )}
-        </nav>
+        {native ? (
+          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-ink">{title}</h1>
+        ) : (
+          <nav aria-label="페이지 위치" className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-[0.18em]">
+            <span className="text-ink">DEUDDA</span>
+            <span className="mx-2 text-ink-dim">/</span>
+            <span className="text-ink-mute">{title}</span>
+            {eyebrow && (
+              <>
+                <span className="mx-2 text-ink-dim">/</span>
+                <span className="text-accent">{eyebrow}</span>
+              </>
+            )}
+          </nav>
+        )}
 
         {/* 중앙/우측 — 검색 affordance */}
         {!onSearchPage && (
@@ -67,9 +78,11 @@ export default function TopBar() {
           >
             <Search size={14} className="text-ink-dim group-hover:text-ink-mute" />
             <span>플레이리스트, 곡, 큐레이터 검색</span>
-            <kbd className="ml-1 hidden rounded bg-bg/60 px-1.5 py-0.5 font-mono text-[10px] text-ink-dim ring-1 ring-line/10 xl:inline-block">
-              /search
-            </kbd>
+            {!native && (
+              <kbd className="ml-1 hidden rounded bg-bg/60 px-1.5 py-0.5 font-mono text-[10px] text-ink-dim ring-1 ring-line/10 xl:inline-block">
+                /search
+              </kbd>
+            )}
           </Link>
         )}
 
