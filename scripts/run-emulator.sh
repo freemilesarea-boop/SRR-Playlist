@@ -142,7 +142,12 @@ elif [[ -z "$(running_devices)" ]]; then
   AVD="$(echo "$AVDS" | head -1)"
   echo "${DIM}첫 번째 기기로 부팅합니다: $AVD${OFF}"
   enable_avd_keyboard "$AVD"
-  nohup "$EMULATOR" -avd "$AVD" -netdelay none -netspeed full >/dev/null 2>&1 &
+  # -prop 은 부팅 시점에 시스템 속성을 심는다. Google Play 이미지는 adb root 가
+  # 막혀 있어 부팅 후에는 언어를 바꿀 수 없는데, 이 경로는 root 없이 통한다.
+  # 한국어가 시스템 언어로 올라가야 Gboard 가 한글 자판을 같이 올린다 —
+  # 그게 없으면 회원가입·매장명 같은 화면을 아예 테스트할 수 없다.
+  nohup "$EMULATOR" -avd "$AVD" -netdelay none -netspeed full \
+    -prop persist.sys.locale=ko-KR >/dev/null 2>&1 &
   echo -n "부팅 대기 중"
   "$ADB" wait-for-device
   until [[ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
@@ -195,7 +200,8 @@ check_device_capabilities() {  # $1 = 기기 시리얼
   if [[ "$locale" != ko* ]]; then
     echo "${YEL}!${OFF} 시스템 언어가 한국어가 아닙니다 — ${YEL}한글 입력이 안 됩니다${OFF}."
     echo "  ${DIM}회원가입·매장명처럼 한글을 쳐야 하는 화면을 테스트할 수 없습니다.${OFF}"
-    echo "  ${DIM}npm run android:korean 을 한 번 실행하세요.${OFF}"
+    echo "  ${DIM}이 기기는 이미 켜진 뒤라 지금은 못 바꿉니다 — npm run android:korean 을${OFF}"
+    echo "  ${DIM}실행하면 한국어로 다시 띄워줍니다(다음부터는 자동).${OFF}"
   fi
 
   # 푸시(FCM)는 Play 서비스가 메시지를 받아 앱에 전달한다. 없으면 토큰조차 안 나온다.

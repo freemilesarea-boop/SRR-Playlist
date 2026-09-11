@@ -258,9 +258,13 @@ APNs 키(.p8)는 Apple Developer → Keys 에서 발급.
 npm run android:korean
 ```
 
-시스템 언어에 한국어를 추가한다(그러면 Gboard 가 한글 자판을 같이 올린다).
-AOSP 이미지는 한 번에 끝나고, Google Play 이미지는 adb 로 언어를 못 바꾸므로
-설정 화면을 열어주고 순서를 안내한다.
+가상기기를 껐다가 한국어를 심어서 다시 켠다. 부팅 후에는 언어를 바꿀 수 없어서다 —
+Google Play 이미지는 adb root 를 막아둬 setprop 이 통하지 않는다. 대신 에뮬레이터의
+`-prop persist.sys.locale=ko-KR` 플래그로 부팅 시점에 심는다(root 불필요).
+시스템 언어에 한국어가 올라가면 Gboard 가 한글 자판을 같이 띄운다.
+
+`npm run android:emu` 도 같은 플래그로 띄우므로, 새로 켜는 기기는 처음부터 한국어다.
+이 스크립트는 **이미 영어로 켜져 있는 기기**를 바꿀 때만 필요하다.
 
 자판 없이 당장 입력해야 하면 **복사·붙여넣기**가 가장 빠르다. 맥에서 한글을
 복사한 뒤 입력란을 길게 눌러 붙여넣으면 된다(Android Studio 에뮬레이터는 맥
