@@ -164,7 +164,7 @@ export default function BusinessPage() {
   const SlotIcon = slotIcon(displaySchedule?.slot_name);
 
   return (
-    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6">
+    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6 lg:space-y-6">
       {/* 헤더 — 1줄 컴팩트 (제목 + ON AIR/OFF 클릭 토글) */}
       <header className="flex items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/30">
@@ -278,7 +278,7 @@ export default function BusinessPage() {
 
             {/* 표지 + 제목 */}
             <div className="flex items-end gap-4">
-              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-line/20 sm:w-24">
+              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-line/20 sm:w-24 lg:w-32">
                 <AutoCover
                   title={displayPlaylist.title}
                   category={displayPlaylist.category}
@@ -290,7 +290,7 @@ export default function BusinessPage() {
                 <p className="text-[11px] uppercase tracking-wider text-white/65">
                   {displayIsFallback ? '폴백 재생' : '지금 자동 재생 슬롯'}
                 </p>
-                <h2 className="text-xl font-extrabold leading-tight text-white drop-shadow sm:text-2xl">
+                <h2 className="text-xl font-extrabold leading-tight text-white drop-shadow sm:text-2xl lg:text-3xl">
                   {displayPlaylist.title}
                 </h2>
               </div>
@@ -305,8 +305,10 @@ export default function BusinessPage() {
               </div>
             )}
 
-            {/* 시작/끄기 통합 버튼 */}
-            <div className="flex flex-col gap-2 sm:flex-row">
+            {/* 시작/끄기 통합 버튼
+                태블릿에서 버튼이 1200px 로 늘어나면 "어디를 눌러야 하는지" 가 흐려진다.
+                최대 폭을 잡아 손이 가는 크기로 남긴다. */}
+            <div className="flex flex-col gap-2 sm:flex-row lg:max-w-2xl">
               {isPlaying ? (
                 <button
                   onClick={stopBusinessMode}
@@ -393,7 +395,8 @@ export default function BusinessPage() {
         <BusinessQRSection playlists={businessOnlyPlaylists} />
       </CollapseSection>
 
-      {/* 다른 플레이리스트 둘러보기 */}
+      {/* 다른 플레이리스트 둘러보기
+          (자동 스케줄·QR 과 달리 가로로 긴 플레이리스트 행이 들어가므로 전체 폭을 쓴다) */}
       <CollapseSection
         icon={<Compass size={14} className="text-accent" />}
         title="다른 플레이리스트 둘러보기"

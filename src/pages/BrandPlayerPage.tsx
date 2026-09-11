@@ -298,7 +298,7 @@ export default function BrandPlayerPage() {
 
   if (loading && !config) {
     return (
-      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black text-white">
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black text-white pt-safe pb-safe pl-safe pr-safe">
         <Loader2 size={32} className="animate-spin text-accent" />
       </div>
     );
@@ -306,7 +306,7 @@ export default function BrandPlayerPage() {
 
   if (error && !hasQueue) {
     return (
-      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-black px-6 text-center text-white">
+      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-black px-6 text-center text-white pt-safe pb-safe pl-safe pr-safe">
         <Music size={40} className="text-white/40" />
         <p className="text-lg font-bold">{error}</p>
         <div className="flex gap-2">
@@ -318,7 +318,7 @@ export default function BrandPlayerPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-black text-white" data-presentation-mode={presentation}>
+    <div className="fixed inset-0 z-[90] flex flex-col bg-black text-white pt-safe pb-safe pl-safe pr-safe" data-presentation-mode={presentation}>
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다.
           전체화면(presentation) 위에도 떠야 하므로 z-[120] (BrandPresentationOverlays 보다 위). */}
       <PlaybackBlockedOverlay />

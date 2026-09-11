@@ -117,6 +117,38 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     expect(css).toContain('.native-shell .app-main > main');
   });
 
+  it('글자 키우기는 태블릿에서만 — 폰에서 키우면 좁은 화면이 넘친다', () => {
+    // 앱 하나가 아이폰(393px) · 갤럭시(412px) · 매장 태블릿(1280~2000px)에서 같이 돈다.
+    // 루트 글자를 무조건 키우면 폰에서 글자가 잘리고 버튼이 겹친다.
+    const media = css.slice(css.indexOf('@media (min-width: 1024px)'));
+    expect(media).toContain('font-size: 17px');
+    const beforeMedia = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+    expect(beforeMedia).not.toContain('font-size: 17px');
+    // 본문 폭 제한과 탭 높이도 태블릿 전용이어야 한다.
+    expect(media).toContain('.native-shell .app-main > main');
+    expect(media).toContain('min-height: 56px');
+  });
+
+  it('뼈대(사이드바·하단탭·푸터)는 폰에도 적용된다', () => {
+    const beforeMedia = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+    expect(beforeMedia).toContain('.native-shell .app-sidebar');
+    expect(beforeMedia).toContain('.native-shell .app-bottom-nav');
+    expect(beforeMedia).toContain('.native-shell .app-footer');
+  });
+
+  it.each([
+    'src/pages/StorePlayerPage.tsx',
+    'src/pages/BrandPlayerPage.tsx',
+  ])('%s 의 전체화면이 노치/홈바를 피한다', (file) => {
+    // fixed inset-0 은 화면 전체를 덮으므로, 아이폰에서는 상단 바가 노치 밑으로,
+    // 하단 상태줄이 홈 인디케이터 밑으로 들어가 가려진다.
+    const src = repoFile(file);
+    for (const m of src.matchAll(/className="fixed inset-0 z-\[90\][^"]*"/g)) {
+      expect(m[0]).toContain('pt-safe');
+      expect(m[0]).toContain('pb-safe');
+    }
+  });
+
   it('앱을 켰을 때 역할에 맞는 화면으로 보내는 훅이 셸에 붙어 있다', () => {
     // 이게 빠지면 매장 태블릿이 재부팅 후 마케팅 홈에 머물고, 아무도 안 누르면 무음이 된다.
     expect(repoFile('src/components/AppShell.tsx')).toContain('useNativeLanding()');

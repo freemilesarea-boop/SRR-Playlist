@@ -111,7 +111,7 @@ export default function StorePlayerPage() {
   const hasQueue = queue.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white">
+    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white pt-safe pb-safe pl-safe pr-safe">
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
       <PlaybackBlockedOverlay />
       {/* 상단 바: 상태 + 나가기 */}
@@ -155,17 +155,22 @@ export default function StorePlayerPage() {
         </button>
       </header>
 
-      {/* 본문 */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-4">
+      {/* 본문
+          폰은 세로 한 줄. 태블릿(lg+)은 가로로 벌려 커버 | 정보·컨트롤 2단 —
+          매장 태블릿은 가로로 세워두므로, 세로로 쌓으면 커버가 작아지고 좌우가 텅 빈다.
+          매장에서는 몇 걸음 떨어져서 "지금 무슨 곡인지" 를 보므로 커버와 제목이 커야 한다. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-4 lg:flex-row lg:gap-12 lg:px-12">
         {hasQueue && current ? (
           <>
-            <div className="relative aspect-square w-56 max-w-[60vw] overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10 sm:w-72">
+            <div className="relative aspect-square w-56 max-w-[60vw] shrink-0 overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10 sm:w-72 lg:w-[min(40vw,26rem)] lg:max-w-none">
               <AutoCover title={current.title} category={current.genre} imageUrl={current.cover_url} size="lg" />
             </div>
 
-            <div className="space-y-2 text-center">
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{current.title}</h1>
-              <p className="text-base text-white/70">{current.artist ?? '—'}</p>
+            {/* 태블릿에서 오른쪽 단 — 폰에서는 그냥 이어지는 흐름 (display: contents) */}
+            <div className="contents lg:flex lg:w-full lg:max-w-xl lg:flex-col lg:items-start lg:gap-6">
+            <div className="space-y-2 text-center lg:text-left">
+              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{current.title}</h1>
+              <p className="text-base text-white/70 lg:text-lg">{current.artist ?? '—'}</p>
               {playlist && (
                 <p className="inline-flex items-center gap-1 text-xs text-white/50">
                   <ListMusic size={12} /> {playlist.title}
@@ -173,7 +178,7 @@ export default function StorePlayerPage() {
               )}
               {/* X6.84 — 매장주 행동 데이터 (👍/👎) 수집. 로그인 + current 트랙 있을 때만. */}
               {storeId && current?.id && (
-                <div className="flex justify-center pt-2">
+                <div className="flex justify-center pt-2 lg:justify-start">
                   <StoreTrackReactionButtons
                     storeId={storeId}
                     trackId={current.id}
@@ -184,7 +189,7 @@ export default function StorePlayerPage() {
             </div>
 
             {/* 진행바 */}
-            <div className="flex w-full max-w-xl items-center gap-3 text-xs tabular-nums text-white/60">
+            <div className="flex w-full max-w-xl items-center gap-3 text-xs tabular-nums text-white/60 lg:max-w-none">
               <span>{formatTime(currentTime)}</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
                 <div
@@ -196,12 +201,12 @@ export default function StorePlayerPage() {
             </div>
 
             {/* 큰 컨트롤 — 브레이크/운영종료 중에는 본사 스케줄 준수를 위해 비활성. */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 lg:gap-8">
               <button
                 onClick={prev}
                 disabled={scheduleActive}
                 aria-label="이전 곡"
-                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10 lg:p-5"
               >
                 <SkipBack size={24} fill="currentColor" />
               </button>
@@ -209,7 +214,7 @@ export default function StorePlayerPage() {
                 onClick={() => (playing ? pause() : play())}
                 disabled={scheduleActive}
                 aria-label={playing ? '일시정지' : '재생'}
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:h-24 lg:w-24"
               >
                 {playing ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
               </button>
@@ -217,7 +222,7 @@ export default function StorePlayerPage() {
                 onClick={() => next()}
                 disabled={scheduleActive}
                 aria-label="다음 곡"
-                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10 lg:p-5"
               >
                 <SkipForward size={24} fill="currentColor" />
               </button>
@@ -244,6 +249,7 @@ export default function StorePlayerPage() {
                 <SkipForward size={12} /> 다음 곡: <span className="text-white/85">{upcoming.title}</span>
               </div>
             )}
+            </div>
           </>
         ) : (
           <div className="space-y-4 text-center">
