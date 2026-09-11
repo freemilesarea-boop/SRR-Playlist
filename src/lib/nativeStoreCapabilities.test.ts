@@ -162,6 +162,22 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     expect(repoFile('src/lib/companyInfo.ts')).toContain('사업자번호');
   });
 
+  it('브랜드 플레이어 상단 바가 폰에서 넘치지 않는다', () => {
+    // 폰(390px)에서 칩 3개 + 버튼 3개가 한 줄에 안 들어간다.
+    // 줄바꿈을 허용하고, 장식성 칩과 버튼 글자는 좁은 화면에서 숨긴다(아이콘은 남는다).
+    const src = repoFile('src/pages/BrandPlayerPage.tsx');
+    expect(src).toContain('flex flex-wrap items-center justify-between');
+    expect(src).toContain('md:inline-flex');
+    for (const label of ['다른 매장', '연결 해제', '나가기']) {
+      expect(src).toContain(`<span className="hidden sm:inline">${label}</span>`);
+    }
+  });
+
+  it('결제 폼이 태블릿에서 화면을 가로지르지 않는다', () => {
+    // 연락처 입력칸 하나가 1200px 을 가로지르면 어디에 무엇을 쓰는지 안 보인다.
+    expect(repoFile('src/pages/PricingPage.tsx')).toContain('lg:mx-auto lg:max-w-2xl');
+  });
+
   it('자동 스케줄의 3개 시간대는 넓은 화면에서만 가로로 벌린다', () => {
     // 오전·오후·저녁을 나란히 두면 하루 전체가 한 화면에 들어온다.
     // 다만 한 칸에 시간 입력 2개 + 플리 선택 + 자동 버튼이 들어가야 해서

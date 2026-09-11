@@ -614,7 +614,9 @@ function FranchisePanel({ ctx, onChanged }: {
 
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-4 rounded-3xl bg-bg-card p-5 ring-1 ring-line/10 sm:p-6">
+    // Panel 안은 전부 입력 폼이다. 태블릿에서 폭을 잡지 않으면 연락처 입력칸 하나가
+    // 1200px 을 가로질러, 어디를 눌러 무엇을 쓰는지 한눈에 안 들어온다.
+    <section className="space-y-4 rounded-3xl bg-bg-card p-5 ring-1 ring-line/10 sm:p-6 lg:mx-auto lg:max-w-2xl">
       <div>
         <h2 className="text-lg font-extrabold tracking-tight">{title}</h2>
         {subtitle && <p className="text-xs text-ink-mute">{subtitle}</p>}

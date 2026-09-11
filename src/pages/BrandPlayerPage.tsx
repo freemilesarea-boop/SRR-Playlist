@@ -323,27 +323,29 @@ export default function BrandPlayerPage() {
           전체화면(presentation) 위에도 떠야 하므로 z-[120] (BrandPresentationOverlays 보다 위). */}
       <PlaybackBlockedOverlay />
       {/* 상단 최소 바 (presentation 모드에서 숨김) */}
-      <header className={`flex items-center justify-between gap-3 px-5 py-3 ${presentation ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-2 text-xs font-semibold">
+      {/* 상단 바 — 폰(390px)에서는 칩 3개 + 버튼 3개가 한 줄에 안 들어간다.
+          줄바꿈을 허용하고, 장식성 칩과 버튼 글자는 좁은 화면에서 숨긴다(아이콘은 남긴다). */}
+      <header className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-5 ${presentation ? 'hidden' : ''}`}>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold sm:gap-2">
           <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1">
             <Sparkles size={12} className="text-accent" /> {config?.brand.name ?? '브랜드'}
           </span>
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${online ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'}`}>
             {online ? <Wifi size={12} /> : <WifiOff size={12} />}{online ? '온라인' : '오프라인'}
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-white/60">
+          <span className="hidden items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-white/60 md:inline-flex">
             <ShieldCheck size={12} /> 24시간 재생 준비됨
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={switchStore} title="다른 매장 코드 입력" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
-            <SwitchIcon size={13} /> 다른 매장
+            <SwitchIcon size={13} /> <span className="hidden sm:inline">다른 매장</span>
           </button>
           <button onClick={() => void disconnectDevice()} title="이 기기의 매장 연결 해제" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
-            <LogOut size={13} /> 연결 해제
+            <LogOut size={13} /> <span className="hidden sm:inline">연결 해제</span>
           </button>
           <button onClick={exitPlayer} title="플레이어 종료 (저장된 코드는 유지 — 다음에 자동 연결)" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
-            <X size={14} /> 나가기
+            <X size={14} /> <span className="hidden sm:inline">나가기</span>
           </button>
         </div>
       </header>
@@ -385,8 +387,8 @@ export default function BrandPlayerPage() {
         <div className="min-w-0 flex-1">
           {hasQueue && current ? (
             <>
-              <p className="truncate text-sm font-bold">{current.title}</p>
-              <p className="truncate text-xs text-white/55">{current.artist ?? '—'}</p>
+              <p className="truncate text-sm font-bold lg:text-lg">{current.title}</p>
+              <p className="truncate text-xs text-white/55 lg:text-sm">{current.artist ?? '—'}</p>
             </>
           ) : (
             <p className="text-sm text-white/60">재생 가능한 곡이 없어요. 브랜드 음악 정책을 확인해주세요.</p>
@@ -398,11 +400,11 @@ export default function BrandPlayerPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={prev} aria-label="이전 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"><SkipBack size={18} fill="currentColor" /></button>
-          <button onClick={() => (playing ? pause() : play())} aria-label={playing ? '일시정지' : '재생'} className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-black hover:bg-accent/90">
+          <button onClick={prev} aria-label="이전 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20 lg:p-3.5"><SkipBack size={18} fill="currentColor" /></button>
+          <button onClick={() => (playing ? pause() : play())} aria-label={playing ? '일시정지' : '재생'} className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-black hover:bg-accent/90 lg:h-16 lg:w-16">
             {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="ml-0.5" />}
           </button>
-          <button onClick={() => next()} aria-label="다음 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20"><SkipForward size={18} fill="currentColor" /></button>
+          <button onClick={() => next()} aria-label="다음 곡" className="rounded-full bg-white/10 p-2.5 hover:bg-white/20 lg:p-3.5"><SkipForward size={18} fill="currentColor" /></button>
           {/* Presentation Fullscreen 진입 — 저장 이미지만 전체화면. 음악은 계속 재생. */}
           <button
             onClick={() => void enterPresentation()}
