@@ -21,9 +21,15 @@
 export type PlaybackDeviceRisk =
   /** 네이티브 앱 — 포그라운드 서비스로 보호됨. 화면이 꺼져도 이어진다. */
   | 'native_app'
+  /**
+   * 홈 화면에 설치된 웹앱(PWA). 브라우저 탭이 아닌 독립 태스크로 뜨고,
+   * 크롬은 설치된 사이트에 자동재생을 허용한다 — 리로드 후에도 소리가 난다.
+   * 웹에서 갈 수 있는 최선이므로 더 권할 게 없다. 경고하지 않는다.
+   */
+  | 'installed_webapp'
   /** PC 브라우저 — 창을 열어두면 안정적. 숙대점도 PC 구간에서는 끊기지 않았다. */
   | 'desktop_browser'
-  /** 폰/태블릿 브라우저 — 백그라운드 전환 시 중단 위험. 경고 대상. */
+  /** 폰·태블릿 브라우저 — 백그라운드 전환 시 중단 위험. 경고 대상. */
   | 'mobile_browser';
 
 /**
@@ -35,6 +41,11 @@ const MOBILE_UA = /Android|iPhone|iPad|iPod|Windows Phone|Mobile Safari|SamsungB
 export interface PlaybackDeviceEnv {
   /** Capacitor 네이티브 쉘 안에서 실행 중인지 (isNativeApp()). */
   native: boolean;
+  /**
+   * 홈 화면에 설치돼 standalone 으로 실행 중인지 (isStandalone()).
+   * 설치를 권해놓고 설치한 사람에게 같은 경고를 계속 띄우면 안 된다.
+   */
+  standalone?: boolean;
   /** navigator.userAgent. */
   userAgent: string;
   /**
@@ -52,6 +63,9 @@ export interface PlaybackDeviceEnv {
  */
 export function assessPlaybackDeviceRisk(env: PlaybackDeviceEnv): PlaybackDeviceRisk {
   if (env.native) return 'native_app';
+  // 설치본을 브라우저보다 먼저 본다. UA 는 설치 여부를 구분하지 못하므로
+  // UA 를 먼저 보면 설치를 마친 매장에 "앱을 설치하세요" 를 계속 띄우게 된다.
+  if (env.standalone) return 'installed_webapp';
 
   const ua = env.userAgent ?? '';
   if (MOBILE_UA.test(ua)) return 'mobile_browser';
@@ -63,10 +77,11 @@ export function assessPlaybackDeviceRisk(env: PlaybackDeviceEnv): PlaybackDevice
 }
 
 /** 현재 런타임 기준 판정. 브라우저 API 접근은 여기서만 한다(위 함수는 순수 유지). */
-export function currentPlaybackDeviceRisk(native: boolean): PlaybackDeviceRisk {
+export function currentPlaybackDeviceRisk(native: boolean, standalone?: boolean): PlaybackDeviceRisk {
   if (typeof navigator === 'undefined') return 'desktop_browser';
   return assessPlaybackDeviceRisk({
     native,
+    standalone,
     userAgent: navigator.userAgent,
     hasTouch: typeof document !== 'undefined' && 'ontouchend' in document,
   });

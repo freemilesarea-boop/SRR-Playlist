@@ -16,6 +16,8 @@ import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionBut
 import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
+import { isStandalone } from '@/hooks/useInstallPrompt';
+import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -79,6 +81,8 @@ export default function StorePlayerPage() {
     void logPlaybackDiagnostic('session_start', {
       reason: takeReloadReason(),
       playerMode: 'store',
+      // 홈 화면 앱으로 설치했는지 기록 (BrandPlayerPage 와 동일 목적).
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
     });
     return watchPageLifecycle('store');
   }, []);

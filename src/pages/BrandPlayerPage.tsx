@@ -22,6 +22,8 @@ import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls'
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
+import { isStandalone } from '@/hooks/useInstallPrompt';
+import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
@@ -149,6 +151,9 @@ export default function BrandPlayerPage() {
     void logPlaybackDiagnostic('session_start', {
       reason: takeReloadReason(),
       playerMode: 'brand',
+      // 매장이 홈 화면 앱으로 설치했는지를 기록으로 남긴다. UA 로는 구분이 안 돼
+      // "설치하라고 했는데 했나?" 를 물어볼 수밖에 없었다(숙대점 2026-09-12).
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
     });
     return watchPageLifecycle('brand');
   }, []);

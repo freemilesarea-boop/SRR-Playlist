@@ -59,10 +59,39 @@ describe('assessPlaybackDeviceRisk — 기기 판별', () => {
   });
 });
 
+// ── 설치한 매장에 설치하라고 또 말하지 않는다 ────────────────────────────────
+// 2026-09-12 숙대점 사진에서 드러난 버그: standalone 판정이 빠져 있어, 홈 화면에
+// 설치를 마쳐도 "앱을 설치하세요" 배너가 그대로 떠 있었다. 설치를 권해놓고
+// 설치한 사람에게 같은 말을 반복하면 안내를 아예 안 믿게 된다.
+describe('홈 화면에 설치한 경우', () => {
+  it('설치본이면 경고하지 않는다 — 웹에서 갈 수 있는 최선이라 더 권할 게 없다', () => {
+    expect(assessPlaybackDeviceRisk(env({ standalone: true, userAgent: SUKDAE_PHONE })))
+      .toBe('installed_webapp');
+    expect(shouldWarnMobileBrowser('installed_webapp')).toBe(false);
+  });
+
+  it('설치 판정을 UA 보다 먼저 본다 — UA 는 설치 여부를 구분하지 못한다', () => {
+    // 이게 뒤집히면 설치한 매장이 계속 mobile_browser 로 잡혀 배너가 안 사라진다.
+    const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1';
+    expect(assessPlaybackDeviceRisk(env({ standalone: true, userAgent: ua }))).toBe('installed_webapp');
+  });
+
+  it('네이티브 앱이 설치본보다 우선이다', () => {
+    expect(assessPlaybackDeviceRisk(env({ native: true, standalone: true, userAgent: SUKDAE_PHONE })))
+      .toBe('native_app');
+  });
+
+  it('설치 안 했으면 그대로 경고한다', () => {
+    expect(assessPlaybackDeviceRisk(env({ standalone: false, userAgent: SUKDAE_PHONE })))
+      .toBe('mobile_browser');
+  });
+});
+
 describe('shouldWarnMobileBrowser', () => {
-  it('폰 브라우저에서만 경고한다', () => {
+  it('설치 안 한 폰·태블릿 브라우저에서만 경고한다', () => {
     expect(shouldWarnMobileBrowser('mobile_browser')).toBe(true);
     expect(shouldWarnMobileBrowser('desktop_browser')).toBe(false);
     expect(shouldWarnMobileBrowser('native_app')).toBe(false);
+    expect(shouldWarnMobileBrowser('installed_webapp')).toBe(false);
   });
 });

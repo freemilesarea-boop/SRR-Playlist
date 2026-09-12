@@ -14,12 +14,14 @@ import { useState } from 'react';
 import { Smartphone, X } from 'lucide-react';
 import InstallAppButton from '@/components/InstallAppButton';
 import { isNativeApp } from '@/lib/native';
+import { isStandalone } from '@/hooks/useInstallPrompt';
 import { currentPlaybackDeviceRisk, shouldWarnMobileBrowser } from '@/lib/mobileBrowserPlaybackRisk';
 
 export default function MobileBrowserPlaybackWarning({ className = '' }: { className?: string }) {
   const [dismissed, setDismissed] = useState(false);
   // 판정은 매 렌더 싸다(문자열 정규식 1회). 기기가 바뀌면 어차피 새 세션이다.
-  const risk = currentPlaybackDeviceRisk(isNativeApp());
+  // isStandalone() — 설치를 마친 매장에는 더 권할 게 없으므로 배너를 내린다.
+  const risk = currentPlaybackDeviceRisk(isNativeApp(), isStandalone());
 
   if (dismissed || !shouldWarnMobileBrowser(risk)) return null;
 
@@ -30,9 +32,9 @@ export default function MobileBrowserPlaybackWarning({ className = '' }: { class
     >
       <Smartphone size={14} className="mt-0.5 shrink-0 text-amber-300" />
       <p className="min-w-[12rem] flex-1">
-        <b className="font-bold text-amber-50">폰 브라우저로 재생 중입니다.</b>{' '}
+        <b className="font-bold text-amber-50">인터넷 창으로 재생 중입니다.</b>{' '}
         화면이 꺼지거나 다른 앱으로 넘어가면 <b className="font-bold text-amber-50">음악이 멈출 수 있어요.</b>{' '}
-        매장 음악은 <b className="font-bold text-amber-50">PC</b>로 틀거나 <b className="font-bold text-amber-50">매장용 앱</b>을 쓰는 걸 권장합니다.
+        오른쪽 <b className="font-bold text-amber-50">[매장용 앱 설치]</b>를 누르시면 홈 화면에 앱이 생기고, 그걸로 켜시면 잘 안 끊깁니다.
       </p>
       <div className="flex shrink-0 items-center gap-1">
         <InstallAppButton variant="ghost" label="매장용 앱 설치" />
