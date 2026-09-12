@@ -131,7 +131,15 @@ self.addEventListener('push', (event) => {
     // 텍스트 payload 폴백
     payload = { title: event.data.text() || 'DEUDDA' };
   }
-  if (payload.kind === 'player_recover') {
+  // 복구 신호 판별 — kind 와 tag 둘 다 본다.
+  //
+  // kind 는 명시적이지만 send-push 가 통과시켜줘야 도달한다. tag 는 예전부터
+  // 그대로 통과되므로 send-push 재배포 없이도 이 경로가 돈다
+  // (dispatch-brand-player-alerts 가 tag='player-recover-<incident_id>' 로 보낸다).
+  // 둘 중 하나만 맞아도 복구로 처리해, 서버 배포 순서에 상관없이 동작하게 한다.
+  const isRecoverSignal =
+    payload.kind === 'player_recover' || (payload.tag ?? '').startsWith('player-recover');
+  if (isRecoverSignal) {
     event.waitUntil(handlePlayerRecover(payload));
     return;
   }
