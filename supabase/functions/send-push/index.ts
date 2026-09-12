@@ -119,6 +119,10 @@ serve(async (req: Request) => {
     url: (payload.url as string | undefined) ?? '/',
     tag: payload.tag as string | undefined,
     icon: payload.icon as string | undefined,
+    // kind — 서비스워커가 알림 대신 다른 동작을 할지 가르는 값.
+    // 'player_recover' 면 sw.ts 가 살아있는 창을 깨워 재생을 되살리고,
+    // 아무도 응답하지 않을 때만 알림을 띄운다. 없으면 기존대로 알림만.
+    kind: payload.kind as string | undefined,
   };
 
   // 사용자의 구독 목록 조회 — 웹(브라우저)과 네이티브(앱)를 각각.

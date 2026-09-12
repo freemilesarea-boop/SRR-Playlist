@@ -19,6 +19,7 @@ import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlayb
 import { isStandalone } from '@/hooks/useInstallPrompt';
 import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
+import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -328,6 +329,9 @@ export default function StorePlayerPage() {
 
         {/* 폰 브라우저로 틀어둔 경우 — 백그라운드 전환 시 끊김 위험(숙대점 2026-09-11). */}
         <MobileBrowserPlaybackWarning />
+
+        {/* 끊김 자동 복구(푸시) 활성화 — 알림 허용이 없으면 복구 신호가 기기에 닿지 않는다. */}
+        <PlayerRecoveryOptIn />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-white/55">
