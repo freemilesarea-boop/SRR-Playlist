@@ -320,3 +320,70 @@ npm run android:paste -- "쿠우쿠우 강남점"
 - `networkState: 3` → 소스를 못 찾음(URL·캐시)
 - `readyState: 0` + `networkState: 2` → 계속 받는 중(느리거나 디코딩 실패)
 - `currentSrc` 가 `blob:` → 오프라인 캐시가 깨짐
+
+---
+
+## 역할별 테스트 계정
+
+개인 계정만으로는 매장·아티스트·본사 화면을 열 수 없다. 역할 판정이 서버에서
+이뤄지기 때문이다(`isStoreAccount()` 는 `account_type` / `membership_tier` /
+`subscription_type` 셋을, 본사는 `enterprise_accounts.auth_user_id` 를 본다).
+아래 계정은 그 조건을 갖춰 운영 DB 에 만들어 둔 것이다.
+
+**비밀번호는 넷 다 `DeuddaQA!2026`.**
+
+| 역할 | 이메일 | 들어가는 화면 |
+|---|---|---|
+| 개인(무료) | `qa-user@deudda.test` | 홈·검색·라이브러리, 요금제 업그레이드 |
+| 매장 | `qa-store@deudda.test` | `/business` 대시보드, `/business/player` |
+| 아티스트 | `qa-artist@deudda.test` | `/artist` 대시보드, 계약, 정산 |
+| 본사(HQ) | `demohq@deudda.com` | `/enterprise/hq` 및 `/enterprise/*` 전체 |
+
+`@deudda.test` 는 예약된 TLD 라 실제로 메일이 나가지 않는다. 넷 다 이메일 인증을
+마친 상태로 만들었으므로 확인 메일을 기다릴 필요가 없다.
+
+### 브랜드 플레이어
+
+브랜드 플레이어는 계정이 아니라 **매장 코드**로 들어간다. 새로 만들 필요 없이
+기존 데모 본사를 쓰면 된다:
+
+```
+/brand → 매장 코드에  DEMO-ST-YSA5CP  입력 → 브랜드 "데모" 플레이어
+```
+
+### 각 계정이 실제로 무엇을 갖고 있나
+
+- **매장** — `business_profiles` 에 "큐에이 테스트 매장"(카페, 09:00~22:00)이 연결돼
+  있다. 시간대 스케줄은 **일부러 비워 뒀다** — 스케줄러로 직접 만드는 것이 매장
+  대시보드의 핵심 동작이라 비어 있어야 그걸 테스트할 수 있다.
+- **아티스트** — `artist_profiles` 가 `approved`, 계약은 `signed`. 그래서 승인 대기
+  화면이 아니라 정식 대시보드로 들어간다.
+- **본사** — 기존 "Deudda 데모 본사"에 이미 연결돼 있던 계정이다. `auth.identities`
+  행이 없어서 비밀번호가 맞아도 로그인이 안 되던 것을 고쳤다(GoTrue 는 이메일
+  로그인 시 `auth.identities` 로 사용자를 찾는다).
+
+### 확인한 것 / 확인 못 한 것
+
+SQL 로 확인한 것: 저장된 bcrypt 해시가 위 비밀번호와 일치하고, 넷 다 이메일 인증
+완료·차단 없음·`identities` 행 있음. 각 계정으로 가장해 RLS 를 그대로 태운 결과
+매장은 자기 매장만, 아티스트는 자기 프로필만 보이고, 본사만 `get_my_enterprise_role()`
+이 `is_hq=true` 를 돌려준다. 곡 1,554개·플레이리스트 17개가 양쪽에서 보인다.
+
+확인 못 한 것: **실제 HTTP 로그인**. 개발 컨테이너의 네트워크 정책이 `supabase.co`
+로의 아웃바운드를 막아서 여기서는 토큰을 받아볼 수 없었다. 기기에서 직접 확인해야 한다.
+
+### 다 쓰고 나서 지우기
+
+테스트 계정은 id 가 `da000000-0000-4000-8000-…` 으로 시작한다. 이것만 지우면 된다
+(데모 본사 계정 `demohq@deudda.com` 은 원래 있던 데이터라 건드리지 않는다):
+
+```sql
+delete from auth.users where id::text like 'da000000-0000-4000-8000-%';
+```
+
+이 한 줄이면 된다. `public.users.id` 가 `auth.users` 를 `on delete cascade` 로
+참조하고(`users_id_fkey`), `business_profiles` · `artist_profiles` 는 다시
+`public.users` 를 같은 방식으로 참조하며, `auth.identities` 도 함께 지워진다.
+
+확인할 때 `information_schema` 는 쓰지 말 것 — auth 스키마에 대한 권한이 없으면
+외래키가 **없는 것처럼** 빈 결과를 돌려준다. `pg_constraint` 로 봐야 한다.
