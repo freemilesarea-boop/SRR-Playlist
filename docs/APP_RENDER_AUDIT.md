@@ -84,18 +84,46 @@
 
 ---
 
-## 별건: 본사 계정이 `/enterprise/hq` 를 못 연다 (미해결)
+## 별건: 본사 계정이 `/enterprise/hq` 를 못 열던 것 — 해결
 
 게이트가 두 개인데 서로 다른 테이블을 본다.
 
 - `/enterprise/*` 대부분 → `get_my_enterprise_role()` → `enterprise_accounts.auth_user_id`
 - `/enterprise/hq` → `get_my_franchise_admin()` → **`franchise_admins` 행**
 
-테스트용 본사 계정(`demohq@deudda.com`)은 앞쪽만 만족한다. 운영 DB 에서 확인:
+테스트용 본사 계정(`demohq@deudda.com`)은 앞쪽만 만족해서 뒤쪽에서 막혔다.
+원인은 계정이 아니라 데이터였다 — 프랜차이즈 4개 **전부 관리자가 0명**이라
+`/enterprise/hq` 를 누구도 열 수 없는 상태였다.
 
-```
-get_my_enterprise_role()   → is_hq = true, "Deudda 데모 본사"
-get_my_franchise_admin()   → is_franchise_admin = false
+이미 있던 데모 프랜차이즈(`Deudda 데모 본사`, slug `demo`, 데모 매장 3곳)에
+데모 HQ 계정을 `owner` 로 연결했다. 새 프랜차이즈를 만들지 않았고, 다른 브랜드의
+데이터는 건드리지 않았다.
+
+```sql
+insert into public.franchise_admins (franchise_id, user_id, role)
+values ('0aa238a1-85bd-485d-8804-cee9de5b65cc',   -- Deudda 데모 본사
+        'de700001-0000-0000-0000-000000000001',   -- demohq@deudda.com
+        'owner');
 ```
 
-기기에서 이 화면을 테스트하려면 `franchise_admins` 에 행을 하나 넣어야 한다.
+그 계정으로 가장해 RLS 를 그대로 태워 확인한 결과:
+
+| 호출 | 결과 |
+|---|---|
+| `get_my_franchise_admin()` | `is_franchise_admin: true`, `admin_role: owner`, "Deudda 데모 본사" |
+| `get_my_enterprise_role()` | `is_hq: true`, brand_code `DEMO` |
+| `get_my_franchise_hq_dashboard()` | 전체 매장 3 · 온라인 0 · 오프라인 3 · 정책 0 · 지역 0 |
+
+페이지가 읽는 필드(`total_stores` `online_stores` `offline_stores` `active_policies`
+`regions` `recent_assignments`)가 모두 채워져 나온다. 빈 것은 빈 배열이라
+`.length` 도 안전하다.
+
+매장 3곳이 전부 "오프라인" 인 것은 정상이다 — 아무도 재생 중이 아니다.
+
+되돌리려면:
+
+```sql
+delete from public.franchise_admins
+ where franchise_id = '0aa238a1-85bd-485d-8804-cee9de5b65cc'
+   and user_id = 'de700001-0000-0000-0000-000000000001';
+```

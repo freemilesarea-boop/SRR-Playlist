@@ -339,6 +339,10 @@ npm run android:paste -- "쿠우쿠우 강남점"
 | 아티스트 | `qa-artist@deudda.test` | `/artist` 대시보드, 계약, 정산 |
 | 본사(HQ) | `demohq@deudda.com` | `/enterprise/hq` 및 `/enterprise/*` 전체 |
 
+`/enterprise/hq` 는 다른 게이트(`franchise_admins`)를 쓴다. 이 계정을 데모
+프랜차이즈(매장 3곳)의 `owner` 로 연결해뒀으므로 그대로 열린다 — 자세한 내용은
+`APP_RENDER_AUDIT.md` 참고.
+
 `@deudda.test` 는 예약된 TLD 라 실제로 메일이 나가지 않는다. 넷 다 이메일 인증을
 마친 상태로 만들었으므로 확인 메일을 기다릴 필요가 없다.
 
