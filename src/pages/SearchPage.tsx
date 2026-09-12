@@ -231,7 +231,7 @@ export default function SearchPage() {
                 <button
                   key={q + i}
                   onClick={() => onSubmitChip(q)}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent ring-1 ring-accent/20 hover:bg-accent/15"
+                  className="app-tap inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent ring-1 ring-accent/20 hover:bg-accent/15"
                 >
                   <span className="text-[10px] opacity-70">{i + 1}</span>
                   <span>{q}</span>

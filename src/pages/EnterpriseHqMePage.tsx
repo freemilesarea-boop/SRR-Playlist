@@ -73,7 +73,7 @@ export default function EnterpriseHqMePage() {
   if (isProfileReady && !user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 pt-3 pb-12 sm:px-6">
+    <div className="app-tap-area mx-auto max-w-3xl space-y-4 px-4 pt-3 pb-12 sm:px-6">
       <EnterprisePaymentBanner />
       <div className="flex items-center gap-2">
         <Link to="/profile"

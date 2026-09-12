@@ -159,7 +159,7 @@ export default function SalesPartnersPage() {
               const on = form.target_business_types.includes(t);
               return (
                 <button key={t} type="button" onClick={() => toggleType(t)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${on ? 'bg-violet-600 text-white ring-violet-600' : 'bg-bg-soft text-ink-mute ring-line/10 hover:text-ink'}`}>
+                  className={`app-tap rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${on ? 'bg-violet-600 text-white ring-violet-600' : 'bg-bg-soft text-ink-mute ring-line/10 hover:text-ink'}`}>
                   {t}
                 </button>
               );

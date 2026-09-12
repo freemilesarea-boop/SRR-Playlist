@@ -132,7 +132,7 @@ export default function EnterpriseOpsStoresPage() {
   const hasMore = result?.pagination.has_more ?? false;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="app-tap-area mx-auto w-full max-w-6xl px-4 py-6">
       {/* header */}
       <div className="mb-4 flex items-center gap-3">
         <Link to="/enterprise/me" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card" aria-label="뒤로">

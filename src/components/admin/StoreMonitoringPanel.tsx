@@ -170,7 +170,7 @@ export default function StoreMonitoringPanel() {
     ]).then(([f, r]) => {
       if (!alive) return;
       setFranchises(Array.isArray(f) ? f : []);
-      setRegions('data' in r ? r.data : []);
+      setRegions(Array.isArray(r?.data) ? r.data : []);
     });
     return () => { alive = false; };
   }, []);

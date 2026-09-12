@@ -73,7 +73,7 @@ export default function EnterpriseHqIntelPage() {
   if (!authLoading && !user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 p-4 pb-24">
+    <div className="app-tap-area mx-auto max-w-6xl space-y-5 p-4 pb-24">
       <PageHeader />
       <ExecutiveSummarySection />
       <KpiSection />
@@ -874,7 +874,7 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => voi
       </p>
       <button
         onClick={onRetry}
-        className="mt-2 rounded bg-white/70 border border-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-900 hover:bg-white dark:bg-rose-500/30 dark:border-transparent dark:text-rose-50 dark:hover:bg-rose-500/40"
+        className="app-tap mt-2 rounded bg-white/70 border border-slate-200 px-3 py-0.5 text-[11px] font-bold text-slate-900 hover:bg-white dark:bg-rose-500/30 dark:border-transparent dark:text-rose-50 dark:hover:bg-rose-500/40"
       >
         재시도
       </button>

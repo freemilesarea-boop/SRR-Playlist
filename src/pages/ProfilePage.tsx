@@ -211,7 +211,7 @@ export default function ProfilePage() {
   return (
     // 설정·목록형 화면이다. 폭을 잡지 않으면 태블릿에서 "구독 관리" 라벨과
     // 오른쪽 화살표가 1200px 떨어져 한 줄로 안 읽힌다.
-    <div className="space-y-8 px-4 pb-8 pt-6 sm:px-6 lg:mx-auto lg:max-w-3xl">
+    <div className="app-tap-area space-y-8 px-4 pb-8 pt-6 sm:px-6 lg:mx-auto lg:max-w-3xl">
       <EnterprisePaymentBanner />
       <header className="flex items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-2xl font-bold text-bg">

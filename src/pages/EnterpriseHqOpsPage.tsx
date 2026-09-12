@@ -65,7 +65,7 @@ export default function EnterpriseHqOpsPage() {
   if (!authLoading && !user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 p-4 pb-24">
+    <div className="app-tap-area mx-auto max-w-6xl space-y-5 p-4 pb-24">
       <PageHeader />
       <HeroKpiSection />
       <StoresSection />

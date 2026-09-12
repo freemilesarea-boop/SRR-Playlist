@@ -122,7 +122,19 @@ export async function listEnterpriseRegions(
     p_include_deleted: params.includeDeleted ?? false,
   });
   if (error) { console.error('[enterpriseRegionsApi] list failed', error); throw error; }
-  return data as EnterpriseRegionListResponse;
+  // RPC 가 null 을 돌려줄 수 있다(권한/빈 결과). 그대로 캐스팅하면 타입은 통과하지만
+  // 호출부가 res.data 를 읽다가 터진다 — 매장 모니터링 패널이 통째로 죽던 원인.
+  const res = data as EnterpriseRegionListResponse | null;
+  return {
+    success: res?.success ?? false,
+    data: Array.isArray(res?.data) ? res.data : [],
+    pagination: res?.pagination ?? {
+      total: 0,
+      limit: params.limit ?? 50,
+      offset: params.offset ?? 0,
+      has_more: false,
+    },
+  };
 }
 
 export async function createEnterpriseRegion(

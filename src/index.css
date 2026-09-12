@@ -233,6 +233,31 @@ input[type='range']::-moz-range-thumb {
   padding-bottom: 9rem !important;
 }
 
+/* 손가락으로 누를 수 있는 최소 크기.
+ *
+ * 웹은 마우스 포인터라 높이 29px 짜리 칩도 정확히 눌린다. 앱은 아니다 — 손가락 접촉면이
+ * 9mm 안팎이라 그 크기는 옆 것을 같이 누른다. 권장치는 44px(Apple HIG / Material).
+ *
+ * 다만 앱에서도 모든 버튼을 키우면 관리자 화면처럼 조작부가 빽빽한 곳은 오히려 못 쓰게 된다.
+ * 그래서 전역 규칙 대신 .app-tap 을 붙인 것만 키운다 — 어디를 키웠는지 코드에서 보이게.
+ */
+.native-shell .app-tap {
+  min-height: 44px;
+}
+
+/* 조작부가 수십 개 컴포넌트에 흩어진 화면(관리자·내 정보)은 하나씩 붙이는 게 불가능하다.
+ * 그런데 거기가 앱에서 가장 작다 — 높이 16~28px 짜리가 화면마다 10개씩 나온다.
+ * 그래서 그 화면 안에서만 일괄로 바닥을 깐다.
+ *
+ * 44px 가 아니라 40px 인 이유는, 표가 빽빽한 관리자 화면에서 행 높이가 한 번에 2.5배가 되면
+ * 오히려 한 화면에 아무것도 안 들어오기 때문이다.
+ * 웹(마우스)에는 적용되지 않으므로 데스크톱 밀도는 그대로다. */
+.native-shell .app-tap-area button,
+.native-shell .app-tap-area a[href],
+.native-shell .app-tap-area [role='button'] {
+  min-height: 40px;
+}
+
 /* 터치: 300ms 탭 지연 제거 + 길게 눌렀을 때 파란 하이라이트 제거 */
 .native-shell button,
 .native-shell a,

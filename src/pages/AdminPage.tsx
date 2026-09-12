@@ -460,7 +460,7 @@ export default function AdminPage() {
   }, []);
 
   return (
-    <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
+    <div className="app-tap-area space-y-6 px-4 pb-8 pt-6 sm:px-6">
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
@@ -517,7 +517,7 @@ export default function AdminPage() {
                   onClick={() => selectGroup(g)}
                   aria-current={isActive ? 'page' : undefined}
                   title={groupHint(g)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold tracking-wider transition ${
+                  className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold tracking-wider transition ${
                     isActive
                       ? 'bg-ink text-bg ring-1 ring-ink'
                       : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
@@ -540,7 +540,7 @@ export default function AdminPage() {
                     key={sg.name}
                     onClick={() => selectSubgroup(sg.name)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                    className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       isActive
                         ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50'
                         : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
@@ -561,7 +561,7 @@ export default function AdminPage() {
                 key={t.key}
                 onClick={() => selectTab(t.key)}
                 aria-current={tab === t.key ? 'page' : undefined}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                   tab === t.key
                     ? 'bg-accent text-black'
                     : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
@@ -574,7 +574,7 @@ export default function AdminPage() {
             {(hiddenAdvancedCount > 0 || showAdvanced) && (
               <button
                 onClick={() => setShowAdvanced((v) => !v)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-xs font-medium text-ink-mute ring-1 ring-line/15 transition hover:text-ink hover:ring-line/25"
+                className="app-tap inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-xs font-medium text-ink-mute ring-1 ring-line/15 transition hover:text-ink hover:ring-line/25"
                 aria-expanded={showAdvanced}
               >
                 {showAdvanced ? '간단히' : `고급 ${hiddenAdvancedCount}`}
@@ -587,7 +587,7 @@ export default function AdminPage() {
           {breadcrumbFor(tab, TABS.find((t) => t.key === tab)?.label ?? tab).map((c, i, arr) => (
             <li key={`${c.label}-${i}`} className="flex items-center gap-1">
               {c.tab && i < arr.length - 1 ? (
-                <button className="hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
+                <button className="app-tap px-1 hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
                   {c.label}
                 </button>
               ) : (
