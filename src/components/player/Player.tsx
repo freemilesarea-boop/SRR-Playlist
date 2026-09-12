@@ -142,6 +142,21 @@ function truncateSetOldest<T>(set: Set<T>, max: number): number {
 
 /** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
 let lastErrorToastAt = 0;
+/**
+ * loadedmetadata 를 기다리는 한계 시간.
+ *
+ * 이 타임아웃이 잡으려는 것은 "이 파일은 이 기기에서 절대 못 연다" 는 경우다
+ * (iOS 가 못 푸는 WAV 등). 그런 파일은 보통 error 이벤트로 먼저 걸러지고, 여기까지
+ * 오는 건 duration 이 0:00 에 고착돼 조용히 멈춘 경우뿐이다.
+ *
+ * 예전 12초는 짧았다. 서버가 Range 를 쓰지 않고 200 으로 파일 전체를 내려주면
+ * (에뮬레이터·느린 회선에서 실제로 그렇게 된다) 12초 안에 메타데이터가 못 온다.
+ * 그러면 멀쩡한 파일을 "재생 불가" 로 처리해버린다 — 매장에서는 그게 곧 무음이다.
+ * 느린 회선을 고장으로 오판하지 않을 만큼 늘렸다. 진짜 디코딩 실패는 error 이벤트가
+ * 즉시 잡으므로, 이 시간을 늘려도 고장 감지가 늦어지지는 않는다.
+ */
+const META_TIMEOUT_MS = 25_000;
+
 const ERROR_TOAST_DEBOUNCE_MS = 3_000;
 
 /**
@@ -1247,8 +1262,8 @@ export default function Player() {
       clearMetaTimer();
       if (playing) {
         try { audio.load(); } catch { /* noop */ }
-        // 메타데이터 로딩 타임아웃 — 12초 안에 loadedmetadata 가 없으면(duration 0:00 고착)
-        // 재생 불가로 처리(iOS 가 디코딩 못 하는 WAV 등). onLoadedMetadata 에서 해제.
+        // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
+        // 시간 선택 이유는 META_TIMEOUT_MS 참고. onLoadedMetadata 에서 해제.
         const trackId = current.id;
         metaTimerRef.current = window.setTimeout(() => {
           const a = activeRef();
@@ -1257,7 +1272,9 @@ export default function Player() {
               && (!a || !Number.isFinite(dur) || (dur ?? 0) <= 0)) {
              
             console.warn('[audio] metadata timeout — duration 0:00, 재생 불가 처리', {
-              id: trackId, title: current.title, src: a?.currentSrc, readyState: a?.readyState, networkState: a?.networkState,
+              id: trackId, title: current.title, src: a?.currentSrc,
+              readyState: a?.readyState, networkState: a?.networkState,
+              timeoutMs: META_TIMEOUT_MS,
             });
             usePlaybackHealthStore.getState().reportPlaybackError('META_TIMEOUT');
             // X6.67 — 매장 무인환경에서는 무음 (사용자 보이지 않음) → Sentry alert.
@@ -1272,7 +1289,7 @@ export default function Player() {
             setErrored(true);
             pause();
           }
-        }, 12000);
+        }, META_TIMEOUT_MS);
       }
       audio.currentTime = 0;
       audio.volume = volume;
