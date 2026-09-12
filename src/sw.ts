@@ -68,6 +68,58 @@ interface PushPayload {
   badge?: string;
   url?: string;
   tag?: string;
+  /**
+   * 'player_recover' 면 알림 대신 복구를 먼저 시도한다(매장 재생 되살리기).
+   * 없으면 기존 동작 그대로 — 알림만 띄운다.
+   */
+  kind?: string;
+}
+
+/**
+ * 매장 플레이어 복구 신호를 살아있는 창에 전달하고 회신을 기다린다.
+ *
+ * 왜 회신을 기다리나 — 창이 **얼어 있으면** postMessage 는 전달된 것처럼 보이지만
+ * 아무도 처리하지 않는다. 그 경우를 못 가려내면 "창이 있으니 괜찮겠지" 하고
+ * 알림을 안 띄워 매장이 조용한 채로 남는다. 회신이 오면 살아있는 것이다.
+ */
+async function askClientToRecover(client: Client, timeoutMs: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const done = (v: boolean) => { if (!settled) { settled = true; resolve(v); } };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    try {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (e: MessageEvent) => {
+        clearTimeout(timer);
+        done((e.data as { ok?: boolean } | null)?.ok === true);
+      };
+      client.postMessage({ type: 'PLAYER_RECOVER' }, [ch.port2]);
+    } catch {
+      clearTimeout(timer);
+      done(false);
+    }
+  });
+}
+
+/**
+ * kind='player_recover' — 서버가 매장 재생이 죽었다고 판단했을 때.
+ *
+ * 살아있는 창이 처리했으면 알림을 띄우지 않는다. 매장 기기에 알림이 쌓이면
+ * 정작 사람이 봐야 할 때 무시하게 된다. 아무도 응답하지 않을 때만 사람을 부른다.
+ */
+async function handlePlayerRecover(payload: PushPayload): Promise<void> {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const acks = await Promise.all(clients.map((c) => askClientToRecover(c, 3000)));
+  if (acks.some(Boolean)) return;
+
+  await self.registration.showNotification(payload.title || '음악이 멈췄어요', {
+    body: payload.body ?? '화면을 눌러 음악을 다시 켜주세요.',
+    icon: payload.icon ?? '/pwa-192x192.png',
+    badge: payload.badge ?? '/favicon-32.png',
+    data: { url: payload.url ?? '/' },
+    tag: payload.tag ?? 'player-recover',
+    requireInteraction: true,
+  });
 }
 
 self.addEventListener('push', (event) => {
@@ -78,6 +130,10 @@ self.addEventListener('push', (event) => {
   } catch {
     // 텍스트 payload 폴백
     payload = { title: event.data.text() || 'DEUDDA' };
+  }
+  if (payload.kind === 'player_recover') {
+    event.waitUntil(handlePlayerRecover(payload));
+    return;
   }
   const title = payload.title || 'DEUDDA';
   event.waitUntil(

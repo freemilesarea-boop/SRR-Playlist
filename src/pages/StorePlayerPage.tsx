@@ -18,6 +18,7 @@ import { isNativeApp } from '@/lib/native';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { isStandalone } from '@/hooks/useInstallPrompt';
 import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
+import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -86,6 +87,22 @@ export default function StorePlayerPage() {
     });
     return watchPageLifecycle('store');
   }, []);
+
+  // 서버가 보낸 복구 신호 수신 (BrandPlayerPage 와 동일 — 탭이 얼어도 SW 가 깨운다).
+  useEffect(() => listenForRecoverySignal({
+    readState: () => {
+      const p = usePlayerStore.getState();
+      const h = usePlaybackHealthStore.getState();
+      return {
+        businessMode: useBusinessStore.getState().businessMode,
+        playing: p.playing,
+        audioActive: h.audioActive,
+        autoplayBlocked: h.autoplayBlocked,
+        suppressed: p.scheduleSuppressed,
+      };
+    },
+    resume: () => usePlayerStore.getState().play(),
+  }), []);
 
   // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
   const storeId = useAuthStore((s) => s.user?.id ?? null);

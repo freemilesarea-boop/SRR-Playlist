@@ -24,6 +24,7 @@ import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { isStandalone } from '@/hooks/useInstallPrompt';
 import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
+import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
@@ -157,6 +158,23 @@ export default function BrandPlayerPage() {
     });
     return watchPageLifecycle('brand');
   }, []);
+
+  // 서버가 보낸 복구 신호 수신 — 탭이 얼어 있어도 서비스워커가 깨워준다.
+  // 숙대점 4시간 28분 무음(2026-09-12)이 이 경로가 없어서 생겼다.
+  useEffect(() => listenForRecoverySignal({
+    readState: () => {
+      const p = usePlayerStore.getState();
+      const h = usePlaybackHealthStore.getState();
+      return {
+        businessMode: useBusinessStore.getState().businessMode,
+        playing: p.playing,
+        audioActive: h.audioActive,
+        autoplayBlocked: h.autoplayBlocked,
+        suppressed: p.scheduleSuppressed,
+      };
+    },
+    resume: () => usePlayerStore.getState().play(),
+  }), []);
 
   // 브랜드/서비스 로고 로드(멱등). AppShell 밖 kiosk 라우트에서도 로고 확보.
   useEffect(() => { void loadBrandSettings(); }, [loadBrandSettings]);
