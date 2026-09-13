@@ -32,10 +32,13 @@ describe('15. Recovery Console 은 관리자만', () => {
 });
 
 describe('매장 클라이언트 권한 — 읽기만, 자기 것만', () => {
-  it('authenticated 에 SELECT 만 준다', () => {
+  it('authenticated 에 SELECT 만 준다 (TRUNCATE 포함 나머지는 회수)', () => {
+    // TRUNCATE 는 RLS 를 타지 않는다 — 남겨두면 로그인한 아무나 명령 큐를 비울 수 있다.
+    expect(sql0520).toContain('revoke all on public.brand_player_commands from authenticated;');
     expect(sql0520).toContain('grant select on public.brand_player_commands to authenticated;');
-    expect(sql0520).toContain(
-      'revoke insert, update, delete on public.brand_player_commands from authenticated;');
+    const revokeAt = sql0520.indexOf('revoke all on public.brand_player_commands from authenticated;');
+    const grantAt = sql0520.indexOf('grant select on public.brand_player_commands to authenticated;');
+    expect(revokeAt).toBeLessThan(grantAt);   // 회수가 먼저, 그 다음 SELECT 부여
   });
 
   it('anon 은 이 테이블에 아무 권한도 없다', () => {

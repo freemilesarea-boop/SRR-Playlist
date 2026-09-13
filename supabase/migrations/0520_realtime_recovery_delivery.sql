@@ -39,9 +39,12 @@ comment on column public.brand_player_commands.delivery_source is
   '명령이 실제로 어느 경로로 클라이언트에 닿았는가. heartbeat=폴링 fallback, realtime=WebSocket.';
 
 -- 매장 클라이언트의 Realtime 구독용. 행 범위는 RLS(store_user_id = auth.uid()) 가 정한다.
--- 쓰기 권한은 주지 않는다 — insert/update 는 SECURITY DEFINER RPC 로만.
+--
+-- 이 테이블은 Supabase 기본 권한 때문에 anon/authenticated 가 ALL 을 갖고 있었다.
+-- 행은 RLS 가 막고 있었지만 **TRUNCATE 는 RLS 를 타지 않는다** — 로그인한 아무나
+-- 명령 큐 전체를 지울 수 있는 상태였다. 필요한 것만 남기고 전부 회수한다.
+revoke all on public.brand_player_commands from authenticated;
 grant select on public.brand_player_commands to authenticated;
-revoke insert, update, delete on public.brand_player_commands from authenticated;
 revoke all on public.brand_player_commands from anon;
 
 /* ─────────────────────────────────────────────────────────────────────────
