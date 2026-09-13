@@ -30,6 +30,7 @@ export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드
   | 'chunk_error'      // 청크 로드 실패 → 복구 리로드
   | 'self_heal'        // 무인 복구 로직이 리로드
+  | 'remote_recovery'  // 운영자가 원격 복구 명령으로 리로드
   | 'fresh_load'       // 사용자가 직접 열었거나 첫 진입
   | 'media_error'      // 오디오 디코딩/네트워크 오류
   | 'network'          // 오프라인/회선 문제
@@ -67,8 +68,8 @@ export function takeReloadReason(): DiagnosticReason {
 }
 
 const REASONS: ReadonlySet<string> = new Set<DiagnosticReason>([
-  'sw_update', 'chunk_error', 'self_heal', 'fresh_load', 'media_error',
-  'network', 'skip', 'policy_blocked', 'preview_limit', 'unknown',
+  'sw_update', 'chunk_error', 'self_heal', 'remote_recovery', 'fresh_load',
+  'media_error', 'network', 'skip', 'policy_blocked', 'preview_limit', 'unknown',
 ]);
 
 export function isDiagnosticReason(v: unknown): v is DiagnosticReason {

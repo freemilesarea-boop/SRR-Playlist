@@ -9,7 +9,9 @@ export type BrandPlayerCommandAction =
   | { kind: 'none' }
   | { kind: 'run'; command: BrandPlayerCommand; commandId: string };
 
-const KNOWN: readonly string[] = ['reload', 'play', 'next'];
+// 0519 — hard_recovery 추가. app_restart/device_reboot 는 웹이 실행하지 않으므로
+// 여기 넣지 않는다(서버가 앞서 나가도 매장이 오작동하면 안 된다).
+const KNOWN: readonly string[] = ['reload', 'play', 'next', 'hard_recovery'];
 
 /**
  * 명령을 실행할지 판정한다.

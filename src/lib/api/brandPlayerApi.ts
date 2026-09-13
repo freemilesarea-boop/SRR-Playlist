@@ -90,7 +90,7 @@ export async function listMyBrandDevices(): Promise<MyBrandDevice[]> {
 
 /** 세션 heartbeat (last_seen_at / 현재곡 갱신). 실패는 silent 처리 권장. */
 /** 원격 제어 명령 (0518). heartbeat 응답에 실려 1회만 배달된다. */
-export type BrandPlayerCommand = 'reload' | 'play' | 'next';
+export type BrandPlayerCommand = 'reload' | 'play' | 'next' | 'hard_recovery';
 
 export interface BrandPlayerHeartbeatResult {
   success: boolean;
@@ -116,6 +116,13 @@ export async function brandPlayerHeartbeat(
 /** 관리자용 실시간 세션 상태 (0518 원격 제어 대상 목록). */
 export interface BrandPlayerHealthRow {
   session_id: string;
+  /** 0519 — 명령을 매장 단위로 정확히 지목하기 위해 필요하다. */
+  store_user_id: string;
+  brand_id: string;
+  /** 아직 종결되지 않은 최근 명령 1건 (운영자가 배달 상태를 보게). */
+  pending_command?: string | null;
+  pending_command_id?: string | null;
+  pending_command_status?: string | null;
   brand_name: string;
   store_label: string;
   status: 'playing' | 'stalled' | 'offline';
@@ -364,4 +371,64 @@ export async function adminRegenerateBrandDailyPlaylist(brandId: string): Promis
   const { data, error } = await supabase.rpc('admin_regenerate_brand_daily_playlist', { p_brand_id: brandId });
   if (error) throw error;
   return data as { ok: boolean };
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 0519 — 원격 복구 제어                                                       */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export type RecoveryStatus =
+  | 'pending' | 'received' | 'executing' | 'succeeded' | 'failed' | 'expired' | 'rejected';
+
+/**
+ * 명령 결과 보고. 실패해도 재생을 막지 않는다(fire-and-forget).
+ * 서버가 상태 역전을 거부하므로 중복 ACK 는 무해하다.
+ */
+export async function ackStoreRecovery(
+  commandId: string,
+  status: RecoveryStatus,
+  resultCode?: string,
+  buildHash?: string,
+  playerInstanceId?: string,
+): Promise<void> {
+  try {
+    await supabase.rpc('ack_store_recovery', {
+      p_command_id: commandId,
+      p_status: status,
+      p_result_code: resultCode ?? null,
+      p_build_hash: buildHash ?? null,
+      p_player_instance_id: playerInstanceId ?? null,
+    });
+  } catch {
+    /* 결과 보고 실패가 복구를 막아선 안 된다 */
+  }
+}
+
+export interface RequestRecoveryResult {
+  success: boolean;
+  command_id?: string;
+  session_id?: string;
+  command?: BrandPlayerCommand;
+  reason?: string;
+  retry_after_seconds?: number;
+}
+
+/**
+ * 운영자 원격 복구 요청. **admin 전용** — 서버가 _is_super_admin() 으로 거부한다.
+ * store_user_id 는 필수다(전 매장 broadcast 불가).
+ */
+export async function requestStoreRecovery(
+  storeUserId: string,
+  command: BrandPlayerCommand,
+  opts: { sessionId?: string | null; playerInstanceId?: string | null; note?: string } = {},
+): Promise<RequestRecoveryResult> {
+  const { data, error } = await supabase.rpc('request_store_recovery', {
+    p_store_user_id: storeUserId,
+    p_command: command,
+    p_target_session_id: opts.sessionId ?? null,
+    p_target_player_instance_id: opts.playerInstanceId ?? null,
+    p_note: opts.note ?? null,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? { success: false }) as RequestRecoveryResult;
 }

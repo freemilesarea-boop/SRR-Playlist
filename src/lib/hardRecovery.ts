@@ -73,3 +73,29 @@ export function guardGeneration<A extends unknown[]>(
     fn(...args);
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Hard Recovery 실행부 registry                                              */
+/* ────────────────────────────────────────────────────────────────────────── */
+/**
+ * Player 가 부팅 시 자기 hard reset 함수를 등록한다. 원격 명령 수신부(heartbeat 훅)는
+ * 이걸 통해 **프로덕션에 이미 배포된 같은 경로**를 부른다 — 새 복구 구현을 만들지 않는다.
+ *
+ * swUpdateGate 의 applyNowFn 과 같은 패턴이다(순환 import 회피).
+ */
+let hardRecoveryFn: (() => void) | null = null;
+
+/** Player mount 시 1회 등록. unmount 시 null 로 해제. */
+export function registerHardRecovery(fn: (() => void) | null): void {
+  hardRecoveryFn = fn;
+}
+
+/** 등록돼 있으면 실행하고 true. 아직 Player 가 없으면 false. */
+export function runRegisteredHardRecovery(): boolean {
+  if (!hardRecoveryFn) return false;
+  try { hardRecoveryFn(); return true; } catch { return false; }
+}
+
+export function isHardRecoveryAvailable(): boolean {
+  return hardRecoveryFn !== null;
+}
