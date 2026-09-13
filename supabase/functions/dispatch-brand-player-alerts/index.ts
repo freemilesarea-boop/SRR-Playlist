@@ -100,6 +100,59 @@ serve(async (req) => {
     result.push = { error: String(e) };
   }
 
+  // ── 1-b. 매장 기기 본인에게 복구 푸시 ────────────────────────────────────
+  //
+  // 숙대점 2026-09-12: 02:50 에 탭이 죽어 07:18 에 점주가 직접 열 때까지
+  // 4시간 28분 무음이었다. 관리자 알림은 나갔지만 **매장 기기에는 아무것도
+  // 닿지 않았다.** 탭이 죽으면 페이지 JS 는 안 돌지만 서비스워커는 푸시로 깨어난다.
+  //
+  // kind='player_recover' 를 받으면 sw.ts 가 살아있는 창을 깨워 재생을 되살리고,
+  // 아무도 응답하지 않을 때만 알림을 띄운다(매장 기기에 알림을 쌓지 않으려고).
+  //
+  // 복구 알림(brand_player_recovered)에는 보내지 않는다 — 이미 소리가 나고 있다.
+  if (!isRecovery) {
+    try {
+      let storeUserId: string | null = null;
+      if (payload.incident_id) {
+        const { data: inc } = await sb
+          .from('brand_player_incidents')
+          .select('store_user_id')
+          .eq('id', payload.incident_id)
+          .maybeSingle();
+        storeUserId = ((inc as any)?.store_user_id as string | undefined) ?? null;
+      }
+
+      if (!storeUserId) {
+        result.store_push = { skipped: 'no_store_user' };
+      } else {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${SERVICE_ROLE}` },
+          body: JSON.stringify({
+            user_id: storeUserId,
+            kind: 'player_recover',
+            title: '음악이 멈췄어요',
+            body: '화면을 눌러 음악을 다시 켜주세요.',
+            url: '/brand',
+            // 같은 사고에 알림이 쌓이지 않도록 incident 단위로 묶는다.
+            tag: `player-recover-${payload.incident_id}`,
+          }),
+        });
+        const detail = await r.json().catch(() => ({}));
+        result.store_push = {
+          store_user_id: storeUserId,
+          ok: r.ok,
+          status: r.status,
+          // sent=0 이면 매장이 알림 권한을 안 켠 것 — 이 경로가 무력하다는 신호.
+          sent: (detail as any)?.sent ?? null,
+          candidates: (detail as any)?.candidates ?? null,
+        };
+      }
+    } catch (e) {
+      result.store_push = { error: String(e) };
+    }
+  }
+
   // ── 2. Slack / 이메일 — 미발송 admin_notifications 흘려보내기 ────────────
   try {
     const { data: pending } = await sb

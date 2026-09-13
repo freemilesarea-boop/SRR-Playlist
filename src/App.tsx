@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { lazyWithRetry, clearChunkReloadFlag } from '@/lib/lazyWithRetry';
 import { OPERATOR_ROUTE_PATHS } from '@/lib/operatorRouteRegistry';
 import { installUnloadGuard, reloadApp } from '@/lib/playbackGuard';
+import { shouldKeepAlive, syncBackgroundPlayback } from '@/lib/storePlaybackService';
 import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
@@ -179,6 +180,14 @@ export default function App() {
     })();
   }, [navigate]);
 
+  // 네이티브 푸시 알림 탭 → 알림에 담긴 앱 내부 경로로 이동. 웹에서는 no-op.
+  useEffect(() => {
+    void (async () => {
+      const { initNativePushRouting } = await import('@/lib/nativePush');
+      await initNativePushRouting((path) => navigate(path));
+    })();
+  }, [navigate]);
+
   // 재생 중 창 닫기/새로고침 시 "음악 중단" 경고 (명시적 정지/로그아웃 시 제외)
   useEffect(() => installUnloadGuard(), []);
 
@@ -187,6 +196,17 @@ export default function App() {
   // 화면을 살려둬야 한다. playing 에만 걸어두면 오류로 멈추는 순간 wake lock 이 풀려
   // 모니터/PC 가 잠들고, 그때부터는 자동 복구 자체가 불가능해진다.
   useWakeLock(playing || businessMode);
+
+  // 안드로이드 백그라운드 재생 유지 — 매장 모드로 재생 중일 때만 포그라운드 서비스를 띄운다.
+  // (iOS 는 AVAudioSession .playback 으로 OS 가 보장, 웹은 해당 없음 → 내부에서 no-op)
+  useEffect(() => {
+    const desired = shouldKeepAlive({ storeMode: businessMode, playing });
+    void syncBackgroundPlayback(desired);
+  }, [businessMode, playing]);
+
+  // 앱 종료 시 서비스가 남지 않도록 정리.
+  useEffect(() => () => { void syncBackgroundPlayback(false); }, []);
+
   useTrackVisit();
 
   if (!isSupabaseConfigured) {

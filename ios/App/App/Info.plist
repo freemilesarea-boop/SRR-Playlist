@@ -45,6 +45,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- 매장/브랜드 플레이어는 화면이 잠기거나 앱이 백그라운드로 가도 음악이 끊기면 안 된다.
+	     audio 백그라운드 모드가 없으면 WKWebView 의 재생이 즉시 정지된다. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<!-- OAuth(구글/카카오) 딥링크: com.deudda.app://auth/callback 로 앱 복귀.
 	     nativeAuth.ts 의 NATIVE_OAUTH_REDIRECT 와 스킴 일치. -->
 	<key>CFBundleURLTypes</key>

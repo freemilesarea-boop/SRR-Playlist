@@ -6,6 +6,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, Sparkles, ShieldCheck, Maximize2, LogOut, Repeat as SwitchIcon } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
+import { isNativeApp } from '@/lib/native';
+import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
 import { useBusinessStore } from '@/store/businessStore';
@@ -18,6 +21,11 @@ import BrandVisualStage from '@/components/brand/BrandVisualStage';
 import BrandFullscreenControls from '@/components/brand/BrandFullscreenControls';
 import BrandPresentationOverlays from '@/components/brand/BrandPresentationOverlays';
 import PlaybackBlockedOverlay from '@/components/player/PlaybackBlockedOverlay';
+import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
+import { isStandalone } from '@/hooks/useInstallPrompt';
+import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
+import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
+import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
 import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
@@ -41,6 +49,8 @@ export default function BrandPlayerPage() {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
+  // 무인 매장 — 회선이 끊겨도 저장된 곡으로 재생이 이어지도록 미리 받아둔다.
+  useAudioCachePrefetch(true);
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
   // BRAND-PLAYER-UX-4 — 브랜드/서비스 로고(사이니지 미디어 없을 때 Priority 2). 기존 필드 재사용.
@@ -75,7 +85,13 @@ export default function BrandPlayerPage() {
     // Fullscreen API 미지원/거부: CSS 기반 presentation (완전한 OS 전체화면은 불가)
     setFallback(true);
     setPresentation(true);
-    toast.info('브라우저 전체화면을 사용할 수 없어 화면 내 프레젠테이션 모드로 표시합니다. ESC로 종료하세요.');
+    // iOS 네이티브 쉘(WKWebView)은 Fullscreen API 자체가 없어 항상 이 경로로 온다.
+    // 태블릿엔 ESC 키가 없으므로 화면 내 종료 버튼(BrandFullscreenControls)을 함께 안내한다.
+    toast.info(
+      isNativeApp()
+        ? '화면 내 프레젠테이션 모드로 표시합니다. 종료하려면 화면을 눌러 나타나는 종료 버튼을 사용하세요.'
+        : '브라우저 전체화면을 사용할 수 없어 화면 내 프레젠테이션 모드로 표시합니다. ESC 또는 화면의 종료 버튼으로 종료하세요.',
+    );
   }, []);
 
   const exitPresentation = useCallback(() => {
@@ -130,6 +146,36 @@ export default function BrandPlayerPage() {
     enableForBusinessMode();
     usePlayerStore.getState().setScheduleSuppression(null);
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
+  // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
+  useEffect(() => {
+    void logPlaybackDiagnostic('session_start', {
+      reason: takeReloadReason(),
+      playerMode: 'brand',
+      // 매장이 홈 화면 앱으로 설치했는지를 기록으로 남긴다. UA 로는 구분이 안 돼
+      // "설치하라고 했는데 했나?" 를 물어볼 수밖에 없었다(숙대점 2026-09-12).
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
+    });
+    return watchPageLifecycle('brand');
+  }, []);
+
+  // 서버가 보낸 복구 신호 수신 — 탭이 얼어 있어도 서비스워커가 깨워준다.
+  // 숙대점 4시간 28분 무음(2026-09-12)이 이 경로가 없어서 생겼다.
+  useEffect(() => listenForRecoverySignal({
+    readState: () => {
+      const p = usePlayerStore.getState();
+      const h = usePlaybackHealthStore.getState();
+      return {
+        businessMode: useBusinessStore.getState().businessMode,
+        playing: p.playing,
+        audioActive: h.audioActive,
+        autoplayBlocked: h.autoplayBlocked,
+        suppressed: p.scheduleSuppressed,
+      };
+    },
+    resume: () => usePlayerStore.getState().play(),
+  }), []);
 
   // 브랜드/서비스 로고 로드(멱등). AppShell 밖 kiosk 라우트에서도 로고 확보.
   useEffect(() => { void loadBrandSettings(); }, [loadBrandSettings]);
@@ -326,6 +372,14 @@ export default function BrandPlayerPage() {
           </button>
         </div>
       </header>
+
+      {/* 폰 브라우저로 틀어둔 경우 — 백그라운드 전환 시 끊김 위험(숙대점 2026-09-11).
+          presentation(사이니지 전체화면)에서는 숨긴다 — 매장 손님에게 보이는 화면이다. */}
+      {!presentation && <MobileBrowserPlaybackWarning className="mx-5 mb-2 sm:mx-8" />}
+
+      {/* 끊김 자동 복구(푸시) 활성화 — 알림 허용이 없으면 복구 신호가 기기에 닿지 않는다.
+          presentation(사이니지 전체화면)에서는 숨긴다 — 매장 손님에게 보이는 화면이다. */}
+      {!presentation && <PlayerRecoveryOptIn className="mx-5 mb-2 sm:mx-8" />}
 
       {/* 사이니지 (화면 대부분) — presentation 진입 시 이 컨테이너만 Fullscreen 대상.
           audio 는 전역 <Player> 소유 → fullscreen/chrome 토글이 audio element 에 영향 없음. */}

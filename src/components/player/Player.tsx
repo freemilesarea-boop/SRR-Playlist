@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
+import { resolveStallAction, isEscalation, type StallAction } from '@/lib/stallWatchdog';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -59,6 +60,22 @@ import { resolveStoreGate } from '@/lib/storePlaybackGate';
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
+import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
+import { startBackgroundTicker } from '@/lib/backgroundTicker';
+import { reloadApp } from '@/lib/playbackGuard';
+
+/** 자가치유 리로드 시각(부팅 루프 방지용). sessionStorage 라 탭이 닫히면 초기화된다. */
+const SELF_HEAL_RELOAD_KEY = 'deudda:selfheal-reload-at';
+
+/**
+ * 이 audio element 가 해당 트랙을 물고 있는지 (오프라인 캐시의 blob: src 포함).
+ * 세 개의 이벤트 가드(timeupdate / loadedmetadata / durationchange)가 공유한다.
+ */
+function matchesTrack(audioUrl: string | null | undefined, currentSrc: string | null | undefined) {
+  return audioSourceMatch(audioUrl, currentSrc, { origin: window.location.origin, blobOwner });
+}
+
 
 /** HTMLMediaElement.error.code → 사람 읽기용 이름 */
 const MEDIA_ERROR_CODES: Record<number, string> = {
@@ -378,6 +395,8 @@ export default function Player() {
   const membership = resolveMembership(session, gateProfile);
   const openGate = useGateStore((s) => s.open);
   const pvTrackIdRef = useRef<string | null>(null);
+  // 직전 리로드 사유 — 마운트 시 1회 회수(sessionStorage 1회성). 자동재생 차단 기록에 함께 남긴다.
+  const lastReloadReasonRef = useRef<DiagnosticReason>(takeReloadReason());
   const previewSecRef = useRef(0);
   const previewBlockedRef = useRef(false);
   const previewLastTRef = useRef(0);
@@ -1216,10 +1235,13 @@ export default function Player() {
       // 1) 이전 src 의 play 프로미스 abort
       audio.pause();
       // 2) 새 src 적용
+      // 오프라인 캐시가 준비돼 있으면 로컬 object URL, 아니면 원본 네트워크 URL.
+      // 동기 조회만 한다 — 트랙 전환 hot path 에 await 를 넣지 않는다.
+      const playbackSrc = playbackSrcFor(current.audio_url);
       if (import.meta.env.DEV) {
-        console.debug('[Player] src set', { id: current.id, url: current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
+        console.debug('[Player] src set', { id: current.id, url: current.audio_url, cached: playbackSrc !== current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
       }
-      audio.src = current.audio_url;
+      audio.src = playbackSrc;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
       clearMetaTimer();
@@ -1435,6 +1457,155 @@ export default function Player() {
   }, [businessMode]);
 
   /* ============================================
+   * BRAND-PLAYER-SELF-HEAL-1 — 무인 매장 정지 자동 복구 워치독
+   * ============================================
+   * Phase 3-2 health monitor 는 `active-stalled` 를 이미 감지하지만 **이벤트 기반**이라,
+   * 오디오가 진짜로 멈춰서 timeupdate 가 끊기면 재평가할 계기 자체가 사라진다.
+   * (`waiting` 이 한 번 튀고 네트워크가 안 돌아오는 경우가 정확히 이 사각지대다 —
+   *  그 순간엔 아직 정지 2.5초가 안 돼서 아무것도 안 잡히고, 이후엔 아무도 다시 안 본다.)
+   * 서버는 stalled 로 보고 알림까지 띄우는데 매장 화면은 가만히 있는 상태가 여기서 나온다.
+   *
+   * 그래서 매장 모드에서만 3초 tick 으로 재생 위치를 직접 확인하고, 정지가 이어지면
+   * 사다리를 올라간다: 8초 nudge → 20초 reload → 35초 skip (stallWatchdog.ts).
+   * 곡이 바뀌면 처음부터 다시 — 네트워크가 죽어 있어도 포기하지 않고, 돌아오면 저절로 낫는다.
+   *
+   * 일반 청취자에게는 interval 자체가 생성되지 않는다(동작 변화 0).
+   */
+  const stallProgressRef = useRef<{ trackId: string | null; ct: number; ts: number }>({
+    trackId: null, ct: 0, ts: 0,
+  });
+  const stallLastActionRef = useRef<StallAction>('none');
+
+  useEffect(() => {
+    if (!businessMode) return;
+
+    const tick = () => {
+      const st = healthStateRef.current;
+      const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
+      if (!el) return;
+
+      const store = usePlayerStore.getState();
+      const health = usePlaybackHealthStore.getState();
+      const trackId = store.queue[store.index]?.id ?? null;
+      const now = performance.now();
+      const prog = stallProgressRef.current;
+      const ct = el.currentTime;
+
+      // 진행했거나 곡이 바뀌었으면 기준점을 갱신하고 사다리를 초기화한다.
+      if (prog.trackId !== trackId || Math.abs(ct - prog.ct) >= 0.01) {
+        stallProgressRef.current = { trackId, ct, ts: now };
+        stallLastActionRef.current = 'none';
+        return;
+      }
+
+      const action = resolveStallAction({
+        businessMode: true,
+        playing: store.playing,
+        paused: el.paused,
+        ended: el.ended,
+        crossfading: st.crossfading,
+        suppressed: store.scheduleSuppressed,
+        autoplayBlocked: health.autoplayBlocked,
+        subscriptionBlocked: health.subscriptionBlocked,
+        stalledMs: now - prog.ts,
+      });
+      // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
+      if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
+      const prevAction = stallLastActionRef.current;
+      stallLastActionRef.current = action;
+
+      // SELF-HEAL-2 — paused 로 굳은 정지는 지금껏 계측에 한 번도 안 잡혔다
+      // (숙대점 조사 시점 playback_stalled 0건). 사다리 첫 칸에서 한 번만 남겨
+      // 다음엔 추측하지 않는다. nudge 로 바로 풀리는 흔한 경우까지 보여야
+      // "몇 번이나 이 상태에 빠지는지" 를 알 수 있다.
+      if (el.paused && prevAction === 'none') {
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            kind: 'paused_stall', action,
+            stalledSec: Math.round((now - prog.ts) / 1000),
+            trackId, readyState: el.readyState,
+            online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+          },
+        });
+      }
+
+      const stalledSec = Math.round((now - prog.ts) / 1000);
+      console.warn('[audio:selfheal] 매장 재생 정지 감지 — 자동 복구', {
+        action, stalledSec, trackId, currentTime: ct,
+        readyState: el.readyState, networkState: el.networkState,
+        online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      });
+
+      if (action === 'nudge') {
+        // Recovery Manager 에 위임 — cooldown/escalation/로그가 이미 그 안에 있다.
+        void recoverAudioRef.current?.('stalled', { source: 'stall-watchdog', stalledSec });
+        return;
+      }
+
+      if (action === 'reload') {
+        // 같은 위치로 소스를 다시 잡는다 (onError NETWORK 재시도와 같은 방식).
+        const resumeAt = ct;
+        try {
+          el.load();
+          const onceCanPlay = () => {
+            el.removeEventListener('canplay', onceCanPlay);
+            try {
+              if (resumeAt > 0 && Number.isFinite(el.duration) && resumeAt < el.duration) {
+                el.currentTime = resumeAt;
+              }
+            } catch { /* noop */ }
+            const pr = el.play();
+            if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 칸(skip)이 처리 */ });
+          };
+          el.addEventListener('canplay', onceCanPlay, { once: true });
+        } catch { /* 다음 칸(skip)이 처리 */ }
+        return;
+      }
+
+      if (action === 'reload_page') {
+        // 마지막 칸 — skip 조차 듣지 않는 상태(숙대점 34분 정지가 이 경우였다).
+        // 페이지를 다시 띄우면 오디오 엘리먼트·큐·워커가 전부 새로 만들어진다.
+        // 부팅 루프 방지: 자가치유 리로드는 10분에 한 번까지만.
+        const RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
+        let last = 0;
+        try { last = Number(sessionStorage.getItem(SELF_HEAL_RELOAD_KEY) ?? '0'); } catch { /* noop */ }
+        if (Date.now() - last < RELOAD_COOLDOWN_MS) {
+          // 쿨다운 중이면 사다리를 되돌려 skip 부터 다시 시도한다(가만히 있지 않는다).
+          stallLastActionRef.current = 'reload';
+          return;
+        }
+        try { sessionStorage.setItem(SELF_HEAL_RELOAD_KEY, String(Date.now())); } catch { /* noop */ }
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: { action: 'reload_page', stalledSec, trackId, online: navigator.onLine },
+        });
+        console.warn('[audio:selfheal] skip 실패 — 페이지 재시작', { stalledSec, trackId });
+        reloadApp('self-heal stall reload');
+        return;
+      }
+
+      // skip — 이 파일/이 위치가 문제다. cause 는 기본값(manual_next):
+      // 자연 종료가 아니므로 플레이리스트 Cycle 완료 Signal 을 내면 안 된다.
+      usePlaybackHealthStore.getState().reportPlaybackError('STALL_SKIP');
+      void logPlaybackDiagnostic('track_cut_short', {
+        reason: 'skip',
+        playerMode: 'store',
+        context: { action: 'stall_skip', stalledSec, trackId, playedSeconds: Math.round(ct) },
+      });
+      store.next();
+    };
+
+    // 화면이 꺼지면 메인 스레드 타이머는 스로틀링된다 — 정작 복구가 필요한 그 상황에서
+    // 워치독이 잠든다(숙대점 34분 정지). Web Worker 타이머는 그 영향을 훨씬 덜 받는다.
+    const ticker = startBackgroundTicker(tick, 3_000);
+    if (import.meta.env.DEV) console.debug('[audio:selfheal] 워치독 시작', { ticker: ticker.kind });
+    return () => ticker.stop();
+  }, [businessMode]);
+
+  /* ============================================
    * Crossfade 엔진
    * ============================================ */
   const crossfadeRafRef = useRef<number | null>(null);
@@ -1510,7 +1681,7 @@ export default function Player() {
 
     // Phase 5-2 — src 재설정 idempotent guard.
     // preload effect 가 이미 nextAudio.src 를 세팅했으면 재설정 skip → 브라우저 재fetch 방지.
-    const nextUrl = nextTrack.audio_url;
+    const nextUrl = playbackSrcFor(nextTrack.audio_url);
     const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
     // Phase 3-1 — crossfade 실제 시작 로그 (guard 통과 후)
     audioDebugWarn('[audio:engine:crossfade-start]', {
@@ -1725,7 +1896,7 @@ export default function Player() {
     if (!nextAudio) return;
 
     // 이미 같은 src 로 로드되어 있으면 재설정 skip (browser 재fetch 방지).
-    const nextUrl = nextTrack.audio_url;
+    const nextUrl = playbackSrcFor(nextTrack.audio_url);
     const alreadyLoaded = nextAudio.src === nextUrl || nextAudio.currentSrc === nextUrl;
     if (alreadyLoaded) {
       preloadedNextIdRef.current = nextTrack.id;
@@ -1930,16 +2101,11 @@ export default function Player() {
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
     const target = e.currentTarget;
     // X6.2.13 — activeRef 가드 완화. currentSrc / current.audio_url 매칭 기반.
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) return; // 다른 트랙 audio 의 timeupdate 무시
-      } catch {
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    // 오프라인 캐시 적중 시 src 는 blob: object URL 이라 경로 비교가 불가능하다 → 공용 판정 사용.
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      if (m === 'mismatch') return; // 다른 트랙 audio 의 timeupdate 무시
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     const t = target.currentTime;
 
@@ -2110,20 +2276,12 @@ export default function Player() {
     // X6.2.13 — activeRef 가드 완화. metadata 가 어떤 audio 에서 fire 됐든,
     // 그 audio 의 currentSrc 가 현재 트랙의 audio_url 과 같은 path 면 처리.
     // (매장 모드 / crossfade 등 activeIdx 가 다른 audio 를 가리킬 때 progress 0:00 멈춤 해결)
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) {
-          // preload 된 next track 의 metadata — 현재 트랙 progress 와 무관, 무시
-          return;
-        }
-      } catch {
-        // URL parse 실패 시 fallback — activeRef 검사로
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      // preload 된 next track 의 metadata — 현재 트랙 progress 와 무관, 무시
+      if (m === 'mismatch') return;
+      // 판정 불가 시 fallback — activeRef 검사로
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     if (import.meta.env.DEV) {
       console.debug('[Player] loadedmetadata', { id: current?.id, duration: d, readyState: target.readyState, currentSrc: target.currentSrc });
@@ -2152,16 +2310,10 @@ export default function Player() {
     const d = target.duration;
     if (!Number.isFinite(d) || d <= 0) return;
     // current track 매칭
-    if (current?.audio_url && target.currentSrc) {
-      try {
-        const trackPath = new URL(current.audio_url, window.location.origin).pathname;
-        const srcPath = new URL(target.currentSrc, window.location.origin).pathname;
-        if (trackPath !== srcPath) return;
-      } catch {
-        if (target !== activeRef()) return;
-      }
-    } else if (target !== activeRef()) {
-      return;
+    {
+      const m = matchesTrack(current?.audio_url, target.currentSrc);
+      if (m === 'mismatch') return;
+      if (m === 'unknown' && target !== activeRef()) return;
     }
     setDuration(d);
     clearMetaTimer();
@@ -2280,6 +2432,12 @@ export default function Player() {
           setErrored(true);
           // 무인 매장에서는 토스트를 아무도 못 본다 — 전체화면 안내(PlaybackBlockedOverlay)를 띄운다.
           usePlaybackHealthStore.getState().setAutoplayBlocked(true);
+          // 직전 리로드 사유와 함께 남긴다 — 배포 때문인지 탭 정리 때문인지 구분하려면 이게 필요하다.
+          void logPlaybackDiagnostic('autoplay_blocked', {
+            reason: lastReloadReasonRef.current,
+            playerMode: 'store',
+            context: { trackId: current?.id ?? null, online: navigator.onLine },
+          });
           return;
         }
         pause();
@@ -2449,6 +2607,28 @@ export default function Player() {
     const target = e.currentTarget;
     const err = target.error;
     const codeName = err ? (MEDIA_ERROR_CODES[err.code] ?? `code=${err.code}`) : 'UNKNOWN';
+    // 오프라인 캐시본(blob:)으로 재생하다 실패 → 손상된 캐시로 보고 폐기한다.
+    // 그대로 두면 무인 매장에서 그 곡이 돌아올 때마다 계속 실패한다. 폐기하면
+    // 다음 차례에 네트워크로 다시 받아 스스로 복구된다.
+    if ((target.currentSrc || target.src).startsWith('blob:') && current?.audio_url) {
+      void dropCachedAudio(current.audio_url);
+    }
+    // 곡이 중간에 끊긴 기록 — 숙대점에서 20초짜리 세션 272건의 원인을 못 찾았던 공백을 메운다.
+    if (businessMode) {
+      void logPlaybackDiagnostic('track_cut_short', {
+        reason: navigator.onLine ? 'media_error' : 'network',
+        playerMode: 'store',
+        context: {
+          trackId: current?.id ?? null,
+          playedSeconds: Math.round(target.currentTime),
+          durationSeconds: Number.isFinite(target.duration) ? Math.round(target.duration) : null,
+          errorCode: err?.code ?? null,
+          codeName,
+          readyState: target.readyState,
+          networkState: target.networkState,
+        },
+      });
+    }
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
     void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });

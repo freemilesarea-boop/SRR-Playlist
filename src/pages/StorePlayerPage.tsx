@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
-  Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock,
+  Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock, HardDriveDownload,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -14,6 +14,15 @@ import AutoCover from '@/components/AutoCover';
 import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
+import { isNativeApp } from '@/lib/native';
+import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
+import { isStandalone } from '@/hooks/useInstallPrompt';
+import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
+import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
+import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
+import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { formatCacheSize } from '@/lib/audioCache';
+import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
 // 프랜차이즈 연결 매장만 적용; 일반 매장은 hook 이 no-op.
 import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
@@ -50,6 +59,9 @@ export default function StorePlayerPage() {
   const next = usePlayerStore((s) => s.next);
   const prev = usePlayerStore((s) => s.prev);
 
+  const nativeApp = isNativeApp();
+  // 오프라인 대비 선반입 — 매장은 같은 로테이션을 반복하므로 한 바퀴면 전곡이 로컬에 남는다.
+  const cacheStats = useAudioCachePrefetch(true);
   const { online, failedCount, wakeLockSupported, wakeLockActive, todayPlayCount } =
     usePlaybackHealthStore();
   const autoplayRecommendations = usePlaybackSettingsStore((s) => s.autoplayRecommendations);
@@ -64,6 +76,34 @@ export default function StorePlayerPage() {
     setBusinessMode(true);
     enableForBusinessMode();
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
+  // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
+  useEffect(() => {
+    void logPlaybackDiagnostic('session_start', {
+      reason: takeReloadReason(),
+      playerMode: 'store',
+      // 홈 화면 앱으로 설치했는지 기록 (BrandPlayerPage 와 동일 목적).
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
+    });
+    return watchPageLifecycle('store');
+  }, []);
+
+  // 서버가 보낸 복구 신호 수신 (BrandPlayerPage 와 동일 — 탭이 얼어도 SW 가 깨운다).
+  useEffect(() => listenForRecoverySignal({
+    readState: () => {
+      const p = usePlayerStore.getState();
+      const h = usePlaybackHealthStore.getState();
+      return {
+        businessMode: useBusinessStore.getState().businessMode,
+        playing: p.playing,
+        audioActive: h.audioActive,
+        autoplayBlocked: h.autoplayBlocked,
+        suppressed: p.scheduleSuppressed,
+      };
+    },
+    resume: () => usePlayerStore.getState().play(),
+  }), []);
 
   // X6.84 — 매장주 본인 = store_id (별도 stores 테이블 없음, business 플랜 user.id 사용)
   const storeId = useAuthStore((s) => s.user?.id ?? null);
@@ -268,6 +308,13 @@ export default function StorePlayerPage() {
           />
         </div>
 
+        {cacheStats?.available && cacheStats.count > 0 && (
+          <p className="flex items-center gap-1.5 text-[11px] text-white/50">
+            <HardDriveDownload size={12} className="shrink-0" />
+            오프라인 저장 {cacheStats.count}곡 · {formatCacheSize(cacheStats.bytes)} — 인터넷이 끊겨도 저장된 곡은 계속 재생됩니다.
+          </p>
+        )}
+
         {failedCount > 0 && (
           <p className="flex items-center gap-1.5 text-[11px] text-amber-300">
             <AlertTriangle size={12} /> 재생 실패 {failedCount}건 — 문제 트랙은 자동으로 건너뛰었어요.
@@ -276,14 +323,28 @@ export default function StorePlayerPage() {
 
         {!wakeLockSupported && (
           <p className="text-[11px] text-white/50">
-            이 브라우저는 화면 꺼짐 방지를 지원하지 않아요. 기기의 <b>화면 자동 잠금</b>을 해제해두시면 더 안정적입니다.
+            이 기기는 화면 꺼짐 방지를 지원하지 않아요. 기기의 <b>화면 자동 잠금</b>을 해제해두시면 더 안정적입니다.
           </p>
         )}
+
+        {/* 폰 브라우저로 틀어둔 경우 — 백그라운드 전환 시 끊김 위험(숙대점 2026-09-11). */}
+        <MobileBrowserPlaybackWarning />
+
+        {/* 끊김 자동 복구(푸시) 활성화 — 알림 허용이 없으면 복구 신호가 기기에 닿지 않는다. */}
+        <PlayerRecoveryOptIn />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-white/55">
             <MonitorSmartphone size={13} className="shrink-0" />
-            브라우저를 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">창을 완전히 닫으면 음악은 중단됩니다.</b>
+            {nativeApp ? (
+              <>
+                앱을 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">앱을 완전히 종료하면 음악은 중단됩니다.</b>
+              </>
+            ) : (
+              <>
+                브라우저를 켜둔 상태에서 안정적으로 재생됩니다. <b className="text-white/75">창을 완전히 닫으면 음악은 중단됩니다.</b>
+              </>
+            )}
           </p>
           <InstallAppButton variant="ghost" label="매장용 앱 설치" />
         </div>

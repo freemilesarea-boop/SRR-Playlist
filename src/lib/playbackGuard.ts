@@ -1,6 +1,7 @@
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { shouldWarnBeforeUnload } from '@/lib/unloadWarningPolicy';
+import { markReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
 
 /**
  * 재생 중 탭/창 닫기·새로고침 시 "음악이 중단됩니다" 경고.
@@ -37,7 +38,19 @@ export function suppressUnloadWarningOnce(): void {
 export function reloadApp(reason: string): void {
   suppressUnloadWarningOnce();
   if (reason) console.warn(`[reloadApp] ${reason}`);
+  // 리로드 사유를 다음 페이지 로드로 넘긴다 — 자동재생 차단/무음이 생겼을 때
+  // "왜 리로드됐나" 를 되짚을 수 있게(숙대점 조사에서 이걸 몰라 원인 추정에 시간을 썼다).
+  markReloadReason(classifyReloadReason(reason));
   window.location.reload();
+}
+
+/** reloadApp 의 자유 문자열 사유 → 진단용 분류. */
+export function classifyReloadReason(reason: string): DiagnosticReason {
+  const r = (reason || '').toLowerCase();
+  if (r.includes('sw ') || r.includes('sw-') || r.includes('service worker')) return 'sw_update';
+  if (r.includes('chunk')) return 'chunk_error';
+  if (r.includes('heal') || r.includes('recovery') || r.includes('stuck')) return 'self_heal';
+  return 'unknown';
 }
 
 export function installUnloadGuard(): () => void {

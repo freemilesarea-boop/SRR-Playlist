@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 푸시 알림(APNs). Xcode → Signing & Capabilities → + Push Notifications 를 추가하면
+	     이 파일이 타깃에 연결된다(CODE_SIGN_ENTITLEMENTS).
+	     development 빌드로 테스트할 때는 값을 development 로 바꾸고
+	     edge function 의 APNS_ENV=sandbox 로 맞춘다. -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

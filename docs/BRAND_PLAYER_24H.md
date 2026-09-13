@@ -428,3 +428,68 @@ useBrandDailyPlaylistSync
 | `resolve_brand_playback_window(brand_id)` | 지금 재생해도 되는지 |
 | `admin_get_brand_playback_policy` / `admin_set_brand_playback_policy` | 관리자 조회/설정 |
 | `admin_regenerate_brand_daily_playlist(brand_id)` | 관리자 수동 재생성 |
+
+---
+
+## 자가 치유 — 사람 없이 스스로 되살아난다 (SELF-HEAL-1)
+
+### 사각지대
+
+Phase 3-2 health monitor 는 `active-stalled` 를 이미 감지한다. 문제는 그게
+**이벤트 기반**이라는 것이다 — `timeupdate` / `canplay` / `ended` / visibility 안에서만
+`checkAudioHealth` 가 돈다. 그런데 오디오가 **진짜로** 멈추면 그 이벤트들이 더 이상
+오지 않는다.
+
+가장 흔한 형태가 이렇다:
+
+```
+네트워크 끊김 → `waiting` 1회 발생 → checkAudioHealth 호출
+                 └ 이 시점엔 아직 정지 2.5초 미만 → 아무 issue 도 안 잡힘
+              → 네트워크 안 돌아옴 → 이벤트 없음 → 다시 볼 계기 없음
+              → 서버는 stalled 로 보고 알림까지 띄우는데 매장 화면은 가만히 있음
+```
+
+Recovery Manager 도 규칙상 `active.play()` 만 한다(`load()`/src 재설정 금지). play()
+로 안 되는 정지 — 버퍼 고갈, 디코더 정지, 깨진 파일 — 에는 사다리의 마지막 칸이 없다.
+
+### 워치독
+
+매장 모드에서만 3초 tick 으로 재생 위치를 직접 본다. 정지가 이어지면 올라간다:
+
+| 정지 | 조치 | 고치는 것 |
+|---|---|---|
+| 8초 | `nudge` — Recovery Manager 에 위임(`play()`) | 탭 스로틀링, 일시적 정지 |
+| 20초 | `reload` — 같은 위치로 소스 재획득 | 버퍼 고갈 |
+| 35초 | `skip` — 다음 곡 | 이 파일/이 위치가 문제 |
+
+곡이 바뀌면 사다리는 처음부터 다시 시작한다. **매장은 포기하지 않는다** — 네트워크가
+죽어 있으면 곡당 35초씩 넘기며 계속 시도하고, 돌아오면 저절로 낫는다.
+
+판정은 `src/lib/stallWatchdog.ts` 의 순수 함수(`resolveStallAction`)에 있고 실행만
+Player 가 한다. 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다(`isEscalation`).
+
+**손대지 않는 상황** — 하나라도 걸리면 `'none'`:
+
+- 매장 모드가 아님 → 일반 청취자에게는 interval 자체가 생성되지 않는다(동작 변화 0)
+- `playing === false` → 사용자가 멈춘 것을 마음대로 되살리지 않는다
+- `scheduleSuppressed` → 본사 스케줄로 억제된 동안에는 조용히 있는다
+- `autoplayBlocked` → 사용자 제스처가 필요하다. play() 를 눌러도 소용없다
+- `subscriptionBlocked` → 되살릴 대상이 아니다
+- `crossfading` → `crossfade-stuck` 경로가 담당한다
+- `paused` / `ended` → 정지가 아니다. `neither-playing` / `onEnded` 의 몫
+
+### 자가 치유가 감시를 눈멀게 하지 않도록
+
+서버는 `current_track_id` 가 바뀌는 것을 "정상 재생 중"의 근거로 쓴다
+(`current_track_started_at` → `admin_brand_player_health`). 그런데 워치독이 정지된
+곡을 계속 건너뛰면 큐 index 는 척척 넘어간다 — store 의 현재 곡을 그대로 보고하면
+**소리는 한 번도 안 나는데 서버 눈에는 잘 도는 매장**으로 보인다. 자가 치유를 붙이면서
+감시를 눈멀게 하는 셈이다.
+
+그래서 heartbeat 는 **마지막으로 실제 소리가 났던 곡**을 보고한다 (`audioActive` 기준).
+소리가 안 나는 동안에는 기준점을 옮기지 않으므로 `current_track_started_at` 이
+멈춰 있고, 서버는 그대로 stalled 로 판정한다. RPC 시그니처 변경 없이 클라이언트에서만
+해결된다.
+
+`audioActive` 를 구독해 두어, 소리가 나기 시작한 순간 heartbeat 가 즉시 다시 나간다
+(없으면 곡 전환이 60s interval 까지 보고되지 않는다).
