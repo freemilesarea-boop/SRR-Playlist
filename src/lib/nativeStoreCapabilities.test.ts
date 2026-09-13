@@ -232,13 +232,17 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     expect(repoFile('src/pages/PricingPage.tsx')).toContain('lg:mx-auto lg:max-w-2xl');
   });
 
-  it('자동 스케줄의 3개 시간대는 넓은 화면에서만 가로로 벌린다', () => {
+  it('자동 스케줄의 3개 시간대는 자리가 있을 때만 가로로 벌린다', () => {
     // 오전·오후·저녁을 나란히 두면 하루 전체가 한 화면에 들어온다.
-    // 다만 한 칸에 시간 입력 2개 + 플리 선택 + 자동 버튼이 들어가야 해서
-    // xl(≥1280px)부터다 — 1024~1279px(아이패드 가로)에서는 세로로 둔다.
+    // 다만 한 칸에 시간 입력 2개 + 플리 선택 + 자동 버튼이 들어가야 한다.
+    //
+    // 예전에는 이 판단을 화면 폭(xl:grid-cols-3)으로 했다. 그런데 태블릿 2단
+    // 레이아웃에서 이 영역은 화면의 일부일 뿐이라, 화면이 1280px 여도 카드가
+    // 208px 이 되어 종료 시간 입력이 카드 밖으로 잘렸다. 화면이 아니라 영역의
+    // 실제 폭을 봐야 한다 — 자세한 검증은 slotGrid.test.ts.
     const src = repoFile('src/components/BusinessScheduler.tsx');
-    expect(src).toContain('grid gap-2 xl:grid-cols-3');
-    expect(src).not.toContain('grid gap-2 lg:grid-cols-3');
+    expect(src).toContain('grid-cols-[repeat(auto-fit,minmax(min(21rem,100%),1fr))]');
+    expect(src).not.toContain('xl:grid-cols-3');
   });
 
   it('하단탭 마지막 칸이 전체 메뉴를 연다', () => {
