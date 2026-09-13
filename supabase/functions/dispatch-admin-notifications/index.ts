@@ -130,22 +130,38 @@ async function buildRecoveryExtras(
 
       // 어느 배포본이 도는 기기인가 / 어느 플레이어 인스턴스인가.
       // 진단 로그의 context 에만 있는 값이라 여기서 끌어온다(추측하지 않는다).
+      //
+      // ⚠ "최근 N건을 훑는다" 로 하면 안 된다. buildHash 는 session_start 에만 실리는데,
+      // 정작 알림이 나가는 장애 상황에서는 stall/skip 진단이 수십 건 쌓여 session_start 를
+      // 창 밖으로 밀어낸다 — 필요한 순간에만 값이 사라진다. 그래서 이벤트를 지목해 찾는다.
+      const { data: start } = await sb
+        .from('store_playback_diagnostics')
+        .select('context')
+        .eq('user_id', storeUserId)
+        .eq('event', 'session_start')
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle();
+      const sc = ((start as any)?.context ?? {}) as Record<string, unknown>;
+      if (typeof sc.buildHash === 'string') push('buildHash', sc.buildHash);
+      if (typeof sc.playerInstanceId === 'string') push('playerInstanceId', sc.playerInstanceId);
+
+      // 복구 단계는 Flight Recorder flush 에만 실린다 — 최근 것 위주로 훑는다.
       const { data: diag } = await sb
         .from('store_playback_diagnostics')
-        .select('context, created_at')
+        .select('context')
         .eq('user_id', storeUserId)
         .order('created_at', { ascending: false })
         .limit(20);
       for (const row of (diag ?? []) as Array<{ context: Record<string, unknown> | null }>) {
         const c = row.context ?? {};
-        if (!facts.some((f) => f.label === 'buildHash') && typeof c.buildHash === 'string') {
-          push('buildHash', c.buildHash);
-        }
-        if (!facts.some((f) => f.label === 'playerInstanceId') && typeof c.playerInstanceId === 'string') {
+        if (typeof c.playerInstanceId === 'string'
+            && !facts.some((f) => f.label === 'playerInstanceId')) {
           push('playerInstanceId', c.playerInstanceId);
         }
-        if (!facts.some((f) => f.label === '복구 단계') && c.recoveryLevel !== undefined && c.recoveryLevel !== null) {
+        if (c.recoveryLevel !== undefined && c.recoveryLevel !== null
+            && !facts.some((f) => f.label === '복구 단계')) {
           push('복구 단계', c.recoveryLevel);
+          break;
         }
       }
     }
