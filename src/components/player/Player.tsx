@@ -26,6 +26,7 @@ import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, newPlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
 } from '@/lib/playbackFlightRecorder';
+import { disposeAudioElement } from '@/lib/hardRecovery';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -1601,9 +1602,8 @@ export default function Player() {
         el, audioElementId: getAudioObjectId(el), extra: { slot },
       });
       recordPauseRequest('COMPONENT_CLEANUP', el, getAudioObjectId(el));
-      try { el.pause(); } catch { /* noop */ }
-      // src 를 떼고 load() 로 리소스를 놓아준다 — 죽은 파이프라인을 붙잡고 있지 않게.
-      try { el.removeAttribute('src'); el.load(); } catch { /* noop */ }
+      // pause → src 제거 → load(). 브라우저가 붙잡고 있던 미디어 리소스를 실제로 놓는다.
+      disposeAudioElement(el);
     }
 
     // 새 엘리먼트에 src 를 다시 꽂게 트랙 전환 기준점을 지운다(큐는 그대로).
