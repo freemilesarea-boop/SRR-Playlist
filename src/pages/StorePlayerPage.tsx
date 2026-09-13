@@ -21,6 +21,7 @@ import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { buildHash } from '@/lib/playbackFlightRecorder';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 // X6.89 — B2B 프랜차이즈 정책 자동 동기화 (60s 폴링).
@@ -84,7 +85,9 @@ export default function StorePlayerPage() {
       reason: takeReloadReason(),
       playerMode: 'store',
       // 홈 화면 앱으로 설치했는지 기록 (BrandPlayerPage 와 동일 목적).
-      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
+      // buildHash — 이 기기가 어느 배포본을 돌고 있는지. 매장별로 오래된 빌드가
+      // 남아있는지(stale client) 판별할 수단이 지금까지 없었다.
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()), buildHash: buildHash() },
     });
     return watchPageLifecycle('store');
   }, []);

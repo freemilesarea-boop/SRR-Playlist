@@ -19,6 +19,10 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import { resolveStallAction, isEscalation, type StallAction } from '@/lib/stallWatchdog';
+import {
+  initFlightRecorder, setFlightContextProvider, resetFlightRecorder, newPlayerInstanceId,
+  recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
+} from '@/lib/playbackFlightRecorder';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -253,6 +257,13 @@ export default function Player() {
   const [audioMountRevision, setAudioMountRevision] = useState(0);
   const lastMountedARef = useRef<HTMLAudioElement | null>(null);
   const lastMountedBRef = useRef<HTMLAudioElement | null>(null);
+
+  // FLIGHT-RECORDER-2 — Player/audio 인스턴스 식별.
+  // 장애 직전에 Player 가 리마운트됐는지, audio 엘리먼트가 새로 만들어졌는지를
+  // 사후에 판별할 수단이 지금까지 없었다(숙대점 조사 UNVERIFIED #9).
+  const playerInstanceIdRef = useRef<string>(newPlayerInstanceId());
+  const detachARef = useRef<(() => void) | null>(null);
+  const detachBRef = useRef<(() => void) | null>(null);
   const setAudioARef = useCallback((node: HTMLAudioElement | null) => {
     audioARef.current = node;
     if (node && node !== lastMountedARef.current) {
@@ -267,8 +278,13 @@ export default function Player() {
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
         currentSrc: node.currentSrc,
       });
+      // 순수 관측 — 재생 API 를 건드리지 않는다.
+      detachARef.current?.();
+      detachARef.current = attachMediaEventRecorder(node, getAudioObjectId(node));
     } else if (!node) {
       lastMountedARef.current = null;
+      detachARef.current?.();
+      detachARef.current = null;
     }
   }, []);
   const setAudioBRef = useCallback((node: HTMLAudioElement | null) => {
@@ -283,8 +299,12 @@ export default function Player() {
         sinkId: (node as HTMLAudioElement & { sinkId?: string }).sinkId,
         currentSrc: node.currentSrc,
       });
+      detachBRef.current?.();
+      detachBRef.current = attachMediaEventRecorder(node, getAudioObjectId(node));
     } else if (!node) {
       lastMountedBRef.current = null;
+      detachBRef.current?.();
+      detachBRef.current = null;
     }
   }, []);
 
@@ -645,6 +665,49 @@ export default function Player() {
     crossfadeSeconds,
   };
 
+  // FLIGHT-RECORDER-2 — 블랙박스 수명주기.
+  // 평상시 서버 전송은 0건이다. 링버퍼에만 쌓다가 정지가 감지될 때만 flush 한다.
+  const stallRecoveryLevelRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = playerInstanceIdRef.current;
+    initFlightRecorder(pid);
+    setFlightContextProvider(() => {
+      const st = usePlayerStore.getState();
+      const h = healthStateRef.current;
+      const activeEl = h.activeIdx === 0 ? audioARef.current : audioBRef.current;
+      return {
+        trackId: st.queue[st.index]?.id ?? null,
+        queueIndex: st.index,
+        queueLength: st.queue.length,
+        activeAudioElementId: activeEl ? getAudioObjectId(activeEl) : null,
+        crossfadeActive: h.crossfading,
+        recoveryLevel: stallRecoveryLevelRef.current,
+      };
+    });
+    recordFlightEvent('PLAYER_MOUNT');
+    return () => {
+      recordFlightEvent('PLAYER_UNMOUNT');
+      resetFlightRecorder();
+    };
+  }, []);
+
+  /**
+   * 링버퍼를 서버로 1회 내보낸다. 레이트 리밋(10분/일20회)에 걸리면 조용히 넘어간다.
+   * 매장 모드에서만 보낸다 — 일반 청취자에게는 아무 동작도 하지 않는다.
+   * 전송 실패는 logPlaybackDiagnostic 안에서 삼켜지므로 재생에 영향이 없다.
+   */
+  const flushFlightRecorderRef = useRef<(trigger: Parameters<typeof tryBuildFlush>[0], note?: string) => void>(() => {});
+  flushFlightRecorderRef.current = (trigger, note) => {
+    if (!businessMode) return;
+    const payload = tryBuildFlush(trigger, note ? { note } : {});
+    if (!payload) return;
+    void logPlaybackDiagnostic('playback_stalled', {
+      reason: trigger === 'media_error' ? 'media_error' : 'self_heal',
+      playerMode: 'store',
+      context: payload,
+    });
+  };
+
   // ensureSinkReady 는 useCallback → 각 렌더마다 재생성. ref 로 보관해서
   // stable checkAudioHealth 가 접근.
   const ensureSinkReadyRef = useRef(ensureSinkReady);
@@ -978,7 +1041,7 @@ export default function Player() {
       const audio = activeRef();
       if (audio && usePlayerStore.getState().playing && isPlayableUrl(usePlayerStore.getState().queue[usePlayerStore.getState().index]?.audio_url)) {
         try { audio.load(); } catch { /* noop */ }
-        const p = audio.play();
+        const p = observePlay(audio.play(), 'online-recovery', audio);
         if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay 정책 등 — 무시 */ });
       }
     }
@@ -1233,6 +1296,7 @@ export default function Player() {
       setDuration(0);
 
       // 1) 이전 src 의 play 프로미스 abort
+      recordPauseRequest('PLAYER_STOP', audio, getAudioObjectId(audio));
       audio.pause();
       // 2) 새 src 적용
       // 오프라인 캐시가 준비돼 있으면 로컬 object URL, 아니면 원본 네트워크 URL.
@@ -1280,6 +1344,7 @@ export default function Player() {
       // 다른(next-preload) audio 는 정지 + src 해제
       const other = nextRef();
       if (other) {
+        recordPauseRequest('INACTIVE_AUDIO', other, getAudioObjectId(other));
         other.pause();
         other.removeAttribute('src');
       }
@@ -1295,9 +1360,13 @@ export default function Player() {
         void attemptPlay(audio, 'resume');
       }
     } else {
+      recordPauseRequest('PLAYER_STOP', audio, getAudioObjectId(audio));
       audio.pause();
       const other = nextRef();
-      if (other && !other.paused) other.pause();
+      if (other && !other.paused) {
+        recordPauseRequest('INACTIVE_AUDIO', other, getAudioObjectId(other));
+        other.pause();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, playable, playing, queue.length, activeIdx]);
@@ -1322,6 +1391,7 @@ export default function Player() {
         inactiveVolume: inactive.volume,
         crossfadeInProgress: crossfading,
       });
+      recordPauseRequest('INVALID_STATE_GUARD', inactive, getAudioObjectId(inactive));
       try { inactive.pause(); } catch { /* noop */ }
     }
   }, [volume, activeIdx, crossfading]);
@@ -1364,7 +1434,7 @@ export default function Player() {
       if (!audio.paused) return;          // 이미 재생 중 (위 무음 복원만 수행)
 
       console.info('[player] auto-resume', { reason, id: st.queue[st.index]?.id });
-      const p = audio.play();
+      const p = observePlay(audio.play(), 'auto-resume', audio);
       if (p && typeof p.catch === 'function') {
         p.catch((e) => {
 
@@ -1507,6 +1577,7 @@ export default function Player() {
         if (progressed) fruitlessSkipsRef.current = 0;
         stallProgressRef.current = { trackId, ct, ts: now };
         stallLastActionRef.current = 'none';
+        stallRecoveryLevelRef.current = null;
         return;
       }
 
@@ -1526,6 +1597,24 @@ export default function Player() {
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
       const prevAction = stallLastActionRef.current;
       stallLastActionRef.current = action;
+      stallRecoveryLevelRef.current = action;
+
+      // FLIGHT-RECORDER-2 — 정지 순간의 스냅샷. 여기가 "정상 → 정지" 전환 직후의
+      // 첫 관측 지점이다. 1칸 진입에서만 링버퍼를 서버로 내보낸다(레이트 리밋 적용).
+      recordFlightEvent('STALL_SNAPSHOT', {
+        el, audioElementId: getAudioObjectId(el),
+        extra: { action, prevAction, stalledMs: Math.round(now - prog.ts) },
+      });
+      if (action === 'nudge') {
+        recordFlightEvent('RECOVERY_LEVEL_1_START', { el, audioElementId: getAudioObjectId(el) });
+        flushFlightRecorderRef.current('recovery_level_1');
+      } else if (action === 'reload') {
+        recordFlightEvent('RECOVERY_LEVEL_2_START', { el, audioElementId: getAudioObjectId(el) });
+      } else if (action === 'skip') {
+        recordFlightEvent('RECOVERY_LEVEL_3_START', { el, audioElementId: getAudioObjectId(el) });
+      } else if (action === 'reload_page') {
+        recordFlightEvent('RECOVERY_LEVEL_4_START', { el, audioElementId: getAudioObjectId(el) });
+      }
 
       // SELF-HEAL-2 — paused 로 굳은 정지는 지금껏 계측에 한 번도 안 잡혔다
       // (숙대점 조사 시점 playback_stalled 0건). 사다리 첫 칸에서 한 번만 남겨
@@ -1561,6 +1650,7 @@ export default function Player() {
         // 같은 위치로 소스를 다시 잡는다 (onError NETWORK 재시도와 같은 방식).
         const resumeAt = ct;
         try {
+          recordFlightEvent('RECOVERY_LEVEL_2_LOAD', { el, audioElementId: getAudioObjectId(el) });
           el.load();
           const onceCanPlay = () => {
             el.removeEventListener('canplay', onceCanPlay);
@@ -1569,7 +1659,7 @@ export default function Player() {
                 el.currentTime = resumeAt;
               }
             } catch { /* noop */ }
-            const pr = el.play();
+            const pr = observePlay(el.play(), 'recovery-l2-reload', el);
             if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 칸(skip)이 처리 */ });
           };
           el.addEventListener('canplay', onceCanPlay, { once: true });
@@ -1749,6 +1839,7 @@ export default function Player() {
     // 이미 무효 (진짜 다음 곡이 다른 트랙일 수 있음). 안전하게 abort.
     const stAfterWait = usePlayerStore.getState();
     if (stAfterWait.queue[stAfterWait.index]?.id !== current.id) {
+      recordFlightEvent('CROSSFADE_ABORT', { extra: { why: 'superseded', toTrackId: nextTrack.id } });
       audioDebugWarn('[audio:crossfade:superseded]', {
         expectedFromId: current.id,
         actualCurrentId: stAfterWait.queue[stAfterWait.index]?.id ?? null,
@@ -1759,7 +1850,11 @@ export default function Player() {
       return;
     }
 
-    const p = nextAudio.play();
+    recordFlightEvent('CROSSFADE_NEXT_PLAY_REQUEST', {
+      el: nextAudio, audioElementId: getAudioObjectId(nextAudio),
+      extra: { fromTrackId: current.id, toTrackId: nextTrack.id },
+    });
+    const p = observePlay(nextAudio.play(), 'crossfade-next', nextAudio, getAudioObjectId(nextAudio));
     if (p && typeof p.catch === 'function') {
       p.catch(() => {
         // 자동재생 실패 — 그냥 ended 핸들러가 다음 곡 처리
@@ -1767,6 +1862,13 @@ export default function Player() {
       });
     }
 
+    recordFlightEvent('CROSSFADE_START', {
+      extra: {
+        fromAudioElementId: getAudioObjectId(activeRef()),
+        toAudioElementId: getAudioObjectId(nextAudio),
+        fromTrackId: current.id, toTrackId: nextTrack.id,
+      },
+    });
     setCrossfading(true);
     const targetVol = volume;
     const durationMs = crossfadeSeconds * 1000;
@@ -1790,8 +1892,15 @@ export default function Player() {
         elapsedMs: Math.round(performance.now() - startedAt),
         swapToIdx,
       });
+      recordFlightEvent('CROSSFADE_SWAP', {
+        extra: {
+          why: reason, swapToIdx,
+          fromTrackId: current.id, toTrackId: nextTrack.id,
+        },
+      });
       // 양쪽 audio 안전 처리 — 어떤 reason 이든 active 즉시 pause
       if (activeAudio) {
+        recordPauseRequest('CROSSFADE', activeAudio, getAudioObjectId(activeAudio));
         activeAudio.pause();
         activeAudio.currentTime = 0;
         activeAudio.volume = 0;
@@ -1805,6 +1914,7 @@ export default function Player() {
         if (nextAudio.muted) nextAudio.muted = false;
       }
       setActiveIdx(swapToIdx);
+      recordFlightEvent('CROSSFADE_COMPLETE', { extra: { why: reason, toTrackId: nextTrack.id } });
       setCrossfading(false);
       if (crossfadeRafRef.current !== null) {
         cancelAnimationFrame(crossfadeRafRef.current);
@@ -2154,7 +2264,7 @@ export default function Player() {
           networkState: target.networkState,
           paused: target.paused,
         });
-        const p = target.play();
+        const p = observePlay(target.play(), 'engine-stuck', target);
         if (p && typeof p.catch === 'function') {
           p.then(() => {
             audioDebugWarn('[audio:engine:recovery-play] ok', { trackId: nowTrackId });
@@ -2405,7 +2515,7 @@ export default function Player() {
     }
     const expectedSrc = audio.currentSrc;
     try {
-      await audio.play();
+      await observePlay(audio.play(), 'play-target', audio, getAudioObjectId(audio));
       // muted=true 면 안전 해제 (브라우저/사용자 실수 방어)
       if (audio.muted) {
         if (import.meta.env.DEV) console.warn(`[Player] muted=true 감지 — 자동 해제 (${label})`);
@@ -2454,6 +2564,7 @@ export default function Player() {
           // 무인 매장에서는 토스트를 아무도 못 본다 — 전체화면 안내(PlaybackBlockedOverlay)를 띄운다.
           usePlaybackHealthStore.getState().setAutoplayBlocked(true);
           // 직전 리로드 사유와 함께 남긴다 — 배포 때문인지 탭 정리 때문인지 구분하려면 이게 필요하다.
+          flushFlightRecorderRef.current('play_rejected', 'NotAllowedError');
           void logPlaybackDiagnostic('autoplay_blocked', {
             reason: lastReloadReasonRef.current,
             playerMode: 'store',
@@ -2474,7 +2585,7 @@ export default function Player() {
       }
       if (!audio.paused) return;
       try {
-        await audio.play();
+        await observePlay(audio.play(), 'play-target-retry', audio);
         if (import.meta.env.DEV) console.debug(`[Player] play() ok (${label} retry)`, { id: current?.id, currentSrc: audio.currentSrc });
       } catch (err2: unknown) {
         const e2 = err2 as DOMException;
@@ -2650,6 +2761,7 @@ export default function Player() {
         },
       });
     }
+    flushFlightRecorderRef.current('media_error', codeName);
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
     void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });
@@ -2720,7 +2832,7 @@ export default function Player() {
                 target.currentTime = resumeAt;
               }
             } catch { /* noop */ }
-            const pr = target.play();
+            const pr = observePlay(target.play(), 'network-retry', target);
             if (pr && typeof pr.catch === 'function') pr.catch(() => { /* 다음 onError 가 처리 */ });
           };
           target.addEventListener('canplay', onceCanPlay, { once: true });

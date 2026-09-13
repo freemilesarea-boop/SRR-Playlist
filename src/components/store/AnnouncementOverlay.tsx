@@ -64,6 +64,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
+import { recordPauseRequest } from '@/lib/playbackFlightRecorder';
 import {
   getUpcomingAnnouncements, markAnnouncementPlayed, resolveAnnouncementPlayableUrl,
   type UpcomingAnnouncement,
@@ -260,6 +261,7 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
 
     // 현재 매장음악 즉시 interrupt (자연 종료 대기 없음)
     try {
+      recordPauseRequest('ANNOUNCEMENT');
       usePlayerStore.getState().pause();
     } catch (e) {
       log('pause BGM failed', e);

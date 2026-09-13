@@ -31,6 +31,7 @@
  */
 import { type MutableRefObject, useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
+import { recordPauseRequest } from '@/lib/playbackFlightRecorder';
 import type { SessionSummary } from '@/hooks/useAudioSessionState';
 
 /** invalid issue 식별자. */
@@ -219,6 +220,7 @@ export function useAudioInvalidStateGuard(
         switch (issue) {
           case 'active-playing-without-intent': {
             if (active && !active.paused) {
+              recordPauseRequest('INVALID_STATE_GUARD', active);
               active.pause();
               correctionParts.push('active.pause');
             }
@@ -226,6 +228,7 @@ export function useAudioInvalidStateGuard(
           }
           case 'inactive-playing-without-intent': {
             if (inactive && !inactive.paused) {
+              recordPauseRequest('INVALID_STATE_GUARD', inactive);
               inactive.pause();
               correctionParts.push('inactive.pause');
             }
@@ -238,6 +241,7 @@ export function useAudioInvalidStateGuard(
           case 'both-playing-no-crossfade': {
             // active 는 유지 · inactive 만 정리 (이중 재생 → active 만 남김).
             if (inactive && !inactive.paused) {
+              recordPauseRequest('INVALID_STATE_GUARD', inactive);
               inactive.pause();
               correctionParts.push('inactive.pause');
             }
@@ -256,6 +260,7 @@ export function useAudioInvalidStateGuard(
           }
           case 'session-paused-but-audio-not': {
             if (active && !active.paused) {
+              recordPauseRequest('INVALID_STATE_GUARD', active);
               active.pause();
               correctionParts.push('active.pause');
             }

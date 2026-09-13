@@ -14,6 +14,7 @@
  */
 import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
+import { recordPauseRequest, observePlay } from '@/lib/playbackFlightRecorder';
 import { toast } from '@/store/toastStore';
 import type { AudioSessionState } from '@/hooks/useAudioSessionState';
 
@@ -187,9 +188,11 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
       if (playingExpected) return true;
       let forced = 0;
       if (active && !active.paused) {
+        recordPauseRequest('RECOVERY_MANAGER', active);
         try { active.pause(); parts.push('force-pause-active;'); forced += 1; } catch { /* silent */ }
       }
       if (inactive && !inactive.paused) {
+        recordPauseRequest('RECOVERY_MANAGER', inactive);
         try { inactive.pause(); parts.push('force-pause-inactive;'); forced += 1; } catch { /* silent */ }
       }
       audioDebugWarn('[audio:recovery:blocked-autoplay]', {
@@ -207,7 +210,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     const tryPlay = async (el: HTMLAudioElement | null, tag: string): Promise<boolean> => {
       if (!el) { parts.push(`${tag}=no-el;`); return false; }
       try {
-        const p = el.play();
+        const p = observePlay(el.play(), 'recovery-manager', el);
         if (p && typeof p.then === 'function') await p;
         parts.push(`${tag}=ok;`);
         return true;
@@ -249,6 +252,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
             break;
           }
           if (inactive) {
+            recordPauseRequest('RECOVERY_MANAGER', inactive);
             try { inactive.pause(); parts.push('inactive.pause=ok;'); }
             catch (e) { parts.push(`inactive.pause=err(${(e as Error).message});`); }
             try { inactive.volume = 0; parts.push('inactive.vol=0;'); }
@@ -259,6 +263,7 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
             if (!(await tryPlay(active, 'active.play'))) outcome = 'failed';
           } else if (active && !active.paused && !playingExpected) {
             // 사용자 재생 의도 없는데 active 가 재생 중 → 강제 pause (autoplay leak 정리)
+            recordPauseRequest('RECOVERY_MANAGER', active);
             try { active.pause(); parts.push('force-pause-active-both;'); } catch { /* silent */ }
             audioDebugWarn('[audio:recovery:blocked-autoplay]', {
               reason,
