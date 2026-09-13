@@ -22,6 +22,12 @@ export interface NativeLandingInput {
   boundBrandId?: string | null;
   /** localStorage 에 복원 가능한 재생 큐가 남아 있는가 */
   hasPlayerSession: boolean;
+  /**
+   * 태블릿인가. 매장·브랜드 전체화면 플레이어는 벽/카운터에 세워두는 기기 이야기다.
+   * 점주가 자기 폰으로 앱을 열었을 때까지 플레이어로 보내면, 검색도 홈도 못 보고
+   * 매번 나가기를 눌러야 한다 — 앱을 안 쓰게 되는 길이다.
+   */
+  tablet: boolean;
 }
 
 /** 매장(business) 플랜 계정인지. 셋 중 하나만 business 여도 매장으로 본다. */
@@ -43,6 +49,10 @@ export function nativeLandingPath(input: NativeLandingInput): string | null {
   if (input.currentPath !== '/') return null;
   // 로그인 전에는 기존 게이트(RequireAuth/LoginPage)가 처리한다.
   if (!input.signedIn) return null;
+
+  // 폰에서는 가로채지 않는다. 전체화면 플레이어는 세워두는 기기의 화면이다.
+  // (하단탭의 '매장' 으로 언제든 갈 수 있으므로 접근성은 잃지 않는다.)
+  if (!input.tablet) return null;
 
   // 브랜드 전용 태블릿이 우선 — 기기에 브랜드가 묶여 있으면 그 브랜드 플레이어가 이 기기의 용도다.
   if (input.boundBrandId) return `/brand/player/${input.boundBrandId}`;

@@ -436,7 +436,7 @@ function NotificationsSection() {
         <button
           onClick={() => void onMarkAll()}
           disabled={markingAll || unread === 0}
-          className="rounded bg-bg-deep px-2 py-1 text-[11px] hover:bg-bg-hover disabled:opacity-50"
+          className="min-h-11 rounded bg-bg-deep px-3 py-1 text-[11px] hover:bg-bg-hover disabled:opacity-50"
         >모두 읽음</button>
       </div>
       {error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-200"><AlertCircle size={11} className="inline" /> {error}</p>}

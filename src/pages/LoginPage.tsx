@@ -253,7 +253,7 @@ export default function LoginPage() {
   const showBackButton = mode !== 'signin';
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6 pt-safe pb-safe">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 pt-safe pb-safe">
       <div className="w-full max-w-md space-y-6 animate-fade-in py-10">
         <div className="space-y-2 text-center">
           <Logo size={56} className="mx-auto rounded-2xl" />

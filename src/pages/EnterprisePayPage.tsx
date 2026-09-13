@@ -55,7 +55,7 @@ export default function EnterprisePayPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-8">
-      <Link to="/enterprise/me" className="mb-4 inline-flex items-center gap-1 text-sm text-ink-mute hover:text-ink">
+      <Link to="/enterprise/me" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-ink-mute hover:text-ink">
         <ArrowLeft size={14} /> 대시보드
       </Link>
 

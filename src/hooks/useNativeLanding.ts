@@ -5,6 +5,7 @@ import { isNativeApp } from '@/lib/native';
 import { landingGate, nativeLandingPath } from '@/lib/nativeLanding';
 import { loadPlayerSession } from '@/lib/playerSession';
 import { getRecentBrands, getBrandToken } from '@/lib/brandSession';
+import { currentDeviceIsTablet } from '@/lib/deviceClass';
 
 /**
  * 로그인한 사용자당 한 번, 루트('/')에 있으면 역할에 맞는 화면으로 갈아탄다.
@@ -64,6 +65,7 @@ export function useNativeLanding(): void {
       subscriptionType: profile?.subscription_type ?? null,
       boundBrandId: boundBrandId(),
       hasPlayerSession: !!loadPlayerSession(),
+      tablet: currentDeviceIsTablet(),
     });
 
     // 판단이 끝났으면(이동하든 안 하든) 이 사용자에 대해서는 더 보지 않는다.

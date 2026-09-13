@@ -306,7 +306,7 @@ export default function BrandPlayerPage() {
 
   if (error && !hasQueue) {
     return (
-      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-black px-6 text-center text-white pt-safe pb-safe pl-safe pr-safe">
+      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-black text-center text-white pt-safe pb-safe pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))]">
         <Music size={40} className="text-white/40" />
         <p className="text-lg font-bold">{error}</p>
         <div className="flex gap-2">
@@ -338,13 +338,13 @@ export default function BrandPlayerPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={switchStore} title="다른 매장 코드 입력" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+          <button onClick={switchStore} title="다른 매장 코드 입력" className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-xs font-semibold hover:bg-white/20">
             <SwitchIcon size={13} /> <span className="hidden sm:inline">다른 매장</span>
           </button>
-          <button onClick={() => void disconnectDevice()} title="이 기기의 매장 연결 해제" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+          <button onClick={() => void disconnectDevice()} title="이 기기의 매장 연결 해제" className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-xs font-semibold hover:bg-white/20">
             <LogOut size={13} /> <span className="hidden sm:inline">연결 해제</span>
           </button>
-          <button onClick={exitPlayer} title="플레이어 종료 (저장된 코드는 유지 — 다음에 자동 연결)" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">
+          <button onClick={exitPlayer} title="플레이어 종료 (저장된 코드는 유지 — 다음에 자동 연결)" className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-xs font-semibold hover:bg-white/20">
             <X size={14} /> <span className="hidden sm:inline">나가기</span>
           </button>
         </div>

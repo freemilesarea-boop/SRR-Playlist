@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { isNativeApp } from '@/lib/native';
+import { useIsTablet } from '@/hooks/useIsTablet';
 import { bottomNavItems, type NavItem } from '@/lib/appNav';
 import { isStoreAccount } from '@/lib/nativeLanding';
 import { getRecentBrands } from '@/lib/brandSession';
@@ -40,6 +41,8 @@ function TabInner({ item, active }: { item: NavItem; active: boolean }) {
 export default function BottomNav() {
   const profile = useAuthStore((s) => s.profile);
   const [moreOpen, setMoreOpen] = useState(false);
+  // 회전하면 다시 계산된다 — 아이패드를 돌렸을 때 탭 구성이 그대로 남으면 안 된다.
+  const tablet = useIsTablet();
 
   const items = bottomNavItems({
     native: isNativeApp(),
@@ -50,6 +53,7 @@ export default function BottomNav() {
       subscriptionType: profile?.subscription_type ?? null,
     }),
     hasBrand: hasBoundBrand(),
+    tablet,
   });
 
   return (

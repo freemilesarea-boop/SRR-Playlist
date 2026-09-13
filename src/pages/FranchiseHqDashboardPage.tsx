@@ -110,7 +110,7 @@ export default function FranchiseHqDashboardPage() {
           </div>
         </div>
         <button onClick={() => void load()} disabled={state.loading}
-          className="inline-flex items-center gap-1 rounded-full bg-bg-soft px-3 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50">
+          className="inline-flex min-h-11 items-center gap-1 rounded-full bg-bg-soft px-3.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50">
           <RefreshCw size={12} className={state.loading ? 'animate-spin' : ''} /> 새로고침
         </button>
       </header>

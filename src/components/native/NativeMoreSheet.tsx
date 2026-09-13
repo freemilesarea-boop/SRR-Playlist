@@ -15,6 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import { nativeMenuSections, type NavItem } from '@/lib/appNav';
+import { useIsTablet } from '@/hooks/useIsTablet';
 import { isStoreAccount } from '@/lib/nativeLanding';
 import { NAV_ICONS } from '@/components/navIcons';
 import { getRecentBrands } from '@/lib/brandSession';
@@ -53,11 +54,13 @@ export default function NativeMoreSheet({ onClose }: Props) {
   }, [userId]);
 
   const enterprise = useEnterpriseSelfRole(userId);
+  const tablet = useIsTablet();
 
   const sections = useMemo(
     () =>
       nativeMenuSections({
         native: true,
+        tablet,
         signedIn: !!userId,
         isCurator: profile?.is_curator ?? false,
         storeAccount: isStoreAccount({
@@ -73,7 +76,7 @@ export default function NativeMoreSheet({ onClose }: Props) {
         isSalesAgent,
         isEnterpriseHq: !!enterprise.role.is_hq,
       }),
-    [userId, profile, isSalesAgent, enterprise.role.is_hq],
+    [userId, profile, isSalesAgent, enterprise.role.is_hq, tablet],
   );
 
   return (

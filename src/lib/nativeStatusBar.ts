@@ -8,15 +8,10 @@
  * 한 번 더 갈리는데, 색을 여기에 또 적어두면 theme.css 와 갈라지기 때문이다.
  */
 import { isNativeApp, nativePlatform } from '@/lib/native';
+import { rgbTripletToHex } from '@/lib/timeTheme';
 
-/** CSS 변수에 들어있는 "10 10 10" 같은 rgb 3원소를 #rrggbb 로. 못 읽으면 null. */
-export function rgbTripletToHex(triplet: string): string | null {
-  const parts = triplet.trim().split(/[\s,]+/).filter(Boolean);
-  if (parts.length !== 3) return null;
-  const nums = parts.map((p) => Number(p));
-  if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return null;
-  return `#${nums.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('')}`;
-}
+// 색 변환은 timeTheme 과 한 벌이다(웹 PWA 의 theme-color 도 같은 값을 쓴다).
+export { rgbTripletToHex };
 
 /**
  * Capacitor StatusBar 의 Style 이름은 "글자색" 이 아니라 "배경이 어둡다/밝다" 를 뜻한다.

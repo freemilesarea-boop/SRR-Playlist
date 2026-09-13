@@ -99,7 +99,7 @@ export default function AuthCallbackPage() {
   }, [navigate]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-ink">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-bg text-ink">
       <Loader2 size={28} className="animate-spin text-accent" />
       <p className="text-sm text-ink-mute">로그인 처리 중이에요…</p>
     </div>

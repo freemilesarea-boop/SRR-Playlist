@@ -212,7 +212,7 @@ export default function PaymentSuccessPage() {
         )}
       </div>
 
-      <Link to="/profile" className="block text-center text-xs text-ink-mute hover:text-ink">
+      <Link to="/profile" className="flex min-h-11 items-center justify-center text-xs text-ink-mute hover:text-ink">
         마이페이지로 가기
       </Link>
     </div>
@@ -344,7 +344,7 @@ function TimeoutView({
       </div>
       <Link
         to="/profile"
-        className="mt-2 block text-center text-[11px] text-ink-mute hover:text-ink"
+        className="mt-2 flex min-h-11 items-center justify-center text-[11px] text-ink-mute hover:text-ink"
       >
         마이페이지로 가기
       </Link>

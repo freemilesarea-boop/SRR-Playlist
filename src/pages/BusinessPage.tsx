@@ -175,7 +175,7 @@ export default function BusinessPage() {
           onClick={handleToggleBusinessMode}
           disabled={starting || (!isPlaying && schedules.length === 0)}
           aria-pressed={isPlaying}
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
+          className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
             isPlaying
               ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200 ring-emerald-400/30 hover:bg-emerald-500/25'
               : 'bg-bg-card text-ink-dim ring-line/10 hover:bg-bg-hover hover:text-ink'

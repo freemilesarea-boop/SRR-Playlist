@@ -396,7 +396,7 @@ function Empty({ children }: { children: React.ReactNode }) {
       <p className="mt-2 text-sm text-ink-mute">{children}</p>
       <Link
         to="/charts"
-        className="mt-3 inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent ring-1 ring-accent/20 hover:bg-accent/15"
+        className="mt-3 inline-flex min-h-11 items-center gap-1 rounded-full bg-accent/10 px-4 py-2.5 text-xs font-semibold text-accent ring-1 ring-accent/20 hover:bg-accent/15"
       >
         <Headphones size={12} /> 차트에서 둘러보기
       </Link>

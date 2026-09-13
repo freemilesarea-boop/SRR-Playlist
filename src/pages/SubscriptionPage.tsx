@@ -573,7 +573,7 @@ export default function SubscriptionPage() {
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=듣다 매장 구독 문의"
-          className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+          className="inline-flex min-h-11 items-center gap-1 text-xs text-accent hover:underline"
         >
           <Mail size={12} /> 매장 일괄 도입 문의
         </a>

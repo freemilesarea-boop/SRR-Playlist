@@ -104,7 +104,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   // 세션 복원 전에는 절대 /login 으로 보내지 않고 로더 표시 (로그인 루프 방지)
   if (!isAuthReady) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 text-ink-mute">
         <LogoMark size={44} className="animate-pulse text-accent" />
         <p>불러오는 중…</p>
       </div>
@@ -357,7 +357,7 @@ export default function App() {
 
 function AccountStatusLoader() {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 text-ink-mute">
       <LogoMark size={44} className="animate-pulse text-accent" />
       <p>불러오는 중…</p>
     </div>
@@ -366,7 +366,7 @@ function AccountStatusLoader() {
 
 function WithdrawnAccountScreen({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className="text-accent" />
       <p className="text-lg font-bold">이 계정은 회원 탈퇴 처리되었습니다.</p>
       <p className="text-sm text-ink-mute">
@@ -384,7 +384,7 @@ function WithdrawnAccountScreen({ onSignOut }: { onSignOut: () => void }) {
 
 function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <p className="text-lg font-bold">계정이 비활성화됐어요</p>
       <p className="text-sm text-ink-mute">
         운영자가 이 계정을 일시 비활성화했어요.<br />
@@ -403,7 +403,7 @@ function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
 // 프로필 조회가 에러(네트워크 등)로 실패한 경우 — 절대 자동 signOut 하지 않고 재시도 제공.
 function ProfileErrorScreen({ onRetry, onSignOut }: { onRetry: () => void; onSignOut: () => Promise<void> }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className="text-accent" />
       <p className="text-lg font-bold">정보를 불러오지 못했어요</p>
       <p className="text-sm text-ink-mute">네트워크 상태를 확인하고 다시 시도해주세요.</p>
@@ -458,7 +458,7 @@ function ProfileBootstrapScreen({
   }, [userId, onReload]);
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className={exhausted ? 'text-accent' : 'animate-pulse text-accent'} />
       <p className="text-lg font-bold">계정을 준비하고 있어요</p>
       <p className="text-sm text-ink-mute">

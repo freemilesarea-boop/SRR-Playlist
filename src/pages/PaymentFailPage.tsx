@@ -29,7 +29,7 @@ export default function PaymentFailPage() {
           </a>
         </div>
       </div>
-      <Link to="/" className="block text-center text-xs text-ink-mute hover:text-ink">
+      <Link to="/" className="flex min-h-11 items-center justify-center text-xs text-ink-mute hover:text-ink">
         홈으로 돌아가기
       </Link>
     </div>

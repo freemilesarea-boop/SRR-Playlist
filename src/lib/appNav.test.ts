@@ -7,7 +7,7 @@ import {
   type MenuContext,
 } from './appNav';
 
-const web: NavContext = { native: false, isCurator: false, storeAccount: false, hasBrand: false };
+const web: NavContext = { native: false, isCurator: false, storeAccount: false, hasBrand: false, tablet: true };
 
 const menuBase: MenuContext = {
   ...web,
@@ -133,5 +133,29 @@ describe('nativeMenuSections', () => {
     for (const section of nativeMenuSections({ ...menuBase, isAdmin: true, isArtist: true, isSalesAgent: true, isEnterpriseHq: true, isCurator: true })) {
       expect(new Set(section.items.map((i) => i.to)).size).toBe(section.items.length);
     }
+  });
+});
+
+describe('하단탭 — 매장 계정이라도 폰에서는 홈을 남긴다', () => {
+  const storePhone: NavContext = {
+    native: true, isCurator: false, storeAccount: true, hasBrand: false, tablet: false,
+  };
+  const storeTablet: NavContext = { ...storePhone, tablet: true };
+
+  it('폰: 홈과 매장이 둘 다 있다', () => {
+    const keys = bottomNavItems(storePhone).map((i) => i.to ?? i.action);
+    expect(keys).toContain('/');
+    expect(keys).toContain('/business');
+  });
+
+  it('태블릿: 매장이 첫 칸, 홈은 더보기로 밀린다', () => {
+    const items = bottomNavItems(storeTablet);
+    expect(items[0].to).toBe('/business');
+    expect(items.map((i) => i.to)).not.toContain('/');
+  });
+
+  it('어느 쪽이든 5칸을 유지한다', () => {
+    expect(bottomNavItems(storePhone)).toHaveLength(5);
+    expect(bottomNavItems(storeTablet)).toHaveLength(5);
   });
 });

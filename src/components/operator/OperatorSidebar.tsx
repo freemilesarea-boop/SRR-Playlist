@@ -61,7 +61,7 @@ export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProp
     <div className="flex h-full flex-col bg-bg">
       {/* Brand / title */}
       <div className="px-5 pb-3 pt-5">
-        <Link to="/ops" onClick={onNavigate} className="group inline-flex items-center gap-2.5">
+        <Link to="/ops" onClick={onNavigate} className="group inline-flex min-h-11 items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
             <Home size={16} strokeWidth={2.4} />
           </span>

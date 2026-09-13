@@ -790,7 +790,7 @@ function SimpleSlotCard({
         <button
           onClick={onAutoMatch}
           title="이 시간대에 맞는 플레이리스트 자동 추천"
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-bg-hover px-2.5 py-1.5 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg bg-bg-hover px-3 py-1.5 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
         >
           <ListMusic size={12} /> 자동
         </button>

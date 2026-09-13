@@ -13,7 +13,7 @@ function navNo(i: number): string {
 export default function Sidebar() {
   const isCurator = useAuthStore((s) => s.profile?.is_curator ?? false);
   // 앱에서는 이 사이드바 자체를 index.css(.native-shell)가 숨긴다 — 하단탭이 대신한다.
-  const navItems = sidebarNavItems({ native: false, isCurator, storeAccount: false, hasBrand: false });
+  const navItems = sidebarNavItems({ native: false, isCurator, storeAccount: false, hasBrand: false, tablet: true });
   return (
     <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line/10 bg-bg/85 backdrop-blur-xl pt-safe lg:flex">
       {/* Brand — DEUDDA Product spec: 로고 마크 + "DEUDDA." (영문 wordmark, period 포함) */}

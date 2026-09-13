@@ -8,7 +8,7 @@ export default function ConfigMissingScreen() {
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-6 pt-safe pb-safe">
+    <div className="flex min-h-dvh items-center justify-center bg-bg px-6 pt-safe pb-safe">
       <div className="w-full max-w-md space-y-5 rounded-2xl bg-bg-card p-6 ring-1 ring-yellow-500/30">
         <div className="flex items-center gap-2 text-yellow-300">
           <AlertCircle size={18} />

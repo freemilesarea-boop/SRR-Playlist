@@ -147,7 +147,7 @@ export default function EnterpriseOpsStoresPage() {
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="ml-auto inline-flex items-center gap-1 rounded bg-bg-card px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50"
+          className="ml-auto inline-flex min-h-11 items-center gap-1 rounded bg-bg-card px-3 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
         </button>

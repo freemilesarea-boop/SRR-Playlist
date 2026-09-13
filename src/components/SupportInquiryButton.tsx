@@ -63,7 +63,7 @@ export default function SupportInquiryButton({
         return 'inline-flex items-center gap-1.5 rounded-lg bg-bg-card px-3 py-2 text-sm font-semibold hover:bg-bg-hover';
       case 'chip':
       default:
-        return 'inline-flex items-center gap-1 rounded-full bg-bg-card px-2.5 py-1.5 text-xs font-semibold text-ink-mute hover:bg-bg-hover';
+        return 'inline-flex min-h-11 items-center gap-1 rounded-full bg-bg-card px-3.5 py-1.5 text-xs font-semibold text-ink-mute hover:bg-bg-hover';
     }
   })();
 

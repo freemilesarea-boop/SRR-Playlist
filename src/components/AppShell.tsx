@@ -43,11 +43,11 @@ export default function AppShell() {
   }, [loadBrand]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg pt-safe">
+    <div className="flex min-h-dvh flex-col bg-bg pt-safe">
       <Sidebar />
 
       {/* 모바일 전용 상단 우측 테마 토글 — lg+ 에서는 TopBar 안에 통합돼 숨김 */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe pl-safe pr-safe sm:px-6 lg:hidden">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end pt-safe pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))] lg:hidden">
         <div className="pointer-events-auto pt-2.5">
           <ThemeQuickToggle />
         </div>

@@ -587,7 +587,7 @@ export default function AdminPage() {
           {breadcrumbFor(tab, TABS.find((t) => t.key === tab)?.label ?? tab).map((c, i, arr) => (
             <li key={`${c.label}-${i}`} className="flex items-center gap-1">
               {c.tab && i < arr.length - 1 ? (
-                <button className="app-tap px-1 hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
+                <button className="app-tap px-3 hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
                   {c.label}
                 </button>
               ) : (

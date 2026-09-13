@@ -55,6 +55,11 @@ export interface NavContext {
   storeAccount: boolean;
   /** 이 기기에 연결된 브랜드가 있는가 */
   hasBrand: boolean;
+  /**
+   * 태블릿인가. 매장 계정이라도 폰에서는 홈을 남긴다 —
+   * 점주가 자기 폰에서 앱을 열었을 때 추천·차트로 갈 길이 더보기 시트뿐이면 안 된다.
+   */
+  tablet: boolean;
 }
 
 /** 전체 메뉴는 역할까지 봐야 한다 — 있는 사람에게만 보여준다. */
@@ -102,8 +107,12 @@ export function bottomNavItems(ctx: NavContext): NavItem[] {
     return [HOME, CHARTS, LIBRARY, STORE, PROFILE];
   }
 
-  // 매장/브랜드 계정: 음악을 트는 화면이 앞. 홈(추천)은 더보기로 밀린다.
-  if (ctx.storeAccount || ctx.hasBrand) {
+  // 매장/브랜드 계정 + 태블릿: 음악을 트는 화면이 앞. 홈(추천)은 더보기로 밀린다.
+  // 벽에 세워둔 기기는 음악을 트는 게 용도라 추천 화면이 앞에 있을 이유가 없다.
+  //
+  // 폰은 아래 기본 목록으로 내려간다. 거기에 홈과 매장이 둘 다 있어서, 점주가
+  // 자기 폰으로 열면 일반 앱처럼 쓰다가 '매장' 으로 언제든 넘어갈 수 있다.
+  if ((ctx.storeAccount || ctx.hasBrand) && ctx.tablet) {
     const first: NavItem = ctx.hasBrand && !ctx.storeAccount ? BRAND : STORE;
     return [first, SEARCH, LIBRARY, PROFILE, MORE];
   }

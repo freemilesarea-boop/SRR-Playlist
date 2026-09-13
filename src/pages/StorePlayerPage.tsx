@@ -156,7 +156,7 @@ export default function StorePlayerPage() {
         </div>
         <button
           onClick={() => navigate('/business')}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-xs font-semibold hover:bg-white/20"
         >
           <X size={14} /> 나가기
         </button>

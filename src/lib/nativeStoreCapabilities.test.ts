@@ -117,14 +117,21 @@ describe('앱 전용 셸(터치 레이아웃)', () => {
     expect(css).toContain('.native-shell .app-main > main');
   });
 
-  it('글자 키우기는 태블릿에서만 — 폰에서 키우면 좁은 화면이 넘친다', () => {
-    // 앱 하나가 아이폰(393px) · 갤럭시(412px) · 매장 태블릿(1280~2000px)에서 같이 돈다.
-    // 루트 글자를 무조건 키우면 폰에서 글자가 잘리고 버튼이 겹친다.
+  it('글자 키우기는 큰 화면에서만 — 폰에서 키우면 좁은 화면이 넘친다', () => {
+    // 앱 하나가 아이폰(393px) · 갤럭시(412px) · 아이패드(744~1024px) · 매장 태블릿(1280~2000px)에서
+    // 같이 돈다. 루트 글자를 무조건 키우면 폰에서 글자가 잘리고 버튼이 겹친다.
+    // 글자 확대는 "세워두고 한 걸음 떨어져 보는" 매장 태블릿 이야기라 1024px 유지.
     const media = css.slice(css.indexOf('@media (min-width: 1024px)'));
     expect(media).toContain('font-size: 17px');
     const beforeMedia = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
     expect(beforeMedia).not.toContain('font-size: 17px');
-    // 본문 폭 제한과 탭 높이도 태블릿 전용이어야 한다.
+  });
+
+  it('태블릿 레이아웃은 짧은 변 기준 — 세워 든 아이패드(744px)도 들어와야 한다', () => {
+    // 예전에는 이것도 1024px 였다. 그러면 아이패드 미니·갤럭시 탭 세로가 전부 폰 레이아웃이 된다.
+    const TABLET_AT = '@media (min-width: 700px) and (min-height: 600px)';
+    const media = css.slice(css.indexOf(TABLET_AT));
+    expect(css).toContain(TABLET_AT);
     expect(media).toContain('.native-shell .app-main > main');
     expect(media).toContain('min-height: 56px');
   });

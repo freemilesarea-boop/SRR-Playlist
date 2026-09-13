@@ -9,6 +9,7 @@ const base: NativeLandingInput = {
   subscriptionType: 'individual',
   boundBrandId: null,
   hasPlayerSession: false,
+  tablet: true,
 };
 
 describe('isStoreAccount', () => {
@@ -94,5 +95,31 @@ describe('landingGate — 언제 판단할 차례인가', () => {
     expect(landingGate({ ...base, landedForUser: 'u1' })).toBe('skip');
     expect(landingGate({ ...base, userId: null, landedForUser: 'u1' })).toBe('reset');
     expect(landingGate({ ...base, landedForUser: null })).toBe('evaluate');
+  });
+});
+
+describe('폰에서는 전체화면 플레이어로 보내지 않는다', () => {
+  // 전체화면 매장/브랜드 플레이어는 벽·카운터에 세워두는 기기의 화면이다.
+  // 점주가 자기 폰으로 앱을 열었는데 플레이어만 뜨면 검색도 홈도 못 보고 매번 나가기를 눌러야 한다.
+  const store = {
+    ...base,
+    accountType: 'business' as const,
+    membershipTier: 'business' as const,
+    subscriptionType: 'business',
+  };
+
+  it('매장 계정 + 폰 → 가로채지 않는다', () => {
+    expect(nativeLandingPath({ ...store, tablet: false, hasPlayerSession: true })).toBeNull();
+    expect(nativeLandingPath({ ...store, tablet: false, hasPlayerSession: false })).toBeNull();
+  });
+
+  it('매장 계정 + 태블릿 → 기존대로 매장 화면', () => {
+    expect(nativeLandingPath({ ...store, tablet: true, hasPlayerSession: true })).toBe('/business/player');
+    expect(nativeLandingPath({ ...store, tablet: true, hasPlayerSession: false })).toBe('/business');
+  });
+
+  it('브랜드 묶인 기기도 폰이면 가로채지 않는다', () => {
+    expect(nativeLandingPath({ ...base, tablet: false, boundBrandId: 'b1' })).toBeNull();
+    expect(nativeLandingPath({ ...base, tablet: true, boundBrandId: 'b1' })).toBe('/brand/player/b1');
   });
 });

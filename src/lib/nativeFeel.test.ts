@@ -59,8 +59,16 @@ describe('촉감 — 누를 때 울려야 한다', () => {
 });
 
 describe('태블릿 2단 — 넓은 화면을 쓰고 스크롤을 줄인다', () => {
-  const tablet = css.slice(css.indexOf('@media (min-width: 1024px)'));
-  const beforeTablet = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+  // 태블릿 구간은 짧은 변 기준이다(가로·세로를 함께 본다). width 만 보면 폰 가로가 섞인다.
+  const TABLET_AT = '@media (min-width: 700px) and (min-height: 600px)';
+  const tablet = css.slice(css.indexOf(TABLET_AT));
+  const beforeTablet = css.slice(0, css.indexOf(TABLET_AT));
+
+  it('폰을 눕힌 화면은 태블릿이 아니다 — 높이 조건이 있어야 한다', () => {
+    // 아이폰 16 Pro Max 가로는 956px 다. width 조건만 있으면 여기로 들어온다.
+    expect(css).toContain(TABLET_AT);
+    expect(css).not.toMatch(/@media \(min-width: 1024px\)\s*\{[^}]*app-store-grid/s);
+  });
 
   it('매장 대시보드 2단은 태블릿에서만 — 폰에서 2단이 되면 아무것도 안 보인다', () => {
     expect(tablet).toContain('.native-shell .app-store-grid');
