@@ -55,15 +55,26 @@ export async function initNativeShell(): Promise<void> {
     /* DOM 없는 환경 — skip */
   }
 
-  // 상태바: 다크 테마 고정(앱 배경 #0a0a0a 와 일치).
+  // 상태바: 앱 테마를 따라간다. 예전에는 다크로 고정해서, 라이트 모드로 쓰면
+  // 화면 위쪽 한 줄만 시커멓게 남아 있었다 — 그 한 줄이 "웹뷰" 라고 광고한다.
   try {
-    const { StatusBar, Style } = await import('@capacitor/status-bar');
-    await StatusBar.setStyle({ style: Style.Dark });
-    if (nativePlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#0a0a0a' });
-    }
+    const { syncNativeStatusBar } = await import('@/lib/nativeStatusBar');
+    await syncNativeStatusBar();
+    // 테마가 바뀌면(사용자 전환 · OS 다크모드 · 시간대) 상태바도 따라가야 한다.
+    const { useThemeStore } = await import('@/store/themeStore');
+    useThemeStore.subscribe(() => {
+      void syncNativeStatusBar();
+    });
   } catch {
     /* 플러그인 미탑재 환경 — skip */
+  }
+
+  // 누를 때 짧게 울린다. 촉감이 없으면 아무리 다듬어도 웹처럼 읽힌다.
+  try {
+    const { installTapHaptics } = await import('@/lib/nativeHaptics');
+    installTapHaptics();
+  } catch {
+    /* 진동이 안 되는 기기 — skip */
   }
 
   // 스플래시: 첫 렌더 이후 수동 숨김(깜빡임 방지).

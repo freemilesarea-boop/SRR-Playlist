@@ -266,6 +266,75 @@ input[type='range']::-moz-range-thumb {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 길게 눌러도 글자가 잡히지 않게.
+ *
+ * 앱에서 제목을 길게 눌렀을 때 파란 선택 블록과 "복사 / 전체 선택" 말풍선이 뜨면
+ * 그 순간 웹페이지로 보인다. 네이티브 앱은 본문 글자가 선택되지 않는다.
+ *
+ * 다만 전부 막으면 안 된다 — 매장 코드나 아이디처럼 복사해야 하는 값이 있다.
+ * 입력란과 등폭(mono) 글자는 열어둔다. 등폭은 이 앱에서 코드·ID·토큰에만 쓰여서
+ * "복사할 값" 과 거의 정확히 겹친다. 그 밖에 열어둘 곳은 .app-selectable 로 표시한다. */
+.native-shell {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.native-shell input,
+.native-shell textarea,
+.native-shell [contenteditable='true'],
+.native-shell code,
+.native-shell .font-mono,
+.native-shell .app-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 스크롤이 바깥으로 전파되지 않게. 안쪽 목록 끝까지 내렸을 때 페이지가 같이 밀리면
+   (스크롤 체이닝) 앱에서는 창이 흔들리는 것처럼 보인다. body 의 세로 당김은 이미 막혀 있다. */
+.native-shell [data-scroll-lock],
+.native-shell .overflow-y-auto,
+.native-shell .overflow-auto {
+  overscroll-behavior: contain;
+}
+
+/* ===== 화면 전환 =====
+ *
+ * 앞으로 가면 오른쪽에서, 뒤로 가면 왼쪽에서 들어온다. 방향 감각이 없으면 아무리
+ * 레이아웃을 다듬어도 "링크를 눌렀더니 문서가 바뀐" 웹처럼 읽힌다.
+ *
+ * 거리를 화면 폭이 아니라 32px 로 잡은 이유: 나가는 화면을 붙잡지 않기 때문에,
+ * 전체 폭을 밀면 뒤에 아무것도 없는 빈 공간이 그대로 보인다. 짧게 미는 편이 자연스럽다.
+ * 시간도 220ms 를 넘기지 않는다 — 매장에서 하루에 수백 번 누르는 화면이다. */
+@media (prefers-reduced-motion: no-preference) {
+  .native-shell .app-route-push {
+    animation: app-route-push 220ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  .native-shell .app-route-pop {
+    animation: app-route-pop 190ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+}
+@keyframes app-route-push {
+  from {
+    opacity: 0;
+    transform: translate3d(32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes app-route-pop {
+  from {
+    opacity: 0;
+    transform: translate3d(-32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ===== 태블릿(≥1024px) — 데스크톱 레이아웃이 걸리는 구간 ===== */
 @media (min-width: 1024px) {
   /* 본문이 화면 끝까지 늘어나면 카드 하나가 1900px 이 되어 제목과 값이 양 끝으로

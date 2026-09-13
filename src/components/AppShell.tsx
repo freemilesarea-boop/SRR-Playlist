@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import RouteTransition from './native/RouteTransition';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import TrialBanner from './TrialBanner';
@@ -60,7 +61,10 @@ export default function AppShell() {
             <TrialBanner />
             <InstallPromptBanner />
           </div>
-          <Outlet />
+          {/* 앱에서만 화면 전환 애니메이션이 붙는다(웹은 브라우저 뒤로가기와 충돌). */}
+          <RouteTransition>
+            <Outlet />
+          </RouteTransition>
         </main>
         {/* Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한 padding-bottom 으로 마지막 줄 보호 */}
         {/* app-footer / app-footer-space — 앱에서는 index.css 가 푸터를 숨기고 여백만 남긴다. */}
