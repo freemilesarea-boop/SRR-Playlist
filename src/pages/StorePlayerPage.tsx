@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
   Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock, HardDriveDownload,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -15,6 +16,7 @@ import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
+import { isIOSVolumeLocked, nudgeVolume, VOLUME_STEP } from '@/lib/iosAudio';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -233,6 +235,12 @@ export default function StorePlayerPage() {
               </button>
             </div>
 
+            {/* 볼륨 — 매장에서 제일 자주 만지는 조작부다.
+                전역 미니 플레이어에도 볼륨이 있지만 그건 이 전체화면에 가려서 닿지 않는다.
+                팝오버로 숨기지 않고 항상 펼쳐둔다 — 손님이 "좀 줄여주세요" 할 때
+                두 번 누르게 하면 안 된다. */}
+            <StoreVolumeControl />
+
             {/* 본사 스케줄 안내 (브레이크/운영종료). 오류처럼 보이지 않도록 별도 배너로 표시. */}
             {scheduleActive && (
               <ScheduleBanner kind={isBreak ? 'break' : 'closed'} nextLabel={nextTransitionLabel} />
@@ -333,6 +341,75 @@ export default function StorePlayerPage() {
       </footer>
 
       {/* Priority 5/7 overlays 는 AppShell <GlobalStoreAudioOverlays /> 에서 전역 마운트. */}
+    </div>
+  );
+}
+
+/**
+ * 매장용 볼륨 조절.
+ *
+ * 슬라이더 하나로 끝내지 않고 -10/+10 버튼을 같이 둔다. 벽에 세워둔 태블릿에서 얇은
+ * 슬라이더를 정확히 집는 건 생각보다 어렵고, 손님 앞에서 만지작거리게 된다.
+ * 숫자를 크게 띄우는 것도 같은 이유다 — 한 걸음 떨어져서 지금 몇인지 보여야 한다.
+ */
+function StoreVolumeControl() {
+  const volume = usePlayerStore((s) => s.volume);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const toggleMute = usePlayerStore((s) => s.toggleMute);
+  const percent = Math.round(volume * 100);
+  const locked = isIOSVolumeLocked();
+
+  // iOS/iPadOS 는 audio.volume 을 무시한다. 움직여도 소리가 그대로인 슬라이더는
+  // 고장으로 보이므로, 조작부를 내리고 기기 볼륨 버튼을 쓰라고 알린다.
+  if (locked) {
+    return (
+      <div className="flex w-full max-w-md items-center gap-2 rounded-2xl bg-white/5 px-4 py-3 text-xs text-white/70 ring-1 ring-white/10">
+        <Volume2 size={16} className="shrink-0" />
+        <span>이 기기에서는 <b className="text-white">기기 볼륨 버튼</b>으로 조절해주세요.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex w-full max-w-md items-center gap-3">
+      <button
+        onClick={toggleMute}
+        aria-label={volume === 0 ? '음소거 해제' : '음소거'}
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+      >
+        {volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+      </button>
+
+      <button
+        onClick={() => setVolume(nudgeVolume(volume, -VOLUME_STEP))}
+        aria-label="볼륨 낮추기"
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg font-bold hover:bg-white/20"
+      >
+        −
+      </button>
+
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={volume}
+        onChange={(e) => setVolume(Number(e.target.value))}
+        aria-label="볼륨"
+        className="app-volume-range h-2 flex-1 cursor-pointer appearance-none rounded-full bg-white/20 accent-accent"
+      />
+
+      <button
+        onClick={() => setVolume(nudgeVolume(volume, VOLUME_STEP))}
+        aria-label="볼륨 높이기"
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg font-bold hover:bg-white/20"
+      >
+        +
+      </button>
+
+      <span className="w-12 shrink-0 text-right font-mono text-base font-bold tabular-nums text-white/80">
+        {percent}
+      </span>
     </div>
   );
 }

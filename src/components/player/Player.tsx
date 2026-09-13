@@ -19,6 +19,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import { resolveStallAction, isEscalation, type StallAction } from '@/lib/stallWatchdog';
+import { isIOSVolumeLocked } from '@/lib/iosAudio';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -84,19 +85,6 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
   3: 'DECODE',
   4: 'SRC_NOT_SUPPORTED',
 };
-
-/**
- * X6.79 — iOS/iPadOS Safari 감지.
- * WebKit 은 audio.volume setter 를 무시 (Apple 정책) → 슬라이더 작동 X.
- * iPadOS 13+ 는 navigator.platform='MacIntel' 로 위장하므로 maxTouchPoints 로 추가 판별.
- */
-function isIOSSafari(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent;
-  if (/iPad|iPhone|iPod/.test(ua)) return true;
-  // iPadOS 위장 케이스
-  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
-}
 
 /**
  * 세션당 1회만 실패 처리되는 트랙 id 집합.
@@ -3015,7 +3003,7 @@ export default function Player() {
         )}
         {/* X6.79 — iOS/iPadOS Safari 는 audio.volume setter 를 무시 (WebKit 정책).
             매장 iPad 에서 슬라이더 안 먹힘 문제 안내. 데스크탑/안드로이드 정상. */}
-        {volumePopover && isIOSSafari() && (
+        {volumePopover && isIOSVolumeLocked() && (
           <div className="px-3 py-1 text-[10px] leading-tight text-amber-700 dark:text-amber-300">
             ⚠️ iPhone/iPad 에서는 슬라이더가 작동하지 않습니다.
             기기 측면 <b>볼륨 ↑↓ 하드웨어 버튼</b> 으로 조절해주세요.

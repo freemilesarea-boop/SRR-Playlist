@@ -233,6 +233,30 @@ input[type='range']::-moz-range-thumb {
   padding-bottom: 9rem !important;
 }
 
+/* 볼륨 슬라이더 손잡이를 손가락 크기로.
+ *
+ * range 기본 손잡이는 12~14px 라 마우스로는 충분해도 손가락으로는 못 집는다.
+ * 매장에서 볼륨을 못 줄이면 결국 기기 버튼을 찾게 되고, 그건 앱을 안 쓰게 되는 길이다.
+ * 트랙은 얇게 두고 손잡이만 키운다 — 트랙까지 두꺼우면 화면이 투박해진다. */
+.native-shell .app-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent));
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+.native-shell .app-volume-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent));
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
 /* 손가락으로 누를 수 있는 최소 크기.
  *
  * 웹은 마우스 포인터라 높이 29px 짜리 칩도 정확히 눌린다. 앱은 아니다 — 손가락 접촉면이
