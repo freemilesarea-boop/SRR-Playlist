@@ -10,10 +10,17 @@
 // 자가 치유를 붙이면서 감시를 눈멀게 하는 셈이라, 여기서 audioActive(실제 재생
 // 여부)를 기준으로 삼는다 — 소리가 안 나는 동안에는 마지막으로 실제 재생된 곡을
 // 계속 보고하고, 서버는 그대로 stalled 로 판정한다.
+//
+// 0518 — 원격 제어: heartbeat 응답에 실려 오는 명령을 실행한다.
+// 푸시 복구(player_recover)는 매장이 알림을 허용해야 동작하지만, 이 경로는
+// 탭이 살아만 있으면 권한 없이도 닿는다 — 둘은 서로를 대체하지 않는다.
+// 서버가 배달 시점에 명령을 소비하므로 같은 명령이 두 번 오지 않지만,
+// StrictMode 중복 호출 등에 대비해 실행한 command_id 를 한 번 더 걸러낸다.
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
-import { brandPlayerHeartbeat } from '@/lib/api/brandPlayerApi';
+import { brandPlayerHeartbeat, type BrandPlayerHeartbeatResult } from '@/lib/api/brandPlayerApi';
+import { decideCommandAction } from '@/lib/brandPlayerCommand';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -48,6 +55,28 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
   // 구독해서 소리가 나기 시작한 순간 (a) 가 다시 돌게 한다. 이게 없으면 곡 전환이
   // 60s interval 까지 보고되지 않는다 — 전환 직후엔 아직 audioActive=false 이므로.
   const audioActive = usePlaybackHealthStore((s) => s.audioActive);
+  const doneCommandsRef = useRef<Set<string>>(new Set());
+
+  // 명령 실행. 재생을 되살리는 것이 목적이므로 실패해도 조용히 넘어간다.
+  const runCommand = (res: BrandPlayerHeartbeatResult): void => {
+    const action = decideCommandAction(res, doneCommandsRef.current);
+    if (action.kind !== 'run') return;
+    const { command, commandId } = action;
+    doneCommandsRef.current.add(commandId);
+
+    try {
+      if (command === 'reload') {
+        // 매장 PC 의 F5 를 대신한다. 새 빌드도 함께 적용된다.
+        window.location.reload();
+        return;
+      }
+      const store = usePlayerStore.getState();
+      if (command === 'play') store.play();
+      else if (command === 'next') store.next({ cause: 'manual_next' });
+    } catch {
+      /* silent — 명령 실패가 재생을 망가뜨리면 안 된다 */
+    }
+  };
 
   // (a) 트랙 변경(= 실제로 소리가 난 곡의 변경) 즉시 heartbeat
   useEffect(() => {
@@ -56,7 +85,9 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     if (reported === lastTrackIdRef.current) return;
     lastTrackIdRef.current = reported;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua).catch(() => { /* silent */ });
+    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua)
+      .then(runCommand)
+      .catch(() => { /* silent */ });
   }, [enabled, brandId, sessionToken, currentTrackId, audioActive]);
 
   // (b) 60s interval — getState() 로 fresh 값 조회, deps 는 [enabled, brandId, sessionToken] 만
@@ -68,7 +99,9 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
       const tid = resolveReportedTrackId(st.queue[st.index]?.id ?? null, lastAudibleTrackIdRef);
       lastTrackIdRef.current = tid;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua).catch(() => { /* silent */ });
+      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua)
+        .then((res) => { if (!cancelled) runCommand(res); })
+        .catch(() => { /* silent */ });
     };
     fire();
     const id = window.setInterval(() => { if (!cancelled) fire(); }, HEARTBEAT_INTERVAL_MS);
