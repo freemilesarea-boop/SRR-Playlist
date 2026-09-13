@@ -1,3 +1,4 @@
+import { recordPauseRequest } from '@/lib/playbackFlightRecorder';
 /**
  * audioOutput — Audio Output Device Manager (Phase 1)
  *
@@ -229,6 +230,7 @@ export function playTestTone(deviceId: string | null, durationMs = 3000): TestTo
     if (stopped) return;
     stopped = true;
     try { osc.stop(); } catch { /* noop */ }
+    recordPauseRequest('AUDIO_OUTPUT_SYNC', audio);
     try { audio.pause(); } catch { /* noop */ }
     try { audio.srcObject = null; } catch { /* noop */ }
     try { void ctx.close(); } catch { /* noop */ }

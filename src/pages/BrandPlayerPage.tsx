@@ -8,6 +8,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { isNativeApp } from '@/lib/native';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { buildHash } from '@/lib/playbackFlightRecorder';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlaybackSettingsStore } from '@/store/playbackSettingsStore';
@@ -155,7 +156,9 @@ export default function BrandPlayerPage() {
       playerMode: 'brand',
       // 매장이 홈 화면 앱으로 설치했는지를 기록으로 남긴다. UA 로는 구분이 안 돼
       // "설치하라고 했는데 했나?" 를 물어볼 수밖에 없었다(숙대점 2026-09-12).
-      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()) },
+      // buildHash — 이 기기가 어느 배포본을 돌고 있는지. 매장별로 오래된 빌드가
+      // 남아있는지(stale client) 판별할 수단이 지금까지 없었다.
+      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()), buildHash: buildHash() },
     });
     return watchPageLifecycle('brand');
   }, []);

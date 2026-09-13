@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Megaphone, AlertCircle } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
+import { recordPauseRequest } from '@/lib/playbackFlightRecorder';
 import {
   getActiveEmergencyBroadcast, markEmergencyBroadcastStatus,
   type ActiveBroadcastPayload,
@@ -142,6 +143,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
         if (i >= steps) {
           if (fadeTimerRef.current) window.clearInterval(fadeTimerRef.current);
           fadeTimerRef.current = null;
+          recordPauseRequest('EMERGENCY_BROADCAST');
           try { usePlayerStore.getState().pause(); } catch { void 0; }
           beginPlay();
         }
@@ -149,6 +151,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
       fadeTimerRef.current = window.setInterval(tick, stepMs);
     } else {
       // 'pause' 또는 'after_current_track' (V1 동일 처리)
+      recordPauseRequest('EMERGENCY_BROADCAST');
       try { usePlayerStore.getState().pause(); } catch { void 0; }
       beginPlay();
     }
@@ -165,6 +168,7 @@ export default function EmergencyBroadcastOverlay({ storeId, debug = false }: Em
 
     const a = audioRef.current;
     if (a) {
+      recordPauseRequest('EMERGENCY_BROADCAST', a);
       try { a.pause(); } catch { void 0; }
       try { a.removeAttribute('src'); a.load(); } catch { void 0; }
     }

@@ -7,6 +7,12 @@ import path from 'path';
 // 같은 빌드 안에서 한 번 평가되어 양쪽 모두 같은 값을 가짐.
 const BUILD_ID = Date.now().toString(36);
 
+// 어느 배포본이 도는지 판별하기 위한 커밋 식별자 (관측 전용).
+// BUILD_ID 와 분리한 이유: BUILD_ID 는 SW reload 키라 빌드마다 반드시 달라져야 한다.
+// 같은 커밋을 두 번 빌드해도 SW 갱신이 막히지 않도록 이 값은 별도로 둔다.
+// Vercel 이 주는 커밋 SHA 를 쓰고, 없으면 'dev'. Secret 아님.
+const BUILD_HASH = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 12) || 'dev';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -113,6 +119,7 @@ export default defineConfig({
   // SW reload 식별자 — main.tsx (import.meta.env.VITE_BUILD_ID) 와 src/sw.ts (__SW_BUILD_ID__) 공유
   define: {
     'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID),
+    'import.meta.env.VITE_BUILD_HASH': JSON.stringify(BUILD_HASH),
     __SW_BUILD_ID__: JSON.stringify(BUILD_ID),
   },
 });
