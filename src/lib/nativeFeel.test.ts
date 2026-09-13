@@ -58,6 +58,40 @@ describe('촉감 — 누를 때 울려야 한다', () => {
   });
 });
 
+describe('태블릿 2단 — 넓은 화면을 쓰고 스크롤을 줄인다', () => {
+  const tablet = css.slice(css.indexOf('@media (min-width: 1024px)'));
+  const beforeTablet = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+
+  it('매장 대시보드 2단은 태블릿에서만 — 폰에서 2단이 되면 아무것도 안 보인다', () => {
+    expect(tablet).toContain('.native-shell .app-store-grid');
+    expect(beforeTablet).not.toContain('.native-shell .app-store-grid');
+  });
+
+  it('래퍼는 평소 contents — 폰·웹에서는 없는 것처럼 동작해야 한다', () => {
+    // contents 가 빠지면 래퍼가 실제 박스가 되어 웹 레이아웃까지 바뀐다.
+    expect(repoFile('src/pages/BusinessPage.tsx')).toContain('app-store-grid contents');
+    expect(repoFile('src/pages/BusinessPage.tsx')).toContain('app-store-main');
+    expect(repoFile('src/pages/BusinessPage.tsx')).toContain('app-store-side');
+  });
+
+  it('루트가 flex+gap 이어야 한다 — space-y 는 contents 래퍼를 넘지 못한다', () => {
+    // space-y 로 두면 래퍼가 contents 일 때 섹션 사이 간격이 통째로 사라진다.
+    const biz = repoFile('src/pages/BusinessPage.tsx');
+    expect(biz).toContain('flex flex-col gap-5');
+    expect(biz).not.toContain('<div className="space-y-5 px-4 pb-8 pt-6 sm:px-6 lg:space-y-6">');
+  });
+
+  it('설정 화면 다단도 태블릿에서만', () => {
+    expect(tablet).toContain('.native-shell .app-settings-cols');
+    expect(beforeTablet).not.toContain('.native-shell .app-settings-cols');
+    expect(repoFile('src/pages/ProfilePage.tsx')).toContain('app-settings-cols');
+  });
+
+  it('다단에서 space-y 의 위쪽 여백을 지운다 — 안 지우면 두 단이 어긋난다', () => {
+    expect(tablet).toMatch(/\.app-settings-cols > \* \+ \*\s*\{[^}]*margin-top:\s*0/s);
+  });
+});
+
 describe('화면 전환 — 방향이 있어야 한다', () => {
   it('앞으로/뒤로 각각의 애니메이션이 있다', () => {
     expect(css).toContain('@keyframes app-route-push');

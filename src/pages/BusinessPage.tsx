@@ -164,7 +164,7 @@ export default function BusinessPage() {
   const SlotIcon = slotIcon(displaySchedule?.slot_name);
 
   return (
-    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6 lg:space-y-6">
+    <div className="flex flex-col gap-5 px-4 pb-8 pt-6 sm:px-6 lg:gap-6">
       {/* 헤더 — 1줄 컴팩트 (제목 + ON AIR/OFF 클릭 토글) */}
       <header className="flex items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/30">
@@ -364,8 +364,12 @@ export default function BusinessPage() {
         </button>
       )}
 
+      {/* 자동 스케줄 + 매장 QR — 앱 태블릿에서만 좌우 2단.
+          contents 라서 폰·웹에서는 이 래퍼가 없는 것과 똑같이 한 줄로 쌓인다(순서·간격 그대로).
+          매장 태블릿은 가로가 남는데 한 줄로 쌓으면 스크롤만 길어진다. */}
+      <div className="app-store-grid contents">
       {/* === 자동 스케줄 운영 — 첫 사용자면 자동 펼침 (load 완료 후 마운트로 defaultOpen 정확히 반영) === */}
-      <div id="scheduler-section">
+      <div id="scheduler-section" className="app-store-main">
         {scheduleLoading ? (
           <div className="rounded-2xl bg-bg-card/60 px-4 py-3.5 text-xs text-ink-dim ring-1 ring-line/10">
             자동 스케줄 불러오는 중…
@@ -387,13 +391,16 @@ export default function BusinessPage() {
       </div>
 
       {/* 매장 QR */}
-      <CollapseSection
-        icon={<QrCode size={14} className="text-accent" />}
-        title="매장 QR 공유"
-        subtitle="손님이 찍으면 매장 플레이리스트를 같이 들을 수 있어요"
-      >
-        <BusinessQRSection playlists={businessOnlyPlaylists} />
-      </CollapseSection>
+      <div className="app-store-side">
+        <CollapseSection
+          icon={<QrCode size={14} className="text-accent" />}
+          title="매장 QR 공유"
+          subtitle="손님이 찍으면 매장 플레이리스트를 같이 들을 수 있어요"
+        >
+          <BusinessQRSection playlists={businessOnlyPlaylists} />
+        </CollapseSection>
+      </div>
+      </div>
 
       {/* 다른 플레이리스트 둘러보기
           (자동 스케줄·QR 과 달리 가로로 긴 플레이리스트 행이 들어가므로 전체 폭을 쓴다) */}
