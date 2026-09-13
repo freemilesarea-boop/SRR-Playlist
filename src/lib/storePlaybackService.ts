@@ -79,15 +79,21 @@ export interface NativeHealth {
   androidSdk: number;
   androidRelease: string;
   serviceRunning: boolean;
+  /** Activity 객체가 존재하는가 (onCreate ~ onDestroy). */
+  activityAlive: boolean;
+  /** 화면에 떠 있는가. **워치독 판단에는 쓰지 않는다** — 표시용이다. */
   activityForeground: boolean;
-  /** Activity 생존 신호가 끊긴 시간(ms). 아직 한 번도 못 봤으면 -1. */
-  activitySilentForMs: number;
+  /** JS 하트비트가 끊긴 시간(ms). 아직 한 번도 못 받았으면 -1. */
+  webHeartbeatSilentForMs: number;
+  /** 소리가 끊긴 시간(ms). 아직 한 번도 못 들었으면 -1. */
+  audibleSilentForMs: number;
   batteryOptimizationIgnored: boolean;
   appVersion: string | null;
   appBuild: number;
 }
 
 interface NativeExtra {
+  heartbeat(options: { audible: boolean }): Promise<void>;
   restartApp(): Promise<{ started: boolean }>;
   health(): Promise<NativeHealth>;
   openBatteryOptimizationSettings(): Promise<void>;
@@ -106,6 +112,18 @@ export function resolvePlayerRuntime(standalone: boolean): PlayerRuntime {
     return nativePlatform() === 'android' ? 'android_native' : 'ios_native';
   }
   return standalone ? 'pwa' : 'web';
+}
+
+/**
+ * 네이티브 워치독에 "WebView 가 살아 있다" 를 알린다.
+ *
+ * 이 신호가 없으면 네이티브는 백그라운드와 사망을 구분할 수 없고, 점주가 다른 앱을
+ * 오래 쓰는 것만으로 듣다를 강제로 띄우게 된다. 실패는 조용히 무시한다 —
+ * 하트비트 실패가 재생을 막으면 안 된다.
+ */
+export async function sendNativeHeartbeat(audible: boolean): Promise<void> {
+  if (!backgroundPlaybackServiceSupported()) return;
+  try { await NativeExt.heartbeat({ audible }); } catch { /* noop */ }
 }
 
 /**

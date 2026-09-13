@@ -51,37 +51,92 @@ public class StorePlaybackService extends Service {
     private static final String CHANNEL_ID = "store_playback";
     private static final int NOTIFICATION_ID = 4711;
 
-    /** Activity 생존 신호가 이만큼 끊기면 죽은 것으로 본다. */
-    private static final long ACTIVITY_DEAD_AFTER_MS = 3 * 60 * 1000L;
+    /**
+     * WebView(JS) 하트비트가 이만큼 끊기면 플레이어가 죽은 것으로 본다.
+     *
+     * **Activity 가 백그라운드인 것과 죽은 것은 다르다.** 점주가 다른 앱을 쓰는 동안
+     * Activity 는 멀쩡히 살아 있고 WebView 도 계속 음악을 튼다. foreground 여부만 보고
+     * 되살리려 들면, 다른 앱을 3분 쓴 것만으로 듣다가 화면을 강제로 띄운다 —
+     * 무인 매장이 아니라 사람이 쓰는 태블릿에서는 그게 더 큰 사고다.
+     *
+     * 그래서 판단 근거를 **JS 하트비트**로 바꾼다. JS 가 돌고 있으면 WebView 는 살아
+     * 있는 것이고, foreground 인지 아닌지는 상관없다.
+     */
+    private static final long WEB_HEARTBEAT_DEAD_MS = 5 * 60 * 1000L;
+    /** 소리가 이만큼 끊겨야 개입 후보가 된다. 음악이 나오는 중이면 아무 문제도 없다. */
+    private static final long AUDIBLE_DEAD_MS = 5 * 60 * 1000L;
     /** 워치독 점검 주기. */
     private static final long WATCHDOG_INTERVAL_MS = 60 * 1000L;
     /** 되살리기 최소 간격 — 무한 launch 루프 방지. */
     private static final long RELAUNCH_COOLDOWN_MS = 5 * 60 * 1000L;
 
-    /* ── Activity 생존 신호 (MainActivity 가 갱신) ───────────────────────── */
-    private static volatile long lastActivitySeenAt = 0L;
+    /* ── 생존 신호 ───────────────────────────────────────────────────────
+     *
+     * activityAlive     : onCreate ~ onDestroy. Activity 객체가 존재하는가.
+     * activityForeground: 화면에 떠 있는가. **되살리기 판단에는 쓰지 않는다** —
+     *                     상태 표시(health)용이다.
+     * lastWebHeartbeatAt: JS 가 마지막으로 살아 있음을 알린 시각.
+     * lastAudibleAt     : 실제로 소리가 나고 있다고 JS 가 알린 마지막 시각.
+     */
+    private static volatile boolean activityAlive = false;
     private static volatile boolean activityForeground = false;
+    private static volatile long lastWebHeartbeatAt = 0L;
+    private static volatile long lastAudibleAt = 0L;
 
-    /** MainActivity.onStart / onResume 에서 호출. */
-    public static void noteActivityAlive(boolean foreground) {
-        lastActivitySeenAt = SystemClock.elapsedRealtime();
-        activityForeground = foreground;
+    /** MainActivity.onCreate */
+    public static void noteActivityCreated() {
+        activityAlive = true;
     }
 
-    /** MainActivity.onDestroy 에서 호출. */
-    public static void noteActivityGone() {
+    /** MainActivity.onDestroy */
+    public static void noteActivityDestroyed() {
+        activityAlive = false;
         activityForeground = false;
     }
 
-    public static long activitySilentForMs() {
-        if (lastActivitySeenAt == 0L) {
-            return -1L;   // 아직 한 번도 본 적 없음
+    /** MainActivity.onStart/onResume(true) · onStop(false) */
+    public static void noteActivityForeground(boolean foreground) {
+        activityForeground = foreground;
+        if (foreground) {
+            activityAlive = true;
         }
-        return SystemClock.elapsedRealtime() - lastActivitySeenAt;
+    }
+
+    /**
+     * JS 하트비트. WebView 가 코드를 실행하고 있다는 유일한 확실한 증거다.
+     *
+     * @param audible 지금 실제로 소리가 나고 있는가(재생 위치가 움직이는가)
+     */
+    public static void noteWebHeartbeat(boolean audible) {
+        long now = SystemClock.elapsedRealtime();
+        lastWebHeartbeatAt = now;
+        if (audible) {
+            lastAudibleAt = now;
+        }
+    }
+
+    public static boolean isActivityAlive() {
+        return activityAlive;
     }
 
     public static boolean isActivityForeground() {
         return activityForeground;
+    }
+
+    /** JS 하트비트가 끊긴 시간(ms). 아직 한 번도 받은 적 없으면 -1. */
+    public static long webHeartbeatSilentForMs() {
+        if (lastWebHeartbeatAt == 0L) {
+            return -1L;
+        }
+        return SystemClock.elapsedRealtime() - lastWebHeartbeatAt;
+    }
+
+    /** 소리가 끊긴 시간(ms). 아직 한 번도 소리를 들은 적 없으면 -1. */
+    public static long audibleSilentForMs() {
+        if (lastAudibleAt == 0L) {
+            return -1L;
+        }
+        return SystemClock.elapsedRealtime() - lastAudibleAt;
     }
 
     /* ── 인스턴스 상태 ──────────────────────────────────────────────────── */
@@ -141,9 +196,11 @@ public class StorePlaybackService extends Service {
         @Override
         public void run() {
             try {
-                long silent = activitySilentForMs();
-                if (silent >= 0 && silent > ACTIVITY_DEAD_AFTER_MS && !activityForeground) {
-                    Log.w(TAG, "Activity 신호 끊김 " + (silent / 1000) + "s — 되살리기 시도");
+                if (shouldRelaunch()) {
+                    Log.w(TAG, "플레이어가 죽은 것으로 판단 — 되살리기 시도"
+                        + " (activityAlive=" + activityAlive
+                        + ", webSilentMs=" + webHeartbeatSilentForMs()
+                        + ", audibleSilentMs=" + audibleSilentForMs() + ")");
                     relaunchActivity("watchdog", false);
                 }
             } catch (Exception e) {
@@ -153,6 +210,36 @@ public class StorePlaybackService extends Service {
             }
         }
     };
+
+    /**
+     * 지금 Activity/WebView 를 되살려야 하는가.
+     *
+     * **소리가 나고 있으면 무조건 아니다.** 백그라운드에 있든 화면이 꺼져 있든
+     * 음악이 나오는 중이면 아무 문제도 없다 — 그게 이 앱의 목적이다.
+     *
+     * 개입 조건은 두 가지가 **모두** 성립할 때뿐이다:
+     *   (1) 5분 넘게 소리가 없다, 그리고
+     *   (2) Activity 가 파괴됐거나 JS 하트비트가 5분 넘게 끊겼다
+     *       (= 웹쪽 복구 사다리가 돌 수 없는 상태다)
+     *
+     * JS 가 살아서 하트비트를 보내고 있는데 소리만 없는 경우는 **웹 워치독의
+     * 일이다**(nudge → reload → skip → hard reset). 네이티브가 끼어들면 웹이
+     * 복구하려는 중에 Activity 를 다시 만들어 그 시도를 날린다.
+     */
+    private boolean shouldRelaunch() {
+        long audibleSilent = audibleSilentForMs();
+        // 소리를 한 번도 들은 적이 없으면(-1) 아직 재생을 시작하지 않은 것 —
+        // 되살릴 대상이 아니다. 시작은 사람이 한다.
+        if (audibleSilent < 0 || audibleSilent < AUDIBLE_DEAD_MS) {
+            return false;
+        }
+        if (!activityAlive) {
+            return true;                       // Activity 자체가 사라졌다
+        }
+        long webSilent = webHeartbeatSilentForMs();
+        // 하트비트를 한 번도 못 받았으면 판단 근거가 없다 — 개입하지 않는다.
+        return webSilent >= 0 && webSilent >= WEB_HEARTBEAT_DEAD_MS;
+    }
 
     private void startWatchdog() {
         handler.removeCallbacks(watchdog);

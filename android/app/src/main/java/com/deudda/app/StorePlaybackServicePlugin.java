@@ -77,6 +77,20 @@ public class StorePlaybackServicePlugin extends Plugin {
     }
 
     /**
+     * JS 하트비트 — **WebView 가 살아 있다는 유일한 확실한 증거.**
+     *
+     * 워치독은 foreground 여부가 아니라 이 신호로 판단한다. 점주가 다른 앱을
+     * 오래 쓰는 것은 정상이고, 그동안에도 WebView 는 음악을 튼다.
+     *
+     * @param audible 지금 실제로 소리가 나고 있는가(재생 위치가 움직이는가)
+     */
+    @PluginMethod
+    public void heartbeat(PluginCall call) {
+        StorePlaybackService.noteWebHeartbeat(Boolean.TRUE.equals(call.getBoolean("audible", false)));
+        call.resolve();
+    }
+
+    /**
      * 네이티브 상태 신호. **개인정보·기기 시리얼·광고 ID 는 담지 않는다.**
      * 담는 것은 OS 버전, 앱 버전, 서비스 생존, 배터리 최적화 제외 여부뿐이다.
      */
@@ -87,8 +101,10 @@ public class StorePlaybackServicePlugin extends Plugin {
         res.put("androidSdk", Build.VERSION.SDK_INT);
         res.put("androidRelease", Build.VERSION.RELEASE);
         res.put("serviceRunning", StorePlaybackService.isServiceRunning());
+        res.put("activityAlive", StorePlaybackService.isActivityAlive());
         res.put("activityForeground", StorePlaybackService.isActivityForeground());
-        res.put("activitySilentForMs", StorePlaybackService.activitySilentForMs());
+        res.put("webHeartbeatSilentForMs", StorePlaybackService.webHeartbeatSilentForMs());
+        res.put("audibleSilentForMs", StorePlaybackService.audibleSilentForMs());
         res.put("batteryOptimizationIgnored", isIgnoringBatteryOptimizations());
 
         String versionName = null;

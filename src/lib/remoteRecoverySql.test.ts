@@ -128,6 +128,29 @@ describe('네이티브 쉘 계약 (Android)', () => {
     expect(service).toContain('RELAUNCH_COOLDOWN_MS = 5 * 60 * 1000L');
   });
 
+  it('워치독은 foreground 여부로 판단하지 않는다 — 다른 앱 사용은 정상 상태다', () => {
+    // shouldRelaunch 안에서 activityForeground 를 보면 안 된다.
+    const fn = service.slice(service.indexOf('private boolean shouldRelaunch()'));
+    const body = fn.slice(0, fn.indexOf('\n    }') + 6);
+    expect(body).not.toContain('activityForeground');
+    // 판단 근거는 소리 + JS 하트비트 + Activity 존재 여부뿐이다.
+    expect(body).toContain('audibleSilentForMs');
+    expect(body).toContain('webHeartbeatSilentForMs');
+    expect(body).toContain('activityAlive');
+  });
+
+  it('소리가 나고 있으면 어떤 경우에도 되살리지 않는다', () => {
+    const fn = service.slice(service.indexOf('private boolean shouldRelaunch()'));
+    const body = fn.slice(0, fn.indexOf('\n    }') + 6);
+    // 첫 관문이 "소리가 충분히 오래 끊겼는가" 이고, 아니면 즉시 false 다.
+    expect(body).toMatch(/audibleSilent < 0 \|\| audibleSilent < AUDIBLE_DEAD_MS[\s\S]*?return false;/);
+  });
+
+  it('JS 하트비트가 살아 있으면 네이티브가 끼어들지 않는다 — 웹 사다리의 몫이다', () => {
+    expect(service).toContain('WEB_HEARTBEAT_DEAD_MS = 5 * 60 * 1000L');
+    expect(service).toContain('public static void noteWebHeartbeat(boolean audible)');
+  });
+
   it('오디오 포커스를 잃어도 재생을 멈추지 않는다', () => {
     expect(service).toContain('AUDIOFOCUS_LOSS_TRANSIENT');
     expect(service).toContain('setWillPauseWhenDucked(false)');

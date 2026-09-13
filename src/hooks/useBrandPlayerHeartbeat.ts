@@ -32,6 +32,7 @@ import {
 } from '@/lib/remoteRecovery';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { isNativeApp } from '@/lib/native';
+import { sendNativeHeartbeat } from '@/lib/storePlaybackService';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -128,8 +129,20 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
         .catch(() => { /* silent */ });
     };
     fire();
+    // 네이티브 쉘에는 "WebView 가 살아 있다 + 소리가 난다" 를 따로 알린다.
+    // 이 신호가 워치독의 유일한 판단 근거다 — foreground 여부로 판단하면
+    // 점주가 다른 앱을 쓰는 것만으로 화면을 강제로 띄우게 된다.
+    const beat = () => {
+      void sendNativeHeartbeat(usePlaybackHealthStore.getState().audioActive);
+    };
+    beat();
+    const nativeId = window.setInterval(() => { if (!cancelled) beat(); }, 30_000);
     const id = window.setInterval(() => { if (!cancelled) fire(); }, HEARTBEAT_INTERVAL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.clearInterval(nativeId);
+    };
   }, [enabled, brandId, sessionToken]);
 
   // (c) 0520 — Realtime 즉시 배달. **control plane 이다.**

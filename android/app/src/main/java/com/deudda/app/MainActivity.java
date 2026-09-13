@@ -18,32 +18,32 @@ public class MainActivity extends BridgeActivity {
         // 앱 로컬 플러그인은 자동 검색되지 않는다 — super.onCreate 전에 직접 등록.
         registerPlugin(StorePlaybackServicePlugin.class);
         super.onCreate(savedInstanceState);
-        StorePlaybackService.noteActivityAlive(false);
+        StorePlaybackService.noteActivityCreated();
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        StorePlaybackService.noteActivityAlive(true);
+        StorePlaybackService.noteActivityForeground(true);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        StorePlaybackService.noteActivityAlive(true);
+        StorePlaybackService.noteActivityForeground(true);
     }
 
     @Override
     public void onStop() {
-        // 백그라운드로 갔을 뿐 죽은 것은 아니다 — 마지막 생존 시각은 갱신하되
-        // foreground 플래그만 내린다. 워치독은 3분 무신호일 때만 개입한다.
-        StorePlaybackService.noteActivityAlive(false);
+        // 백그라운드로 갔을 뿐 죽은 것이 아니다. **워치독은 이 플래그로 판단하지 않는다** —
+        // 점주가 다른 앱을 오래 쓰는 것은 정상 상태다. 판단은 JS 하트비트가 한다.
+        StorePlaybackService.noteActivityForeground(false);
         super.onStop();
     }
 
     @Override
     public void onDestroy() {
-        StorePlaybackService.noteActivityGone();
+        StorePlaybackService.noteActivityDestroyed();
         super.onDestroy();
     }
 }
