@@ -56,6 +56,10 @@ export type AppEventName =
   | 'RECOVERY_LEVEL_1_START' | 'RECOVERY_LEVEL_1_PLAY_RESULT'
   | 'RECOVERY_LEVEL_2_START' | 'RECOVERY_LEVEL_2_LOAD' | 'RECOVERY_LEVEL_2_PLAY_RESULT'
   | 'RECOVERY_LEVEL_3_START' | 'RECOVERY_LEVEL_4_START'
+  | 'HARD_RECOVERY_TRIGGERED' | 'HARD_RECOVERY_ELEMENT_DESTROY'
+  | 'HARD_RECOVERY_ELEMENT_CREATED' | 'HARD_RECOVERY_PLAY_REQUEST'
+  | 'HARD_RECOVERY_PROGRESS_CONFIRMED' | 'HARD_RECOVERY_SUCCESS' | 'HARD_RECOVERY_FAILURE'
+  | 'CONTROLLED_RELOAD_REQUEST' | 'CONTROLLED_RELOAD_SUPPRESSED_COOLDOWN'
   | 'STALL_SNAPSHOT';
 
 export type FlightEventName = MediaEventName | AppEventName;
@@ -67,7 +71,8 @@ export type PauseReason =
   | 'AUDIO_OUTPUT_SYNC' | 'COMPONENT_CLEANUP' | 'OTHER_INTERNAL';
 
 export type FlushTrigger =
-  | 'recovery_level_1' | 'media_error' | 'play_rejected' | 'invalid_audio_state';
+  | 'recovery_level_1' | 'media_error' | 'play_rejected' | 'invalid_audio_state'
+  | 'hard_recovery';
 
 /** 엘리먼트에서 읽어낸 순간 상태. 전부 읽기 전용 접근이다. */
 export interface AudioSnapshot {

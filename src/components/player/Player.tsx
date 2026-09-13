@@ -18,7 +18,10 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
-import { resolveStallAction, isEscalation, type StallAction } from '@/lib/stallWatchdog';
+import {
+  resolveStallAction, isEscalation, verifyHardReset, HARD_RESET_VERIFY_MS,
+  type StallAction,
+} from '@/lib/stallWatchdog';
 import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, newPlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
@@ -262,6 +265,21 @@ export default function Player() {
   // 장애 직전에 Player 가 리마운트됐는지, audio 엘리먼트가 새로 만들어졌는지를
   // 사후에 판별할 수단이 지금까지 없었다(숙대점 조사 UNVERIFIED #9).
   const playerInstanceIdRef = useRef<string>(newPlayerInstanceId());
+  /**
+   * HARD RECOVERY — audio 엘리먼트 세대.
+   *
+   * skip 은 큐 index 만 옮기고 **같은 HTMLMediaElement** 에 새 src 를 꽂는다.
+   * 엘리먼트/미디어 파이프라인이 죽어 있으면 곡을 아무리 넘겨도 같은 시체를 계속
+   * 쓴다(숙대점 2026-09-13, 74곡 연속 playedSeconds=0). 이 값을 올리면 React 가
+   * <audio> 를 통째로 언마운트하고 새로 만든다 — 브라우저가 옛 객체를 재사용할 수 없다.
+   */
+  const [audioGeneration, setAudioGeneration] = useState(0);
+  const audioGenerationRef = useRef(0);
+  audioGenerationRef.current = audioGeneration;
+  /** hard reset 실행 시각(performance.now). 검증 중이 아니면 null. */
+  const hardResetAtRef = useRef<number | null>(null);
+  /** 이번 정지 구간에서 hard reset 을 이미 썼는가 → 그래도 안 되면 페이지 재시작. */
+  const hardResetDoneRef = useRef(false);
   const detachARef = useRef<(() => void) | null>(null);
   const detachBRef = useRef<(() => void) | null>(null);
   const setAudioARef = useCallback((node: HTMLAudioElement | null) => {
@@ -1369,7 +1387,7 @@ export default function Player() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, playable, playing, queue.length, activeIdx]);
+  }, [current?.id, playable, playing, queue.length, activeIdx, audioGeneration]);
 
   /* ---------- 볼륨 동기화 ---------- */
   useEffect(() => {
@@ -1553,6 +1571,58 @@ export default function Player() {
    */
   const fruitlessSkipsRef = useRef(0);
 
+  /**
+   * HARD RECOVERY 실행 — 죽은 엘리먼트를 버리고 새 세대를 만든다.
+   *
+   * 페이지 리로드보다 파급이 훨씬 작다: 큐·세션·스케줄러·로그인 상태가 전부 남고,
+   * 리로드 직후 자동재생 차단에 걸릴 위험도 없다. 큐는 손대지 않으므로 지금 곡을
+   * 처음부터 다시 튼다.
+   */
+  const runHardResetRef = useRef<() => void>(() => {});
+  runHardResetRef.current = () => {
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    const gen = audioGenerationRef.current;
+    recordFlightEvent('HARD_RECOVERY_TRIGGERED', {
+      el: a, audioElementId: a ? getAudioObjectId(a) : null,
+      extra: { fromGeneration: gen, fruitlessSkips: fruitlessSkipsRef.current },
+    });
+    // 정지 직전 기록을 서버로 — 자동 복구에 성공해도 원인 분석은 계속돼야 한다.
+    flushFlightRecorderRef.current('hard_recovery', `gen${gen}`);
+
+    // 옛 콜백이 새 세대를 건드리지 못하게 진행 중인 crossfade/타이머부터 끊는다.
+    try { cancelCrossfade(); } catch { /* noop */ }
+    try { clearMetaTimer(); } catch { /* noop */ }
+    preloadedNextIdRef.current = null;
+
+    for (const [slot, el] of [['A', a], ['B', b]] as const) {
+      if (!el) continue;
+      recordFlightEvent('HARD_RECOVERY_ELEMENT_DESTROY', {
+        el, audioElementId: getAudioObjectId(el), extra: { slot },
+      });
+      recordPauseRequest('COMPONENT_CLEANUP', el, getAudioObjectId(el));
+      try { el.pause(); } catch { /* noop */ }
+      // src 를 떼고 load() 로 리소스를 놓아준다 — 죽은 파이프라인을 붙잡고 있지 않게.
+      try { el.removeAttribute('src'); el.load(); } catch { /* noop */ }
+    }
+
+    // 새 엘리먼트에 src 를 다시 꽂게 트랙 전환 기준점을 지운다(큐는 그대로).
+    lastTrackIdRef.current = null;
+    hardResetAtRef.current = performance.now();
+    hardResetDoneRef.current = true;
+    setAudioGeneration((g) => g + 1);
+  };
+
+  // 새 세대가 실제로 마운트됐을 때 기록. generation 0(최초 마운트)은 제외한다.
+  useEffect(() => {
+    if (audioGeneration === 0) return;
+    recordFlightEvent('HARD_RECOVERY_ELEMENT_CREATED', {
+      el: audioARef.current,
+      audioElementId: audioARef.current ? getAudioObjectId(audioARef.current) : null,
+      extra: { generation: audioGeneration },
+    });
+  }, [audioGeneration]);
+
   useEffect(() => {
     if (!businessMode) return;
 
@@ -1571,10 +1641,45 @@ export default function Player() {
       // 진행했거나 곡이 바뀌었으면 기준점을 갱신하고 사다리를 초기화한다.
       const progressed = Math.abs(ct - prog.ct) >= 0.01;
       const trackChanged = prog.trackId !== trackId;
+
+      // HARD RECOVERY 검증 — play() 가 resolve 됐다는 것만으로는 성공이 아니다.
+      // 숙대점 장애가 바로 paused=false 인데 소리가 안 나던 상태였다.
+      // 오직 **재생 위치가 실제로 움직였는가** 로만 판정한다.
+      if (hardResetAtRef.current !== null) {
+        const verdict = verifyHardReset({
+          msSinceReset: now - hardResetAtRef.current,
+          progressed,
+        });
+        if (verdict === 'success') {
+          recordFlightEvent('HARD_RECOVERY_PROGRESS_CONFIRMED', {
+            el, audioElementId: getAudioObjectId(el),
+            extra: { generation: audioGenerationRef.current, ct },
+          });
+          recordFlightEvent('HARD_RECOVERY_SUCCESS', {
+            el, audioElementId: getAudioObjectId(el),
+            extra: { generation: audioGenerationRef.current },
+          });
+          hardResetAtRef.current = null;
+          hardResetDoneRef.current = false;   // 다음 정지 구간에서 다시 쓸 수 있게
+          fruitlessSkipsRef.current = 0;
+        } else if (verdict === 'failure') {
+          recordFlightEvent('HARD_RECOVERY_FAILURE', {
+            el, audioElementId: getAudioObjectId(el),
+            extra: { generation: audioGenerationRef.current, waitedMs: HARD_RESET_VERIFY_MS },
+          });
+          hardResetAtRef.current = null;      // 검증 종료 → 사다리가 마지막 칸으로 간다
+        }
+      }
+
       if (progressed || trackChanged) {
         // 실제로 소리가 났을 때만 헛skip 카운터를 푼다. 곡이 바뀐 것만으로는 풀지
         // 않는다 — skip 이 곡을 바꾸므로, 그러면 카운터가 영원히 0 에 머문다.
-        if (progressed) fruitlessSkipsRef.current = 0;
+        if (progressed) {
+          fruitlessSkipsRef.current = 0;
+          // 소리가 정상으로 돌아왔으면 다음 정지 구간에서 hard reset 을 다시 쓸 수 있어야 한다.
+          // 이걸 안 풀면 나중에 무관한 정지가 곧장 페이지 재시작으로 직행한다.
+          hardResetDoneRef.current = false;
+        }
         stallProgressRef.current = { trackId, ct, ts: now };
         stallLastActionRef.current = 'none';
         stallRecoveryLevelRef.current = null;
@@ -1592,6 +1697,8 @@ export default function Player() {
         subscriptionBlocked: health.subscriptionBlocked,
         stalledMs: now - prog.ts,
         fruitlessSkips: fruitlessSkipsRef.current,
+        hardResetDone: hardResetDoneRef.current,
+        hardResetMsAgo: hardResetAtRef.current === null ? null : now - hardResetAtRef.current,
       });
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
@@ -1612,8 +1719,10 @@ export default function Player() {
         recordFlightEvent('RECOVERY_LEVEL_2_START', { el, audioElementId: getAudioObjectId(el) });
       } else if (action === 'skip') {
         recordFlightEvent('RECOVERY_LEVEL_3_START', { el, audioElementId: getAudioObjectId(el) });
-      } else if (action === 'reload_page') {
+      } else if (action === 'hard_reset') {
         recordFlightEvent('RECOVERY_LEVEL_4_START', { el, audioElementId: getAudioObjectId(el) });
+      } else if (action === 'reload_page') {
+        recordFlightEvent('CONTROLLED_RELOAD_REQUEST', { el, audioElementId: getAudioObjectId(el) });
       }
 
       // SELF-HEAL-2 — paused 로 굳은 정지는 지금껏 계측에 한 번도 안 잡혔다
@@ -1667,6 +1776,15 @@ export default function Player() {
         return;
       }
 
+      if (action === 'hard_reset') {
+        // 곡이 아니라 **엘리먼트**를 버린다. 큐·세션은 그대로 두므로 파급이 가장 작다.
+        console.warn('[audio:selfheal] skip 무효 — 오디오 엘리먼트 재생성', {
+          stalledSec, trackId, fruitlessSkips: fruitlessSkipsRef.current,
+        });
+        runHardResetRef.current();
+        return;
+      }
+
       if (action === 'reload_page') {
         // 마지막 칸 — skip 조차 듣지 않는 상태(숙대점 34분 정지가 이 경우였다).
         // 페이지를 다시 띄우면 오디오 엘리먼트·큐·워커가 전부 새로 만들어진다.
@@ -1675,6 +1793,10 @@ export default function Player() {
         let last = 0;
         try { last = Number(sessionStorage.getItem(SELF_HEAL_RELOAD_KEY) ?? '0'); } catch { /* noop */ }
         if (Date.now() - last < RELOAD_COOLDOWN_MS) {
+          recordFlightEvent('CONTROLLED_RELOAD_SUPPRESSED_COOLDOWN', {
+            el, audioElementId: getAudioObjectId(el),
+            extra: { sinceLastMs: Date.now() - last, cooldownMs: RELOAD_COOLDOWN_MS },
+          });
           // 쿨다운 중이면 사다리를 되돌려 skip 부터 다시 시도한다(가만히 있지 않는다).
           stallLastActionRef.current = 'reload';
           return;
@@ -2994,6 +3116,7 @@ export default function Player() {
     <>
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
+        key={`audio-A-${audioGeneration}`}
         ref={setAudioARef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
@@ -3024,6 +3147,7 @@ export default function Player() {
         maybeLogBurnInSummary={maybeLogBurnInSummary}
       />
       <audio
+        key={`audio-B-${audioGeneration}`}
         ref={setAudioBRef}
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
