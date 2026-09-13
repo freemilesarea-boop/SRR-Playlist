@@ -89,9 +89,20 @@ export async function listMyBrandDevices(): Promise<MyBrandDevice[]> {
 }
 
 /** 세션 heartbeat (last_seen_at / 현재곡 갱신). 실패는 silent 처리 권장. */
+/** 원격 제어 명령 (0518). heartbeat 응답에 실려 1회만 배달된다. */
+export type BrandPlayerCommand = 'reload' | 'play' | 'next';
+
+export interface BrandPlayerHeartbeatResult {
+  success: boolean;
+  /** 대기 중인 명령이 있으면 그 종류. 없으면 null. */
+  command?: BrandPlayerCommand | null;
+  /** 중복 실행 방지용 식별자. */
+  command_id?: string | null;
+}
+
 export async function brandPlayerHeartbeat(
   brandId: string, sessionToken: string, currentTrackId: string | null, userAgent: string | null,
-): Promise<{ success: boolean }> {
+): Promise<BrandPlayerHeartbeatResult> {
   const { data, error } = await supabase.rpc('brand_player_heartbeat', {
     p_brand_id: brandId,
     p_session_token: sessionToken,
@@ -99,7 +110,39 @@ export async function brandPlayerHeartbeat(
     p_user_agent: userAgent,
   });
   if (error) throw error;
-  return data as { success: boolean };
+  return data as BrandPlayerHeartbeatResult;
+}
+
+/** 관리자용 실시간 세션 상태 (0518 원격 제어 대상 목록). */
+export interface BrandPlayerHealthRow {
+  session_id: string;
+  brand_name: string;
+  store_label: string;
+  status: 'playing' | 'stalled' | 'offline';
+  seconds_since_heartbeat: number;
+  seconds_on_current_track: number;
+  current_track_title: string | null;
+  device: string | null;
+  last_seen_at: string;
+}
+
+export async function adminBrandPlayerHealth(minutes = 1440): Promise<BrandPlayerHealthRow[]> {
+  const { data, error } = await supabase.rpc('admin_brand_player_health', { p_minutes: minutes });
+  if (error) throw error;
+  return (data ?? []) as BrandPlayerHealthRow[];
+}
+
+/** 매장 세션에 원격 명령을 넣는다 (super admin). 10분 내 heartbeat 로 배달된다. */
+export async function adminEnqueueBrandPlayerCommand(
+  sessionId: string, command: BrandPlayerCommand, note?: string,
+): Promise<{ success: boolean; id: string; command: BrandPlayerCommand }> {
+  const { data, error } = await supabase.rpc('admin_enqueue_brand_player_command', {
+    p_session_id: sessionId,
+    p_command: command,
+    p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data as { success: boolean; id: string; command: BrandPlayerCommand };
 }
 
 // ── 관리자 경로 (서버 RPC 가 _is_super_admin 최종 판정) ──────────────

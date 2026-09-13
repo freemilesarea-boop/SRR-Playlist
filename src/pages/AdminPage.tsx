@@ -113,6 +113,7 @@ const BrandRegistryPanel = lazy(() => import('@/components/admin/BrandRegistryPa
 const SupportInquiriesPanel = lazy(() => import('@/components/admin/SupportInquiriesPanel'));
 const CuratorsAdminPanel = lazy(() => import('@/components/admin/CuratorsAdminPanel'));
 const BrandPlayerPanel = lazy(() => import('@/components/admin/BrandPlayerPanel'));
+const BrandPlayerRemoteCard = lazy(() => import('@/components/admin/BrandPlayerRemoteCard'));
 
 // X6.39 — lazy chunk 로드 중 표시할 fallback
 function TabSkeleton() {
@@ -616,7 +617,12 @@ export default function AdminPage() {
         {/* dashboard 는 eager 라 Suspense 밖에서 즉시 렌더 */}
         {tab === 'dashboard' && <Dashboard />}
         <Suspense fallback={<TabSkeleton />}>
-          {tab === 'brand-player' && <BrandPlayerPanel />}
+          {tab === 'brand-player' && (
+            <>
+              <BrandPlayerRemoteCard />
+              <BrandPlayerPanel />
+            </>
+          )}
           {tab === 'support-inquiries' && <SupportInquiriesPanel />}
           {tab === 'members' && <MembersList />}
           {tab === 'member-broadcast' && <MemberBroadcastPanel />}
