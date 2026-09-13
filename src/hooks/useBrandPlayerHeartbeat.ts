@@ -12,19 +12,25 @@
 // 계속 보고하고, 서버는 그대로 stalled 로 판정한다.
 //
 // 0518 — 원격 제어: heartbeat 응답에 실려 오는 명령을 실행한다.
-// 푸시 복구(player_recover)는 매장이 알림을 허용해야 동작하지만, 이 경로는
-// 탭이 살아만 있으면 권한 없이도 닿는다 — 둘은 서로를 대체하지 않는다.
-// 서버가 배달 시점에 명령을 소비하므로 같은 명령이 두 번 오지 않지만,
-// StrictMode 중복 호출 등에 대비해 실행한 command_id 를 한 번 더 걸러낸다.
+// 0520 — Realtime 을 기본 배달 경로로 올리고 **heartbeat 는 fallback 으로 남긴다.**
+//   heartbeat 는 60초 주기라 최악 60초가 무음으로 흘러간다. WebSocket 이 살아
+//   있으면 1초 안에 닿는다. 반대로 모바일 브라우저가 백그라운드에서 소켓을 끊거나
+//   재연결에 실패하면 Realtime 은 아무것도 배달하지 못한다 — 그때 폴링이 받는다.
+//   두 경로는 handleRemoteCommand 하나만 호출한다(실행부 분기 없음).
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
-import { brandPlayerHeartbeat, type BrandPlayerHeartbeatResult } from '@/lib/api/brandPlayerApi';
+import { useAuthStore } from '@/store/authStore';
+import {
+  brandPlayerHeartbeat, subscribeStoreRecoveryCommands,
+  type BrandPlayerHeartbeatResult,
+} from '@/lib/api/brandPlayerApi';
 import { decideCommandAction } from '@/lib/brandPlayerCommand';
-import { runRegisteredHardRecovery } from '@/lib/hardRecovery';
-import { requestControlledReload } from '@/lib/playbackGuard';
-import { markPendingRemoteReload } from '@/lib/remoteRecovery';
-import { ackStoreRecovery } from '@/lib/api/brandPlayerApi';
+import { handleRemoteCommand } from '@/lib/remoteRecoveryExecutor';
+import {
+  parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
+} from '@/lib/remoteRecovery';
+import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -51,6 +57,18 @@ function resolveReportedTrackId(
   return lastAudibleRef.current ?? storeTrackId;
 }
 
+/**
+ * 이 클라이언트가 누구인가. **호출 시점**에 읽는다 — 명령은 렌더와 무관한 순간에
+ * 도착하고, 그때의 최신 신원으로 target 을 대조해야 한다.
+ */
+function readIdentity(sessionId: string | null): ClientIdentity {
+  return {
+    storeUserId: useAuthStore.getState().user?.id ?? null,
+    sessionId,
+    playerInstanceId: getPlayerInstanceId(),
+  };
+}
+
 export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Options): void {
   const currentTrackId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
   const lastTrackIdRef = useRef<string | null>(null);
@@ -59,43 +77,26 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
   // 구독해서 소리가 나기 시작한 순간 (a) 가 다시 돌게 한다. 이게 없으면 곡 전환이
   // 60s interval 까지 보고되지 않는다 — 전환 직후엔 아직 audioActive=false 이므로.
   const audioActive = usePlaybackHealthStore((s) => s.audioActive);
-  const doneCommandsRef = useRef<Set<string>>(new Set());
 
-  // 명령 실행. 재생을 되살리는 것이 목적이므로 실패해도 조용히 넘어간다.
-  const runCommand = (res: BrandPlayerHeartbeatResult): void => {
-    const action = decideCommandAction(res, doneCommandsRef.current);
-    if (action.kind !== 'run') return;
-    const { command, commandId } = action;
-    doneCommandsRef.current.add(commandId);
+  const storeUserId = useAuthStore((s) => s.user?.id ?? null);
+  /** 내 세션 id — heartbeat 응답으로 배운다. Realtime target 대조에 쓴다. */
+  const sessionIdRef = useRef<string | null>(null);
 
-    try {
-      if (command === 'reload') {
-        // ⚠ window.location.reload() 를 직접 부르지 않는다.
-        // 직접 호출하면 markReloadReason(사유 기록) · 10분 쿨다운 · Flight Recorder
-        // 상관관계를 전부 우회한다. 반드시 controlled reload 경로를 쓴다.
-        void ackStoreRecovery(commandId, 'executing');
-        markPendingRemoteReload(commandId);
-        const started = requestControlledReload('remote recovery reload');
-        if (!started) {
-          // 쿨다운에 막혔다 — 성공처럼 보고하지 않는다.
-          void ackStoreRecovery(commandId, 'rejected', 'REMOTE_RELOAD_COOLDOWN');
-        }
-        return;
-      }
-      if (command === 'hard_recovery') {
-        // 프로덕션에 이미 배포된 Hard Recovery 경로를 그대로 부른다.
-        // 성공 판정(실제 currentTime 진행)은 Player 의 verifyHardReset 이 담당한다.
-        void ackStoreRecovery(commandId, 'executing');
-        const ok = runRegisteredHardRecovery();
-        if (!ok) void ackStoreRecovery(commandId, 'failed', 'HARD_RECOVERY_UNAVAILABLE');
-        return;
-      }
-      const store = usePlayerStore.getState();
-      if (command === 'play') { store.play(); void ackStoreRecovery(commandId, 'succeeded'); }
-      else if (command === 'next') { store.next({ cause: 'manual_next' }); void ackStoreRecovery(commandId, 'succeeded'); }
-    } catch {
-      /* silent — 명령 실패가 재생을 망가뜨리면 안 된다 */
+  // heartbeat 응답 처리 — 세션 id 학습 + 명령 실행(fallback 경로).
+  const consumeHeartbeat = (res: BrandPlayerHeartbeatResult): void => {
+    if (!res || res.success !== true) return;
+    if (typeof res.session_id === 'string' && res.session_id) {
+      sessionIdRef.current = res.session_id;
     }
+    // 0518 의 화이트리스트·필수필드 검사를 그대로 통과시킨다(legacy 경로 회귀 방지).
+    const action = decideCommandAction(res, executedCommandIds());
+    if (action.kind !== 'run') return;
+    // 서버가 내 세션 토큰으로 대상을 확정해 건넨 명령이다 — target 대조는 서버가 끝냈다.
+    handleRemoteCommand(
+      { commandId: action.commandId, command: action.command, serverTargeted: true },
+      readIdentity(sessionIdRef.current),
+      'heartbeat',
+    );
   };
 
   // (a) 트랙 변경(= 실제로 소리가 난 곡의 변경) 즉시 heartbeat
@@ -106,7 +107,7 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     lastTrackIdRef.current = reported;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
     void brandPlayerHeartbeat(brandId, sessionToken, reported, ua)
-      .then(runCommand)
+      .then(consumeHeartbeat)
       .catch(() => { /* silent */ });
   }, [enabled, brandId, sessionToken, currentTrackId, audioActive]);
 
@@ -120,11 +121,38 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
       lastTrackIdRef.current = tid;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
       void brandPlayerHeartbeat(brandId, sessionToken, tid, ua)
-        .then((res) => { if (!cancelled) runCommand(res); })
+        .then((res) => { if (!cancelled) consumeHeartbeat(res); })
         .catch(() => { /* silent */ });
     };
     fire();
     const id = window.setInterval(() => { if (!cancelled) fire(); }, HEARTBEAT_INTERVAL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [enabled, brandId, sessionToken]);
+
+  // (c) 0520 — Realtime 즉시 배달. **control plane 이다.**
+  //
+  // 이 effect 는 오디오를 건드리지 않는다. 구독 실패·소켓 끊김·재연결 실패 어느
+  // 경우에도 여기서 하는 일은 "명령을 못 받는 것" 뿐이고, 그때는 (b) 의 폴링이
+  // 그대로 받는다. Player unmount·pause·queue reset 은 절대 하지 않는다.
+  useEffect(() => {
+    if (!enabled || !storeUserId) return;
+    let sub: { unsubscribe: () => void } | null = null;
+    try {
+      sub = subscribeStoreRecoveryCommands(
+        storeUserId,
+        (row) => {
+          // row 를 믿고 바로 실행하지 않는다 — target·TTL·상태·중복을 전부 다시 본다.
+          handleRemoteCommand(
+            parseRealtimeCommandRow(row), readIdentity(sessionIdRef.current), 'realtime',
+          );
+        },
+        (status) => {
+          recordFlightEvent('REALTIME_CHANNEL_STATUS', { extra: { status } });
+        },
+      );
+    } catch {
+      /* 구독 자체가 실패해도 재생과 폴링은 그대로 간다 */
+    }
+    return () => { try { sub?.unsubscribe(); } catch { /* noop */ } };
+  }, [enabled, storeUserId]);
 }

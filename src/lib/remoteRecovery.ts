@@ -31,7 +31,31 @@ export interface RemoteCommandEnvelope {
   targetSessionId?: string | null;
   targetPlayerInstanceId?: string | null;
   storeUserId?: string | null;
+  /**
+   * 서버측 lifecycle 상태. Realtime 재연결 후 옛 row 가 다시 흘러들어와도
+   * 종결된 명령을 재실행하지 않기 위해 본다. 없으면(구버전 heartbeat 응답)
+   * 검사를 건너뛴다 — heartbeat 는 애초에 pending 만 배달한다.
+   */
+  status?: string | null;
+  /**
+   * 서버가 이미 대상을 확정해서 **나에게만** 건네준 명령인가.
+   *
+   * heartbeat 경로가 그렇다: brand_player_heartbeat 는 내 session_token 으로 세션을
+   * 특정한 뒤 그 세션의 명령만 골라 준다. 봉투에 target 필드가 실려 오지 않으므로
+   * 여기서 target 대조를 다시 하면 전부 wrong_target 이 되어버린다.
+   *
+   * Realtime row 에는 절대 세우지 않는다 — 그쪽은 매장 단위 구독이라 같은 매장의
+   * 다른 탭에도 똑같이 도착하고, target 대조가 유일한 방어선이다.
+   */
+  serverTargeted?: boolean;
 }
+
+/** 더 이상 실행하면 안 되는 상태. 종결됐거나 이미 다른 경로가 집어간 것. */
+export const TERMINAL_STATUSES: readonly string[] =
+  ['succeeded', 'failed', 'expired', 'rejected'];
+
+/** 아직 실행 대상인 상태. Realtime row 는 보통 'pending' 으로 들어온다. */
+export const RUNNABLE_STATUSES: readonly string[] = ['pending', 'received'];
 
 /** 이 클라이언트가 누구인가. */
 export interface ClientIdentity {
@@ -42,7 +66,10 @@ export interface ClientIdentity {
 
 export type RemoteCommandDecision =
   | { kind: 'run'; command: RemoteCommand; commandId: string }
-  | { kind: 'skip'; reason: 'no_command' | 'unknown_command' | 'expired' | 'wrong_target' | 'duplicate' };
+  | {
+      kind: 'skip';
+      reason: 'no_command' | 'unknown_command' | 'expired' | 'wrong_target' | 'duplicate' | 'terminal';
+    };
 
 /**
  * 이 명령을 실행할 것인가.
@@ -64,6 +91,7 @@ export function decideRemoteCommand(
   if (!commandId || !command) return { kind: 'skip', reason: 'no_command' };
   if (!EXECUTABLE_COMMANDS.includes(command)) return { kind: 'skip', reason: 'unknown_command' };
   if (alreadyDone.has(commandId)) return { kind: 'skip', reason: 'duplicate' };
+  if (isTerminalStatus(env.status)) return { kind: 'skip', reason: 'terminal' };
   if (isExpired(env.expiresAt, nowMs)) return { kind: 'skip', reason: 'expired' };
   if (!matchesTarget(env, me)) return { kind: 'skip', reason: 'wrong_target' };
 
@@ -85,6 +113,9 @@ export function isExpired(expiresAt: string | number | null | undefined, nowMs: 
  * session/store 가 맞아도 **실행하지 않는다** — 옛 탭에 명령이 꽂히는 사고를 막는다.
  */
 export function matchesTarget(env: RemoteCommandEnvelope, me: ClientIdentity): boolean {
+  // 서버가 내 세션 토큰으로 대상을 확정해 건넨 명령(heartbeat 배달)은 그대로 받는다.
+  if (env.serverTargeted) return true;
+
   const { targetPlayerInstanceId: pid, targetSessionId: sid, storeUserId: store } = env;
 
   if (pid) return !!me.playerInstanceId && me.playerInstanceId === pid;
@@ -172,4 +203,123 @@ export function allowRemoteCommand(
   // reload 는 Player 의 기존 10분 controlled-reload 쿨다운이 담당한다.
   if (command !== 'hard_recovery') return true;
   return nowMs - lastRunAtMs >= HARD_RECOVERY_COOLDOWN_MS;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 상태 판정                                                                   */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 종결된(또는 알 수 없는) 상태인가.
+ *
+ * 값이 없으면 **종결로 보지 않는다** — 구버전 heartbeat 응답에는 status 가 없고,
+ * 그 경로는 서버가 pending 만 골라 배달하므로 안전하다.
+ */
+export function isTerminalStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Realtime row → 봉투                                                         */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** postgres_changes 가 주는 brand_player_commands row 의 우리가 쓰는 부분. */
+export interface RemoteCommandRow {
+  id?: unknown;
+  command?: unknown;
+  status?: unknown;
+  expires_at?: unknown;
+  session_id?: unknown;
+  store_user_id?: unknown;
+  target_player_instance_id?: unknown;
+}
+
+function str(v: unknown): string | null {
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+
+/**
+ * Realtime payload 를 판정용 봉투로 옮긴다.
+ *
+ * row 는 서버가 만든 것이지만 **신뢰해서 그대로 실행하지 않는다.** 봉투로 옮긴 뒤
+ * decideRemoteCommand 가 target·TTL·상태·중복을 전부 다시 본다.
+ */
+export function parseRealtimeCommandRow(
+  row: RemoteCommandRow | null | undefined,
+): RemoteCommandEnvelope | null {
+  if (!row || typeof row !== 'object') return null;
+  const commandId = str(row.id);
+  const command = str(row.command);
+  if (!commandId || !command) return null;
+  return {
+    commandId,
+    command,
+    status: str(row.status),
+    expiresAt: str(row.expires_at),
+    targetSessionId: str(row.session_id),
+    targetPlayerInstanceId: str(row.target_player_instance_id),
+    storeUserId: str(row.store_user_id),
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* exactly once — 두 배달 경로 + 페이지 리로드를 가로지르는 1회 보장             */
+/* ────────────────────────────────────────────────────────────────────────── */
+/**
+ * 같은 command_id 가 Realtime 과 heartbeat 양쪽에서, 그리고 **reload 이후의 새
+ * 페이지에서까지** 들어올 수 있다. 메모리 Set 만으로는 리로드를 넘지 못한다:
+ *
+ *   원격 reload 수신 → 실행 → 페이지 리로드 → 새 페이지가 heartbeat 로 같은 명령을
+ *   다시 받음 → 또 리로드 → TTL 이 끝날 때까지 반복.
+ *
+ * 그래서 실행한 id 를 sessionStorage 에 남긴다. 저장소가 막힌 환경에서도 메모리
+ * Set 은 계속 동작하므로 같은 페이지 안에서의 중복은 여전히 막힌다.
+ */
+const EXECUTED_KEY = 'deudda:remote-cmd-done';
+const EXECUTED_CAP = 40;
+
+const memoryExecuted = new Set<string>();
+let hydrated = false;
+
+function readStored(): string[] {
+  try {
+    const raw = sessionStorage.getItem(EXECUTED_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((v): v is string => typeof v === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function hydrate(): void {
+  if (hydrated) return;
+  hydrated = true;
+  for (const id of readStored()) memoryExecuted.add(id);
+}
+
+/** 이미 실행한 command_id 집합 (메모리 + sessionStorage 합집합). */
+export function executedCommandIds(): ReadonlySet<string> {
+  hydrate();
+  return memoryExecuted;
+}
+
+/** 실행했다고 기록한다. 실행 **직전**에 부른다 — 실행 도중 리로드돼도 남아야 한다. */
+export function rememberExecutedCommand(commandId: string): void {
+  hydrate();
+  memoryExecuted.add(commandId);
+  try {
+    const next = readStored().filter((v) => v !== commandId);
+    next.push(commandId);
+    sessionStorage.setItem(EXECUTED_KEY, JSON.stringify(next.slice(-EXECUTED_CAP)));
+  } catch { /* 저장소 차단 — 메모리 Set 으로만 방어한다 */ }
+}
+
+/** 테스트 전용 초기화. */
+export function resetExecutedCommands(): void {
+  memoryExecuted.clear();
+  hydrated = false;
+  try { sessionStorage.removeItem(EXECUTED_KEY); } catch { /* noop */ }
 }

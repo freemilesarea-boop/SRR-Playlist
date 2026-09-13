@@ -16,6 +16,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { recoveryConsolePath } from '../_shared/recoveryConsoleLink.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -69,6 +70,22 @@ serve(async (req) => {
 
   const result: Record<string, unknown> = { event: payload.event ?? 'unknown' };
 
+  // 0520 — 어느 매장인지 먼저 확정한다. 관리자 푸시를 눌렀을 때 /ops 가 아니라
+  // **그 매장이 선택된 Recovery Console** 로 바로 떨어지게 하려는 것뿐이다.
+  // 조회 실패는 무시한다 — 링크가 없으면 예전처럼 /ops 로 간다.
+  let storeUserId: string | null = null;
+  if (payload.incident_id) {
+    try {
+      const { data: inc } = await sb
+        .from('brand_player_incidents')
+        .select('store_user_id')
+        .eq('id', payload.incident_id)
+        .maybeSingle();
+      storeUserId = ((inc as any)?.store_user_id as string | undefined) ?? null;
+    } catch { /* 무시 */ }
+  }
+  const adminPushUrl = (!isRecovery && recoveryConsolePath(storeUserId)) || '/ops';
+
   // ── 1. 관리자 전원에게 Web Push ──────────────────────────────────────────
   try {
     const { data: admins } = await sb.from('users').select('id').eq('role', 'admin');
@@ -88,7 +105,7 @@ serve(async (req) => {
             user_id: uid,
             title,
             body,
-            url: '/ops',
+            url: adminPushUrl,
             tag: `brand-player-${payload.incident_id ?? payload.brand ?? 'alert'}`,
           }),
         });
@@ -112,16 +129,6 @@ serve(async (req) => {
   // 복구 알림(brand_player_recovered)에는 보내지 않는다 — 이미 소리가 나고 있다.
   if (!isRecovery) {
     try {
-      let storeUserId: string | null = null;
-      if (payload.incident_id) {
-        const { data: inc } = await sb
-          .from('brand_player_incidents')
-          .select('store_user_id')
-          .eq('id', payload.incident_id)
-          .maybeSingle();
-        storeUserId = ((inc as any)?.store_user_id as string | undefined) ?? null;
-      }
-
       if (!storeUserId) {
         result.store_push = { skipped: 'no_store_user' };
       } else {

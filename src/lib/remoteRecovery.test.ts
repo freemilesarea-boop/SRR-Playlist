@@ -4,6 +4,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   decideRemoteCommand, matchesTarget, isExpired, judgeReloadOutcome,
   allowRemoteCommand, markPendingRemoteReload, takePendingRemoteReload,
+  parseRealtimeCommandRow, isTerminalStatus,
+  executedCommandIds, rememberExecutedCommand, resetExecutedCommands,
   EXECUTABLE_COMMANDS, HARD_RECOVERY_COOLDOWN_MS,
   type ClientIdentity, type RemoteCommandEnvelope,
 } from './remoteRecovery';
@@ -28,6 +30,7 @@ function cmd(over: Partial<RemoteCommandEnvelope> = {}): RemoteCommandEnvelope {
 }
 
 beforeEach(() => {
+  resetExecutedCommands();
   try { sessionStorage.clear(); } catch { /* noop */ }
 });
 
@@ -226,5 +229,117 @@ describe('클라이언트 쿨다운 (서버 쿨다운의 2차 방어)', () => {
 
   it('reload 는 Player 의 기존 10분 controlled-reload 쿨다운이 담당한다', () => {
     expect(allowRemoteCommand('reload', NOW, NOW + 1)).toBe(true);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* 0520 — Realtime row 해석 · 상태 · 영속 중복방지                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+describe('Realtime row 해석', () => {
+  it('snake_case row 를 봉투로 옮긴다', () => {
+    expect(parseRealtimeCommandRow({
+      id: 'c9', command: 'reload', status: 'pending',
+      expires_at: '2026-09-14T00:02:00Z',
+      session_id: 'sess-A', store_user_id: 'store-sukdae',
+      target_player_instance_id: 'pi-A',
+    })).toEqual({
+      commandId: 'c9', command: 'reload', status: 'pending',
+      expiresAt: '2026-09-14T00:02:00Z',
+      targetSessionId: 'sess-A', targetPlayerInstanceId: 'pi-A',
+      storeUserId: 'store-sukdae',
+    });
+  });
+
+  it('id 나 command 가 없으면 봉투를 만들지 않는다', () => {
+    expect(parseRealtimeCommandRow({ command: 'reload' })).toBeNull();
+    expect(parseRealtimeCommandRow({ id: 'c1' })).toBeNull();
+    expect(parseRealtimeCommandRow(null)).toBeNull();
+    expect(parseRealtimeCommandRow(undefined)).toBeNull();
+  });
+
+  it('빈 문자열은 null 로 떨어뜨린다 — session_id="" 를 target 으로 오해하지 않는다', () => {
+    const env = parseRealtimeCommandRow({ id: 'c1', command: 'play', session_id: '' });
+    expect(env?.targetSessionId).toBeNull();
+  });
+
+  it('Realtime row 에는 serverTargeted 가 절대 붙지 않는다 — target 대조가 유일한 방어선', () => {
+    const env = parseRealtimeCommandRow({ id: 'c1', command: 'play', store_user_id: 'store-x' });
+    expect(env?.serverTargeted).toBeUndefined();
+  });
+});
+
+describe('종결 상태', () => {
+  it('종결된 명령은 실행 대상이 아니다', () => {
+    for (const s of ['succeeded', 'failed', 'expired', 'rejected']) {
+      expect(isTerminalStatus(s), s).toBe(true);
+    }
+  });
+
+  it('pending / received 는 아직 살아 있다', () => {
+    expect(isTerminalStatus('pending')).toBe(false);
+    expect(isTerminalStatus('received')).toBe(false);
+    expect(isTerminalStatus('executing')).toBe(false);
+  });
+
+  it('status 가 없으면 종결로 보지 않는다 — 구버전 heartbeat 응답 호환', () => {
+    expect(isTerminalStatus(null)).toBe(false);
+    expect(isTerminalStatus(undefined)).toBe(false);
+    expect(isTerminalStatus('')).toBe(false);
+  });
+
+  it('decideRemoteCommand 가 종결 상태를 걸러낸다', () => {
+    expect(decideRemoteCommand(cmd({ status: 'succeeded' }), ME, none, NOW))
+      .toEqual({ kind: 'skip', reason: 'terminal' });
+  });
+});
+
+describe('서버가 대상을 확정한 명령 (heartbeat 경로)', () => {
+  it('target 필드가 없어도 실행한다', () => {
+    expect(decideRemoteCommand(
+      { commandId: 'c1', command: 'hard_recovery', serverTargeted: true }, ME, none, NOW,
+    ).kind).toBe('run');
+  });
+
+  it('그래도 TTL·화이트리스트·중복 검사는 그대로 받는다', () => {
+    expect(decideRemoteCommand(
+      { commandId: 'c1', command: 'device_reboot', serverTargeted: true }, ME, none, NOW,
+    )).toEqual({ kind: 'skip', reason: 'unknown_command' });
+    expect(decideRemoteCommand(
+      { commandId: 'c1', command: 'reload', serverTargeted: true, expiresAt: NOW - 1 }, ME, none, NOW,
+    )).toEqual({ kind: 'skip', reason: 'expired' });
+  });
+});
+
+describe('영속 중복방지 — 페이지 리로드를 건너간다', () => {
+  it('기록한 id 가 sessionStorage 에 남는다', () => {
+    rememberExecutedCommand('c-abc');
+    expect(executedCommandIds().has('c-abc')).toBe(true);
+    expect(sessionStorage.getItem('deudda:remote-cmd-done')).toContain('c-abc');
+  });
+
+  it('용량을 넘으면 오래된 것부터 버린다 (무한 증가 방지)', () => {
+    for (let i = 0; i < 60; i += 1) rememberExecutedCommand(`c${i}`);
+    const stored = JSON.parse(sessionStorage.getItem('deudda:remote-cmd-done') ?? '[]') as string[];
+    expect(stored.length).toBeLessThanOrEqual(40);
+    expect(stored).toContain('c59');
+    expect(stored).not.toContain('c0');
+  });
+
+  it('저장소가 막혀 있어도 throw 하지 않는다', () => {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      configurable: true,
+      value: { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); },
+               removeItem() { throw new Error('x'); }, clear() { throw new Error('x'); } },
+    });
+    try {
+      resetExecutedCommands();
+      expect(() => rememberExecutedCommand('c')).not.toThrow();
+      expect(executedCommandIds().has('c')).toBe(true);
+    } finally {
+      if (saved) Object.defineProperty(globalThis, 'sessionStorage', saved);
+      resetExecutedCommands();
+    }
   });
 });

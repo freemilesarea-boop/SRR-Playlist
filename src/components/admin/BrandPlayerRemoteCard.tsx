@@ -15,8 +15,16 @@
  *  • 매장 기기가 해당 빌드를 받은 뒤에야 동작한다.
  *  • 완전 offline(기기 꺼짐/폰 잠금)이면 배달되지 않는다. TTL 2분 안에 돌아오지
  *    않으면 만료된다 — "보냈으니 됐겠지" 로 오판하지 않게 상태를 표시한다.
+ *
+ * ── 0520 ────────────────────────────────────────────────────────────────────
+ *  • Slack 장애 알림의 "Recovery Console 열기" 는 ?store=<uuid> 를 달고 들어온다.
+ *    해당 매장을 맨 위로 올리고 표시한다. **자동 실행은 하지 않는다** — 링크는
+ *    화면을 열어줄 뿐이고, 실행은 여기서 사람이 누르고 확인 절차를 거친다.
+ *  • 명령이 Realtime 으로 갔는지 heartbeat 로 갔는지 표시한다. Realtime 이 조용히
+ *    죽어 있으면 "왜 60초나 걸리지" 를 알 방법이 없다.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { RefreshCw, RotateCcw, Play, SkipForward, Radio, Wrench } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert,
@@ -56,6 +64,13 @@ function fmtAgo(sec: number): string {
   return `${Math.round(m / 60)}시간 전`;
 }
 
+/** 배달 경로 뱃지. heartbeat 만 계속 찍히면 Realtime 이 죽어 있다는 신호다. */
+function sourceLabel(src: string | null | undefined): string | null {
+  if (src === 'realtime') return '실시간 전달';
+  if (src === 'heartbeat') return '폴링 전달';
+  return null;
+}
+
 /** 명령 진행 상태 뱃지 — 보냈는데 안 갔는지를 운영자가 알아야 한다. */
 function pendingLabel(status: string | null): string | null {
   if (!status) return null;
@@ -66,6 +81,9 @@ function pendingLabel(status: string | null): string | null {
 }
 
 export default function BrandPlayerRemoteCard() {
+  const [params] = useSearchParams();
+  // Slack 딥링크가 지목한 매장. 이 값으로 하는 일은 정렬·강조뿐이다.
+  const focusStore = params.get('store');
   const [rows, setRows] = useState<BrandPlayerHealthRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -85,6 +103,18 @@ export default function BrandPlayerRemoteCard() {
     const id = window.setInterval(() => { void load(); }, 15_000);
     return () => window.clearInterval(id);
   }, [load]);
+
+  // 지목된 매장을 맨 위로. 목록 자체는 그대로 두고 순서만 바꾼다.
+  const ordered = useMemo(() => {
+    if (!rows || !focusStore) return rows;
+    return [...rows].sort((a, b) => {
+      const av = a.store_user_id === focusStore ? 0 : 1;
+      const bv = b.store_user_id === focusStore ? 0 : 1;
+      return av - bv;
+    });
+  }, [rows, focusStore]);
+
+  const focusMissing = !!focusStore && !!rows && !rows.some((r) => r.store_user_id === focusStore);
 
   const send = useCallback(async (row: BrandPlayerHealthRow, command: BrandPlayerCommand) => {
     if (NEEDS_CONFIRM.has(command)) {
@@ -140,6 +170,13 @@ export default function BrandPlayerRemoteCard() {
         명령이 배달되지 않고 <b>2분 뒤 만료</b>됩니다 — 보냈다고 복구된 것이 아닙니다.
       </AdminAlert>
 
+      {focusMissing && (
+        <AdminAlert tone="warning">
+          알림이 지목한 매장이 최근 24시간 접속 목록에 없습니다. 기기가 완전히 꺼져 있어
+          원격 명령이 닿지 않는 상태입니다 — 점주 연락이 필요합니다.
+        </AdminAlert>
+      )}
+
       {rows === null && <AdminSkeleton rows={3} />}
 
       {rows !== null && err !== null && <AdminAlert tone="danger">{err}</AdminAlert>}
@@ -154,15 +191,19 @@ export default function BrandPlayerRemoteCard() {
 
       {rows !== null && rows.length > 0 && (
         <div className="grid gap-2">
-          {rows.map((r) => {
+          {(ordered ?? rows).map((r) => {
             const offline = r.status === 'offline';
             const pending = pendingLabel(r.pending_command_status ?? null);
+            const source = sourceLabel(r.pending_command_delivery_source ?? r.last_command_delivery_source);
+            const focused = !!focusStore && r.store_user_id === focusStore;
             return (
               <AdminCard key={r.session_id}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{r.store_label}</span>
+                  {focused && <AdminBadge tone="info">알림에서 지목됨</AdminBadge>}
                   <AdminBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</AdminBadge>
                   {pending && <AdminBadge tone="info">{pending}</AdminBadge>}
+                  {source && <AdminBadge tone="neutral">{source}</AdminBadge>}
                   <span className="text-[11px] text-ink-dim">{r.brand_name}</span>
                   {r.device && <span className="text-[11px] text-ink-dim">· {r.device}</span>}
                   <span className="text-[11px] text-ink-dim">· 신호 {fmtAgo(r.seconds_since_heartbeat)}</span>
