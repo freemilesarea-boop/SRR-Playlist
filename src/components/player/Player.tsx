@@ -26,7 +26,7 @@ import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, newPlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
 } from '@/lib/playbackFlightRecorder';
-import { disposeAudioElement } from '@/lib/hardRecovery';
+import { disposeAudioElement, registerHardRecovery } from '@/lib/hardRecovery';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -71,10 +71,11 @@ import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
 import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
-import { reloadApp } from '@/lib/playbackGuard';
+import { reloadApp, SELF_HEAL_RELOAD_KEY } from '@/lib/playbackGuard';
 
 /** 자가치유 리로드 시각(부팅 루프 방지용). sessionStorage 라 탭이 닫히면 초기화된다. */
-const SELF_HEAL_RELOAD_KEY = 'deudda:selfheal-reload-at';
+// 자가치유 리로드와 원격 복구 리로드가 **같은 쿨다운 창**을 쓴다(playbackGuard 소유).
+// 따로 놀면 운영자가 누른 직후 워치독이 또 리로드하는 사고가 난다.
 
 /**
  * 이 audio element 가 해당 트랙을 물고 있는지 (오프라인 캐시의 blob: src 포함).
@@ -704,7 +705,11 @@ export default function Player() {
       };
     });
     recordFlightEvent('PLAYER_MOUNT');
+    // 원격 복구 명령이 **같은 hard reset 경로**를 부를 수 있게 등록한다.
+    // 별도 복구 구현을 만들지 않는다.
+    registerHardRecovery(() => { runHardResetRef.current(); });
     return () => {
+      registerHardRecovery(null);
       recordFlightEvent('PLAYER_UNMOUNT');
       resetFlightRecorder();
     };

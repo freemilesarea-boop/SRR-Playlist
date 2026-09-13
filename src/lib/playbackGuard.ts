@@ -47,6 +47,8 @@ export function reloadApp(reason: string): void {
 /** reloadApp 의 자유 문자열 사유 → 진단용 분류. */
 export function classifyReloadReason(reason: string): DiagnosticReason {
   const r = (reason || '').toLowerCase();
+  // 원격 복구 리로드는 자가치유(self_heal)와 구분해야 한다 — 누가 눌렀는지가 다르다.
+  if (r.includes('remote')) return 'remote_recovery';
   if (r.includes('sw ') || r.includes('sw-') || r.includes('service worker')) return 'sw_update';
   if (r.includes('chunk')) return 'chunk_error';
   if (r.includes('heal') || r.includes('recovery') || r.includes('stuck')) return 'self_heal';
@@ -68,4 +70,36 @@ export function installUnloadGuard(): () => void {
   }
   window.addEventListener('beforeunload', onBeforeUnload);
   return () => window.removeEventListener('beforeunload', onBeforeUnload);
+}
+
+/**
+ * 자가치유·원격 복구 리로드가 공유하는 쿨다운 키.
+ *
+ * Player.tsx 의 사다리 마지막 칸과 원격 reload 명령이 **같은 창을 쓴다**.
+ * 둘이 따로 놀면 운영자가 누른 직후 워치독이 또 리로드하는 사고가 난다.
+ */
+export const SELF_HEAL_RELOAD_KEY = 'deudda:selfheal-reload-at';
+export const CONTROLLED_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
+
+/** 마지막 controlled reload 시각(ms). 없으면 0. */
+export function lastControlledReloadAt(): number {
+  try { return Number(sessionStorage.getItem(SELF_HEAL_RELOAD_KEY) ?? '0') || 0; }
+  catch { return 0; }
+}
+
+/**
+ * 쿨다운을 지키는 리로드. **원격 reload 는 반드시 이 경로를 쓴다.**
+ *
+ * 직접 window.location.reload() 를 부르면 사유 기록(markReloadReason)과 쿨다운을
+ * 전부 우회한다 — 그래서 원격 리로드였는지 사후에 알 수 없고, 연타로 반복
+ * 리로드가 걸린다. 그 경로는 금지다.
+ *
+ * @returns 실제로 리로드를 시작했으면 true, 쿨다운에 막혔으면 false
+ */
+export function requestControlledReload(reason: string, nowMs: number = Date.now()): boolean {
+  const last = lastControlledReloadAt();
+  if (last > 0 && nowMs - last < CONTROLLED_RELOAD_COOLDOWN_MS) return false;
+  try { sessionStorage.setItem(SELF_HEAL_RELOAD_KEY, String(nowMs)); } catch { /* noop */ }
+  reloadApp(reason);
+  return true;
 }

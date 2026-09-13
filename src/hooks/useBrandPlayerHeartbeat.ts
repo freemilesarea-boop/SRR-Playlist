@@ -21,6 +21,10 @@ import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { brandPlayerHeartbeat, type BrandPlayerHeartbeatResult } from '@/lib/api/brandPlayerApi';
 import { decideCommandAction } from '@/lib/brandPlayerCommand';
+import { runRegisteredHardRecovery } from '@/lib/hardRecovery';
+import { requestControlledReload } from '@/lib/playbackGuard';
+import { markPendingRemoteReload } from '@/lib/remoteRecovery';
+import { ackStoreRecovery } from '@/lib/api/brandPlayerApi';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -66,13 +70,29 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
 
     try {
       if (command === 'reload') {
-        // 매장 PC 의 F5 를 대신한다. 새 빌드도 함께 적용된다.
-        window.location.reload();
+        // ⚠ window.location.reload() 를 직접 부르지 않는다.
+        // 직접 호출하면 markReloadReason(사유 기록) · 10분 쿨다운 · Flight Recorder
+        // 상관관계를 전부 우회한다. 반드시 controlled reload 경로를 쓴다.
+        void ackStoreRecovery(commandId, 'executing');
+        markPendingRemoteReload(commandId);
+        const started = requestControlledReload('remote recovery reload');
+        if (!started) {
+          // 쿨다운에 막혔다 — 성공처럼 보고하지 않는다.
+          void ackStoreRecovery(commandId, 'rejected', 'REMOTE_RELOAD_COOLDOWN');
+        }
+        return;
+      }
+      if (command === 'hard_recovery') {
+        // 프로덕션에 이미 배포된 Hard Recovery 경로를 그대로 부른다.
+        // 성공 판정(실제 currentTime 진행)은 Player 의 verifyHardReset 이 담당한다.
+        void ackStoreRecovery(commandId, 'executing');
+        const ok = runRegisteredHardRecovery();
+        if (!ok) void ackStoreRecovery(commandId, 'failed', 'HARD_RECOVERY_UNAVAILABLE');
         return;
       }
       const store = usePlayerStore.getState();
-      if (command === 'play') store.play();
-      else if (command === 'next') store.next({ cause: 'manual_next' });
+      if (command === 'play') { store.play(); void ackStoreRecovery(commandId, 'succeeded'); }
+      else if (command === 'next') { store.next({ cause: 'manual_next' }); void ackStoreRecovery(commandId, 'succeeded'); }
     } catch {
       /* silent — 명령 실패가 재생을 망가뜨리면 안 된다 */
     }
