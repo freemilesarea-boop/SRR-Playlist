@@ -39,7 +39,7 @@
  *   사용자가 멈춘 것을 마음대로 다시 트는 일은 없어야 한다.
  */
 
-export type StallAction = 'none' | 'nudge' | 'reload' | 'skip' | 'reload_page';
+export type StallAction = 'none' | 'nudge' | 'reload' | 'skip' | 'hard_reset' | 'reload_page';
 
 /** 재생을 다시 건다. 가장 싸고 대부분의 일시적 정지를 고친다. */
 export const NUDGE_AFTER_MS = 8_000;
@@ -60,6 +60,21 @@ export const SKIP_AFTER_MS = 35_000;
  * 최소한 "화면을 누르면 된다" 는 상태까지는 간다 — 조용한 정지보다 낫다.
  */
 export const RELOAD_PAGE_AFTER_MS = 150_000;
+
+/**
+ * HARD RESET — 오디오 엘리먼트 자체를 버리고 새로 만든다.
+ *
+ * 왜 skip 으로는 안 되는가(숙대점 2026-09-13, 71분/74곡):
+ *   skip 은 큐 index 만 옮긴다. 그 다음 트랙 전환은 **같은 HTMLMediaElement** 에
+ *   새 src 를 꽂고 load() 할 뿐이다(Player.tsx 트랙 전환 effect). activeIdx 도
+ *   바뀌지 않는다. 그래서 엘리먼트/미디어 파이프라인이 죽은 상태라면 곡을 몇 개를
+ *   넘기든 같은 죽은 엘리먼트를 계속 쓰게 되고, 74곡 연속 playedSeconds=0 이 된다.
+ *
+ * 그래서 마지막 칸(페이지 재시작) 앞에 "엘리먼트만 새로 만드는" 칸을 하나 넣는다.
+ * 페이지 리로드보다 파급이 훨씬 작고(큐·세션·스케줄러 보존), 리로드 직후
+ * 자동재생 차단에 걸릴 위험도 없다.
+ */
+export const HARD_RESET_VERIFY_MS = 20_000;
 
 /**
  * "곡을 넘겨도 소용없다" 고 판단하는 연속 헛skip 횟수.
@@ -106,6 +121,10 @@ export interface StallInput {
    * 생략하면 0 — 기존 호출부 동작 그대로.
    */
   fruitlessSkips?: number;
+  /** 이번 정지 구간에서 hard reset 을 이미 써봤는가. 썼는데도 안 되면 페이지 재시작. */
+  hardResetDone?: boolean;
+  /** hard reset 이 실행된 뒤 흐른 시간(ms). 아직 안 했으면 null. */
+  hardResetMsAgo?: number | null;
 }
 
 /**
@@ -143,11 +162,16 @@ export function resolveStallAction(i: StallInput): StallAction {
   // 사용자가 직접 누른 일시정지는 playing=false 라 여기까지 오지 않는다.
   // 첫 칸(nudge = play())이 이 상태의 정답이기도 하다.
 
+  // hard reset 직후 검증 창 — 새 엘리먼트가 로드·재생할 시간을 준다.
+  // 이때 사다리를 계속 태우면 방금 만든 엘리먼트를 또 부순다.
+  const hr = i.hardResetMsAgo;
+  if (hr !== null && hr !== undefined && hr < HARD_RESET_VERIFY_MS) return 'none';
+
   // 넘겨도 넘겨도 소리가 안 나면 곡 탓이 아니다 — 오디오 파이프라인이 죽은 것이다.
   // skip 을 한 번 더 해봐야 사다리만 초기화되고 매장은 계속 조용하다(숙대점 71분/74회).
-  // 이 경우엔 skip 칸을 건너뛰고 곧장 페이지 재시작으로 간다.
+  // 곡이 아니라 **엘리먼트**를 버린다. 그래도 안 되면 그때 페이지를 다시 띄운다.
   if ((i.fruitlessSkips ?? 0) >= FRUITLESS_SKIP_LIMIT && i.stalledMs >= SKIP_AFTER_MS) {
-    return 'reload_page';
+    return i.hardResetDone ? 'reload_page' : 'hard_reset';
   }
 
   if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return 'reload_page';
@@ -158,7 +182,30 @@ export function resolveStallAction(i: StallInput): StallAction {
 }
 
 /** 사다리에서 이 칸이 저 칸보다 뒤인가 (되돌아가지 않게). */
-const ORDER: Record<StallAction, number> = { none: 0, nudge: 1, reload: 2, skip: 3, reload_page: 4 };
+const ORDER: Record<StallAction, number> = { none: 0, nudge: 1, reload: 2, skip: 3, hard_reset: 4, reload_page: 5 };
 export function isEscalation(from: StallAction, to: StallAction): boolean {
   return ORDER[to] > ORDER[from];
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** hard reset 결과 판정. */
+export type HardResetVerdict = 'pending' | 'success' | 'failure';
+
+/**
+ * hard reset 이 실제로 소리를 되살렸는가.
+ *
+ * **play() 가 resolve 됐다는 것만으로 성공 처리하지 않는다.** 숙대점 장애가 바로
+ * paused=false 인데 소리가 안 나던 상태였다. 판정 기준은 오직 **재생 위치가 실제로
+ * 움직였는가** 하나다.
+ */
+export function verifyHardReset(i: {
+  /** hard reset 이후 흐른 시간(ms). */
+  msSinceReset: number;
+  /** 그 사이 재생 위치가 실제로 움직였는가. */
+  progressed: boolean;
+}): HardResetVerdict {
+  if (i.progressed) return 'success';
+  if (i.msSinceReset >= HARD_RESET_VERIFY_MS) return 'failure';
+  return 'pending';
 }

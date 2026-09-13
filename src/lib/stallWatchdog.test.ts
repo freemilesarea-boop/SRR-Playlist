@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveStallAction, isEscalation,
   NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS, FRUITLESS_SKIP_LIMIT,
+  HARD_RESET_VERIFY_MS, verifyHardReset,
   type StallInput,
 } from './stallWatchdog';
 
@@ -204,9 +205,11 @@ describe('넘겨도 소리가 안 날 때 — 숙대점 2026-09-13 (71분 / skip
     fruitlessSkips,
   });
 
-  it('헛skip 이 한도에 차면 skip 대신 페이지를 다시 띄운다', () => {
-    // 이게 skip 이면 곡만 바뀌고 사다리가 초기화돼 150초 칸에 영영 못 간다.
-    expect(resolveStallAction(stalled(SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT))).toBe('reload_page');
+  it('헛skip 이 한도에 차면 skip 을 멈추고 탈출 칸으로 올라간다', () => {
+    // 이게 skip 이면 곡만 바뀌고 사다리가 초기화돼 탈출 칸에 영영 못 간다.
+    // HARD-RECOVERY-6 이후 첫 탈출 칸은 페이지 재시작이 아니라 엘리먼트 재생성이다
+    // (파급이 훨씬 작다). 페이지 재시작은 그것마저 실패했을 때의 마지막 칸.
+    expect(resolveStallAction(stalled(SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT))).toBe('hard_reset');
   });
 
   it('한도 직전까지는 그대로 skip 한다 — 한 곡만 깨진 흔한 경우는 건드리지 않는다', () => {
@@ -230,5 +233,200 @@ describe('넘겨도 소리가 안 날 때 — 숙대점 2026-09-13 (71분 / skip
     expect(resolveStallAction({ ...base, playing: false })).toBe('none');
     expect(resolveStallAction({ ...base, suppressed: true })).toBe('none');
     expect(resolveStallAction({ ...base, autoplayBlocked: true })).toBe('none');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * HARD RECOVERY — 엘리먼트를 버리는 칸
+ * 숙대점 2026-09-13: skip 은 큐 index 만 옮기고 같은 HTMLMediaElement 에 새 src 를
+ * 꽂을 뿐이라, 엘리먼트가 죽어 있으면 74곡을 넘겨도 전부 0초였다.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+describe('resolveStallAction — hard reset 칸', () => {
+  const base = (over: Partial<StallInput> = {}): StallInput => ({
+    businessMode: true,
+    playing: true,
+    paused: false,
+    ended: false,
+    crossfading: false,
+    suppressed: false,
+    autoplayBlocked: false,
+    subscriptionBlocked: false,
+    stalledMs: SKIP_AFTER_MS,
+    fruitlessSkips: FRUITLESS_SKIP_LIMIT,
+    hardResetDone: false,
+    hardResetMsAgo: null,
+    ...over,
+  });
+
+  it('헛skip 이 한도에 차면 페이지가 아니라 엘리먼트를 먼저 버린다', () => {
+    expect(resolveStallAction(base())).toBe('hard_reset');
+  });
+
+  it('hard reset 을 이미 썼는데도 안 됐으면 그때 페이지를 다시 띄운다', () => {
+    expect(resolveStallAction(base({ hardResetDone: true }))).toBe('reload_page');
+  });
+
+  it('hard reset 직후 검증 창에서는 아무것도 하지 않는다 — 방금 만든 엘리먼트를 또 부수면 안 된다', () => {
+    expect(resolveStallAction(base({ hardResetMsAgo: 0 }))).toBe('none');
+    expect(resolveStallAction(base({ hardResetMsAgo: HARD_RESET_VERIFY_MS - 1 }))).toBe('none');
+  });
+
+  it('검증 창이 지나면 다시 사다리가 돈다', () => {
+    expect(resolveStallAction(base({ hardResetMsAgo: HARD_RESET_VERIFY_MS, hardResetDone: true })))
+      .toBe('reload_page');
+  });
+
+  it('헛skip 이 한도 미만이면 hard reset 하지 않는다 — 한 곡만 깨진 흔한 경우', () => {
+    expect(resolveStallAction(base({ fruitlessSkips: FRUITLESS_SKIP_LIMIT - 1 }))).toBe('skip');
+  });
+
+  it('정지가 짧으면 아랫칸부터 — 곧장 엘리먼트를 버리지 않는다', () => {
+    expect(resolveStallAction(base({ stalledMs: NUDGE_AFTER_MS }))).toBe('nudge');
+    expect(resolveStallAction(base({ stalledMs: RELOAD_AFTER_MS }))).toBe('reload');
+  });
+
+  it('매장 모드가 아니거나 사용자가 멈춘 상태면 절대 발동하지 않는다', () => {
+    expect(resolveStallAction(base({ businessMode: false }))).toBe('none');
+    expect(resolveStallAction(base({ playing: false }))).toBe('none');
+    expect(resolveStallAction(base({ suppressed: true }))).toBe('none');
+    expect(resolveStallAction(base({ autoplayBlocked: true }))).toBe('none');
+    expect(resolveStallAction(base({ subscriptionBlocked: true }))).toBe('none');
+    expect(resolveStallAction(base({ ended: true }))).toBe('none');
+    expect(resolveStallAction(base({ crossfading: true }))).toBe('none');
+  });
+
+  it('필드를 생략하면 예전 동작 그대로 — 기존 호출부 영향 0', () => {
+    const { hardResetDone: _a, hardResetMsAgo: _b, fruitlessSkips: _c, ...legacy } = base();
+    expect(resolveStallAction(legacy)).toBe('skip');
+  });
+
+  it('사다리 순서: skip < hard_reset < reload_page', () => {
+    expect(isEscalation('skip', 'hard_reset')).toBe(true);
+    expect(isEscalation('hard_reset', 'reload_page')).toBe(true);
+    expect(isEscalation('hard_reset', 'skip')).toBe(false);
+    expect(isEscalation('reload_page', 'hard_reset')).toBe(false);
+  });
+});
+
+describe('verifyHardReset — 성공 판정은 오직 실제 재생 진행', () => {
+  it('재생 위치가 움직이면 성공', () => {
+    expect(verifyHardReset({ msSinceReset: 1_000, progressed: true })).toBe('success');
+  });
+
+  it('play() 가 되든 말든 위치가 안 움직이면 성공이 아니다 — 검증 창 동안은 pending', () => {
+    expect(verifyHardReset({ msSinceReset: 0, progressed: false })).toBe('pending');
+    expect(verifyHardReset({ msSinceReset: HARD_RESET_VERIFY_MS - 1, progressed: false })).toBe('pending');
+  });
+
+  it('검증 창이 지나도 안 움직이면 실패', () => {
+    expect(verifyHardReset({ msSinceReset: HARD_RESET_VERIFY_MS, progressed: false })).toBe('failure');
+  });
+
+  it('창이 지났어도 진행이 있으면 성공이 이긴다', () => {
+    expect(verifyHardReset({ msSinceReset: HARD_RESET_VERIFY_MS * 3, progressed: true })).toBe('success');
+  });
+});
+
+describe('장시간 정상 재생 — hard reset 오발동 없음 (화정점 회귀 방지)', () => {
+  it('6시간 동안 곡 전환 반복해도 사다리에 오르지 않는다', () => {
+    const TICK_MS = 3_000;
+    const TRACK_SEC = 180;
+    let ct = 0;
+    let stalledMs = 0;
+    let fruitless = 0;
+    const actions: string[] = [];
+
+    // 6시간 = 7200 tick. 매 tick 실제 재생이 진행되므로 stalledMs 는 0 으로 유지된다.
+    for (let i = 0; i < (6 * 60 * 60 * 1000) / TICK_MS; i += 1) {
+      ct = (ct + TICK_MS / 1000) % TRACK_SEC;   // 곡 전환 포함
+      const progressed = true;                   // 소리가 실제로 나고 있다
+      if (progressed) { stalledMs = 0; fruitless = 0; }
+      const a = resolveStallAction({
+        businessMode: true, playing: true, paused: false, ended: false,
+        crossfading: false, suppressed: false, autoplayBlocked: false,
+        subscriptionBlocked: false, stalledMs, fruitlessSkips: fruitless,
+        hardResetDone: false, hardResetMsAgo: null,
+      });
+      if (a !== 'none') actions.push(a);
+    }
+    expect(actions).toEqual([]);
+  });
+
+  it('짧은 버퍼링(8초 미만)이 반복돼도 발동하지 않는다', () => {
+    for (let ms = 0; ms < NUDGE_AFTER_MS; ms += 500) {
+      expect(resolveStallAction({
+        businessMode: true, playing: true, paused: false, ended: false,
+        crossfading: false, suppressed: false, autoplayBlocked: false,
+        subscriptionBlocked: false, stalledMs: ms, fruitlessSkips: 0,
+        hardResetDone: false, hardResetMsAgo: null,
+      })).toBe('none');
+    }
+  });
+
+  it('사용자가 직접 누른 일시정지(paused=true, playing=false)는 건드리지 않는다', () => {
+    expect(resolveStallAction({
+      businessMode: true, playing: false, paused: true, ended: false,
+      crossfading: false, suppressed: false, autoplayBlocked: false,
+      subscriptionBlocked: false, stalledMs: 10 * 60_000, fruitlessSkips: 99,
+      hardResetDone: false, hardResetMsAgo: null,
+    })).toBe('none');
+  });
+});
+
+describe('숙대점 시나리오 재현 — 74곡 무한루프가 이번에는 탈출된다', () => {
+  it('헛skip 3회 → hard_reset → 실패 → reload_page 로 끝난다 (무한 skip 없음)', () => {
+    const seen: string[] = [];
+    let fruitless = 0;
+    let hardResetDone = false;
+
+    // 사다리를 3번 태운다 — 매번 36초에 skip, 곡은 바뀌지만 0초.
+    for (let round = 0; round < 3; round += 1) {
+      const a = resolveStallAction({
+        businessMode: true, playing: true, paused: false, ended: false,
+        crossfading: false, suppressed: false, autoplayBlocked: false,
+        subscriptionBlocked: false, stalledMs: SKIP_AFTER_MS,
+        fruitlessSkips: fruitless, hardResetDone, hardResetMsAgo: null,
+      });
+      seen.push(a);
+      if (a === 'skip') fruitless += 1;
+    }
+    expect(seen).toEqual(['skip', 'skip', 'skip']);
+    expect(fruitless).toBe(FRUITLESS_SKIP_LIMIT);
+
+    // 4번째 — 이제 곡이 아니라 엘리먼트를 버린다.
+    const fourth = resolveStallAction({
+      businessMode: true, playing: true, paused: false, ended: false,
+      crossfading: false, suppressed: false, autoplayBlocked: false,
+      subscriptionBlocked: false, stalledMs: SKIP_AFTER_MS,
+      fruitlessSkips: fruitless, hardResetDone, hardResetMsAgo: null,
+    });
+    expect(fourth).toBe('hard_reset');
+
+    // 새 엘리먼트도 안 살아나면(검증 창 경과 + progress 없음) 마지막 칸.
+    expect(verifyHardReset({ msSinceReset: HARD_RESET_VERIFY_MS, progressed: false })).toBe('failure');
+    hardResetDone = true;
+    const fifth = resolveStallAction({
+      businessMode: true, playing: true, paused: false, ended: false,
+      crossfading: false, suppressed: false, autoplayBlocked: false,
+      subscriptionBlocked: false, stalledMs: SKIP_AFTER_MS,
+      fruitlessSkips: fruitless, hardResetDone, hardResetMsAgo: null,
+    });
+    expect(fifth).toBe('reload_page');
+
+    // 무한 hard_reset 루프가 아니다 — 같은 정지 구간에서 두 번 나오지 않는다.
+    expect(seen.filter((a) => a === 'hard_reset')).toHaveLength(0);
+  });
+
+  it('hard reset 이 성공하면(progress 확인) 페이지 재시작까지 가지 않는다', () => {
+    expect(verifyHardReset({ msSinceReset: 4_000, progressed: true })).toBe('success');
+    // 성공 시 호출부가 hardResetDone 을 풀고 fruitless 를 0 으로 되돌린다 →
+    // 다음 판정은 사다리 맨 아래로 돌아간다.
+    expect(resolveStallAction({
+      businessMode: true, playing: true, paused: false, ended: false,
+      crossfading: false, suppressed: false, autoplayBlocked: false,
+      subscriptionBlocked: false, stalledMs: 0, fruitlessSkips: 0,
+      hardResetDone: false, hardResetMsAgo: null,
+    })).toBe('none');
   });
 });
