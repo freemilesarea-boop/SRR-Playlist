@@ -31,6 +31,10 @@
  * 곡이 바뀌면 사다리는 처음부터 다시 시작한다 — **매장은 포기하지 않는다.**
  * 네트워크가 죽어 있으면 곡당 35초씩 넘기며 계속 시도하고, 돌아오면 저절로 낫는다.
  *
+ * 단, 넘긴 곡마저 한 마디도 안 나는 상태가 이어지면(FRUITLESS_SKIP_LIMIT) 곡 탓이
+ * 아니므로 skip 을 멈추고 곧장 페이지를 다시 띄운다 — 그러지 않으면 사다리 초기화가
+ * 반복되며 마지막 칸에 영영 못 간다(숙대점 2026-09-13, 71분/74회).
+ *
  * ⚠ 매장 모드에서만 동작한다. 일반 청취자에게는 항상 'none' 이다 —
  *   사용자가 멈춘 것을 마음대로 다시 트는 일은 없어야 한다.
  */
@@ -57,6 +61,24 @@ export const SKIP_AFTER_MS = 35_000;
  */
 export const RELOAD_PAGE_AFTER_MS = 150_000;
 
+/**
+ * "곡을 넘겨도 소용없다" 고 판단하는 연속 헛skip 횟수.
+ *
+ * 왜 필요한가 — 숙대점 2026-09-13. 14:48~15:59 **71분 동안 stall_skip 74건**,
+ * 전부 playedSeconds=0 이었다. 즉 넘긴 곡도 한 마디도 소리가 안 났다.
+ * 그런데 그동안 reload_page 는 **단 한 번도 실행되지 않았다.**
+ *
+ * 사다리가 "곡이 바뀌면 처음부터" 로 되어 있기 때문이다. 36초에 skip →
+ * 곡이 바뀜 → 사다리 초기화 → 36초 뒤 또 skip. 150초 칸에 영영 도달하지 못한다.
+ * 한 곡이 안 되는 상황(원래 의도한 시나리오)에는 맞지만, **오디오 파이프라인
+ * 자체가 죽어 모든 곡이 0초인 상황**에서는 매장이 조용한 채로 무한히 돈다.
+ *
+ * 그래서 실제 소리가 난 적 없는 skip 을 세고, 이만큼 쌓이면 곡 탓이 아니라고
+ * 보고 곧장 마지막 칸(페이지 재시작)으로 간다. 3회면 약 2분 — 그 사이 한 곡이라도
+ * 실제로 재생되면 카운터는 0 으로 돌아간다.
+ */
+export const FRUITLESS_SKIP_LIMIT = 3;
+
 export interface StallInput {
   /** 매장/브랜드 플레이어인가. false 면 무조건 'none'. */
   businessMode: boolean;
@@ -79,6 +101,11 @@ export interface StallInput {
   subscriptionBlocked: boolean;
   /** 마지막으로 재생 위치가 움직인 뒤 흐른 시간(ms). */
   stalledMs: number;
+  /**
+   * 연속으로 "한 마디도 못 듣고" 넘긴 곡 수. 실제 재생이 한 번이라도 되면 0.
+   * 생략하면 0 — 기존 호출부 동작 그대로.
+   */
+  fruitlessSkips?: number;
 }
 
 /**
@@ -115,6 +142,13 @@ export function resolveStallAction(i: StallInput): StallAction {
   // playing 은 **재생 의도**다. 의도는 재생인데 엘리먼트만 paused 면 버그 상태다.
   // 사용자가 직접 누른 일시정지는 playing=false 라 여기까지 오지 않는다.
   // 첫 칸(nudge = play())이 이 상태의 정답이기도 하다.
+
+  // 넘겨도 넘겨도 소리가 안 나면 곡 탓이 아니다 — 오디오 파이프라인이 죽은 것이다.
+  // skip 을 한 번 더 해봐야 사다리만 초기화되고 매장은 계속 조용하다(숙대점 71분/74회).
+  // 이 경우엔 skip 칸을 건너뛰고 곧장 페이지 재시작으로 간다.
+  if ((i.fruitlessSkips ?? 0) >= FRUITLESS_SKIP_LIMIT && i.stalledMs >= SKIP_AFTER_MS) {
+    return 'reload_page';
+  }
 
   if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return 'reload_page';
   if (i.stalledMs >= SKIP_AFTER_MS) return 'skip';
