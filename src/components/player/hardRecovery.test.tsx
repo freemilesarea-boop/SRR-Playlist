@@ -20,7 +20,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { render, act, cleanup } from '@testing-library/react';
 import { disposeAudioElement, guardGeneration, isStaleGeneration } from '@/lib/hardRecovery';
 import {
-  resolveStallAction, verifyHardReset,
+  resolveStallAction, verifyHardReset, isEscalation,
   SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT, HARD_RESET_VERIFY_MS,
   type StallAction,
 } from '@/lib/stallWatchdog';
@@ -379,5 +379,168 @@ describe('4. hard reset 실패 시 reload_page 도달', () => {
       hardResetMsAgo: HARD_RESET_VERIFY_MS - 1,
     });
     expect(mid).toBe('none');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 5~7. PREOPEN-FINAL-AUDIT — 장시간 무인 재생 시뮬레이션
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** Player 워치독 tick 의 상태 전이를 그대로 옮긴 시뮬레이터. */
+function simulate(opts: {
+  hours: number;
+  /** tick 마다 실제 재생이 진행됐는가. */
+  progressAt: (tickIndex: number, elapsedMs: number) => boolean;
+  /** 곡 전환 경계인가 (watchdog 의 trackChanged 에 해당). */
+  trackChangeAt?: (tickIndex: number, elapsedMs: number) => boolean;
+  /** crossfade 진행 중인가. */
+  crossfadingAt?: (tickIndex: number, elapsedMs: number) => boolean;
+}) {
+  const TICK = 3_000;
+  const ticks = Math.floor((opts.hours * 60 * 60 * 1000) / TICK);
+
+  let stalledMs = 0;
+  let fruitless = 0;
+  let hardResetDone = false;
+  let hardResetAt: number | null = null;
+  let elapsed = 0;
+  const counts: Record<string, number> = {
+    nudge: 0, reload: 0, skip: 0, hard_reset: 0, reload_page: 0,
+  };
+  let lastAction: StallAction = 'none';
+
+  for (let i = 0; i < ticks; i += 1) {
+    elapsed += TICK;
+    stalledMs += TICK;
+    const progressed = opts.progressAt(i, elapsed);
+    const trackChanged = opts.trackChangeAt?.(i, elapsed) ?? false;
+    const crossfading = opts.crossfadingAt?.(i, elapsed) ?? false;
+
+    if (hardResetAt !== null) {
+      const v = verifyHardReset({ msSinceReset: elapsed - hardResetAt, progressed });
+      if (v === 'success') { hardResetAt = null; hardResetDone = false; fruitless = 0; }
+      else if (v === 'failure') { hardResetAt = null; }
+    }
+
+    if (progressed || trackChanged) {
+      if (progressed) { fruitless = 0; hardResetDone = false; }
+      stalledMs = 0;
+      lastAction = 'none';
+      continue;
+    }
+
+    const action = resolveStallAction({
+      businessMode: true, playing: true, paused: false, ended: false,
+      crossfading, suppressed: false, autoplayBlocked: false, subscriptionBlocked: false,
+      stalledMs, fruitlessSkips: fruitless, hardResetDone,
+      hardResetMsAgo: hardResetAt === null ? null : elapsed - hardResetAt,
+    });
+    if (action === 'none') continue;
+    // Player 와 동일: 사다리를 되돌아가거나 같은 칸을 반복 실행하지 않는다.
+    if (!isEscalation(lastAction, action)) continue;
+    lastAction = action;
+    counts[action] += 1;
+
+    if (action === 'skip') { fruitless += 1; stalledMs = 0; lastAction = 'none'; }
+    else if (action === 'hard_reset') { hardResetAt = elapsed; hardResetDone = true; }
+  }
+  return { counts, fruitless, hardResetDone, hardResetAt, elapsedMs: elapsed, ticks };
+}
+
+describe('5. 24시간 무인 재생 시뮬레이션', () => {
+  it('정상 재생 24시간(28,800 tick) 동안 복구가 한 번도 발동하지 않는다', () => {
+    const TRACK_MS = 180_000;   // 3분짜리 곡
+    const r = simulate({
+      hours: 24,
+      progressAt: () => true,                                  // 소리가 계속 난다
+      trackChangeAt: (_, ms) => ms % TRACK_MS < 3_000,         // 3분마다 곡 전환
+      crossfadingAt: (_, ms) => ms % TRACK_MS > TRACK_MS - 6_000, // 전환 직전 crossfade
+    });
+
+    expect(r.ticks).toBe(28_800);
+    expect(r.counts.nudge).toBe(0);
+    expect(r.counts.reload).toBe(0);
+    expect(r.counts.skip).toBe(0);
+    expect(r.counts.hard_reset).toBe(0);
+    expect(r.counts.reload_page).toBe(0);
+    // 24시간 뒤에도 상태가 깨끗하다 — 다음 정지에서 사다리가 맨 아래부터 시작한다.
+    expect(r.fruitless).toBe(0);
+    expect(r.hardResetDone).toBe(false);
+    expect(r.hardResetAt).toBeNull();
+  });
+
+  it('곡 전환 경계에서 잠깐 진행이 멈춰도(≤6초) 복구가 발동하지 않는다', () => {
+    const TRACK_MS = 180_000;
+    const r = simulate({
+      hours: 24,
+      // 곡 전환 직후 2 tick(6초) 동안 버퍼링 — 첫 칸(8초)에 못 미친다.
+      progressAt: (_, ms) => (ms % TRACK_MS) >= 6_000,
+      trackChangeAt: (_, ms) => ms % TRACK_MS < 3_000,
+    });
+    expect(r.counts.nudge).toBe(0);
+    expect(r.counts.skip).toBe(0);
+    expect(r.counts.hard_reset).toBe(0);
+    expect(r.counts.reload_page).toBe(0);
+    expect(r.fruitless).toBe(0);
+  });
+
+  it('곡 전환이 fruitlessSkips 에 누적되지 않는다 — 하루 480곡을 넘겨도 0', () => {
+    const TRACK_MS = 180_000;
+    const r = simulate({
+      hours: 24,
+      progressAt: () => true,
+      trackChangeAt: (_, ms) => ms % TRACK_MS < 3_000,
+    });
+    expect(24 * 60 * 60 * 1000 / TRACK_MS).toBe(480);   // 하루 480곡
+    expect(r.fruitless).toBe(0);
+  });
+});
+
+describe('6. 복구 후 장시간 정상 재생', () => {
+  it('freeze → 사다리 → hard_reset → 성공 → 이후 3시간 무발동', () => {
+    const FREEZE_MS = 150_000;       // 처음 2분 30초 동안 정지
+    const r = simulate({
+      hours: 3,
+      progressAt: (_, ms) => ms > FREEZE_MS + 6_000,   // hard reset 직후 소리가 돌아온다
+    });
+
+    // 사이클 3번은 nudge → reload → skip, 4번째 사이클에서 skip 대신 hard_reset.
+    expect(r.counts.nudge).toBe(FRUITLESS_SKIP_LIMIT + 1);
+    expect(r.counts.reload).toBe(FRUITLESS_SKIP_LIMIT + 1);
+    expect(r.counts.skip).toBe(FRUITLESS_SKIP_LIMIT);
+    expect(r.counts.hard_reset).toBe(1);
+    expect(r.counts.reload_page).toBe(0);              // 페이지 재시작까지 가지 않음
+
+    // 복구 뒤 상태가 완전히 초기화됐다 — 3시간 동안 두 번째 복구가 없다.
+    expect(r.fruitless).toBe(0);
+    expect(r.hardResetDone).toBe(false);
+    expect(r.hardResetAt).toBeNull();
+  });
+});
+
+describe('7. hard reset 실패 → reload_page → 무한 reload 방지', () => {
+  it('진행이 끝내 없으면 reload_page 로 끝나고 hard_reset 은 1회뿐이다', () => {
+    const r = simulate({ hours: 1, progressAt: () => false });
+    expect(r.counts.hard_reset).toBe(1);
+    expect(r.counts.reload_page).toBeGreaterThanOrEqual(1);
+  });
+
+  it('reload 쿨다운(10분)이 같은 시간창의 반복 재시작을 막는다', () => {
+    // Player 의 sessionStorage 쿨다운 게이트와 동일한 판정을 재현한다.
+    const COOLDOWN_MS = 10 * 60 * 1000;
+    const allow = (lastAt: number, now: number) => now - lastAt >= COOLDOWN_MS;
+
+    const first = 0;
+    expect(allow(first, 1_000)).toBe(false);              // 1초 뒤 — 차단
+    expect(allow(first, COOLDOWN_MS - 1)).toBe(false);    // 9분 59초 — 차단
+    expect(allow(first, COOLDOWN_MS)).toBe(true);         // 10분 — 허용
+
+    // 1시간 동안 3초마다 시도해도 최대 6회를 넘지 않는다.
+    let last = -COOLDOWN_MS;
+    let reloads = 0;
+    for (let t = 0; t < 60 * 60 * 1000; t += 3_000) {
+      if (allow(last, t)) { reloads += 1; last = t; }
+    }
+    expect(reloads).toBeLessThanOrEqual(6);
   });
 });
