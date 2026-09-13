@@ -373,8 +373,38 @@ SQL 로 확인한 것: 저장된 bcrypt 해시가 위 비밀번호와 일치하�
 매장은 자기 매장만, 아티스트는 자기 프로필만 보이고, 본사만 `get_my_enterprise_role()`
 이 `is_hq=true` 를 돌려준다. 곡 1,554개·플레이리스트 17개가 양쪽에서 보인다.
 
-확인 못 한 것: **실제 HTTP 로그인**. 개발 컨테이너의 네트워크 정책이 `supabase.co`
+확인 못 한 것: **실제 HTTP 로그인**(그래서 위 토큰 NULL 문제를 기기에서야 발견했다). 개발 컨테이너의 네트워크 정책이 `supabase.co`
 로의 아웃바운드를 막아서 여기서는 토큰을 받아볼 수 없었다. 기기에서 직접 확인해야 한다.
+
+### SQL 로 계정을 만들 때 반드시 할 것 — 토큰 컬럼을 '' 로
+
+`auth.users` 에 SQL 로 행을 넣으면 `confirmation_token` · `recovery_token` ·
+`email_change` · `email_change_token_new` 같은 컬럼이 **NULL** 로 남는다. 스키마상
+nullable 이라 INSERT 는 통과한다. 그런데 GoTrue 는 이 컬럼들을 Go 의 `string` 으로
+읽기 때문에 NULL 을 만나면 `converting NULL to string is unsupported` 로 죽는다.
+
+결과는 **로그인 요청이 500** 이고, 앱에는 이렇게 보인다:
+
+> 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.
+
+비밀번호도 맞고 `identities` 행도 있는데 안 되므로, 계정 문제로 보이지 않아서 찾기 어렵다.
+실제 가입으로 만들어진 계정은 이 값들이 전부 빈 문자열 `''` 이다.
+
+```sql
+update auth.users set
+  confirmation_token         = coalesce(confirmation_token, ''),
+  recovery_token             = coalesce(recovery_token, ''),
+  email_change               = coalesce(email_change, ''),
+  email_change_token_new     = coalesce(email_change_token_new, ''),
+  email_change_token_current = coalesce(email_change_token_current, ''),
+  phone_change               = coalesce(phone_change, ''),
+  phone_change_token         = coalesce(phone_change_token, ''),
+  reauthentication_token     = coalesce(reauthentication_token, '')
+where id::text like 'da000000-0000-4000-8000-%';
+```
+
+`last_sign_in_at` 이 NULL 인 것은 정상이다 — 아직 로그인한 적이 없을 뿐이고,
+이 컬럼은 GoTrue 에서도 nullable 로 다룬다.
 
 ### 다 쓰고 나서 지우기
 
