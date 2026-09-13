@@ -19,7 +19,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import {
-  resolveStallAction, isEscalation, verifyHardReset, HARD_RESET_VERIFY_MS,
+  resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
   type StallAction,
 } from '@/lib/stallWatchdog';
 import {
@@ -71,6 +71,7 @@ import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
 import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
+import { noteAutoplayBlocked, noteAudiblePlayback } from '@/lib/autoplayRecovery';
 import { reloadApp, SELF_HEAL_RELOAD_KEY } from '@/lib/playbackGuard';
 
 /** 자가치유 리로드 시각(부팅 루프 방지용). sessionStorage 라 탭이 닫히면 초기화된다. */
@@ -1059,15 +1060,47 @@ export default function Player() {
     function onOffline() {
       setOnline(false);
     }
+    /** 회선 복귀 후 실제 복구 — 소스를 다시 잡고 재생을 건다. */
+    function reloadAndPlay(audio: HTMLAudioElement | null) {
+      const st = usePlayerStore.getState();
+      if (!audio || !st.playing || !isPlayableUrl(st.queue[st.index]?.audio_url)) return;
+      try { audio.load(); } catch { /* noop */ }
+      const p = observePlay(audio.play(), 'online-recovery', audio);
+      if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay 정책 등 — 무시 */ });
+    }
+
     function onOnline() {
       setOnline(true);
-      // 재생 의도가 있는데 멈춰 있으면 현재 트랙을 다시 로드 후 재생 시도
       const audio = activeRef();
-      if (audio && usePlayerStore.getState().playing && isPlayableUrl(usePlayerStore.getState().queue[usePlayerStore.getState().index]?.audio_url)) {
-        try { audio.load(); } catch { /* noop */ }
-        const p = observePlay(audio.play(), 'online-recovery', audio);
-        if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay 정책 등 — 무시 */ });
+
+      // 회선이 돌아왔다고 **소리가 나고 있는 재생을 끊지 않는다.**
+      // 예전에는 무조건 audio.load() 를 불렀다. 그러면 IndexedDB 캐시로 멀쩡히
+      // 이어지던 곡이 Wi-Fi 가 한 번 깜빡일 때마다 처음으로 되감겼다.
+      //
+      // 그렇다고 audioActive 만 보고 손을 떼면 반대 사고가 난다: 숙대점 유형의
+      // 무음 정지는 paused=false 이고 pause 이벤트도 오지 않아 audioActive 가
+      // true 로 남는다(= false positive). 그 상태에서 아무것도 안 하면 재연결이
+      // 복구 기회가 되지 못한다.
+      //
+      // 그래서 **1.5초 뒤 재생 위치가 실제로 움직였는지 확인한 뒤에만** 손을 뗀다.
+      // 판단 기준은 여기서도 플래그가 아니라 실제 진행이다.
+      if (audio && !audio.paused && usePlaybackHealthStore.getState().audioActive) {
+        const before = audio.currentTime;
+        const beforeTrack = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id ?? null;
+        window.setTimeout(() => {
+          const later = activeRef();
+          if (!later) return;
+          const st = usePlayerStore.getState();
+          // 그 사이 곡이 넘어갔으면 새 곡이 도는 중이다 — 절대 되감지 않는다.
+          if ((st.queue[st.index]?.id ?? null) !== beforeTrack) return;
+          if (later.currentTime > before + 0.1) return;   // 진짜 재생 중 — 건드리지 않는다
+          reloadAndPlay(later);
+        }, 1_500);
+        return;
       }
+
+      // paused 로 굳었거나 소리가 난 적이 없다 — 즉시 복구를 건다.
+      reloadAndPlay(audio);
     }
     window.addEventListener('offline', onOffline);
     window.addEventListener('online', onOnline);
@@ -1704,6 +1737,10 @@ export default function Player() {
         fruitlessSkips: fruitlessSkipsRef.current,
         hardResetDone: hardResetDoneRef.current,
         hardResetMsAgo: hardResetAtRef.current === null ? null : now - hardResetAtRef.current,
+        // 회선이 끊긴 동안에는 페이지를 다시 띄우지 않는다(offline_hold).
+        // IndexedDB 에 받아둔 곡으로 버티고 있을 수 있고, 리로드 직후에는 자동재생이
+        // 막힐 수 있다 — 회선 없음과 재생 죽음은 다른 사건이다.
+        online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
       });
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
@@ -1728,6 +1765,11 @@ export default function Player() {
         recordFlightEvent('RECOVERY_LEVEL_4_START', { el, audioElementId: getAudioObjectId(el) });
       } else if (action === 'reload_page') {
         recordFlightEvent('CONTROLLED_RELOAD_REQUEST', { el, audioElementId: getAudioObjectId(el) });
+      } else if (action === 'offline_hold') {
+        recordFlightEvent('OFFLINE_RELOAD_SUPPRESSED', {
+          el, audioElementId: getAudioObjectId(el),
+          extra: { stalledMs: Math.round(now - prog.ts), fruitlessSkips: fruitlessSkipsRef.current },
+        });
       }
 
       // SELF-HEAL-2 — paused 로 굳은 정지는 지금껏 계측에 한 번도 안 잡혔다
@@ -1753,6 +1795,24 @@ export default function Player() {
         readyState: el.readyState, networkState: el.networkState,
         online: typeof navigator !== 'undefined' ? navigator.onLine : null,
       });
+
+      if (action === 'offline_hold') {
+        // 마지막 칸에 도달했지만 회선이 없다 — **페이지를 다시 띄우지 않는다.**
+        // 같은 문서 안의 복구(nudge/reload/skip/hard_reset)는 이미 전부 시도했다.
+        // 여기서는 기록만 남기고, 회선이 돌아오면 onOnline 이 사다리를 되감는다.
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            kind: 'OFFLINE_RELOAD_SUPPRESSED',
+            stalledSec, trackId,
+            fruitlessSkips: fruitlessSkipsRef.current,
+            online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+          },
+        });
+        console.warn('[audio:selfheal] 오프라인 — 페이지 재시작 보류', { stalledSec, trackId });
+        return;
+      }
 
       if (action === 'nudge') {
         // Recovery Manager 에 위임 — cooldown/escalation/로그가 이미 그 안에 있다.
@@ -1840,7 +1900,48 @@ export default function Player() {
     // 워치독이 잠든다(숙대점 34분 정지). Web Worker 타이머는 그 영향을 훨씬 덜 받는다.
     const ticker = startBackgroundTicker(tick, 3_000);
     if (import.meta.env.DEV) console.debug('[audio:selfheal] 워치독 시작', { ticker: ticker.kind });
-    return () => ticker.stop();
+
+    /**
+     * 회선 복귀 — 사다리를 되감는다. **재연결 자체는 리로드 사유가 아니다.**
+     *
+     * 오프라인 동안 offline_hold 로 멈춰 있었다면 그 기록을 지우고 정지 시계를
+     * 지금으로 옮긴다. 그래야 회선이 돌아온 직후에 마지막 칸이 곧바로 터지지 않고,
+     * 사다리가 평소 간격(8초 → 20초 → …)으로 처음부터 다시 오른다.
+     */
+    const onNetworkBack = () => {
+      // tick 과 같은 방식으로 활성 엘리먼트를 읽는다(effect deps 를 늘리지 않기 위해).
+      const st = healthStateRef.current;
+      const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
+      const ct = el ? el.currentTime : 0;
+      // 회선이 끊긴 사이에도 캐시된 곡으로 소리가 나고 있었는가.
+      const progressed = ct > stallProgressRef.current.ct + 0.25;
+      const plan = decideReconnectReset(progressed);
+
+      recordFlightEvent('NETWORK_RECONNECT_RESET', {
+        el, audioElementId: el ? getAudioObjectId(el) : null,
+        extra: {
+          progressed,
+          heldAt: stallLastActionRef.current,
+          clearedFruitless: plan.clearFruitlessSkips,
+        },
+      });
+
+      stallProgressRef.current = {
+        trackId: stallProgressRef.current.trackId,
+        ct,
+        ts: performance.now(),           // resetStallClock
+      };
+      stallLastActionRef.current = 'none';   // clearLadder
+      stallRecoveryLevelRef.current = null;
+      if (plan.clearFruitlessSkips) fruitlessSkipsRef.current = 0;
+      if (plan.clearHardResetDone) { hardResetDoneRef.current = false; hardResetAtRef.current = null; }
+    };
+    window.addEventListener('online', onNetworkBack);
+
+    return () => {
+      ticker.stop();
+      window.removeEventListener('online', onNetworkBack);
+    };
   }, [businessMode]);
 
   /* ============================================
@@ -2323,6 +2424,29 @@ export default function Player() {
             if (usePlaybackHealthStore.getState().autoplayBlocked) {
               usePlaybackHealthStore.getState().setAutoplayBlocked(false);
             }
+            // 차단 구간이 열려 있었다면 **정확히 1회** 복구를 기록한다.
+            // 플래그가 아니라 실제 소리를 기준으로 삼는다 — 오버레이를 눌렀어도
+            // 재생이 실패했으면 복구가 아니다.
+            const recovered = noteAudiblePlayback();
+            if (recovered) {
+              recordFlightEvent('AUTOPLAY_RECOVERED', {
+                el, audioElementId: getAudioObjectId(el),
+                extra: { source: recovered.source, blockedForMs: recovered.blockedForMs },
+              });
+              void logPlaybackDiagnostic('autoplay_recovered', {
+                playerMode: businessMode ? 'store' : 'personal',
+                context: {
+                  source: recovered.source,
+                  blockedForMs: recovered.blockedForMs,
+                  // 브라우저가 알려주는 만큼만 적는다. 없으면 null — 추측하지 않는다.
+                  userActivation: typeof navigator !== 'undefined'
+                    && 'userActivation' in navigator
+                    ? Boolean((navigator as unknown as { userActivation?: { hasBeenActive?: boolean } })
+                        .userActivation?.hasBeenActive)
+                    : null,
+                },
+              });
+            }
           }
           // Phase 3-2 — engine event 마다 health check
           checkAudioHealth(`event:${ev}`);
@@ -2690,6 +2814,8 @@ export default function Player() {
           setErrored(true);
           // 무인 매장에서는 토스트를 아무도 못 본다 — 전체화면 안내(PlaybackBlockedOverlay)를 띄운다.
           usePlaybackHealthStore.getState().setAutoplayBlocked(true);
+          // 이 시점부터 "실제로 소리가 났는가" 를 지켜본다 — 풀린 순간을 1회 기록한다.
+          noteAutoplayBlocked();
           // 직전 리로드 사유와 함께 남긴다 — 배포 때문인지 탭 정리 때문인지 구분하려면 이게 필요하다.
           flushFlightRecorderRef.current('play_rejected', 'NotAllowedError');
           void logPlaybackDiagnostic('autoplay_blocked', {

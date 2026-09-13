@@ -39,7 +39,19 @@
  *   사용자가 멈춘 것을 마음대로 다시 트는 일은 없어야 한다.
  */
 
-export type StallAction = 'none' | 'nudge' | 'reload' | 'skip' | 'hard_reset' | 'reload_page';
+export type StallAction =
+  | 'none' | 'nudge' | 'reload' | 'skip' | 'hard_reset'
+  /**
+   * 회선이 끊긴 동안 마지막 칸을 **보류**한다. 페이지를 다시 띄우지 않는다.
+   *
+   * 오프라인에서 페이지를 재시작하면 얻는 것보다 잃는 것이 크다:
+   *   • IndexedDB 에 받아둔 곡으로 버티고 있었을 수도 있는데 그 재생을 끊는다.
+   *   • 리로드 직후에는 사용자 제스처가 없어 자동재생이 막힐 수 있다.
+   *   • 셸은 서비스워커 precache 로 뜨지만 오디오는 네트워크가 돌아와야 받는다.
+   * 회선이 없다는 것과 재생이 죽었다는 것은 **다른 사건**이다.
+   */
+  | 'offline_hold'
+  | 'reload_page';
 
 /** 재생을 다시 건다. 가장 싸고 대부분의 일시적 정지를 고친다. */
 export const NUDGE_AFTER_MS = 8_000;
@@ -125,6 +137,14 @@ export interface StallInput {
   hardResetDone?: boolean;
   /** hard reset 이 실행된 뒤 흐른 시간(ms). 아직 안 했으면 null. */
   hardResetMsAgo?: number | null;
+  /**
+   * 지금 네트워크가 붙어 있는가(navigator.onLine).
+   *
+   * 생략하면 online 으로 본다 — 기존 호출부 동작 그대로다. false 일 때만 마지막 칸
+   * (페이지 재시작)을 보류한다. 같은 문서 안에서 끝나는 복구(nudge/reload/skip/
+   * hard_reset)는 오프라인에서도 그대로 한다 — 캐시된 곡으로 되살아날 수 있다.
+   */
+  online?: boolean;
 }
 
 /**
@@ -170,11 +190,15 @@ export function resolveStallAction(i: StallInput): StallAction {
   // 넘겨도 넘겨도 소리가 안 나면 곡 탓이 아니다 — 오디오 파이프라인이 죽은 것이다.
   // skip 을 한 번 더 해봐야 사다리만 초기화되고 매장은 계속 조용하다(숙대점 71분/74회).
   // 곡이 아니라 **엘리먼트**를 버린다. 그래도 안 되면 그때 페이지를 다시 띄운다.
+  // 오프라인이면 마지막 칸을 보류한다. 같은 문서 안의 복구는 그대로 진행한다.
+  const canNavigate = i.online !== false;
+
   if ((i.fruitlessSkips ?? 0) >= FRUITLESS_SKIP_LIMIT && i.stalledMs >= SKIP_AFTER_MS) {
-    return i.hardResetDone ? 'reload_page' : 'hard_reset';
+    if (!i.hardResetDone) return 'hard_reset';
+    return canNavigate ? 'reload_page' : 'offline_hold';
   }
 
-  if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return 'reload_page';
+  if (i.stalledMs >= RELOAD_PAGE_AFTER_MS) return canNavigate ? 'reload_page' : 'offline_hold';
   if (i.stalledMs >= SKIP_AFTER_MS) return 'skip';
   if (i.stalledMs >= RELOAD_AFTER_MS) return 'reload';
   if (i.stalledMs >= NUDGE_AFTER_MS) return 'nudge';
@@ -182,7 +206,13 @@ export function resolveStallAction(i: StallInput): StallAction {
 }
 
 /** 사다리에서 이 칸이 저 칸보다 뒤인가 (되돌아가지 않게). */
-const ORDER: Record<StallAction, number> = { none: 0, nudge: 1, reload: 2, skip: 3, hard_reset: 4, reload_page: 5 };
+// offline_hold 는 reload_page 와 같은 칸이다 — 마지막 칸에 도달했으나 보류한 상태.
+// 같은 순위로 두면 (a) 오프라인 동안 보류 로그가 매 tick 반복되지 않고,
+// (b) 회선이 돌아왔다고 곧바로 reload_page 로 넘어가지도 않는다.
+// 재개는 아래 decideReconnectReset 이 사다리를 되감아서 처리한다.
+const ORDER: Record<StallAction, number> = {
+  none: 0, nudge: 1, reload: 2, skip: 3, hard_reset: 4, offline_hold: 5, reload_page: 5,
+};
 export function isEscalation(from: StallAction, to: StallAction): boolean {
   return ORDER[to] > ORDER[from];
 }
@@ -208,4 +238,41 @@ export function verifyHardReset(i: {
   if (i.progressed) return 'success';
   if (i.msSinceReset >= HARD_RESET_VERIFY_MS) return 'failure';
   return 'pending';
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 회선 복귀 처리                                                              */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * offline → online 전환 시 복구 상태를 어떻게 되돌릴지.
+ *
+ * **재연결 자체는 절대 페이지를 다시 띄우는 이유가 되지 않는다.** 어느 경우에도
+ * 정지 시계를 지금으로 리셋하므로, 회선이 돌아온 직후에 마지막 칸이 곧바로 터지는
+ * 일이 없다. 사다리는 평소 간격(8초 → 20초 → 35초 → …)으로 처음부터 다시 오른다.
+ *
+ * 차이는 "얼마나 깨끗하게 지우는가" 뿐이다:
+ *   • 실제로 소리가 돌아왔다면 → 전부 초기화(정상 상태로 복귀).
+ *   • 아직 소리가 없다면 → 헛skip·hard reset 이력은 남긴다. 같은 정지가 이어지는
+ *     것이므로, 다시 조용히 처음부터 기어오르게 만들면 아까 도달했던 지점까지
+ *     또 오래 걸린다.
+ */
+export interface ReconnectReset {
+  /** 정지 시계를 지금으로 옮긴다 — 항상 true. 재연결 직후 즉시 재시작 금지. */
+  resetStallClock: true;
+  /** 사다리 진행 기록(마지막 실행 칸)을 지운다 — 항상 true. */
+  clearLadder: true;
+  /** 헛skip 카운터를 0 으로 되돌리는가. */
+  clearFruitlessSkips: boolean;
+  /** hard reset 사용 이력을 지우는가. */
+  clearHardResetDone: boolean;
+}
+
+export function decideReconnectReset(progressed: boolean): ReconnectReset {
+  return {
+    resetStallClock: true,
+    clearLadder: true,
+    clearFruitlessSkips: progressed,
+    clearHardResetDone: progressed,
+  };
 }
