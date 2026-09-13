@@ -23,6 +23,7 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { buildRecoveryConsoleUrl, shouldAttachRecovery } from '../_shared/recoveryConsoleLink.ts';
 
 const MODULE_LOAD_AT = new Date().toISOString();
 
@@ -67,7 +68,97 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-async function sendSlack(webhookUrl: string, n: NotificationRow): Promise<{ ok: boolean; error?: string }> {
+/**
+ * 0520 — 매장 재생 장애 알림에 붙는 부가정보.
+ *
+ * url  : Recovery Console 딥링크(해당 매장 preselect). **클릭만으로는 아무 명령도
+ *        나가지 않는다** — 화면을 열어줄 뿐이고 실행은 Admin 인증 + 확인 절차를 거친다.
+ * facts: 당직자가 Slack 만 보고도 상황을 판단할 수 있게 하는 최소 사실.
+ *        secret / 이메일 / 전화번호 / 결제정보는 절대 담지 않는다.
+ */
+interface RecoveryExtras {
+  url: string | null;
+  facts: Array<{ label: string; value: string }>;
+}
+
+const EMPTY_EXTRAS: RecoveryExtras = { url: null, facts: [] };
+
+/** 서버가 이미 가진 사실만 모은다. 값이 없으면 그 줄을 빼고 링크만 남긴다. */
+async function buildRecoveryExtras(
+  sb: any, n: NotificationRow, appBaseUrl: string,
+): Promise<RecoveryExtras> {
+  if (!shouldAttachRecovery(n.kind)) return EMPTY_EXTRAS;
+  const ctx = (n.context ?? {}) as Record<string, unknown>;
+  const storeUserId = typeof ctx.store_user_id === 'string' ? ctx.store_user_id : null;
+
+  const facts: Array<{ label: string; value: string }> = [];
+  const push = (label: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return;
+    facts.push({ label, value: String(value).slice(0, 120) });
+  };
+
+  push('매장', ctx.store);
+  push('브랜드', ctx.brand);
+  push('기기', ctx.device);
+
+  try {
+    // 사고 유형 / 지속 시간 — incident 행이 원본이다.
+    const incidentId = typeof ctx.incident_id === 'string' ? ctx.incident_id : null;
+    if (incidentId) {
+      const { data: inc } = await sb
+        .from('brand_player_incidents')
+        .select('status, opened_at, resolved_at')
+        .eq('id', incidentId).maybeSingle();
+      if (inc) {
+        push('유형', (inc as any).status === 'stalled' ? '멈춤(화면 켜짐)' : '연결 끊김');
+        const opened = (inc as any).opened_at ? Date.parse((inc as any).opened_at) : NaN;
+        const end = (inc as any).resolved_at ? Date.parse((inc as any).resolved_at) : Date.now();
+        if (Number.isFinite(opened)) push('지속', `${Math.round((end - opened) / 60000)}분`);
+      }
+    }
+
+    if (storeUserId) {
+      // 마지막 신호 — 세션 테이블이 원본.
+      const { data: sess } = await sb
+        .from('brand_player_sessions')
+        .select('last_seen_at')
+        .eq('user_id', storeUserId)
+        .order('last_seen_at', { ascending: false })
+        .limit(1).maybeSingle();
+      const seen = (sess as any)?.last_seen_at ? Date.parse((sess as any).last_seen_at) : NaN;
+      if (Number.isFinite(seen)) push('마지막 신호', `${Math.round((Date.now() - seen) / 60000)}분 전`);
+
+      // 어느 배포본이 도는 기기인가 / 어느 플레이어 인스턴스인가.
+      // 진단 로그의 context 에만 있는 값이라 여기서 끌어온다(추측하지 않는다).
+      const { data: diag } = await sb
+        .from('store_playback_diagnostics')
+        .select('context, created_at')
+        .eq('user_id', storeUserId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      for (const row of (diag ?? []) as Array<{ context: Record<string, unknown> | null }>) {
+        const c = row.context ?? {};
+        if (!facts.some((f) => f.label === 'buildHash') && typeof c.buildHash === 'string') {
+          push('buildHash', c.buildHash);
+        }
+        if (!facts.some((f) => f.label === 'playerInstanceId') && typeof c.playerInstanceId === 'string') {
+          push('playerInstanceId', c.playerInstanceId);
+        }
+        if (!facts.some((f) => f.label === '복구 단계') && c.recoveryLevel !== undefined && c.recoveryLevel !== null) {
+          push('복구 단계', c.recoveryLevel);
+        }
+      }
+    }
+  } catch {
+    // 부가정보 조회 실패가 알림 자체를 막으면 안 된다 — 링크만이라도 보낸다.
+  }
+
+  return { url: buildRecoveryConsoleUrl(appBaseUrl, storeUserId), facts };
+}
+
+async function sendSlack(
+  webhookUrl: string, n: NotificationRow, extras: RecoveryExtras = EMPTY_EXTRAS,
+): Promise<{ ok: boolean; error?: string }> {
   const emoji = SEV_EMOJI[n.severity] ?? '📣';
   const text = `${emoji} *${n.title}*`;
   const blocks: any[] = [
@@ -79,6 +170,17 @@ async function sendSlack(webhookUrl: string, n: NotificationRow): Promise<{ ok: 
   ];
   if (n.body) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: n.body.slice(0, 2900) } });
+  }
+  if (extras.facts.length) {
+    blocks.push({ type: 'section', fields: extras.facts.slice(0, 10).map((f) => (
+      { type: 'mrkdwn', text: `*${f.label}:*\n${f.value}` }
+    ))});
+  }
+  if (extras.url) {
+    // 링크 한 개. Slack 버튼으로 복구를 **실행**하지는 않는다 — 이번 단계에서는
+    // Slack 서명 검증·action callback·관리자 매핑이 없으므로 실행 권한을 주지 않는다.
+    blocks.push({ type: 'section', text: { type: 'mrkdwn',
+      text: `<${extras.url}|🛠 Recovery Console 열기> — 화면에서 매장 확인 후 실행합니다.` } });
   }
   if (n.track_id) {
     blocks.push({ type: 'context', elements: [
@@ -106,6 +208,7 @@ async function sendSlack(webhookUrl: string, n: NotificationRow): Promise<{ ok: 
 
 async function sendEmail(
   resendKey: string, from: string, to: string[], n: NotificationRow,
+  extras: RecoveryExtras = EMPTY_EXTRAS,
 ): Promise<{ ok: boolean; error?: string }> {
   const emoji = SEV_EMOJI[n.severity] ?? '📣';
   const subject = `[듣다 Ops ${n.severity.toUpperCase()}] ${n.title}`.slice(0, 180);
@@ -118,7 +221,11 @@ async function sendEmail(
       ${n.track_id ? `<tr><td style="color:#71717a;">track_id</td><td><code>${n.track_id}</code></td></tr>` : ''}
       <tr><td style="color:#71717a;">시각</td><td>${new Date(n.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</td></tr>
     </table>
+    ${extras.facts.length ? `<table style="font-size:13px;line-height:1.7;width:100%;margin-top:12px;">${
+      extras.facts.map((f) => `<tr><td style="color:#71717a;width:120px;">${escapeHtml(f.label)}</td><td>${escapeHtml(f.value)}</td></tr>`).join('')
+    }</table>` : ''}
     ${n.body ? `<div style="background:#f4f4f5;border-radius:8px;padding:12px;margin-top:12px;white-space:pre-wrap;font-size:13px;">${escapeHtml(n.body)}</div>` : ''}
+    ${extras.url ? `<p style="margin-top:16px;"><a href="${escapeHtml(extras.url)}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-size:13px;">Recovery Console 열기</a></p>` : ''}
     <p style="margin-top:18px;font-size:11px;color:#71717a;">듣다 운영 알림 시스템 자동 발송 · admin_notifications id ${n.id}</p>
   </div>
 </body></html>`;
@@ -150,6 +257,9 @@ serve(async (req) => {
   const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
   const RESEND_FROM = Deno.env.get('RESEND_FROM') || '듣다 운영 <no-reply@deudda.com>';
+  // Recovery Console 링크의 base. **서버 환경변수만** 쓴다 — 요청/알림 payload 로
+  // 들어온 문자열로 URL 을 조합하지 않는다(open redirect 방지).
+  const APP_PUBLIC_URL = Deno.env.get('APP_PUBLIC_URL') || 'https://deudda.com';
 
   const authHeader = req.headers.get('authorization') ?? '';
   const cronSecret = req.headers.get('x-cron-secret') ?? '';
@@ -240,6 +350,8 @@ serve(async (req) => {
   const results: any[] = [];
   for (const n of targets) {
     const r: any = { id: n.id, severity: n.severity, slack: 'skipped', email: 'skipped' };
+    // 매장 재생 장애 알림에만 붙는다. 다른 kind 는 EMPTY_EXTRAS 라 기존 그대로다.
+    const extras = await buildRecoveryExtras(sbAdmin, n, APP_PUBLIC_URL);
     try {
       let slackOkNow = false, emailOkNow = false;
       const errParts: string[] = [];
@@ -249,7 +361,7 @@ serve(async (req) => {
         if (!isSingle && n.dispatch_slack_at) {
           r.slack = 'already';
         } else {
-          const sr = await sendSlack(slackUrl, n);
+          const sr = await sendSlack(slackUrl, n, extras);
           if (sr.ok) { slackOkNow = true; r.slack = 'sent'; }
           else { r.slack = `failed: ${sr.error}`; errParts.push(`slack: ${sr.error}`); }
         }
@@ -260,7 +372,7 @@ serve(async (req) => {
         if (!isSingle && n.dispatch_email_at) {
           r.email = 'already';
         } else {
-          const er = await sendEmail(RESEND_API_KEY, RESEND_FROM, emailTo, n);
+          const er = await sendEmail(RESEND_API_KEY, RESEND_FROM, emailTo, n, extras);
           if (er.ok) { emailOkNow = true; r.email = 'sent'; }
           else { r.email = `failed: ${er.error}`; errParts.push(`email: ${er.error}`); }
         }

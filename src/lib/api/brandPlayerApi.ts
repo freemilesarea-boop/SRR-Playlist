@@ -1,5 +1,6 @@
 // Phase BRAND-1 — Brand Player RPC 래퍼.
 // 모든 접근은 0405 의 SECURITY DEFINER RPC 경유 (brand_* 테이블 direct 접근 없음).
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type {
   BrandListItem, BrandDetail, StoreVerifyResult, BrandPlayerConfig,
@@ -98,6 +99,13 @@ export interface BrandPlayerHeartbeatResult {
   command?: BrandPlayerCommand | null;
   /** 중복 실행 방지용 식별자. */
   command_id?: string | null;
+  /**
+   * 0520 — 이 클라이언트의 세션 id. Realtime 으로 들어온 명령이 **이 탭**을 지목한
+   * 것인지 판별하는 데 쓴다. 같은 매장 계정으로 탭이 둘 열려 있으면 두 탭 모두
+   * Realtime row 를 받으므로, 세션 대조 없이는 엉뚱한 탭이 실행한다.
+   * 구버전 서버는 이 키를 주지 않는다 — 그 경우 세션 지목 명령은 heartbeat 로만 닿는다.
+   */
+  session_id?: string | null;
 }
 
 export async function brandPlayerHeartbeat(
@@ -123,6 +131,11 @@ export interface BrandPlayerHealthRow {
   pending_command?: string | null;
   pending_command_id?: string | null;
   pending_command_status?: string | null;
+  /** 0520 — 이 명령이 어느 경로로 갔는가 (realtime / heartbeat). */
+  pending_command_delivery_source?: string | null;
+  /** 0520 — 마지막으로 실제 클라이언트에 닿은 명령 시각/경로. Realtime 가동 여부 근거. */
+  last_command_received_at?: string | null;
+  last_command_delivery_source?: string | null;
   brand_name: string;
   store_label: string;
   status: 'playing' | 'stalled' | 'offline';
@@ -431,4 +444,56 @@ export async function requestStoreRecovery(
   });
   if (error) throw new Error(error.message);
   return (data ?? { success: false }) as RequestRecoveryResult;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 0520 — Realtime 명령 배달 (heartbeat 는 fallback 으로 그대로 남는다)         */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export interface RecoveryCommandSubscription {
+  channel: RealtimeChannel;
+  unsubscribe: () => void;
+}
+
+/**
+ * 이 매장으로 들어오는 복구 명령을 즉시 받는다.
+ *
+ * • 구독 범위는 `store_user_id = 내 uid` 로 서버에서 제한된다(필터 + RLS 이중).
+ *   필터를 지우면 남의 매장 row 가 흘러올 수 있으므로 절대 넓히지 않는다.
+ * • INSERT 만 본다. UPDATE 를 구독하면 우리 자신의 ACK 가 메아리로 돌아와
+ *   같은 명령을 다시 판정하게 되고, 리로드 직후에는 그것이 재실행 위험이 된다.
+ *   배달 신호는 INSERT 하나로 충분하다.
+ * • **control-plane 전용이다.** 구독이 실패해도 호출자는 아무것도 멈추지 않는다 —
+ *   heartbeat fallback 이 그대로 돈다.
+ */
+export function subscribeStoreRecoveryCommands(
+  storeUserId: string,
+  onCommand: (row: Record<string, unknown>) => void,
+  onStatus?: (status: string) => void,
+): RecoveryCommandSubscription {
+  const channel = supabase
+    .channel(`brand-player-recovery-${storeUserId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'brand_player_commands',
+        filter: `store_user_id=eq.${storeUserId}`,
+      },
+      (payload) => {
+        try { onCommand((payload.new ?? {}) as Record<string, unknown>); }
+        catch { /* 수신 처리 실패가 재생을 건드리면 안 된다 */ }
+      },
+    )
+    .subscribe((status) => {
+      try { onStatus?.(status); } catch { /* noop */ }
+    });
+
+  return {
+    channel,
+    unsubscribe: () => {
+      try { void supabase.removeChannel(channel); } catch { /* noop */ }
+    },
+  };
 }
