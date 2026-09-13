@@ -335,10 +335,17 @@ function shouldReloadOnReconnect(i: {
   /** 1.5초 뒤 재생 위치가 실제로 움직였는가 (진행 확인 경로에서만 의미 있음). */
   progressedAfterProbe: boolean;
   /** 그 사이 곡이 바뀌었는가. */
-  trackChanged: boolean;
+  trackChanged?: boolean;
+  /** 그 사이 audioGeneration 이 바뀌었는가 (hard recovery). */
+  generationChanged?: boolean;
+  /** 그 사이 활성 엘리먼트 객체가 바뀌었는가 (crossfade swap / remount). */
+  elementChanged?: boolean;
 }): 'immediate' | 'after_probe' | 'never' {
   if (!i.hasAudio) return 'immediate';           // reloadAndPlay 가 내부에서 다시 거른다
   if (i.paused || !i.audioActive) return 'immediate';
+  // 철 지난 타이머 — 결과를 버린다. 순서는 Player 구현과 같다.
+  if (i.generationChanged) return 'never';       // hard recovery 진행 중 — 방해하지 않는다
+  if (i.elementChanged) return 'never';          // 다른 엘리먼트다
   if (i.trackChanged) return 'never';            // 새 곡이 돌고 있다 — 절대 되감지 않는다
   return i.progressedAfterProbe ? 'never' : 'after_probe';
 }
@@ -395,5 +402,43 @@ describe('§4 onOnline 회귀 — 멀쩡한 캐시 재생은 절대 되감지 �
         progressedAfterProbe: progressed, trackChanged: false,
       })).not.toBe('immediate');
     }
+  });
+});
+
+describe('§3 stale probe timer — 세대가 바뀌면 결과를 버린다', () => {
+  const base = {
+    hasAudio: true, paused: false, audioActive: true,
+    progressedAfterProbe: false, trackChanged: false,
+  };
+
+  it('확인하는 사이 hard recovery 가 일어났으면 손대지 않는다', () => {
+    // 새로 만든 엘리먼트는 currentTime 이 0 이라 "진행 없음" 으로 보인다.
+    // 세대 가드가 없으면 바로 그 엘리먼트에 load() 를 걸어 복구를 망친다.
+    expect(shouldReloadOnReconnect({ ...base, generationChanged: true })).toBe('never');
+  });
+
+  it('확인하는 사이 활성 엘리먼트가 바뀌었으면 손대지 않는다 (crossfade swap)', () => {
+    expect(shouldReloadOnReconnect({ ...base, elementChanged: true })).toBe('never');
+  });
+
+  it('세대 가드가 곡 전환 가드보다 먼저다 — hard recovery 는 곡을 바꾸지 않는다', () => {
+    // hard recovery 는 큐를 그대로 두므로 trackChanged=false 다.
+    // 세대만으로 걸러내지 못하면 이 조합이 그대로 통과한다.
+    expect(shouldReloadOnReconnect({
+      ...base, generationChanged: true, trackChanged: false,
+    })).toBe('never');
+  });
+
+  it('아무것도 안 바뀌고 진행도 없으면 그때만 복구한다', () => {
+    expect(shouldReloadOnReconnect({
+      ...base, generationChanged: false, elementChanged: false, trackChanged: false,
+    })).toBe('after_probe');
+  });
+
+  it('네 가드 중 하나라도 걸리면 절대 load() 하지 않는다', () => {
+    for (const guard of ['generationChanged', 'elementChanged', 'trackChanged'] as const) {
+      expect(shouldReloadOnReconnect({ ...base, [guard]: true })).toBe('never');
+    }
+    expect(shouldReloadOnReconnect({ ...base, progressedAfterProbe: true })).toBe('never');
   });
 });

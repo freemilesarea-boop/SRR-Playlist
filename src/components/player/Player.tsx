@@ -279,6 +279,8 @@ export default function Player() {
   const [audioGeneration, setAudioGeneration] = useState(0);
   const audioGenerationRef = useRef(0);
   audioGenerationRef.current = audioGeneration;
+  /** onOnline 진행 확인 타이머. 세대/엘리먼트가 바뀌면 결과를 버리고, 정리 시 끊는다. */
+  const probeTimerRef = useRef<number | null>(null);
   /** hard reset 실행 시각(performance.now). 검증 중이 아니면 null. */
   const hardResetAtRef = useRef<number | null>(null);
   /** 이번 정지 구간에서 hard reset 을 이미 썼는가 → 그래도 안 되면 페이지 재시작. */
@@ -1085,15 +1087,28 @@ export default function Player() {
       // 그래서 **1.5초 뒤 재생 위치가 실제로 움직였는지 확인한 뒤에만** 손을 뗀다.
       // 판단 기준은 여기서도 플래그가 아니라 실제 진행이다.
       if (audio && !audio.paused && usePlaybackHealthStore.getState().audioActive) {
-        const before = audio.currentTime;
+        // 확인 시작 시점의 좌표를 전부 붙잡아 둔다. 1.5초 뒤에 하나라도 달라져
+        // 있으면 이 타이머는 **철 지난 것**이므로 결과를 버린다.
+        const beforeEl = audio;
+        const beforeCt = audio.currentTime;
         const beforeTrack = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id ?? null;
-        window.setTimeout(() => {
+        const beforeGeneration = audioGenerationRef.current;
+
+        probeTimerRef.current = window.setTimeout(() => {
+          probeTimerRef.current = null;
           const later = activeRef();
           if (!later) return;
+
+          // (1) hard recovery 가 엘리먼트를 새로 만들었다 — 그쪽 복구를 방해하지 않는다.
+          if (audioGenerationRef.current !== beforeGeneration) return;
+          // (2) crossfade 로 활성 엘리먼트가 바뀌었거나 remount 됐다 — 다른 대상이다.
+          if (later !== beforeEl) return;
+          // (3) 곡이 넘어갔다 — 새 곡이 도는 중이므로 절대 되감지 않는다.
           const st = usePlayerStore.getState();
-          // 그 사이 곡이 넘어갔으면 새 곡이 도는 중이다 — 절대 되감지 않는다.
           if ((st.queue[st.index]?.id ?? null) !== beforeTrack) return;
-          if (later.currentTime > before + 0.1) return;   // 진짜 재생 중 — 건드리지 않는다
+          // (4) 실제로 위치가 움직였다 — 멀쩡히 재생 중이다.
+          if (later.currentTime > beforeCt + 0.1) return;
+
           reloadAndPlay(later);
         }, 1_500);
         return;
@@ -1107,6 +1122,11 @@ export default function Player() {
     return () => {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', onOnline);
+      // 언마운트/activeIdx 전환 시 남은 probe 타이머를 반드시 끊는다.
+      if (probeTimerRef.current !== null) {
+        window.clearTimeout(probeTimerRef.current);
+        probeTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx]);
