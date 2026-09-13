@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveStallAction, isEscalation,
-  NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS,
+  NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS, FRUITLESS_SKIP_LIMIT,
   type StallInput,
 } from './stallWatchdog';
 
@@ -187,5 +187,48 @@ describe('사다리 끝 — skip 이 듣지 않을 때', () => {
   it('자동재생 차단·구독 차단 상태에서는 재시작하지 않는다 (리로드해도 소용없음)', () => {
     expect(resolveStallAction({ ...stalled(RELOAD_PAGE_AFTER_MS), autoplayBlocked: true })).toBe('none');
     expect(resolveStallAction({ ...stalled(RELOAD_PAGE_AFTER_MS), subscriptionBlocked: true })).toBe('none');
+  });
+});
+
+describe('넘겨도 소리가 안 날 때 — 숙대점 2026-09-13 (71분 / skip 74회)', () => {
+  const stalled = (ms: number, fruitlessSkips: number): StallInput => ({
+    businessMode: true,
+    playing: true,
+    paused: false,
+    ended: false,
+    crossfading: false,
+    suppressed: false,
+    autoplayBlocked: false,
+    subscriptionBlocked: false,
+    stalledMs: ms,
+    fruitlessSkips,
+  });
+
+  it('헛skip 이 한도에 차면 skip 대신 페이지를 다시 띄운다', () => {
+    // 이게 skip 이면 곡만 바뀌고 사다리가 초기화돼 150초 칸에 영영 못 간다.
+    expect(resolveStallAction(stalled(SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT))).toBe('reload_page');
+  });
+
+  it('한도 직전까지는 그대로 skip 한다 — 한 곡만 깨진 흔한 경우는 건드리지 않는다', () => {
+    expect(resolveStallAction(stalled(SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT - 1))).toBe('skip');
+  });
+
+  it('헛skip 이 쌓여도 아직 정지가 짧으면 아랫칸부터 밟는다', () => {
+    expect(resolveStallAction(stalled(NUDGE_AFTER_MS, FRUITLESS_SKIP_LIMIT))).toBe('nudge');
+    expect(resolveStallAction(stalled(RELOAD_AFTER_MS, FRUITLESS_SKIP_LIMIT))).toBe('reload');
+    expect(resolveStallAction(stalled(SKIP_AFTER_MS - 1, FRUITLESS_SKIP_LIMIT))).toBe('reload');
+  });
+
+  it('필드를 생략하면 예전 동작 그대로다 (기존 호출부 영향 0)', () => {
+    const { fruitlessSkips: _omit, ...legacy } = stalled(SKIP_AFTER_MS, 0);
+    expect(resolveStallAction(legacy)).toBe('skip');
+  });
+
+  it('사용자가 멈췄거나 매장 모드가 아니면 헛skip 이 쌓여도 아무것도 하지 않는다', () => {
+    const base = stalled(SKIP_AFTER_MS, FRUITLESS_SKIP_LIMIT + 5);
+    expect(resolveStallAction({ ...base, businessMode: false })).toBe('none');
+    expect(resolveStallAction({ ...base, playing: false })).toBe('none');
+    expect(resolveStallAction({ ...base, suppressed: true })).toBe('none');
+    expect(resolveStallAction({ ...base, autoplayBlocked: true })).toBe('none');
   });
 });

@@ -1475,6 +1475,13 @@ export default function Player() {
     trackId: null, ct: 0, ts: 0,
   });
   const stallLastActionRef = useRef<StallAction>('none');
+  /**
+   * 연속으로 "한 마디도 못 듣고" 넘긴 곡 수.
+   * 곡이 바뀌어도 초기화하지 않는다 — 바로 그 초기화 때문에 사다리 마지막 칸에
+   * 도달하지 못했다(숙대점 2026-09-13, 71분간 skip 74회 전부 playedSeconds=0).
+   * 실제로 재생 위치가 움직이면(= 소리가 났으면) 그때 0 으로 되돌린다.
+   */
+  const fruitlessSkipsRef = useRef(0);
 
   useEffect(() => {
     if (!businessMode) return;
@@ -1492,7 +1499,12 @@ export default function Player() {
       const ct = el.currentTime;
 
       // 진행했거나 곡이 바뀌었으면 기준점을 갱신하고 사다리를 초기화한다.
-      if (prog.trackId !== trackId || Math.abs(ct - prog.ct) >= 0.01) {
+      const progressed = Math.abs(ct - prog.ct) >= 0.01;
+      const trackChanged = prog.trackId !== trackId;
+      if (progressed || trackChanged) {
+        // 실제로 소리가 났을 때만 헛skip 카운터를 푼다. 곡이 바뀐 것만으로는 풀지
+        // 않는다 — skip 이 곡을 바꾸므로, 그러면 카운터가 영원히 0 에 머문다.
+        if (progressed) fruitlessSkipsRef.current = 0;
         stallProgressRef.current = { trackId, ct, ts: now };
         stallLastActionRef.current = 'none';
         return;
@@ -1508,6 +1520,7 @@ export default function Player() {
         autoplayBlocked: health.autoplayBlocked,
         subscriptionBlocked: health.subscriptionBlocked,
         stalledMs: now - prog.ts,
+        fruitlessSkips: fruitlessSkipsRef.current,
       });
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
@@ -1582,7 +1595,9 @@ export default function Player() {
           playerMode: 'store',
           context: { action: 'reload_page', stalledSec, trackId, online: navigator.onLine },
         });
-        console.warn('[audio:selfheal] skip 실패 — 페이지 재시작', { stalledSec, trackId });
+        console.warn('[audio:selfheal] skip 실패 — 페이지 재시작', {
+          stalledSec, trackId, fruitlessSkips: fruitlessSkipsRef.current,
+        });
         reloadApp('self-heal stall reload');
         return;
       }
@@ -1590,10 +1605,16 @@ export default function Player() {
       // skip — 이 파일/이 위치가 문제다. cause 는 기본값(manual_next):
       // 자연 종료가 아니므로 플레이리스트 Cycle 완료 Signal 을 내면 안 된다.
       usePlaybackHealthStore.getState().reportPlaybackError('STALL_SKIP');
+      // 한 마디도 못 들었으면 "곡이 문제" 가 아닐 수 있다 — 세어 둔다.
+      if (ct < 1) fruitlessSkipsRef.current += 1;
+      else fruitlessSkipsRef.current = 0;
       void logPlaybackDiagnostic('track_cut_short', {
         reason: 'skip',
         playerMode: 'store',
-        context: { action: 'stall_skip', stalledSec, trackId, playedSeconds: Math.round(ct) },
+        context: {
+          action: 'stall_skip', stalledSec, trackId,
+          playedSeconds: Math.round(ct), fruitlessSkips: fruitlessSkipsRef.current,
+        },
       });
       store.next();
     };
