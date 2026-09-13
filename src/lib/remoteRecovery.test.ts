@@ -6,7 +6,7 @@ import {
   allowRemoteCommand, markPendingRemoteReload, takePendingRemoteReload,
   parseRealtimeCommandRow, isTerminalStatus,
   executedCommandIds, rememberExecutedCommand, resetExecutedCommands,
-  EXECUTABLE_COMMANDS, HARD_RECOVERY_COOLDOWN_MS,
+  EXECUTABLE_COMMANDS, executableCommands, HARD_RECOVERY_COOLDOWN_MS,
   type ClientIdentity, type RemoteCommandEnvelope,
 } from './remoteRecovery';
 
@@ -140,11 +140,30 @@ describe('명령 화이트리스트', () => {
     expect([...EXECUTABLE_COMMANDS].sort()).toEqual(['hard_recovery', 'next', 'play', 'reload']);
   });
 
-  it('device_reboot / app_restart 는 웹에서 실행하지 않는다', () => {
-    for (const c of ['device_reboot', 'app_restart']) {
-      expect(decideRemoteCommand(cmd({ command: c }), ME, none, NOW))
-        .toEqual({ kind: 'skip', reason: 'unknown_command' });
+  it('네이티브 쉘은 app_restart 가 하나 더 있다 — device_reboot 는 여전히 없다', () => {
+    expect([...executableCommands(true)].sort())
+      .toEqual(['app_restart', 'hard_recovery', 'next', 'play', 'reload']);
+    expect(executableCommands(true)).not.toContain('device_reboot');
+    expect(executableCommands(false)).not.toContain('app_restart');
+  });
+
+  it('device_reboot 는 어디서도 실행하지 않는다 — 명시적 거부', () => {
+    for (const me of [ME, { ...ME, nativeShell: true }]) {
+      expect(decideRemoteCommand(cmd({ command: 'device_reboot' }), me, none, NOW))
+        .toEqual({
+          kind: 'skip', reason: 'unsupported_runtime', resultCode: 'DEVICE_REBOOT_UNSUPPORTED',
+        });
     }
+  });
+
+  it('app_restart 는 웹에서 거부, 네이티브 쉘에서만 실행한다', () => {
+    expect(decideRemoteCommand(cmd({ command: 'app_restart' }), ME, none, NOW))
+      .toEqual({
+        kind: 'skip', reason: 'unsupported_runtime', resultCode: 'APP_RESTART_WEB_UNSUPPORTED',
+      });
+    expect(decideRemoteCommand(
+      cmd({ command: 'app_restart' }), { ...ME, nativeShell: true }, none, NOW,
+    )).toEqual({ kind: 'run', command: 'app_restart', commandId: 'c1' });
   });
 
   it('legacy reload/play/next 는 그대로 동작한다 (회귀 방지)', () => {
@@ -304,7 +323,9 @@ describe('서버가 대상을 확정한 명령 (heartbeat 경로)', () => {
   it('그래도 TTL·화이트리스트·중복 검사는 그대로 받는다', () => {
     expect(decideRemoteCommand(
       { commandId: 'c1', command: 'device_reboot', serverTargeted: true }, ME, none, NOW,
-    )).toEqual({ kind: 'skip', reason: 'unknown_command' });
+    )).toEqual({
+      kind: 'skip', reason: 'unsupported_runtime', resultCode: 'DEVICE_REBOOT_UNSUPPORTED',
+    });
     expect(decideRemoteCommand(
       { commandId: 'c1', command: 'reload', serverTargeted: true, expiresAt: NOW - 1 }, ME, none, NOW,
     )).toEqual({ kind: 'skip', reason: 'expired' });

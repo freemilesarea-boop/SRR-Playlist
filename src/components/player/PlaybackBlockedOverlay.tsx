@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { applyPendingUpdateNow } from '@/lib/swUpdateGate';
+import { markAutoplayUnblockSource } from '@/lib/autoplayRecovery';
 import { Play, RefreshCw, CreditCard } from 'lucide-react';
 
 export default function PlaybackBlockedOverlay() {
@@ -30,6 +31,8 @@ export default function PlaybackBlockedOverlay() {
 
   function resume() {
     // 이 클릭이 곧 사용자 제스처 — 브라우저 자동재생 제한이 풀린다.
+    // 사람이 눌러서 푼 것 — 이 사실을 기록에 남긴다(실제 소리가 나면 함께 보고된다).
+    markAutoplayUnblockSource('overlay_tap');
     setAutoplayBlocked(false);
     play();
   }

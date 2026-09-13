@@ -20,6 +20,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { ackStoreRecovery } from '@/lib/api/brandPlayerApi';
 import { runRegisteredHardRecovery } from '@/lib/hardRecovery';
 import { requestControlledReload } from '@/lib/playbackGuard';
+import { restartNativeApp } from '@/lib/storePlaybackService';
 import {
   decideRemoteCommand, markPendingRemoteReload,
   executedCommandIds, rememberExecutedCommand,
@@ -39,6 +40,8 @@ export interface ExecutorDeps {
   hardRecovery: () => boolean;
   play: () => void;
   next: () => void;
+  /** 네이티브 쉘에서 WebView/Activity 를 다시 만든다. 웹에서는 호출되지 않는다. */
+  restartApp: () => Promise<boolean>;
 }
 
 export const defaultExecutorDeps: ExecutorDeps = {
@@ -54,6 +57,7 @@ export const defaultExecutorDeps: ExecutorDeps = {
   hardRecovery: () => runRegisteredHardRecovery(),
   play: () => usePlayerStore.getState().play(),
   next: () => usePlayerStore.getState().next({ cause: 'manual_next' }),
+  restartApp: () => restartNativeApp(),
 };
 
 /**
@@ -86,6 +90,17 @@ export function executeRemoteCommand(
       if (!ok) deps.ack(commandId, 'failed', 'HARD_RECOVERY_UNAVAILABLE');
       return;
     }
+    if (command === 'app_restart') {
+      // 네이티브 전용. 여기까지 왔다는 것은 decideRemoteCommand 가 네이티브임을
+      // 확인했다는 뜻이다. **기기 재부팅이 아니라 WebView/Activity 재생성이다.**
+      // 성공 판정은 재시작 후 새 세션의 실제 재생 진행이 담당한다 — 여기서
+      // succeeded 로 닫지 않는다.
+      deps.ack(commandId, 'executing');
+      void deps.restartApp().then((started) => {
+        if (!started) deps.ack(commandId, 'failed', 'APP_RESTART_UNAVAILABLE');
+      });
+      return;
+    }
     if (command === 'play') { deps.play(); deps.ack(commandId, 'succeeded'); return; }
     if (command === 'next') { deps.next(); deps.ack(commandId, 'succeeded'); }
   } catch {
@@ -113,6 +128,12 @@ export function handleRemoteCommand(
       recordFlightEvent('REMOTE_COMMAND_SKIPPED', {
         extra: { source, reason: decision.reason, commandId: env?.commandId ?? null },
       });
+    }
+    // 이 런타임이 못 하는 명령은 **조용히 무시하지 않고 거부로 보고한다.**
+    // 그래야 운영자가 "보냈는데 아무 일도 안 일어난다" 로 시간을 쓰지 않는다.
+    if (decision.reason === 'unsupported_runtime' && env?.commandId) {
+      rememberExecutedCommand(env.commandId);   // 같은 명령을 반복해 거부하지 않는다
+      deps.ack(env.commandId, 'rejected', decision.resultCode ?? 'UNSUPPORTED_RUNTIME');
     }
     return decision;
   }

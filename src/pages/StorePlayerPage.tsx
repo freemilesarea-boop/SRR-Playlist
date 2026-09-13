@@ -14,6 +14,7 @@ import AutoCover from '@/components/AutoCover';
 import InstallAppButton from '@/components/InstallAppButton';
 import StoreTrackReactionButtons from '@/components/player/StoreTrackReactionButtons';
 import { formatTime } from '@/lib/format';
+import { resolvePlayerRuntime } from '@/lib/storePlaybackService';
 import { isNativeApp } from '@/lib/native';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { isStandalone } from '@/hooks/useInstallPrompt';
@@ -87,7 +88,12 @@ export default function StorePlayerPage() {
       // 홈 화면 앱으로 설치했는지 기록 (BrandPlayerPage 와 동일 목적).
       // buildHash — 이 기기가 어느 배포본을 돌고 있는지. 매장별로 오래된 빌드가
       // 남아있는지(stale client) 판별할 수단이 지금까지 없었다.
-      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()), buildHash: buildHash() },
+      context: {
+        device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()),
+        buildHash: buildHash(),
+        // HARDENING-13 — 관리자가 web / pwa / android_native 를 구분할 수 있게 한다.
+        runtime: resolvePlayerRuntime(isStandalone()),
+      },
     });
     return watchPageLifecycle('store');
   }, []);

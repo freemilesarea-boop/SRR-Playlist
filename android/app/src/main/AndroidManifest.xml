@@ -39,6 +39,21 @@
             android:foregroundServiceType="mediaPlayback"
             android:exported="false" />
 
+        <!-- 재부팅 후 복귀. Activity 를 직접 띄우지는 못한다(Android 10+ 백그라운드
+             Activity 시작 제한) — 포그라운드 서비스를 올려 상시 알림 한 번 탭으로
+             플레이어를 열 수 있게 하는 것이 이 리시버가 보장하는 전부다. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -67,4 +82,13 @@
          음악 앱의 정당한 용도이며, Play Console 의 FGS 타입 신고 대상이다. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- 재부팅 후 매장 재생 서비스 복귀(BootReceiver). Activity 자동 실행 권한이 아니다. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 배터리 최적화는 **조회만** 한다(PowerManager.isIgnoringBatteryOptimizations).
+         이 조회에는 권한이 필요 없다. 자동 예외 요청 다이얼로그를 쓰지 않으므로
+         REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 권한은 선언하지 않는다 —
+         쓰지 않는 민감 권한을 선언하면 Play 심사에서 정당화를 요구받는다.
+         사용자는 설정 화면으로 안내만 하고 선택은 사람이 한다. -->
 </manifest>

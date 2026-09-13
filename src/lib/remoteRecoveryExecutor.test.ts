@@ -33,6 +33,7 @@ function spyDeps(): ExecutorDeps & { calls: string[] } {
     hardRecovery: () => { calls.push('hard'); return true; },
     play: () => { calls.push('play'); },
     next: () => { calls.push('next'); },
+    restartApp: () => { calls.push('restartApp'); return Promise.resolve(true); },
   };
 }
 
@@ -241,7 +242,7 @@ describe('12. 실행부 실패가 재생을 건드리지 않는다', () => {
     const boom = () => { throw new Error('boom'); };
     const d: ExecutorDeps = {
       ack: boom, markPendingReload: boom, controlledReload: boom,
-      hardRecovery: boom, play: boom, next: boom,
+      hardRecovery: boom, play: boom, next: boom, restartApp: boom,
     };
     for (const c of ['reload', 'hard_recovery', 'play', 'next'] as const) {
       expect(() => executeRemoteCommand(c, 'c', 'realtime', d)).not.toThrow();
@@ -258,13 +259,39 @@ describe('12. 실행부 실패가 재생을 건드리지 않는다', () => {
     expect(d.calls).toEqual([]);
   });
 
-  it('모르는 명령은 실행하지 않는다 (device_reboot / app_restart 포함)', () => {
+  it('모르는 명령은 실행하지 않는다', () => {
     const d = spyDeps();
-    for (const c of ['device_reboot', 'app_restart', 'self_destruct']) {
-      expect(handleRemoteCommand(parseRealtimeCommandRow(row({ command: c })), ME, 'realtime', d, NOW))
-        .toEqual({ kind: 'skip', reason: 'unknown_command' });
-    }
+    expect(handleRemoteCommand(parseRealtimeCommandRow(row({ command: 'self_destruct' })), ME, 'realtime', d, NOW))
+      .toEqual({ kind: 'skip', reason: 'unknown_command' });
     expect(d.calls).toEqual([]);
+  });
+
+  it('device_reboot 는 어디서도 실행하지 않고 거부로 보고한다', () => {
+    const d = spyDeps();
+    const r = handleRemoteCommand(
+      parseRealtimeCommandRow(row({ id: 'c-reboot', command: 'device_reboot' })), ME, 'realtime', d, NOW,
+    );
+    expect(r).toEqual({
+      kind: 'skip', reason: 'unsupported_runtime', resultCode: 'DEVICE_REBOOT_UNSUPPORTED',
+    });
+    expect(d.calls).toEqual(['ack:rejected:DEVICE_REBOOT_UNSUPPORTED']);
+  });
+
+  it('app_restart 는 웹에서 거부, 네이티브에서만 실행한다', () => {
+    const web = spyDeps();
+    expect(handleRemoteCommand(
+      parseRealtimeCommandRow(row({ id: 'c-web', command: 'app_restart' })), ME, 'realtime', web, NOW,
+    )).toEqual({
+      kind: 'skip', reason: 'unsupported_runtime', resultCode: 'APP_RESTART_WEB_UNSUPPORTED',
+    });
+    expect(web.calls).toEqual(['ack:rejected:APP_RESTART_WEB_UNSUPPORTED']);
+
+    const nat = spyDeps();
+    const native = { ...ME, nativeShell: true };
+    expect(handleRemoteCommand(
+      parseRealtimeCommandRow(row({ id: 'c-nat', command: 'app_restart' })), native, 'realtime', nat, NOW,
+    ).kind).toBe('run');
+    expect(nat.calls).toEqual(['ack:executing', 'restartApp']);
   });
 });
 

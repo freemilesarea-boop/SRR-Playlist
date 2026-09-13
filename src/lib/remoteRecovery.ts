@@ -16,11 +16,33 @@
  *  • 같은 command_id 는 정확히 1회. Realtime 과 heartbeat 로 중복 수신돼도 1회.
  */
 
-/** 서버가 배달할 수 있는 명령. app_restart/device_reboot 는 웹이 실행하지 않는다. */
-export type RemoteCommand = 'reload' | 'play' | 'next' | 'hard_recovery';
+/** 서버가 배달할 수 있는 명령. device_reboot 는 어디서도 실행하지 않는다. */
+export type RemoteCommand = 'reload' | 'play' | 'next' | 'hard_recovery' | 'app_restart';
 
-/** 웹 클라이언트가 실행하는 명령 화이트리스트. 이 밖의 값은 전부 무시한다. */
+/** 어느 런타임에서든 실행하는 명령. */
 export const EXECUTABLE_COMMANDS: readonly string[] = ['reload', 'play', 'next', 'hard_recovery'];
+
+/**
+ * **네이티브 쉘에서만** 실행하는 명령.
+ *
+ * app_restart 는 WebView/Activity 를 다시 만드는 것이다 — 브라우저 탭에는
+ * 대응하는 개념이 없다. 웹/PWA 에서 받으면 실행하지 않고 거부로 보고한다
+ * (조용히 무시하면 운영자가 "왜 아무 일도 안 일어나지" 로 시간을 쓴다).
+ */
+export const NATIVE_ONLY_COMMANDS: readonly string[] = ['app_restart'];
+
+/**
+ * **어디서도 실행하지 않는** 명령.
+ *
+ * device_reboot 는 Device Owner / MDM 없이는 일반 앱이 할 수 없다. 자리만 예약돼
+ * 있을 뿐이며, 받으면 명시적으로 거부한다 — 될 것처럼 두지 않는다.
+ */
+export const NEVER_SUPPORTED_COMMANDS: readonly string[] = ['device_reboot'];
+
+/** 이 런타임이 실행할 수 있는 명령 목록. */
+export function executableCommands(nativeShell: boolean): readonly string[] {
+  return nativeShell ? [...EXECUTABLE_COMMANDS, ...NATIVE_ONLY_COMMANDS] : EXECUTABLE_COMMANDS;
+}
 
 /** 서버에서 온 명령 한 건 (heartbeat 응답 또는 Realtime row). */
 export interface RemoteCommandEnvelope {
@@ -62,13 +84,24 @@ export interface ClientIdentity {
   storeUserId: string | null;
   sessionId: string | null;
   playerInstanceId: string | null;
+  /**
+   * Capacitor 네이티브 쉘(Android/iOS) 안에서 돌고 있는가.
+   * **UA 로 판단하지 않는다** — isNativeApp() 이 유일한 판단 근거다.
+   * 생략하면 false(웹) — 기존 호출부 동작 그대로.
+   */
+  nativeShell?: boolean;
 }
 
 export type RemoteCommandDecision =
   | { kind: 'run'; command: RemoteCommand; commandId: string }
   | {
       kind: 'skip';
-      reason: 'no_command' | 'unknown_command' | 'expired' | 'wrong_target' | 'duplicate' | 'terminal';
+      reason:
+        | 'no_command' | 'unknown_command' | 'expired' | 'wrong_target' | 'duplicate' | 'terminal'
+        /** 명령 자체는 알지만 이 런타임에서는 실행할 수 없다 — 거부로 보고한다. */
+        | 'unsupported_runtime';
+      /** 거부 ACK 에 실을 코드. unsupported_runtime 일 때만 있다. */
+      resultCode?: string;
     };
 
 /**
@@ -89,7 +122,18 @@ export function decideRemoteCommand(
 
   const { commandId, command } = env;
   if (!commandId || !command) return { kind: 'skip', reason: 'no_command' };
-  if (!EXECUTABLE_COMMANDS.includes(command)) return { kind: 'skip', reason: 'unknown_command' };
+
+  // 절대 지원하지 않는 명령 — 될 것처럼 두지 않고 명시적으로 거부한다.
+  if (NEVER_SUPPORTED_COMMANDS.includes(command)) {
+    return { kind: 'skip', reason: 'unsupported_runtime', resultCode: 'DEVICE_REBOOT_UNSUPPORTED' };
+  }
+  // 네이티브 전용 명령을 웹에서 받았다 — 조용히 무시하지 않고 거부로 알린다.
+  if (NATIVE_ONLY_COMMANDS.includes(command) && me.nativeShell !== true) {
+    return { kind: 'skip', reason: 'unsupported_runtime', resultCode: 'APP_RESTART_WEB_UNSUPPORTED' };
+  }
+  if (!executableCommands(me.nativeShell === true).includes(command)) {
+    return { kind: 'skip', reason: 'unknown_command' };
+  }
   if (alreadyDone.has(commandId)) return { kind: 'skip', reason: 'duplicate' };
   if (isTerminalStatus(env.status)) return { kind: 'skip', reason: 'terminal' };
   if (isExpired(env.expiresAt, nowMs)) return { kind: 'skip', reason: 'expired' };

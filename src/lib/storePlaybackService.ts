@@ -65,3 +65,78 @@ export async function syncBackgroundPlayback(desired: boolean, label?: { title?:
     // 플러그인 미탑재(cap sync 전) 등 — 재생 자체에는 영향 없음.
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* HARDENING-13 — 네이티브 상태 조회 · 원격 APP_RESTART · 배터리 최적화 안내      */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** 이 클라이언트가 무엇으로 돌고 있는가. UA 가 아니라 런타임으로 판단한다. */
+export type PlayerRuntime = 'android_native' | 'ios_native' | 'pwa' | 'web';
+
+/** 네이티브가 보고하는 상태. 개인정보·기기 시리얼·광고 ID 는 담지 않는다. */
+export interface NativeHealth {
+  runtime: 'android_native';
+  androidSdk: number;
+  androidRelease: string;
+  serviceRunning: boolean;
+  activityForeground: boolean;
+  /** Activity 생존 신호가 끊긴 시간(ms). 아직 한 번도 못 봤으면 -1. */
+  activitySilentForMs: number;
+  batteryOptimizationIgnored: boolean;
+  appVersion: string | null;
+  appBuild: number;
+}
+
+interface NativeExtra {
+  restartApp(): Promise<{ started: boolean }>;
+  health(): Promise<NativeHealth>;
+  openBatteryOptimizationSettings(): Promise<void>;
+}
+
+const NativeExt = Native as unknown as StorePlaybackServicePlugin & NativeExtra;
+
+/**
+ * 실행 런타임 판정.
+ *
+ * standalone 판정은 호출부가 넘긴다 — 이 모듈이 DOM/matchMedia 에 의존하지 않게
+ * 하기 위해서다(테스트 가능성). 네이티브 여부만 여기서 직접 본다.
+ */
+export function resolvePlayerRuntime(standalone: boolean): PlayerRuntime {
+  if (isNativeApp()) {
+    return nativePlatform() === 'android' ? 'android_native' : 'ios_native';
+  }
+  return standalone ? 'pwa' : 'web';
+}
+
+/**
+ * 원격 APP_RESTART — **WebView/Activity 재생성**이다. 기기 재부팅이 아니다.
+ * 네이티브 안드로이드가 아니면 실행하지 않고 false 를 준다.
+ */
+export async function restartNativeApp(): Promise<boolean> {
+  if (!backgroundPlaybackServiceSupported()) return false;
+  try {
+    const res = await NativeExt.restartApp();
+    return res?.started === true;
+  } catch {
+    return false;
+  }
+}
+
+/** 네이티브 상태. 네이티브가 아니거나 조회 실패면 null. */
+export async function readNativeHealth(): Promise<NativeHealth | null> {
+  if (!backgroundPlaybackServiceSupported()) return null;
+  try {
+    return await NativeExt.health();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 배터리 최적화 설정 화면으로 **안내만** 한다.
+ * 자동 예외 요청은 하지 않는다 — 무엇을 허용하는지 보고 사람이 결정한다.
+ */
+export async function openBatteryOptimizationSettings(): Promise<void> {
+  if (!backgroundPlaybackServiceSupported()) return;
+  try { await NativeExt.openBatteryOptimizationSettings(); } catch { /* noop */ }
+}

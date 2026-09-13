@@ -11,6 +11,7 @@ const M = (name: string) =>
 
 const sql0520 = M('0520_realtime_recovery_delivery.sql');
 const sql0519 = M('0519_remote_recovery_control.sql');
+const sql0521 = M('0521_app_restart_command.sql');
 
 describe('15. Recovery Console 은 관리자만', () => {
   it('admin_brand_player_health 는 role=admin 을 확인하고 아니면 예외', () => {
@@ -75,9 +76,85 @@ describe('17. heartbeat fallback 회귀 없음', () => {
   });
 });
 
-describe('명령 화이트리스트 회귀 없음', () => {
-  it('웹이 실행하지 않는 명령은 서버도 거부한다 (0519)', () => {
+describe('명령 화이트리스트', () => {
+  it('0519 가 app_restart / device_reboot 자리를 만들어 뒀다', () => {
     expect(sql0519).toMatch(/app_restart/);
     expect(sql0519).toMatch(/device_reboot/);
+  });
+
+  it('0521 은 app_restart 발행만 열고 device_reboot 는 계속 거부한다', () => {
+    expect(sql0521).toContain(
+      "if p_command not in ('reload', 'play', 'next', 'hard_recovery', 'app_restart') then");
+    // 허용 목록에 device_reboot 가 들어가면 안 된다.
+    expect(sql0521).not.toMatch(/not in \([^)]*device_reboot/);
+  });
+
+  it('app_restart 쿨다운은 네이티브 워치독과 같은 5분이다', () => {
+    expect(sql0521).toContain("when 'app_restart'   then interval '5 minutes'");
+  });
+
+  it('0521 도 admin 전용 · broadcast 금지를 유지한다', () => {
+    expect(sql0521).toContain('forbidden: admin only');
+    expect(sql0521).toContain('store_user_id required — broadcast is not allowed');
+    expect(sql0521).toContain(
+      'revoke all on function public.request_store_recovery(uuid, text, uuid, text, text) from public, anon;');
+  });
+});
+
+describe('네이티브 쉘 계약 (Android)', () => {
+  const A = (name: string) =>
+    readFileSync(resolve(process.cwd(), 'android/app/src/main', name), 'utf-8');
+  const manifest = A('AndroidManifest.xml');
+  const service = A('java/com/deudda/app/StorePlaybackService.java');
+  const boot = A('java/com/deudda/app/BootReceiver.java');
+  const plugin = A('java/com/deudda/app/StorePlaybackServicePlugin.java');
+
+  it('포그라운드 서비스 타입과 권한이 그대로다', () => {
+    expect(manifest).toContain('android:foregroundServiceType="mediaPlayback"');
+    expect(manifest).toContain('android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK');
+    expect(service).toContain('FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK');
+    expect(service).toContain('return START_STICKY;');
+  });
+
+  it('부팅 복귀 리시버가 등록돼 있다', () => {
+    expect(manifest).toContain('android.permission.RECEIVE_BOOT_COMPLETED');
+    expect(manifest).toContain('android:name=".BootReceiver"');
+    expect(manifest).toContain('android.intent.action.BOOT_COMPLETED');
+    // 부팅 시 Activity 를 직접 띄우려 하지 않는다(Android 10+ 에서 차단된다).
+    expect(boot).not.toContain('startActivity');
+  });
+
+  it('워치독 재실행에 5분 쿨다운이 있다 — 무한 launch 루프 금지', () => {
+    expect(service).toContain('RELAUNCH_COOLDOWN_MS = 5 * 60 * 1000L');
+  });
+
+  it('오디오 포커스를 잃어도 재생을 멈추지 않는다', () => {
+    expect(service).toContain('AUDIOFOCUS_LOSS_TRANSIENT');
+    expect(service).toContain('setWillPauseWhenDucked(false)');
+    // 네이티브가 WebView 오디오를 직접 멈추는 코드가 없어야 한다.
+    expect(service).not.toMatch(/webView[^\n]*pause/i);
+  });
+
+  it('기기 재부팅을 시도하는 코드가 없다', () => {
+    for (const src of [service, boot, plugin]) {
+      expect(src).not.toContain('ACTION_REBOOT');
+      expect(src).not.toContain('PowerManager.reboot');
+      expect(src).not.toMatch(/\.reboot\(/);
+    }
+  });
+
+  it('배터리 최적화는 조회·안내만 한다 — 자동 예외 요청 없음', () => {
+    expect(plugin).toContain('isIgnoringBatteryOptimizations');
+    expect(plugin).toContain('ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+    // 주석에서 "왜 안 쓰는지" 를 설명하는 것은 괜찮다 — 실제 호출만 없으면 된다.
+    expect(plugin).not.toContain('Settings.ACTION_REQUEST_IGNORE');
+    // 쓰지 않는 민감 권한을 선언하지도 않는다.
+    expect(manifest).not.toContain('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS');
+  });
+
+  it('네이티브 상태 신호에 개인정보·기기 식별자가 없다', () => {
+    for (const forbidden of ['getSerial', 'ANDROID_ID', 'advertisingId', 'IMEI', 'getDeviceId']) {
+      expect(plugin).not.toContain(forbidden);
+    }
   });
 });

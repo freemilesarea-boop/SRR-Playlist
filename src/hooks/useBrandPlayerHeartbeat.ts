@@ -31,6 +31,7 @@ import {
   parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
 } from '@/lib/remoteRecovery';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
+import { isNativeApp } from '@/lib/native';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -66,6 +67,8 @@ function readIdentity(sessionId: string | null): ClientIdentity {
     storeUserId: useAuthStore.getState().user?.id ?? null,
     sessionId,
     playerInstanceId: getPlayerInstanceId(),
+    // app_restart 는 네이티브 쉘에서만 실행한다. UA 가 아니라 런타임으로 판단한다.
+    nativeShell: isNativeApp(),
   };
 }
 

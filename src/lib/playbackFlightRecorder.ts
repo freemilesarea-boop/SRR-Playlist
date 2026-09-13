@@ -63,6 +63,10 @@ export type AppEventName =
   // 0520 — 원격 복구 명령이 어느 경로로 닿았고 무엇을 했는지. 관측 전용이다.
   | 'REMOTE_COMMAND_RECEIVED' | 'REMOTE_COMMAND_SKIPPED'
   | 'REALTIME_CHANNEL_STATUS'
+  // 0521 — 오프라인 동안 마지막 칸(페이지 재시작)을 보류했다 / 회선 복귀로 사다리를 되감았다.
+  | 'OFFLINE_RELOAD_SUPPRESSED' | 'NETWORK_RECONNECT_RESET'
+  // 0521 — 자동재생 차단이 실제로 풀린 순간(소리가 났다).
+  | 'AUTOPLAY_RECOVERED'
   | 'STALL_SNAPSHOT';
 
 export type FlightEventName = MediaEventName | AppEventName;
