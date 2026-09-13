@@ -306,12 +306,18 @@ input[type='range']::-moz-range-thumb {
  * 거리를 화면 폭이 아니라 32px 로 잡은 이유: 나가는 화면을 붙잡지 않기 때문에,
  * 전체 폭을 밀면 뒤에 아무것도 없는 빈 공간이 그대로 보인다. 짧게 미는 편이 자연스럽다.
  * 시간도 220ms 를 넘기지 않는다 — 매장에서 하루에 수백 번 누르는 화면이다. */
+/* fill-mode 는 backwards 다. both(=forwards 포함) 로 두면 애니메이션이 끝난 뒤에도
+ * transform 이 계속 적용된 상태로 남는다(none 이어도 computed 는 matrix 라 마찬가지다).
+ * transform 이 있는 요소는 stacking context 를 만들어서, 그 안의 z-index 가 바깥과
+ * 겨루지 못한다 — 매장 플레이어(z-[90]) 가 이 래퍼 안에 갇혀 하단탭(z-30) 아래로
+ * 내려갔다. 전체화면이어야 할 화면 위로 탭바와 미니 플레이어가 떠 있었다.
+ * backwards 면 끝난 뒤 원래 스타일로 돌아가고, 마지막 키프레임과 값이 같아 튀지 않는다. */
 @media (prefers-reduced-motion: no-preference) {
   .native-shell .app-route-push {
-    animation: app-route-push 220ms cubic-bezier(0.2, 0, 0, 1) both;
+    animation: app-route-push 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
   }
   .native-shell .app-route-pop {
-    animation: app-route-pop 190ms cubic-bezier(0.2, 0, 0, 1) both;
+    animation: app-route-pop 190ms cubic-bezier(0.2, 0, 0, 1) backwards;
   }
 }
 @keyframes app-route-push {

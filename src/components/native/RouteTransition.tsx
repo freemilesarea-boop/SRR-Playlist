@@ -52,6 +52,13 @@ export default function RouteTransition({ children }: { children: ReactNode }) {
     // 레이아웃을 한 번 읽어 강제로 반영시킨다.
     void el.offsetWidth;
     el.classList.add(cls);
+
+    // 끝나면 클래스를 뗀다. CSS 의 fill-mode:backwards 만으로도 transform 은 남지 않지만,
+    // 이 래퍼가 transform 을 가진 동안은 stacking context 가 생겨 안쪽 z-index 가 바깥과
+    // 겨루지 못한다(매장 플레이어가 하단탭 아래로 깔렸던 원인). 흔적을 남기지 않는다.
+    const done = () => el.classList.remove(PUSH_CLASS, POP_CLASS);
+    el.addEventListener('animationend', done, { once: true });
+    return () => el.removeEventListener('animationend', done);
     // location.key 는 같은 경로로 다시 이동해도 매번 바뀐다 — 그래서 이걸 봐야 한다.
   }, [location.key, navigationType]);
 

@@ -111,7 +111,12 @@ export default function StorePlayerPage() {
   const hasQueue = queue.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white pt-safe pb-safe pl-safe pr-safe">
+    // 배경은 테마를 따르지 않고 항상 어둡다. 이 화면은 글자·아이콘이 전부 text-white 로
+    // 짜여 있어서, 라이트 테마의 밝은 배경이 깔리면 흰 글자가 흰 바탕에 얹혀 아무것도 안 보인다
+    // (실제로 그랬다 — 그라데이션 시작색으로 쓰던 토큰이 정의돼 있지 않아 색이 비었고,
+    //  위쪽이 흰 화면인데 글자도 희어서 제목이 안 보였다).
+    // 매장 손님에게 보이는 화면이기도 해서, 조명이 어두운 매장에서도 어두운 편이 맞다.
+    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-[#171327] via-[#0b0a10] to-black text-white pt-safe pb-safe pl-safe pr-safe">
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
       <PlaybackBlockedOverlay />
       {/* 상단 바: 상태 + 나가기 */}
@@ -122,7 +127,7 @@ export default function StorePlayerPage() {
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
-              online ? 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200' : 'bg-red-500/20 text-slate-900 dark:text-red-200'
+              online ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'
             }`}
           >
             {online ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -130,19 +135,19 @@ export default function StorePlayerPage() {
           </span>
           {franchiseSync.policy?.has_franchise_policy && (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-slate-900 dark:text-indigo-200"
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200"
               title={`본사 정책: ${franchiseSync.policy.policy_name ?? ''} · 슬롯: ${franchiseSync.policy.matched_slot?.slot_name ?? '—'}`}
             >
               <Sparkles size={12} /> 본사 정책 자동 동기화
             </span>
           )}
           {isBreak && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-slate-900 dark:text-amber-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-amber-200">
               <Coffee size={12} /> 브레이크타임
             </span>
           )}
           {isClosed && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/25 px-2.5 py-1 text-slate-900 dark:text-slate-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/25 px-2.5 py-1 text-slate-200">
               <Moon size={12} /> 운영 시간 아님
             </span>
           )}

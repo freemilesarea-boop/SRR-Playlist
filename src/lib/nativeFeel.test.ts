@@ -103,6 +103,19 @@ describe('화면 전환 — 방향이 있어야 한다', () => {
     expect(block).toContain('prefers-reduced-motion: no-preference');
   });
 
+  it('fill-mode 는 backwards — both 면 transform 이 남아 z-index 가 갇힌다', () => {
+    // 실제로 당했다: both 로 두니 애니메이션이 끝나도 transform(matrix) 이 남아
+    // 래퍼가 stacking context 가 됐고, 매장 플레이어(z-[90]) 가 하단탭(z-30) 아래로 깔렸다.
+    // 전체화면이어야 할 화면 위로 탭바와 미니 플레이어가 떠 있었다.
+    expect(css).toMatch(/app-route-push [^;]*backwards/);
+    expect(css).toMatch(/app-route-pop [^;]*backwards/);
+    expect(css).not.toMatch(/app-route-(push|pop) [^;]*\bboth\b/);
+  });
+
+  it('전환이 끝나면 클래스를 뗀다 — transform 흔적을 남기지 않는다', () => {
+    expect(repoFile('src/components/native/RouteTransition.tsx')).toContain('animationend');
+  });
+
   it('AppShell 이 Outlet 을 감싼다 — 여기 빠지면 전환이 통째로 죽는다', () => {
     const shell = repoFile('src/components/AppShell.tsx');
     expect(shell).toContain('RouteTransition');
