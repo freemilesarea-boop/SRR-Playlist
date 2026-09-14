@@ -41,6 +41,10 @@ import { useAudioBurnInCertification, type BurnInSummary } from '@/hooks/useAudi
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { noteAudioProgress } from '@/lib/clientLiveness';
+import {
+  classifyAudioFreeze, freezeNeedsRecovery, requiresTimerDetection,
+  type AudioFreezeKind,
+} from '@/lib/frozenAudioState';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
 import { audioDebugWarn } from '@/lib/audioDebug';
@@ -692,6 +696,8 @@ export default function Player() {
   // FLIGHT-RECORDER-2 — 블랙박스 수명주기.
   // 평상시 서버 전송은 0건이다. 링버퍼에만 쌓다가 정지가 감지될 때만 flush 한다.
   const stallRecoveryLevelRef = useRef<string | null>(null);
+  /** 직전에 기록한 정지 모양. 같은 모양을 매 tick 기록하지 않기 위한 것(유계 로그). */
+  const lastFreezeKindRef = useRef<AudioFreezeKind>('NONE');
   useEffect(() => {
     const pid = playerInstanceIdRef.current;
     initFlightRecorder(pid);
@@ -1751,7 +1757,39 @@ export default function Player() {
         stallProgressRef.current = { trackId, ct, ts: now };
         stallLastActionRef.current = 'none';
         stallRecoveryLevelRef.current = null;
+        lastFreezeKindRef.current = 'NONE';
         return;
+      }
+
+      // 21 — 사다리를 태우기 **전에** 정지의 모양을 한 번 남긴다.
+      // 복구가 시작되면 상태가 바뀌어 원래 모양을 잃는다. 같은 정지 구간에서
+      // 모양이 바뀔 때만 기록하므로 24시간 재생에서도 유계다(관측 전용).
+      const freezeKind = classifyAudioFreeze({
+        playing: store.playing,
+        suppressed: store.scheduleSuppressed,
+        autoplayBlocked: health.autoplayBlocked,
+        crossfading: st.crossfading,
+        paused: el.paused,
+        ended: el.ended,
+        readyState: el.readyState,
+        errorCode: el.error ? el.error.code : null,
+        stalledMs: now - prog.ts,
+      });
+      if (freezeKind !== lastFreezeKindRef.current) {
+        lastFreezeKindRef.current = freezeKind;
+        if (freezeNeedsRecovery(freezeKind)) {
+          recordFlightEvent('AUDIO_FREEZE_CLASSIFIED', {
+            el, audioElementId: getAudioObjectId(el),
+            extra: {
+              kind: freezeKind,
+              timerOnly: requiresTimerDetection(freezeKind),
+              stalledMs: Math.round(now - prog.ts),
+              readyState: el.readyState,
+              networkState: el.networkState,
+              paused: el.paused,
+            },
+          });
+        }
       }
 
       const action = resolveStallAction({

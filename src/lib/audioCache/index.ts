@@ -119,10 +119,22 @@ function releaseObjectUrl(objUrl: string) {
  * 선반입 (비동기 — 재생 경로 밖)
  * ------------------------------------------------------------------ */
 
-/** 저장된 블롭을 object URL 로 만들어 동기 맵에 등록. 이미 있으면 그대로. */
+/**
+ * 저장된 블롭을 object URL 로 만들어 동기 맵에 등록. 이미 있으면 그대로.
+ *
+ * 저장소가 던져도 여기서 삼킨다. audioCacheStore 가 이미 try/catch 로 null 을
+ * 돌려주지만, 그 계약이 한 번 깨지면 예외가 prefetchQueue 를 타고 올라가 재생
+ * 경로에서 unhandled rejection 이 된다. **캐시는 부가 기능이고 재생은 아니다** —
+ * 저장소 고장이 소리를 멈추게 하는 경로를 아예 만들지 않는다.
+ */
 async function materialize(audioUrl: string): Promise<boolean> {
   if (objectUrlByAudioUrl.has(audioUrl)) return true;
-  const blob = await getAudioBlob(audioUrl);
+  let blob: Blob | null;
+  try {
+    blob = await getAudioBlob(audioUrl);
+  } catch {
+    return false;
+  }
   if (!blob) return false;
   // 경합: await 사이에 다른 호출이 먼저 등록했을 수 있다.
   const existing = objectUrlByAudioUrl.get(audioUrl);
@@ -208,9 +220,13 @@ export async function prefetchQueue(opts: {
   signal?: AbortSignal;
 }): Promise<number> {
   const { urls, index, ahead = DEFAULT_PREFETCH_AHEAD, signal } = opts;
-  if (!(await cacheStoreReady())) return 0;
-
-  if (!cachedUrls) cachedUrls = await cachedUrlSet();
+  try {
+    if (!(await cacheStoreReady())) return 0;
+    if (!cachedUrls) cachedUrls = await cachedUrlSet();
+  } catch {
+    // 저장소를 열 수 없다 = 오프라인 캐시를 쓸 수 없다. 네트워크 재생은 그대로 간다.
+    return 0;
+  }
 
   // 1) 아직 안 받은 것 내려받기
   const targets = pickPrefetchTargets({ urls, index, cached: cachedUrls, ahead });
