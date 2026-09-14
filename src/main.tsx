@@ -10,6 +10,12 @@ import { isNativeApp, initNativeShell } from './lib/native';
 import { useBusinessStore } from './store/businessStore';
 import { usePlaybackHealthStore } from './store/playbackHealthStore';
 import { shouldDeferReload, registerApplyUpdate } from './lib/swUpdateGate';
+import {
+  decideUpdateActivation, deterministicStaggerMs, alreadyActivated, markActivated,
+} from './lib/zeroTouchUpdate';
+import { logPlaybackDiagnostic } from './lib/playbackDiagnostics';
+import { usePlayerStore } from './store/playerStore';
+import { useAuthStore } from './store/authStore';
 import { reloadApp } from './lib/playbackGuard';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
@@ -65,35 +71,105 @@ const SW_RELOAD_KEY = `sw-reloaded-${BUILD_ID}`;
 // ----------------------------------------------------------------------------
 let deferredSince: number | null = null;
 let deferTimer: number | null = null;
+let audioSub: (() => void) | null = null;
+/**
+ * 이 문서가 **제스처 없이** 소리를 시작했는가.
+ *
+ * 리로드는 사용자 제스처를 잃는다. 한 번이라도 자동재생이 막힌 문서를 다시
+ * 띄우면 또 막힐 것이고, 무인 매장에서는 그대로 무음이 된다. 그래서 자동
+ * 활성화는 이 신뢰가 있을 때만 한다 — 없으면 옛 빌드로 도는 편이 낫다.
+ */
+let autoplayEverBlocked = false;
+let audioEverActive = false;
+
+function autoplayTrusted(): boolean {
+  return audioEverActive && !autoplayEverBlocked;
+}
 
 function applyReload(reason: string): void {
   if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
+  if (alreadyActivated(BUILD_ID)) return;
   window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
+  markActivated(BUILD_ID);
+  void logPlaybackDiagnostic('update_activated', {
+    reason: 'sw_update',
+    context: { build: BUILD_ID, why: reason, deferredMs: deferredSince ? Date.now() - deferredSince : 0 },
+  });
   // beforeunload 경고("변경한 내용이 저장되지 않을 수 있습니다")를 띄우지 않는다.
   // 우리가 의도한 리로드인데 모달이 뜨면 무인 매장에서는 아무도 안 눌러 그대로 멈춘다.
   reloadApp(`sw build ${BUILD_ID} (${reason})`);
 }
 
-/** 즉시 적용 or 미루기. 미룬 경우 재생이 멈추는 순간 다시 판단한다. */
+/** 한 문서에서 같은 blocker 를 반복 기록하지 않는다(유계 로그). */
+let lastBlockerLogged: string | null = null;
+
+/**
+ * 즉시 적용 or 미루기.
+ *
+ * 22 — 예전에는 30초 폴링 하나로 "재생이 멈추는 순간"을 노렸다. 그런데 그 창은
+ * 트랙 전환의 emptied→playing 사이 수백 밀리초다. 30초 샘플링이 그 안에 들어갈
+ * 확률은 한 번에 2% 남짓이고, 실제로 2026-09-14 하루 6번 배포 동안 두 매장 모두
+ * **한 번도** 맞추지 못했다. 확률에 기대던 것을 사건에 거는 것으로 바꾼다 —
+ * audioActive 가 false 로 떨어지는 그 순간 구독으로 직접 듣는다.
+ */
 function requestReload(reason: string): void {
   if (window.sessionStorage.getItem(SW_RELOAD_KEY)) return;
 
-  const defer = shouldDeferReload({
-    businessMode: useBusinessStore.getState().businessMode,
-    audioActive: usePlaybackHealthStore.getState().audioActive,
-    deferredSince,
-    now: Date.now(),
-  });
+  const businessMode = useBusinessStore.getState().businessMode;
+  const health = usePlaybackHealthStore.getState();
 
-  if (!defer) { applyReload(reason); return; }
+  // 일반 사용자는 기존 그대로 — 미루지 않고 즉시 적용한다.
+  if (!shouldDeferReload({
+    businessMode, audioActive: health.audioActive, deferredSince, now: Date.now(),
+  })) {
+    if (!businessMode) { applyReload(reason); return; }
+  }
 
   if (deferredSince === null) {
     deferredSince = Date.now();
     console.warn('[sw] 매장 재생 중 — 업데이트 적용을 미룹니다', { build: BUILD_ID, reason });
+    void logPlaybackDiagnostic('update_pending', {
+      reason: 'sw_update',
+      context: { build: BUILD_ID, why: reason, autoplayTrusted: autoplayTrusted() },
+    });
   }
   usePlaybackHealthStore.getState().setSwUpdatePending(true);
 
-  // 재생이 멈추거나 상한을 넘기면 적용. 30초 폴링이면 충분하다(정확도 요구 없음).
+  const decision = decideUpdateActivation({
+    updatePending: true,
+    businessMode,
+    audioActive: health.audioActive,
+    // 매장 모드는 크로스페이드가 꺼져 있어 audioActive 가 false 로 떨어지는 그
+    // 순간이 곧 트랙 경계다. 재생 의도가 남아 있으면 경계, 아니면 그냥 idle.
+    atTrackBoundary: !health.audioActive && usePlayerStore.getState().playing,
+    crossfading: false,
+    recovering: health.autoplayBlocked || health.subscriptionBlocked,
+    online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
+    autoplayTrusted: autoplayTrusted(),
+    deferredSince,
+    staggerMs: deterministicStaggerMs(useAuthStore.getState().user?.id ?? ''),
+    now: Date.now(),
+  });
+
+  if (decision.kind === 'activate') { applyReload(`${reason}:${decision.reason}`); return; }
+
+  if (decision.blocker !== lastBlockerLogged) {
+    lastBlockerLogged = decision.blocker;
+    void logPlaybackDiagnostic('update_blocked', {
+      reason: 'sw_update',
+      context: { build: BUILD_ID, blocker: decision.blocker, deferredMs: Date.now() - deferredSince },
+    });
+  }
+
+  // 사건 기반 — audioActive 가 바뀌는 순간 바로 다시 판단한다.
+  if (audioSub === null) {
+    audioSub = usePlaybackHealthStore.subscribe((st, prev) => {
+      if (st.autoplayBlocked) autoplayEverBlocked = true;
+      if (st.audioActive) audioEverActive = true;
+      if (st.audioActive !== prev.audioActive) requestReload('audio-state-change');
+    });
+  }
+  // 안전망 — 구독이 어떤 이유로든 안 돌아도 상한에는 도달하게 한다.
   if (deferTimer === null) {
     deferTimer = window.setInterval(() => requestReload('deferred-recheck'), 30_000);
   }

@@ -24,7 +24,13 @@ export type DiagnosticEvent =
   | 'autoplay_blocked'
   | 'autoplay_recovered'
   | 'track_cut_short'
-  | 'playback_stalled';
+  | 'playback_stalled'
+  // 22 — 업데이트 수명주기. 오늘 프로덕션에 6번 배포했는데 두 매장 다 하나도
+  // 활성화하지 않았고, **그 사실을 서버에서 볼 방법이 없었다.** 무인 업데이트를
+  // 만들려면 먼저 업데이트가 감지됐는지부터 보여야 한다.
+  | 'update_pending'
+  | 'update_activated'
+  | 'update_blocked';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드
