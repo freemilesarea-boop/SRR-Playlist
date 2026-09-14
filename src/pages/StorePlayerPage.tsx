@@ -21,6 +21,7 @@ import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { ensurePlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { buildHash } from '@/lib/playbackFlightRecorder';
 import { formatCacheSize } from '@/lib/audioCache';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -87,7 +88,13 @@ export default function StorePlayerPage() {
       // 홈 화면 앱으로 설치했는지 기록 (BrandPlayerPage 와 동일 목적).
       // buildHash — 이 기기가 어느 배포본을 돌고 있는지. 매장별로 오래된 빌드가
       // 남아있는지(stale client) 판별할 수단이 지금까지 없었다.
-      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()), buildHash: buildHash() },
+      context: {
+        device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()),
+        buildHash: buildHash(),
+        // 17 — 원격 복구의 가장 구체적인 target. 2026-09-14 에는 이 값이
+        // Flight Recorder flush 때만 서버에 닿아 session_id 로 대신 겨냥해야 했다.
+        playerInstanceId: ensurePlayerInstanceId(),
+      },
     });
     return watchPageLifecycle('store');
   }, []);

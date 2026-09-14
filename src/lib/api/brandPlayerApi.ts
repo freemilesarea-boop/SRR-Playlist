@@ -119,9 +119,23 @@ export interface HeartbeatBuildIdentity {
   navigationType?: string | null;
 }
 
+/**
+ * 17 — 이 heartbeat 시점의 클라이언트 상태. 프로세스가 OS 에 끊기면 아무것도
+ * 보낼 수 없으므로, **마지막 heartbeat 가 곧 부검 소견서**가 된다.
+ */
+export interface HeartbeatLiveness {
+  playerInstanceId?: string | null;
+  lastAudioProgressAt?: string | null;
+  visibilityState?: string | null;
+  online?: boolean | null;
+  realtimeStatus?: string | null;
+  wakeLockActive?: boolean | null;
+}
+
 export async function brandPlayerHeartbeat(
   brandId: string, sessionToken: string, currentTrackId: string | null, userAgent: string | null,
   identity?: HeartbeatBuildIdentity,
+  liveness?: HeartbeatLiveness,
 ): Promise<BrandPlayerHeartbeatResult> {
   const { data, error } = await supabase.rpc('brand_player_heartbeat', {
     p_brand_id: brandId,
@@ -133,6 +147,14 @@ export async function brandPlayerHeartbeat(
     p_sw_build_hash: identity?.swBuildHash ?? null,
     p_sw_controlled: identity?.swControlled ?? null,
     p_navigation_type: identity?.navigationType ?? null,
+    // 17 — 죽기 직전의 마지막 정상 상태. 전부 nullable 이라 구버전 서버에서도
+    // 실패하지 않는다(인자 기본값이 있다).
+    p_player_instance_id: liveness?.playerInstanceId ?? null,
+    p_last_audio_progress_at: liveness?.lastAudioProgressAt ?? null,
+    p_visibility_state: liveness?.visibilityState ?? null,
+    p_client_online: liveness?.online ?? null,
+    p_realtime_status: liveness?.realtimeStatus ?? null,
+    p_wake_lock_active: liveness?.wakeLockActive ?? null,
   });
   if (error) throw error;
   return data as BrandPlayerHeartbeatResult;

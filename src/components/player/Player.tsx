@@ -23,7 +23,7 @@ import {
   type StallAction,
 } from '@/lib/stallWatchdog';
 import {
-  initFlightRecorder, setFlightContextProvider, resetFlightRecorder, newPlayerInstanceId,
+  initFlightRecorder, setFlightContextProvider, resetFlightRecorder, ensurePlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
 } from '@/lib/playbackFlightRecorder';
 import { disposeAudioElement, registerHardRecovery } from '@/lib/hardRecovery';
@@ -40,6 +40,7 @@ import { useAudioInvalidStateGuard } from '@/hooks/useAudioInvalidStateGuard';
 import { useAudioBurnInCertification, type BurnInSummary } from '@/hooks/useAudioBurnInCertification';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { noteAudioProgress } from '@/lib/clientLiveness';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
 import { audioDebugWarn } from '@/lib/audioDebug';
@@ -267,7 +268,7 @@ export default function Player() {
   // FLIGHT-RECORDER-2 — Player/audio 인스턴스 식별.
   // 장애 직전에 Player 가 리마운트됐는지, audio 엘리먼트가 새로 만들어졌는지를
   // 사후에 판별할 수단이 지금까지 없었다(숙대점 조사 UNVERIFIED #9).
-  const playerInstanceIdRef = useRef<string>(newPlayerInstanceId());
+  const playerInstanceIdRef = useRef<string>(ensurePlayerInstanceId());
   /**
    * HARD RECOVERY — audio 엘리먼트 세대.
    *
@@ -2554,6 +2555,9 @@ export default function Player() {
     }
     if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
       lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
+      // currentTime 이 **실제로** 늘어난 순간. heartbeat 가 이 시각을 서버로 옮긴다.
+      // 모듈 변수 한 줄 대입이라 리렌더가 없다 — timeupdate 는 초당 4회 온다.
+      noteAudioProgress();
     }
 
     setCurrentTime(t);
