@@ -40,6 +40,7 @@ import { useAudioInvalidStateGuard } from '@/hooks/useAudioInvalidStateGuard';
 import { useAudioBurnInCertification, type BurnInSummary } from '@/hooks/useAudioBurnInCertification';
 import { AudioDiagnosticsDashboard } from '@/components/player/AudioDiagnosticsDashboard';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { noteAudioProgress } from '@/lib/clientLiveness';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { getAudioObjectId } from '@/lib/audioOutput';
 import { audioDebugWarn } from '@/lib/audioDebug';
@@ -2508,6 +2509,9 @@ export default function Player() {
     }
     if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
       lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
+      // currentTime 이 **실제로** 늘어난 순간. 네이티브 워치독의 lastAudibleAt 이
+      // 먹는 신호가 여기서 나온다. 모듈 변수 한 줄 대입이라 리렌더가 없다.
+      noteAudioProgress();
     }
 
     setCurrentTime(t);

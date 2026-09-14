@@ -33,6 +33,7 @@ import {
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { isNativeApp } from '@/lib/native';
 import { sendNativeHeartbeat } from '@/lib/storePlaybackService';
+import { isAudiblyProgressing } from '@/lib/clientLiveness';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -132,8 +133,13 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     // 네이티브 쉘에는 "WebView 가 살아 있다 + 소리가 난다" 를 따로 알린다.
     // 이 신호가 워치독의 유일한 판단 근거다 — foreground 여부로 판단하면
     // 점주가 다른 앱을 쓰는 것만으로 화면을 강제로 띄우게 된다.
+    //
+    // audible 은 **실제 currentTime 진행** 기준이다. 예전엔 audioActive 를 넘겼는데,
+    // 그 값은 Player 에서 audio element 의 `playing` 이벤트 + `!el.paused` 로 세워진다
+    // — currentTime 이 얼어붙은 채 paused=false 인 플레이어도 계속 "들린다" 로
+    // 보고돼, 워치독이 잡으라고 만들어진 바로 그 정지 상태에서 눈이 멀었다.
     const beat = () => {
-      void sendNativeHeartbeat(usePlaybackHealthStore.getState().audioActive);
+      void sendNativeHeartbeat(isAudiblyProgressing());
     };
     beat();
     const nativeId = window.setInterval(() => { if (!cancelled) beat(); }, 30_000);
