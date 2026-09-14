@@ -32,10 +32,26 @@
 /* ────────────────────────────────────────────────────────────────────────── */
 
 let lastAudioProgressAtMs: number | null = null;
+let lastReadyState: number | null = null;
+let lastNetworkState: number | null = null;
 
-/** currentTime 이 실제로 늘어난 순간에만 호출한다. */
-export function noteAudioProgress(nowMs: number = Date.now()): void {
+/**
+ * currentTime 이 실제로 늘어난 순간에만 호출한다.
+ *
+ * 그 순간의 readyState / networkState 도 같이 받아둔다. 재생이 멈춘 뒤에는
+ * 이 값이 **마지막으로 정상이던 순간의 오디오 상태**가 된다 — 프로세스가
+ * 끊겼을 때 "소리가 멈춘 게 버퍼 고갈이었나 네트워크였나" 를 가르는 단서다.
+ * 별도 배선 없이 Player 가 이미 쥐고 있는 element 에서 그대로 읽는다.
+ */
+export function noteAudioProgress(
+  nowMs: number = Date.now(),
+  media?: { readyState?: number; networkState?: number } | null,
+): void {
   lastAudioProgressAtMs = nowMs;
+  if (media) {
+    lastReadyState = normalizeMediaState(media.readyState, 4);
+    lastNetworkState = normalizeMediaState(media.networkState, 3);
+  }
 }
 
 /** 마지막 실제 진행 시각(epoch ms). 한 번도 진행한 적 없으면 null. */
@@ -117,7 +133,63 @@ export function readOnline(): boolean | null {
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* 4) heartbeat 에 실을 스냅샷                                                 */
+/* 4) 기기 자원 — "교체가 필요한가" 에 답할 수 있는 유일한 숫자들                */
+/*                                                                            */
+/*    지금 우리는 숙대점 기기의 저장공간도 힙도 **전혀 모른다.** 그래서 프로세스가 */
+/*    죽었을 때 "메모리가 부족했다" 도 "저장공간이 찼다" 도 증거 없이 말할 수만    */
+/*    있었다. 이 값들이 있어야 하드웨어 교체 판단을 추측이 아니라 측정으로 한다.   */
+/*                                                                            */
+/*    전부 optional API 다. 없으면 null 이고, null 은 "모른다" 이지 "정상" 이     */
+/*    아니다. estimate() 는 비동기라 heartbeat 를 막지 않도록 따로 새로고침한다.  */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+let storageUsage: number | null = null;
+let storageQuota: number | null = null;
+let storageCheckedAt = 0;
+
+/** 저장공간은 빨리 변하지 않는다 — 10분에 한 번만 묻는다. */
+const STORAGE_REFRESH_MS = 10 * 60_000;
+
+/**
+ * 저장공간 추정치를 갱신한다. **await 하지 않고 부른다** — heartbeat 는 이
+ * 호출을 기다리지 않고, 다음 heartbeat 가 갱신된 값을 싣는다.
+ */
+export function refreshStorageEstimate(nowMs: number = Date.now()): void {
+  if (nowMs - storageCheckedAt < STORAGE_REFRESH_MS) return;
+  storageCheckedAt = nowMs;
+  try {
+    const st = typeof navigator !== 'undefined' ? navigator.storage : undefined;
+    if (!st?.estimate) return;
+    void st.estimate().then((e) => {
+      storageUsage = typeof e.usage === 'number' ? e.usage : null;
+      storageQuota = typeof e.quota === 'number' ? e.quota : null;
+    }).catch(() => { /* 관측 실패가 재생을 막지 않는다 */ });
+  } catch {
+    /* noop */
+  }
+}
+
+/** Chromium 계열에서만 있는 비표준 API. 없으면 null 이다. */
+export function readJsHeapUsed(): number | null {
+  try {
+    const perf = globalThis.performance as Performance & {
+      memory?: { usedJSHeapSize?: number };
+    } | undefined;
+    const v = perf?.memory?.usedJSHeapSize;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** HTMLMediaElement.readyState / networkState 를 그대로. 범위 밖이면 null. */
+export function normalizeMediaState(v: unknown, max: number): number | null {
+  if (typeof v !== 'number' || !Number.isInteger(v)) return null;
+  return v >= 0 && v <= max ? v : null;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 5) heartbeat 에 실을 스냅샷                                                 */
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export interface ClientLivenessSnapshot {
@@ -129,17 +201,29 @@ export interface ClientLivenessSnapshot {
   online: boolean | null;
   realtimeStatus: string | null;
   wakeLockActive: boolean | null;
+  /** navigator.storage.estimate() — 저장공간 압박을 측정으로 말하기 위한 값. */
+  storageUsageBytes: number | null;
+  storageQuotaBytes: number | null;
+  /** Chromium 전용 비표준. 없으면 null. */
+  jsHeapUsedBytes: number | null;
+  /** 재생 중이던 audio element 의 상태. 0..4 / 0..3. */
+  audioReadyState: number | null;
+  audioNetworkState: number | null;
 }
 
 /** 서버 RPC 로 나가는 키 — 늘어나면 여기부터 늘어난다(회귀 테스트가 고정한다). */
 export const LIVENESS_PAYLOAD_KEYS: readonly (keyof ClientLivenessSnapshot)[] = [
   'playerInstanceId', 'lastAudioProgressAt', 'visibilityState',
   'online', 'realtimeStatus', 'wakeLockActive',
+  'storageUsageBytes', 'storageQuotaBytes', 'jsHeapUsedBytes',
+  'audioReadyState', 'audioNetworkState',
 ];
 
 export function readLivenessSnapshot(opts: {
   playerInstanceId: string | null;
   wakeLockActive: boolean | null;
+  audioReadyState?: number | null;
+  audioNetworkState?: number | null;
 }): ClientLivenessSnapshot {
   const ms = lastAudioProgressAt();
   return {
@@ -149,6 +233,13 @@ export function readLivenessSnapshot(opts: {
     online: readOnline(),
     realtimeStatus: realtimeStatus(),
     wakeLockActive: opts.wakeLockActive,
+    storageUsageBytes: storageUsage,
+    storageQuotaBytes: storageQuota,
+    jsHeapUsedBytes: readJsHeapUsed(),
+    audioReadyState: opts.audioReadyState === undefined
+      ? lastReadyState : normalizeMediaState(opts.audioReadyState, 4),
+    audioNetworkState: opts.audioNetworkState === undefined
+      ? lastNetworkState : normalizeMediaState(opts.audioNetworkState, 3),
   };
 }
 
@@ -156,4 +247,9 @@ export function readLivenessSnapshot(opts: {
 export function __resetClientLivenessForTest(): void {
   lastAudioProgressAtMs = null;
   realtimeStatusValue = null;
+  storageUsage = null;
+  storageQuota = null;
+  storageCheckedAt = 0;
+  lastReadyState = null;
+  lastNetworkState = null;
 }

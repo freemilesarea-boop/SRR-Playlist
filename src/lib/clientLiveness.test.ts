@@ -105,7 +105,9 @@ describe('heartbeat 스냅샷', () => {
   it('페이로드 키가 늘어나면 이 테스트가 먼저 깨진다 (payload 폭증 방지)', () => {
     const snap = readLivenessSnapshot({ playerInstanceId: 'pi-1', wakeLockActive: false });
     expect(Object.keys(snap).sort()).toEqual([...LIVENESS_PAYLOAD_KEYS].sort());
-    expect(LIVENESS_PAYLOAD_KEYS).toHaveLength(6);
+    // 18 에서 기기 자원 5개가 늘어 11개다. 더 늘리려면 여기부터 고쳐야 한다 —
+    // 그게 이 테스트의 목적이다(무심코 늘어나는 것을 막는다).
+    expect(LIVENESS_PAYLOAD_KEYS).toHaveLength(11);
   });
 
   it('PII 가 될 만한 값을 담지 않는다', () => {

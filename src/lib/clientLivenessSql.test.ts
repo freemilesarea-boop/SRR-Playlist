@@ -109,10 +109,19 @@ describe('컬럼과 클라이언트 페이로드가 1:1 이다', () => {
       online: 'client_online',
       realtimeStatus: 'realtime_status',
       wakeLockActive: 'wake_lock_active',
+      storageUsageBytes: 'storage_usage_bytes',
+      storageQuotaBytes: 'storage_quota_bytes',
+      jsHeapUsedBytes: 'js_heap_used_bytes',
+      audioReadyState: 'audio_ready_state',
+      audioNetworkState: 'audio_network_state',
     };
-    expect(LIVENESS_PAYLOAD_KEYS).toHaveLength(6);
+    expect(LIVENESS_PAYLOAD_KEYS).toHaveLength(11);
+    // 0524 가 6개, 0526 이 나머지 5개를 만든다.
+    const sql26 = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/0526_device_resource_telemetry.sql'), 'utf-8');
     for (const k of LIVENESS_PAYLOAD_KEYS) {
-      expect(sql).toContain(`add column if not exists ${colFor[k]}`);
+      const decl = `add column if not exists ${colFor[k]}`;
+      expect(sql.includes(decl) || sql26.includes(decl)).toBe(true);
     }
   });
 });

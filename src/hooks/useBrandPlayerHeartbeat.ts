@@ -31,7 +31,9 @@ import {
   parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
 } from '@/lib/remoteRecovery';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
-import { readLivenessSnapshot, setRealtimeStatus } from '@/lib/clientLiveness';
+import {
+  readLivenessSnapshot, setRealtimeStatus, refreshStorageEstimate,
+} from '@/lib/clientLiveness';
 import {
   pageBuildHash, resolveNavigationType, readServiceWorkerState,
   requestServiceWorkerIdentity, isPageSwBuildMismatch,
@@ -72,6 +74,9 @@ function buildIdentityPayload() {
 function buildLivenessPayload() {
   let wakeLockActive: boolean | null = null;
   try { wakeLockActive = usePlaybackHealthStore.getState().wakeLockActive; } catch { /* noop */ }
+  // 저장공간 추정은 비동기다 — 여기서 기다리지 않고 예약만 한다. 다음 heartbeat 가
+  // 갱신된 값을 싣는다. 10분에 한 번만 실제로 묻는다.
+  refreshStorageEstimate();
   return readLivenessSnapshot({
     playerInstanceId: getPlayerInstanceId(),
     wakeLockActive,

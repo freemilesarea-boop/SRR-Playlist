@@ -161,6 +161,26 @@ async function download(audioUrl: string, signal?: AbortSignal): Promise<boolean
   }
 }
 
+/**
+ * IndexedDB 에서 사라진 곡을 **인메모리 색인에서도** 지운다.
+ *
+ * 이게 없으면 축출된 곡이 `cachedUrls` 에 영원히 "캐시됨" 으로 남는다. 그러면
+ * pickPrefetchTargets 가 그 곡을 건너뛰어 **다시는 내려받지 않는다** — 매장은
+ * 캐시가 있다고 믿는 채로 그 곡마다 네트워크에 의존하게 되고, 회선이 흔들리는
+ * 구형 기기에서 바로 그게 무음이 된다. 리로드 전까지 스스로 낫지 않는다.
+ *
+ * lastTouchAt 도 같이 지운다. 안 그러면 지워진 곡의 항목이 계속 쌓인다
+ * (하루 이틀은 무해하지만 며칠씩 도는 매장에서는 단조 증가다).
+ */
+function forgetCached(urls: readonly string[]): void {
+  for (const url of urls) {
+    cachedUrls?.delete(url);
+    lastTouchAt.delete(url);
+    const objUrl = objectUrlByAudioUrl.get(url);
+    if (objUrl) releaseObjectUrl(objUrl);
+  }
+}
+
 /** 새 항목이 들어갈 자리 확보 — LRU 로 정리. */
 async function makeRoomFor(bytes: number): Promise<void> {
   const entries = await listEntries();
@@ -170,7 +190,10 @@ async function makeRoomFor(bytes: number): Promise<void> {
   // 지금 재생에 걸려 있는 곡은 지우지 않는다.
   const protectedUrls = new Set(objectUrlByAudioUrl.keys());
   const victims = pickEvictions(entries, Math.max(0, limit - bytes), protectedUrls);
-  if (victims.length > 0) await deleteAudio(victims);
+  if (victims.length > 0) {
+    await deleteAudio(victims);
+    forgetCached(victims);
+  }
 }
 
 /**
@@ -275,4 +298,39 @@ export async function dropCachedAudio(audioUrl: string | null | undefined): Prom
 /** 테스트/진단용 — 현재 살아있는 object URL 수. */
 export function liveObjectUrlCount(): number {
   return liveOrder.length;
+}
+
+/**
+ * 이 모듈이 붙들고 있는 **모든** 자료구조의 크기.
+ *
+ * 장시간 무인 재생에서 단조 증가하는 것이 하나라도 있으면 그게 곧 누수다.
+ * soak 테스트가 이 숫자들을 0/100/250/500/1000 전환 시점에 비교한다.
+ */
+export function audioCacheDiagnostics(): {
+  liveObjectUrls: number;
+  objectUrlMap: number;
+  reverseMap: number;
+  touchEntries: number;
+  cachedIndex: number;
+  inFlight: number;
+} {
+  return {
+    liveObjectUrls: liveOrder.length,
+    objectUrlMap: objectUrlByAudioUrl.size,
+    reverseMap: audioUrlByObjectUrl.size,
+    touchEntries: lastTouchAt.size,
+    cachedIndex: cachedUrls?.size ?? 0,
+    inFlight: inFlight.size,
+  };
+}
+
+/** 테스트용 — 모듈 수준 상태를 전부 비운다(IndexedDB 는 건드리지 않는다). */
+export function __resetAudioCacheMemoryForTest(): void {
+  for (const objUrl of [...audioUrlByObjectUrl.keys()]) releaseObjectUrl(objUrl);
+  objectUrlByAudioUrl.clear();
+  audioUrlByObjectUrl.clear();
+  liveOrder.length = 0;
+  lastTouchAt.clear();
+  cachedUrls = null;
+  inFlight = new Set();
 }
