@@ -121,5 +121,8 @@ export default defineConfig({
     'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID),
     'import.meta.env.VITE_BUILD_HASH': JSON.stringify(BUILD_HASH),
     __SW_BUILD_ID__: JSON.stringify(BUILD_ID),
+    // 16A — SW 자신의 build identity. `/sw.js` URL 은 모든 배포가 같아서
+    // 어느 deployment 의 SW 인지 구분할 수 없다. 페이지가 물어보면 이 값을 답한다.
+    __SW_BUILD_HASH__: JSON.stringify(BUILD_HASH),
   },
 });

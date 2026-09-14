@@ -67,6 +67,9 @@ export type AppEventName =
   | 'OFFLINE_RELOAD_SUPPRESSED' | 'NETWORK_RECONNECT_RESET'
   // 0521 — 자동재생 차단이 실제로 풀린 순간(소리가 났다).
   | 'AUTOPLAY_RECOVERED'
+  // 16A — 페이지와 SW 의 build 가 어긋났다. **관측 전용**이며 이것만으로
+  // 장애 처리도 리로드도 하지 않는다.
+  | 'PAGE_SW_BUILD_MISMATCH'
   | 'STALL_SNAPSHOT';
 
 export type FlightEventName = MediaEventName | AppEventName;

@@ -108,14 +108,31 @@ export interface BrandPlayerHeartbeatResult {
   session_id?: string | null;
 }
 
+/**
+ * 16A — heartbeat 에 실어 보내는 build identity. 전부 선택적이다.
+ * 서버 쪽 인자가 default null 이므로 이 값들을 안 보내도 heartbeat 는 정상이다.
+ */
+export interface HeartbeatBuildIdentity {
+  pageBuildHash?: string | null;
+  swBuildHash?: string | null;
+  swControlled?: boolean | null;
+  navigationType?: string | null;
+}
+
 export async function brandPlayerHeartbeat(
   brandId: string, sessionToken: string, currentTrackId: string | null, userAgent: string | null,
+  identity?: HeartbeatBuildIdentity,
 ): Promise<BrandPlayerHeartbeatResult> {
   const { data, error } = await supabase.rpc('brand_player_heartbeat', {
     p_brand_id: brandId,
     p_session_token: sessionToken,
     p_current_track_id: currentTrackId,
     p_user_agent: userAgent,
+    // 16A — 지금 돌고 있는 코드의 신원. 서버 기대값을 복사해 보내지 않는다.
+    p_page_build_hash: identity?.pageBuildHash ?? null,
+    p_sw_build_hash: identity?.swBuildHash ?? null,
+    p_sw_controlled: identity?.swControlled ?? null,
+    p_navigation_type: identity?.navigationType ?? null,
   });
   if (error) throw error;
   return data as BrandPlayerHeartbeatResult;
