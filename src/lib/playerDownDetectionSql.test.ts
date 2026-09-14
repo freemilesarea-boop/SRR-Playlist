@@ -51,14 +51,21 @@ describe('오탐 방지', () => {
     expect(sql).toContain('resolve_brand_playback_window');
   });
 
-  it('revoked 세션은 heartbeat 집계에서 빠진다', () => {
-    expect(sql).toContain('where bps.revoked_at is null');
+  it('revoked 세션은 heartbeat 집계에서 빠진다 (_brand_player_session_health 가 이미 거른다)', () => {
+    expect(sql).toContain('revoked');
   });
 
-  it('두 heartbeat 갈래 중 더 싱싱한 쪽을 쓴다', () => {
-    expect(sql).toContain('max(l.sig) as last_signal_at');
-    expect(sql).toContain('brand_player_sessions');
-    expect(sql).toContain('stream_sessions_v2');
+  it('생존 판정 출처는 brand_player_sessions 하나뿐이다 (session-scope 보장)', () => {
+    // stream_sessions_v2 는 FK 가 없어 user_id 로만 합쳐진다 — revoked 제외가
+    // 우회되어 죽은 플레이어를 ONLINE 으로 붙잡을 수 있다. 실행 SQL 에서 제외한다.
+    const executable = sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
+    expect(executable).not.toContain('stream_sessions_v2');
+    expect(executable).toContain('_brand_player_session_health');
+  });
+
+  it('매장당 canonical session 은 heartbeat 가 가장 싱싱한 한 줄이다', () => {
+    expect(sql).toContain('select distinct on (h.user_id) h.*');
+    expect(sql).toContain('order by h.user_id, h.seconds_since_heartbeat asc');
   });
 
   it('기존 stalled 경로를 없애지 않았다', () => {
@@ -84,9 +91,13 @@ describe('보안', () => {
       'revoke all on function public.detect_brand_player_incidents(integer, integer, integer, integer) from public, anon;');
   });
 
-  it('옛 3인자 시그니처(20분 grace)를 남겨두지 않는다', () => {
-    expect(sql).toContain(
+  it('옛 3인자 시그니처(20분 grace)를 새 함수 생성 **전에** 지운다', () => {
+    // 둘이 공존하는 동안 무인자 호출은 ambiguous 로 실패한다 — 크론이 그 틈에 돈다.
+    const dropAt = sql.indexOf(
       'drop function if exists public.detect_brand_player_incidents(integer, integer, integer);');
+    const createAt = sql.indexOf('create or replace function public.detect_brand_player_incidents(');
+    expect(dropAt).toBeGreaterThan(-1);
+    expect(dropAt).toBeLessThan(createAt);
   });
 });
 
@@ -94,5 +105,10 @@ describe('크론', () => {
   it('300초 임계가 의미를 가지려면 1분 주기여야 한다', () => {
     expect(sql).toContain("schedule => '* * * * *'");
     expect(sql).toContain("jobname = 'srr-brand-player-health'");
+  });
+
+  it('잡이 이미 있으면 alter 만 한다 — 중복 크론을 만들지 않는다', () => {
+    expect(sql).toContain('perform cron.alter_job(v_id');
+    expect(sql).toContain('if v_id is null then');
   });
 });

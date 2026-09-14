@@ -40,12 +40,16 @@ export const DOWN_AFTER_S = 300;
 
 export interface LivenessInput {
   /**
-   * 이 매장에서 가장 최근에 도착한 신호의 나이(초).
+   * 이 매장 **canonical session** 의 heartbeat 나이(초).
    *
-   * 두 갈래를 **둘 다** 본 뒤 더 싱싱한 쪽을 쓴다:
-   *   brand_player_sessions.last_seen_at   — 60초 주기 제어 heartbeat
-   *   stream_sessions_v2.last_heartbeat_at — 10초 주기 재생 검증 heartbeat
-   * 하나가 막혀도 다른 하나가 살아 있으면 플레이어는 살아 있는 것이다.
+   * canonical session = revoked 아닌 세션 중 heartbeat 가 가장 싱싱한 것.
+   * 출처는 brand_player_sessions.last_seen_at(60초 주기) 하나뿐이다.
+   *
+   * stream_sessions_v2.last_heartbeat_at(10초 주기)을 섞지 않는 이유 —
+   * 그 테이블은 brand_player_sessions 와 FK 로 묶여 있지 않아 user_id 로만 합쳐진다.
+   * 그러면 revoked 세션이나 다른 탭의 heartbeat 가 **정작 죽은 매장 플레이어를
+   * ONLINE 으로 붙잡아둘 수** 있다. 놓친 무음을 만드는 쪽의 오류라 허용하지 않는다.
+   * (stream_sessions_v2 는 사후 조사용으로는 계속 쓴다.)
    *
    * null 이면 관측 가능한 세션이 아예 없다는 뜻.
    */

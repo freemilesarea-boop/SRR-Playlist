@@ -152,11 +152,11 @@ describe('8. disabled store → alert 0', () => {
 });
 
 describe('9. session 교체 중 일시 gap → false alert 없음', () => {
-  it('두 세션 중 하나라도 싱싱하면 그 나이를 쓴다 (min age)', () => {
-    // 새 세션이 5초 전에 heartbeat 를 보냈고 옛 세션은 40분째 조용하다.
-    // 매장 단위 판단은 **가장 싱싱한 신호**로 한다 — 40분을 쓰면 오탐이다.
-    const freshest = Math.min(5, 2400);
-    expect(resolveLiveness(store(freshest))).toBe('ONLINE');
+  it('살아있는 세션이 여럿이면 가장 싱싱한 것이 canonical (오탐 방지)', () => {
+    // 리로드로 새 세션이 생기고 옛 세션이 아직 revoke 전일 수 있다.
+    // 둘 다 revoked 가 아니면 더 싱싱한 쪽을 canonical 로 본다.
+    const canonicalAge = Math.min(5, 130);
+    expect(resolveLiveness(store(canonicalAge))).toBe('ONLINE');
   });
 
   it('리로드로 세션이 잠깐 비어도(관측 세션 없음) 장애로 올리지 않는다', () => {
@@ -166,17 +166,19 @@ describe('9. session 교체 중 일시 gap → false alert 없음', () => {
 });
 
 describe('10. stale old session heartbeat 가 current session 을 살려놓지 못한다', () => {
-  it('revoke 된 옛 세션은 입력에서 빠져야 한다 — 남은 신호만으로 판단', () => {
-    // 옛 세션(revoked)이 09:00 에 마지막 heartbeat 를 남겼고 현재 세션은 죽었다.
-    // revoked 세션을 제외하면 관측되는 나이는 현재 세션의 것(400초)뿐이다.
+  it('revoke 된 옛 세션은 입력에서 빠진다 — 살아있는 세션만으로 판단', () => {
+    // 옛 세션(revoked)이 최근까지 heartbeat 를 남겼더라도, canonical 계산에는
+    // 들어오지 않는다. 남는 것은 실제 매장 세션의 나이(400초)뿐이다.
     const ageFromLiveSessionsOnly = 400;
     expect(resolveLiveness(store(ageFromLiveSessionsOnly))).toBe('DOWN');
   });
 
-  it('옛 세션을 섞으면 DOWN 을 놓친다 — 그래서 revoked 제외가 계약이다', () => {
-    // 반례 고정: revoked 세션의 10초짜리 heartbeat 를 섞으면 ONLINE 으로 오판한다.
-    const wrong = Math.min(10 /* revoked 세션 */, 400 /* 실제 세션 */);
-    expect(resolveLiveness(store(wrong))).toBe('ONLINE');   // ← 이렇게 되면 안 된다
+  it('반례 고정 — 옛/다른 세션의 heartbeat 를 섞으면 죽은 매장을 ONLINE 으로 오판한다', () => {
+    // 이 계산을 하면 안 된다는 것을 테스트로 박아둔다. 0522 는 생존 판정 출처를
+    // brand_player_sessions 하나로 좁혀 이 경로 자체를 없앴다
+    // (stream_sessions_v2 는 FK 가 없어 session-scope 를 걸 수 없다).
+    const wrongIfMixed = Math.min(10 /* 옛·다른 세션 */, 400 /* 실제 매장 세션 */);
+    expect(resolveLiveness(store(wrongIfMixed))).toBe('ONLINE');   // ← 되면 안 되는 결과
   });
 });
 

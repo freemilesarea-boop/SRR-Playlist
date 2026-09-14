@@ -37,16 +37,25 @@ comment on column public.brand_player_incidents.detection is
   '무엇이 이 건을 열었는가: silence(heartbeat 부재) | stalled(heartbeat 는 오는데 곡이 안 넘어감).';
 
 -- ----------------------------------------------------------------------------
--- 2) 매장별 "가장 싱싱한 신호의 나이"
+-- 2) 매장별 canonical session 과 그 heartbeat 나이
 --
---    두 갈래를 모두 본다:
---      brand_player_sessions.last_seen_at    — 60초 주기 제어 heartbeat
---      stream_sessions_v2.last_heartbeat_at  — 10초 주기 재생 검증 heartbeat
---    하나가 막혀도 다른 하나가 살아 있으면 플레이어는 살아 있다. 둘 다 조용해야
---    무음이다. (오탐을 줄이는 쪽으로만 작동한다.)
+--    ★ 출처는 brand_player_sessions 하나뿐이다. stream_sessions_v2 는 쓰지 않는다.
 --
---    revoked 세션은 제외한다 — 옛 세션의 마지막 heartbeat 가 현재 세션의 죽음을
---    가려버리면 안 된다(테스트 시나리오 10).
+--    처음엔 stream_sessions_v2.last_heartbeat_at(10초 주기)도 섞어 "더 싱싱한 쪽"을
+--    쓰려 했다. 틀렸다. stream_sessions_v2 에는 brand_player_sessions 로 이어지는
+--    FK 가 없고 device_id 는 클라이언트가 보내는 자유 텍스트라, 그 갈래는 user_id
+--    로만 합쳐진다 — revoked 세션 제외가 통째로 우회된다. 그러면 옛 세션이나 다른
+--    탭에서 올라온 heartbeat 가 **정작 죽은 매장 플레이어를 ONLINE 으로 붙잡아둘 수**
+--    있다. 이 Phase 가 없애려는 바로 그 실패(무음인데 아무도 모름)를 되살리는 셈이다.
+--
+--    잃는 것은 거의 없다. 두 heartbeat 는 같은 문서에서 나오므로 문서가 죽으면 함께
+--    죽는다. stream 이 더 싱싱한 경우는 60초 창 안쪽뿐인데, 임계가 180/300초라
+--    판정이 달라지지 않는다. stream_sessions_v2 는 계속 **사후 조사용**으로 쓴다
+--    (2026-09-14 숙대점 351초 무음도 그걸로 잘라냈다). 생존 판정에는 쓰지 않는다.
+--
+--    canonical session = 해당 매장의 revoked 아닌 세션 중 heartbeat 가 가장 싱싱한 것.
+--    revoked 세션은 아예 들어오지 않는다 — 옛 세션의 마지막 heartbeat 가 현재 세션의
+--    죽음을 가리면 안 된다.
 -- ----------------------------------------------------------------------------
 create or replace function public._brand_player_liveness(p_minutes integer default 1440)
 returns table(
@@ -61,43 +70,25 @@ stable
 security definer
 set search_path to 'public'
 as $$
-  with live as (
-    -- 제어 heartbeat (revoked 제외)
-    select bps.user_id, bps.last_seen_at as sig
-      from public.brand_player_sessions bps
-     where bps.revoked_at is null
-       and bps.last_seen_at > now() - make_interval(mins => greatest(1, p_minutes))
-    union all
-    -- 재생 검증 heartbeat (BRAND 플레이어만)
-    select ss.user_id, ss.last_heartbeat_at
-      from public.stream_sessions_v2 ss
-     where ss.player_type = 'BRAND'
-       and ss.last_heartbeat_at > now() - make_interval(mins => greatest(1, p_minutes))
-  ),
-  freshest as (
-    select l.user_id, max(l.sig) as last_signal_at
-      from live l group by l.user_id
-  ),
-  rep as (
-    -- 매장당 한 줄: heartbeat 가 가장 싱싱한 세션을 대표로 쓴다.
+  -- _brand_player_session_health 는 이미 revoked_at is null 로 거른다.
+  with canonical as (
     select distinct on (h.user_id) h.*
       from public._brand_player_session_health(greatest(1, p_minutes)) h
      order by h.user_id, h.seconds_since_heartbeat asc
   )
-  select r.brand_id, r.brand_name, r.user_id, r.store_label,
-         extract(epoch from (now() - f.last_signal_at))::int,
-         f.last_signal_at,
-         r.session_id, r.device, r.current_track_title,
-         r.seconds_on_current_track, r.stall_threshold_seconds,
-         coalesce((public.resolve_brand_playback_window(r.brand_id)->>'should_play')::boolean, true),
+  select c.brand_id, c.brand_name, c.user_id, c.store_label,
+         c.seconds_since_heartbeat,
+         c.last_seen_at,
+         c.session_id, c.device, c.current_track_title,
+         c.seconds_on_current_track, c.stall_threshold_seconds,
+         coalesce((public.resolve_brand_playback_window(c.brand_id)->>'should_play')::boolean, true),
          exists (select 1 from public.brand_player_monitoring_exempt e
-                  where e.store_user_id = r.user_id)
-    from rep r
-    join freshest f on f.user_id = r.user_id
+                  where e.store_user_id = c.user_id)
+    from canonical c
 $$;
 
 comment on function public._brand_player_liveness(integer) is
-  '매장별 가장 싱싱한 heartbeat 의 나이(초). 제어 heartbeat 와 재생 검증 heartbeat 중 최신값을 쓴다.';
+  '매장별 canonical session(revoked 제외, heartbeat 가 가장 싱싱한 것)과 그 heartbeat 나이(초). 생존 판정의 유일한 출처다.';
 
 revoke all on function public._brand_player_liveness(integer) from public, anon;
 
@@ -114,6 +105,11 @@ revoke all on function public._brand_player_liveness(integer) from public, anon;
 --    영업 종료(resolve_brand_playback_window.should_play=false)와 감시 제외
 --    계정은 아무리 조용해도 장애로 올리지 않는다.
 -- ----------------------------------------------------------------------------
+-- 옛 3인자 시그니처(20분 grace)를 **먼저** 지운다.
+-- 새 4인자와 함께 남아 있는 동안 detect_brand_player_incidents() 무인자 호출은
+-- 두 후보가 다 기본값을 가져 ambiguous 로 실패한다. 크론이 그 틈에 돌면 에러가 난다.
+drop function if exists public.detect_brand_player_incidents(integer, integer, integer);
+
 create or replace function public.detect_brand_player_incidents(
   p_suspected_seconds integer default 180,
   p_down_seconds      integer default 300,
@@ -323,13 +319,21 @@ $fn$;
 
 revoke all on function public.detect_brand_player_incidents(integer, integer, integer, integer) from public, anon;
 
--- 옛 시그니처(20분 grace)는 남겨두면 크론이나 운영자가 실수로 부를 수 있다.
-drop function if exists public.detect_brand_player_incidents(integer, integer, integer);
-
 -- ----------------------------------------------------------------------------
 -- 4) 크론 — 5분에서 1분으로. 300초 임계는 1분 주기여야 의미가 있다.
 --    (5분 주기면 최악의 경우 300+300=600초까지 늦어진다.)
 -- ----------------------------------------------------------------------------
-select cron.alter_job(
-  (select jobid from cron.job where jobname = 'srr-brand-player-health'),
-  schedule => '* * * * *');
+do $cron$
+declare v_id bigint;
+begin
+  select jobid into v_id from cron.job where jobname = 'srr-brand-player-health';
+  if v_id is null then
+    -- 잡이 없으면 새로 만든다(중복 생성 아님 — 위 조회가 없을 때만 온다).
+    perform cron.schedule('srr-brand-player-health', '* * * * *',
+                          'select public.cron_check_brand_player_health();');
+  else
+    -- 있으면 주기만 바꾼다. alter_job 은 제자리 수정이라 중복 잡이 생기지 않는다.
+    perform cron.alter_job(v_id, schedule => '* * * * *');
+  end if;
+end
+$cron$;
