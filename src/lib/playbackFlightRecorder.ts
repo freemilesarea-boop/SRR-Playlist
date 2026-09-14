@@ -70,6 +70,10 @@ export type AppEventName =
   // 16A — 페이지와 SW 의 build 가 어긋났다. **관측 전용**이며 이것만으로
   // 장애 처리도 리로드도 하지 않는다.
   | 'PAGE_SW_BUILD_MISMATCH'
+  // 21 — 정지의 **모양**. 특히 FROZEN_AUDIO_STATE(paused=false · readyState>=2 ·
+  // error 없음 · 위치만 정지)는 waiting/stalled/error 가 하나도 뜨지 않아
+  // 이벤트 기반 감시로는 원리적으로 못 본다. 관측 전용 — 복구는 사다리가 한다.
+  | 'AUDIO_FREEZE_CLASSIFIED'
   | 'STALL_SNAPSHOT';
 
 export type FlightEventName = MediaEventName | AppEventName;
