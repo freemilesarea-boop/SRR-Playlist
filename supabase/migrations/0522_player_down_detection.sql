@@ -90,7 +90,9 @@ $$;
 comment on function public._brand_player_liveness(integer) is
   '매장별 canonical session(revoked 제외, heartbeat 가 가장 싱싱한 것)과 그 heartbeat 나이(초). 생존 판정의 유일한 출처다.';
 
-revoke all on function public._brand_player_liveness(integer) from public, anon;
+-- 권한 — _brand_player_session_health 와 같은 모양으로 맞춘다(postgres + service_role).
+revoke all on function public._brand_player_liveness(integer) from public, anon, authenticated;
+grant execute on function public._brand_player_liveness(integer) to service_role;
 
 -- ----------------------------------------------------------------------------
 -- 3) 감지 — 2단계 + 무음 기준
@@ -317,7 +319,25 @@ begin
 end;
 $fn$;
 
-revoke all on function public.detect_brand_player_incidents(integer, integer, integer, integer) from public, anon;
+-- 권한 정리 — 여기가 이번 감사에서 나온 기존 과다 부여다.
+--
+-- 옛 함수 ACL 은 postgres=X | authenticated=X | service_role=X 였다. 즉 **로그인한
+-- 아무나** 장애 감지를 돌릴 수 있었다. 이 함수는 incident 를 쓰고 admin_notifications
+-- 를 넣고 _notify_brand_player_alert 로 Slack HTTP POST 까지 쏜다 — 반복 호출하면
+-- 운영 알림을 오염시킬 수 있다. 감지는 크론(postgres)과 운영 도구(service_role)만
+-- 돌리면 된다.
+--
+-- drop 후 create 한 새 함수는 기본 ACL(PUBLIC EXECUTE)로 시작하므로 회수가 필수고,
+-- service_role 은 명시적으로 다시 줘야 한다(PUBLIC 으로 얻던 권한이 사라지므로).
+revoke all on function public.detect_brand_player_incidents(integer, integer, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.detect_brand_player_incidents(integer, integer, integer, integer)
+  to service_role;
+
+-- 래퍼도 같이 잠근다. SECURITY DEFINER 라 여기가 열려 있으면 위의 회수가 통째로
+-- 우회된다 — authenticated 가 래퍼를 부르면 본체가 postgres 권한으로 실행된다.
+revoke all on function public.cron_check_brand_player_health() from public, anon, authenticated;
+grant execute on function public.cron_check_brand_player_health() to service_role;
 
 -- ----------------------------------------------------------------------------
 -- 4) 크론 — 5분에서 1분으로. 300초 임계는 1분 주기여야 의미가 있다.

@@ -84,11 +84,22 @@ describe('보안', () => {
     expect(sql).toContain("'store_user_id', b.user_id");
   });
 
-  it('새 함수에 public·anon EXECUTE 를 주지 않는다', () => {
+  it('새 함수에 public·anon·authenticated EXECUTE 를 주지 않는다', () => {
     expect(sql).toContain(
-      'revoke all on function public._brand_player_liveness(integer) from public, anon;');
+      'revoke all on function public._brand_player_liveness(integer) from public, anon, authenticated;');
+    expect(sql).toMatch(
+      /revoke all on function public\.detect_brand_player_incidents\(integer, integer, integer, integer\)\s*\n?\s*from public, anon, authenticated;/);
+  });
+
+  it('감지는 service_role 만 돌릴 수 있다 — 로그인 사용자가 Slack 을 울릴 수 없다', () => {
+    // 옛 ACL 은 authenticated=X 였다. 이 함수는 Slack HTTP POST 까지 쏜다.
+    expect(sql).toMatch(/grant execute on function public\.detect_brand_player_incidents/);
+    expect(sql).toContain('to service_role;');
+  });
+
+  it('SECURITY DEFINER 래퍼도 같이 잠근다 (안 그러면 회수가 우회된다)', () => {
     expect(sql).toContain(
-      'revoke all on function public.detect_brand_player_incidents(integer, integer, integer, integer) from public, anon;');
+      'revoke all on function public.cron_check_brand_player_health() from public, anon, authenticated;');
   });
 
   it('옛 3인자 시그니처(20분 grace)를 새 함수 생성 **전에** 지운다', () => {
