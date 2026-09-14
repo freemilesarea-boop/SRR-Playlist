@@ -31,8 +31,64 @@ import {
   parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
 } from '@/lib/remoteRecovery';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
+import {
+  pageBuildHash, resolveNavigationType, readServiceWorkerState,
+  requestServiceWorkerIdentity, isPageSwBuildMismatch,
+} from '@/lib/pwaBuildIdentity';
+import { logPlaybackDiagnostic } from '@/lib/playbackDiagnostics';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
+
+/**
+ * 16A — 지금 돌고 있는 코드의 신원. heartbeat 마다 같은 값을 보내도 된다.
+ *
+ * swBuildHash 는 SW 에게 물어봐야 알 수 있어 비동기다. 한 번 받으면 캐시한다 —
+ * 같은 문서가 사는 동안 SW 가 바뀌면 controllerchange 로 페이지가 리로드되므로
+ * (main.tsx), 문서 수명 안에서는 고정으로 봐도 된다.
+ *
+ * 실패해도 null 로 둘 뿐, heartbeat 를 막지 않는다. 관측이 재생을 방해하면 안 된다.
+ */
+let cachedSwBuildHash: string | null = null;
+let swIdentityAsked = false;
+let mismatchLogged = false;
+
+function buildIdentityPayload() {
+  const sw = readServiceWorkerState();
+  return {
+    pageBuildHash: pageBuildHash(),
+    swBuildHash: cachedSwBuildHash,
+    swControlled: sw.controlled,
+    navigationType: resolveNavigationType(),
+  };
+}
+
+/** SW 에게 identity 를 한 번 물어보고 캐시한다. 응답이 없으면 null 로 남긴다. */
+async function ensureSwIdentity(): Promise<void> {
+  if (swIdentityAsked) return;
+  swIdentityAsked = true;
+  const id = await requestServiceWorkerIdentity();
+  cachedSwBuildHash = id?.swBuildHash ?? null;
+
+  // 관측 이벤트일 뿐이다 — 이걸로 장애 처리도, 리로드도 하지 않는다(§9).
+  if (!mismatchLogged && isPageSwBuildMismatch(pageBuildHash(), cachedSwBuildHash)) {
+    mismatchLogged = true;
+    recordFlightEvent('PAGE_SW_BUILD_MISMATCH');
+    void logPlaybackDiagnostic('session_start', {
+      reason: 'unknown',
+      playerMode: 'brand',
+      context: {
+        kind: 'PAGE_SW_BUILD_MISMATCH',
+        pageBuildHash: pageBuildHash(),
+        swBuildHash: cachedSwBuildHash,
+      },
+    });
+  }
+}
+
+/** 테스트용 — 모듈 수준 캐시를 비운다. */
+export function __resetBuildIdentityCacheForTest(): void {
+  cachedSwBuildHash = null; swIdentityAsked = false; mismatchLogged = false;
+}
 
 interface Options {
   brandId: string | null;
@@ -106,7 +162,7 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     if (reported === lastTrackIdRef.current) return;
     lastTrackIdRef.current = reported;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua)
+    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua, buildIdentityPayload())
       .then(consumeHeartbeat)
       .catch(() => { /* silent */ });
   }, [enabled, brandId, sessionToken, currentTrackId, audioActive]);
@@ -120,10 +176,11 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
       const tid = resolveReportedTrackId(st.queue[st.index]?.id ?? null, lastAudibleTrackIdRef);
       lastTrackIdRef.current = tid;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua)
+      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua, buildIdentityPayload())
         .then((res) => { if (!cancelled) consumeHeartbeat(res); })
         .catch(() => { /* silent */ });
     };
+    void ensureSwIdentity();
     fire();
     const id = window.setInterval(() => { if (!cancelled) fire(); }, HEARTBEAT_INTERVAL_MS);
     return () => { cancelled = true; window.clearInterval(id); };

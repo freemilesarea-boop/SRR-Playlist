@@ -25,21 +25,55 @@ clientsClaim();
 // workbox 는 revision 이 바뀐 파일은 자연히 갱신하지만, 삭제된 파일 항목은 남을 수 있음.
 cleanupOutdatedCaches();
 
-precacheAndRoute(self.__WB_MANIFEST);
+// injectManifest 는 `self.__WB_MANIFEST` 가 소스에 **정확히 한 번**만 나오길 요구한다.
+// 한 번만 꺼내서 precache 와 엔트리 수 양쪽에 쓴다.
+const WB_MANIFEST = self.__WB_MANIFEST;
+
+precacheAndRoute(WB_MANIFEST);
 
 // 빌드 시점 inject — main.tsx 의 SW_RELOAD_KEY 와 일치하는 BUILD_ID.
 // import.meta.env 는 SW 컨텍스트에서도 vite define 으로 inject 됨.
 declare const __SW_BUILD_ID__: string | undefined;
 
+// 16A — 이 SW 가 어느 배포본인가. `/sw.js` 는 모든 배포가 같은 URL 이라
+// scriptURL 만으로는 판별할 수 없다(관측 전용, 비민감).
+declare const __SW_BUILD_HASH__: string | undefined;
+
+/** precache 엔트리 수 — 매니페스트가 실제로 실렸는지 보는 용도. */
+const PRECACHE_ENTRY_COUNT: number = Array.isArray(WB_MANIFEST) ? WB_MANIFEST.length : 0;
+
+/** 이 SW 런타임이 activate 된 시각. 서버 시각과 섞지 않는다. */
+let activatedAt: number | null = null;
+
 // main.tsx 의 updatefound → SKIP_WAITING 메시지로 대기중 SW 즉시 활성화.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     void self.skipWaiting();
+    return;
+  }
+  // 16A — 페이지가 "너 어느 빌드냐" 고 물으면 답한다.
+  //
+  // 왜 필요한가 — 2026-09-14 숙대점에서 페이지가 옛 번들로 떴는데, 그걸
+  // session_start context 가 비어 있다는 **부재**로만 역추론해야 했다. 그때
+  // "SW 는 어느 빌드였나" 는 끝내 답하지 못했다. 이제는 물어보면 된다.
+  // PII 없음 — 빌드 해시·엔트리 수·scope·자기 런타임 기준 시각뿐이다.
+  if (event.data && event.data.type === 'GET_SW_IDENTITY') {
+    const reply = {
+      type: 'SW_IDENTITY',
+      swBuildHash: typeof __SW_BUILD_HASH__ === 'string' ? __SW_BUILD_HASH__ : null,
+      precacheEntryCount: PRECACHE_ENTRY_COUNT,
+      scope: self.registration.scope,
+      activatedAt,
+    };
+    const port = event.ports && event.ports[0];
+    if (port) port.postMessage(reply);
+    else if (event.source) (event.source as Client).postMessage(reply);
   }
 });
 
 // activate — 오래된 캐시 정리 + 모든 window client 에 활성화 알림.
 self.addEventListener('activate', (event) => {
+  activatedAt = Date.now();
   event.waitUntil((async () => {
     // 현재 SW 가 관리하는 workbox precache 이름 (workbox 는 scope 별로 이름 부여)
     // 그 외 workbox- prefix 캐시는 이전 SW/빌드 유물 → 삭제.
