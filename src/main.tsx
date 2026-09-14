@@ -14,7 +14,7 @@ import {
   decideUpdateActivation, deterministicStaggerMs, alreadyActivated, markActivated,
   noteAutoplaySignals, autoplayTrusted,
 } from './lib/zeroTouchUpdate';
-import { logPlaybackDiagnostic } from './lib/playbackDiagnostics';
+import { beaconPlaybackDiagnostic } from './lib/playbackDiagnostics';
 import { usePlayerStore } from './store/playerStore';
 import { useAuthStore } from './store/authStore';
 import { reloadApp } from './lib/playbackGuard';
@@ -96,7 +96,8 @@ function applyReload(reason: string): void {
   if (alreadyActivated(BUILD_ID)) return;
   window.sessionStorage.setItem(SW_RELOAD_KEY, '1');
   markActivated(BUILD_ID);
-  void logPlaybackDiagnostic('update_activated', {
+  // 이 줄 다음에 문서가 사라진다 — keepalive 가 아니면 기록이 남지 않는다.
+  beaconPlaybackDiagnostic('update_activated', {
     reason: 'sw_update',
     context: { build: BUILD_ID, why: reason, deferredMs: deferredSince ? Date.now() - deferredSince : 0 },
   });
@@ -133,7 +134,7 @@ function requestReload(reason: string): void {
   if (deferredSince === null) {
     deferredSince = Date.now();
     console.warn('[sw] 매장 재생 중 — 업데이트 적용을 미룹니다', { build: BUILD_ID, reason });
-    void logPlaybackDiagnostic('update_pending', {
+    beaconPlaybackDiagnostic('update_pending', {
       reason: 'sw_update',
       context: { build: BUILD_ID, why: reason, autoplayTrusted: autoplayTrusted() },
     });
@@ -160,7 +161,7 @@ function requestReload(reason: string): void {
 
   if (decision.blocker !== lastBlockerLogged) {
     lastBlockerLogged = decision.blocker;
-    void logPlaybackDiagnostic('update_blocked', {
+    beaconPlaybackDiagnostic('update_blocked', {
       reason: 'sw_update',
       context: { build: BUILD_ID, blocker: decision.blocker, deferredMs: Date.now() - deferredSince },
     });
@@ -186,6 +187,16 @@ registerApplyUpdate(() => applyReload('manual'));
 if (!isNativeApp() && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   // (1) controllerchange — 새 SW 가 page control 잡으면 즉시 reload (build 당 1회)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // 24 — 새 SW 가 이 문서를 넘겨받은 그 순간을 먼저 남긴다.
+    //
+    // 왜 여기서, 왜 beacon 인가 — 숙대점이 배포 두 건을 자동으로 받았는데 업데이트
+    // 진단이 한 줄도 남지 않았다. 우리 게이트가 한 일인지, 브라우저가 스스로 문서를
+    // 다시 띄운 것인지 서버에서 가릴 방법이 없었다. 이 한 줄이 그 둘을 가른다:
+    // 이것만 남고 update_* 가 없으면 리로드는 우리 것이 아니다.
+    beaconPlaybackDiagnostic('sw_controllerchange', {
+      reason: 'sw_update',
+      context: { build: BUILD_ID },
+    });
     requestReload('controllerchange');
   });
 
@@ -197,6 +208,10 @@ if (!isNativeApp() && typeof window !== 'undefined' && 'serviceWorker' in naviga
     if (window.sessionStorage.getItem(msgKey)) return;
     window.sessionStorage.setItem(msgKey, '1');
     console.warn('[sw] SW_ACTIVATED message — 리로드 판단');
+    beaconPlaybackDiagnostic('sw_controllerchange', {
+      reason: 'sw_update',
+      context: { build: BUILD_ID, why: 'sw-activated' },
+    });
     requestReload('sw-activated');
   });
 

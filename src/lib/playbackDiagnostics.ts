@@ -13,7 +13,7 @@
  *   • fire-and-forget. 기록 실패가 재생을 막지 않는다.
  *   • 서버에서도 분당 20건 제한이 걸려 있다(폭주 방지).
  */
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isNativeApp } from '@/lib/native';
 
 export type DiagnosticEvent =
@@ -30,7 +30,10 @@ export type DiagnosticEvent =
   // 만들려면 먼저 업데이트가 감지됐는지부터 보여야 한다.
   | 'update_pending'
   | 'update_activated'
-  | 'update_blocked';
+  | 'update_blocked'
+  // 24 — 새 SW 가 이 문서를 넘겨받은 **그 순간**. 리로드가 곧바로 따라올 수 있어
+  // 일반 RPC 로는 기록이 남지 않는다(아래 beacon 참고).
+  | 'sw_controllerchange';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드
@@ -108,6 +111,64 @@ export function isCutShort(opts: {
 }
 
 /** 재생 기록 한 줄. 실패는 조용히 무시된다. */
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 리로드를 견디는 기록 — keepalive beacon                                      */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 왜 따로 필요한가 — 2026-09-14 숙대점이 두 번 연속 배포를 자동으로 받았는데
+ * update_pending / update_blocked / update_activated 가 **전 매장 통틀어 0건**이었다.
+ * 같은 함수로 보내는 session_start 는 같은 기기에서 정상으로 남는다. 차이는 하나뿐이다:
+ * 업데이트 기록은 **네비게이션 직전**에 나가고, 진행 중인 fetch 는 문서가 사라질 때
+ * 함께 취소된다.
+ *
+ * 그래서 이 경로는 `keepalive: true` 로 보낸다 — 문서가 사라져도 브라우저가 요청을
+ * 끝까지 배달한다. 실패하면 조용히 넘어간다. 관측이 재생을 방해하면 안 된다.
+ *
+ * 토큰은 auth 상태 변화에서 받아 캐시한다(동기적으로 읽어야 하므로). 없으면 anon 으로
+ * 보내고, 그 경우 서버의 auth.uid() 가 null 이라 행이 생기지 않는다 — 조용한 실패지만
+ * 잘못된 user_id 로 남기는 것보다 낫다.
+ */
+let cachedAccessToken: string | null = null;
+
+if (isSupabaseConfigured) {
+  void supabase.auth.getSession()
+    .then(({ data }) => { cachedAccessToken = data.session?.access_token ?? null; })
+    .catch(() => { /* noop */ });
+  supabase.auth.onAuthStateChange((_e, session) => {
+    cachedAccessToken = session?.access_token ?? null;
+  });
+}
+
+export function beaconPlaybackDiagnostic(
+  event: DiagnosticEvent,
+  opts: { reason?: DiagnosticReason; context?: Record<string, unknown>; playerMode?: PlayerMode } = {},
+): void {
+  try {
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (!url || !anon || typeof fetch !== 'function') return;
+    void fetch(`${url}/rest/v1/rpc/log_store_playback_diagnostic`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anon,
+        Authorization: `Bearer ${cachedAccessToken ?? anon}`,
+      },
+      body: JSON.stringify({
+        p_event: event,
+        p_reason: opts.reason ?? null,
+        p_context: opts.context ?? {},
+        p_player_mode: opts.playerMode ?? null,
+        p_is_native: isNativeApp(),
+      }),
+    }).catch(() => { /* 진단 기록 실패가 재생을 막아선 안 된다 */ });
+  } catch {
+    /* 진단 기록 실패가 재생을 막아선 안 된다 */
+  }
+}
+
 export async function logPlaybackDiagnostic(
   event: DiagnosticEvent,
   opts: {
