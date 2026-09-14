@@ -255,3 +255,47 @@ describe('§10 Wake Lock 재획득', () => {
     expect(LIVENESS_PAYLOAD_KEYS).toContain('wakeLockActive');
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* §7 (Phase 21) — 타이머가 트랙마다 누적되지 않는다                           */
+/*                                                                            */
+/*    24시간 매장은 하루 수백 곡을 돈다. 트랙 전환마다 타이머가 하나씩 남으면    */
+/*    그게 곧 구형 기기의 프로세스 압박이다.                                    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+describe('§7 타이머 수명', () => {
+  it('장수명 타이머는 전부 ref 에 보관된다 (정리할 손잡이가 있다)', () => {
+    for (const ref of [
+      'crossfadeTimeoutRef', 'metaTimerRef', 'nextTimerRef',
+      'preloadTimeoutRef', 'probeTimerRef',
+    ]) {
+      expect(playerSrc).toContain(ref);
+    }
+  });
+
+  it('보관된 타이머는 모두 해제 경로가 있다', () => {
+    for (const ref of [
+      'crossfadeTimeoutRef', 'metaTimerRef', 'nextTimerRef',
+      'preloadTimeoutRef', 'probeTimerRef',
+    ]) {
+      // clearTimeout(ref.current) 또는 clearInterval(ref.current) 형태가 있어야 한다.
+      expect(playerSrc).toMatch(new RegExp(`clear(Timeout|Interval)\\(\\s*${ref}\\.current`));
+    }
+  });
+
+  it('해제 횟수가 생성 횟수 이상이다 (남는 타이머가 없다)', () => {
+    const created = (playerSrc.match(/window\.set(Timeout|Interval)\(/g) ?? []).length;
+    const cleared = (playerSrc.match(/clear(Timeout|Interval)\(/g) ?? []).length;
+    expect(cleared).toBeGreaterThanOrEqual(created);
+  });
+
+  it('watchdog / heartbeat 인터벌은 effect cleanup 에서 해제된다', () => {
+    // setInterval 을 만들고 cleanup 없이 두면 언마운트마다 하나씩 쌓인다.
+    expect(playerSrc).toContain('window.clearInterval(iv)');
+  });
+
+  it('Wake Lock 재시도 타이머도 언마운트 시 정리된다', () => {
+    const wl = read('src/hooks/useWakeLock.ts');
+    expect(wl).toContain('if (retryTimer !== null) clearTimeout(retryTimer);');
+  });
+});
