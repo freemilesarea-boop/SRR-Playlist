@@ -27,8 +27,11 @@ describe('1. heartbeat 에 pageBuildHash 를 싣는다', () => {
   });
 
   it('두 heartbeat 경로(트랙 변경 · 60초 주기) 모두 identity 를 싣는다', () => {
-    const calls = hookSrc.match(/brandPlayerHeartbeat\([^)]*buildIdentityPayload\(\)\)/g) ?? [];
-    expect(calls.length).toBe(2);
+    // 인자가 더 붙어도(17 liveness) 깨지지 않게 호출 단위로 센다 — 지키려는 것은
+    // "두 경로 다 identity 를 싣는다" 이지 인자 개수가 아니다.
+    const calls = hookSrc.match(/brandPlayerHeartbeat\((?:[^()]|\([^()]*\))*\)/g) ?? [];
+    const withIdentity = calls.filter((c) => c.includes('buildIdentityPayload()'));
+    expect(withIdentity.length).toBe(2);
   });
 
   it('서버 기대값을 복사해 보내지 않는다 — 자기 빌드 해시만 보낸다', () => {

@@ -266,6 +266,8 @@ export function buildHash(): string {
 }
 
 /** Player mount 마다 새 인스턴스 id. */
+let moduleInstanceId: string | null = null;
+
 export function newPlayerInstanceId(): string {
   try {
     const c = globalThis.crypto;
@@ -319,12 +321,34 @@ export function resetFlightRecorder(): void {
   state = null;
 }
 
+/** 테스트용 — 문서 수준 인스턴스 id 까지 비운다. */
+export function __resetPlayerInstanceIdForTest(): void {
+  moduleInstanceId = null;
+}
+
 export function getFlightBuffer(): readonly FlightEntry[] {
   return state ? state.buffer : [];
 }
 
 export function getPlayerInstanceId(): string | null {
-  return state ? state.playerInstanceId : null;
+  return state ? state.playerInstanceId : moduleInstanceId;
+}
+
+/**
+ * 이 **문서**의 플레이어 인스턴스 id. 처음 부를 때 만들고 그 뒤로는 같은 값이다.
+ *
+ * 왜 모듈 수준인가 — 2026-09-14 원격 복구에서 가장 구체적인 target 인
+ * playerInstanceId 를 쓰지 못했다. 값이 Flight Recorder 안에만 있었고, 그건
+ * Player mount effect 가 돈 뒤에야 채워진다. 페이지의 session_start 는 그보다
+ * 먼저 나갈 수 있어 null 이 찍혔다.
+ *
+ * 여기로 올려두면 호출 순서와 무관하게 **한 문서 = 한 id** 가 보장된다.
+ * (Player 가 재마운트돼도 같은 탭이면 같은 id 다 — 원격 복구가 겨냥하는 대상은
+ *  React 컴포넌트가 아니라 그 탭이다.)
+ */
+export function ensurePlayerInstanceId(): string {
+  if (!moduleInstanceId) moduleInstanceId = newPlayerInstanceId();
+  return moduleInstanceId;
 }
 
 function readContext(): FlightContext {

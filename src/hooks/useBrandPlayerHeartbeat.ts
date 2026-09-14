@@ -31,6 +31,7 @@ import {
   parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
 } from '@/lib/remoteRecovery';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
+import { readLivenessSnapshot, setRealtimeStatus } from '@/lib/clientLiveness';
 import {
   pageBuildHash, resolveNavigationType, readServiceWorkerState,
   requestServiceWorkerIdentity, isPageSwBuildMismatch,
@@ -60,6 +61,21 @@ function buildIdentityPayload() {
     swControlled: sw.controlled,
     navigationType: resolveNavigationType(),
   };
+}
+
+/**
+ * 17 — 이 heartbeat 순간의 클라이언트 상태.
+ *
+ * 읽기만 한다. 값을 못 읽으면 null 로 둘 뿐 heartbeat 를 막지 않는다 —
+ * 관측이 재생을 방해하면 안 된다(16A 와 같은 원칙).
+ */
+function buildLivenessPayload() {
+  let wakeLockActive: boolean | null = null;
+  try { wakeLockActive = usePlaybackHealthStore.getState().wakeLockActive; } catch { /* noop */ }
+  return readLivenessSnapshot({
+    playerInstanceId: getPlayerInstanceId(),
+    wakeLockActive,
+  });
 }
 
 /** SW 에게 identity 를 한 번 물어보고 캐시한다. 응답이 없으면 null 로 남긴다. */
@@ -162,7 +178,7 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     if (reported === lastTrackIdRef.current) return;
     lastTrackIdRef.current = reported;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua, buildIdentityPayload())
+    void brandPlayerHeartbeat(brandId, sessionToken, reported, ua, buildIdentityPayload(), buildLivenessPayload())
       .then(consumeHeartbeat)
       .catch(() => { /* silent */ });
   }, [enabled, brandId, sessionToken, currentTrackId, audioActive]);
@@ -176,7 +192,7 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
       const tid = resolveReportedTrackId(st.queue[st.index]?.id ?? null, lastAudibleTrackIdRef);
       lastTrackIdRef.current = tid;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null;
-      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua, buildIdentityPayload())
+      void brandPlayerHeartbeat(brandId, sessionToken, tid, ua, buildIdentityPayload(), buildLivenessPayload())
         .then((res) => { if (!cancelled) consumeHeartbeat(res); })
         .catch(() => { /* silent */ });
     };
@@ -205,6 +221,9 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
         },
         (status) => {
           recordFlightEvent('REALTIME_CHANNEL_STATUS', { extra: { status } });
+          // 다음 heartbeat 가 이 상태를 서버로 옮긴다. 명령이 배달되지 않았을 때
+          // "채널이 끊겨서" 인지 "프로세스가 없어서" 인지 가르는 유일한 단서다.
+          setRealtimeStatus(status);
         },
       );
     } catch {

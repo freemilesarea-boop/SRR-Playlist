@@ -8,6 +8,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { isNativeApp } from '@/lib/native';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { ensurePlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { buildHash } from '@/lib/playbackFlightRecorder';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -158,7 +159,13 @@ export default function BrandPlayerPage() {
       // "설치하라고 했는데 했나?" 를 물어볼 수밖에 없었다(숙대점 2026-09-12).
       // buildHash — 이 기기가 어느 배포본을 돌고 있는지. 매장별로 오래된 빌드가
       // 남아있는지(stale client) 판별할 수단이 지금까지 없었다.
-      context: { device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()), buildHash: buildHash() },
+      context: {
+        device: currentPlaybackDeviceRisk(isNativeApp(), isStandalone()),
+        buildHash: buildHash(),
+        // 17 — 원격 복구의 가장 구체적인 target. 2026-09-14 에는 이 값이
+        // Flight Recorder flush 때만 서버에 닿아 session_id 로 대신 겨냥해야 했다.
+        playerInstanceId: ensurePlayerInstanceId(),
+      },
     });
     return watchPageLifecycle('brand');
   }, []);
