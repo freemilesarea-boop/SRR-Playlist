@@ -1425,6 +1425,15 @@ export default function Player() {
         recordPauseRequest('INACTIVE_AUDIO', other, getAudioObjectId(other));
         other.pause();
         other.removeAttribute('src');
+        // src 를 지우는 것만으로는 media element load algorithm 이 돌지 않는다 —
+        // element 는 직전 리소스(디코딩 버퍼 포함, 매장 음원 약 4.6MB)를 다음
+        // preload 까지 그대로 붙들고 있다. load() 가 그걸 실제로 놓게 한다.
+        // Android 10 같은 저메모리 기기에서는 그 한 곡분이 아깝다.
+        //
+        // 이게 지금까지 안전하지 않았던 이유: load() 는 emptied 를 발생시키고,
+        // 그 핸들러가 슬롯을 구분하지 않아 활성 재생 중에 audioActive 를 꺼뜨렸다.
+        // 위에서 false 전이를 활성 슬롯으로 한정했으므로 이제 안전하다.
+        try { other.load(); } catch { /* noop */ }
       }
 
       // playing=true 면 canplay 이벤트에서 자동 play 호출됨 (onCanPlay)
@@ -2435,8 +2444,19 @@ export default function Player() {
           // (기존에는 수동 ▶ 클릭에서만 초기화돼, 24시간 매장에서 한 곡이 며칠에 걸쳐
           //  순간 끊김 3회를 누적하면 그 뒤로는 첫 blip 에 바로 영구 정지했다.)
           // 실제 소리 여부를 전역에 반영 — 배포 리로드 게이트가 이 값을 본다.
+          // 활성 슬롯 판정은 healthStateRef 로 한다. activeRef() 는 렌더 스코프
+          // activeIdx 를 닫아버려 deps 가 [] 인 이 effect 안에서는 stale 이 된다.
+          const activeIdxNow = healthStateRef.current.activeIdx;
+          const isActiveEl = (slot === 'A' && activeIdxNow === 0) || (slot === 'B' && activeIdxNow === 1);
+          // 소리가 나기 시작한 것은 어느 슬롯이든 사실이다(크로스페이드 중엔 둘 다 난다).
           if (ev === 'playing') usePlaybackHealthStore.getState().setAudioActive(!el.paused);
-          if (ev === 'pause' || ev === 'emptied') usePlaybackHealthStore.getState().setAudioActive(false);
+          // 반대로 **꺼졌다** 는 판정은 활성 슬롯에서만 받는다. 비활성(프리로드)
+          // 슬롯을 정리할 때 나는 pause/emptied 까지 받으면, 활성이 멀쩡히 재생
+          // 중인데 audioActive 가 false 로 떨어진다 — 그 값은 배포 리로드 게이트와
+          // heartbeat 의 "실제 소리가 난 곡" 보고를 좌우한다.
+          if ((ev === 'pause' || ev === 'emptied') && isActiveEl) {
+            usePlaybackHealthStore.getState().setAudioActive(false);
+          }
           if (ev === 'playing' && !el.paused) {
             const tid = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id;
             if (tid) networkRetriedRef.current.delete(tid);
