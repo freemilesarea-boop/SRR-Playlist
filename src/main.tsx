@@ -12,6 +12,7 @@ import { usePlaybackHealthStore } from './store/playbackHealthStore';
 import { shouldDeferReload, registerApplyUpdate } from './lib/swUpdateGate';
 import {
   decideUpdateActivation, deterministicStaggerMs, alreadyActivated, markActivated,
+  noteAutoplaySignals, autoplayTrusted,
 } from './lib/zeroTouchUpdate';
 import { logPlaybackDiagnostic } from './lib/playbackDiagnostics';
 import { usePlayerStore } from './store/playerStore';
@@ -73,17 +74,21 @@ let deferredSince: number | null = null;
 let deferTimer: number | null = null;
 let audioSub: (() => void) | null = null;
 /**
- * 이 문서가 **제스처 없이** 소리를 시작했는가.
+ * 이 문서가 **제스처 없이** 소리를 시작했는가 — 누적 관측은 zeroTouchUpdate 가 소유한다.
  *
  * 리로드는 사용자 제스처를 잃는다. 한 번이라도 자동재생이 막힌 문서를 다시
  * 띄우면 또 막힐 것이고, 무인 매장에서는 그대로 무음이 된다. 그래서 자동
  * 활성화는 이 신뢰가 있을 때만 한다 — 없으면 옛 빌드로 도는 편이 낫다.
+ *
+ * 23 — 이 관측은 **업데이트가 감지되기 전부터** 돌아야 한다. 예전에는 첫 미룸
+ * 이후에야 구독을 걸어 그 뒤의 전이만 봤고, 그래서 이미 재생 중이던 문서는
+ * audioEverActive 가 false 인 채로 첫 트랙 경계를 autoplay_not_trusted 로
+ * 버렸다 — 한 곡이 이유 없이 늦었다. 지금은 부팅 즉시 현재 상태를 한 번 읽고
+ * 그 뒤로 계속 듣는다.
  */
-let autoplayEverBlocked = false;
-let audioEverActive = false;
-
-function autoplayTrusted(): boolean {
-  return audioEverActive && !autoplayEverBlocked;
+if (typeof window !== 'undefined') {
+  noteAutoplaySignals(usePlaybackHealthStore.getState());
+  usePlaybackHealthStore.subscribe(noteAutoplaySignals);
 }
 
 function applyReload(reason: string): void {
@@ -164,8 +169,6 @@ function requestReload(reason: string): void {
   // 사건 기반 — audioActive 가 바뀌는 순간 바로 다시 판단한다.
   if (audioSub === null) {
     audioSub = usePlaybackHealthStore.subscribe((st, prev) => {
-      if (st.autoplayBlocked) autoplayEverBlocked = true;
-      if (st.audioActive) audioEverActive = true;
       if (st.audioActive !== prev.audioActive) requestReload('audio-state-change');
     });
   }

@@ -212,3 +212,68 @@ export function markActivated(buildId: string, storage?: Storage | null): void {
     /* noop */
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 자동재생 신뢰 — 이 문서가 제스처 없이 소리를 냈는가                          */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 왜 모듈이 상태를 갖는가 — 이 판정의 근거는 **문서가 살아온 이력**이지 지금
+ * 한 순간의 값이 아니다. "지금 소리가 난다" 는 제스처로 살아난 것일 수도 있어서
+ * 그것만으로는 신뢰가 되지 않고, "지금 막혀 있지 않다" 도 아까 막혔다가 사람이
+ * 눌러준 것일 수 있다. 그래서 두 사실을 문서 수명 동안 **누적**한다.
+ *
+ * 23 — 예전에는 이 누적을 업데이트가 감지된 **뒤에야** 구독으로 시작했다.
+ * 그래서 이미 재생 중이던 문서는 첫 트랙 경계에서 audioEverActive 가 아직
+ * false 라 autoplay_not_trusted 로 버려지고, 두 번째 경계에야 적용됐다 —
+ * 한 곡(약 3분)이 이유 없이 늦었다. 관측은 처음부터 켜져 있어야 한다.
+ */
+let autoplayEverBlocked = false;
+let audioEverActive = false;
+
+export interface AutoplaySignals {
+  /** 지금 실제로 소리가 나는가. */
+  audioActive: boolean;
+  /** 지금 자동재생 정책에 막혀 있는가. */
+  autoplayBlocked: boolean;
+}
+
+/**
+ * 관측 한 틱을 누적한다. 구독 콜백에서도, 구독을 걸기 전의 현재 상태로도 부른다.
+ * 되돌리지 않는다 — 한 번 막혔던 사실은 그 문서가 사는 동안 사라지지 않는다.
+ */
+export function noteAutoplaySignals(s: AutoplaySignals): void {
+  if (s.autoplayBlocked) autoplayEverBlocked = true;
+  if (s.audioActive) audioEverActive = true;
+}
+
+/**
+ * 리로드 후에도 자동재생이 될 것으로 믿을 근거가 있는가.
+ *
+ * 브라우저 정책을 우회하지 않는다 — 정책이 이미 허락했다는 **증거**만 본다.
+ * 증거가 없으면 자동 활성화하지 않는다(상한을 넘겨도).
+ */
+export function autoplayTrusted(): boolean {
+  return audioEverActive && !autoplayEverBlocked;
+}
+
+/** 관측 누적의 현재 모양. 보고·진단용이며 판정에 쓰지 않는다. */
+export type AutoplayTrustState =
+  | 'AUTOPLAY_UNKNOWN'
+  | 'AUTOPLAY_BLOCKED'
+  | 'AUTOPLAY_RECOVERED_BY_GESTURE'
+  | 'AUTOPLAY_TRUSTED_FOR_RELOAD';
+
+export function autoplayTrustState(now: AutoplaySignals): AutoplayTrustState {
+  if (now.autoplayBlocked) return 'AUTOPLAY_BLOCKED';
+  if (autoplayEverBlocked) {
+    return audioEverActive ? 'AUTOPLAY_RECOVERED_BY_GESTURE' : 'AUTOPLAY_BLOCKED';
+  }
+  return audioEverActive ? 'AUTOPLAY_TRUSTED_FOR_RELOAD' : 'AUTOPLAY_UNKNOWN';
+}
+
+/** 테스트 전용 — 문서 수명 누적을 비운다. */
+export function __resetAutoplayTrustForTest(): void {
+  autoplayEverBlocked = false;
+  audioEverActive = false;
+}
