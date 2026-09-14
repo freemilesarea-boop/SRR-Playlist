@@ -327,6 +327,25 @@ describe('main.tsx 배선', () => {
     }
   });
 
+  it('24 — 그 기록이 리로드를 견딘다 (keepalive beacon)', () => {
+    // 일반 fetch 는 문서가 사라질 때 같이 취소된다. 2026-09-14 숙대점이 배포 두 건을
+    // 자동으로 받았는데 update_* 가 한 줄도 안 남은 것이 그 증거다.
+    for (const e of ['update_pending', 'update_activated', 'update_blocked']) {
+      const at = src.indexOf(`'${e}'`);
+      expect(src.slice(Math.max(0, at - 60), at)).toContain('beaconPlaybackDiagnostic(');
+    }
+    const diag = readFileSync(resolve(process.cwd(), 'src/lib/playbackDiagnostics.ts'), 'utf-8');
+    expect(diag).toContain('keepalive: true');
+  });
+
+  it('24 — controllerchange 를 그 자리에서 남긴다 (누가 리로드했는지 가리는 표식)', () => {
+    expect(src).toContain("beaconPlaybackDiagnostic('sw_controllerchange'");
+    // 판단보다 **먼저** 남겨야 한다 — 판단 도중 문서가 사라질 수 있다.
+    const marker = src.indexOf("beaconPlaybackDiagnostic('sw_controllerchange'");
+    const call = src.indexOf("requestReload('controllerchange')");
+    expect(marker).toBeLessThan(call);
+  });
+
   it('blocker 로그가 유계다 (같은 사유를 매 tick 남기지 않는다)', () => {
     expect(src).toContain('lastBlockerLogged');
   });
