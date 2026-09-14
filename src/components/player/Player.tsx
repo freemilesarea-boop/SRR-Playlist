@@ -2557,7 +2557,7 @@ export default function Player() {
       lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
       // currentTime 이 **실제로** 늘어난 순간. heartbeat 가 이 시각을 서버로 옮긴다.
       // 모듈 변수 한 줄 대입이라 리렌더가 없다 — timeupdate 는 초당 4회 온다.
-      noteAudioProgress();
+      noteAudioProgress(Date.now(), { readyState: target.readyState, networkState: target.networkState });
     }
 
     setCurrentTime(t);

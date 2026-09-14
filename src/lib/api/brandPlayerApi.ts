@@ -130,6 +130,11 @@ export interface HeartbeatLiveness {
   online?: boolean | null;
   realtimeStatus?: string | null;
   wakeLockActive?: boolean | null;
+  storageUsageBytes?: number | null;
+  storageQuotaBytes?: number | null;
+  jsHeapUsedBytes?: number | null;
+  audioReadyState?: number | null;
+  audioNetworkState?: number | null;
 }
 
 export async function brandPlayerHeartbeat(
@@ -155,6 +160,13 @@ export async function brandPlayerHeartbeat(
     p_client_online: liveness?.online ?? null,
     p_realtime_status: liveness?.realtimeStatus ?? null,
     p_wake_lock_active: liveness?.wakeLockActive ?? null,
+    // 18 — 기기 자원. "교체가 필요한가" 를 추측이 아니라 측정으로 답하기 위한 값.
+    // 전부 optional API 라 미지원 환경에서는 null 이다(= 모른다, 정상 아님).
+    p_storage_usage_bytes: liveness?.storageUsageBytes ?? null,
+    p_storage_quota_bytes: liveness?.storageQuotaBytes ?? null,
+    p_js_heap_used_bytes: liveness?.jsHeapUsedBytes ?? null,
+    p_audio_ready_state: liveness?.audioReadyState ?? null,
+    p_audio_network_state: liveness?.audioNetworkState ?? null,
   });
   if (error) throw error;
   return data as BrandPlayerHeartbeatResult;
