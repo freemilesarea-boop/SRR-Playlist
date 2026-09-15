@@ -161,6 +161,11 @@ comment on function public.brand_player_shell_poll(uuid, text) is
 --    목록에서 빠지고 그때는 다시 다른 기기가 canonical 이 된다. 24시간 넘게 열린
 --    incident 는 이미 사람이 봐야 하는 건이라 여기서 더 늘리지 않는다.
 -- ----------------------------------------------------------------------------
+-- ★ 0527 과 같은 이유로 먼저 지운다. create or replace 는 반환 타입을 못 바꾸고,
+--   여기서는 shell_age_seconds 한 칸이 더 붙는다. 빈 DB 에 0522 → 0527 → 0528
+--   순서로 실제 적용해 확인했다.
+drop function if exists public._brand_player_liveness(integer);
+
 create or replace function public._brand_player_liveness(p_minutes integer default 1440)
 returns table(
   brand_id uuid, brand_name text, user_id uuid, store_label text,
