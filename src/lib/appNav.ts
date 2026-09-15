@@ -55,11 +55,6 @@ export interface NavContext {
   storeAccount: boolean;
   /** 이 기기에 연결된 브랜드가 있는가 */
   hasBrand: boolean;
-  /**
-   * 태블릿인가. 매장 계정이라도 폰에서는 홈을 남긴다 —
-   * 점주가 자기 폰에서 앱을 열었을 때 추천·차트로 갈 길이 더보기 시트뿐이면 안 된다.
-   */
-  tablet: boolean;
 }
 
 /** 전체 메뉴는 역할까지 봐야 한다 — 있는 사람에게만 보여준다. */
@@ -114,11 +109,12 @@ export function bottomNavItems(ctx: NavContext): NavItem[] {
   // 한쪽이 더보기 시트 안에 있으면 매번 두 번 눌러야 한다. 보관함은 반대다:
   // 매장에 걸어둔 기기에서 내 보관함을 여는 일은 거의 없다. 그래서 자리를 맞바꿨다.
   // (보관함은 더보기 → '내 음악' 에 그대로 있다.)
+  //
+  // 폰과 태블릿을 일부러 같게 뒀다. 점주가 매장 태블릿과 자기 폰을 번갈아 쓰는데
+  // 기기마다 탭 자리가 다르면 매번 눈으로 찾아야 한다. 홈(추천·차트)은 매장 계정이
+  // 자주 가는 곳이 아니라서 더보기로 내려도 손해가 적다.
   if (ctx.storeAccount || ctx.hasBrand) {
-    // 태블릿은 벽에 세워두고 음악을 트는 기기라 홈(추천)이 앞에 있을 이유가 없다.
-    if (ctx.tablet) return [BRAND, STORE, SEARCH, PROFILE, MORE];
-    // 폰은 손에 들고 일반 앱처럼도 쓴다 — 홈은 남기고 내 정보를 더보기로 내린다.
-    return [HOME, BRAND, STORE, SEARCH, MORE];
+    return [BRAND, STORE, SEARCH, PROFILE, MORE];
   }
 
   // 로그인 전이거나 개인 감상용 — 홈이 앞이되, 매장은 반드시 남긴다.

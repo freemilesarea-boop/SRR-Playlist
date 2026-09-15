@@ -7,7 +7,7 @@ import {
   type MenuContext,
 } from './appNav';
 
-const web: NavContext = { native: false, isCurator: false, storeAccount: false, hasBrand: false, tablet: true };
+const web: NavContext = { native: false, isCurator: false, storeAccount: false, hasBrand: false };
 
 const menuBase: MenuContext = {
   ...web,
@@ -55,16 +55,14 @@ describe('bottomNavItems', () => {
   });
 
   it('브랜드가 묶인 기기도 같은 목록 — 브랜드가 첫 칸', () => {
-    const items = bottomNavItems({ ...web, native: true, hasBrand: true, tablet: true });
+    const items = bottomNavItems({ ...web, native: true, hasBrand: true });
     expect(items[0].to).toBe('/brand');
   });
 
   it('매장/브랜드 하단탭에는 보관함이 없다 — 더보기로 옮겼다', () => {
     // 매장에 걸어둔 기기에서 내 보관함을 여는 일은 거의 없다.
-    for (const tablet of [true, false]) {
-      const items = bottomNavItems({ ...web, native: true, storeAccount: true, tablet });
-      expect(items.map((i) => i.to)).not.toContain('/library');
-    }
+    const items = bottomNavItems({ ...web, native: true, storeAccount: true });
+    expect(items.map((i) => i.to)).not.toContain('/library');
   });
 
   it('빠진 보관함은 더보기 시트에 그대로 있다', () => {
@@ -151,28 +149,29 @@ describe('nativeMenuSections', () => {
   });
 });
 
-describe('하단탭 — 매장 계정이라도 폰에서는 홈을 남긴다', () => {
-  const storePhone: NavContext = {
-    native: true, isCurator: false, storeAccount: true, hasBrand: false, tablet: false,
-  };
-  const storeTablet: NavContext = { ...storePhone, tablet: true };
+describe('하단탭 — 매장 계정은 화면 크기와 무관하게 같은 목록', () => {
+  const store: NavContext = { native: true, isCurator: false, storeAccount: true, hasBrand: false };
 
-  it('폰: 홈·브랜드·매장이 다 있다', () => {
-    // 폰은 손에 들고 일반 앱처럼도 쓴다 — 홈을 빼면 추천·차트로 갈 길이 더보기뿐이다.
-    const keys = bottomNavItems(storePhone).map((i) => i.to ?? i.action);
-    expect(keys).toContain('/');
-    expect(keys).toContain('/brand');
-    expect(keys).toContain('/business');
+  it('브랜드·매장이 앞, 홈은 더보기로 밀린다', () => {
+    // 점주가 매장 태블릿과 자기 폰을 번갈아 쓴다 — 기기마다 탭 자리가 다르면
+    // 매번 눈으로 찾아야 한다. 그래서 폰/태블릿을 일부러 같게 뒀다.
+    expect(bottomNavItems(store).map((i) => i.to)).toEqual([
+      '/brand', '/business', '/search', '/profile', '#more',
+    ]);
   });
 
-  it('태블릿: 브랜드·매장이 앞, 홈은 더보기로 밀린다', () => {
-    const items = bottomNavItems(storeTablet);
-    expect(items.map((i) => i.to)).toEqual(['/brand', '/business', '/search', '/profile', '#more']);
-    expect(items.map((i) => i.to)).not.toContain('/');
+  it('홈은 하단탭에 없지만 더보기 시트에서 닿는다', () => {
+    expect(bottomNavItems(store).map((i) => i.to)).not.toContain('/');
+    const all = nativeMenuSections({ ...menuBase, storeAccount: true }).flatMap((s) => s.items);
+    expect(all.map((i) => i.to)).toContain('/');
   });
 
-  it('어느 쪽이든 5칸을 유지한다', () => {
-    expect(bottomNavItems(storePhone)).toHaveLength(5);
-    expect(bottomNavItems(storeTablet)).toHaveLength(5);
+  it('브랜드만 묶인 기기도 같은 목록', () => {
+    const brandOnly = { ...store, storeAccount: false, hasBrand: true };
+    expect(bottomNavItems(brandOnly).map((i) => i.to)).toEqual(bottomNavItems(store).map((i) => i.to));
+  });
+
+  it('5칸을 유지한다', () => {
+    expect(bottomNavItems(store)).toHaveLength(5);
   });
 });
