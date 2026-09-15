@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { usePlayerStore } from '@/store/playerStore';
+import { usePlayerStore, resetNextThrottleForTest } from '@/store/playerStore';
 import type { TrackRow } from '@/types/db';
 
 // Minimal playable track (setQueue keeps only isPlayableTrack rows).
@@ -111,6 +111,7 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
 
   it('audio_ended on the LAST track emits a cycle event', () => {
     usePlayerStore.setState({ index: 2 });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     const ev = S().cycleEvent;
     expect(ev).not.toBeNull();
@@ -124,6 +125,7 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
 
   it('audio_ended on a MIDDLE track emits nothing', () => {
     usePlayerStore.setState({ index: 1 });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     expect(S().cycleEvent).toBeNull();
     expect(S().index).toBe(2);
@@ -131,6 +133,7 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
 
   it('manual next() on the last track emits nothing (no false positive)', () => {
     usePlayerStore.setState({ index: 2 });
+    resetNextThrottleForTest();
     S().next(); // default cause = manual_next
     expect(S().cycleEvent).toBeNull();
     expect(S().index).toBe(0);
@@ -138,12 +141,14 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
 
   it('manual next() with explicit cause manual_next emits nothing', () => {
     usePlayerStore.setState({ index: 2 });
+    resetNextThrottleForTest();
     S().next({ cause: 'manual_next' });
     expect(S().cycleEvent).toBeNull();
   });
 
   it('single-track audio_ended emits a cycle event', () => {
     usePlayerStore.setState({ queue: [track('solo')], index: 0, cycleEvent: null });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     expect(S().cycleEvent?.trackId).toBe('solo');
     expect(S().playing).toBe(true); // repeat=all keeps looping
@@ -151,15 +156,18 @@ describe('playerStore cycle-completion signal (BRAND-PLAYLIST-ROTATION-4C, §19)
 
   it('repeat=one audio_ended is NOT a playlist cycle', () => {
     usePlayerStore.setState({ index: 2, repeat: 'one' });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     expect(S().cycleEvent).toBeNull();
   });
 
   it('sequence increments monotonically across cycles', () => {
     usePlayerStore.setState({ index: 2 });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     const first = S().cycleEvent?.sequence;
     usePlayerStore.setState({ index: 2 });
+    resetNextThrottleForTest();
     S().next({ cause: 'audio_ended' });
     expect(S().cycleEvent?.sequence).toBe((first ?? 0) + 1);
   });

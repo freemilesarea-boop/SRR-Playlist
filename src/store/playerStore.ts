@@ -128,6 +128,21 @@ interface PlayerState {
   setPendingSeek: (sec: number | null) => void;
 }
 
+/**
+ * next() 최소 간격(ms).
+ *
+ * 이보다 짧은 간격으로 들어온 두 번째 호출은 버린다. 자세한 이유는 next() 안 주석 참고.
+ */
+export const NEXT_MIN_INTERVAL_MS = 400;
+let lastNextAtMs = 0;
+let lastNextCause: NextCause | null = null;
+
+/** 테스트에서 간격 상태를 되돌린다(프로덕션 경로에서는 쓰지 않는다). */
+export function resetNextThrottleForTest(): void {
+  lastNextAtMs = 0;
+  lastNextCause = null;
+}
+
 // 0078 — localStorage 영속화
 const VOLUME_KEY = 'srr.player.volume';
 const MUTED_VOL_KEY = 'srr.player.mutedVolume';
@@ -345,6 +360,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const cause: NextCause = opts?.cause ?? 'manual_next';
     const { queue, index, shuffle, shuffleOrder, repeat } = get();
     if (queue.length === 0) return;
+
+    // 한 번 눌렀는데 여러 곡이 한꺼번에 넘어가던 것 차단.
+    //
+    // next() 를 부르는 곳이 여럿이다: 다음 곡 버튼, 알림창 미디어 컨트롤(nexttrack),
+    // 자연 종료(ended), crossfade 완료, 재생 오류 자동 건너뛰기. 이 중 둘이 같은 탭에
+    // 겹치면 index 가 두 번 올라간다. 호출부마다 막는 대신 여기서 한 번에 막는다.
+    //
+    // 정상 경로는 이 창에 걸리지 않는다: 곡 자연 종료는 분 단위, 오류 자동 건너뛰기는
+    // 최소 3초(AUTO_SKIP_DELAY_MS) 간격이다. 사람이 일부러 두 번 누르는 것도 보통
+    // 400ms 보다 느리다. 400ms 안에 두 번 들어오면 그건 기계가 두 번 부른 것이다.
+    const nowMs = Date.now();
+    if (nowMs - lastNextAtMs < NEXT_MIN_INTERVAL_MS) {
+      console.warn('[player] next 무시 — 직전 호출과 너무 가까움', {
+        dtMs: nowMs - lastNextAtMs, cause, prevCause: lastNextCause,
+      });
+      return;
+    }
+    lastNextAtMs = nowMs;
+    lastNextCause = cause;
 
     // 4C — 자연 종료(audio_ended) 가 마지막 재생순번/단일 트랙에서 발생하면 Cycle 완료.
     // 아래 wrap 분기 set() 에만 병합한다(...cyc). 완료가 아니면 cyc={} → no-op.

@@ -1358,9 +1358,13 @@ export default function Player() {
           console.warn('[player] silent silence detected — unmute', { reason, id: st.queue[st.index]?.id });
           audio.muted = false;
         }
-        if (audio.volume === 0 && !crossfading) {
-          console.warn('[player] silent silence detected — restore volume', {
-            reason, id: st.queue[st.index]?.id, restored: storeVol,
+        // volume === 0 만 보던 것을 "설정값과 어긋나면" 으로 넓혔다.
+        // crossfade 가 중간에 끊기면 audio.volume 이 0 이 아니라 0.2 같은 값으로 남는다.
+        // 그러면 소리가 아주 작게 계속 나오고, 슬라이더는 100% 를 가리킨다 —
+        // 사용자 눈에는 "볼륨이 너무 작다" 로만 보인다.
+        if (!crossfading && Math.abs(audio.volume - storeVol) > 0.01) {
+          console.warn('[player] 볼륨이 설정값과 다름 — 복구', {
+            reason, id: st.queue[st.index]?.id, actual: audio.volume, restored: storeVol,
           });
           audio.volume = storeVol;
         }
@@ -2377,9 +2381,12 @@ export default function Player() {
         if (import.meta.env.DEV) console.warn(`[Player] muted=true 감지 — 자동 해제 (${label})`);
         audio.muted = false;
       }
-      // volume=0 이면 경고 (크로스페이드 중간 아님)
-      if (audio.volume === 0 && !crossfading) {
-        if (import.meta.env.DEV) console.warn(`[Player] volume=0 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`);
+      // 설정값과 어긋나면 되돌린다(크로스페이드 중간 아님).
+      // 0 만 보면, 끊긴 crossfade 가 남긴 0.2 같은 값은 그대로 지나가 소리만 작아진다.
+      if (!crossfading && Math.abs(audio.volume - volume) > 0.01) {
+        console.warn(`[player] 볼륨 어긋남 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`, {
+          actual: audio.volume,
+        });
         audio.volume = volume;
       }
       if (import.meta.env.DEV) {
