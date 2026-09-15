@@ -49,8 +49,14 @@ describe('§5 audio progress contract — heartbeat 은 재생의 증거가 아�
       .toBe('silent');
   });
 
-  it('heartbeat 이 멎었으면 진행 신호가 뭐였든 silent 다', () => {
+  it('❗heartbeat 이 늦어도 진행 신호가 싱싱하면 playing 이다 (progress > heartbeat)', () => {
+    // 처음엔 이걸 silent 로 적었다 — 틀렸다. 매장에 소리가 나는지의 최상위 증거는 진행이다.
     expect(classifySession(PRIMARY({ secondsSinceHeartbeat: 17_075, secondsSinceAudioProgress: 1 })))
+      .toBe('playing');
+  });
+
+  it('진행 신호도 없고 heartbeat 도 멎었으면 silent 다', () => {
+    expect(classifySession(PRIMARY({ secondsSinceHeartbeat: 17_075, secondsSinceAudioProgress: null })))
       .toBe('silent');
   });
 
@@ -125,7 +131,26 @@ describe('§6 테스트 행렬', () => {
     expect(shouldRaiseMaskedOutageAlert(v)).toBe(false);
   });
 
-  it('F. 같은 계정 다른 기기가 싱싱해도 incident 가 지목한 기기는 그대로다', () => {
+  it('❗F. heartbeat stale + progress fresh → PLAYING · urgent false (RC-30.1A §3 필수 회귀)', () => {
+    const v = assessStoreHealth([
+      PRIMARY({ secondsSinceHeartbeat: 900, secondsSinceAudioProgress: 12 }),
+    ]);
+    expect(classifySession(PRIMARY({ secondsSinceHeartbeat: 900, secondsSinceAudioProgress: 12 })))
+      .toBe('playing');
+    expect(v.store.service).toBe('playing');
+    expect(v.primary).toBe('playing');
+    expect(v.urgent).toBe(false);
+    expect(shouldRaiseMaskedOutageAlert(v)).toBe(false);
+  });
+
+  it('E-2. heartbeat fresh + progress null → UNPROVEN · urgent false', () => {
+    const v = assessStoreHealth([PRIMARY({ secondsSinceHeartbeat: 5, secondsSinceAudioProgress: null })]);
+    expect(v.store).toEqual({ service: 'unknown', reason: 'heartbeat_only' });
+    expect(v.primary).toBe('unproven');
+    expect(v.urgent).toBe(false);
+  });
+
+  it('G. 같은 계정 다른 기기가 싱싱해도 incident 가 지목한 기기는 그대로다', () => {
     const v = assessStoreHealth(
       [PRIMARY({ secondsSinceHeartbeat: 17_075, secondsSinceAudioProgress: 17_075 }), SECONDARY()],
       '823034d7',

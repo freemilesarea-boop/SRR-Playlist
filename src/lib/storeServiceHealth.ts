@@ -95,16 +95,34 @@ export interface StoreHealthVerdict {
   urgent: boolean;
 }
 
-/** 세션 하나를 판정한다. */
+/**
+ * 세션 하나를 판정한다.
+ *
+ * **우선순위: ACTUAL AUDIO PROGRESS > HEARTBEAT.**
+ *
+ * 처음엔 heartbeat 를 먼저 봤다 — "문서가 멎었으면 진행 신호가 뭐였든 소리는 없다".
+ * **틀렸다.** 매장에 소리가 나는지에 대한 가장 강한 증거는 진행 신호다. heartbeat 은
+ * 문서가 서버를 부르고 있다는 뜻일 뿐이고, 12:17~12:44 에는 그게 멀쩡한 채로 26곡이
+ * 무음으로 지나갔다. 그러니 진행 신호가 싱싱하면 heartbeat 이 늦더라도 재생 중이다.
+ *
+ *   진행 싱싱                    → playing   (heartbeat 상태와 무관)
+ *   진행 없음 + heartbeat 싱싱   → unproven  (살아는 있는데 증명 불가)
+ *   그 외                        → silent
+ */
 export function classifySession(
   s: StoreSessionSnapshot,
   staleSeconds: number = STORE_AUDIO_STALE_SECONDS,
 ): SessionAudioState {
-  // 문서가 멎었으면 진행 신호가 뭐였든 지금 소리는 나지 않는다.
-  if (s.secondsSinceHeartbeat >= staleSeconds) return 'silent';
-  // 살아는 있는데 진행 신호가 없다 — 재생한다고 말할 근거가 없다.
-  if (s.secondsSinceAudioProgress === null) return 'unproven';
-  return s.secondsSinceAudioProgress < staleSeconds ? 'playing' : 'silent';
+  // 1) 실제 진행이 최상위 증거다.
+  if (s.secondsSinceAudioProgress !== null && s.secondsSinceAudioProgress < staleSeconds) {
+    return 'playing';
+  }
+  // 2) 살아는 있는데 진행 신호를 보낸 적이 없다 — 재생한다고 말할 근거가 없다.
+  if (s.secondsSinceAudioProgress === null && s.secondsSinceHeartbeat < staleSeconds) {
+    return 'unproven';
+  }
+  // 3) 진행이 멎었거나, 진행 신호도 없고 문서도 멎었다.
+  return 'silent';
 }
 
 /**
