@@ -17,7 +17,7 @@
 | 개인정보처리방침 · 약관 · 지원 | ✅ 로그인 없이 열리는 공개 URL |
 | 앱 아이콘 · 스플래시 | ✅ `npm run icons` |
 | 결제 정책 | ✅ 앱에서 결제 진입점 제거 (`src/lib/purchaseGate.ts`) |
-| 릴리스 서명 키 | ⬜ `npm run keystore` |
+| 릴리스 서명 키 | ✅ 생성 완료 — 지문 등록은 §3 |
 | Play Console 계정 | ✅ 보유 — 계정 유형(개인/조직)은 §4 확인 |
 
 ---
@@ -83,6 +83,20 @@ npm run keystore
 - 스크립트가 SHA-1 / SHA-256 지문과 카카오 키 해시를 같이 뽑아준다.
   **이 릴리스 지문을 카카오·구글·Firebase 에 등록해야** 스토어 빌드에서 로그인이 된다.
   디버그 키로만 등록해두면 심사원이 로그인을 못 해서 반려된다.
+
+지문은 세 군데에 등록한다. **디버그 키로 등록해둔 기존 값은 지우지 말고 추가만
+한다** — 지우면 개발 빌드에서 로그인이 깨진다. 지문을 잊었으면
+`npm run keystore -- --print` 로 다시 뽑는다.
+
+| 등록할 곳 | 화면 | 넣는 값 |
+| --- | --- | --- |
+| 카카오 개발자 | 내 애플리케이션 → 플랫폼 → Android | 패키지명 `com.deudda.app` + **카카오 키 해시** |
+| Firebase | 프로젝트 설정 → 내 앱(Android) → 디지털 지문 추가 | **SHA-1 과 SHA-256 둘 다** |
+| Google Cloud | API 및 서비스 → 사용자 인증 정보 → Android OAuth 클라이언트 | 패키지명 + **SHA-1** |
+
+Firebase 에 지문을 넣은 뒤 `google-services.json` 을 다시 받을 필요는 없다
+(지문은 서버 쪽에서 대조한다). 구글 로그인이 `DEVELOPER_ERROR` 로 떨어지면
+거의 항상 이 등록이 빠진 것이다.
 
 > 지금 기기에 깔려 있는 `deudda-1.0-debug.apk` 는 **디버그 키**로 서명돼 있다.
 > 릴리스 빌드는 그 위에 안 깔린다(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) —

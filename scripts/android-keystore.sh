@@ -19,7 +19,32 @@ KEYSTORE="android/deudda-release.jks"
 PROPS="android/keystore.properties"
 ALIAS="deudda"
 
+# 지문은 등록할 때마다 필요한데(카카오/구글/Firebase) 키를 만들 때 한 번만 보고
+# 놓치기 쉽다. 그래서 --print 로 언제든 다시 볼 수 있게 한다.
+print_fingerprints() {
+  local pw="$1"
+  echo "지문 — 카카오/구글 로그인, Firebase 에 등록할 때 씁니다:"
+  keytool -list -v -keystore "$KEYSTORE" -alias "$ALIAS" -storepass "$pw" \
+    | sed -n '/SHA1:/p;/SHA256:/p' | sed 's/^/  /'
+  # 카카오는 SHA-1 을 base64 로 인코딩한 "키 해시" 를 쓴다. 손으로 변환하면 꼭 틀린다.
+  local keyhash
+  keyhash="$(keytool -exportcert -alias "$ALIAS" -keystore "$KEYSTORE" -storepass "$pw" 2>/dev/null \
+    | openssl sha1 -binary | openssl base64)"
+  echo "  카카오 키 해시: $keyhash"
+}
+
+if [[ "${1:-}" == "--print" ]]; then
+  [[ -f "$KEYSTORE" ]] || die "키가 없습니다: $KEYSTORE" "먼저 npm run keystore 로 만드세요."
+  [[ -f "$PROPS" ]] || die "설정이 없습니다: $PROPS" "비밀번호를 읽을 수 없어 지문을 뽑지 못합니다."
+  # storePassword=... 한 줄만 꺼낸다. 값에 = 가 들어있어도 안전하게 자른다.
+  PW="$(sed -n 's/^storePassword=//p' "$PROPS" | head -n 1)"
+  [[ -n "$PW" ]] || die "$PROPS 에 storePassword 가 없습니다."
+  print_fingerprints "$PW"
+  exit 0
+fi
+
 [[ -f "$KEYSTORE" ]] && die "이미 키가 있습니다: $KEYSTORE" \
+  "지문만 다시 보려면: npm run keystore -- --print" \
   "덮어쓰면 기존 키를 잃습니다. 정말 새로 만들려면 먼저 그 파일을 안전한 곳으로 옮기세요."
 [[ -f "$PROPS" ]] && die "이미 설정이 있습니다: $PROPS" \
   "키 파일만 지워졌다면 백업에서 되살리세요. 설정만 다시 쓰려면 이 파일을 지우고 실행하세요."
@@ -63,13 +88,7 @@ ok "키 생성: $KEYSTORE"
 ok "설정 저장: $PROPS (600, 커밋 안 됨)"
 
 echo
-echo "지문 — 카카오/구글 로그인, Firebase 에 등록할 때 씁니다:"
-keytool -list -v -keystore "$KEYSTORE" -alias "$ALIAS" -storepass "$PW1" \
-  | sed -n '/SHA1:/p;/SHA256:/p' | sed 's/^/  /'
-# 카카오는 SHA-1 을 base64 로 인코딩한 "키 해시" 를 쓴다. 손으로 변환하면 꼭 틀린다.
-KEYHASH="$(keytool -exportcert -alias "$ALIAS" -keystore "$KEYSTORE" -storepass "$PW1" 2>/dev/null \
-  | openssl sha1 -binary | openssl base64)"
-echo "  카카오 키 해시: $KEYHASH"
+print_fingerprints "$PW1"
 
 cat <<'NEXT'
 
