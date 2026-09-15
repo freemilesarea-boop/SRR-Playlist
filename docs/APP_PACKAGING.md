@@ -116,13 +116,21 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 - **`src/lib/nativeAuth.ts`**
   - `nativeOAuthSignIn(provider, scopes?)`: `signInWithOAuth({ redirectTo: 딥링크, skipBrowserRedirect: true })` →
     `@capacitor/browser`로 시스템 브라우저 오픈.
-  - `initNativeAuthDeepLink(onResult)`: `@capacitor/app` `appUrlOpen` 리스너 → `?code=` 추출 →
-    `exchangeCodeForSession(code)` → 성공 시 `/auth/callback` 라우팅(웹과 동일한 첫 화면 분기).
+  - `initNativeAuthDeepLink(onResult)`: `@capacitor/app` `appUrlOpen` 리스너 →
+    `parseOAuthCallback(url)` 로 결과를 읽어 세션을 세운다. 우리 supabase 클라이언트는
+    `flowType` 을 지정하지 않아 **implicit** 이라 토큰이 **프래그먼트**(`#access_token=…`)로
+    온다. `?code=`(PKCE)도 같이 처리하므로 나중에 flowType 을 바꿔도 동작한다.
 - **`authStore.signInWithGoogle/Kakao`**: `isNativeApp()`이면 위 네이티브 경로, 아니면 기존 웹 경로.
 - **`App.tsx`**: 마운트 시 `initNativeAuthDeepLink`를 라우터 `navigate`에 연결(웹은 no-op).
 
 ### 출시 전 수동 설정 (대시보드 — 코드 아님)
-1. **Supabase** → Auth → URL Configuration → **Redirect URLs**에 `com.deudda.app://auth/callback` 추가.
+1. **Supabase** → Authentication → URL Configuration → **Redirect URLs** 에
+   `com.deudda.app://auth/callback` 추가. 저장소의 `supabase/config.toml`
+   (`[auth] additional_redirect_urls`)에는 들어 있지만 **그 파일만으로는 운영 프로젝트에
+   반영되지 않는다** — `supabase config push` 를 돌리거나 대시보드에서 직접 넣어야 한다.
+   빠지면 Supabase 가 딥링크 대신 Site URL 로 보내서 앱이 깨어나지 않고, 증상은 앱에서
+   `cancelled` 또는 `timeout` 으로만 보인다. 끝에 `/` 를 붙이면 다른 URL 이므로 정확히
+   이 값이어야 한다.
 2. **카카오** 개발자 콘솔: 플랫폼에 앱 등록(패키지명/번들ID) — Supabase 콜백은 그대로, 네이티브 앱 등록만.
 3. **구글**: OAuth 클라이언트의 authorized redirect는 **Supabase 콜백 URL** 그대로 사용(딥링크는 Supabase→앱 단계라 구글 콘솔 변경 불필요).
 

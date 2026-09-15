@@ -5,7 +5,9 @@
 // 로그인 실패로 처리했다. ?code= 만 읽었기 때문이다. 우리 supabase 클라이언트는
 // flowType 을 지정하지 않아 implicit 이고, implicit 은 토큰을 프래그먼트로 보낸다.
 import { describe, it, expect } from 'vitest';
-import { parseOAuthCallback } from './nativeAuth';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseOAuthCallback, NATIVE_OAUTH_REDIRECT } from './nativeAuth';
 
 const REDIRECT = 'com.deudda.app://auth/callback';
 
@@ -53,5 +55,24 @@ describe('parseOAuthCallback', () => {
 
   it('URL 이 아니면 실패로 본다', () => {
     expect(parseOAuthCallback('!!! not a url').kind).toBe('error');
+  });
+});
+
+// 딥링크가 코드에만 있고 Supabase 허용 목록에 없으면 인증은 성공하는데 앱으로 못 돌아온다.
+// 브라우저에 그대로 갇히고, 앱에는 아무 로그도 안 남아서 원인을 찾기 어렵다.
+describe('Supabase 리다이렉트 허용 목록', () => {
+  const configToml = readFileSync(
+    fileURLToPath(new URL('../../supabase/config.toml', import.meta.url)),
+    'utf8',
+  );
+
+  it('네이티브 딥링크가 additional_redirect_urls 에 있다', () => {
+    expect(configToml).toContain(`"${NATIVE_OAUTH_REDIRECT}"`);
+  });
+
+  it('운영 도메인도 그대로 남아 있다', () => {
+    // 딥링크를 넣다가 웹 콜백을 지우면 웹 로그인이 통째로 죽는다.
+    expect(configToml).toContain('"https://deudda.com"');
+    expect(configToml).toContain('"https://www.deudda.com"');
   });
 });
