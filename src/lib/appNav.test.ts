@@ -46,15 +46,30 @@ describe('bottomNavItems', () => {
     expect(bottomNavItems(web).some((i) => i.action === 'more')).toBe(false);
   });
 
-  it('앱 + 매장 계정이면 매장이 첫 칸', () => {
+  it('앱 + 매장 계정이면 브랜드·매장이 앞에 나란히 온다', () => {
+    // 브랜드 담당자가 매장을 같이 보는 경우가 많다 — 한쪽이 더보기 안에 있으면
+    // 오갈 때마다 두 번 눌러야 한다.
     const items = bottomNavItems({ ...web, native: true, storeAccount: true });
-    expect(items[0].to).toBe('/business');
+    expect(items.map((i) => i.to)).toContain('/brand');
+    expect(items.map((i) => i.to)).toContain('/business');
   });
 
-  it('브랜드 전용 태블릿이면 브랜드가 첫 칸', () => {
-    // 매장 계정이 아닌데 기기에 브랜드가 묶여 있으면 그 브랜드를 틀려고 설치한 기기다.
-    const items = bottomNavItems({ ...web, native: true, hasBrand: true });
+  it('브랜드가 묶인 기기도 같은 목록 — 브랜드가 첫 칸', () => {
+    const items = bottomNavItems({ ...web, native: true, hasBrand: true, tablet: true });
     expect(items[0].to).toBe('/brand');
+  });
+
+  it('매장/브랜드 하단탭에는 보관함이 없다 — 더보기로 옮겼다', () => {
+    // 매장에 걸어둔 기기에서 내 보관함을 여는 일은 거의 없다.
+    for (const tablet of [true, false]) {
+      const items = bottomNavItems({ ...web, native: true, storeAccount: true, tablet });
+      expect(items.map((i) => i.to)).not.toContain('/library');
+    }
+  });
+
+  it('빠진 보관함은 더보기 시트에 그대로 있다', () => {
+    const all = nativeMenuSections({ ...menuBase, signedIn: true }).flatMap((s) => s.items);
+    expect(all.map((i) => i.to)).toContain('/library');
   });
 
   it('앱이라도 매장/브랜드가 아니면 홈이 첫 칸 — 다만 매장은 남는다', () => {
@@ -142,15 +157,17 @@ describe('하단탭 — 매장 계정이라도 폰에서는 홈을 남긴다', (
   };
   const storeTablet: NavContext = { ...storePhone, tablet: true };
 
-  it('폰: 홈과 매장이 둘 다 있다', () => {
+  it('폰: 홈·브랜드·매장이 다 있다', () => {
+    // 폰은 손에 들고 일반 앱처럼도 쓴다 — 홈을 빼면 추천·차트로 갈 길이 더보기뿐이다.
     const keys = bottomNavItems(storePhone).map((i) => i.to ?? i.action);
     expect(keys).toContain('/');
+    expect(keys).toContain('/brand');
     expect(keys).toContain('/business');
   });
 
-  it('태블릿: 매장이 첫 칸, 홈은 더보기로 밀린다', () => {
+  it('태블릿: 브랜드·매장이 앞, 홈은 더보기로 밀린다', () => {
     const items = bottomNavItems(storeTablet);
-    expect(items[0].to).toBe('/business');
+    expect(items.map((i) => i.to)).toEqual(['/brand', '/business', '/search', '/profile', '#more']);
     expect(items.map((i) => i.to)).not.toContain('/');
   });
 

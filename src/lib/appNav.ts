@@ -107,14 +107,18 @@ export function bottomNavItems(ctx: NavContext): NavItem[] {
     return [HOME, CHARTS, LIBRARY, STORE, PROFILE];
   }
 
-  // 매장/브랜드 계정 + 태블릿: 음악을 트는 화면이 앞. 홈(추천)은 더보기로 밀린다.
-  // 벽에 세워둔 기기는 음악을 트는 게 용도라 추천 화면이 앞에 있을 이유가 없다.
+  // 매장/브랜드 계정: 음악을 트는 두 화면(브랜드·매장)을 앞에 둔다.
   //
-  // 폰은 아래 기본 목록으로 내려간다. 거기에 홈과 매장이 둘 다 있어서, 점주가
-  // 자기 폰으로 열면 일반 앱처럼 쓰다가 '매장' 으로 언제든 넘어갈 수 있다.
-  if ((ctx.storeAccount || ctx.hasBrand) && ctx.tablet) {
-    const first: NavItem = ctx.hasBrand && !ctx.storeAccount ? BRAND : STORE;
-    return [first, SEARCH, LIBRARY, PROFILE, MORE];
+  // 예전에는 둘 중 하나만 올리고(brand 또는 store) 보관함이 그 자리에 있었다.
+  // 그런데 이 앱을 쓰는 사람은 브랜드 담당자이면서 매장을 같이 보는 경우가 많다 —
+  // 한쪽이 더보기 시트 안에 있으면 매번 두 번 눌러야 한다. 보관함은 반대다:
+  // 매장에 걸어둔 기기에서 내 보관함을 여는 일은 거의 없다. 그래서 자리를 맞바꿨다.
+  // (보관함은 더보기 → '내 음악' 에 그대로 있다.)
+  if (ctx.storeAccount || ctx.hasBrand) {
+    // 태블릿은 벽에 세워두고 음악을 트는 기기라 홈(추천)이 앞에 있을 이유가 없다.
+    if (ctx.tablet) return [BRAND, STORE, SEARCH, PROFILE, MORE];
+    // 폰은 손에 들고 일반 앱처럼도 쓴다 — 홈은 남기고 내 정보를 더보기로 내린다.
+    return [HOME, BRAND, STORE, SEARCH, MORE];
   }
 
   // 로그인 전이거나 개인 감상용 — 홈이 앞이되, 매장은 반드시 남긴다.
