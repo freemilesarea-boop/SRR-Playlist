@@ -338,6 +338,7 @@ npm run android:paste -- "쿠우쿠우 강남점"
 | 매장 | `qa-store@deudda.test` | `/business` 대시보드, `/business/player` |
 | 아티스트 | `qa-artist@deudda.test` | `/artist` 대시보드, 계약, 정산 |
 | 본사(HQ) | `demohq@deudda.com` | `/enterprise/hq` 및 `/enterprise/*` 전체 |
+| 엔터프라이즈 매장 | `demoshop1@deudda.com` | 본사(Deudda 데모 본사) 소속 매장으로서의 `/business` · `/business/player` |
 
 `/enterprise/hq` 는 다른 게이트(`franchise_admins`)를 쓴다. 이 계정을 데모
 프랜차이즈(매장 3곳)의 `owner` 로 연결해뒀으므로 그대로 열린다 — 자세한 내용은
@@ -345,6 +346,30 @@ npm run android:paste -- "쿠우쿠우 강남점"
 
 `@deudda.test` 는 예약된 TLD 라 실제로 메일이 나가지 않는다. 넷 다 이메일 인증을
 마친 상태로 만들었으므로 확인 메일을 기다릴 필요가 없다.
+
+### 엔터프라이즈 매장과 일반 매장의 차이
+
+`qa-store@deudda.test` 는 어디에도 속하지 않은 **단독 매장**이다. 본사 정책·공지·
+긴급방송이 내려오지 않으므로 그쪽 동작은 이 계정으로 테스트할 수 없다.
+
+`demoshop1@deudda.com` 은 `franchise_stores` 를 통해 "Deudda 데모 본사" 에 묶인
+**엔터프라이즈 소속 매장**이다. 본사가 `/enterprise/*` 에서 내리는 것들이 이 매장에
+실제로 도달하는지 확인하려면 이 계정을 써야 한다. 본사쪽은 `demohq@deudda.com` 으로
+로그인해서 조작하고, 매장쪽은 이 계정으로 확인하는 식이다.
+
+원래 이 계정은 로그인이 안 됐다 — `auth.identities` 행이 없었고(GoTrue 는 이메일
+로그인 시 이 테이블로 사용자를 찾는다) 등급도 free 였다. 셋 다 채워 넣었다:
+identities 행, `account_type`/`membership_tier`/`subscription_type` = business,
+비밀번호 `DeuddaQA!2026`. `business_profiles` 도 없어서 매장 대시보드가 첫 설정
+화면으로만 떴다 — "데모 매장 1"(카페, 09:00~22:00)로 만들어 뒀다.
+
+**같은 본사의 데모 매장 2·3(`demoshop2·3@deudda.com`)은 아직 손대지 않았다.**
+여러 매장을 동시에 보는 화면(본사 대시보드의 매장 목록·정책 일괄 배포)을 테스트할 때
+필요하면 같은 방식으로 열어주면 된다.
+
+> `루베르 콘텐츠 스튜디오` 의 `TEST_스튜디오오감_*` 5개도 엔터프라이즈 매장이지만
+> `account_type` 이 비어 있어 매장으로 인식되지 않는다. `카공시대` 소속 2개는
+> **실제 고객 계정이다 — 테스트에 쓰지 말 것.**
 
 ### 브랜드 플레이어
 
