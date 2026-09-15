@@ -79,6 +79,8 @@ export default function RecoveryControlPlane({ deps, onRemountPlayer }: Recovery
   const recoveriesUsedRef = useRef(0);
   const lastRecoveryAtRef = useRef<number | null>(null);
   const remountTriedRef = useRef(false);
+  /** 30 — 연속으로 "낡았다" 고 본 횟수. 정상으로 돌아오면 0 으로 리셋한다. */
+  const staleObservationsRef = useRef(0);
 
   /**
    * PLAYER EXECUTION STALE + SHELL ALIVE 를 판정하고, 맞으면 되살린다.
@@ -102,13 +104,23 @@ export default function RecoveryControlPlane({ deps, onRemountPlayer }: Recovery
       suppressed: !!p.scheduleSuppressed,
       autoplayBlocked: h.autoplayBlocked,
       recoveryInProgress: isRecoveryInProgress(),
+      documentHidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
+      staleObservations: staleObservationsRef.current,
       recoveriesUsed: recoveriesUsedRef.current,
       msSinceLastRecovery: lastRecoveryAtRef.current === null
         ? null : now - lastRecoveryAtRef.current,
       remountTried: remountTriedRef.current,
       canNavigate: h.online !== false,
     });
-    if (action === 'none') return;
+    if (action === 'none') {
+      staleObservationsRef.current = 0;          // 정상으로 돌아왔다 — 증거를 버린다
+      return;
+    }
+    if (action === 'observe') {
+      staleObservationsRef.current += 1;         // 아직 확정이 아니다. 복구하지 않는다.
+      return;
+    }
+    staleObservationsRef.current = 0;            // 확정했으니 카운터를 비운다
 
     // 조정자 — 플레이어 사다리나 원격 명령이 이미 잡고 있으면 이번 차례를 넘긴다.
     if (!beginRecovery('shell_watchdog')) return;

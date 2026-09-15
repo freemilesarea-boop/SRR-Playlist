@@ -14,9 +14,11 @@ import { resolve } from 'node:path';
 import {
   resolveShellWatchdogAction, describeShellWatchdogAction, isShellRecoveryVerified,
   PLAYER_RUNTIME_STALE_MS, SHELL_RECOVERY_BUDGET, SHELL_RECOVERY_COOLDOWN_MS,
-  REQUIRED_PROGRESS_SAMPLES, type ShellWatchdogInput,
+  REQUIRED_PROGRESS_SAMPLES, CONFIRM_OBSERVATIONS, PLAYER_RUNTIME_SUSPECT_MS,
+  PLAYER_RUNTIME_SUSPECT_HIDDEN_MS, suspectThresholdMs, worstCaseDetectionMs,
+  type ShellWatchdogInput,
 } from './shellWatchdog';
-import { RELOAD_PAGE_AFTER_MS } from './stallWatchdog';
+import { RELOAD_PAGE_AFTER_MS, SKIP_AFTER_MS } from './stallWatchdog';
 import {
   notePlayerRuntimeAlive, readPlayerRuntimeAge, noteShellLayerAlive, readLayerHealth,
   beginRecovery, endRecovery, isRecoveryInProgress, currentRecoveryOwner,
@@ -31,6 +33,9 @@ const HEALTHY: ShellWatchdogInput = {
   shellAgeMs: 5_000,
   playing: true, hasQueue: true, suppressed: false, autoplayBlocked: false,
   recoveryInProgress: false,
+  documentHidden: false,
+  // 30 — 2단계 감지. 기본 픽스처는 이미 확정 직전까지 관측이 쌓인 상태다.
+  staleObservations: CONFIRM_OBSERVATIONS - 1,
   recoveriesUsed: 0, msSinceLastRecovery: null, remountTried: false, canNavigate: true,
 };
 
@@ -145,19 +150,134 @@ describe('§9 오탐 방지 — 이 상태들에서는 절대 개입하지 않�
   });
 });
 
-describe('§5 감지 예산 — 새 숫자를 만들지 않는다', () => {
-  it('임계값은 플레이어가 자기 사다리를 끝까지 쓰는 시간과 같다', () => {
-    expect(PLAYER_RUNTIME_STALE_MS).toBe(RELOAD_PAGE_AFTER_MS);
+describe('§2·§3 임계값 실험 — 숫자를 임의로 고르지 않는다', () => {
+  /**
+   * 타이머 구조의 비대칭이 실험의 전제다:
+   *   런타임 신호 = 3초 **Web Worker** 티커 → 백그라운드 스로틀링에 강하다
+   *   셸 판정    = 5초 **메인 스레드** interval → hidden 이면 분당 1회까지 눌린다
+   *
+   * 그래서 "정상인데 신호가 잠깐 낡아 보이는" 폭이 visible / hidden 에서 다르다.
+   * 아래 지터 모형은 그 폭을 재현한다(ms 단위 gap).
+   */
+  const JITTER = {
+    /** 정상: 3초 티커가 제때 돈다. */
+    normal: [3_000, 3_100, 3_200, 2_900],
+    /** 트랙 전환·큐 리필: 메인 스레드가 잠깐 바쁘다. */
+    transition: [3_000, 5_000, 4_000, 6_000],
+    /** 저사양 GC·긴 렌더: 드물게 수 초. */
+    lowEndBlocking: [3_000, 8_000, 3_000, 12_000],
+    /** 느린 네트워크: 티커 자체와는 무관하지만 함께 본다. */
+    slowNetwork: [3_000, 4_000, 3_000, 5_000],
+    /** SW 업데이트 적용 직전: 짧은 정지. */
+    swUpdate: [3_000, 7_000, 3_000],
+    /** 백그라운드 스로틀링(hidden) — 들쭉날쭉한 초기 구간. */
+    backgroundThrottled: [30_000, 45_000, 60_000, 50_000],
+    /**
+     * 지속 스로틀링. 크로미움 계열은 백그라운드 타이머를 **분당 1회**까지 줄인다.
+     * 그 상태가 이어지면 gap 이 60초 근처에서 계속 머문다 — 이게 최악 조건이다.
+     */
+    sustainedBackground: [60_000, 62_000, 61_000, 60_000],
+  };
+
+  /** 그 지터로 정상 재생이 이어질 때, 후보 임계값이 몇 번 오탐하는가. */
+  function falseRecoveries(thresholdMs: number, gaps: number[], confirmNeeded: number): number {
+    let stale = 0;
+    let fired = 0;
+    // 셸은 5초마다 본다. 티커 gap 을 5초 격자에 올려놓고 관측한다.
+    for (let round = 0; round < 200; round++) {
+      const age = gaps[round % gaps.length];       // 마지막 틱 이후 경과
+      if (age >= thresholdMs) {
+        stale += 1;
+        if (stale >= confirmNeeded) { fired += 1; stale = 0; }
+      } else {
+        stale = 0;
+      }
+    }
+    return fired;
+  }
+
+  const CANDIDATES = [30_000, 45_000, 60_000, 90_000, 150_000];
+
+  it('visible 지터로는 30초 후보부터 이미 오탐이 없다 — 그래서 더 낮출 이유가 없다', () => {
+    const visibleJitter = [
+      ...JITTER.normal, ...JITTER.transition, ...JITTER.lowEndBlocking,
+      ...JITTER.slowNetwork, ...JITTER.swUpdate,
+    ];
+    CANDIDATES.forEach((t) => {
+      expect(falseRecoveries(t, visibleJitter, CONFIRM_OBSERVATIONS)).toBe(0);
+    });
   });
 
-  it('3초 티커 기준으로 50번 연속 결측이다 — 지터로는 닿지 않는다', () => {
-    expect(PLAYER_RUNTIME_STALE_MS / 3_000).toBeGreaterThanOrEqual(50);
+  it('hidden 초기 스로틀링에서 30·45초는 오탐한다 (60초는 이 모형은 통과한다)', () => {
+    const g = JITTER.backgroundThrottled;
+    expect(falseRecoveries(30_000, g, CONFIRM_OBSERVATIONS)).toBeGreaterThan(0);
+    expect(falseRecoveries(45_000, g, CONFIRM_OBSERVATIONS)).toBeGreaterThan(0);
+    // 60초는 gap 이 60초를 **연속으로** 넘지 않아 이 모형에서는 살아남는다.
+    // 통과했다고 안전하다는 뜻은 아니다 — 아래 지속 스로틀링이 진짜 조건이다.
+    expect(falseRecoveries(60_000, g, CONFIRM_OBSERVATIONS)).toBe(0);
   });
 
-  it('숙대 사고의 26분 방치보다 훨씬 빨리 잡는다', () => {
-    const worstCaseDetectionMs = PLAYER_RUNTIME_STALE_MS + 5_000; // 임계 + 셸 틱
-    expect(worstCaseDetectionMs).toBeLessThan(200_000);            // < 3분 20초
-    expect(worstCaseDetectionMs).toBeLessThan(26 * 60_000);        // 그날의 1/10 미만
+  it('❗지속 스로틀링(분당 1회)에서는 60초 이하가 전부 오탐한다', () => {
+    const g = JITTER.sustainedBackground;
+    expect(falseRecoveries(30_000, g, CONFIRM_OBSERVATIONS)).toBeGreaterThan(0);
+    expect(falseRecoveries(45_000, g, CONFIRM_OBSERVATIONS)).toBeGreaterThan(0);
+    expect(falseRecoveries(60_000, g, CONFIRM_OBSERVATIONS)).toBeGreaterThan(0);
+    // 90초부터 견딘다. 우리는 이미 쓰고 있는 150초를 골랐다 — 여유를 더 둔다.
+    expect(falseRecoveries(90_000, g, CONFIRM_OBSERVATIONS)).toBe(0);
+    expect(falseRecoveries(PLAYER_RUNTIME_SUSPECT_HIDDEN_MS, g, CONFIRM_OBSERVATIONS)).toBe(0);
+  });
+
+  it('그래서 임계값을 visible / hidden 으로 나눈다', () => {
+    expect(suspectThresholdMs(false)).toBe(PLAYER_RUNTIME_SUSPECT_MS);
+    expect(suspectThresholdMs(true)).toBe(PLAYER_RUNTIME_SUSPECT_HIDDEN_MS);
+    expect(PLAYER_RUNTIME_SUSPECT_MS).toBeLessThan(PLAYER_RUNTIME_SUSPECT_HIDDEN_MS);
+  });
+
+  it('선택한 visible 임계값은 새 숫자가 아니다 — SKIP_AFTER_MS(35초)', () => {
+    expect(PLAYER_RUNTIME_SUSPECT_MS).toBe(SKIP_AFTER_MS);
+    // 3초 티커 기준 11번 연속 결측. 저사양 메인 스레드 블로킹(수 초)과 한 자릿수 이상 차이.
+    expect(PLAYER_RUNTIME_SUSPECT_MS / 3_000).toBeGreaterThanOrEqual(11);
+  });
+
+  it('hidden 임계값도 새 숫자가 아니다 — RELOAD_PAGE_AFTER_MS(150초)', () => {
+    expect(PLAYER_RUNTIME_SUSPECT_HIDDEN_MS).toBe(RELOAD_PAGE_AFTER_MS);
+  });
+
+  it('§3 목표 — visible 최악 감지 지연이 60초 이하다', () => {
+    expect(worstCaseDetectionMs(false)).toBe(35_000 + 5_000 * CONFIRM_OBSERVATIONS);
+    expect(worstCaseDetectionMs(false)).toBeLessThanOrEqual(60_000);
+  });
+
+  it('29 대비 3배 빨라졌고, 그날의 26분 방치 대비 1/30 이다', () => {
+    expect(worstCaseDetectionMs(false)).toBeLessThan(155_000);      // 29 의 최악값
+    expect(worstCaseDetectionMs(false) * 30).toBeLessThan(26 * 60_000);
+  });
+});
+
+describe('§4 2단계 감지 — 한 번의 관측으로 리마운트하지 않는다', () => {
+  it('첫 관측은 observe 다 (복구하지 않는다)', () => {
+    expect(resolveShellWatchdogAction({ ...SUKDAE_1406, staleObservations: 0 })).toBe('observe');
+  });
+
+  it('확정에 필요한 만큼 쌓여야 움직인다', () => {
+    for (let n = 0; n < CONFIRM_OBSERVATIONS - 1; n++) {
+      expect(resolveShellWatchdogAction({ ...SUKDAE_1406, staleObservations: n })).toBe('observe');
+    }
+    expect(resolveShellWatchdogAction({
+      ...SUKDAE_1406, staleObservations: CONFIRM_OBSERVATIONS - 1,
+    })).toBe('remount_player');
+  });
+
+  it('중간에 정상으로 돌아오면 카운터가 리셋된다 (제어면이 리셋한다)', () => {
+    const plane = R('src/components/RecoveryControlPlane.tsx');
+    expect(plane).toContain("staleObservationsRef.current = 0;");
+    expect(plane).toContain("staleObservationsRef.current += 1;");
+  });
+
+  it('새 타이머·네트워크·저장소·렌더를 추가하지 않는다', () => {
+    const plane = R('src/components/RecoveryControlPlane.tsx');
+    expect((plane.match(/window\.setInterval\(/g) ?? []).length).toBe(2);   // 29 와 동일
+    expect(plane).not.toMatch(/localStorage|sessionStorage/);
   });
 });
 
@@ -274,5 +394,123 @@ describe('§12 저사양 예산 — 무엇을 추가했는가', () => {
 
   it('타이머 추가 0 — 기존 5초 틱에 얹었다', () => {
     expect(plane).toContain('원래 있던 5초 틱 하나에 얹는다');
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════════════ */
+/* §8 복구 race — 두 주체가 동시에 움직이지 않는다                             */
+/* ════════════════════════════════════════════════════════════════════════ */
+describe('§8 race injection — single owner 보장', () => {
+  /** 두 주체가 같은 순간에 복구를 시도한다. 하나만 잡아야 한다. */
+  function race(a: Parameters<typeof beginRecovery>[0], b: Parameters<typeof beginRecovery>[0]) {
+    const gotA = beginRecovery(a);
+    const gotB = beginRecovery(b);
+    return { gotA, gotB, owner: currentRecoveryOwner() };
+  }
+
+  it('audio stall + player stale — 사다리가 먼저 잡으면 셸은 물러난다', () => {
+    const r = race('player_ladder', 'shell_watchdog');
+    expect(r.gotA).toBe(true);
+    expect(r.gotB).toBe(false);
+    expect(r.owner).toBe('player_ladder');
+    // 그리고 판정 단계에서도 물러난다 — 이중 방어.
+    expect(resolveShellWatchdogAction({ ...SUKDAE_1406, recoveryInProgress: true })).toBe('none');
+  });
+
+  it('remote command + player stale — 원격이 먼저 잡으면 셸은 물러난다', () => {
+    const r = race('remote_command', 'shell_watchdog');
+    expect(r.gotB).toBe(false);
+    expect(r.owner).toBe('remote_command');
+  });
+
+  it('SW update + player stale — 셸이 잡았으면 다른 주체가 못 들어온다', () => {
+    const r = race('shell_watchdog', 'player_ladder');
+    expect(r.gotA).toBe(true);
+    expect(r.gotB).toBe(false);
+  });
+
+  it('중복 remount / reload / skip 이 생기지 않는다 — 소유권이 하나뿐이다', () => {
+    let remounts = 0;
+    for (let i = 0; i < 100; i++) {
+      // 같은 순간에 셋이 전부 시도한다.
+      const owners = (['player_ladder', 'remote_command', 'shell_watchdog'] as const);
+      const winners = owners.filter((o) => beginRecovery(o));
+      expect(winners.length).toBe(1);
+      if (winners[0] === 'shell_watchdog') remounts++;
+      endRecovery(winners[0]);
+      expect(isRecoveryInProgress()).toBe(false);
+    }
+    // 100 라운드 내내 소유권이 새지 않았다. (누가 이기든 항상 1명)
+    expect(remounts).toBeLessThanOrEqual(100);
+  });
+
+  it('mutex 가 끼지 않는다 — 제어면이 finally 로 반드시 놓는다', () => {
+    const plane = R('src/components/RecoveryControlPlane.tsx');
+    expect(plane).toContain('} finally {');
+    expect(plane).toContain("endRecovery('shell_watchdog')");
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════════════ */
+/* §7 최종 임계값으로 stress                                                  */
+/* ════════════════════════════════════════════════════════════════════════ */
+describe('§7 stress — 선택한 임계값으로', () => {
+  it('정상 1,000회 체크 → false recovery 0', () => {
+    let fired = 0;
+    let stale = 0;
+    for (let i = 0; i < 1_000; i++) {
+      const a = resolveShellWatchdogAction({
+        ...HEALTHY, playerRuntimeAgeMs: 3_000 + (i % 4) * 500, staleObservations: stale,
+      });
+      if (a === 'observe') stale++;
+      else if (a === 'none') stale = 0;
+      else fired++;
+    }
+    expect(fired).toBe(0);
+  });
+
+  it('백그라운드 스로틀 500회 체크 → false recovery 0', () => {
+    let fired = 0;
+    let stale = 0;
+    for (let i = 0; i < 500; i++) {
+      const a = resolveShellWatchdogAction({
+        ...HEALTHY,
+        documentHidden: true,
+        playerRuntimeAgeMs: 60_000 + (i % 3) * 1_000,   // 지속 스로틀링 구간
+        staleObservations: stale,
+      });
+      if (a === 'observe') stale++;
+      else if (a === 'none') stale = 0;
+      else fired++;
+    }
+    expect(fired).toBe(0);
+  });
+
+  it('네트워크 저하 100 사이클 → 셸은 개입하지 않는다 (티커는 네트워크와 무관)', () => {
+    let fired = 0;
+    for (let c = 0; c < 100; c++) {
+      const a = resolveShellWatchdogAction({
+        ...HEALTHY,
+        playerRuntimeAgeMs: 3_000,      // 런타임은 멀쩡하다
+        canNavigate: c % 2 === 0,       // 오프라인/온라인을 오간다
+        staleObservations: 0,
+      });
+      if (a !== 'none') fired++;
+    }
+    expect(fired).toBe(0);
+  });
+
+  it('타이머 상실 100 사이클 — 매번 확정까지 정확히 CONFIRM_OBSERVATIONS 관측', () => {
+    for (let c = 0; c < 100; c++) {
+      let stale = 0;
+      let observes = 0;
+      let action: string = 'none';
+      while (action !== 'remount_player' && observes < 10) {
+        action = resolveShellWatchdogAction({ ...SUKDAE_1406, staleObservations: stale });
+        if (action === 'observe') { stale++; observes++; }
+      }
+      expect(action).toBe('remount_player');
+      expect(observes).toBe(CONFIRM_OBSERVATIONS - 1);
+    }
   });
 });

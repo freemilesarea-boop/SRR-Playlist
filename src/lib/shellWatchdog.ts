@@ -24,21 +24,68 @@
  * 이 파일은 순수 판정만 한다. 신호 수집은 recoveryControlPlane, 실행은
  * RecoveryControlPlane 컴포넌트가 한다.
  */
-import { RELOAD_PAGE_AFTER_MS } from '@/lib/stallWatchdog';
+import { RELOAD_PAGE_AFTER_MS, SKIP_AFTER_MS } from '@/lib/stallWatchdog';
 
 /**
- * 플레이어 런타임이 "멎었다" 고 볼 시간.
+ * ── 30 — 왜 임계값이 둘인가 (타이머 구조의 비대칭) ─────────────────────────
  *
- * 런타임 생존 신호는 플레이어의 3초 워커 티커가 찍는다(backgroundTicker).
- * 새 숫자를 만들지 않고 이 프로젝트가 이미 쓰는 값을 그대로 쓴다 —
- * RELOAD_PAGE_AFTER_MS(150초)는 **플레이어가 자기 사다리를 끝까지 다 쓰는 데
- * 걸리는 시간**이다. 그만큼 조용하면 3초 티커를 50번 연속 놓친 것이고,
- * 사다리가 돌고 있을 가능성도 없다(사다리는 그 티커 위에서 돈다).
+ * 두 계층의 타이머는 성질이 다르다:
  *
- * 더 짧게 잡지 않는 이유: 저사양 Android 가 CPU 압박으로 워커 틱을 잠깐
- * 굶길 수 있다. 멀쩡한 플레이어를 리마운트하는 것이 무음보다 낫지 않다.
+ *   플레이어 런타임 신호 : 3초 **Web Worker** 티커 (backgroundTicker)
+ *                          → 백그라운드 스로틀링을 훨씬 덜 받는다.
+ *   셸 판정 틱          : 5초 **메인 스레드** window.setInterval
+ *                          → 문서가 hidden 이면 브라우저가 분당 1회까지 줄인다.
+ *
+ * 그래서 문서가 보이는가에 따라 신뢰할 수 있는 지터 폭이 다르다. 하나의 숫자로
+ * 덮으면 둘 중 하나가 틀린다 — 빠르게 잡으면 hidden 에서 오탐이 나고,
+ * 느리게 잡으면 kiosk 에서 무음이 길어진다.
+ *
+ * 숙대는 wake lock 을 잡은 kiosk 라 visible 이 정상 상태다(2026-09-15 14:05:19
+ * 마지막 스냅샷도 visibility=visible 이었다). 그쪽을 빠르게, hidden 은 보수적으로.
  */
-export const PLAYER_RUNTIME_STALE_MS = RELOAD_PAGE_AFTER_MS;
+
+/**
+ * visible 일 때 "의심" 으로 넘어가는 시간. **새 숫자를 만들지 않는다** —
+ * SKIP_AFTER_MS(35초)는 플레이어 사다리가 세 번째 칸(건너뛰기)까지 가는 시간이다.
+ * 런타임 티커가 35초를 놓쳤다면 3초 티커를 **11번 연속** 놓친 것이고, 사다리는
+ * 그 티커 위에서 도므로 한 칸도 올라가지 못했다는 뜻이다.
+ *
+ * 메인 스레드가 GC·긴 렌더로 잠깐 막히는 정도(보통 1초 미만, 드물게 수 초)와는
+ * 한 자릿수 이상 차이가 난다.
+ */
+export const PLAYER_RUNTIME_SUSPECT_MS = SKIP_AFTER_MS;
+
+/**
+ * hidden 일 때의 임계값. 보수적으로 간다 — 메인 스레드 틱이 분당 1회까지
+ * 줄어들면 우리가 보는 "나이" 자체가 거칠어지고, 워커 티커도 브라우저에 따라
+ * 백그라운드에서 함께 눌릴 수 있다. 29 에서 쓰던 150초를 그대로 유지한다.
+ */
+export const PLAYER_RUNTIME_SUSPECT_HIDDEN_MS = RELOAD_PAGE_AFTER_MS;
+
+/**
+ * 의심을 확정으로 바꾸는 연속 관측 횟수.
+ *
+ * 한 번의 관측으로 리마운트하지 않는다 — 셸 틱(5초) 두 번을 더 기다려서
+ * **10초 이상 계속** 낡아 있는지 본다. 잠깐의 워커 굶주림은 그 사이에 풀린다.
+ * 새 타이머를 만들지 않는다. 기존 5초 틱에 카운터 하나가 얹힐 뿐이다.
+ */
+export const CONFIRM_OBSERVATIONS = 3;
+
+/** 29 호환 — 이제는 visible 기준값을 가리킨다. */
+export const PLAYER_RUNTIME_STALE_MS = PLAYER_RUNTIME_SUSPECT_MS;
+
+/** 지금 상태에서 쓸 의심 임계값. */
+export function suspectThresholdMs(documentHidden: boolean): number {
+  return documentHidden ? PLAYER_RUNTIME_SUSPECT_HIDDEN_MS : PLAYER_RUNTIME_SUSPECT_MS;
+}
+
+/**
+ * 최악 감지 지연 = 임계값 + 셸 틱 정렬 1회 + 확정까지 남은 틱.
+ * visible 기준 35 + 5 + 10 = 50초.
+ */
+export function worstCaseDetectionMs(documentHidden: boolean, shellTickMs = 5_000): number {
+  return suspectThresholdMs(documentHidden) + shellTickMs * CONFIRM_OBSERVATIONS;
+}
 
 /**
  * 한 문서 수명 동안 허용하는 셸 주도 복구 횟수.
@@ -68,6 +115,10 @@ export interface ShellWatchdogInput {
   autoplayBlocked: boolean;
   /** 이미 다른 주체가 복구를 돌리고 있는가(플레이어 사다리·원격 명령·이전 셸 복구). */
   recoveryInProgress: boolean;
+  /** 문서가 숨겨져 있는가. 임계값이 달라진다(위 비대칭 설명 참고). */
+  documentHidden: boolean;
+  /** 지금까지 **연속으로** 낡아 있다고 본 횟수. 정상으로 돌아오면 0 으로 리셋된다. */
+  staleObservations: number;
 
   /* ── 예산 ── */
   recoveriesUsed: number;
@@ -81,6 +132,8 @@ export interface ShellWatchdogInput {
 export type ShellWatchdogAction =
   /** 아무것도 하지 않는다. */
   | 'none'
+  /** 낡았지만 아직 확정이 아니다. 다음 틱에서 다시 본다(복구하지 않는다). */
+  | 'observe'
   /** 플레이어 subtree 를 새 세대로 리마운트한다. 문서는 유지되므로 자동재생 정책을 다시 만나지 않는다. */
   | 'remount_player'
   /** 리마운트로도 안 살아났다. 문서를 다시 띄운다. */
@@ -107,9 +160,12 @@ export function resolveShellWatchdogAction(i: ShellWatchdogInput): ShellWatchdog
 
   // 런타임이 살아 있으면 끝. 소리가 안 나는 문제라면 플레이어 사다리의 일이다.
   if (i.playerRuntimeAgeMs === null) return 'none';   // 아직 한 번도 못 받았다 = 모른다
-  if (i.playerRuntimeAgeMs < PLAYER_RUNTIME_STALE_MS) return 'none';
+  if (i.playerRuntimeAgeMs < suspectThresholdMs(i.documentHidden)) return 'none';
 
-  // ── 여기부터 PLAYER EXECUTION STALE + SHELL ALIVE
+  // ── 2단계: 의심 → 확정. 한 번의 관측으로 리마운트하지 않는다.
+  if (i.staleObservations + 1 < CONFIRM_OBSERVATIONS) return 'observe';
+
+  // ── 여기부터 PLAYER EXECUTION STALE (확정) + SHELL ALIVE
   if (i.recoveriesUsed >= SHELL_RECOVERY_BUDGET) return 'exhausted';
   if (i.msSinceLastRecovery !== null && i.msSinceLastRecovery < SHELL_RECOVERY_COOLDOWN_MS) {
     return 'none';                          // 방금 고쳤다. 자리 잡을 시간을 준다.
@@ -125,6 +181,7 @@ export function resolveShellWatchdogAction(i: ShellWatchdogInput): ShellWatchdog
 export function describeShellWatchdogAction(a: ShellWatchdogAction): string {
   switch (a) {
     case 'none': return '정상';
+    case 'observe': return '플레이어 신호가 낡았습니다 — 다음 확인까지 지켜봅니다';
     case 'remount_player': return '플레이어 실행이 멎어 새로 띄웁니다';
     case 'reload_page': return '플레이어를 다시 띄워도 살아나지 않아 페이지를 재시작합니다';
     case 'exhausted': return '웹으로 복구할 수 있는 것을 모두 시도했습니다 — 운영자 확인 필요';
@@ -147,6 +204,6 @@ export const REQUIRED_PROGRESS_SAMPLES = 2;
 
 export function isShellRecoveryVerified(i: ShellRecoveryVerdictInput): boolean {
   if (i.playerRuntimeAgeMs === null) return false;
-  if (i.playerRuntimeAgeMs >= PLAYER_RUNTIME_STALE_MS) return false;
+  if (i.playerRuntimeAgeMs >= PLAYER_RUNTIME_SUSPECT_MS) return false;
   return i.progressSamples >= REQUIRED_PROGRESS_SAMPLES;
 }

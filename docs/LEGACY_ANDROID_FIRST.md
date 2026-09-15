@@ -55,7 +55,7 @@ Native supervisor 는 *브라우저 프로세스가 실제로 죽은* 경우에�
 | F | brand heartbeat cleanup | ✅ | — | ✅ | ✅ **27에서 수정** — 수신기가 셸에 있다 | 불필요 | 감지 지연 |
 | G | Realtime disconnect | ✅ | ✅ 폴백 폴링 | ✅ | ✅ (≤5s 픽업) | 불필요 | 없음 |
 | H | Player unmount | ✗ | — | ✅ | ✅ | 필요 시 1클릭 | 없음 |
-| I | Player timer loss | ✗ | ✅ **29에서 닫힘** — 셸 워치독이 감지 → Player subtree 리마운트 → 실패 시 controlled reload | ✅ | ✅ | 불필요(예산 소진 시에만) | 없음 |
+| I | Player timer loss | ✗ | ✅ **29에서 닫힘 · 30에서 지연 단축** — 셸 워치독이 감지(visible 최악 50초 / hidden 165초) → Player subtree 리마운트 → 실패 시 controlled reload | ✅ | ✅ | 불필요(예산 소진 시에만) | 없음 |
 | J | Shell alive / Player dead | ✗ | 검토 대상 (PART 13) | ✅ | ✅ | 1클릭 | 없음 |
 | K | network offline | ✅ (캐시분) | ✅ `offline_hold` — 오프라인 중 페이지 재시작 보류 | ✅ | ✗ (명령 못 닿음) | 회선 복구 | 없음 |
 | L | cache miss | ✅ (네트워크) | ✅ | ✅ | ✅ | 불필요 | 없음 |
@@ -66,9 +66,23 @@ Native supervisor 는 *브라우저 프로세스가 실제로 죽은* 경우에�
 | Q | 재생 중 SW 업데이트 | ✅ | ✅ 트랙 경계까지 defer | ✅ | ✅ | 불필요 | 없음 |
 | R | transition lock stuck | ✅ | ✅ 매장 모드는 crossfade 자체가 꺼져 있어 해당 없음 | ✅ | ✅ | 불필요 | 없음 |
 
-**I 는 Phase 29 에서 닫혔다.** 플레이어의 3초 티커가 찍는 런타임 생존 신호가
-150초(= 티커 50회 연속 결측) 넘게 낡으면, 셸이 Player subtree 를 새 세대로
-리마운트한다. 최악 감지 지연은 **155초** — 2026-09-15 의 26분 방치 대비 1/10 이다.
+**I 는 Phase 29 에서 닫혔고 Phase 30 에서 지연을 줄였다.** 플레이어의 3초 티커가
+찍는 런타임 생존 신호가 낡으면 셸이 Player subtree 를 새 세대로 리마운트한다.
+임계값은 문서 가시성에 따라 갈린다.
+
+| 문서 | suspect 임계 | 확정 관측 | 최악 감지 | 상수 출처 |
+|---|---|---|---|---|
+| visible | 35초 | ×3 | **50초** | `SKIP_AFTER_MS` |
+| hidden | 150초 | ×3 | **165초** | `RELOAD_PAGE_AFTER_MS` |
+
+임의 숫자가 아니라 `stallWatchdog.ts` 가 이미 쓰는 두 상수를 그대로 가져왔다.
+hidden 을 더 낮추지 않은 이유는 백그라운드 타이머 스로틀링이다 — 크로미움 계열은
+`setInterval` 을 **분당 1회**까지 줄이므로, 그 모델에서 60초 후보는 오탐하고
+90초부터 0 이 된다. 150초는 기존 상수이면서 그 선을 넘는다.
+**가장 낮은 숫자가 아니라 FALSE RECOVERY = 0 을 유지하는 값을 골랐다.**
+
+visible 최악 50초는 2026-09-15 의 26분 방치 대비 1/32 다.
+단 이 표는 **모델 값이고 실기기 실측이 아니다.** 실측 전에는 보장이라고 쓰지 않는다.
 
 리마운트를 페이지 재시작보다 먼저 쓴다. 문서가 유지되므로 Samsung Internet 의
 자동재생 정책을 다시 만나지 않는다.
