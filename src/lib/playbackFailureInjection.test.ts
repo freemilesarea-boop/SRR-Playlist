@@ -122,7 +122,7 @@ describe('F · G. Realtime / heartbeat 가 던져도 재생 경로로 전파되�
 
   it('F. 구독은 플레이어와 다른 failure domain 에 있다 (2026-09-15 회귀 금지)', () => {
     expect(read('src/hooks/useBrandPlayerHeartbeat.ts')).not.toContain('subscribeStoreRecoveryCommands');
-    expect(read('src/components/AppShell.tsx')).toContain('<RecoveryControlPlane />');
+    expect(read('src/components/AppShell.tsx')).toMatch(/<RecoveryControlPlane\b/);
   });
 
   it('F. 수신 콜백이 throw 해도 재생을 건드리지 않는다', () => {

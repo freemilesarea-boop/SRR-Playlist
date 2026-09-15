@@ -95,6 +95,14 @@ export function clearControlPlaneIdentity(): void {
  */
 let lastPlayerTickAt = 0;
 let lastShellTickAt = 0;
+/**
+ * 29 — 플레이어 **런타임** 생존. 위의 lastPlayerTickAt(60초 heartbeat)과 다르다.
+ *
+ * 플레이어의 3초 워커 티커가 찍는다. 2026-09-15 에 멎은 것이 바로 이 층이고,
+ * 60초 heartbeat 보다 20배 촘촘해서 실행 상실을 훨씬 빨리 드러낸다.
+ * 모듈 변수 한 줄 대입이라 렌더도 네트워크도 저장소도 건드리지 않는다.
+ */
+let lastPlayerRuntimeTickAt = 0;
 
 export function notePlayerLayerAlive(nowMs: number = Date.now()): void {
   if (nowMs > lastPlayerTickAt) lastPlayerTickAt = nowMs;
@@ -104,12 +112,24 @@ export function noteShellLayerAlive(nowMs: number = Date.now()): void {
   if (nowMs > lastShellTickAt) lastShellTickAt = nowMs;
 }
 
+/** 플레이어 런타임 티커가 한 바퀴 돌았다. 플레이어의 3초 티커에서만 부른다. */
+export function notePlayerRuntimeAlive(nowMs: number = Date.now()): void {
+  if (nowMs > lastPlayerRuntimeTickAt) lastPlayerRuntimeTickAt = nowMs;
+}
+
+/** 런타임 신호 나이(ms). 한 번도 못 받았으면 null — "모른다" 이지 "죽었다" 가 아니다. */
+export function readPlayerRuntimeAge(nowMs: number = Date.now()): number | null {
+  return lastPlayerRuntimeTickAt === 0 ? null : Math.max(0, nowMs - lastPlayerRuntimeTickAt);
+}
+
 /** 테스트 전용 — 모듈 상태를 되돌린다. */
 export function __resetControlPlaneForTest(): void {
   identity = { storeUserId: null, sessionId: null, brandId: null };
   lastPlayerTickAt = 0;
   lastShellTickAt = 0;
+  lastPlayerRuntimeTickAt = 0;
   receiverOwner = null;
+  recoveryOwner = null;
 }
 
 export interface LayerHealth {
@@ -242,4 +262,43 @@ export function releaseCommandReceiver(ownerId: string): void {
 
 export function currentCommandReceiver(): string | null {
   return receiverOwner;
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 복구 조정자 — 셋이 동시에 고치려 들지 않게                                    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 29 — 복구 주체가 셋이 됐다:
+ *   • 플레이어 사다리(25)      — nudge / reload / skip / hard_reset
+ *   • 원격 복구 명령(27)       — 운영자 [매장 긴급 복구]
+ *   • 셸 워치독(29)            — 플레이어 실행 상실
+ *
+ * 이들이 동시에 움직이면 중복 reload · 중복 skip · 중복 remount 가 난다.
+ * 하나만 잡도록 최소한의 소유권을 둔다. 실패해도 재생을 막지 않는다 —
+ * 잡지 못한 쪽은 그냥 이번 차례를 건너뛴다.
+ */
+export type RecoveryOwner = 'player_ladder' | 'remote_command' | 'shell_watchdog';
+
+let recoveryOwner: RecoveryOwner | null = null;
+
+/** 복구를 시작한다. 이미 남이 잡고 있으면 false — 그때는 아무것도 하지 않는다. */
+export function beginRecovery(owner: RecoveryOwner): boolean {
+  if (recoveryOwner !== null && recoveryOwner !== owner) return false;
+  recoveryOwner = owner;
+  return true;
+}
+
+/** 자기가 잡은 것만 놓는다. */
+export function endRecovery(owner: RecoveryOwner): void {
+  if (recoveryOwner === owner) recoveryOwner = null;
+}
+
+export function isRecoveryInProgress(): boolean {
+  return recoveryOwner !== null;
+}
+
+export function currentRecoveryOwner(): RecoveryOwner | null {
+  return recoveryOwner;
 }

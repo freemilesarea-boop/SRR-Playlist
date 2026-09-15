@@ -47,11 +47,22 @@ describe('§1 아키텍처 규칙 — 복구 시스템은 복구 대상과 같�
   });
 
   it('제어면은 AppShell 에 마운트된다 (플레이어 라우트가 아니라)', () => {
-    expect(shell).toContain('<RecoveryControlPlane />');
+    expect(shell).toMatch(/<RecoveryControlPlane\b/);
   });
 
-  it('제어면은 오디오·큐를 건드리지 않는다', () => {
-    expect(plane).not.toMatch(/usePlayerStore|audioRef|\.play\(\)|\.pause\(\)/);
+  it('제어면은 재생 상태를 **바꾸지** 않는다 (읽기만 한다)', () => {
+    // 29 에서 셸 워치독이 오탐 방지를 위해 재생 상태를 **읽어야** 한다 —
+    // 의도적 일시정지·영업 종료·자동재생 차단을 "죽음" 으로 오인하면 안 되기 때문이다.
+    // 읽는 것은 허용하되 **쓰는 것은 금지**로 계약을 좁힌다.
+    expect(plane).not.toMatch(/\.play\(\)|\.pause\(\)|setQueue|jumpTo|audioRef/);
+  });
+
+  it('제어면의 스토어 접근은 구독이 아니라 스냅샷이다 (렌더 유발 0)', () => {
+    // usePlayerStore((s) => …) 형태의 셀렉터 구독을 쓰면 재생 위치가 바뀔 때마다
+    // 셸이 리렌더된다 — 저사양 Android 에서 그건 비용이다. getState() 만 쓴다.
+    expect(plane).toContain('usePlayerStore.getState()');
+    expect(plane).not.toMatch(/usePlayerStore\(\(/);
+    expect(plane).not.toMatch(/usePlaybackHealthStore\(\(/);
   });
 
   it('훅은 여전히 heartbeat fallback 을 갖는다 (명령 배달 경로를 하나로 줄이지 않았다)', () => {

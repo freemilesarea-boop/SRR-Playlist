@@ -144,7 +144,7 @@ describe('§7 token truthy → falsy 가 무엇을 멈추는가 (deterministic)'
       require('node:path').resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf-8');
     expect(player).toContain('safeHeartbeatV2');          // 스트림 하트비트 주인
     expect(player).not.toContain('getBrandToken');        // brand token 과 무관
-    expect(shell).toContain('<Player />');                // 셸에 산다
+    expect(shell).toMatch(/<Player\b/);                   // 셸에 산다
   });
 });
 

@@ -31,6 +31,8 @@ Native supervisor 는 *브라우저 프로세스가 실제로 죽은* 경우에�
 | stream heartbeat | `Player` (AppShell) | 10s | 재생 종료/언마운트 | 트랙 전환 | 없음 |
 | stall watchdog | `Player` → `startBackgroundTicker` (Web Worker) | 3s | `ticker.stop()` + `worker.terminate()` + blob revoke | 언마운트 | 없음 — ref 1개 |
 | shell health | `RecoveryControlPlane` (AppShell) | 5s | `window.clearInterval` | 없음(마운트 1회) | 없음 |
+| 셸 워치독 (29) | `RecoveryControlPlane` — **기존 5s 틱에 얹음, 타이머 추가 0** | 5s | 위와 동일 | 없음 | 없음 |
+| player runtime liveness (29) | `Player` 3s 워커 티커 — 모듈 변수 대입 1줄 | 3s | 티커 stop 과 함께 | 리마운트 | 없음 |
 | 저하 폴링 | `RecoveryControlPlane` | 5s, **플레이어 정지 중에만** | `stopped` 플래그 + clearInterval | `[storeUserId]` | 없음 |
 | Realtime 구독 | `RecoveryControlPlane` | push | `unsubscribe` + 소유권 반납 | `[storeUserId]` | **`acquireCommandReceiver` 단일 소유권으로 차단** |
 | emergency poll | `AnnouncementOverlay` / `EmergencyBroadcastOverlay` (AppShell) | 5s / 15s | `clearInterval` | 라우트·권한 변경 | 없음 |
@@ -53,7 +55,7 @@ Native supervisor 는 *브라우저 프로세스가 실제로 죽은* 경우에�
 | F | brand heartbeat cleanup | ✅ | — | ✅ | ✅ **27에서 수정** — 수신기가 셸에 있다 | 불필요 | 감지 지연 |
 | G | Realtime disconnect | ✅ | ✅ 폴백 폴링 | ✅ | ✅ (≤5s 픽업) | 불필요 | 없음 |
 | H | Player unmount | ✗ | — | ✅ | ✅ | 필요 시 1클릭 | 없음 |
-| I | Player timer loss | ✗ | ✗ **미해결** | ✅ | ✅ | 1클릭 | 없음 |
+| I | Player timer loss | ✗ | ✅ **29에서 닫힘** — 셸 워치독이 감지 → Player subtree 리마운트 → 실패 시 controlled reload | ✅ | ✅ | 불필요(예산 소진 시에만) | 없음 |
 | J | Shell alive / Player dead | ✗ | 검토 대상 (PART 13) | ✅ | ✅ | 1클릭 | 없음 |
 | K | network offline | ✅ (캐시분) | ✅ `offline_hold` — 오프라인 중 페이지 재시작 보류 | ✅ | ✗ (명령 못 닿음) | 회선 복구 | 없음 |
 | L | cache miss | ✅ (네트워크) | ✅ | ✅ | ✅ | 불필요 | 없음 |
@@ -64,8 +66,19 @@ Native supervisor 는 *브라우저 프로세스가 실제로 죽은* 경우에�
 | Q | 재생 중 SW 업데이트 | ✅ | ✅ 트랙 경계까지 defer | ✅ | ✅ | 불필요 | 없음 |
 | R | transition lock stuck | ✅ | ✅ 매장 모드는 crossfade 자체가 꺼져 있어 해당 없음 | ✅ | ✅ | 불필요 | 없음 |
 
-**I(Player timer loss)가 남은 구멍이다.** 2026-09-15 14:06 이 그 모양이었고,
-왜 타이머가 멎었는지는 아직 모른다. 27의 전역 예외 기록이 다음 발생 때 잡는다.
+**I 는 Phase 29 에서 닫혔다.** 플레이어의 3초 티커가 찍는 런타임 생존 신호가
+150초(= 티커 50회 연속 결측) 넘게 낡으면, 셸이 Player subtree 를 새 세대로
+리마운트한다. 최악 감지 지연은 **155초** — 2026-09-15 의 26분 방치 대비 1/10 이다.
+
+리마운트를 페이지 재시작보다 먼저 쓴다. 문서가 유지되므로 Samsung Internet 의
+자동재생 정책을 다시 만나지 않는다.
+
+**다만 원인은 여전히 모른다.** 이 구조는 원인이 다시 와도 자동으로 복구될 뿐,
+무엇이 14:06 에 타이머를 멎게 했는지는 증명하지 못한다.
+
+남은 구멍은 **N(autoplay blocked)** 뿐이고, 그건 브라우저 정책이라 코드로 못 넘는다.
+그리고 **PLAYER DOWN + SHELL DOWN** 은 웹 자가복구가 보장되지 않는다 —
+2026-09-15 는 셸이 살아 있었으므로 그 경우가 아니었다.
 
 ## 성공의 정의
 

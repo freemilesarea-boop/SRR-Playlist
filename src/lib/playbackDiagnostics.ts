@@ -44,7 +44,10 @@ export type DiagnosticEvent =
   | 'app_error'
   // 27 — "플레이어는 멈췄는데 셸은 살아 있다". 평소에는 보내지 않는다 —
   // 플레이어 계층이 멈춘 동안에만 제어면이 남긴다(recoveryControlPlane.ts).
-  | 'shell_health';
+  | 'shell_health'
+  // 29 — 플레이어 실행 자체가 멎었고 셸이 그것을 감지했다. Phase 28 failure
+  // matrix 의 I(Player timer loss)를 닫는 신호다. 셸 주도 복구마다 1건.
+  | 'player_execution_stale';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드

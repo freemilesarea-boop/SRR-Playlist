@@ -25,6 +25,7 @@ import {
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
 } from '@/lib/mediaProgress';
+import { notePlayerRuntimeAlive } from '@/lib/recoveryControlPlane';
 import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, ensurePlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
@@ -1717,6 +1718,20 @@ export default function Player() {
     if (!businessMode) return;
 
     const tick = () => {
+      // 29 — **이 줄이 이 티커의 유일한 셸 인터페이스다.**
+      //
+      // Phase 28 failure matrix 의 I(Player timer loss)는 플레이어 내부 워치독이
+      // 플레이어와 같은 실행 도메인에 있어 스스로를 감시할 수 없다는 문제였다.
+      // 2026-09-15 14:06:16 숙대점에서 브랜드 heartbeat(60초)와 스트림
+      // heartbeat(10초)가 동시에 멎었고, 같은 문서의 셸 폴러는 26분 38초 동안
+      // 멀쩡히 돌았다. 그때 셸이 이 신호의 부재를 볼 수 있었다면 3분 안에
+      // 알아챘을 것이다.
+      //
+      // 모듈 변수 한 줄 대입이다 — 렌더도, 네트워크도, 저장소 쓰기도 없다.
+      // **엘리먼트가 없어도 찍는다.** 여기 아래 early return 뒤에 두면
+      // "오디오가 잠깐 없는 상태" 가 "실행이 죽은 상태" 로 오인된다.
+      notePlayerRuntimeAlive();
+
       const st = healthStateRef.current;
       const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
       if (!el) return;

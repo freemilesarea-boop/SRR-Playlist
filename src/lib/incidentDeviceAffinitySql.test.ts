@@ -92,6 +92,7 @@ describe('§7 진단 이벤트 CHECK 가 클라이언트와 일치한다', () =>
     'autoplay_blocked', 'autoplay_recovered', 'track_cut_short', 'playback_stalled',
     'update_pending', 'update_activated', 'update_blocked',
     'sw_controllerchange', 'audio_frozen', 'app_error', 'shell_health',
+    'player_execution_stale',
   ];
 
   it('15종이 전부 허용된다', () => {

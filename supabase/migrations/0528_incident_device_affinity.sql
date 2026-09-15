@@ -66,7 +66,8 @@ alter table public.store_playback_diagnostics
     'sw_controllerchange',                                    -- 24
     'audio_frozen',                                           -- 25
     'app_error',                                              -- 27 전역 예외
-    'shell_health'                                            -- 27 셸 생존
+    'shell_health',                                           -- 27 셸 생존
+    'player_execution_stale'                                  -- 29 플레이어 실행 상실
   ));
 
 -- ----------------------------------------------------------------------------

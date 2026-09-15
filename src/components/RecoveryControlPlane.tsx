@@ -26,8 +26,16 @@ import {
   acquireCommandReceiver, releaseCommandReceiver,
   noteShellLayerAlive, readLayerHealth, readControlPlaneIdentity,
   publishControlPlaneIdentity, shouldPollForCommands,
+  readPlayerRuntimeAge, beginRecovery, endRecovery, isRecoveryInProgress,
   DEGRADED_POLL_INTERVAL_MS,
 } from '@/lib/recoveryControlPlane';
+import {
+  resolveShellWatchdogAction, describeShellWatchdogAction,
+} from '@/lib/shellWatchdog';
+import { usePlayerStore } from '@/store/playerStore';
+import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { logPlaybackDiagnostic } from '@/lib/playbackDiagnostics';
+import { requestControlledReload } from '@/lib/playbackGuard';
 
 /** 셸 생존 표시 주기. 네트워크를 쓰지 않는 로컬 표시라 비용이 없다. */
 const SHELL_TICK_MS = 5_000;
@@ -48,16 +56,102 @@ export interface ShellPollDeps {
   poll: (brandId: string) => Promise<Record<string, unknown> | null>;
 }
 
-export default function RecoveryControlPlane({ deps }: { deps?: ShellPollDeps }) {
+export interface RecoveryControlPlaneProps {
+  deps?: ShellPollDeps;
+  /**
+   * 29 — 플레이어 subtree 를 새 세대로 다시 띄운다. AppShell 이 `key` 를 올린다.
+   *
+   * 페이지 재시작보다 **먼저** 쓴다. 문서가 유지되므로 Samsung Internet 의
+   * 자동재생 정책을 다시 만나지 않는다(리로드하면 제스처를 요구받을 수 있다).
+   */
+  onRemountPlayer?: () => void;
+}
+
+export default function RecoveryControlPlane({ deps, onRemountPlayer }: RecoveryControlPlaneProps) {
   const storeUserId = useAuthStore((s) => s.user?.id ?? null);
   const ownerId = useId();
   const pollRef = useRef(deps?.poll ?? null);
   pollRef.current = deps?.poll ?? null;
+  const remountRef = useRef(onRemountPlayer ?? null);
+  remountRef.current = onRemountPlayer ?? null;
 
-  // 셸이 살아 있다는 표시. 이 타이머가 도는 한 셸 계층은 살아 있는 것이다.
+  /** 29 — 셸 주도 복구 예산. 문서 수명 동안만 유지된다. */
+  const recoveriesUsedRef = useRef(0);
+  const lastRecoveryAtRef = useRef<number | null>(null);
+  const remountTriedRef = useRef(false);
+
+  /**
+   * PLAYER EXECUTION STALE + SHELL ALIVE 를 판정하고, 맞으면 되살린다.
+   *
+   * 여기서 currentTime 을 폴링하지 않는다 — 그건 플레이어 워치독의 일이고
+   * 저사양 Android 에서 CPU 를 쓸 이유가 없다. 이 함수가 보는 것은 **실행 신호의
+   * 부재**뿐이다.
+   */
+  function runShellWatchdog() {
+    if (!remountRef.current) return;                 // 되살릴 수단이 없으면 판정도 하지 않는다
+    const health = readLayerHealth();
+    const p = usePlayerStore.getState();
+    const h = usePlaybackHealthStore.getState();
+    const now = Date.now();
+
+    const action = resolveShellWatchdogAction({
+      playerRuntimeAgeMs: readPlayerRuntimeAge(now),
+      shellAgeMs: health.shellAgeMs,
+      playing: p.playing,
+      hasQueue: p.queue.length > 0,
+      suppressed: !!p.scheduleSuppressed,
+      autoplayBlocked: h.autoplayBlocked,
+      recoveryInProgress: isRecoveryInProgress(),
+      recoveriesUsed: recoveriesUsedRef.current,
+      msSinceLastRecovery: lastRecoveryAtRef.current === null
+        ? null : now - lastRecoveryAtRef.current,
+      remountTried: remountTriedRef.current,
+      canNavigate: h.online !== false,
+    });
+    if (action === 'none') return;
+
+    // 조정자 — 플레이어 사다리나 원격 명령이 이미 잡고 있으면 이번 차례를 넘긴다.
+    if (!beginRecovery('shell_watchdog')) return;
+    try {
+      recoveriesUsedRef.current += 1;
+      lastRecoveryAtRef.current = now;
+      void logPlaybackDiagnostic('player_execution_stale', {
+        reason: 'self_heal',
+        playerMode: 'brand',
+        context: {
+          action,
+          note: describeShellWatchdogAction(action),
+          playerRuntimeAgeMs: readPlayerRuntimeAge(now),
+          shellAgeMs: health.shellAgeMs,
+          recoveriesUsed: recoveriesUsedRef.current,
+        },
+      });
+      if (action === 'remount_player') {
+        remountTriedRef.current = true;
+        remountRef.current?.();
+      } else if (action === 'reload_page') {
+        requestControlledReload('self_heal');
+      }
+      // 'exhausted' — 기록만 남긴다. 운영자 버튼의 몫이다.
+    } finally {
+      // 리마운트는 다음 렌더에서 일어난다. 소유권은 쿨다운 뒤에 자연히 풀리도록
+      // 여기서 바로 놓는다 — 잡은 채로 두면 플레이어 사다리까지 막힌다.
+      endRecovery('shell_watchdog');
+    }
+  }
+
+  // 타이머가 **최신** 워치독을 부르도록 ref 로 건넨다. 타이머 자체는 한 번만 만든다.
+  const runWatchdogRef = useRef<() => void>(() => {});
+  runWatchdogRef.current = runShellWatchdog;
+
+  // 셸이 살아 있다는 표시 + 29 워치독.
+  // **새 타이머를 만들지 않는다** — 원래 있던 5초 틱 하나에 얹는다.
   useEffect(() => {
     noteShellLayerAlive();
-    const id = window.setInterval(() => noteShellLayerAlive(), SHELL_TICK_MS);
+    const id = window.setInterval(() => {
+      noteShellLayerAlive();
+      runWatchdogRef.current();
+    }, SHELL_TICK_MS);
     return () => window.clearInterval(id);
   }, []);
 
