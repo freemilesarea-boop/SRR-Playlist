@@ -52,18 +52,66 @@ npm run android:emu -- --device  # USB 로 연결한 실제 태블릿에 설치
 > 라이브 리로드는 `adb reverse` + `localhost` 를 쓴다. 흔히 쓰는 `10.0.2.2` 는
 > **표준 에뮬레이터에서만** 통해서 실제 매장 태블릿에서는 안 붙는다.
 
-### 매장 태블릿에 직접 넣기
+### 실기기(갤럭시 · 매장 태블릿)에 넣기
+
+USB 로 연결돼 있으면 이 한 줄이면 끝난다:
 
 ```bash
-# 태블릿: 설정 → 휴대전화 정보 → 빌드번호 7번 탭 → 개발자 옵션 → USB 디버깅 ON
-adb devices                      # 기기가 보이는지 확인 (허용 팝업 수락)
-npm run android:emu -- --device
+# 기기: 설정 → 휴대전화 정보 → 소프트웨어 정보 → 빌드번호 7번 탭
+#       → 개발자 옵션 → USB 디버깅 ON → 연결 후 '이 컴퓨터를 허용' 수락
+npm run apk -- --install
+```
+
+USB 가 없거나 폰만 따로 있을 때는 파일을 만들어서 옮긴다:
+
+```bash
+npm run apk
+```
+
+APK 가 `dist-apk/` 와 **바탕화면**에 함께 떨어진다. 그 파일을 폰으로 보내고
+(카톡 '나에게 보내기', 구글 드라이브, USB 로 `내 파일 > Download` 에 복사)
+폰에서 탭하면 설치된다. 처음엔 "이 출처의 앱 설치 허용" 을 한 번 켜야 한다.
+
+> **설치가 거부되면** 대개 이유는 하나다 — 서명이 다른 '듣다' 가 이미 깔려 있는 것.
+> 디버그 키와 릴리스 키는 서명이 달라서 서로 덮어쓸 수 없다. 폰에서 기존 앱을
+> 지우고 다시 설치하면 된다. (`--install` 은 이 경우를 알아서 처리한다)
+
+서명된 릴리스 빌드가 필요하면 키를 먼저 만든다 (한 번만):
+
+```bash
+npm run keystore             # 키 생성 + 지문/카카오 키 해시 출력
+npm run apk -- --release     # 서명된 APK
+npm run aab                  # Play 스토어 업로드용 .aab
 ```
 
 빌드만 따로 돌리려면:
 ```bash
 npm run android:build            # JDK 선택 → 웹 빌드 → cap sync → ./gradlew assembleDebug
 ```
+
+### 아이폰 · 아이패드에서 확인하기 (macOS + Xcode)
+
+```bash
+npm run cap:ios          # 웹 빌드 → cap sync → Xcode 가 열린다
+```
+
+**시뮬레이터** — 애플 개발자 계정 없이 된다. Xcode 위쪽 기기 목록에서 iPhone 이나
+iPad 를 고르고 ▶︎ 를 누른다. 백그라운드 재생·레이아웃은 여기서 다 확인되지만,
+**푸시는 시뮬레이터에서 확인할 수 없다**(APNs 토큰이 발급되지 않는다).
+
+**실기기** — 아이폰/아이패드를 USB 로 연결하고, 왼쪽 파일 목록에서 `App` 을 고른 뒤
+**Signing & Capabilities** 탭에서:
+
+1. `Automatically manage signing` 체크
+2. `Team` 에 본인 Apple ID 선택 (무료 계정도 된다 — 대신 서명이 7일마다 만료돼
+   그때 다시 빌드해야 한다)
+3. ▶︎ 로 실행
+4. 폰에서 **설정 → 일반 → VPN 및 기기 관리 → 개발자 앱 → 신뢰**
+
+> Bundle Identifier(`com.deudda.app`)는 그대로 두는 게 좋다. 바꾸면 구글·카카오
+> 콘솔에 등록된 iOS 번들 ID 와 어긋나서 **소셜 로그인만 막힌다** — 재생·화면은
+> 멀쩡해서 원인을 찾기 어렵다. "이미 사용 중인 번들 ID" 라고 나오면 그때만
+> 임시로 뒤에 글자를 붙이고, 로그인 확인은 원래 ID 로 다시 한다.
 
 ---
 
@@ -276,9 +324,9 @@ npm run android:emu -- --device   # 매장 태블릿에 설치해서 실사용 �
 
 | 항목 | 필요한 것 |
 | --- | --- |
-| 서명 키 | `keytool` 로 keystore 생성 → `android/app` 서명 설정. **키는 커밋 금지** |
+| 서명 키 | `npm run keystore` — 생성·배선·gitignore 까지 끝난다. 키와 비밀번호는 **반드시 따로 백업** |
 | 앱 아이콘/스플래시 | ✅ 완료 — 브랜드 마크로 생성됨. 로고가 바뀌면 `npm run icons` |
-| 릴리스 빌드 | Android Studio → Build → Generate Signed Bundle (`.aab`) |
+| 릴리스 빌드 | `npm run aab` |
 | 개발자 계정 | Google Play Console (등록비 $25 1회) |
 | **포그라운드 서비스 신고** | 앱 콘텐츠 → 포그라운드 서비스 권한 → `mediaPlayback` 을 "매장 배경음악 재생" 으로 신고. **미신고 시 반려** |
 | 푸시(선택) | Firebase 프로젝트 → `google-services.json` 을 `android/app/` 에 저장 |

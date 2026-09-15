@@ -1,5 +1,17 @@
 apply plugin: 'com.android.application'
 
+// 릴리스 서명 — android/keystore.properties 가 있을 때만 켜진다.
+//
+// 키(.jks)도 비밀번호도 저장소에 들어가지 않는다(.gitignore). 파일이 없으면
+// 서명 설정 자체가 붙지 않으므로, 키가 없는 사람도 debug 빌드는 그대로 된다.
+// 만드는 법: npm run keystore
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+def hasReleaseKey = keystorePropsFile.exists() && keystoreProps['storeFile']
+
 android {
     namespace "com.deudda.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,10 +28,27 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseKey) {
+                // storeFile 은 절대경로도 되고, android/ 기준 상대경로도 된다.
+                def declared = new File(keystoreProps['storeFile'])
+                storeFile declared.isAbsolute() ? declared : rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // 키가 없으면 서명을 붙이지 않는다. 그래야 "키 없음" 이 빌드 실패로 드러난다
+            // — 서명 안 된 APK 가 조용히 나와서 기기에서 설치가 거부되는 것보다 낫다.
+            if (hasReleaseKey) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

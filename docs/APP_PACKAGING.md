@@ -82,8 +82,22 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 
 ### Android (Google Play)
 - [ ] Google Play Console 계정(등록비 $25 1회)
-- [ ] 릴리스 서명 키(keystore) 생성 → `android/app` 서명 설정, **키는 커밋 금지**
-- [ ] `.aab`(Android App Bundle) 빌드: Android Studio → Build → Generate Signed Bundle
+- [ ] 릴리스 서명 키(keystore) 생성 — 배선은 끝나 있다. 키만 만들면 된다:
+  ```bash
+  npm run keystore
+  ```
+  키(`android/deudda-release.jks`)와 비밀번호(`android/keystore.properties`)는
+  `.gitignore` 에 있어 커밋되지 않는다. **이 둘을 잃으면 같은 앱으로 업데이트를
+  영영 올릴 수 없다** — Play 는 앱을 패키지 이름이 아니라 서명 키로 식별한다.
+  만든 직후 비밀번호 관리자와 외장 저장소 두 곳에 백업할 것.
+
+  스크립트가 SHA-1 · SHA-256 지문과 카카오 키 해시도 같이 뽑아준다. 카카오/구글
+  로그인과 Firebase 에 **릴리스 키 지문을 등록해야** 앱에서 로그인이 된다
+  (디버그 키로만 등록해두면 스토어 빌드에서 로그인이 깨진다).
+- [ ] `.aab`(Android App Bundle) 빌드:
+  ```bash
+  npm run aab        # android/app/build/outputs/bundle/release/app-release.aab
+  ```
 
 ### iOS (App Store)
 - [ ] Apple Developer Program(연 $99)
