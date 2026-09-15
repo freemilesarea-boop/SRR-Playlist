@@ -12,6 +12,11 @@ import Footer from './common/Footer';
 // 매장 BGM 이 어떤 화면에서 흐르고 있어도 예약 안내/긴급 방송 발화 보장.
 // /admin · /artist · /auth/* 등은 내부 route guard 가 차단.
 import GlobalStoreAudioOverlays from './store/GlobalStoreAudioOverlays';
+// 27 — 복구 명령 수신기. **플레이어와 다른 failure domain 에 둔다.**
+// 2026-09-15 숙대점: 플레이어 계층이 멈춘 뒤에도 이 계층은 26분 38초 동안
+// 5초마다 서버와 200 OK 로 왕복하고 있었다. 그때 발행된 복구 명령이 배달되지
+// 못한 이유는 수신기가 죽은 쪽에 있었기 때문이다.
+import RecoveryControlPlane from './RecoveryControlPlane';
 // FloatingSupportButton 은 App.tsx 루트에서 마운트 (createPortal → document.body)
 // AppShell 내부 마운트 중단 — 어떤 컨테이너 의존성도 없도록 격리.
 import {
@@ -68,6 +73,8 @@ export default function AppShell() {
       <Player />
       <BottomNav />
       <GlobalStoreAudioOverlays />
+      {/* 오디오·큐·라우트에 의존하지 않는다. 렌더 결과도 없다(null). */}
+      <RecoveryControlPlane />
     </div>
   );
 }

@@ -25,11 +25,12 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { RefreshCw, RotateCcw, Play, SkipForward, Radio, Wrench } from 'lucide-react';
+import { RefreshCw, RotateCcw, Play, SkipForward, Radio, Wrench, LifeBuoy } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert,
 } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
+import { planOneClickRecovery } from '@/lib/oneClickRecovery';
 import {
   adminBrandPlayerHealth, requestStoreRecovery,
   type BrandPlayerHealthRow, type BrandPlayerCommand,
@@ -217,6 +218,29 @@ export default function BrandPlayerRemoteCard() {
                 </p>
 
                 <div className="mt-2 flex flex-wrap gap-2">
+                  {/* 27 — 버튼 하나. 운영자는 장애 종류를 판단하지 않는다.
+                      ★ offline 이어도 **비활성화하지 않는다.** 2026-09-15 숙대점에서
+                      heartbeat 는 끊겼지만 앱 셸은 26분 38초 동안 살아 있었다 —
+                      그때 이 콘솔은 모든 버튼을 잠가두고 있었다. 이제 복구 명령은
+                      셸 제어면이 받으므로, 셸이 살아 있으면 닿는다. */}
+                  {(() => {
+                    const plan = planOneClickRecovery({
+                      status: r.status,
+                      secondsSinceHeartbeat: r.seconds_since_heartbeat,
+                    });
+                    return (
+                      <AdminButton
+                        size="sm" variant="solid" tone="primary" leftIcon={<LifeBuoy size={13} />}
+                        disabled={busy === `${r.session_id}:${plan.command}`}
+                        title={plan.label + (plan.mayNotReach
+                          ? ' · 기기가 완전히 꺼져 있으면 2분 뒤 만료됩니다'
+                          : '')}
+                        onClick={() => void send(r, plan.command)}
+                      >
+                        매장 긴급 복구
+                      </AdminButton>
+                    );
+                  })()}
                   <AdminButton
                     size="sm" variant="subtle" tone="primary" leftIcon={<Wrench size={13} />}
                     disabled={offline || busy === `${r.session_id}:hard_recovery`}
@@ -247,7 +271,7 @@ export default function BrandPlayerRemoteCard() {
                   </AdminButton>
                   {offline && (
                     <span className="self-center text-[11px] text-ink-dim">
-                      오프라인 — 원격 명령이 닿지 않습니다
+                      플레이어 heartbeat 끊김 — 앱 셸이 살아 있으면 긴급 복구는 닿습니다
                     </span>
                   )}
                 </div>
