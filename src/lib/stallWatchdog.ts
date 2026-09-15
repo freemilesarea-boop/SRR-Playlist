@@ -106,6 +106,16 @@ export const HARD_RESET_VERIFY_MS = 20_000;
  */
 export const FRUITLESS_SKIP_LIMIT = 3;
 
+/**
+ * 25 — "얼었다" 를 서버로 보내는 최소 간격.
+ *
+ * heartbeat 가 60초다. 관측 보고가 그보다 잦아질 이유가 없다 — 더 잦게 보낸다고
+ * 더 빨리 알 수 있는 것도 아니고(서버 감지 주기도 1분), 무인 매장에서 24시간
+ * 도는 클라이언트가 서버에 쓰는 양만 늘어난다. 정지 구간당 1회가 기본이고
+ * 이 값은 얼었다 풀렸다를 반복하는 경우의 바닥이다.
+ */
+export const FROZEN_REPORT_MIN_INTERVAL_MS = 60_000;
+
 export interface StallInput {
   /** 매장/브랜드 플레이어인가. false 면 무조건 'none'. */
   businessMode: boolean;

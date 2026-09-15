@@ -20,11 +20,15 @@ import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import {
   resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
-  type StallAction,
+  FROZEN_REPORT_MIN_INTERVAL_MS, type StallAction,
 } from '@/lib/stallWatchdog';
+import {
+  isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
+} from '@/lib/mediaProgress';
 import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, ensurePlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
+  getPlayerInstanceId,
 } from '@/lib/playbackFlightRecorder';
 import { disposeAudioElement, registerHardRecovery } from '@/lib/hardRecovery';
 import { useAuthStore } from '@/store/authStore';
@@ -74,7 +78,10 @@ import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
-import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
+import {
+  logPlaybackDiagnostic, beaconPlaybackDiagnostic, takeReloadReason, type DiagnosticReason,
+} from '@/lib/playbackDiagnostics';
+import { pageBuildHash } from '@/lib/pwaBuildIdentity';
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
 import { noteAutoplayBlocked, noteAudiblePlayback } from '@/lib/autoplayRecovery';
 import { reloadApp, SELF_HEAL_RELOAD_KEY } from '@/lib/playbackGuard';
@@ -1647,6 +1654,15 @@ export default function Player() {
   const fruitlessSkipsRef = useRef(0);
 
   /**
+   * 서버 보고용 진행 기준점. 곡이 바뀌면 옮기되 **진행으로 세지 않는다.**
+   * 이걸 곡 전환으로 갱신하던 것이 2026-09-15 무음 27분을 서버에서 가린 원인이다.
+   */
+  const progressAnchorRef = useRef<ProgressAnchor>({ trackId: null, ct: 0 });
+
+  /** 얼었다는 보고를 서버로 보낸 마지막 시각. 서버 쓰기를 유계로 묶는다. */
+  const lastFrozenReportAtRef = useRef(-Infinity);
+
+  /**
    * HARD RECOVERY 실행 — 죽은 엘리먼트를 버리고 새 세대를 만든다.
    *
    * 페이지 리로드보다 파급이 훨씬 작다: 큐·세션·스케줄러·로그인 상태가 전부 남고,
@@ -1713,7 +1729,15 @@ export default function Player() {
       const ct = el.currentTime;
 
       // 진행했거나 곡이 바뀌었으면 기준점을 갱신하고 사다리를 초기화한다.
-      const progressed = Math.abs(ct - prog.ct) >= 0.01;
+      //
+      // 25 — 진행 판정을 `|Δct| >= 0.01` 에서 **의미 있는 진행**으로 바꾼다.
+      // 2026-09-15 숙대점: 얼어붙은 엘리먼트가 새 소스를 물 때마다 currentTime 이
+      // 0 → 0.02 로 한 번 튀었고, 그 지터가 0.01 문턱을 넘어 매번 "진행했다" 로
+      // 읽혔다. 그래서 fruitlessSkips 가 0 으로 리셋되어 26곡을 건너뛰고도
+      // FRUITLESS_SKIP_LIMIT(3) 에 닿지 못했고, 사다리는 hard_reset 칸까지
+      // **한 번도 올라가지 못했다.** 문턱은 이 프로젝트가 재접속 경로에서 이미
+      // 쓰던 0.25초와 같다(mediaProgress.ts).
+      const progressed = isMeaningfulProgress(prog.ct, ct);
       const trackChanged = prog.trackId !== trackId;
 
       // HARD RECOVERY 검증 — play() 가 resolve 됐다는 것만으로는 성공이 아니다.
@@ -1789,6 +1813,40 @@ export default function Player() {
               paused: el.paused,
             },
           });
+          // 25 — 서버가 **즉시** 알게 한다.
+          //
+          // 예전에는 이 분류가 링버퍼 안에만 있다가 playback_stalled 업로드가
+          // 일어날 때만 서버에 닿았다. 2026-09-15 숙대점 27분 무음 동안 서버가
+          // 받은 것은 단 3건이었고, 그동안 heartbeat·progress·verified_seconds·
+          // incident detector 는 전부 "정상" 이라고 답했다. 얼어붙었다는 사실만은
+          // 늦지 않게 서버에 도착해야 한다.
+          //
+          // 유계: 정지 구간당 1회 + FROZEN_REPORT_MIN_INTERVAL_MS 바닥.
+          // 얼었다 풀렸다를 반복해도 heartbeat(60초)보다 잦아지지 않는다.
+          if (now - lastFrozenReportAtRef.current >= FROZEN_REPORT_MIN_INTERVAL_MS) {
+            lastFrozenReportAtRef.current = now;
+            beaconPlaybackDiagnostic('audio_frozen', {
+              reason: 'self_heal',
+              playerMode: 'brand',
+              context: {
+                kind: freezeKind,
+                build: pageBuildHash(),
+                playerInstanceId: getPlayerInstanceId(),
+                trackId,
+                audioGeneration: audioGenerationRef.current,
+                currentTime: Math.round(el.currentTime * 1000) / 1000,
+                paused: el.paused,
+                readyState: el.readyState,
+                networkState: el.networkState,
+                errorCode: el.error ? el.error.code : null,
+                stalledMs: Math.round(now - prog.ts),
+                timerOnly: requiresTimerDetection(freezeKind),
+                fruitlessSkips: fruitlessSkipsRef.current,
+                online: typeof navigator === 'undefined' ? null : navigator.onLine,
+                visibility: typeof document === 'undefined' ? null : document.visibilityState,
+              },
+            });
+          }
         }
       }
 
@@ -1982,7 +2040,7 @@ export default function Player() {
       const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
       const ct = el ? el.currentTime : 0;
       // 회선이 끊긴 사이에도 캐시된 곡으로 소리가 나고 있었는가.
-      const progressed = ct > stallProgressRef.current.ct + 0.25;
+      const progressed = isMeaningfulProgress(stallProgressRef.current.ct, ct);
       const plan = decideReconnectReset(progressed);
 
       recordFlightEvent('NETWORK_RECONNECT_RESET', {
@@ -2613,6 +2671,17 @@ export default function Player() {
     }
     if (Math.abs(t - lastProgress.ct) >= 0.01 || lastProgress.trackId !== nowTrackId) {
       lastProgressRef.current = { trackId: nowTrackId, ct: t, ts: nowTs };
+    }
+
+    // 25 — 서버로 보내는 "마지막 진행 시각" 은 **의미 있는 진행**일 때만 갱신한다.
+    //
+    // 예전 조건은 `|Δct| >= 0.01 || 곡이 바뀜` 이었다. 2026-09-15 숙대점에서
+    // 얼어붙은 곡을 36초마다 건너뛰었는데, **곡이 바뀌었다는 사실만으로** 이
+    // 시각이 갱신되어 서버는 27분 무음을 끝까지 정상으로 봤다. 곡 전환은 진행이
+    // 아니다 — 기준점만 옮긴다(mediaProgress.ts).
+    const pv = advanceProgressAnchor(progressAnchorRef.current, nowTrackId, t);
+    progressAnchorRef.current = pv.anchor;
+    if (countsAsPlayback(pv)) {
       // currentTime 이 **실제로** 늘어난 순간. heartbeat 가 이 시각을 서버로 옮긴다.
       // 모듈 변수 한 줄 대입이라 리렌더가 없다 — timeupdate 는 초당 4회 온다.
       noteAudioProgress(Date.now(), { readyState: target.readyState, networkState: target.networkState });

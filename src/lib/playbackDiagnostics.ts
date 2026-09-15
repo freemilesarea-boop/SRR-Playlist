@@ -33,7 +33,11 @@ export type DiagnosticEvent =
   | 'update_blocked'
   // 24 — 새 SW 가 이 문서를 넘겨받은 **그 순간**. 리로드가 곧바로 따라올 수 있어
   // 일반 RPC 로는 기록이 남지 않는다(아래 beacon 참고).
-  | 'sw_controllerchange';
+  | 'sw_controllerchange'
+  // 25 — 오디오 파이프라인이 얼어붙은 **그 순간**. 예전에는 이 사실이 링버퍼
+  // 안에만 있다가 playback_stalled 업로드 때만 서버에 닿았다(2026-09-15 숙대점
+  // 27분 무음 동안 단 3건). 정지 구간당 1회, 최소 간격을 두고 즉시 보낸다.
+  | 'audio_frozen';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드
