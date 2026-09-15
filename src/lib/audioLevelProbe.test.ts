@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifyLoudness,
+  resolveLevelProbeEnabled,
+  LEVEL_DIAG_STORAGE_KEY,
   snapshotPlayerVolume,
   diagnoseLevel,
   formatLevelReport,
@@ -128,5 +130,44 @@ describe('formatLevelReport', () => {
     const line = formatLevelReport(probeAt(null), okVol);
     expect(line).toContain('무음');
     expect(line).not.toContain('NaN');
+  });
+});
+
+describe('resolveLevelProbeEnabled', () => {
+  const storageWith = (value: string | null) => ({ getItem: () => value });
+
+  it('아무 신호도 없으면 꺼진 상태다 — 매장 태블릿의 기본값', () => {
+    expect(resolveLevelProbeEnabled()).toBe(false);
+    expect(resolveLevelProbeEnabled({ search: '?foo=1', storage: storageWith(null) })).toBe(false);
+  });
+
+  it('URL 로 그 자리에서 켤 수 있다', () => {
+    expect(resolveLevelProbeEnabled({ search: '?levelDiag=1' })).toBe(true);
+    expect(resolveLevelProbeEnabled({ search: '?levelDiag=true' })).toBe(true);
+    expect(resolveLevelProbeEnabled({ search: '?levelDiag=0' })).toBe(false);
+  });
+
+  it('localStorage 에 남겨두면 다음 실행에도 이어진다', () => {
+    expect(resolveLevelProbeEnabled({ storage: storageWith('1') })).toBe(true);
+    expect(resolveLevelProbeEnabled({ storage: storageWith('0') })).toBe(false);
+  });
+
+  it('주소창이 없는 네이티브 빌드는 빌드 플래그로 켠다', () => {
+    expect(resolveLevelProbeEnabled({ buildFlag: '1' })).toBe(true);
+    expect(resolveLevelProbeEnabled({ buildFlag: undefined })).toBe(false);
+  });
+
+  it('오디오 디버그 세션이면 따로 켜지 않아도 같이 켜진다', () => {
+    expect(resolveLevelProbeEnabled({ audioDebug: true })).toBe(true);
+  });
+
+  it('저장소 접근이 막혀 있어도 던지지 않는다', () => {
+    const blocked = { getItem: () => { throw new Error('denied'); } };
+    expect(resolveLevelProbeEnabled({ storage: blocked })).toBe(false);
+    expect(resolveLevelProbeEnabled({ search: '?levelDiag=1', storage: blocked })).toBe(true);
+  });
+
+  it('저장소 키는 다른 deudda 플래그들과 같은 이름 규칙을 쓴다', () => {
+    expect(LEVEL_DIAG_STORAGE_KEY).toBe('deudda.levelDiag');
   });
 });

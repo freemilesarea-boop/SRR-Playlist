@@ -211,6 +211,51 @@ npm run push:doctor
 adb logcat | grep -iE "deudda|StorePlaybackService|Capacitor"
 ```
 
+`adb` 가 PATH 에 없으면 전체 경로로 부른다 — macOS 기본 설치 위치는
+`~/Library/Android/sdk/platform-tools/adb` 다. `npm run android:log` 는 이 경로를
+알아서 찾는다.
+
+### 소리가 작게 들릴 때
+
+원인은 셋 중 하나다: 음원이 작거나, 플레이어가 볼륨을 깎거나, 기기/OS 가 깎거나.
+귀로는 구분이 안 되므로 앱에 들어 있는 레벨 진단을 켜서 숫자로 가른다. 평소에는
+꺼져 있다 — 파일을 한 번 더 디코딩하는 비용이 있어서 필요할 때만 켠다.
+
+앱(네이티브)에서 켜는 법 — 빌드할 때 플래그를 준다:
+```bash
+VITE_LEVEL_DIAG=1 npm run android:emu -- --apk
+```
+
+웹/PWA 는 주소 뒤에 `?levelDiag=1` 을 붙이거나, 콘솔에서
+`localStorage.setItem('deudda.levelDiag', '1')` 하면 다음 실행까지 유지된다.
+(`?audioDebug=1` 로 오디오 디버그를 켠 세션이면 따로 켤 필요 없다.)
+
+그다음 앱을 완전히 종료했다 다시 켜고 첫 곡을 재생한다. 진단은 **앱 실행당 한 번**,
+첫 곡에서만 돈다:
+```bash
+ADB=~/Library/Android/sdk/platform-tools/adb
+$ADB logcat -c
+$ADB shell am force-stop com.deudda.app
+$ADB logcat | grep -a 레벨진단
+```
+
+나오는 한 줄의 `[레벨진단:...]` 이 원인을 지목한다:
+
+| 판정 | 뜻 | 할 일 |
+| --- | --- | --- |
+| `source` | 음원 자체가 기준보다 조용하다 | 업로드 QC(라우드니스) 에서 걸러야 할 파일이다 |
+| `player` | 슬라이더와 `audio.volume` 이 어긋났다 | 앱 버그다. crossfade 가 중간에 끊긴 경우가 많다 |
+| `device-or-ok` | 앱은 원본 그대로 내보내고 있다 | 기기/OS 쪽이다 — 아래를 본다 |
+
+`device-or-ok` 인데도 다른 앱보다 작게 들린다면 앱이 깎는 게 아니다. 볼 곳은:
+
+* 미디어 볼륨이 최대인지 (안드로이드는 벨/미디어/알림 볼륨이 따로 논다)
+* 에뮬레이터는 호스트 출력 장치를 거치므로 실기기보다 작게 들리는 게 정상이다 —
+  레벨 비교는 반드시 실기기에서 한다
+* 비교 대상 앱(유튜브·스포티파이)은 재생할 때 **음량을 올리는 쪽으로** 정규화한다.
+  우리는 원본 레벨 그대로 내보낸다. 같은 −14 LUFS 음원이라도 저쪽이 더 크게 들릴 수
+  있고, 이건 기기 문제가 아니라 정책 차이다
+
 
 ---
 
