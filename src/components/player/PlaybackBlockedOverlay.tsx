@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { applyPendingUpdateNow } from '@/lib/swUpdateGate';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { Play, RefreshCw, CreditCard } from 'lucide-react';
 
 export default function PlaybackBlockedOverlay() {
@@ -50,12 +51,14 @@ export default function PlaybackBlockedOverlay() {
             결제를 완료하시면 즉시 이어서 재생됩니다.
           </p>
         </div>
-        <Link
-          to="/pricing"
-          className="rounded-full bg-white px-7 py-3.5 text-base font-bold text-black transition hover:opacity-90"
-        >
-          결제하고 이어서 이용하기
-        </Link>
+        {canShowPurchaseUi() && (
+          <Link
+            to="/pricing"
+            className="rounded-full bg-white px-7 py-3.5 text-base font-bold text-black transition hover:opacity-90"
+          >
+            결제하고 이어서 이용하기
+          </Link>
+        )}
         <p className="text-xs text-white/40">
           이미 결제하셨다면 잠시 후 자동으로 재생이 시작됩니다.
         </p>

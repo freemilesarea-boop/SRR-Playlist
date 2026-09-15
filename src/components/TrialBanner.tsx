@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Clock, Crown } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { resolveSubscriptionStatus, trialRemainingMs } from '@/lib/membership';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 /**
  * 영업인 코드 3일 무료 체험 배너 (0195).
@@ -15,6 +16,8 @@ export default function TrialBanner() {
   const profile = useAuthStore((s) => s.profile);
   const navigate = useNavigate();
   const [, setTick] = useState(0);
+  // 앱에서는 결제 CTA 를 감춘다 — 남은 기간 안내는 그대로 둔다(구매 유도가 아니므로).
+  const showCta = canShowPurchaseUi();
 
   const status = resolveSubscriptionStatus(session, profile);
 
@@ -34,12 +37,14 @@ export default function TrialBanner() {
         <span className="flex-1 text-sm font-semibold text-amber-600">
           무료 체험이 종료되었어요. 계속 매장에서 재생하려면 구독이 필요합니다.
         </span>
-        <button
-          onClick={() => navigate('/subscription')}
-          className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-bold text-black transition hover:bg-amber-400"
-        >
-          구독하기
-        </button>
+        {showCta && (
+          <button
+            onClick={() => navigate('/subscription')}
+            className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-bold text-black transition hover:bg-amber-400"
+          >
+            구독하기
+          </button>
+        )}
       </div>
     );
   }
@@ -61,14 +66,16 @@ export default function TrialBanner() {
         {urgent ? '무료 체험 종료 임박! ' : '3일 무료 체험 진행 중 · '}
         남은 기간 <b>{remainLabel}</b>
       </span>
-      <button
-        onClick={() => navigate('/subscription')}
-        className={`rounded-full px-4 py-1.5 text-xs font-bold text-black transition ${
-          urgent ? 'bg-rose-500 hover:bg-rose-400' : 'bg-accent hover:opacity-90'
-        }`}
-      >
-        지금 구독
-      </button>
+      {showCta && (
+        <button
+          onClick={() => navigate('/subscription')}
+          className={`rounded-full px-4 py-1.5 text-xs font-bold text-black transition ${
+            urgent ? 'bg-rose-500 hover:bg-rose-400' : 'bg-accent hover:opacity-90'
+          }`}
+        >
+          지금 구독
+        </button>
+      )}
     </div>
   );
 }

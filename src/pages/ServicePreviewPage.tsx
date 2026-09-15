@@ -12,6 +12,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { gradientStyle } from '@/lib/cover';
 import { toast } from '@/store/toastStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 export default function ServicePreviewPage() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
@@ -99,8 +100,14 @@ export default function ServicePreviewPage() {
             </p>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-ink-mute">무료 미리듣기 2회를 모두 사용했습니다. 서비스 이용을 시작해주세요.</p>
-              <Link to="/subscription" className="btn-primary px-3 py-2 text-xs">이용 시작</Link>
+              <p className="text-sm text-ink-mute">
+                {canShowPurchaseUi()
+                  ? '무료 미리듣기 2회를 모두 사용했습니다. 서비스 이용을 시작해주세요.'
+                  : '무료 미리듣기 2회를 모두 사용했습니다.'}
+              </p>
+              {canShowPurchaseUi() && (
+                <Link to="/subscription" className="btn-primary px-3 py-2 text-xs">이용 시작</Link>
+              )}
             </div>
           )}
         </div>

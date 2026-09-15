@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Building2, Loader2, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { openExternalUrl } from '@/lib/externalNav';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import { formatKRW, normalizePhone } from '@/lib/paymentFormat';
@@ -36,6 +37,9 @@ export default function EnterprisePayPage() {
       const res = await createEnterprisePayment(digits);
       // 앱에서는 WebView 를 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
       if (res.ok && res.payurl) {
+        // 앱에서는 외부 결제창을 열지 않는다(스토어 결제 정책 — purchaseGate.ts).
+        // 라우트에서 이미 막히지만, 화면을 재사용할 때를 대비한 최후 방어선이다.
+        if (!canShowPurchaseUi()) return;
         await openExternalUrl(res.payurl, {
           onReturn: () => {
             // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는

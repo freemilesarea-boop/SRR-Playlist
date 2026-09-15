@@ -56,7 +56,8 @@ fi
 ( cd android && ./gradlew --console=plain "$TASK" )
 [[ -f "$BUILT" ]] || die "빌드는 끝났는데 파일이 없습니다: $BUILT" "위 Gradle 출력을 확인하세요."
 
-VER="$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' android/app/build.gradle | head -1)"
+# 버전은 package.json 이 단일 진실 원천이다(build.gradle 이 여기서 읽어 쓴다).
+VER="$(node -p "require('./package.json').version" 2>/dev/null || echo 0)"
 NAME="deudda-${VER:-0}-${MODE}.${EXT}"
 
 mkdir -p dist-apk

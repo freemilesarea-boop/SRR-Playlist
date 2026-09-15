@@ -60,6 +60,7 @@ import {
 } from '@/lib/trackMetadataOptions';
 
 import type { LucideIcon } from 'lucide-react';
+import { canShowPurchaseUi, PURCHASE_UNAVAILABLE_TITLE, PURCHASE_UNAVAILABLE_BODY } from '@/lib/purchaseGate';
 
 // 긴급 hotfix — /15 alpha + text-*-200 는 WCAG AA fail. /25 + text-*-100 으로 강화.
 const STATUS_LABEL: Record<string, { label: string; tone: string; Icon: LucideIcon }> = {
@@ -644,6 +645,9 @@ function PaymentRequiredCard({
 }) {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
+  // 앱에서는 결제 카드 자체를 띄우지 않는다 — 금액·PayApp 결제 버튼이 모두 들어 있어
+  // 스토어 결제 정책 위반이 된다. 상태만 알리고 끝낸다(purchaseGate.ts).
+  const showPurchase = canShowPurchaseUi();
 
   // X6.22 — get_my_artist_plan 결과 기준 결제 금액/플랜 단일 진입점.
   // plan 미로딩 시 legacy individual 4900 으로 폴백.
@@ -667,6 +671,7 @@ function PaymentRequiredCard({
     : `듣다 정기이용권(월 ${priceWon.toLocaleString('ko-KR')}원) 결제 후 이용할 수 있어요. 결제 완료 후 자동으로 업로드 권한이 활성화됩니다.`;
 
   async function onPay() {
+    if (!showPurchase) return;
     if (phone.replace(/\D/g, '').length < 9) {
       toast.error('알림 받을 휴대폰 번호를 입력해주세요');
       return;
@@ -685,6 +690,17 @@ function PaymentRequiredCard({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!showPurchase) {
+    return (
+      <div id="payment-required" className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
+        <h2 className="text-sm font-bold">{PURCHASE_UNAVAILABLE_TITLE}</h2>
+        <p className="text-[12px] leading-relaxed text-ink-mute">
+          음원 등록·유통에는 정기이용권이 필요해요. {PURCHASE_UNAVAILABLE_BODY}
+        </p>
+      </div>
+    );
   }
 
   return (

@@ -21,6 +21,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { supabase } from '@/lib/supabase';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
@@ -388,8 +389,10 @@ export default function ProfilePage() {
       <PushNotificationToggle />
 
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
-        <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
-          desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
+        {canShowPurchaseUi() && (
+          <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
+            desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
+        )}
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
         {profile?.role === 'admin' && (
           <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Crown, X } from 'lucide-react';
 import type { GateMode } from '@/store/gateStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 export type { GateMode };
 
@@ -82,13 +83,17 @@ export default function SubscriptionGate({
             <div>
               <h2 className="text-lg font-extrabold tracking-tight">프리미엄으로 무제한 감상</h2>
               <p className="mt-1 text-sm text-ink-mute">
-                무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.
+                {canShowPurchaseUi()
+                  ? '무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.'
+                  : '무료 회원은 곡당 25초까지 미리들을 수 있어요.'}
               </p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => navigate('/subscription')} className="btn-primary w-full py-3">
-                <Crown size={16} /> 프리미엄 구독하기
-              </button>
+              {canShowPurchaseUi() && (
+                <button onClick={() => navigate('/subscription')} className="btn-primary w-full py-3">
+                  <Crown size={16} /> 프리미엄 구독하기
+                </button>
+              )}
               <button onClick={onClose} className="btn-ghost w-full py-2.5 text-sm">
                 닫기
               </button>

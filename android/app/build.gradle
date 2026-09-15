@@ -12,6 +12,18 @@ if (keystorePropsFile.exists()) {
 }
 def hasReleaseKey = keystorePropsFile.exists() && keystoreProps['storeFile']
 
+// 버전 단일 진실 원천 = package.json. (아래 defaultConfig 에서 사용)
+def deuddaPkg = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json'))
+def deuddaVersionName = deuddaPkg.version
+def deuddaVersionParts = deuddaVersionName.tokenize('.').collect { it.toInteger() }
+if (deuddaVersionParts.size() != 3) {
+    throw new GradleException("package.json 의 version 은 x.y.z 형식이어야 합니다: ${deuddaVersionName}")
+}
+if (deuddaVersionParts[1] > 99 || deuddaVersionParts[2] > 99) {
+    throw new GradleException("minor/patch 는 99 를 넘을 수 없습니다(versionCode 가 역전됩니다): ${deuddaVersionName}")
+}
+def deuddaVersionCode = deuddaVersionParts[0] * 10000 + deuddaVersionParts[1] * 100 + deuddaVersionParts[2]
+
 android {
     namespace "com.deudda.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -19,8 +31,14 @@ android {
         applicationId "com.deudda.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // 버전은 package.json 하나만 고친다 — 안드로이드/iOS/웹이 따로 놀면
+        // "폰에 깔린 게 어느 빌드인지" 를 아무도 모르게 된다.
+        //
+        // versionCode 는 Play 가 앱을 구분하는 정수이고 한 번 쓴 값은 다시 못 쓴다.
+        // major*10000 + minor*100 + patch 로 만들어 항상 증가하게 한다
+        // (1.0.0 → 10000, 1.0.1 → 10001, 1.2.0 → 10200). minor/patch 는 99 까지.
+        versionCode deuddaVersionCode
+        versionName deuddaVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

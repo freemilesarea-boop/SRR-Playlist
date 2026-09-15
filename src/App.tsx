@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
+import PurchaseUnavailable from '@/components/PurchaseUnavailable';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { usePlayerStore } from '@/store/playerStore';
@@ -96,6 +98,15 @@ function RouteFallback() {
       )}
     </div>
   );
+}
+
+/**
+ * 결제 화면 게이트 — 앱(네이티브)에서는 결제 화면 대신 안내를 보여준다.
+ * 구글/애플이 외부 결제 링크아웃을 금지하기 때문. 자세한 내용은 purchaseGate.ts.
+ */
+function RequireWebPurchase({ children }: { children: React.ReactNode }) {
+  if (!canShowPurchaseUi()) return <PurchaseUnavailable />;
+  return <>{children}</>;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -310,14 +321,14 @@ export default function App() {
                 <Route path="/brand/player/:brandId" element={<RequireAuth><BrandPlayerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
-                <Route path="/pricing" element={<RequireAuth><PricingPage /></RequireAuth>} />
+                <Route path="/pricing" element={<RequireAuth><RequireWebPurchase><PricingPage /></RequireWebPurchase></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
                 <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
                 <Route path="/my/playlists" element={<RequireAuth><MyPlaylistsPage /></RequireAuth>} />
                 <Route path="/sales" element={<RequireAuth><SalespersonDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/hq" element={<RequireAuth><FranchiseHqDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/me" element={<RequireAuth><EnterpriseHqMePage /></RequireAuth>} />
-                <Route path="/enterprise/pay" element={<RequireAuth><EnterprisePayPage /></RequireAuth>} />
+                <Route path="/enterprise/pay" element={<RequireAuth><RequireWebPurchase><EnterprisePayPage /></RequireWebPurchase></RequireAuth>} />
                 <Route path="/enterprise/pay/success" element={<RequireAuth><EnterprisePaySuccessPage /></RequireAuth>} />
                 <Route path="/enterprise/pay/fail" element={<RequireAuth><EnterprisePayFailPage /></RequireAuth>} />
                 <Route path="/enterprise/ops" element={<RequireAuth><EnterpriseHqOpsPage /></RequireAuth>} />

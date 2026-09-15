@@ -23,6 +23,7 @@ import { fetchPlaylistCounts } from '@/lib/api';
 import { useBusinessStore } from '@/store/businessStore';
 import { useBusinessScheduleStore } from '@/store/businessScheduleStore';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessAutoSwitch } from '@/hooks/useBusinessAutoSwitch';
 import { useStartBusinessMode } from '@/hooks/useStartBusinessMode';
@@ -351,7 +352,7 @@ export default function BusinessPage() {
       )}
 
       {/* 사업자 플랜 안내 — 1줄 (전환 시 1줄에 끝남) */}
-      {!isBusinessPlan && (
+      {!isBusinessPlan && canShowPurchaseUi() && (
         <button
           onClick={() => navigate('/subscription')}
           className="flex w-full items-center gap-2 rounded-2xl bg-accent/8 px-3.5 py-2.5 text-left text-xs ring-1 ring-accent/25 transition hover:bg-accent/12"

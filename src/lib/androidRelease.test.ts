@@ -99,3 +99,47 @@ describe('실기기 배포 스크립트', () => {
     expect(repoFile('.gitignore')).toContain('dist-apk/');
   });
 });
+
+// 버전이 갈라지면 "폰에 깔린 게 어느 빌드인지" 를 아무도 모르게 된다.
+// Play 는 같은 versionCode 를 두 번 받지 않으므로 올릴 때마다 증가해야 한다.
+describe('버전 단일 진실 원천', () => {
+  const gradle = repoFile('android/app/build.gradle');
+  const pkgVersion = (JSON.parse(repoFile('package.json')) as { version: string }).version;
+
+  it('package.json 의 version 이 x.y.z 형식이다', () => {
+    expect(pkgVersion).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('build.gradle 이 버전을 박아두지 않고 package.json 에서 읽는다', () => {
+    expect(gradle).toContain("rootProject.file('../package.json')");
+    expect(gradle).toContain('versionName deuddaVersionName');
+    expect(gradle).toContain('versionCode deuddaVersionCode');
+    // 상수로 되돌아가면 두 곳을 따로 고치게 된다.
+    expect(gradle).not.toMatch(/versionName\s+"/);
+    expect(gradle).not.toMatch(/versionCode\s+\d/);
+  });
+
+  it('versionCode 공식이 단조 증가한다', () => {
+    // build.gradle 과 같은 공식. 여기서 깨지면 Play 업로드가 거부된다.
+    const code = (v: string) => {
+      const [a, b, c] = v.split('.').map(Number);
+      return a * 10000 + b * 100 + c;
+    };
+    expect(code('1.0.0')).toBe(10000);
+    expect(code('1.0.1')).toBeGreaterThan(code('1.0.0'));
+    expect(code('1.1.0')).toBeGreaterThan(code('1.0.99'));
+    expect(code('2.0.0')).toBeGreaterThan(code('1.99.99'));
+  });
+
+  it('iOS MARKETING_VERSION 이 package.json 과 같다', () => {
+    const pbx = repoFile('ios/App/App.xcodeproj/project.pbxproj');
+    const found = [...pbx.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((m) => m[1].trim());
+    expect(found.length).toBeGreaterThan(0);
+    for (const v of found) expect(v).toBe(pkgVersion);
+  });
+
+  it('apk 스크립트도 같은 곳에서 버전을 읽는다', () => {
+    // build.gradle 만 바꾸고 스크립트를 놔두면 파일 이름이 deudda-0-debug.apk 가 된다.
+    expect(repoFile('scripts/android-apk.sh')).toContain("require('./package.json').version");
+  });
+});

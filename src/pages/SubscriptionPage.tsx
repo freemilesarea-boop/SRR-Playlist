@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { openExternalUrl } from '@/lib/externalNav';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { friendlyError } from '@/lib/errorMessages';
@@ -174,6 +175,9 @@ export default function SubscriptionPage() {
     promotionCode?: string | null,
   ) {
     if (!user) return;
+    // 앱에서는 어떤 경로로도 외부 결제창을 열지 않는다(스토어 결제 정책).
+    // UI 를 한 군데 빠뜨려도 여기서 막힌다 — purchaseGate.ts 참고.
+    if (!canShowPurchaseUi()) return;
     setBusy(planUi);
     try {
       // SubscriptionType 'personal' ↔ PayApp 'individual' 매핑
@@ -372,7 +376,8 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* 플랜 카드 (요약) */}
+      {/* 플랜 카드 (요약) — 앱에서는 가격·결제 CTA 가 모두 붙어 있어 통째로 감춘다. */}
+      {canShowPurchaseUi() && (
       <div className="grid gap-3 md:grid-cols-3">
         {PLANS.map((p) => {
           // 정지 상태에서는 '이용 중' 잠금 없이 재결제 CTA 를 노출한다.
@@ -440,6 +445,7 @@ export default function SubscriptionPage() {
           );
         })}
       </div>
+      )}
 
       {/* 비교표 */}
       <section className="overflow-hidden rounded-3xl bg-bg-card ring-1 ring-line/10">
@@ -515,7 +521,8 @@ export default function SubscriptionPage() {
       {resume && activeSub && (
         <Alert tone="warning" title={resume.title}>
           <p className="leading-relaxed">{resume.body}</p>
-          {resumeTarget.kind === 'plan' ? (
+          {/* 앱에서는 재결제 CTA 도 감춘다 — 상태 안내(resume.body)는 그대로 남긴다. */}
+          {canShowPurchaseUi() && (resumeTarget.kind === 'plan' ? (
             <button
               onClick={() => setPhoneModal({ plan: resumeTarget.plan, phone: '' })}
               disabled={busy !== null}
@@ -531,7 +538,7 @@ export default function SubscriptionPage() {
             >
               {resume.ctaLabel}
             </Link>
-          )}
+          ))}
         </Alert>
       )}
       {activeSub && activeSub.status === 'active' && (

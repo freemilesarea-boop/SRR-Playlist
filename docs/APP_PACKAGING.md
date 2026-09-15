@@ -78,10 +78,15 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
   색은 보라 `#7B3FF2`(theme.css `--color-accent`)와 검정 `#0A0A0A`(theme-color) 두 개뿐이다.
   PWA 아이콘(`public/pwa-*.png`)은 vite-plugin-pwa 가 따로 관리하므로 건드리지 않는다.
 - [ ] 개인정보처리방침 URL, 지원 URL (스토어 심사 필수)
-- [ ] 앱 버전/빌드번호 (`android` versionCode / `ios` CFBundleVersion)
+- [x] **앱 버전/빌드번호** — `package.json` 의 `version` 하나가 단일 진실 원천이다.
+  안드로이드 `versionCode`/`versionName`, iOS `MARKETING_VERSION` 이 여기서 나온다.
+  올릴 때는 `npm version patch`. 자세한 규칙은 [`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §2.
+- [ ] **결제 정책** — 앱에서는 결제 진입점을 감춘다(`src/lib/purchaseGate.ts`).
+  새 결제 화면을 만들면 반드시 `canShowPurchaseUi()` 로 감쌀 것.
+  [`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §1 참고.
 
 ### Android (Google Play)
-- [ ] Google Play Console 계정(등록비 $25 1회)
+- [ ] Google Play Console 계정(등록비 $25 1회) — **조직 계정 권장**, 개인 계정은 정식 출시 전 테스터 12명×14일이 강제된다 ([`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §4)
 - [ ] 릴리스 서명 키(keystore) 생성 — 배선은 끝나 있다. 키만 만들면 된다:
   ```bash
   npm run keystore
