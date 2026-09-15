@@ -61,12 +61,22 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 ## 5. 스토어 제출 전 채워야 할 항목
 
 ### 공통
-- [ ] **앱 아이콘 / 스플래시** 생성: `@capacitor/assets` 권장
+- [x] **앱 아이콘 / 스플래시** — 완료. 로고가 바뀌면 다시 돌린다:
   ```bash
-  npm i -D @capacitor/assets
-  # resources/icon.png(1024²), resources/splash.png(2732²) 준비 후:
-  npx capacitor-assets generate
+  npm run icons
   ```
+  원본은 손으로 만든 PNG 가 아니라 `scripts/make-app-icons.mjs` 가 브랜드 마크
+  (`Logo.tsx` 의 Construction Sheet 좌표)에서 그려낸다. 그 스크립트가
+  `assets/*.png` 를 만들고, `capacitor-assets` 가 그걸 안드로이드·iOS 해상도로 펼친다.
+
+  | 원본 | 쓰임 |
+  | --- | --- |
+  | `icon-only.png` | iOS 앱 아이콘 · 안드로이드 구형(비-adaptive) 런처 아이콘 |
+  | `icon-background.png` / `icon-foreground.png` | 안드로이드 adaptive icon 두 레이어 |
+  | `splash.png` / `splash-dark.png` | 스플래시 라이트/다크 |
+
+  색은 보라 `#7B3FF2`(theme.css `--color-accent`)와 검정 `#0A0A0A`(theme-color) 두 개뿐이다.
+  PWA 아이콘(`public/pwa-*.png`)은 vite-plugin-pwa 가 따로 관리하므로 건드리지 않는다.
 - [ ] 개인정보처리방침 URL, 지원 URL (스토어 심사 필수)
 - [ ] 앱 버전/빌드번호 (`android` versionCode / `ios` CFBundleVersion)
 
@@ -324,7 +334,7 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 - [ ] Play Console 포그라운드 서비스 타입 신고(mediaPlayback)
 - [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
-- [ ] 앱 아이콘/스플래시 에셋 생성
+- [x] 앱 아이콘/스플래시 에셋 생성 (`npm run icons`)
 - [ ] IAP/결제 정책 결정
 - [ ] 서명 키 생성 + 스토어 계정
 - [ ] 내부 테스트(TestFlight / Play 내부 테스트) → 심사 제출

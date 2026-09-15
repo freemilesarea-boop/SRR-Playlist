@@ -277,7 +277,7 @@ npm run android:emu -- --device   # 매장 태블릿에 설치해서 실사용 �
 | 항목 | 필요한 것 |
 | --- | --- |
 | 서명 키 | `keytool` 로 keystore 생성 → `android/app` 서명 설정. **키는 커밋 금지** |
-| 앱 아이콘/스플래시 | `npm i -D @capacitor/assets` → `npx capacitor-assets generate` |
+| 앱 아이콘/스플래시 | ✅ 완료 — 브랜드 마크로 생성됨. 로고가 바뀌면 `npm run icons` |
 | 릴리스 빌드 | Android Studio → Build → Generate Signed Bundle (`.aab`) |
 | 개발자 계정 | Google Play Console (등록비 $25 1회) |
 | **포그라운드 서비스 신고** | 앱 콘텐츠 → 포그라운드 서비스 권한 → `mediaPlayback` 을 "매장 배경음악 재생" 으로 신고. **미신고 시 반려** |
