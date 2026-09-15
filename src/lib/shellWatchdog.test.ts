@@ -500,6 +500,34 @@ describe('§7 stress — 선택한 임계값으로', () => {
     expect(fired).toBe(0);
   });
 
+  it('트랙 전환 5,000회 → false recovery 0 · 상태 선형 증가 0', () => {
+    // 트랙 경계는 이번 실패 클래스가 실제로 나타난 자리다(2026-09-15 14:06).
+    // 경계에서 티커 간격이 벌어지는 것을 흉내내고, 그때 셸이 끼어드는지 본다.
+    const BOUNDARY_JITTER = [3_000, 9_000, 12_000, 4_000, 3_000];
+    let fired = 0;
+    let stale = 0;
+    const seen = new Set<string>();
+    for (let t = 0; t < 5_000; t++) {
+      for (const gap of BOUNDARY_JITTER) {
+        const a = resolveShellWatchdogAction({
+          ...HEALTHY,
+          documentHidden: t % 7 === 0,          // 가끔 화면이 꺼진 채로 넘어간다
+          playerRuntimeAgeMs: gap,
+          staleObservations: stale,
+        });
+        seen.add(a);
+        if (a === 'observe') stale++;
+        else if (a === 'none') stale = 0;
+        else fired++;
+      }
+    }
+    expect(fired).toBe(0);
+    // 판정자가 들고 있는 상태는 카운터 하나뿐이고, 끝에서도 0 이다.
+    expect(stale).toBe(0);
+    // 5,000 회를 돌아도 나온 판정 종류가 늘어나지 않는다.
+    expect([...seen]).toEqual(['none']);
+  });
+
   it('타이머 상실 100 사이클 — 매번 확정까지 정확히 CONFIRM_OBSERVATIONS 관측', () => {
     for (let c = 0; c < 100; c++) {
       let stale = 0;
