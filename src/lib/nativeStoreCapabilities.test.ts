@@ -326,9 +326,18 @@ describe('가상기기 실행 경로', () => {
     // 예전 검사는 '^VITE_SUPABASE_URL=https' 였는데, 템플릿의
     // your-project-ref.supabase.co 도 https 로 시작해서 그대로 통과했다.
     // 실제로 사용자 맥에서 "✓ .env 확인" 이 뜬 뒤 앱이 설정 화면만 보여줬다.
-    const sh = repoFile('scripts/run-emulator.sh');
+    const sh = repoFile('scripts/require-env.sh');
     expect(sh).toContain('your-project-ref');
     expect(sh).toContain('your-anon-key');
+  });
+
+  it('APK 빌드에도 같은 .env 검사가 걸린다', () => {
+    // android-build.sh 에는 이 검사가 없었다. .env 가 비어도 빌드는 성공하고 APK 도
+    // 나오는데, 기기에서 켜면 "Supabase 환경 변수가 설정되지 않았어요" 화면만 떴다.
+    // 빌드 몇 분을 쓰고 에뮬레이터를 켜서야 아는 게 최악이라 두 경로 모두에서 막는다.
+    for (const script of ['scripts/android-build.sh', 'scripts/run-emulator.sh']) {
+      expect(repoFile(script)).toContain('. scripts/require-env.sh');
+    }
   });
 
   it('Gradle 이 SDK 를 못 찾는 흔한 실패를 미리 막는다', () => {

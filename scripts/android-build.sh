@@ -6,6 +6,8 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 . scripts/pick-jdk.sh
+# .env 가 비어 있어도 빌드는 성공한다 — 기기에서 '설정 필요' 화면만 뜬다. 여기서 끊는다.
+. scripts/require-env.sh
 
 npm run build:no-lint
 npx cap sync android
