@@ -30,6 +30,7 @@ const SUPPORT_LINKS: LinkItem[] = [
   { label: '광고 / B2B 문의', href: 'mailto:freemilesarea@gmail.com?subject=듣다 문의' },
   { label: '이용약관', href: '/terms' },
   { label: '개인정보 처리방침', href: '/privacy' },
+  { label: '계정 및 데이터 삭제', href: '/account-deletion' },
 ];
 
 

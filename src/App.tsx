@@ -50,6 +50,7 @@ const SalesPartnersPage = lazyWithRetry(() => import('@/pages/SalesPartnersPage'
 const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
 const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
+const AccountDeletionPage = lazyWithRetry(() => import('@/pages/legal/AccountDeletionPage'));
 const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
 const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
 const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'));
@@ -302,6 +303,8 @@ export default function App() {
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/notice" element={<NoticePage />} />
                 <Route path="/support" element={<SupportPage />} />
+                {/* 구글 플레이 '데이터 삭제' 선언에 등록한 공개 URL — 로그인 뒤로 옮기면 안 된다. */}
+                <Route path="/account-deletion" element={<AccountDeletionPage />} />
                 <Route path="/service" element={<ServicePage />} />
                 <Route path="/service/preview" element={<ServicePreviewPage />} />
                 <Route path="/sales-partners" element={<SalesPartnersPage />} />
