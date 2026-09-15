@@ -29,6 +29,7 @@
     "android:korean": "bash scripts/android-korean.sh",
     "android:paste": "bash scripts/android-paste.sh",
     "icons": "node scripts/make-app-icons.mjs && capacitor-assets generate --android --ios",
+    "store-graphics": "node scripts/make-store-graphics.mjs",
     "apk": "bash scripts/android-apk.sh",
     "aab": "bash scripts/android-apk.sh --aab",
     "keystore": "bash scripts/android-keystore.sh"

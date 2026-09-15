@@ -221,14 +221,22 @@ WAKE_LOCK · POST_NOTIFICATIONS · FOREGROUND_SERVICE 뿐).
 | 앱 이름 | 30자 이내 |
 | 간단한 설명 | 80자 이내 |
 | 자세한 설명 | 4,000자 이내 |
-| 앱 아이콘 | 512×512 PNG — `assets/icon-only.png` 에서 리사이즈 |
-| 그래픽 이미지 | 1024×500 |
+| 앱 아이콘 | 512×512 PNG — **`store/play-icon-512.png`** |
+| 그래픽 이미지 | 1024×500 PNG — **`store/play-feature-1024x500.png`** |
 | 휴대전화 스크린샷 | 최소 2장 (권장 4~8장) |
 | 태블릿 스크린샷 | 7·10인치 — 태블릿 지원 표시하려면 필요 |
 | 개인정보처리방침 URL | `https://deudda.com/privacy` |
 | 지원 이메일 | 필수 |
 
-스크린샷은 에뮬레이터에서 찍으면 된다 (`EMULATOR_QA.md`).
+앞의 두 이미지는 `npm run store-graphics` 로 만든다(`store/` 에 이미 들어있다).
+브랜드 마크와 색을 `assets/` 에서 가져오므로 로고가 바뀌면 다시 돌리면 된다.
+글자는 앱과 같은 Pretendard 로 그리는데, 폰트가 없는 환경에서는 깨진 타이포
+대신 마크만 그리고 경고를 낸다.
+
+스크린샷은 직접 찍어야 한다 (`EMULATOR_QA.md`). 2~8장, 16:9 또는 9:16,
+긴 쪽 320~3840px. **각 변 1,080px 이상으로 4장 넣으면** 플레이의 추천·프로모션
+대상이 될 수 있으니 이왕이면 그 조건을 맞춘다. 찍을 화면은 매장 대시보드,
+전체화면 플레이어, 시간대 스케줄러, 브랜드 플레이어 정도가 앱을 잘 보여준다.
 
 ### 문구 초안 — 그대로 붙여넣어도 된다
 
@@ -297,7 +305,7 @@ WAKE_LOCK · POST_NOTIFICATIONS · FOREGROUND_SERVICE 뿐).
 
 ─────────────────
 
-문의: (지원 이메일)
+문의: freemilesarea@gmail.com
 이용약관: https://deudda.com/terms
 개인정보처리방침: https://deudda.com/privacy
 ```
