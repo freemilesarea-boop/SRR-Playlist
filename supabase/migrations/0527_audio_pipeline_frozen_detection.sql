@@ -104,6 +104,17 @@ comment on column public.brand_player_incidents.detection is
 --    null 은 null 로 둔다. 0 으로 채우면 이 값을 보내지 않는 구버전 클라이언트가
 --    전부 즉시 장애가 된다. "모른다" 와 "안 간다" 는 다르다.
 -- ----------------------------------------------------------------------------
+-- ★ create or replace 는 **반환 타입을 바꾸지 못한다.** 0522 의 13칸에 칸을 더하므로
+--   먼저 지워야 한다 — 그러지 않으면 적용 자체가 실패한다:
+--     ERROR: cannot change return type of existing function
+--   0522 가 detect_brand_player_incidents 에 같은 이유로 같은 순서를 썼는데,
+--   이 함수에는 그 규율이 빠져 있었다. 빈 DB 에 0522 → 0527 순서로 실제 적용해
+--   확인했다.
+--   시그니처가 (integer) 하나뿐이라 0522 가 걱정했던 오버로드 모호성은 생기지 않는다.
+--   drop 과 create 사이에 크론이 돌면 그 한 번만 실패하고 다음 분에 회복된다
+--   (마이그레이션은 트랜잭션 안에서 돈다).
+drop function if exists public._brand_player_liveness(integer);
+
 create or replace function public._brand_player_liveness(p_minutes integer default 1440)
 returns table(
   brand_id uuid, brand_name text, user_id uuid, store_label text,
