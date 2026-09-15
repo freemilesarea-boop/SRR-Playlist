@@ -113,10 +113,16 @@ describe('F · G. Realtime / heartbeat 가 던져도 재생 경로로 전파되�
   const read = (p: string) => require('node:fs').readFileSync(
     require('node:path').resolve(process.cwd(), p), 'utf-8');
 
-  it('F. 구독 생성이 throw 해도 훅이 삼킨다', () => {
-    const hook = read('src/hooks/useBrandPlayerHeartbeat.ts');
-    const block = hook.slice(hook.indexOf('sub = subscribeStoreRecoveryCommands'));
-    expect(block.slice(0, 900)).toMatch(/\} catch \{[\s\S]{0,120}구독 자체가 실패해도/);
+  // 27 — 구독은 플레이어 페이지 훅에서 AppShell 제어면으로 옮겼다. 계약은 그대로다.
+  it('F. 구독 생성이 throw 해도 제어면이 삼킨다', () => {
+    const plane = read('src/components/RecoveryControlPlane.tsx');
+    const block = plane.slice(plane.indexOf('sub = subscribeStoreRecoveryCommands'));
+    expect(block.slice(0, 900)).toMatch(/\} catch \{[\s\S]{0,160}구독 실패해도/);
+  });
+
+  it('F. 구독은 플레이어와 다른 failure domain 에 있다 (2026-09-15 회귀 금지)', () => {
+    expect(read('src/hooks/useBrandPlayerHeartbeat.ts')).not.toContain('subscribeStoreRecoveryCommands');
+    expect(read('src/components/AppShell.tsx')).toMatch(/<RecoveryControlPlane\b/);
   });
 
   it('F. 수신 콜백이 throw 해도 재생을 건드리지 않는다', () => {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
@@ -12,6 +12,11 @@ import Footer from './common/Footer';
 // 매장 BGM 이 어떤 화면에서 흐르고 있어도 예약 안내/긴급 방송 발화 보장.
 // /admin · /artist · /auth/* 등은 내부 route guard 가 차단.
 import GlobalStoreAudioOverlays from './store/GlobalStoreAudioOverlays';
+// 27 — 복구 명령 수신기. **플레이어와 다른 failure domain 에 둔다.**
+// 2026-09-15 숙대점: 플레이어 계층이 멈춘 뒤에도 이 계층은 26분 38초 동안
+// 5초마다 서버와 200 OK 로 왕복하고 있었다. 그때 발행된 복구 명령이 배달되지
+// 못한 이유는 수신기가 죽은 쪽에 있었기 때문이다.
+import RecoveryControlPlane from './RecoveryControlPlane';
 // FloatingSupportButton 은 App.tsx 루트에서 마운트 (createPortal → document.body)
 // AppShell 내부 마운트 중단 — 어떤 컨테이너 의존성도 없도록 격리.
 import {
@@ -24,6 +29,20 @@ import { useAudioOutputAutoRestore } from '@/hooks/useAudioOutputAutoRestore';
 
 export default function AppShell() {
   const loadBrand = useBrandStore((s) => s.load);
+  /**
+   * 29 — 플레이어 subtree 세대.
+   *
+   * 셸 워치독이 "플레이어 실행이 멎었다" 고 판정하면 이 값을 올린다. React 가
+   * key 변경으로 Player 를 통째로 언마운트했다가 새로 만들어 — 오디오 엘리먼트·
+   * 리스너·타이머·effect 가 전부 새로 난다. 죽은 참조가 남지 않는다.
+   *
+   * 페이지 재시작보다 **먼저** 쓴다. 문서가 유지되므로 Samsung Internet 의
+   * 자동재생 정책을 다시 만나지 않는다 — 리로드는 제스처를 요구받을 수 있다.
+   */
+  const [playerGeneration, setPlayerGeneration] = useState(0);
+  const remountPlayer = useCallback(() => {
+    setPlayerGeneration((g) => g + 1);
+  }, []);
   // Audio Output Phase 2 — 앱 mount 시 저장된 sinkId 자동 복원 · devicechange 이벤트로 auto-reconnect.
   // 새 polling 도입 0. Player 재생 로직 무영향.
   useAudioOutputAutoRestore();
@@ -65,9 +84,11 @@ export default function AppShell() {
         </div>
       </div>
 
-      <Player />
+      <Player key={`player-${playerGeneration}`} />
       <BottomNav />
       <GlobalStoreAudioOverlays />
+      {/* 오디오·큐·라우트에 의존하지 않는다. 렌더 결과도 없다(null). */}
+      <RecoveryControlPlane onRemountPlayer={remountPlayer} />
     </div>
   );
 }

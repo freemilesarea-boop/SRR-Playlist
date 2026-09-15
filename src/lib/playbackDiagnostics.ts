@@ -37,7 +37,17 @@ export type DiagnosticEvent =
   // 25 — 오디오 파이프라인이 얼어붙은 **그 순간**. 예전에는 이 사실이 링버퍼
   // 안에만 있다가 playback_stalled 업로드 때만 서버에 닿았다(2026-09-15 숙대점
   // 27분 무음 동안 단 3건). 정지 구간당 1회, 최소 간격을 두고 즉시 보낸다.
-  | 'audio_frozen';
+  | 'audio_frozen'
+  // 27 — 플레이어 **바깥**(AppShell/window)에서 잡은 예외. 2026-09-15 숙대점에서
+  // 플레이어 계층이 멈춘 이유를 끝내 알 수 없었던 것은 유일한 진단기가 플레이어와
+  // 함께 죽었기 때문이다(globalErrorTelemetry.ts).
+  | 'app_error'
+  // 27 — "플레이어는 멈췄는데 셸은 살아 있다". 평소에는 보내지 않는다 —
+  // 플레이어 계층이 멈춘 동안에만 제어면이 남긴다(recoveryControlPlane.ts).
+  | 'shell_health'
+  // 29 — 플레이어 실행 자체가 멎었고 셸이 그것을 감지했다. Phase 28 failure
+  // matrix 의 I(Player timer loss)를 닫는 신호다. 셸 주도 복구마다 1건.
+  | 'player_execution_stale';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드

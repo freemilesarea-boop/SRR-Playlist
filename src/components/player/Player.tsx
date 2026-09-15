@@ -25,6 +25,7 @@ import {
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
 } from '@/lib/mediaProgress';
+import { notePlayerRuntimeAlive } from '@/lib/recoveryControlPlane';
 import {
   initFlightRecorder, setFlightContextProvider, resetFlightRecorder, ensurePlayerInstanceId,
   recordFlightEvent, recordPauseRequest, observePlay, attachMediaEventRecorder, tryBuildFlush,
@@ -1717,6 +1718,20 @@ export default function Player() {
     if (!businessMode) return;
 
     const tick = () => {
+      // 29 — **이 줄이 이 티커의 유일한 셸 인터페이스다.**
+      //
+      // Phase 28 failure matrix 의 I(Player timer loss)는 플레이어 내부 워치독이
+      // 플레이어와 같은 실행 도메인에 있어 스스로를 감시할 수 없다는 문제였다.
+      // 2026-09-15 14:06:16 숙대점에서 브랜드 heartbeat(60초)와 스트림
+      // heartbeat(10초)가 동시에 멎었고, 같은 문서의 셸 폴러는 26분 38초 동안
+      // 멀쩡히 돌았다. 그때 셸이 이 신호의 부재를 볼 수 있었다면 3분 안에
+      // 알아챘을 것이다.
+      //
+      // 모듈 변수 한 줄 대입이다 — 렌더도, 네트워크도, 저장소 쓰기도 없다.
+      // **엘리먼트가 없어도 찍는다.** 여기 아래 early return 뒤에 두면
+      // "오디오가 잠깐 없는 상태" 가 "실행이 죽은 상태" 로 오인된다.
+      notePlayerRuntimeAlive();
+
       const st = healthStateRef.current;
       const el = st.activeIdx === 0 ? audioARef.current : audioBRef.current;
       if (!el) return;
@@ -3125,7 +3140,17 @@ export default function Player() {
 
     // 자동 이어추천이 큐를 늘렸으면 next() 가 자연스럽게 동작 (마지막 → 새 곡)
     const endedId = current?.id ?? null;
-    void maybeAutoplayRecommendations().then((added) => {
+    // 28 — **다음 곡으로 넘어가는 일은 추천 RPC 의 성공에 걸려 있으면 안 된다.**
+    //
+    // 예전에는 `.then()` 하나뿐이었다. maybeAutoplayRecommendations 는 내부에서
+    // recommendSimilarTracks RPC 를 await 하는데, 그게 거부되면(네트워크 끊김,
+    // 타임아웃, 5xx) then 이 영영 실행되지 않아 **next() 가 호출되지 않는다.**
+    // 큐가 멈추고 unhandled rejection 만 남는다. 무인 매장에서는 그대로 무음이다.
+    //
+    // 브랜드 플레이어는 repeat='all' 이라 RPC 앞에서 먼저 return false 하므로
+    // 오늘 숙대가 이 경로에 노출돼 있지는 않다. 그래도 고친다 — 재생은 관측보다
+    // 우선이고(PLAYBACK > TELEMETRY), repeat 는 전역 상태라 언제든 'off' 가 될 수 있다.
+    const advance = (added: boolean) => {
       if (added) return;
       // await 도중 사용자가 next/prev/트랙변경을 했으면 중복 진행 금지 (stale closure 방어)
       const st = usePlayerStore.getState();
@@ -3133,6 +3158,13 @@ export default function Player() {
       // BRAND-PLAYLIST-ROTATION-4C — 자연 종료임을 명시. 마지막 재생순번/단일 트랙이면
       // playerStore.next 가 Cycle 완료 Signal 을 emit 한다(수동 next 는 emit 안 함).
       next({ cause: 'audio_ended' });
+    };
+    void maybeAutoplayRecommendations().then(advance, (err) => {
+      // 추천이 실패했을 뿐이다. 큐는 그대로 진행한다.
+      recordFlightEvent('AUTOPLAY_RECOMMEND_FAILED', {
+        extra: { message: err instanceof Error ? err.message.slice(0, 120) : 'unknown' },
+      });
+      advance(false);
     });
     checkAudioHealth('ended');
   }

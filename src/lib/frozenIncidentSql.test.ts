@@ -100,11 +100,13 @@ describe('§7 진단 이벤트가 서버에서 조용히 버려지지 않는다'
     for (const ev of REQUIRED) expect(block).toContain(`'${ev}'`);
   });
 
-  it('DiagnosticEvent 유니온과 CHECK 목록이 어긋나지 않는다', () => {
+  it('0527 이 아는 13종은 전부 DiagnosticEvent 유니온에 있다', () => {
+    // 0527 은 27 이 추가한 app_error / shell_health 를 모른다 — 그건 0528 이 채운다.
+    // 여기서는 0527 이 **없는 이벤트를 허용하지 않는지**만 본다.
     const ts = readFileSync(resolve(process.cwd(), 'src/lib/playbackDiagnostics.ts'), 'utf-8');
     const union = ts.slice(ts.indexOf('export type DiagnosticEvent'), ts.indexOf('export type DiagnosticReason'));
-    const declared = [...union.matchAll(/\|?\s*'([a-z_]+)'/g)].map((m) => m[1]);
-    expect(new Set(declared)).toEqual(new Set(REQUIRED));
+    const declared = new Set([...union.matchAll(/\|?\s*'([a-z_]+)'/g)].map((m) => m[1]));
+    REQUIRED.forEach((e) => expect(declared.has(e)).toBe(true));
   });
 });
 
