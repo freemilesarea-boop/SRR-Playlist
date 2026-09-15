@@ -62,6 +62,7 @@ import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
 import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+import { probeAudioLevel, snapshotPlayerVolume, formatLevelReport } from '@/lib/audioLevelProbe';
 import { logPlaybackDiagnostic, takeReloadReason, type DiagnosticReason } from '@/lib/playbackDiagnostics';
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
 import { reloadApp } from '@/lib/playbackGuard';
@@ -375,6 +376,39 @@ export default function Player() {
     return () => { try { delete (w as { __playerDiag?: () => unknown }).__playerDiag; } catch { /* noop */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, playing, crossfading, current?.id]);
+
+  // 재생 레벨 자가진단 — 앱 실행당 딱 한 번, 첫 곡에서.
+  //
+  // "소리가 작다" 는 제보는 원인이 셋(음원 / 플레이어 / 기기)인데 귀로는 구분이 안 된다.
+  // 그래서 첫 곡이 실제로 재생될 때 그 파일을 따로 디코딩해 LUFS 를 재고,
+  // 같은 순간의 audio.volume 과 같이 한 줄로 남긴다. 셋 중 어디를 봐야 할지 바로 나온다.
+  //
+  // warn 으로 찍는 이유: 프로덕션 빌드는 log/debug/info 를 지워서 logcat 에 안 남는다.
+  // 재생 중인 엘리먼트에는 손대지 않는다(createMediaElementSource 는 되돌릴 수 없다).
+  const levelProbeDoneRef = useRef(false);
+  useEffect(() => {
+    if (levelProbeDoneRef.current) return;
+    if (!playing || !current?.audio_url) return;
+    levelProbeDoneRef.current = true;
+
+    // 캐시에 이미 받아둔 blob 이 있으면 그걸 잰다 — 네트워크를 다시 타지 않고,
+    // 무엇보다 "실제로 재생된 그 바이트" 를 재게 된다.
+    const url = playbackSrcFor(current.audio_url) || current.audio_url;
+    void probeAudioLevel(url)
+      .then((probe) => {
+        const snap = snapshotPlayerVolume(
+          usePlayerStore.getState().volume,
+          activeIdx,
+          audioARef.current,
+          audioBRef.current,
+        );
+        console.warn(formatLevelReport(probe, snap));
+      })
+      .catch((e) => {
+        console.warn('[레벨진단] 측정 실패 — 재생에는 영향 없음', e instanceof Error ? e.message : String(e));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, current?.id]);
 
   // 0078 — 미니 플레이어 볼륨 popover
   const [volumePopover, setVolumePopover] = useState(false);
