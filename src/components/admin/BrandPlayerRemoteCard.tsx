@@ -31,6 +31,7 @@ import {
 } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
 import { planOneClickRecovery } from '@/lib/oneClickRecovery';
+import { resolveMonitoredInstall, describeMonitoredInstall } from '@/lib/monitoredInstall';
 import {
   adminBrandPlayerHealth, requestStoreRecovery,
   type BrandPlayerHealthRow, type BrandPlayerCommand,
@@ -116,6 +117,32 @@ export default function BrandPlayerRemoteCard() {
   }, [rows, focusStore]);
 
   const focusMissing = !!focusStore && !!rows && !rows.some((r) => r.store_user_id === focusStore);
+
+  /**
+   * 27 §10 — 매장별 "감시 대상 매장 재생기".
+   *
+   * 2026-09-15 숙대점에서 같은 계정에 세션이 둘이 되자 죽은 태블릿이 가려졌다.
+   * 여기서 기기 종류로 가르지 않는다 — 화정점의 정상 매장 재생기는 데스크톱이다.
+   * 자리 잡은 install 이 하나로 좁혀지지 않으면 **고르지 않는다**(FAIL CLOSED).
+   */
+  const monitoredByStore = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof resolveMonitoredInstall>>();
+    if (!rows) return m;
+    const byStore = new Map<string, typeof rows>();
+    rows.forEach((r) => {
+      const list = byStore.get(r.store_user_id) ?? [];
+      list.push(r);
+      byStore.set(r.store_user_id, list);
+    });
+    byStore.forEach((list, storeId) => {
+      m.set(storeId, resolveMonitoredInstall(list.map((r) => ({
+        sessionId: r.session_id,
+        ageHours: typeof r.session_age_hours === 'number' ? r.session_age_hours : 0,
+        deviceKind: r.device,
+      }))));
+    });
+    return m;
+  }, [rows]);
 
   const send = useCallback(async (row: BrandPlayerHealthRow, command: BrandPlayerCommand) => {
     if (NEEDS_CONFIRM.has(command)) {
@@ -224,6 +251,22 @@ export default function BrandPlayerRemoteCard() {
                       그때 이 콘솔은 모든 버튼을 잠가두고 있었다. 이제 복구 명령은
                       셸 제어면이 받으므로, 셸이 살아 있으면 닿는다. */}
                   {(() => {
+                    const monitored = monitoredByStore.get(r.store_user_id);
+                    // FAIL CLOSED — 대상이 불명확하면 임의의 최신 세션으로 보내지 않는다.
+                    if (!monitored || monitored.kind !== 'resolved') {
+                      return (
+                        <span className="self-center text-[11px] text-warning">
+                          {describeMonitoredInstall(monitored ?? { kind: 'unknown', reason: 'no_sessions' })}
+                        </span>
+                      );
+                    }
+                    if (monitored.sessionId !== r.session_id) {
+                      return (
+                        <span className="self-center text-[11px] text-ink-dim">
+                          감시 대상 매장 재생기가 아닙니다 — 긴급 복구는 해당 기기 행에서
+                        </span>
+                      );
+                    }
                     const plan = planOneClickRecovery({
                       status: r.status,
                       secondsSinceHeartbeat: r.seconds_since_heartbeat,

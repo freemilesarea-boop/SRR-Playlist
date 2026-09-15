@@ -190,6 +190,12 @@ export interface BrandPlayerHealthRow {
   brand_name: string;
   store_label: string;
   status: 'playing' | 'stalled' | 'offline';
+  /**
+   * 27 — 세션 행이 만들어진 뒤 경과(시간). 서버는 예전부터 돌려줬는데 타입에만
+   * 없었다. 감시 대상 install 을 고르는 유일한 근거다(monitoredInstall.ts) —
+   * mobile/desktop 으로 가르면 화정점처럼 매장 재생기가 데스크톱인 곳이 틀린다.
+   */
+  session_age_hours?: number | null;
   seconds_since_heartbeat: number;
   seconds_on_current_track: number;
   current_track_title: string | null;
