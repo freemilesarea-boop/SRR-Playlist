@@ -143,3 +143,45 @@ describe('버전 단일 진실 원천', () => {
     expect(repoFile('scripts/android-apk.sh')).toContain("require('./package.json').version");
   });
 });
+
+// 플레이는 매년 8월 31일에 신규 앱·업데이트의 targetSdk 하한을 한 단계 올린다.
+// 미달이면 심사 이전에 **업로드 자체가 거부된다** — 빌드는 멀쩡히 성공하므로
+// Console 에 올려보고서야 안다. 되돌리는 실수를 막으려고 하한을 박아둔다.
+describe('플레이 SDK 요건', () => {
+  const vars = repoFile('android/variables.gradle');
+  const num = (key: string): number => {
+    const m = vars.match(new RegExp(`${key}\\s*=\\s*(\\d+)`));
+    if (!m) throw new Error(`variables.gradle 에 ${key} 가 없습니다`);
+    return Number(m[1]);
+  };
+
+  // 2026-08-31 부터 API 36 (Android 16).
+  const PLAY_MIN_TARGET_SDK = 36;
+
+  it(`targetSdk 가 ${PLAY_MIN_TARGET_SDK} 이상이다`, () => {
+    expect(num('targetSdkVersion')).toBeGreaterThanOrEqual(PLAY_MIN_TARGET_SDK);
+  });
+
+  it('compileSdk 가 targetSdk 보다 낮지 않다', () => {
+    expect(num('compileSdkVersion')).toBeGreaterThanOrEqual(num('targetSdkVersion'));
+  });
+
+  it('AGP 가 compileSdk 36 을 지원하는 버전이다', () => {
+    // AGP 8.10 이하는 36 을 모르고 "Android SDK 미지원" 경고와 함께 엉뚱하게 빌드된다.
+    const m = repoFile('android/build.gradle').match(/com\.android\.tools\.build:gradle:(\d+)\.(\d+)\.(\d+)/);
+    expect(m, 'build.gradle 에서 AGP 버전을 찾지 못했습니다').not.toBeNull();
+    const [major, minor] = [Number(m![1]), Number(m![2])];
+    expect(major * 100 + minor).toBeGreaterThanOrEqual(811);
+  });
+
+  it('Gradle 래퍼가 AGP 가 요구하는 8.13 이상이다', () => {
+    const m = repoFile('android/gradle/wrapper/gradle-wrapper.properties').match(/gradle-(\d+)\.(\d+)/);
+    expect(m, 'wrapper 에서 Gradle 버전을 찾지 못했습니다').not.toBeNull();
+    const [major, minor] = [Number(m![1]), Number(m![2])];
+    expect(major * 100 + minor).toBeGreaterThanOrEqual(813);
+  });
+
+  it('minSdk 는 그대로 23 이다 (올리면 구형 매장 태블릿이 떨어져 나간다)', () => {
+    expect(num('minSdkVersion')).toBe(23);
+  });
+});

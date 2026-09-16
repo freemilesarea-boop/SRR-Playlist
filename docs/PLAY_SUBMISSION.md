@@ -9,7 +9,7 @@
 
 | 항목 | 상태 |
 | --- | --- |
-| `targetSdk` | ✅ 35 — 신규 앱 요건 충족 (미달이면 업로드 자체가 거부된다) |
+| `targetSdk` | ✅ 36 — 2026-08-31 부터의 신규 앱 요건 (미달이면 업로드 자체가 거부된다) |
 | `minSdk` | ✅ 23 (Android 6.0) |
 | 포그라운드 서비스 | ✅ `mediaPlayback` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` 선언됨 |
 | 권한 | ✅ INTERNET · WAKE_LOCK · POST_NOTIFICATIONS · FOREGROUND_SERVICE 4개뿐 |
@@ -67,6 +67,37 @@ npm run aab
 ```
 
 minor/patch 가 99 를 넘으면 versionCode 가 역전되므로 Gradle 이 빌드를 멈춘다.
+
+---
+
+## 2-1. targetSdk
+
+플레이는 **매년 8월 31일에 하한을 한 단계 올린다.** 2026-08-31 부터 신규 앱과
+업데이트는 **API 36 (Android 16)** 을 타겟해야 하고, 미달이면 심사 이전에
+업로드가 거부된다("API 수준 36 이상을 타겟해야 합니다").
+
+바꾸는 곳은 `android/variables.gradle` 한 군데지만 도구 버전이 따라가야 한다:
+
+| | 값 | 이유 |
+| --- | --- | --- |
+| `compileSdkVersion` · `targetSdkVersion` | 36 | 플레이 요건 |
+| AGP (`android/build.gradle`) | 8.11.1 | 8.10 이하는 compileSdk 36 을 모른다 |
+| Gradle 래퍼 | 8.13 | AGP 8.11 이 요구하는 하한 |
+| `minSdkVersion` | **23 그대로** | 올리면 구형 매장 태블릿이 떨어져 나간다 |
+
+`androidRelease.test.ts` 의 '플레이 SDK 요건' 이 네 값을 전부 잡는다.
+
+내년 8월이면 37 로 또 올려야 한다. 그때는 위 표의 하한과 테스트의
+`PLAY_MIN_TARGET_SDK` 를 같이 올린다.
+
+### 36 으로 올릴 때 확인할 것
+
+- **엣지 투 엣지** — 35 부터 이미 강제였고 36 은 예외 플래그를 없앴을 뿐이다.
+  35 로 실기기 확인을 마쳤으므로 새로 생기는 위험은 아니지만, 상태바·네비게이션바에
+  콘텐츠가 가리지 않는지 한 번 더 본다.
+- **예측형 뒤로가기** — 36 타겟에서 기본 활성이다. 뒤로가기로 앱이 바로 종료되거나
+  모달이 안 닫히는 동작이 없는지 확인한다.
+- Gradle 래퍼가 바뀌었으므로 첫 빌드는 배포판을 새로 받느라 느리다.
 
 ---
 
