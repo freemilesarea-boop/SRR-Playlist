@@ -11,6 +11,12 @@ import {
 } from 'lucide-react';
 import { listPlaylistsWithPlayableCount, type PlaylistPlayableSummary } from '@/lib/businessFallbackApi';
 import {
+  MINUTES_PER_DAY,
+  minutesOf,
+  timeRangeCrossesMidnight,
+  toHhMm,
+} from '@/lib/businessScheduleTime';
+import {
   TEMPLATE_KEYS,
   createSchedule,
   effectiveDays,
@@ -48,29 +54,53 @@ function categoryFromDays(days: number[]): Category {
   return 'all';
 }
 
-/** 영업시간(있으면) 3등분 / 없으면 디폴트 09–12 / 12–18 / 18–22 */
+/**
+ * 24시간 운영 프리셋 — 빈틈 없는 3슬롯.
+ * 마지막 슬롯의 end '00:00' 은 start(16:00) > end 이므로 자정 넘김으로 해석되어
+ * 실질 16:00~24:00 을 덮는다. (`<input type="time">` 이 '24:00' 을 못 받기 때문)
+ */
+const FULL_DAY_SLOTS: Record<SlotName, { start: string; end: string }> = {
+  오전: { start: '00:00', end: '08:00' },
+  오후: { start: '08:00', end: '16:00' },
+  저녁: { start: '16:00', end: '00:00' },
+};
+
+/** 현재 슬롯 값이 24시간 프리셋과 같은지. */
+function isFullDay(src: Record<SlotName, SimpleSlot>): boolean {
+  return SLOT_NAMES.every(
+    (n) => src[n].start === FULL_DAY_SLOTS[n].start && src[n].end === FULL_DAY_SLOTS[n].end,
+  );
+}
+
+/** 슬롯 시간만 24시간 프리셋으로 교체 — 선택한 플리는 유지. */
+function withFullDayTimes(prev: Record<SlotName, SimpleSlot>): Record<SlotName, SimpleSlot> {
+  return {
+    오전: { ...prev.오전, ...FULL_DAY_SLOTS.오전 },
+    오후: { ...prev.오후, ...FULL_DAY_SLOTS.오후 },
+    저녁: { ...prev.저녁, ...FULL_DAY_SLOTS.저녁 },
+  };
+}
+
+/**
+ * 영업시간(있으면) 3등분 / 없으면 디폴트 09–12 / 12–18 / 18–22.
+ * 마감이 시작보다 이르면(10:00 오픈 · 02:00 마감) 자정을 넘는 영업으로 보고 그대로 3등분한다.
+ * 오픈 == 마감이면 24시간 영업으로 본다.
+ */
 function defaultSlots(profile: BusinessProfile | null): Record<SlotName, SimpleSlot> {
-  function toMin(t: string): number {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + (m || 0);
-  }
-  function toHHMM(min: number): string {
-    const h = Math.floor(min / 60) % 24;
-    const m = min % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
   const open = profile?.open_time?.slice(0, 5) ?? '';
   const close = profile?.close_time?.slice(0, 5) ?? '';
   let t1 = '09:00', t2 = '12:00', t3 = '18:00', t4 = '22:00';
   if (open && close) {
-    const o = toMin(open);
-    const c = toMin(close);
-    if (c > o && c - o >= 180) {
-      const third = Math.round((c - o) / 3);
-      t1 = open;
-      t2 = toHHMM(o + third);
-      t3 = toHHMM(o + third * 2);
-      t4 = close;
+    const o = minutesOf(open);
+    const c = minutesOf(close);
+    // 자정 넘김이면 다음날까지 이어지는 길이로 계산. o === c 는 24시간(1440분).
+    const span = c > o ? c - o : c + MINUTES_PER_DAY - o;
+    if (span >= 180) {
+      const third = Math.round(span / 3);
+      t1 = toHhMm(o);
+      t2 = toHhMm(o + third);
+      t3 = toHhMm(o + third * 2);
+      t4 = toHhMm(c);
     }
   }
   return {
@@ -266,8 +296,12 @@ export default function BusinessScheduler() {
     for (const g of groups) {
       for (const name of SLOT_NAMES) {
         const s = g.src[name];
-        if (s.start >= s.end) {
-          toast.info(`${g.label ? g.label + ' ' : ''}${name} 종료 시간은 시작 시간보다 늦어야 해요.`);
+        // 자정 넘김(22:00~02:00)은 허용한다 — 시작과 종료가 "같은" 경우만 막는다.
+        // 길이 0 인지 24시간인지 구분할 수 없기 때문. 24시간은 프리셋 버튼으로 채운다.
+        if (s.start === s.end) {
+          toast.info(
+            `${g.label ? g.label + ' ' : ''}${name} 시작과 종료 시간이 같아요. 24시간 운영은 '24시간 영업' 버튼을 눌러주세요.`,
+          );
           return;
         }
       }
@@ -347,6 +381,17 @@ export default function BusinessScheduler() {
     }
   }
 
+  /** 24시간 영업 프리셋 — 현재 모드의 슬롯 시간만 빈틈 없는 3구간으로 교체 (플리는 유지). */
+  function applyFullDayPreset() {
+    if (mode === 'split') {
+      setWeekdaySlots(withFullDayTimes);
+      setWeekendSlots(withFullDayTimes);
+    } else {
+      setSlots(withFullDayTimes);
+    }
+    toast.success('24시간 영업으로 채웠어요. 플리 확인 후 저장하세요.');
+  }
+
   if (!userId) return null;
 
   const isBusinessPlan = profileSub === 'business';
@@ -355,6 +400,8 @@ export default function BusinessScheduler() {
   const hasLegacyOnly =
     synced && schedules.length > 0 && !SLOT_NAMES.some((n) => schedules.find((s) => s.slot_name === n));
   const current = getCurrentSchedule(schedules);
+  const fullDayActive =
+    mode === 'split' ? isFullDay(weekdaySlots) && isFullDay(weekendSlots) : isFullDay(slots);
 
   return (
     <section className="space-y-5 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10">
@@ -485,6 +532,32 @@ export default function BusinessScheduler() {
               onClick={() => setMode('split')}
             />
           </div>
+        </div>
+
+        {/* 24시간 영업 프리셋 — 3슬롯을 빈틈 없이 채운다 */}
+        <div className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-dim">영업 길이</p>
+          <button
+            type="button"
+            onClick={applyFullDayPreset}
+            aria-pressed={fullDayActive}
+            className={`flex w-full items-center gap-2 rounded-2xl px-3.5 py-3 text-left transition ${
+              fullDayActive
+                ? 'bg-accent text-bg ring-1 ring-accent shadow-card'
+                : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
+            }`}
+          >
+            <Clock size={15} />
+            <span className="text-sm font-bold">24시간 영업</span>
+            <span
+              className={`ml-auto font-mono text-[10px] ${fullDayActive ? 'text-bg/70' : 'text-ink-dim'}`}
+            >
+              00–08 · 08–16 · 16–24
+            </span>
+          </button>
+          <p className="px-1 text-[11px] text-ink-dim">
+            심야 영업은 <span className="font-mono">22:00 ~ 02:00</span> 처럼 자정을 넘겨 적어도 됩니다.
+          </p>
         </div>
 
         {mode === 'unified' ? (
@@ -725,6 +798,11 @@ function SimpleSlotCard({
         <span className="ml-auto font-mono text-[10px] text-ink-dim">
           <Clock size={10} className="-mt-0.5 mr-1 inline" />
           {data.start} ~ {data.end}
+          {timeRangeCrossesMidnight(data.start, data.end) && (
+            <span className="ml-1 rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-slate-900 ring-1 ring-indigo-400/30 dark:text-indigo-200">
+              +1일
+            </span>
+          )}
         </span>
       </div>
 

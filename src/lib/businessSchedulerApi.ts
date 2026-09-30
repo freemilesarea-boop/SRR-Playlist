@@ -1,3 +1,12 @@
+import {
+  findOverlappingWindowIds,
+  minutesOf,
+  nowKstParts,
+  pickCurrentWindow,
+  pickNextWindow,
+  timeRangeCrossesMidnight,
+  type ScheduleWindow,
+} from './businessScheduleTime';
 import { supabase } from './supabase';
 import { getKstHour } from './timeTheme';
 
@@ -246,93 +255,51 @@ export async function createDefaultSchedules(
 }
 
 /* ---------- 현재/다음 스케줄 계산 ---------- */
+//
+// 시간 규칙 자체는 businessScheduleTime (I/O 없는 순수 코어) 에 있다.
+// 여기서는 BusinessSchedule 행 → ScheduleWindow 로 정규화해서 넘기기만 한다.
+// 자정 넘김(22:00~02:00) 과 24시간 운영은 그 코어가 처리한다.
 
-function parseTime(s: string): { h: number; m: number } {
-  // 'HH:MM' or 'HH:MM:SS'
-  const parts = s.split(':');
-  return { h: Number(parts[0] ?? 0), m: Number(parts[1] ?? 0) };
+/** 활성 스케줄만 시간 계산용 window 로 정규화. */
+function toWindows(schedules: BusinessSchedule[]): ScheduleWindow[] {
+  return schedules
+    .filter((s) => s.is_active)
+    .map((s) => ({
+      id: s.id,
+      days: effectiveDays(s),
+      startMinute: minutesOf(s.start_time),
+      endMinute: minutesOf(s.end_time),
+    }));
 }
 
-function minutesOf(s: string): number {
-  const { h, m } = parseTime(s);
-  return h * 60 + m;
-}
-
-/** KST 현재 요일/분 단위 시간 */
-export function nowKstParts(now: Date = new Date()): { day: number; minutes: number } {
-  const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-  const kst = new Date(utc + 9 * 60 * 60 * 1000);
-  return {
-    day: kst.getDay(),
-    minutes: kst.getHours() * 60 + kst.getMinutes(),
-  };
-}
+export { nowKstParts };
 
 export function getCurrentSchedule(
   schedules: BusinessSchedule[],
   now: Date = new Date(),
 ): BusinessSchedule | null {
-  const { day, minutes } = nowKstParts(now);
-  const matches = schedules
-    .filter(
-      (s) =>
-        s.is_active &&
-        effectiveDays(s).includes(day) &&
-        minutesOf(s.start_time) <= minutes &&
-        minutes < minutesOf(s.end_time),
-    )
-    .sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
-  return matches[0] ?? null;
+  const picked = pickCurrentWindow(toWindows(schedules), nowKstParts(now));
+  return picked ? (schedules.find((s) => s.id === picked.id) ?? null) : null;
 }
 
 export function getNextSchedule(
   schedules: BusinessSchedule[],
   now: Date = new Date(),
 ): BusinessSchedule | null {
-  const { day, minutes } = nowKstParts(now);
-  // 오늘 안에서 시작 시간이 현재 이후
-  const today = schedules
-    .filter((s) => s.is_active && effectiveDays(s).includes(day) && minutesOf(s.start_time) > minutes)
-    .sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
-  if (today[0]) return today[0];
-  // 다음 날부터
-  for (let i = 1; i <= 7; i++) {
-    const nextDay = (day + i) % 7;
-    const ofDay = schedules
-      .filter((s) => s.is_active && effectiveDays(s).includes(nextDay))
-      .sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
-    if (ofDay[0]) return ofDay[0];
-  }
-  return null;
+  const picked = pickNextWindow(toWindows(schedules), nowKstParts(now));
+  return picked ? (schedules.find((s) => s.id === picked.id) ?? null) : null;
 }
 
 export function formatSlotTime(start: string, end: string): string {
-  return `${start.slice(0, 5)} ~ ${end.slice(0, 5)}`;
+  const label = `${start.slice(0, 5)} ~ ${end.slice(0, 5)}`;
+  // 자정 넘김이면 종료가 다음날임을 명시 — 22:00 ~ 02:00 만 보면 역순으로 읽힌다.
+  return timeRangeCrossesMidnight(start, end) ? `${label} (+1일)` : label;
 }
 
 /** 영업시간을 기준으로 겹침 체크. 두 스케줄이 공통 요일을 적어도 하나 공유하고 시간이 겹치면 양쪽 모두 표시. */
 export function hasOverlap(schedules: BusinessSchedule[]): BusinessSchedule[] {
-  const overlappingIds = new Set<string>();
-  const active = schedules.filter((s) => s.is_active);
-  for (let i = 0; i < active.length; i++) {
-    for (let j = i + 1; j < active.length; j++) {
-      const a = active[i];
-      const b = active[j];
-      const ad = effectiveDays(a);
-      const bd = effectiveDays(b);
-      const shareDay = ad.some((d) => bd.includes(d));
-      if (!shareDay) continue;
-      const aStart = minutesOf(a.start_time);
-      const aEnd = minutesOf(a.end_time);
-      const bStart = minutesOf(b.start_time);
-      const bEnd = minutesOf(b.end_time);
-      if (aStart < bEnd && bStart < aEnd) {
-        overlappingIds.add(a.id);
-        overlappingIds.add(b.id);
-      }
-    }
-  }
-  return active.filter((s) => overlappingIds.has(s.id));
+  const overlappingIds = findOverlappingWindowIds(toWindows(schedules));
+  return schedules.filter((s) => s.is_active && overlappingIds.has(s.id));
 }
 
 export async function logScheduleEvent(
