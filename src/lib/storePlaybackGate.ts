@@ -23,8 +23,22 @@ export type StoreGateDecision =
 
 export interface StoreGateInput {
   membership: Membership;
-  /** 매장/브랜드 플레이어 모드인가. */
+  /** 매장/브랜드 플레이어 모드인가. localStorage 에 남는 끈적한 플래그다. */
   businessMode: boolean;
+  /**
+   * 지금 보고 있는 화면이 매장 플레이어 화면인가 (/business/player, /brand/player/:id).
+   *
+   * businessMode 만으로는 "무인 매장"을 판정할 수 없다. 그 값은 한 번 켜지면 localStorage 에
+   * 남아서, 점주가 홈·차트·플레이리스트를 둘러보는 동안에도 계속 true 다. 예전에는 그 상태로
+   * subscription_required 를 내서 일반 페이지의 재생까지 막았고, 설명 화면은 매장 플레이어
+   * 페이지에만 있어서 사용자는 이유도 모른 채 25초조차 듣지 못했다 (2026-10-01 회원 신고).
+   */
+  onStorePlayerSurface: boolean;
+}
+
+/** 현재 경로가 매장 플레이어 화면인가. */
+export function isStorePlayerSurface(pathname: string): boolean {
+  return pathname === '/business/player' || pathname.startsWith('/brand/player/');
 }
 
 /**
@@ -36,7 +50,9 @@ export interface StoreGateInput {
 export function resolveStoreGate(i: StoreGateInput): StoreGateDecision {
   if (i.membership === 'anonymous') return 'login_required';
   if (i.membership === 'premium') return 'allow';
-  return i.businessMode ? 'subscription_required' : 'preview';
+  // 전체화면 차단은 무인 매장을 위한 것이다 — 실제로 매장 플레이어 화면을 보고 있을 때만 건다.
+  // 일반 페이지에서는 businessMode 가 켜져 있어도 기존 25초 미리듣기 + 업셀 그대로다.
+  return i.businessMode && i.onStorePlayerSurface ? 'subscription_required' : 'preview';
 }
 
 /** 전체화면 차단 화면을 띄워야 하는가. */

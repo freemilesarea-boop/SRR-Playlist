@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Play,
   Pause,
@@ -73,7 +74,7 @@ import BusinessExcludeButton from '@/components/player/BusinessExcludeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
-import { resolveStoreGate } from '@/lib/storePlaybackGate';
+import { resolveStoreGate, isStorePlayerSurface } from '@/lib/storePlaybackGate';
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
@@ -449,6 +450,9 @@ export default function Player() {
   const gateProfile = useAuthStore((s) => s.profile);
   const membership = resolveMembership(session, gateProfile);
   const openGate = useGateStore((s) => s.open);
+  // 전체화면 차단은 실제 매장 플레이어 화면에서만 — businessMode 플래그만 보면
+  // 일반 페이지를 둘러보는 동안에도 재생이 막힌다.
+  const onStorePlayerSurface = isStorePlayerSurface(useLocation().pathname);
   const pvTrackIdRef = useRef<string | null>(null);
   // 직전 리로드 사유 — 마운트 시 1회 회수(sessionStorage 1회성). 자동재생 차단 기록에 함께 남긴다.
   const lastReloadReasonRef = useRef<DiagnosticReason>(takeReloadReason());
@@ -493,24 +497,19 @@ export default function Player() {
   // 점주도 운영자도 원인을 알 수 없다. 재생을 시작하지 않고 이유를 전체화면으로 명시한다.
   // (데모 계정은 membership 이 premium 으로 해석돼 이 게이트에 걸리지 않는다 — 의도된 무제한)
   useEffect(() => {
-    const gate = resolveStoreGate({ membership, businessMode });
+    const gate = resolveStoreGate({ membership, businessMode, onStorePlayerSurface });
     if (gate === 'allow') {
       if (usePlaybackHealthStore.getState().subscriptionBlocked) {
         usePlaybackHealthStore.getState().setSubscriptionBlocked(false);
       }
       return;
     }
+    // 이 분기는 이제 매장 플레이어 화면에서만 걸린다 — 그 화면에는 이유를 설명하는
+    // PlaybackBlockedOverlay 가 마운트돼 있다. 일반 페이지는 preview 로 내려가 25초 미리듣기와
+    // 업셀 모달을 받는다(예전에는 여기로 떨어져 안내도 소리도 없이 죽었다).
     if (gate === 'subscription_required') {
       usePlaybackHealthStore.getState().setSubscriptionBlocked(true);
-      if (playing) {
-        pause();
-        // 전체화면 안내(PlaybackBlockedOverlay)는 StorePlayerPage / BrandPlayerPage 에만 있다.
-        // businessMode 는 localStorage 에 남는 플래그라, 매장 화면이 아닌 일반 페이지(홈/차트/
-        // 플레이리스트)를 보고 있어도 이 분기를 탄다. 그쪽에는 안내가 없어서 예전에는
-        // 아무 설명 없이 재생만 죽었다 — 곡은 플레이어에 올라오는데 소리는 1초도 안 났다.
-        // 왜 막혔는지 기존 업셀 모달로 알린다. 매장 화면의 전체화면 안내는 그대로다.
-        openGate('upsell');
-      }
+      if (playing) pause();
       return;
     }
     if (!playing) return;
@@ -527,7 +526,7 @@ export default function Player() {
       openGate('upsell');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, membership, businessMode, current?.id]);
+  }, [playing, membership, businessMode, onStorePlayerSurface, current?.id]);
 
   /* ---------- 0093 MediaSession API: 잠금화면 / 이어폰 / Bluetooth 컨트롤 ---------- */
   useEffect(() => {
