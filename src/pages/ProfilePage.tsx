@@ -61,6 +61,9 @@ export default function ProfilePage() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [isAgent, setIsAgent] = useState(false);
   const [payoutVerified, setPayoutVerified] = useState<boolean | null>(null);
+  // 정산정보 CTA 는 /artist 로 보낸다. 그 화면에 못 들어가는 사람에게 띄우면 홈으로
+  // 튕기므로, ArtistDashboardPage 와 같은 기준(artist_profiles 또는 account_type)으로 가른다.
+  const [isArtist, setIsArtist] = useState<boolean | null>(null);
   const [verifyingIdentity, setVerifyingIdentity] = useState(false);
   const location = useLocation();
 
@@ -170,6 +173,18 @@ export default function ProfilePage() {
     return () => { alive = false; };
   }, [user?.id]);
 
+  // 아티스트 판정 — artist_profiles 가 source of truth, account_type 은 미러.
+  // ArtistDashboardPage 의 입장 조건과 같은 기준이어야 CTA 가 막다른 길이 되지 않는다.
+  useEffect(() => {
+    if (!user?.id) return;
+    if (profile?.account_type === 'artist') { setIsArtist(true); return; }
+    let alive = true;
+    fetchMyArtistProfile(user.id)
+      .then((ap) => { if (alive) setIsArtist(ap !== null); })
+      .catch(() => { if (alive) setIsArtist(null); });
+    return () => { alive = false; };
+  }, [user?.id, profile?.account_type]);
+
   async function handleConfirmWithdraw() {
     setWithdrawing(true);
     try {
@@ -248,6 +263,7 @@ export default function ProfilePage() {
         <IdentityVerificationSection
           identityVerified={profile?.identity_verified === true}
           payoutVerified={payoutVerified}
+          isArtist={isArtist}
           verifying={verifyingIdentity}
           onVerify={handleVerifyIdentity}
         />
@@ -485,8 +501,13 @@ function WithdrawConfirmModal({
  *   State C. identityVerified=true & payoutVerified=true  → 준비 완료 (emerald, CTA 없음)
  *
  * payoutVerified 는 null 인 경우(로딩/조회 실패) 안전 fallback 으로 State B/C 를 State C 로 병합
- * (정산정보 등록 CTA 를 잘못 노출하지 않기 위함). 아티스트가 아닌 사용자는 payout 이 없으므로
- * payoutVerified=false 가 되는데, 이 화면은 identity/settlement 준비도만 안내하므로 문제 없음.
+ * (정산정보 등록 CTA 를 잘못 노출하지 않기 위함).
+ *
+ * State B 는 **아티스트에게만** 띄운다. 아티스트가 아닌 사용자는 payout 이 없어
+ * payoutVerified=false 가 되는데, 예전엔 그래도 CTA 를 띄웠다. 그 버튼은
+ * /artist#payout-account 로 보내고 ArtistDashboardPage 가 아티스트가 아닌 사람을
+ * 홈으로 되돌려보내므로, 본인인증을 마친 비아티스트는 눌러도 홈으로 튕기기만 했다
+ * (2026-10-01 제보, 당시 해당 상태 10명).
  *
  * 색상 대비 WCAG AA:
  *   · amber CTA:  bg-amber-400/90 text-amber-950 hover:bg-amber-300 → text ≥ 6:1
@@ -494,10 +515,11 @@ function WithdrawConfirmModal({
  *   · sky CTA:    bg-sky-500 text-white → 4.7:1
  */
 function IdentityVerificationSection({
-  identityVerified, payoutVerified, verifying, onVerify,
+  identityVerified, payoutVerified, isArtist, verifying, onVerify,
 }: {
   identityVerified: boolean;
   payoutVerified: boolean | null;
+  isArtist: boolean | null;
   verifying: boolean;
   onVerify: () => void;
 }) {
@@ -531,7 +553,10 @@ function IdentityVerificationSection({
   }
 
   // State B — 인증 완료 · 정산정보 미완료 (payoutVerified === false 로 확정된 경우에만)
-  if (identityVerified && payoutVerified === false) {
+  // 아티스트에게만 띄운다. 이 CTA 는 /artist#payout-account 로 보내는데, 아티스트가
+  // 아니면 ArtistDashboardPage 가 홈으로 되돌려보내서 버튼이 막다른 길이 된다.
+  // 아티스트가 아닌 사람은 애초에 정산 계좌가 필요 없으므로 아래 '본인인증 완료' 로 떨어진다.
+  if (identityVerified && payoutVerified === false && isArtist === true) {
     return (
       <section id="identity-verification" className="space-y-2 scroll-mt-4">
         <div className="px-1">
