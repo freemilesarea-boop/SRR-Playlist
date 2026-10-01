@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lock, Crown, X } from 'lucide-react';
+import { Lock, Crown, X, ShieldCheck } from 'lucide-react';
 import type { GateMode } from '@/store/gateStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
+import { getBusinessTrialGate, type BusinessTrialGate } from '@/lib/trialApi';
 
 export type { GateMode };
 
@@ -31,6 +32,21 @@ export default function SubscriptionGate({
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, { onClose });
 
+  // 0528 — 사업자등록만 남은 사업자 회원에게는 구독 유도 대신 무료체험 안내를 띄운다.
+  const [bizGate, setBizGate] = useState<BusinessTrialGate | null>(null);
+  useEffect(() => {
+    if (mode !== 'upsell') return;
+    let alive = true;
+    void (async () => {
+      const g = await getBusinessTrialGate();
+      if (alive) setBizGate(g);
+    })();
+    return () => { alive = false; };
+  }, [mode]);
+
+  const needsBusinessRegistration = !!bizGate && bizGate.is_business
+    && !bizGate.registered && !bizGate.paid && !bizGate.trial_active && !bizGate.trial_used;
+
   return (
     <div
       ref={dialogRef}
@@ -47,7 +63,8 @@ export default function SubscriptionGate({
             className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent"
             style={{ boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.35)' }}
           >
-            {mode === 'login' ? <Lock size={22} /> : <Crown size={22} />}
+            {mode === 'login' ? <Lock size={22} />
+              : needsBusinessRegistration ? <ShieldCheck size={22} /> : <Crown size={22} />}
           </span>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/5" aria-label="닫기">
             <X size={16} />
@@ -80,15 +97,28 @@ export default function SubscriptionGate({
         ) : (
           <>
             <div>
-              <h2 className="text-lg font-extrabold tracking-tight">프리미엄으로 무제한 감상</h2>
+              <h2 className="text-lg font-extrabold tracking-tight">
+                {needsBusinessRegistration ? '사업자등록 후 3일 무료체험' : '프리미엄으로 무제한 감상'}
+              </h2>
               <p className="mt-1 text-sm text-ink-mute">
-                무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.
+                {needsBusinessRegistration
+                  ? '사업자등록을 마치면 3일 무료체험이 바로 열려요. 체험 기간에는 모든 곡을 매장에서 무제한으로 사용할 수 있어요.'
+                  : '무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.'}
               </p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => navigate('/subscription')} className="btn-primary w-full py-3">
-                <Crown size={16} /> 프리미엄 구독하기
-              </button>
+              {needsBusinessRegistration ? (
+                <button
+                  onClick={() => { navigate('/business/register'); onClose(); }}
+                  className="btn-primary w-full py-3"
+                >
+                  <ShieldCheck size={16} /> 사업자등록하고 체험 시작
+                </button>
+              ) : (
+                <button onClick={() => navigate('/subscription')} className="btn-primary w-full py-3">
+                  <Crown size={16} /> 프리미엄 구독하기
+                </button>
+              )}
               <button onClick={onClose} className="btn-ghost w-full py-2.5 text-sm">
                 닫기
               </button>
