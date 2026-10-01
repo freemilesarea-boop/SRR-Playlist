@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -26,9 +26,23 @@ import {
 } from '@/lib/playerSession';
 import { useBrandStore } from '@/store/brandStore';
 import { useAudioOutputAutoRestore } from '@/hooks/useAudioOutputAutoRestore';
+import { useBusinessStore } from '@/store/businessStore';
+import { useAuthStore } from '@/store/authStore';
+import { resolveMembership } from '@/lib/membership';
+import { shouldResumeStorePlayerOnLaunch } from '@/lib/storePlaybackGate';
+import { isStandalone } from '@/hooks/useInstallPrompt';
 
 export default function AppShell() {
   const loadBrand = useBrandStore((s) => s.load);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const businessMode = useBusinessStore((s) => s.businessMode);
+  const membership = resolveMembership(
+    useAuthStore((s) => s.session),
+    useAuthStore((s) => s.profile),
+  );
+  // 앱 실행당 1회 — 홈으로 되돌아 나온 사람을 다시 매장 화면으로 끌고 가지 않는다.
+  const launchResumeHandledRef = useRef(false);
   /**
    * 29 — 플레이어 subtree 세대.
    *
@@ -56,6 +70,22 @@ export default function AppShell() {
     void loadBrand();
     return cleanup;
   }, [loadBrand]);
+
+  // 설치형 앱을 매장 모드로 켜면 매장 플레이어로 되돌아간다.
+  // PC 전원 → (OS 가 앱 실행: 점주가 1회 설정) → (여기: 매장 화면 복귀) → (StorePlayerPage: 자동 재생)
+  // 조건을 좁게 잡은 이유는 shouldResumeStorePlayerOnLaunch 주석에 적었다.
+  useEffect(() => {
+    if (launchResumeHandledRef.current) return;
+    if (!shouldResumeStorePlayerOnLaunch({
+      pathname,
+      businessMode,
+      membership,
+      standalone: isStandalone(),
+      alreadyResumed: false,
+    })) return;
+    launchResumeHandledRef.current = true;
+    navigate('/business/player', { replace: true });
+  }, [pathname, businessMode, membership, navigate]);
 
   return (
     <div className="flex min-h-screen flex-col bg-bg pt-safe">

@@ -185,6 +185,21 @@ serve(async (req) => {
     .upsert(row, { onConflict: 'user_id' });
   if (upErr) return json({ error: 'profile save failed', detail: upErr.message }, 500);
 
+  // 0530 — 등록이 받아들여졌으면(verified | manual_review) 영업인 코드 없이 3일 무료체험을 연다.
+  // 자격 판정·중복차단(사업자번호/연락처)·1회 제한은 전부 RPC 안에서 서버가 한다.
+  // 사용자 토큰 클라이언트로 호출해야 auth.uid() 가 잡힌다.
+  // 체험 시작 실패는 등록 자체를 실패로 만들지 않는다 — 재생 시도 시 다시 시도된다.
+  let trialStarted = false;
+  let trialEndsAt: string | null = null;
+  if (status !== 'rejected') {
+    try {
+      const { data: tr } = await sbUser.rpc('start_verified_business_trial');
+      const t = (tr ?? {}) as { ok?: boolean; free_trial_ends_at?: string };
+      trialStarted = t.ok === true;
+      trialEndsAt = t.free_trial_ends_at ?? null;
+    } catch { /* 무시 — 등록은 성공으로 응답 */ }
+  }
+
   return json({
     ok: status !== 'rejected',
     business_verified: verified,
@@ -193,6 +208,8 @@ serve(async (req) => {
     tax_type: nts.tax_type ?? null,
     nts_checked: nts.checked,
     verified_at: verified ? nowIso : null,
+    trial_started: trialStarted,
+    free_trial_ends_at: trialEndsAt,
     message,
   }, status === 'rejected' ? 400 : 200);
 });

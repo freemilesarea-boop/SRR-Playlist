@@ -75,6 +75,10 @@ import BusinessExcludeButton from '@/components/player/BusinessExcludeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
+import {
+  getBusinessTrialGate, startVerifiedBusinessTrial,
+  type BusinessTrialGate,
+} from '@/lib/trialApi';
 import { resolveStoreGate, isStorePlayerSurface } from '@/lib/storePlaybackGate';
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
@@ -451,6 +455,43 @@ export default function Player() {
   const gateProfile = useAuthStore((s) => s.profile);
   const membership = resolveMembership(session, gateProfile);
   const openGate = useGateStore((s) => s.open);
+
+  // 0530 — 사업자등록 게이트.
+  //   · 등록 전   : 재생이 막힐 때 "사업자등록 후 3일 무료체험" 을 안내한다.
+  //   · 등록 완료 : 체험이 아직 안 열렸으면 여기서 한 번 더 연다
+  //                 (verify-business-number 엣지함수의 호출이 실패한 경우 복구 경로).
+  // 자격 판정은 전부 서버(get_business_trial_gate / start_verified_business_trial).
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const bizGateRef = useRef<BusinessTrialGate | null>(null);
+  const sessionUserId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (!sessionUserId || gateProfile?.account_type !== 'business') {
+      bizGateRef.current = null;
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      const g = await getBusinessTrialGate();
+      if (!alive) return;
+      bizGateRef.current = g;
+      if (!g?.can_start_trial) return;
+      const r = await startVerifiedBusinessTrial();
+      if (!alive || !r.ok) return;
+      bizGateRef.current = await getBusinessTrialGate();
+      toast.success('사업자등록 확인 — 3일 무료체험이 시작되었습니다.');
+      void refreshProfile();
+    })();
+    return () => { alive = false; };
+  }, [sessionUserId, gateProfile?.account_type, gateProfile?.free_trial_started_at, refreshProfile]);
+
+  /** 재생 차단 시 띄울 문구. 사업자등록만 남은 회원에게는 체험 안내로 바꾼다. */
+  function previewBlockMessage(): string {
+    const g = bizGateRef.current;
+    if (g && g.is_business && !g.paid && !g.trial_active && !g.trial_used && !g.registered) {
+      return '사업자등록 후 3일 무료체험이 가능합니다. 등록하시면 바로 열립니다.';
+    }
+    return '무료회원에게는 미리듣기만 제공됩니다.';
+  }
   // 전체화면 차단은 실제 매장 플레이어 화면에서만 — businessMode 플래그만 보면
   // 일반 페이지를 둘러보는 동안에도 재생이 막힌다.
   const onStorePlayerSurface = isStorePlayerSurface(useLocation().pathname);
@@ -2789,7 +2830,7 @@ export default function Player() {
       if (previewSecRef.current >= PREVIEW_LIMIT_SECONDS) {
         previewBlockedRef.current = true;
         pause();
-        toast.info('무료회원에게는 미리듣기만 제공됩니다.');
+        toast.info(previewBlockMessage());
         openGate('upsell');
       }
     }
