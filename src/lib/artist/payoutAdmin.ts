@@ -105,6 +105,45 @@ export async function verifyArtistPayoutAccount(accountId: string): Promise<{ ok
   return { ok: true };
 }
 
+/**
+ * 0532 — 관리자가 정산 계좌(은행·계좌번호·예금주)를 직접 고친다.
+ *
+ * 계좌번호는 서버에서 암호화해 저장한다(평문 컬럼은 마스킹만 담는다). 신원 정보
+ * (실명·주민번호·세금 동의)는 건드리지 않는다 — 명의자가 실제로 바뀌는 건이라면
+ * 아티스트가 신분증과 함께 재제출하는 기존 경로를 써야 한다.
+ * 변경 전/후와 사유는 artist_payout_account_changes 에 영구 기록된다.
+ */
+export interface AdminUpdatePayoutResult {
+  ok: boolean;
+  noop?: boolean;
+  changed_fields?: string[];
+  masked_account_number?: string;
+  pending_settlement_count?: number;
+  pending_settlement_amount?: number;
+  message?: string;
+}
+
+export async function adminUpdateArtistPayoutAccount(opts: {
+  accountId: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  reason: string;
+}): Promise<{ ok: boolean; error?: string; result?: AdminUpdatePayoutResult }> {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+  const { data, error } = await supabase.rpc('admin_update_artist_payout_account', {
+    p_account_id: opts.accountId,
+    p_bank_name: opts.bankName,
+    p_account_number: opts.accountNumber,
+    p_account_holder: opts.accountHolder,
+    p_reason: opts.reason,
+    p_user_agent: ua,
+  });
+  if (error) return { ok: false, error: error.message };
+  const r = (data ?? {}) as AdminUpdatePayoutResult;
+  return r.ok ? { ok: true, result: r } : { ok: false, error: r.message ?? '변경 실패' };
+}
+
 export async function rejectArtistPayoutAccount(
   accountId: string,
   reason: string | null,

@@ -12,7 +12,7 @@
  * payout_incomplete, 0489 와 같은 기준).
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Wallet, Check, X, Clock } from 'lucide-react';
+import { Wallet, Check, X, Clock, Pencil } from 'lucide-react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingPayoutAccounts,
@@ -23,6 +23,7 @@ import {
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import RevealPiiButton from './RevealPiiButton';
+import PayoutAccountEditDialog from './PayoutAccountEditDialog';
 import {
   PAYOUT_ACCOUNT_FILTERS as FILTERS,
   matchesPayoutAccountFilter as matchesFilter,
@@ -66,6 +67,8 @@ export default function PayoutVerificationList({
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<PayoutAccountFilter>(initialFilter);
+  // 0532 — 계좌 변경 창. 고객센터 문의로 들어온 은행/계좌 변경을 여기서 처리한다.
+  const [editRow, setEditRow] = useState<AdminPayoutRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -259,7 +262,15 @@ export default function PayoutVerificationList({
                     {new Date(r.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="flex justify-end gap-1">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button
+                        onClick={() => setEditRow(r)}
+                        disabled={busyId === r.account_id}
+                        title="은행 · 계좌번호 · 예금주 변경 (사유 기록)"
+                        className="inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
+                      >
+                        <Pencil size={11} /> 계좌 변경
+                      </button>
                       {r.verification_status !== 'verified' && (
                         <button
                           onClick={() => verify(r.account_id)}
@@ -287,6 +298,14 @@ export default function PayoutVerificationList({
           </tbody>
         </table>
       </div>
+
+      {editRow && (
+        <PayoutAccountEditDialog
+          row={editRow}
+          onClose={() => setEditRow(null)}
+          onSaved={() => void load()}
+        />
+      )}
     </div>
   );
 }
