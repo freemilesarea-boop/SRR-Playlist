@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
@@ -17,6 +17,10 @@ import { formatTime } from '@/lib/format';
 import { isNativeApp } from '@/lib/native';
 import MobileBrowserPlaybackWarning from '@/components/player/MobileBrowserPlaybackWarning';
 import { isStandalone } from '@/hooks/useInstallPrompt';
+import { resolveMembership } from '@/lib/membership';
+import { resolveStoreAutoStart } from '@/lib/storePlaybackGate';
+import { useBusinessScheduleStore } from '@/store/businessScheduleStore';
+import { useStartBusinessMode } from '@/hooks/useStartBusinessMode';
 import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
@@ -49,6 +53,16 @@ import { useStorePlaylistRotation } from '@/hooks/useStorePlaylistRotation';
  */
 export default function StorePlayerPage() {
   const navigate = useNavigate();
+  // 자동 시작은 화면 진입당 1회 — ref 라 리렌더로 초기화되지 않는다.
+  const autoStartTriedRef = useRef(false);
+  const schedulesRefreshedRef = useRef(false);
+  const membership = resolveMembership(
+    useAuthStore((s) => s.session),
+    useAuthStore((s) => s.profile),
+  );
+  const schedules = useBusinessScheduleStore((s) => s.schedules);
+  const schedulesLoading = useBusinessScheduleStore((s) => s.loading);
+  const startBusinessMode = useStartBusinessMode();
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const playing = usePlayerStore((s) => s.playing);
@@ -78,6 +92,38 @@ export default function StorePlayerPage() {
     setBusinessMode(true);
     enableForBusinessMode();
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 스케줄은 지금까지 BusinessPage 를 거쳐야만 로드됐다. PWA 바로가기나 앱 자동 복귀로
+  // 이 화면에 바로 들어오면 schedules 가 비어 있어 자동 시작이 영원히 판단 불가가 된다.
+  useEffect(() => {
+    const uid = useAuthStore.getState().user?.id;
+    if (!uid || schedulesRefreshedRef.current) return;
+    if (useBusinessScheduleStore.getState().schedules.length > 0) return;
+    schedulesRefreshedRef.current = true;
+    void useBusinessScheduleStore.getState().refresh(uid);
+  }, []);
+
+  // 매장 자동 시작 — 점주가 아침마다 재생 버튼을 누르는 구조를 없앤다.
+  // 화면 진입당 1회만 시도한다(resolveStoreAutoStart 주석 참고).
+  // 자동재생이 브라우저에 막히면 autoplayBlocked 가 서고 PlaybackBlockedOverlay 가
+  // "화면을 눌러주세요" 를 전체화면으로 띄운다 — 조용히 무음으로 남지는 않는다.
+  useEffect(() => {
+    const action = resolveStoreAutoStart({
+      membership,
+      schedulesLoading,
+      hasSchedules: schedules.length > 0,
+      hasQueue: queue.length > 0,
+      playing,
+      alreadyTried: autoStartTriedRef.current,
+    });
+    if (action === 'none') return;
+    autoStartTriedRef.current = true;
+    // 진단 이벤트를 새로 찍지 않는다. session_start 는 이 화면 진입 시 이미 1회 기록되고,
+    // 여기서 또 찍으면 세션 수가 이중 계산돼 무음 감시 판정이 망가진다.
+    // 자동 시작의 성패는 이어지는 audio progress / autoplay_blocked 로 이미 드러난다.
+    if (action === 'resume_queue') play();
+    else void startBusinessMode();
+  }, [membership, schedulesLoading, schedules.length, queue.length, playing, play, startBusinessMode]);
 
   // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
   // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.

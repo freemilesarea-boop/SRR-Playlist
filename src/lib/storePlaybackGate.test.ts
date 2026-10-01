@@ -4,6 +4,8 @@ import {
   isStorePlaybackBlocked,
   resolveBusinessToggleAction,
   isStorePlayerSurface,
+  resolveStoreAutoStart,
+  shouldResumeStorePlayerOnLaunch,
   type StoreGateInput,
 } from './storePlaybackGate';
 
@@ -102,5 +104,80 @@ describe('isStorePlayerSurface', () => {
     expect(isStorePlayerSurface('/charts')).toBe(false);
     expect(isStorePlayerSurface('/business')).toBe(false);
     expect(isStorePlayerSurface('/playlist/abc')).toBe(false);
+  });
+});
+
+describe('resolveStoreAutoStart', () => {
+  const base = {
+    membership: 'premium' as const,
+    schedulesLoading: false,
+    hasSchedules: true,
+    hasQueue: false,
+    playing: false,
+    alreadyTried: false,
+  };
+
+  it('큐가 없고 스케줄이 있으면 스케줄로 시작', () => {
+    expect(resolveStoreAutoStart(base)).toBe('start_schedule');
+  });
+
+  it('복원된 큐가 있으면 그 큐를 이어서 재생', () => {
+    expect(resolveStoreAutoStart({ ...base, hasQueue: true })).toBe('resume_queue');
+  });
+
+  it('이미 재생 중이면 건드리지 않는다', () => {
+    expect(resolveStoreAutoStart({ ...base, playing: true })).toBe('none');
+  });
+
+  it('화면 진입당 1회만 — 사람이 멈춘 것을 다시 켜지 않는다', () => {
+    expect(resolveStoreAutoStart({ ...base, alreadyTried: true })).toBe('none');
+  });
+
+  it('무료 등급은 자동 시작하지 않는다 (매장 화면에서 어차피 막힌다)', () => {
+    expect(resolveStoreAutoStart({ ...base, membership: 'free' })).toBe('none');
+    expect(resolveStoreAutoStart({ ...base, membership: 'anonymous' })).toBe('none');
+  });
+
+  it('스케줄 로딩 중에는 판단을 미룬다 — 없다고 단정하지 않는다', () => {
+    expect(resolveStoreAutoStart({ ...base, schedulesLoading: true })).toBe('none');
+  });
+
+  it('스케줄이 하나도 없으면 시작할 것이 없다', () => {
+    expect(resolveStoreAutoStart({ ...base, hasSchedules: false })).toBe('none');
+  });
+});
+
+describe('shouldResumeStorePlayerOnLaunch', () => {
+  const base = {
+    pathname: '/',
+    businessMode: true,
+    membership: 'premium' as const,
+    standalone: true,
+    alreadyResumed: false,
+  };
+
+  it('설치형 앱을 매장 모드로 켜면 매장 플레이어로 복귀', () => {
+    expect(shouldResumeStorePlayerOnLaunch(base)).toBe(true);
+  });
+
+  it('브라우저 탭으로 접속한 사람은 끌고 가지 않는다', () => {
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, standalone: false })).toBe(false);
+  });
+
+  it('start_url 이 아닌 진입은 존중한다', () => {
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, pathname: '/charts' })).toBe(false);
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, pathname: '/playlist/abc' })).toBe(false);
+  });
+
+  it('매장 모드가 아니면 복귀하지 않는다', () => {
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, businessMode: false })).toBe(false);
+  });
+
+  it('무료 등급은 보내지 않는다 — 전체화면 차단 화면만 보게 된다', () => {
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, membership: 'free' })).toBe(false);
+  });
+
+  it('앱 실행당 1회만 — 홈으로 나온 사람을 다시 끌고 가지 않는다', () => {
+    expect(shouldResumeStorePlayerOnLaunch({ ...base, alreadyResumed: true })).toBe(false);
   });
 });

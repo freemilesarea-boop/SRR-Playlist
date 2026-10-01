@@ -77,3 +77,65 @@ export function resolveBusinessToggleAction(i: {
   if (i.businessMode) return 'stop';
   return i.hasSchedules ? 'start' : 'need_schedule';
 }
+
+export type StoreAutoStartAction =
+  | 'none'
+  | 'resume_queue'     // 복원된 큐가 있다 → 이어서 재생
+  | 'start_schedule';  // 큐가 없다 → 현재 시간대 스케줄로 새로 구성
+
+/**
+ * 매장 플레이어 화면에 들어왔을 때 사람이 버튼을 누르지 않아도 재생을 시작할지.
+ *
+ * 매장은 아침마다 점주가 재생 버튼을 누르는 구조였다. 그 조작을 없애려는 것이다.
+ * 자동재생 자체는 브라우저 정책이 결정하므로 여기서 보장하지 못한다 — 막히면
+ * autoplayBlocked 가 서고 PlaybackBlockedOverlay 가 "화면을 눌러주세요" 를 띄운다.
+ *
+ * 무료 등급은 매장 화면에서 subscription_required 로 막히므로 자동 시작하지 않는다.
+ * 재생도 안 되는데 시도만 반복하면 진단 기록만 더럽힌다.
+ *
+ * alreadyTried 는 화면 진입당 1회를 보장한다. 사람이 일부러 멈춘 것을 다시 켜지 않기 위해서다
+ * (진입 직후에는 사람이 멈출 시간이 없었으므로 그때 한 번만 시도한다).
+ */
+export function resolveStoreAutoStart(i: {
+  membership: Membership;
+  schedulesLoading: boolean;
+  hasSchedules: boolean;
+  hasQueue: boolean;
+  playing: boolean;
+  alreadyTried: boolean;
+}): StoreAutoStartAction {
+  if (i.alreadyTried || i.playing) return 'none';
+  if (i.membership !== 'premium') return 'none';
+  if (i.hasQueue) return 'resume_queue';
+  if (i.schedulesLoading) return 'none'; // 아직 판단 불가 — 로드되면 다시 평가된다
+  if (!i.hasSchedules) return 'none';
+  return 'start_schedule';
+}
+
+/**
+ * 앱을 켰을 때 매장 플레이어 화면으로 되돌아갈지.
+ *
+ * PC 전원을 켜면 음악이 나오게 하려면 (1) OS 가 앱을 띄우고 (2) 앱이 매장 화면으로 가고
+ * (3) 재생이 시작돼야 한다. (1)은 웹이 할 수 없어 점주가 1회 설정한다(PWA 설치 + 시작 시 열기).
+ * 이 함수는 (2)를 맡는다.
+ *
+ * 조건을 좁게 잡는다. businessMode 는 localStorage 에 남는 끈적한 플래그라, 넓게 잡으면
+ * 둘러보려던 사람을 매장 화면으로 끌고 간다 (2026-10-01 회원 신고가 같은 뿌리였다):
+ *  - 설치형 PWA 로 실행했을 때만. 브라우저 탭으로 접속한 사람은 건드리지 않는다.
+ *  - start_url('/') 로 들어왔을 때만. 특정 페이지를 겨냥한 진입은 존중한다.
+ *  - 재생 가능한 등급일 때만. 무료 등급을 보내면 전체화면 차단 화면만 보게 된다.
+ *  - 앱 실행당 1회만. 사용자가 홈으로 나오면 다시 끌고 가지 않는다.
+ */
+export function shouldResumeStorePlayerOnLaunch(i: {
+  pathname: string;
+  businessMode: boolean;
+  membership: Membership;
+  standalone: boolean;
+  alreadyResumed: boolean;
+}): boolean {
+  if (i.alreadyResumed) return false;
+  if (!i.standalone) return false;
+  if (i.pathname !== '/') return false;
+  if (!i.businessMode) return false;
+  return i.membership === 'premium';
+}
