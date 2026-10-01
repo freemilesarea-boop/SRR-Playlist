@@ -101,11 +101,11 @@ describe('§7 진단 이벤트 CHECK 가 클라이언트와 일치한다', () =>
     REQUIRED.forEach((e) => expect(block).toContain(`'${e}'`));
   });
 
-  it('DiagnosticEvent 유니온과 어긋나지 않는다', () => {
+  it('DiagnosticEvent 유니온이 15종을 전부 유지한다 (정확한 일치는 최신 CHECK 인 0533 테스트가 본다)', () => {
     const ts = readFileSync(resolve(process.cwd(), 'src/lib/playbackDiagnostics.ts'), 'utf-8');
     const union = ts.slice(ts.indexOf('export type DiagnosticEvent'), ts.indexOf('export type DiagnosticReason'));
-    const declared = [...union.matchAll(/\|?\s*'([a-z_]+)'/g)].map((m) => m[1]);
-    expect(new Set(declared)).toEqual(new Set(REQUIRED));
+    const declared = new Set([...union.matchAll(/\|?\s*'([a-z_]+)'/g)].map((m) => m[1]));
+    REQUIRED.forEach((e) => expect(declared.has(e)).toBe(true));
   });
 });
 

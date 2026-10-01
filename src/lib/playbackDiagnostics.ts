@@ -47,7 +47,10 @@ export type DiagnosticEvent =
   | 'shell_health'
   // 29 — 플레이어 실행 자체가 멎었고 셸이 그것을 감지했다. Phase 28 failure
   // matrix 의 I(Player timer loss)를 닫는 신호다. 셸 주도 복구마다 1건.
-  | 'player_execution_stale';
+  | 'player_execution_stale'
+  // 0533 — 브랜드 플레이어 '나가기'. 2026-10-01 숙대점 05:19 무음은 코드 경로를
+  // 하나씩 지워서야 이 버튼으로 특정했다. 사람이 끈 것과 기기가 죽은 것을 기록으로 가른다.
+  | 'player_exit';
 
 export type DiagnosticReason =
   | 'sw_update'        // 새 빌드 적용으로 리로드

@@ -62,9 +62,14 @@ serve(async (req) => {
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   const isRecovery = payload.event === 'brand_player_recovered';
+  // 0533 — 감시 기기는 꺼졌지만 같은 계정이 다른 화면에서 재생 중이라는 참고 알림.
+  // 소리가 나고 있으므로 긴급 문구도, 매장 기기 복구 푸시도 보내지 않는다.
+  const isInfo = isRecovery || payload.event === 'brand_player_audio_elsewhere';
   const title = isRecovery
     ? `✅ ${payload.brand ?? '매장'} 재생 복구`
-    : `🚨 [긴급] ${payload.brand ?? '매장'} 음악 멈춤`;
+    : isInfo
+      ? `ℹ️ ${payload.brand ?? '매장'} 다른 화면에서 재생 중`
+      : `🚨 [긴급] ${payload.brand ?? '매장'} 음악 멈춤`;
   const body = payload.text
     ?? (isRecovery ? '매장 음악이 다시 나옵니다.' : '매장 플레이어를 확인해주세요.');
 
@@ -84,7 +89,7 @@ serve(async (req) => {
       storeUserId = ((inc as any)?.store_user_id as string | undefined) ?? null;
     } catch { /* 무시 */ }
   }
-  const adminPushUrl = (!isRecovery && recoveryConsolePath(storeUserId)) || '/ops';
+  const adminPushUrl = (!isInfo && recoveryConsolePath(storeUserId)) || '/ops';
 
   // ── 1. 관리자 전원에게 Web Push ──────────────────────────────────────────
   try {
@@ -126,8 +131,8 @@ serve(async (req) => {
   // kind='player_recover' 를 받으면 sw.ts 가 살아있는 창을 깨워 재생을 되살리고,
   // 아무도 응답하지 않을 때만 알림을 띄운다(매장 기기에 알림을 쌓지 않으려고).
   //
-  // 복구 알림(brand_player_recovered)에는 보내지 않는다 — 이미 소리가 나고 있다.
-  if (!isRecovery) {
+  // 복구 알림(brand_player_recovered)·다른 화면 재생 알림에는 보내지 않는다 — 이미 소리가 나고 있다.
+  if (!isInfo) {
     try {
       if (!storeUserId) {
         result.store_push = { skipped: 'no_store_user' };

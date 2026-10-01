@@ -7,7 +7,7 @@ import { Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Music, Loader2, S
 import { usePlayerStore } from '@/store/playerStore';
 import { toast } from '@/store/toastStore';
 import { isNativeApp } from '@/lib/native';
-import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
+import { beaconPlaybackDiagnostic, logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { ensurePlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { buildHash } from '@/lib/playbackFlightRecorder';
 import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
@@ -277,12 +277,16 @@ export default function BrandPlayerPage() {
   //  자동 재진입 → "나가지지 않음". 홈으로 나가면 자동진입 대상이 아니라 정상 종료됨.)
   const exitPlayer = useCallback(() => {
     const ok = window.confirm(
-      '브랜드 플레이어를 종료할까요?\n\n저장된 매장 코드는 유지되어, 다음에 코드 입력 없이 자동으로 다시 연결됩니다.',
+      '브랜드 플레이어를 종료할까요?\n\n매장 음악이 멈춥니다.\n저장된 매장 코드는 유지되어, 다음에 코드 입력 없이 자동으로 다시 연결됩니다.',
     );
     if (!ok) return;
+    beaconPlaybackDiagnostic('player_exit', {
+      playerMode: 'brand',
+      context: { brandId, track: (() => { const st = usePlayerStore.getState(); return st.queue[st.index]?.title ?? null; })() },
+    });
     pause();
     navigate('/');
-  }, [pause, navigate]);
+  }, [brandId, pause, navigate]);
 
   // heartbeat
   useBrandPlayerHeartbeat({ brandId: brandId ?? null, sessionToken: token, enabled: !!brandId && !!token });
