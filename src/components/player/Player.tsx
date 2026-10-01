@@ -502,7 +502,15 @@ export default function Player() {
     }
     if (gate === 'subscription_required') {
       usePlaybackHealthStore.getState().setSubscriptionBlocked(true);
-      if (playing) pause();
+      if (playing) {
+        pause();
+        // 전체화면 안내(PlaybackBlockedOverlay)는 StorePlayerPage / BrandPlayerPage 에만 있다.
+        // businessMode 는 localStorage 에 남는 플래그라, 매장 화면이 아닌 일반 페이지(홈/차트/
+        // 플레이리스트)를 보고 있어도 이 분기를 탄다. 그쪽에는 안내가 없어서 예전에는
+        // 아무 설명 없이 재생만 죽었다 — 곡은 플레이어에 올라오는데 소리는 1초도 안 났다.
+        // 왜 막혔는지 기존 업셀 모달로 알린다. 매장 화면의 전체화면 안내는 그대로다.
+        openGate('upsell');
+      }
       return;
     }
     if (!playing) return;

@@ -43,3 +43,21 @@ export function resolveStoreGate(i: StoreGateInput): StoreGateDecision {
 export function isStorePlaybackBlocked(i: StoreGateInput): boolean {
   return resolveStoreGate(i) === 'subscription_required';
 }
+
+export type BusinessToggleAction = 'stop' | 'start' | 'need_schedule';
+
+/**
+ * 매장 화면의 ON AIR/OFF 토글이 할 일.
+ *
+ * 켜짐 판정의 기준은 **businessMode 지, 재생 중인지가 아니다.** 예전에는 재생 중일 때만
+ * 끄도록 되어 있었는데, 무료 등급은 subscription_required 로 재생이 막혀 playing 이 영원히
+ * false 였다. 그래서 토글이 종료가 아니라 start 로 가서 매장 모드를 다시 켰고, 사용자는
+ * 재생도 안 되고 매장 모드를 끄지도 못하는 상태에 갇혔다(2026-10-01 회원 신고).
+ */
+export function resolveBusinessToggleAction(i: {
+  businessMode: boolean;
+  hasSchedules: boolean;
+}): BusinessToggleAction {
+  if (i.businessMode) return 'stop';
+  return i.hasSchedules ? 'start' : 'need_schedule';
+}

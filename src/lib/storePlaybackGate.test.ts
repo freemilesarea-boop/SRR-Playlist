@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStoreGate, isStorePlaybackBlocked, type StoreGateInput } from './storePlaybackGate';
+import {
+  resolveStoreGate,
+  isStorePlaybackBlocked,
+  resolveBusinessToggleAction,
+  type StoreGateInput,
+} from './storePlaybackGate';
 
 function input(over: Partial<StoreGateInput> = {}): StoreGateInput {
   return { membership: 'free', businessMode: true, ...over };
@@ -57,5 +62,23 @@ describe('classifyReloadReason', () => {
   it('분류 불가 → unknown', async () => {
     const { classifyReloadReason } = await import('./playbackGuard');
     expect(classifyReloadReason('something else')).toBe('unknown');
+  });
+});
+
+describe('resolveBusinessToggleAction', () => {
+  it('매장 모드가 켜져 있으면 재생이 멎어 있어도 끌 수 있다 (2026-10-01 데드락 회귀)', () => {
+    // 무료 등급은 subscription_required 로 재생이 막혀 playing 이 영원히 false 다.
+    // 예전 로직(isPlaying 기준)은 여기서 start 로 가 매장 모드를 다시 켰고,
+    // 사용자는 재생도 못 하고 끄지도 못하는 상태에 갇혔다.
+    expect(resolveBusinessToggleAction({ businessMode: true, hasSchedules: true })).toBe('stop');
+    expect(resolveBusinessToggleAction({ businessMode: true, hasSchedules: false })).toBe('stop');
+  });
+
+  it('꺼져 있고 스케줄이 있으면 시작', () => {
+    expect(resolveBusinessToggleAction({ businessMode: false, hasSchedules: true })).toBe('start');
+  });
+
+  it('꺼져 있고 스케줄이 없으면 스케줄 설정을 먼저 안내', () => {
+    expect(resolveBusinessToggleAction({ businessMode: false, hasSchedules: false })).toBe('need_schedule');
   });
 });
