@@ -20,6 +20,9 @@ export interface BusinessVerifyResult {
   tax_type: string | null;
   nts_checked: boolean;
   verified_at: string | null;
+  /** 0528 — 등록 접수와 동시에 3일 무료체험이 열렸는지 (영업인 코드 없음) */
+  trial_started?: boolean;
+  free_trial_ends_at?: string | null;
   message: string;
 }
 

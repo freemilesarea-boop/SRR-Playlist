@@ -12,15 +12,20 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { gradientStyle } from '@/lib/cover';
 import { toast } from '@/store/toastStore';
+import { getBusinessTrialGate, type BusinessTrialGate } from '@/lib/trialApi';
 
 export default function ServicePreviewPage() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
+  // 0528 — 미리듣기 2회를 다 쓴 뒤 안내 문구를 고르기 위한 게이트 상태.
+  const [trialGate, setTrialGate] = useState<BusinessTrialGate | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const play = usePlayerStore((s) => s.play);
 
   async function loadStatus() {
-    setStatus(await getBusinessPreviewStatus());
+    const [s, g] = await Promise.all([getBusinessPreviewStatus(), getBusinessTrialGate()]);
+    setStatus(s);
+    setTrialGate(g);
   }
   useEffect(() => { void loadStatus(); }, []);
 
@@ -45,7 +50,12 @@ export default function ServicePreviewPage() {
         } else if (res.reason === 'not_business') {
           toast.error('사업자 회원으로 로그인하면 미리듣기가 가능합니다.');
         } else if (res.reason === 'limit_reached') {
-          toast.error('무료 미리듣기 2회를 모두 사용했습니다. 서비스 이용을 시작해주세요.');
+          const needsRegistration = !!trialGate && trialGate.is_business
+            && !trialGate.registered && !trialGate.paid
+            && !trialGate.trial_active && !trialGate.trial_used;
+          toast.error(needsRegistration
+            ? '무료 미리듣기 2회를 모두 사용했습니다. 사업자등록 후 3일 무료체험이 가능합니다.'
+            : '무료 미리듣기 2회를 모두 사용했습니다. 서비스 이용을 시작해주세요.');
         } else {
           toast.error('미리듣기를 시작할 수 없어요. 잠시 후 다시 시도해주세요.');
         }
