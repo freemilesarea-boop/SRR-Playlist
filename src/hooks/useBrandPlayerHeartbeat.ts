@@ -22,17 +22,17 @@ import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useAuthStore } from '@/store/authStore';
 import {
-  brandPlayerHeartbeat, subscribeStoreRecoveryCommands,
-  type BrandPlayerHeartbeatResult,
+  brandPlayerHeartbeat, type BrandPlayerHeartbeatResult,
 } from '@/lib/api/brandPlayerApi';
 import { decideCommandAction } from '@/lib/brandPlayerCommand';
 import { handleRemoteCommand } from '@/lib/remoteRecoveryExecutor';
+import { executedCommandIds, type ClientIdentity } from '@/lib/remoteRecovery';
 import {
-  parseRealtimeCommandRow, executedCommandIds, type ClientIdentity,
-} from '@/lib/remoteRecovery';
+  publishControlPlaneIdentity, notePlayerLayerAlive,
+} from '@/lib/recoveryControlPlane';
 import { recordFlightEvent, getPlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import {
-  readLivenessSnapshot, setRealtimeStatus, refreshStorageEstimate,
+  readLivenessSnapshot, refreshStorageEstimate,
 } from '@/lib/clientLiveness';
 import {
   pageBuildHash, resolveNavigationType, readServiceWorkerState,
@@ -164,7 +164,12 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     if (!res || res.success !== true) return;
     if (typeof res.session_id === 'string' && res.session_id) {
       sessionIdRef.current = res.session_id;
+      // 27 — 셸 제어면이 이 값으로 target 을 대조한다. 플레이어가 죽어도 남는다.
+      publishControlPlaneIdentity({ sessionId: res.session_id });
     }
+    // 27 — 플레이어 계층이 방금 돌았다. 셸은 이 표시가 멎는 것으로
+    // "플레이어만 죽었다"를 알아채고 폴백 폴링을 켠다.
+    notePlayerLayerAlive();
     // 0518 의 화이트리스트·필수필드 검사를 그대로 통과시킨다(legacy 경로 회귀 방지).
     const action = decideCommandAction(res, executedCommandIds());
     if (action.kind !== 'run') return;
@@ -207,33 +212,21 @@ export function useBrandPlayerHeartbeat({ brandId, sessionToken, enabled }: Opti
     return () => { cancelled = true; window.clearInterval(id); };
   }, [enabled, brandId, sessionToken]);
 
-  // (c) 0520 — Realtime 즉시 배달. **control plane 이다.**
+  // (c) 0520 → 27 — Realtime 수신기는 **여기 없다.**
   //
-  // 이 effect 는 오디오를 건드리지 않는다. 구독 실패·소켓 끊김·재연결 실패 어느
-  // 경우에도 여기서 하는 일은 "명령을 못 받는 것" 뿐이고, 그때는 (b) 의 폴링이
-  // 그대로 받는다. Player unmount·pause·queue reset 은 절대 하지 않는다.
+  // 2026-09-15 14:06:16 KST 숙대점: 이 훅이 멈춘 뒤 26분 38초 동안 셸은 5초마다
+  // 서버와 200 OK 로 왕복하고 있었는데, 14:23:35 에 발행한 복구 명령은 배달되지
+  // 못하고 TTL 만료됐다. 수신기가 복구 대상과 **같은 failure domain** 에 있었기
+  // 때문이다 — 되살려야 할 계층이 죽으면 되살릴 명령도 못 받는다.
+  //
+  // 그래서 구독은 AppShell 의 <RecoveryControlPlane /> 으로 옮겼다.
+  // 여기서는 그 제어면이 target 을 대조할 수 있도록 **신원만 올려준다.**
+  // 이 값들은 모듈 스코프에 남아 이 훅이 죽어도 지워지지 않는다.
   useEffect(() => {
-    if (!enabled || !storeUserId) return;
-    let sub: { unsubscribe: () => void } | null = null;
-    try {
-      sub = subscribeStoreRecoveryCommands(
-        storeUserId,
-        (row) => {
-          // row 를 믿고 바로 실행하지 않는다 — target·TTL·상태·중복을 전부 다시 본다.
-          handleRemoteCommand(
-            parseRealtimeCommandRow(row), readIdentity(sessionIdRef.current), 'realtime',
-          );
-        },
-        (status) => {
-          recordFlightEvent('REALTIME_CHANNEL_STATUS', { extra: { status } });
-          // 다음 heartbeat 가 이 상태를 서버로 옮긴다. 명령이 배달되지 않았을 때
-          // "채널이 끊겨서" 인지 "프로세스가 없어서" 인지 가르는 유일한 단서다.
-          setRealtimeStatus(status);
-        },
-      );
-    } catch {
-      /* 구독 자체가 실패해도 재생과 폴링은 그대로 간다 */
-    }
-    return () => { try { sub?.unsubscribe(); } catch { /* noop */ } };
-  }, [enabled, storeUserId]);
+    if (!enabled) return;
+    publishControlPlaneIdentity({
+      storeUserId: storeUserId ?? undefined,
+      brandId: brandId ?? undefined,
+    });
+  }, [enabled, storeUserId, brandId]);
 }

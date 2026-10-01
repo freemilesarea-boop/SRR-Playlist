@@ -16,7 +16,7 @@ import { getBusinessTrialGate, type BusinessTrialGate } from '@/lib/trialApi';
 
 export default function ServicePreviewPage() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
-  // 0528 — 미리듣기 2회를 다 쓴 뒤 안내 문구를 고르기 위한 게이트 상태.
+  // 0530 — 미리듣기 2회를 다 쓴 뒤 안내 문구를 고르기 위한 게이트 상태.
   const [trialGate, setTrialGate] = useState<BusinessTrialGate | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const setQueue = usePlayerStore((s) => s.setQueue);

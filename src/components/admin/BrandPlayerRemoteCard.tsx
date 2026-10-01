@@ -25,11 +25,13 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { RefreshCw, RotateCcw, Play, SkipForward, Radio, Wrench } from 'lucide-react';
+import { RefreshCw, RotateCcw, Play, SkipForward, Radio, Wrench, LifeBuoy } from 'lucide-react';
 import {
   AdminSection, AdminCard, AdminButton, AdminBadge, AdminEmpty, AdminSkeleton, AdminAlert,
 } from '@/components/admin/ui';
 import { toast } from '@/store/toastStore';
+import { planOneClickRecovery } from '@/lib/oneClickRecovery';
+import { resolveMonitoredInstall, describeMonitoredInstall } from '@/lib/monitoredInstall';
 import {
   adminBrandPlayerHealth, requestStoreRecovery,
   type BrandPlayerHealthRow, type BrandPlayerCommand,
@@ -115,6 +117,32 @@ export default function BrandPlayerRemoteCard() {
   }, [rows, focusStore]);
 
   const focusMissing = !!focusStore && !!rows && !rows.some((r) => r.store_user_id === focusStore);
+
+  /**
+   * 27 §10 — 매장별 "감시 대상 매장 재생기".
+   *
+   * 2026-09-15 숙대점에서 같은 계정에 세션이 둘이 되자 죽은 태블릿이 가려졌다.
+   * 여기서 기기 종류로 가르지 않는다 — 화정점의 정상 매장 재생기는 데스크톱이다.
+   * 자리 잡은 install 이 하나로 좁혀지지 않으면 **고르지 않는다**(FAIL CLOSED).
+   */
+  const monitoredByStore = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof resolveMonitoredInstall>>();
+    if (!rows) return m;
+    const byStore = new Map<string, typeof rows>();
+    rows.forEach((r) => {
+      const list = byStore.get(r.store_user_id) ?? [];
+      list.push(r);
+      byStore.set(r.store_user_id, list);
+    });
+    byStore.forEach((list, storeId) => {
+      m.set(storeId, resolveMonitoredInstall(list.map((r) => ({
+        sessionId: r.session_id,
+        ageHours: typeof r.session_age_hours === 'number' ? r.session_age_hours : 0,
+        deviceKind: r.device,
+      }))));
+    });
+    return m;
+  }, [rows]);
 
   const send = useCallback(async (row: BrandPlayerHealthRow, command: BrandPlayerCommand) => {
     if (NEEDS_CONFIRM.has(command)) {
@@ -217,6 +245,45 @@ export default function BrandPlayerRemoteCard() {
                 </p>
 
                 <div className="mt-2 flex flex-wrap gap-2">
+                  {/* 27 — 버튼 하나. 운영자는 장애 종류를 판단하지 않는다.
+                      ★ offline 이어도 **비활성화하지 않는다.** 2026-09-15 숙대점에서
+                      heartbeat 는 끊겼지만 앱 셸은 26분 38초 동안 살아 있었다 —
+                      그때 이 콘솔은 모든 버튼을 잠가두고 있었다. 이제 복구 명령은
+                      셸 제어면이 받으므로, 셸이 살아 있으면 닿는다. */}
+                  {(() => {
+                    const monitored = monitoredByStore.get(r.store_user_id);
+                    // FAIL CLOSED — 대상이 불명확하면 임의의 최신 세션으로 보내지 않는다.
+                    if (!monitored || monitored.kind !== 'resolved') {
+                      return (
+                        <span className="self-center text-[11px] text-warning">
+                          {describeMonitoredInstall(monitored ?? { kind: 'unknown', reason: 'no_sessions' })}
+                        </span>
+                      );
+                    }
+                    if (monitored.sessionId !== r.session_id) {
+                      return (
+                        <span className="self-center text-[11px] text-ink-dim">
+                          감시 대상 매장 재생기가 아닙니다 — 긴급 복구는 해당 기기 행에서
+                        </span>
+                      );
+                    }
+                    const plan = planOneClickRecovery({
+                      status: r.status,
+                      secondsSinceHeartbeat: r.seconds_since_heartbeat,
+                    });
+                    return (
+                      <AdminButton
+                        size="sm" variant="solid" tone="primary" leftIcon={<LifeBuoy size={13} />}
+                        disabled={busy === `${r.session_id}:${plan.command}`}
+                        title={plan.label + (plan.mayNotReach
+                          ? ' · 기기가 완전히 꺼져 있으면 2분 뒤 만료됩니다'
+                          : '')}
+                        onClick={() => void send(r, plan.command)}
+                      >
+                        매장 긴급 복구
+                      </AdminButton>
+                    );
+                  })()}
                   <AdminButton
                     size="sm" variant="subtle" tone="primary" leftIcon={<Wrench size={13} />}
                     disabled={offline || busy === `${r.session_id}:hard_recovery`}
@@ -247,7 +314,7 @@ export default function BrandPlayerRemoteCard() {
                   </AdminButton>
                   {offline && (
                     <span className="self-center text-[11px] text-ink-dim">
-                      오프라인 — 원격 명령이 닿지 않습니다
+                      플레이어 heartbeat 끊김 — 앱 셸이 살아 있으면 긴급 복구는 닿습니다
                     </span>
                   )}
                 </div>

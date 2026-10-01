@@ -1,12 +1,16 @@
 /**
  * @vitest-environment jsdom
  *
- * 11 · 12 — 두 배달 경로가 훅 안에서 실제로 어떻게 붙어 있는지 검증한다.
+ * 11 · 12 · 27 — 두 배달 경로가 실제로 어떻게 붙어 있는지 검증한다.
  *
- * 순수 함수 테스트는 "판정이 맞다" 까지만 증명한다. 여기서 못 박는 것은 배선이다:
- *   • Realtime 구독이 통째로 실패해도 재생과 heartbeat 는 계속 돈다 (control plane 분리)
+ * 27 에서 배선이 바뀌었다. Realtime 수신기는 플레이어 페이지 훅이 아니라
+ * AppShell 의 <RecoveryControlPlane /> 이 갖는다 — 2026-09-15 숙대점에서
+ * 수신기가 복구 대상과 같은 failure domain 에 있어 복구 명령이 배달되지 못했다.
+ * 그래서 이 하네스는 **두 계층을 함께** 띄운다. 그래야 검증되는 것:
+ *   • Realtime 구독이 통째로 실패해도 재생과 heartbeat 는 계속 돈다
  *   • Realtime 이 아무것도 배달하지 않아도 heartbeat 가 명령을 실행한다 (fallback)
- *   • 같은 명령이 양쪽에서 와도 실행은 한 번
+ *   • 같은 명령이 **다른 계층에서** 와도 실행은 한 번
+ *   • 훅이 학습한 session_id 를 제어면이 target 대조에 쓴다 (계층 간 신원 전달)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, act, cleanup, waitFor } from '@testing-library/react';
@@ -61,10 +65,18 @@ vi.mock('@/store/playbackHealthStore', () => ({
 
 import { useBrandPlayerHeartbeat } from './useBrandPlayerHeartbeat';
 import { resetExecutedCommands } from '@/lib/remoteRecovery';
+import RecoveryControlPlane from '@/components/RecoveryControlPlane';
+import { __resetControlPlaneForTest } from '@/lib/recoveryControlPlane';
 
+/** 플레이어 계층(훅) + 셸 계층(제어면). 실제 앱과 같은 배치다. */
 function Harness() {
   useBrandPlayerHeartbeat({ brandId: 'brand-1', sessionToken: 'tok', enabled: true });
-  return <div data-testid="alive">ok</div>;
+  return (
+    <div data-testid="alive">
+      ok
+      <RecoveryControlPlane />
+    </div>
+  );
 }
 
 const OK = { success: true, session_id: 'sess-A' };
@@ -73,6 +85,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   playerActions.length = 0;
   resetExecutedCommands();
+  __resetControlPlaneForTest();
   try { sessionStorage.clear(); } catch { /* noop */ }
   heartbeat.mockResolvedValue(OK);
   subscribe.mockReturnValue({ unsubscribe: () => {} });

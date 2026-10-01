@@ -6,8 +6,8 @@
  *   - getMyTrialStatus: 본인 체험 상태 (만료 시 서버가 lazy-expire 후 반환)
  *   - maybeAutoStartTrial: 로그인/프로필 로드 후 사업자에 한해 1회 자동 시작
  *       (영업인 코드 있으면 코드 경로, 없으면 사업자등록 경로)
- *   - startVerifiedBusinessTrial: 사업자등록 완료 시 영업인 코드 없이 3일 개방 (0528)
- *   - getBusinessTrialGate: 재생 차단 안내 문구 선택용 게이트 상태 (0528)
+ *   - startVerifiedBusinessTrial: 사업자등록 완료 시 영업인 코드 없이 3일 개방 (0530)
+ *   - getBusinessTrialGate: 재생 차단 안내 문구 선택용 게이트 상태 (0530)
  *   - admin_*: 관리자 연장/강제종료/목록
  */
 
@@ -61,7 +61,7 @@ const autoStartAttempted = new Set<string>();
  * 경로 2개 — 둘 다 자격 판정은 서버가 한다:
  *   1) 영업인 코드가 연결돼 있으면 기존 start_sales_agent_trial (실적 귀속 O)
  *   2) 코드가 없으면 사업자등록 기반 start_verified_business_trial
- *      (0528 · 영업인 귀속/할인 없음. 사업자등록 미완료면 서버가 거부하므로
+ *      (0530 · 영업인 귀속/할인 없음. 사업자등록 미완료면 서버가 거부하므로
  *       등록 전에 호출돼도 안전하다.)
  *
  * 성공 시 onStarted 콜백으로 프로필 갱신 트리거.
@@ -90,7 +90,7 @@ export async function maybeAutoStartTrial(
   if (v.ok && v.free_trial_ends_at) onStarted?.(v.free_trial_ends_at);
 }
 
-// ---------- 사업자등록 기반 체험 (0528, 영업인 코드 없음) ----------
+// ---------- 사업자등록 기반 체험 (0530, 영업인 코드 없음) ----------
 
 export type BusinessTrialGateReason =
   | 'login_required' | 'not_business' | 'already_paid'

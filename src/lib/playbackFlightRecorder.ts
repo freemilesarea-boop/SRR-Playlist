@@ -74,7 +74,10 @@ export type AppEventName =
   // error 없음 · 위치만 정지)는 waiting/stalled/error 가 하나도 뜨지 않아
   // 이벤트 기반 감시로는 원리적으로 못 본다. 관측 전용 — 복구는 사다리가 한다.
   | 'AUDIO_FREEZE_CLASSIFIED'
-  | 'STALL_SNAPSHOT';
+  | 'STALL_SNAPSHOT'
+  // 28 — 자연 종료 뒤 이어추천 RPC 가 거부됐다. **큐는 그대로 진행한다.**
+  // 예전에는 이 실패가 next() 호출 자체를 삼켜 무인 매장이 조용해질 수 있었다.
+  | 'AUTOPLAY_RECOMMEND_FAILED';
 
 export type FlightEventName = MediaEventName | AppEventName;
 

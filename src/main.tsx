@@ -18,6 +18,7 @@ import { beaconPlaybackDiagnostic } from './lib/playbackDiagnostics';
 import { usePlayerStore } from './store/playerStore';
 import { useAuthStore } from './store/authStore';
 import { reloadApp } from './lib/playbackGuard';
+import { installGlobalErrorTelemetry } from './lib/globalErrorTelemetry';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -86,6 +87,19 @@ let audioSub: (() => void) | null = null;
  * 버렸다 — 한 곡이 이유 없이 늦었다. 지금은 부팅 즉시 현재 상태를 한 번 읽고
  * 그 뒤로 계속 듣는다.
  */
+// 27 — 전역 예외 기록을 **가장 먼저** 건다.
+//
+// 2026-09-15 14:06:16 KST 숙대점에서 플레이어 계층이 멈췄는데, 왜 멈췄는지
+// 끝내 알 수 없었다. 유일한 클라이언트 진단기(Flight Recorder)가 플레이어와
+// 함께 죽기 때문이다 — 정지를 감지해야 flush 하는데 감지하는 코드가 같이 멈췄다.
+// 그날 12:17 사고 때는 3번 flush 됐고 14:05 전후로는 0번이다.
+//
+// 여기(window 전역)는 어느 컴포넌트가 죽든 문서가 살아 있는 한 계속 돈다.
+// 그날 셸이 26분 38초 동안 살아 있었다는 것은 edge 로그로 실측됐다.
+if (typeof window !== 'undefined') {
+  installGlobalErrorTelemetry();
+}
+
 if (typeof window !== 'undefined') {
   noteAutoplaySignals(usePlaybackHealthStore.getState());
   usePlaybackHealthStore.subscribe(noteAutoplaySignals);

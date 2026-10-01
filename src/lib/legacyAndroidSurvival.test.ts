@@ -107,7 +107,9 @@ describe('§13 진단/텔레메트리 실패가 재생에 전파되지 않는다
 
 describe('§12 Realtime 이 죽어도 음악은 계속된다', () => {
   it('구독 생성 자체가 실패해도 재생 경로를 건드리지 않는다', () => {
-    expect(hookSrc).toContain('/* 구독 자체가 실패해도 재생과 폴링은 그대로 간다 */');
+    // 27 — 구독 위치가 훅 → AppShell 제어면으로 옮겨졌다. 보장은 그대로다.
+    const plane = read('src/components/RecoveryControlPlane.tsx');
+    expect(plane).toContain('구독 실패해도 폴백 폴링과 재생은 그대로 간다');
   });
 
   it('구독 모듈이 control-plane 전용임을 명시하고 오디오를 만지지 않는다', () => {

@@ -1,4 +1,4 @@
--- 0528_business_verified_trial.sql
+-- 0530_business_verified_trial.sql
 --
 -- 사업자등록 완료 시 "영업인 코드 없이" 3일 무료체험을 개방한다.
 --

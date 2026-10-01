@@ -13,7 +13,7 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 
 /**
- * 0528 — 사업자등록 페이지.
+ * 0530 — 사업자등록 페이지.
  *
  * 기존에는 사업자등록번호를 등록할 수 있는 화면이 (1) 사업자 회원가입 폼과
  * (2) 엔터프라이즈 본사 신청(요금제 화면)뿐이었다. 가입을 개인으로 했다가

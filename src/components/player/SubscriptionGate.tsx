@@ -32,7 +32,7 @@ export default function SubscriptionGate({
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(dialogRef, { onClose });
 
-  // 0528 — 사업자등록만 남은 사업자 회원에게는 구독 유도 대신 무료체험 안내를 띄운다.
+  // 0530 — 사업자등록만 남은 사업자 회원에게는 구독 유도 대신 무료체험 안내를 띄운다.
   const [bizGate, setBizGate] = useState<BusinessTrialGate | null>(null);
   useEffect(() => {
     if (mode !== 'upsell') return;
