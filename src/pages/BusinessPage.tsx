@@ -36,6 +36,7 @@ import { formatSlotTime, getCurrentSchedule, getNextSchedule } from '@/lib/busin
 import { toast } from '@/store/toastStore';
 import SupportInquiryButton from '@/components/SupportInquiryButton';
 import { isKakaoChannelConfigured, openKakaoChannelChat } from '@/lib/kakao';
+import { resolveBusinessToggleAction } from '@/lib/storePlaybackGate';
 
 /** 한글 카테고리 → 영문 business_tag */
 const BUSINESS_TAG_MAP: Record<string, string> = {
@@ -152,12 +153,20 @@ export default function BusinessPage() {
   }
 
   function handleToggleBusinessMode() {
-    if (isPlaying) {
-      stopBusinessMode();
-    } else if (displaySchedule || schedules.length > 0) {
-      void handleStart();
-    } else {
-      toast.info('먼저 자동 스케줄에서 시간대를 설정해주세요.');
+    // 켜짐 판정은 businessMode 기준이다 — isPlaying 기준이면 구독 게이트에 막혀 재생이
+    // 안 되는 동안 매장 모드를 끌 수 없다(resolveBusinessToggleAction 주석 참고).
+    switch (resolveBusinessToggleAction({
+      businessMode,
+      hasSchedules: !!displaySchedule || schedules.length > 0,
+    })) {
+      case 'stop':
+        stopBusinessMode();
+        break;
+      case 'start':
+        void handleStart();
+        break;
+      default:
+        toast.info('먼저 자동 스케줄에서 시간대를 설정해주세요.');
     }
   }
 
@@ -173,14 +182,14 @@ export default function BusinessPage() {
         <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">매장</h1>
         <button
           onClick={handleToggleBusinessMode}
-          disabled={starting || (!isPlaying && schedules.length === 0)}
-          aria-pressed={isPlaying}
+          disabled={starting || (!businessMode && schedules.length === 0)}
+          aria-pressed={businessMode}
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
             isPlaying
               ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200 ring-emerald-400/30 hover:bg-emerald-500/25'
               : 'bg-bg-card text-ink-dim ring-line/10 hover:bg-bg-hover hover:text-ink'
           } disabled:opacity-50`}
-          title={isPlaying ? '클릭하면 매장 모드 종료' : '클릭하면 현재 시간대 음악 시작'}
+          title={businessMode ? '클릭하면 매장 모드 종료' : '클릭하면 현재 시간대 음악 시작'}
         >
           {isPlaying ? (
             <>
