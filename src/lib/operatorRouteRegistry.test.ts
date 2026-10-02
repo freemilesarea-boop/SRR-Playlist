@@ -3,8 +3,11 @@ import {
   OPERATOR_ROUTES, OPERATOR_CATEGORIES, OPERATOR_ROUTE_PATHS,
   canAccessRoute, getRouteById, getRouteByPath, matchOpsRoute,
   sidebarSectionsForRole, searchOperatorRoutes, breadcrumbFor,
+  opsPathForLegacyTab,
   type OperatorAccessContext,
 } from './operatorRouteRegistry';
+import { OPERATOR_PANELS } from '@/components/operator/operatorPanels';
+import { ALL_NAV_TAB_KEYS, MERGED_TABS, WORK_QUEUE_TABS, resolveMergedTab } from './adminNav';
 
 const SUPER: OperatorAccessContext = { isSuperAdmin: true, isPlatformAdmin: false, isHq: false };
 const ADMIN: OperatorAccessContext = { isSuperAdmin: false, isPlatformAdmin: true, isHq: false };
@@ -18,6 +21,11 @@ const KNOWN_ADMIN_TABS = new Set([
   'audio-diagnostics', 'enterprise-settlement-center', 'enterprise-billing',
   'enterprise-monthly-settlements', 'enterprise-contracts', 'artists', 'dashboard',
   'ai-curation', 'site-settings',
+  // PHASE 1-B 추가 — AdminPage TABS 의 실제 key (아래 'legacyTab 은 실제 AdminPage 탭' 테스트가
+  // adminNav.ALL_NAV_TAB_KEYS 와 교차 검증한다).
+  'artist-tracks', 'track-review', 'qc-review', 'metadata-violations', 'deleted-tracks',
+  'artist-contracts', 'artist-settlements', 'payout-intake', 'members', 'subscriptions',
+  'payment-sync', 'revenue', 'support-inquiries', 'operation-logs', 'site-notices',
 ]);
 
 describe('registry integrity', () => {
@@ -193,5 +201,187 @@ describe('breadcrumb', () => {
   it('aria: last segment is current (no href)', () => {
     const segs = breadcrumbFor(getRouteById('music-schedules'));
     expect(segs[segs.length - 1].href).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1 — /ops 핵심 화면 진입점 복구
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** PHASE 1-B 로 등록한 화면 (canonicalPath, legacyTab). */
+const PHASE1_ROUTES: Array<[string, string]> = [
+  ['/ops/tracks', 'artist-tracks'],
+  ['/ops/tracks/review', 'track-review'],
+  ['/ops/tracks/qc', 'qc-review'],
+  ['/ops/tracks/violations', 'metadata-violations'],
+  ['/ops/tracks/deleted', 'deleted-tracks'],
+  ['/ops/artists/contracts', 'artist-contracts'],
+  ['/ops/finance/artist-settlements', 'artist-settlements'],
+  ['/ops/finance/payout-accounts', 'payout-intake'],
+  ['/ops/members', 'members'],
+  ['/ops/members/subscriptions', 'subscriptions'],
+  ['/ops/members/payments', 'payment-sync'],
+  ['/ops/members/revenue', 'revenue'],
+  ['/ops/system/inquiries', 'support-inquiries'],
+  ['/ops/system/logs', 'operation-logs'],
+  ['/ops/system/notices', 'site-notices'],
+];
+
+/** PHASE 1 이전에 존재했던 /ops 경로 — 하나도 사라지면 안 된다. */
+const PRE_PHASE1_PATHS = [
+  '/ops', '/ops/stores', '/ops/stores/:storeId', '/ops/stores/playback-settings',
+  '/ops/enterprise', '/ops/enterprise/accounts', '/ops/enterprise/franchises',
+  '/ops/enterprise/brands', '/ops/enterprise/invite-codes',
+  '/ops/music', '/ops/music/playlists', '/ops/music/sets', '/ops/music/schedules',
+  '/ops/music/breaks', '/ops/music/deployment',
+  '/ops/monitoring', '/ops/monitoring/live', '/ops/monitoring/connectivity',
+  '/ops/monitoring/quality', '/ops/monitoring/incidents',
+  '/ops/finance', '/ops/finance/billing', '/ops/finance/settlements', '/ops/finance/contracts',
+  '/ops/artists', '/ops/content', '/ops/analytics', '/ops/ai', '/ops/system',
+];
+
+describe('PHASE 1 — route resolution', () => {
+  it('신규 /ops 경로가 전부 레지스트리에 있고 실제 패널로 resolve 된다', () => {
+    for (const [path] of PHASE1_ROUTES) {
+      const entry = matchOpsRoute(path);
+      expect(entry, `${path} 미등록`).toBeTruthy();
+      expect(OPERATOR_PANELS[entry!.componentKey], `${path} → 패널 미매핑`).toBeTruthy();
+    }
+  });
+
+  it('레지스트리의 모든 componentKey 가 패널에 매핑돼 있다 (home 제외)', () => {
+    for (const r of OPERATOR_ROUTES) {
+      if (r.componentKey === 'home') continue;
+      expect(OPERATOR_PANELS[r.componentKey], `${r.id} → ${r.componentKey} 미매핑`).toBeTruthy();
+    }
+  });
+
+  it('PHASE 1 이전 /ops 경로가 전부 유지된다', () => {
+    const paths = new Set(OPERATOR_ROUTES.map((r) => r.canonicalPath));
+    for (const p of PRE_PHASE1_PATHS) expect(paths.has(p), `${p} 사라짐`).toBe(true);
+  });
+
+  it('App 라우트 등록 목록(OPERATOR_ROUTE_PATHS)에 신규 경로가 포함된다', () => {
+    for (const [path] of PHASE1_ROUTES) expect(OPERATOR_ROUTE_PATHS).toContain(path);
+  });
+});
+
+describe('PHASE 1 — legacy deep link 보존', () => {
+  it('모든 legacyTab 이 adminNav 의 실제 탭 key 다 (딥링크 ?tab= 유효)', () => {
+    const real = new Set<string>([...ALL_NAV_TAB_KEYS, ...Object.keys(MERGED_TABS)]);
+    for (const r of OPERATOR_ROUTES) {
+      if (!r.legacyTab) continue;
+      expect(real.has(r.legacyTab), `${r.id}: '${r.legacyTab}' 는 AdminPage 탭이 아니다`).toBe(true);
+    }
+  });
+
+  it('작업 대기열 6종이 전부 /ops 안에서 열린다 (병합 key 해석 포함)', () => {
+    for (const tab of Object.values(WORK_QUEUE_TABS)) {
+      const resolved = resolveMergedTab(tab)?.tab ?? tab;
+      expect(opsPathForLegacyTab(resolved, ADMIN), `${tab} → /ops 경로 없음`).toBeTruthy();
+    }
+  });
+
+  it('opsPathForLegacyTab 은 권한 없는 사용자에게 경로를 주지 않는다', () => {
+    expect(opsPathForLegacyTab('track-review', ADMIN)).toBe('/ops/tracks/review');
+    expect(opsPathForLegacyTab('track-review', HQ)).toBeUndefined();
+    expect(opsPathForLegacyTab('track-review', NONE)).toBeUndefined();
+  });
+
+  it('opsPathForLegacyTab 은 사이드바에 보이는 경로를 우선한다', () => {
+    // franchise 는 5개 라우트가 공유한다 — 숨김이 아닌 '가맹점 관리'가 나와야 한다.
+    expect(opsPathForLegacyTab('franchise', ADMIN)).toBe('/ops/enterprise/franchises');
+  });
+});
+
+describe('PHASE 1 — 권한이 기존보다 넓어지지 않는다', () => {
+  it('신규 route 는 전부 플랫폼 관리자 전용 — hq 단독 사용자는 접근 불가', () => {
+    for (const [path] of PHASE1_ROUTES) {
+      const entry = matchOpsRoute(path)!;
+      expect(canAccessRoute(entry, HQ), `${path} 가 hq 에게 열렸다`).toBe(false);
+      expect(canAccessRoute(entry, NONE), `${path} 가 비운영자에게 열렸다`).toBe(false);
+      expect(canAccessRoute(entry, ADMIN), `${path} 가 admin 에게 막혔다`).toBe(true);
+      expect(canAccessRoute(entry, SUPER)).toBe(true);
+    }
+  });
+
+  it('신규 route 에 hq 역할이 들어가 있지 않다', () => {
+    for (const [path] of PHASE1_ROUTES) {
+      const entry = matchOpsRoute(path)!;
+      expect(entry.roles).not.toContain('hq');
+    }
+  });
+
+  it('superOnly 였던 /admin 탭을 non-super 에게 열지 않았다', () => {
+    // /admin 의 superOnly 탭 목록(AdminPage TABS 기준). 이 탭을 legacyTab 으로 쓰는
+    // /ops 라우트는 반드시 superOnly 여야 한다.
+    const ADMIN_SUPER_ONLY = new Set([
+      'brand-player', 'enterprise-settlement-center', 'brand-registry',
+      'streaming-v2', 'audio-engine-diagnostics', 'admins',
+    ]);
+    for (const r of OPERATOR_ROUTES) {
+      if (r.legacyTab && ADMIN_SUPER_ONLY.has(r.legacyTab)) {
+        expect(r.superOnly, `${r.id}: /admin 에서 superOnly 인데 /ops 는 아니다`).toBe(true);
+      }
+    }
+  });
+
+  it('hq 단독 사용자의 사이드바가 PHASE 1 으로 늘어나지 않았다 (홈만)', () => {
+    const items = sidebarSectionsForRole(HQ).flatMap((s) => s.items);
+    expect(items.every((i) => i.roles.includes('hq'))).toBe(true);
+  });
+});
+
+describe('PHASE 1 — 사이드바 중복 정리', () => {
+  it('같은 패널이 사이드바에 두 번 나오지 않는다', () => {
+    const keys = sidebarSectionsForRole(SUPER).flatMap((s) => s.items).map((i) => i.componentKey);
+    const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+    expect(dup, `사이드바 중복 패널: ${dup.join(', ')}`).toHaveLength(0);
+  });
+
+  it('숨긴 항목도 route 와 검색은 유지된다', () => {
+    for (const id of ['music-sets', 'music-schedules', 'music-breaks', 'music-deployment',
+                      'monitoring-connectivity', 'monitoring-incidents', 'invite-codes', 'content']) {
+      const e = getRouteById(id);
+      expect(e, `${id} 사라짐`).toBeTruthy();
+      expect(e!.hiddenFromSidebar).toBe(true);
+      expect(e!.searchable).toBe(true);
+    }
+  });
+
+  it('신규 항목은 사이드바에 보인다', () => {
+    const paths = new Set(
+      sidebarSectionsForRole(ADMIN).flatMap((s) => s.items).map((i) => i.canonicalPath),
+    );
+    for (const [path] of PHASE1_ROUTES) expect(paths.has(path), `${path} 사이드바 누락`).toBe(true);
+  });
+
+  it('회원·결제 섹션이 생겼고 아티스트·음원에 검수 화면이 들어있다', () => {
+    const sections = sidebarSectionsForRole(ADMIN);
+    const members = sections.find((s) => s.id === 'members');
+    expect(members, '회원·결제 섹션 없음').toBeTruthy();
+    expect(members!.label).toBe('회원·결제');
+    const art = sections.find((s) => s.id === 'artist-content')!;
+    expect(art.label).toBe('아티스트·음원');
+    expect(art.items.map((i) => i.id)).toContain('tracks-review');
+  });
+});
+
+describe('PHASE 1 — 검색', () => {
+  it('"음원 검수" → 음원 검수', () => {
+    expect(searchOperatorRoutes('음원 검수', ADMIN)[0]?.entry.label).toBe('음원 검수');
+  });
+  it('"회원" → 회원', () => {
+    expect(searchOperatorRoutes('회원', ADMIN)[0]?.entry.label).toBe('회원');
+  });
+  it('"정산 계좌" → 정산 계좌', () => {
+    expect(searchOperatorRoutes('정산 계좌', ADMIN)[0]?.entry.label).toBe('정산 계좌');
+  });
+  it('alias "inquiries" → 문의관리', () => {
+    expect(searchOperatorRoutes('inquiries', ADMIN).map((r) => r.entry.label)).toContain('문의관리');
+  });
+  it('hq 단독 사용자는 신규 화면을 검색할 수 없다', () => {
+    expect(searchOperatorRoutes('음원 검수', HQ)).toHaveLength(0);
+    expect(searchOperatorRoutes('회원', HQ)).toHaveLength(0);
   });
 });
