@@ -43,6 +43,7 @@ import {
   type PayoutAccountMasked,
 } from '@/lib/artistApi';
 import ArtistApplyModal from '@/components/artist/ArtistApplyModal';
+import SectionHeader from '@/components/ui/SectionHeader';
 import PushNotificationToggle from '@/components/PushNotificationToggle';
 import EnterpriseHqProfileCard from '@/components/profile/EnterpriseHqProfileCard';
 import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCard';
@@ -243,8 +244,26 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      <MyInquiriesSection />
+      {/* ── 계정 ─────────────────────────────────────────────── */}
+      <section className="space-y-2">
+        <SectionHeader title="계정" desc="요금제와 구독, 서비스 모드를 관리합니다." />
+      <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
+        <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
+          desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
+        <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
+        {profile?.role === 'admin' && (
+          <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />
+        )}
+        {isAgent && (
+          <Row to="/sales" icon={<Store size={18} />} label="영업 매장 관리"
+            desc="내 영업 코드로 등록된 매장과 이용 현황, 매출을 확인합니다." />
+        )}
+        <Row to="/business" icon={<Settings size={18} />} label="사업자 모드 설정" />
+      </div>
 
+      </section>
+
+      {/* ── 매장 · 엔터프라이즈 (해당 사용자에게만) ───────────── */}
       {/* Phase 1-8 hotfix — Enterprise HQ / 매장 카드를 상단으로 이동.
           본인인증 섹션은 enterprise 사용자에게는 부적절 (본사 settlement 별도 흐름) → 아래에서 gate. */}
       {!enterpriseRole.loading && enterpriseRole.role.is_hq && (
@@ -256,6 +275,37 @@ export default function ProfilePage() {
         <EnterpriseStoreInfoCard info={enterpriseRole.storeInfo} />
       )}
 
+
+      {/* ── 아티스트 ─────────────────────────────────────────── */}
+      {/* Phase 1-7 — enterprise HQ / 매장 우선 표시 — Phase 1-8 hotfix 로 상단으로 이동됨.
+          이 위치는 ArtistManagementCard 분기 가드 유지를 위해 비워둠. */}
+
+      {/* 아티스트 관리/등록 카드 — artist_profiles(approval_status) 가 source of truth.
+          프로필이 있거나 account_type=artist 이면 노출. 미러(account_type/artist_approval_status)
+          가 깨져도 카드가 사라지지 않도록 카드 내부에서 프로필을 직접 조회한다.
+          Phase 1-7 — enterprise HQ / 매장 사용자에게는 노출하지 않음. */}
+      {user?.id
+        && !enterpriseRole.loading
+        && !enterpriseRole.role.is_hq
+        && !enterpriseRole.storeInfo.is_store && (
+        <ArtistManagementCard
+          userId={user.id}
+          userEmail={user.email ?? ''}
+          accountType={profile?.account_type ?? null}
+          usersApproval={profile?.artist_approval_status ?? null}
+        />
+      )}
+
+      {/* 큐레이터 프로필 — 로그인 사용자만 (0013 미적용 환경에선 저장 시 에러 안내) */}
+      {user?.id && (
+        <section className="space-y-2">
+          <CuratorProfileEditor userId={user.id} />
+        </section>
+      )}
+
+
+      {/* ── 정산 ─────────────────────────────────────────────── */}
+      {/* 본인인증은 정산 지급의 선행 조건이라 정산 묶음에 둔다. */}
       {/* X6.18 — 본인인증 섹션 (정산 보류 카드의 본인인증 CTA scroll target)
           Phase 1-8 hotfix — HQ / 매장 사용자는 별도 settlement 흐름 사용 → 숨김.
           enterpriseRole.loading 동안에도 깜빡임 방지 위해 false fallback (기존 동작 유지). */}
@@ -270,20 +320,8 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
-      <section className="space-y-2">
-        <div className="px-1">
-          <h2 className="text-sm font-bold tracking-tight">고객센터</h2>
-          <p className="text-[11px] text-ink-mute">
-            {isKakaoChannelConfigured() ? '@듣다 카카오톡 채널 — 빠른 답변' : '문의 폼으로 답변드립니다'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
-          {isKakaoChannelConfigured() && <KakaoChannelButtons variant="row" />}
-          <SupportInquiryButton variant="nav" label="문의 남기기" defaultType="기타" />
-        </div>
-      </section>
 
+      {/* ── 설정 ─────────────────────────────────────────────── */}
       {/* 테마 설정 */}
       <section className="space-y-2">
         <div className="flex items-end justify-between px-1">
@@ -374,48 +412,28 @@ export default function ProfilePage() {
       {/* Audio Output Phase 1 — 재생 설정 하위 · setSinkId 지원 브라우저 자동 감지 */}
       <AudioOutputSection />
 
-      {/* Phase 1-7 — enterprise HQ / 매장 우선 표시 — Phase 1-8 hotfix 로 상단으로 이동됨.
-          이 위치는 ArtistManagementCard 분기 가드 유지를 위해 비워둠. */}
-
-      {/* 아티스트 관리/등록 카드 — artist_profiles(approval_status) 가 source of truth.
-          프로필이 있거나 account_type=artist 이면 노출. 미러(account_type/artist_approval_status)
-          가 깨져도 카드가 사라지지 않도록 카드 내부에서 프로필을 직접 조회한다.
-          Phase 1-7 — enterprise HQ / 매장 사용자에게는 노출하지 않음. */}
-      {user?.id
-        && !enterpriseRole.loading
-        && !enterpriseRole.role.is_hq
-        && !enterpriseRole.storeInfo.is_store && (
-        <ArtistManagementCard
-          userId={user.id}
-          userEmail={user.email ?? ''}
-          accountType={profile?.account_type ?? null}
-          usersApproval={profile?.artist_approval_status ?? null}
-        />
-      )}
-
-      {/* 큐레이터 프로필 — 로그인 사용자만 (0013 미적용 환경에선 저장 시 에러 안내) */}
-      {user?.id && (
-        <section className="space-y-2">
-          <CuratorProfileEditor userId={user.id} />
-        </section>
-      )}
-
       <PushNotificationToggle />
 
-      <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
-        <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
-          desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
-        <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
-        {profile?.role === 'admin' && (
-          <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />
-        )}
-        {isAgent && (
-          <Row to="/sales" icon={<Store size={18} />} label="영업 매장 관리"
-            desc="내 영업 코드로 등록된 매장과 이용 현황, 매출을 확인합니다." />
-        )}
-        <Row to="/business" icon={<Settings size={18} />} label="사업자 모드 설정" />
-      </div>
 
+      {/* ── 문의 · 고객지원 ──────────────────────────────────── */}
+      <MyInquiriesSection />
+
+      {/* 고객센터 — 카톡 채널 + 문의하기 (env 미설정 시 문의 버튼만 노출) */}
+      <section className="space-y-2">
+        <div className="px-1">
+          <h2 className="text-sm font-bold tracking-tight">고객센터</h2>
+          <p className="text-[11px] text-ink-mute">
+            {isKakaoChannelConfigured() ? '@듣다 카카오톡 채널 — 빠른 답변' : '문의 폼으로 답변드립니다'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
+          {isKakaoChannelConfigured() && <KakaoChannelButtons variant="row" />}
+          <SupportInquiryButton variant="nav" label="문의 남기기" defaultType="기타" />
+        </div>
+      </section>
+
+
+      {/* ── 계정 관리 ────────────────────────────────────────── */}
       <button
         onClick={signOut}
         className="flex w-full items-center justify-center gap-2 text-sm text-ink-mute hover:text-red-400"
