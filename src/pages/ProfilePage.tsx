@@ -19,6 +19,7 @@ import {
   UserX,
   ShieldCheck,
   ShieldAlert,
+  Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
@@ -864,6 +865,16 @@ function ArtistManagementCard({
         {state.cta}
         <ChevronRight size={14} />
       </Link>
+      {/* 정산 진입점 — 승인된 아티스트만. 그 전에는 정산 자체가 생기지 않는다. */}
+      {artistProfile?.approval_status === 'approved' && (
+        <Link
+          to="/artist/settlements"
+          className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-bg-soft py-2.5 text-sm font-semibold ring-1 ring-line/15 hover:text-accent"
+        >
+          <Wallet size={14} /> 정산 내역 보기
+          <ChevronRight size={14} />
+        </Link>
+      )}
     </section>
   );
 }

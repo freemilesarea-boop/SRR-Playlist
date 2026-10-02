@@ -153,7 +153,16 @@ export default function ArtistDashboardPage() {
           </h1>
           <p className="text-xs text-ink-mute">{artist?.artist_name ?? '—'}</p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* 정산 진입점. /artist/settlements 는 라우트만 있고 들어갈 링크가 없었다 —
+              유일한 링크가 결제제한 배너 안이라, 정상 구독 아티스트에게는 0개였다.
+              "정산 금액을 어디서 보냐" 는 문의가 그래서 나왔다. */}
+          <Link
+            to="/artist/settlements"
+            className="inline-flex items-center gap-1 rounded-full bg-bg-card px-3 py-1.5 text-xs font-semibold ring-1 ring-line/15 hover:text-accent"
+          >
+            <Wallet size={13} /> 정산
+          </Link>
           <SupportInquiryButton variant="chip" defaultType="음원 등록 문의" />
         </div>
       </header>
