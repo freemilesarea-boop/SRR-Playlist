@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles,
-  Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, Search, type LucideIcon,
+  Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, Search,
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import {
@@ -13,6 +15,8 @@ import {
 /** 설정에 저장된 문자열 아이콘 이름 → lucide 컴포넌트. 미매핑은 안전한 기본값. */
 const ICONS: Record<string, LucideIcon> = {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles, Settings, KeyRound,
+  // PHASE 1-B 로 추가된 항목용 — 맵에 없으면 전부 Home 아이콘으로 보인다.
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature,
 };
 function iconFor(name: string): LucideIcon {
   return ICONS[name] ?? Home;

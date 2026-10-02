@@ -36,6 +36,30 @@ export const OPERATOR_PANELS: Record<string, OperatorPanel> = {
   'dashboard': lazy(() => import('@/components/admin/Dashboard')),
   'ai-curation': lazy(() => import('@/components/admin/AiCurationPanel')),
   'site-settings': lazy(() => import('@/components/admin/SiteSettingsPanel')),
+
+  // ── PHASE 1-B — /admin 에만 있던 핵심 운영 화면. 컴포넌트는 그대로 재사용한다.
+  // 아티스트·음원
+  'artist-tracks': lazy(() => import('@/components/admin/ArtistTrackManagementList')),
+  'track-review': lazy(() => import('@/components/admin/TrackReviewList')),
+  'qc-review': lazy(() => import('@/components/admin/QcReviewQueuePanel')),
+  'metadata-violations': lazy(() => import('@/components/admin/MetadataViolationsList')),
+  // '삭제 음원' 은 AdminPage 에서 <ArtistTrackManagementList removedView /> 로 렌더된다.
+  // DeletedTracksPanel 은 같은 prop 을 고정한 얇은 래퍼 — 새 화면이 아니다.
+  'deleted-tracks': lazy(() => import('@/components/admin/DeletedTracksPanel')),
+  'artist-contracts': lazy(() => import('@/components/admin/ArtistContractsList')),
+  // 정산
+  'artist-settlements': lazy(() => import('@/components/admin/ArtistSettlementsList')),
+  // PayoutAccountsPanel 의 initialView 기본값은 'intake' — AdminPage 의 기본 진입과 같다.
+  'payout-intake': lazy(() => import('@/components/admin/PayoutAccountsPanel')),
+  // 회원·결제
+  'members': lazy(() => import('@/components/admin/MembersList')),
+  'subscriptions': lazy(() => import('@/components/admin/SubscriptionRequests')),
+  'payment-sync': lazy(() => import('@/components/admin/PaymentSyncTool')),
+  'revenue': lazy(() => import('@/components/admin/RevenueManagement')),
+  // 시스템
+  'support-inquiries': lazy(() => import('@/components/admin/SupportInquiriesPanel')),
+  'operation-logs': lazy(() => import('@/components/admin/AdminOperationLogs')),
+  'site-notices': lazy(() => import('@/components/admin/SiteNoticesManagerPanel')),
 };
 
 export function getOperatorPanel(componentKey: string): OperatorPanel | undefined {

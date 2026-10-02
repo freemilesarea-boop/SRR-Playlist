@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles,
   Settings, KeyRound, AlertTriangle, ArrowRight, type LucideIcon,
@@ -10,6 +10,9 @@ import {
   filterQuickActions, type OperatorAccessContext, type OperatorQuickAction,
 } from '@/lib/operatorNavigation';
 import OperatorOnboardingChecklist from '@/components/operator/OperatorOnboardingChecklist';
+import AdminWorkQueueBar from '@/components/admin/AdminWorkQueueBar';
+import { resolveMergedTab } from '@/lib/adminNav';
+import { opsPathForLegacyTab } from '@/lib/operatorRouteRegistry';
 
 const ICONS: Record<string, LucideIcon> = {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles, Settings, KeyRound,
@@ -84,6 +87,29 @@ export default function OperatorHomePage() {
   }, [access.loading, canOverview]);
 
   const quickActions = useMemo(() => filterQuickActions(ctx), [ctx]);
+  const navigate = useNavigate();
+
+  /**
+   * 작업 대기열 카드 → 해당 화면. 레지스트리에 등록된 화면이면 콘솔 안(/ops)에서 열고,
+   * 아직 등록이 없으면 기존 /admin?tab= 으로 보낸다 — 어느 경우에도 기능이 끊기지 않는다.
+   * 병합된 구 탭 key(payout-verification 등)는 먼저 통합 탭으로 해석한다.
+   */
+  const onQueueNavigate = useCallback(
+    (tab: string) => {
+      const merged = resolveMergedTab(tab);
+      const opsPath = opsPathForLegacyTab(merged?.tab ?? tab, ctx);
+      if (opsPath) navigate(opsPath);
+      else navigate(`/admin?tab=${tab}`);
+    },
+    [ctx, navigate],
+  );
+
+  /**
+   * 카드 노출 여부. 대기열이 가리키는 화면은 전부 플랫폼 관리자용(/admin RequireAdmin 또는
+   * admin 역할 /ops 라우트)이므로, 본사(hq)만인 사용자에게는 어느 경로로도 열리지 않는다.
+   * 열 수 없는 카드를 남기지 않는다 — 기존 AdminWorkQueueBar 규칙과 같다.
+   */
+  const isQueueTabVisible = useCallback(() => canOverview, [canOverview]);
 
   // KPI 값: 로딩 중이거나 미지원/에러면 '—'. 하드코딩된 운영 수치를 표시하지 않는다.
   const fmt = (n: number | undefined): string => {
@@ -100,8 +126,30 @@ export default function OperatorHomePage() {
       {/* Header */}
       <header>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">운영 홈</h1>
-        <p className="mt-1 text-sm text-ink-dim">오늘의 운영 현황과 자주 쓰는 작업을 한곳에서.</p>
+        <p className="mt-1 text-sm text-ink-dim">지금 처리할 일부터. 그 다음 현황과 자주 쓰는 작업.</p>
       </header>
+
+      {/* 처리 대기 — 가장 먼저. 기존 AdminWorkQueueBar + admin_work_queue_counts() 재사용.
+          조회 실패 시 컴포넌트가 스스로 줄을 감춘다(홈은 깨지지 않는다). */}
+      {canOverview && (
+        <AdminWorkQueueBar onNavigate={onQueueNavigate} isTabVisible={isQueueTabVisible} />
+      )}
+
+      {/* 조치가 필요한 현황 — 정상일 때는 아무것도 그리지 않는다. */}
+      {showOfflineAlert && (
+        <section aria-label="조치 필요">
+          <Link
+            to={opsPathForLegacyTab('store-monitoring', ctx) ?? '/admin?tab=store-monitoring'}
+            className="flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 transition-colors hover:bg-amber-400/20"
+          >
+            <AlertTriangle size={20} className="flex-none text-amber-300" />
+            <span className="flex-1 text-sm text-ink">
+              오프라인 매장 <b className="font-bold">{offlineCount.toLocaleString('ko-KR')}</b>곳이 있습니다. 상태를 확인하세요.
+            </span>
+            <ArrowRight size={16} className="flex-none text-ink-dim" />
+          </Link>
+        </section>
+      )}
 
       {/* KPIs — 플랫폼 관리자에게만 (본사 종합 지표는 admin_enterprise_overview 권한 필요) */}
       {canOverview && (
@@ -119,22 +167,6 @@ export default function OperatorHomePage() {
               <KpiCard label="본사 수" value={fmt(overview?.total_franchises)} />
             </div>
           )}
-        </section>
-      )}
-
-      {/* Alerts — 실 데이터 기반 */}
-      {showOfflineAlert && (
-        <section aria-label="알림">
-          <Link
-            to="/admin?tab=store-monitoring"
-            className="flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 transition-colors hover:bg-amber-400/20"
-          >
-            <AlertTriangle size={20} className="flex-none text-amber-300" />
-            <span className="flex-1 text-sm text-ink">
-              오프라인 매장 <b className="font-bold">{offlineCount.toLocaleString('ko-KR')}</b>곳이 있습니다. 상태를 확인하세요.
-            </span>
-            <ArrowRight size={16} className="flex-none text-ink-dim" />
-          </Link>
         </section>
       )}
 

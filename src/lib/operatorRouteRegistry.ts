@@ -22,7 +22,7 @@ export type { OperatorRole, OperatorAccessContext } from './operatorNavigation';
 
 export type OperatorCategory =
   | 'home' | 'stores' | 'enterprise' | 'music' | 'monitoring'
-  | 'finance' | 'artist-content' | 'analytics' | 'ai' | 'system';
+  | 'finance' | 'artist-content' | 'members' | 'analytics' | 'ai' | 'system';
 
 /** 카테고리 메타(사이드바 섹션 헤더). */
 export interface OperatorCategoryMeta {
@@ -34,11 +34,12 @@ export interface OperatorCategoryMeta {
 export const OPERATOR_CATEGORIES: OperatorCategoryMeta[] = [
   { id: 'home',           label: '운영 홈',        icon: 'Home' },
   { id: 'stores',         label: '매장',           icon: 'Store' },
+  { id: 'monitoring',     label: '관제',           icon: 'Activity' },
   { id: 'enterprise',     label: '본사·브랜드',    icon: 'Building2' },
   { id: 'music',          label: '음악',           icon: 'Music' },
-  { id: 'monitoring',     label: '관제',           icon: 'Activity' },
+  { id: 'artist-content', label: '아티스트·음원',  icon: 'Mic2' },
   { id: 'finance',        label: '정산·청구',      icon: 'Wallet' },
-  { id: 'artist-content', label: '아티스트·콘텐츠', icon: 'Mic2' },
+  { id: 'members',        label: '회원·결제',      icon: 'Users' },
   { id: 'analytics',      label: '분석',           icon: 'BarChart3' },
   { id: 'ai',             label: 'AI',             icon: 'Sparkles' },
   { id: 'system',         label: '시스템',         icon: 'Settings' },
@@ -98,22 +99,22 @@ export const OPERATOR_ROUTES: OperatorRouteEntry[] = [
   { id: 'enterprise-accounts', label: '본사 계정', description: '본사 계정 관리', canonicalPath: '/ops/enterprise/accounts', legacyTab: 'enterprise-accounts', componentKey: 'enterprise-accounts', category: 'enterprise', keywords: ['본사 계정', '엔터프라이즈 계정'], aliases: ['accounts'], roles: A, breadcrumb: ['본사·브랜드', '본사 계정'], icon: 'Building2', searchable: true },
   { id: 'enterprise-franchises', label: '가맹점 관리', description: '프랜차이즈 매장·정책·매장별 재생설정 관리', canonicalPath: '/ops/enterprise/franchises', legacyTab: 'franchise', componentKey: 'franchise', category: 'enterprise', keywords: ['가맹점', '프랜차이즈', '매장 연결'], aliases: ['franchise', 'franchises'], roles: A, breadcrumb: ['본사·브랜드', '가맹점 관리'], icon: 'Store', searchable: true },
   { id: 'enterprise-brands', label: '브랜드 자동가입', description: '브랜드 코드 기반 매장 자동 등록', canonicalPath: '/ops/enterprise/brands', legacyTab: 'brand-registry', componentKey: 'brand-registry', category: 'enterprise', keywords: ['브랜드', '브랜드 코드', '자동가입', '브랜드 관리'], aliases: ['brand', 'brand registry'], roles: ['super_admin'], superOnly: true, breadcrumb: ['본사·브랜드', '브랜드 자동가입'], icon: 'Building2', searchable: true },
-  { id: 'invite-codes', label: '초대코드', description: '본사·매장 가입 초대코드(본사 계정에서 발급/회전)', canonicalPath: '/ops/enterprise/invite-codes', legacyTab: 'enterprise-accounts', componentKey: 'enterprise-accounts', category: 'enterprise', keywords: ['초대', '초대코드', '가입코드', '매장코드', '본사코드'], aliases: ['invite', 'invite code', 'invitation'], roles: A, breadcrumb: ['본사·브랜드', '초대코드'], icon: 'KeyRound', searchable: true },
+  { id: 'invite-codes', label: '초대코드', description: '본사·매장 가입 초대코드(본사 계정에서 발급/회전)', canonicalPath: '/ops/enterprise/invite-codes', legacyTab: 'enterprise-accounts', componentKey: 'enterprise-accounts', category: 'enterprise', keywords: ['초대', '초대코드', '가입코드', '매장코드', '본사코드'], aliases: ['invite', 'invite code', 'invitation'], roles: A, breadcrumb: ['본사·브랜드', '초대코드'], icon: 'KeyRound', hiddenFromSidebar: true, searchable: true },
 
   // ── MUSIC ────────────────────────────────────────────
   { id: 'music', label: '음악', description: '음악 배포·정책 관리', canonicalPath: '/ops/music', legacyTab: 'policy-deployment', componentKey: 'policy-deployment', category: 'music', keywords: ['음악', '뮤직'], aliases: ['music'], roles: A, breadcrumb: ['음악'], icon: 'Music', searchable: true },
   { id: 'music-playlists', label: '플레이리스트', description: '플레이리스트/콘텐츠 관리', canonicalPath: '/ops/music/playlists', legacyTab: 'content', componentKey: 'content', category: 'music', keywords: ['플레이리스트', '플리', '콘텐츠'], aliases: ['playlist', 'playlists'], roles: A, breadcrumb: ['음악', '플레이리스트'], icon: 'Music', searchable: true },
-  { id: 'music-sets', label: '플레이리스트 세트', description: '가맹점 플레이리스트 세트(가맹점 관리)', canonicalPath: '/ops/music/sets', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['플레이리스트 세트', '세트', '로테이션'], aliases: ['set', 'sets', 'playlist set'], roles: A, breadcrumb: ['음악', '플레이리스트 세트'], icon: 'Music', searchable: true },
-  { id: 'music-schedules', label: '스케줄', description: '매장 음악 스케줄(가맹점 관리)', canonicalPath: '/ops/music/schedules', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['스케줄', '시간표', '자동 스케줄'], aliases: ['schedule', 'schedules'], roles: A, breadcrumb: ['음악', '스케줄'], icon: 'Music', searchable: true },
-  { id: 'music-breaks', label: '브레이크', description: '브레이크(무음) 슬롯 설정(가맹점 관리)', canonicalPath: '/ops/music/breaks', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['브레이크', '무음', '휴식', 'break'], aliases: ['break', 'breaks'], roles: A, breadcrumb: ['음악', '브레이크'], icon: 'Music', searchable: true },
-  { id: 'music-deployment', label: '배포 현황', description: '매장 음악 정책 배포 현황', canonicalPath: '/ops/music/deployment', legacyTab: 'policy-deployment', componentKey: 'policy-deployment', category: 'music', keywords: ['배포', '배포 현황', '정책 배포'], aliases: ['deployment', 'deploy'], roles: A, breadcrumb: ['음악', '배포 현황'], icon: 'Music', searchable: true },
+  { id: 'music-sets', label: '플레이리스트 세트', description: '가맹점 플레이리스트 세트(가맹점 관리)', canonicalPath: '/ops/music/sets', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['플레이리스트 세트', '세트', '로테이션'], aliases: ['set', 'sets', 'playlist set'], roles: A, breadcrumb: ['음악', '플레이리스트 세트'], icon: 'Music', hiddenFromSidebar: true, searchable: true },
+  { id: 'music-schedules', label: '스케줄', description: '매장 음악 스케줄(가맹점 관리)', canonicalPath: '/ops/music/schedules', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['스케줄', '시간표', '자동 스케줄'], aliases: ['schedule', 'schedules'], roles: A, breadcrumb: ['음악', '스케줄'], icon: 'Music', hiddenFromSidebar: true, searchable: true },
+  { id: 'music-breaks', label: '브레이크', description: '브레이크(무음) 슬롯 설정(가맹점 관리)', canonicalPath: '/ops/music/breaks', legacyTab: 'franchise', componentKey: 'franchise', category: 'music', keywords: ['브레이크', '무음', '휴식', 'break'], aliases: ['break', 'breaks'], roles: A, breadcrumb: ['음악', '브레이크'], icon: 'Music', hiddenFromSidebar: true, searchable: true },
+  { id: 'music-deployment', label: '배포 현황', description: '매장 음악 정책 배포 현황', canonicalPath: '/ops/music/deployment', legacyTab: 'policy-deployment', componentKey: 'policy-deployment', category: 'music', keywords: ['배포', '배포 현황', '정책 배포'], aliases: ['deployment', 'deploy'], roles: A, breadcrumb: ['음악', '배포 현황'], icon: 'Music', hiddenFromSidebar: true, searchable: true },
 
   // ── MONITORING (관제) ─────────────────────────────────
   { id: 'monitoring', label: '관제', description: '통합 운영 관제', canonicalPath: '/ops/monitoring', legacyTab: 'enterprise-noc', componentKey: 'enterprise-noc', category: 'monitoring', keywords: ['관제', '모니터링', '운영센터', 'NOC'], aliases: ['monitoring', 'noc'], roles: A, breadcrumb: ['관제'], icon: 'Activity', searchable: true },
   { id: 'monitoring-live', label: '실시간 재생', description: '매장별 현재 재생 곡', canonicalPath: '/ops/monitoring/live', legacyTab: 'store-now-playing', componentKey: 'store-now-playing', category: 'monitoring', keywords: ['실시간 재생', '지금 재생', 'now playing'], aliases: ['live', 'now playing'], roles: A, breadcrumb: ['관제', '실시간 재생'], icon: 'Music', searchable: true },
-  { id: 'monitoring-connectivity', label: '접속 상태', description: '매장 온라인/오프라인 상태', canonicalPath: '/ops/monitoring/connectivity', legacyTab: 'store-monitoring', componentKey: 'store-monitoring', category: 'monitoring', keywords: ['접속 상태', '온라인', '오프라인', '연결', '하트비트'], aliases: ['connectivity', 'heartbeat', 'online', 'offline'], roles: A, breadcrumb: ['관제', '접속 상태'], icon: 'Activity', searchable: true },
+  { id: 'monitoring-connectivity', label: '접속 상태', description: '매장 온라인/오프라인 상태', canonicalPath: '/ops/monitoring/connectivity', legacyTab: 'store-monitoring', componentKey: 'store-monitoring', category: 'monitoring', keywords: ['접속 상태', '온라인', '오프라인', '연결', '하트비트'], aliases: ['connectivity', 'heartbeat', 'online', 'offline'], roles: A, breadcrumb: ['관제', '접속 상태'], icon: 'Activity', hiddenFromSidebar: true, searchable: true },
   { id: 'monitoring-quality', label: '재생 품질', description: '오디오 재생 품질 진단', canonicalPath: '/ops/monitoring/quality', legacyTab: 'audio-diagnostics', componentKey: 'audio-diagnostics', category: 'monitoring', keywords: ['재생 품질', '오디오 진단', '품질'], aliases: ['quality', 'audio', 'diagnostics'], roles: A, breadcrumb: ['관제', '재생 품질'], icon: 'Activity', searchable: true },
-  { id: 'monitoring-incidents', label: '장애/NOC', description: '장애·운영 인시던트', canonicalPath: '/ops/monitoring/incidents', legacyTab: 'enterprise-noc', componentKey: 'enterprise-noc', category: 'monitoring', keywords: ['장애', '인시던트', 'NOC', '알림'], aliases: ['incidents', 'incident', 'noc'], roles: A, breadcrumb: ['관제', '장애/NOC'], icon: 'Activity', searchable: true },
+  { id: 'monitoring-incidents', label: '장애/NOC', description: '장애·운영 인시던트', canonicalPath: '/ops/monitoring/incidents', legacyTab: 'enterprise-noc', componentKey: 'enterprise-noc', category: 'monitoring', keywords: ['장애', '인시던트', 'NOC', '알림'], aliases: ['incidents', 'incident', 'noc'], roles: A, breadcrumb: ['관제', '장애/NOC'], icon: 'Activity', hiddenFromSidebar: true, searchable: true },
 
   // ── FINANCE (정산·청구) ───────────────────────────────
   { id: 'finance', label: '정산·청구', description: '정산·청구 통합센터(카노니컬)', canonicalPath: '/ops/finance', legacyTab: 'enterprise-settlement-center', componentKey: 'enterprise-settlement-center', category: 'finance', keywords: ['정산', '청구', '정산청구', '통합센터'], aliases: ['finance', 'settlement center'], roles: ['super_admin'], superOnly: true, breadcrumb: ['정산·청구'], icon: 'Wallet', searchable: true },
@@ -122,11 +123,35 @@ export const OPERATOR_ROUTES: OperatorRouteEntry[] = [
   { id: 'finance-contracts', label: '계약', description: '본사 계약 관리', canonicalPath: '/ops/finance/contracts', legacyTab: 'enterprise-contracts', componentKey: 'enterprise-contracts', category: 'finance', keywords: ['계약', '컨트랙트'], aliases: ['contract', 'contracts'], roles: A, breadcrumb: ['정산·청구', '계약'], icon: 'Wallet', searchable: true },
 
   // ── REMAINING ────────────────────────────────────────
-  { id: 'artists', label: '아티스트', description: '아티스트 승인·관리', canonicalPath: '/ops/artists', legacyTab: 'artists', componentKey: 'artists', category: 'artist-content', keywords: ['아티스트', '승인', '음원 검수'], aliases: ['artist', 'artists'], roles: A, breadcrumb: ['아티스트·콘텐츠', '아티스트'], icon: 'Mic2', searchable: true },
-  { id: 'content', label: '콘텐츠', description: '플레이리스트·콘텐츠 관리', canonicalPath: '/ops/content', legacyTab: 'content', componentKey: 'content', category: 'artist-content', keywords: ['콘텐츠', '플레이리스트', '관리'], aliases: ['content'], roles: A, breadcrumb: ['아티스트·콘텐츠', '콘텐츠'], icon: 'Settings', searchable: true },
+  { id: 'artists', label: '아티스트', description: '아티스트 승인·관리', canonicalPath: '/ops/artists', legacyTab: 'artists', componentKey: 'artists', category: 'artist-content', keywords: ['아티스트', '승인', '음원 검수'], aliases: ['artist', 'artists'], roles: A, breadcrumb: ['아티스트·음원', '아티스트 승인'], icon: 'Mic2', searchable: true },
+  { id: 'content', label: '콘텐츠', description: '플레이리스트·콘텐츠 관리', canonicalPath: '/ops/content', legacyTab: 'content', componentKey: 'content', category: 'artist-content', keywords: ['콘텐츠', '플레이리스트', '관리'], aliases: ['content'], roles: A, breadcrumb: ['아티스트·음원', '콘텐츠'], icon: 'Settings', hiddenFromSidebar: true, searchable: true },
   { id: 'analytics', label: '분석', description: '전체 서비스 지표', canonicalPath: '/ops/analytics', legacyTab: 'dashboard', componentKey: 'dashboard', category: 'analytics', keywords: ['분석', '지표', '대시보드', '통계'], aliases: ['analytics', 'stats'], roles: A, breadcrumb: ['분석'], icon: 'BarChart3', searchable: true },
   { id: 'ai', label: 'AI', description: 'AI 큐레이션·분류', canonicalPath: '/ops/ai', legacyTab: 'ai-curation', componentKey: 'ai-curation', category: 'ai', keywords: ['AI', '큐레이션', '추천'], aliases: ['ai', 'curation'], roles: A, breadcrumb: ['AI'], icon: 'Sparkles', searchable: true },
   { id: 'system', label: '시스템', description: '사이트 설정·공지·관리자', canonicalPath: '/ops/system', legacyTab: 'site-settings', componentKey: 'site-settings', category: 'system', keywords: ['시스템', '설정', '공지', '관리자'], aliases: ['system', 'settings'], roles: A, breadcrumb: ['시스템'], icon: 'Settings', searchable: true },
+
+  // ── ARTIST · TRACKS (PHASE 1-B) ──────────────────────
+  // 전부 /admin 에서 superOnly 가 아닌 탭 → roles: A 는 RequireAdmin(profile.role==='admin') 과 등가.
+  { id: 'tracks', label: '음원 관리', description: '등록 음원 목록·상태', canonicalPath: '/ops/tracks', legacyTab: 'artist-tracks', componentKey: 'artist-tracks', category: 'artist-content', keywords: ['음원', '음원 관리', '트랙', '곡 목록'], aliases: ['tracks', 'track'], roles: A, breadcrumb: ['아티스트·음원', '음원 관리'], icon: 'Music', searchable: true },
+  { id: 'tracks-review', label: '음원 검수', description: '업로드 음원 승인·반려', canonicalPath: '/ops/tracks/review', legacyTab: 'track-review', componentKey: 'track-review', category: 'artist-content', keywords: ['음원 검수', '검수', '승인', '반려', '심사'], aliases: ['review', 'track review'], roles: A, breadcrumb: ['아티스트·음원', '음원 검수'], icon: 'Mic2', searchable: true },
+  { id: 'tracks-qc', label: 'AI QC 검수', description: 'AI 품질 검사 대기열', canonicalPath: '/ops/tracks/qc', legacyTab: 'qc-review', componentKey: 'qc-review', category: 'artist-content', keywords: ['QC', '품질', '검사', 'AI 검수'], aliases: ['qc', 'quality check'], roles: A, breadcrumb: ['아티스트·음원', 'AI QC 검수'], icon: 'Sparkles', searchable: true },
+  { id: 'tracks-violations', label: '메타데이터 위반 의심', description: '메타데이터 위반 의심 음원', canonicalPath: '/ops/tracks/violations', legacyTab: 'metadata-violations', componentKey: 'metadata-violations', category: 'artist-content', keywords: ['메타데이터', '위반', '의심', '메타 위반'], aliases: ['violations', 'metadata'], roles: A, breadcrumb: ['아티스트·음원', '메타데이터 위반 의심'], icon: 'AlertTriangle', searchable: true },
+  { id: 'tracks-deleted', label: '삭제 음원', description: '삭제된 음원 목록', canonicalPath: '/ops/tracks/deleted', legacyTab: 'deleted-tracks', componentKey: 'deleted-tracks', category: 'artist-content', keywords: ['삭제 음원', '삭제', '제거된 음원'], aliases: ['deleted', 'removed'], roles: A, breadcrumb: ['아티스트·음원', '삭제 음원'], icon: 'Trash2', searchable: true },
+  { id: 'artists-contracts', label: '아티스트 계약', description: '아티스트 계약 관리', canonicalPath: '/ops/artists/contracts', legacyTab: 'artist-contracts', componentKey: 'artist-contracts', category: 'artist-content', keywords: ['아티스트 계약', '계약서', '서명'], aliases: ['artist contract'], roles: A, breadcrumb: ['아티스트·음원', '아티스트 계약'], icon: 'FileSignature', searchable: true },
+
+  // ── FINANCE (PHASE 1-B) ──────────────────────────────
+  { id: 'finance-artist-settlements', label: '아티스트 정산', description: '아티스트 월별 정산·지급', canonicalPath: '/ops/finance/artist-settlements', legacyTab: 'artist-settlements', componentKey: 'artist-settlements', category: 'finance', keywords: ['아티스트 정산', '지급', '정산 처리'], aliases: ['artist settlement', 'payout'], roles: A, breadcrumb: ['정산·청구', '아티스트 정산'], icon: 'Wallet', searchable: true },
+  { id: 'finance-payout-accounts', label: '정산 계좌', description: '아티스트 정산 계좌 확인·승인', canonicalPath: '/ops/finance/payout-accounts', legacyTab: 'payout-intake', componentKey: 'payout-intake', category: 'finance', keywords: ['정산 계좌', '계좌', '계좌 확인', '지급 계좌'], aliases: ['payout account', 'bank account'], roles: A, breadcrumb: ['정산·청구', '정산 계좌'], icon: 'Wallet', searchable: true },
+
+  // ── MEMBERS · PAYMENTS (PHASE 1-B) ───────────────────
+  { id: 'members', label: '회원', description: '회원 목록·상세', canonicalPath: '/ops/members', legacyTab: 'members', componentKey: 'members', category: 'members', keywords: ['회원', '회원관리', '유저', '사용자'], aliases: ['members', 'users'], roles: A, breadcrumb: ['회원·결제', '회원'], icon: 'Users', searchable: true },
+  { id: 'members-subscriptions', label: '구독신청', description: '구독 신청·승인', canonicalPath: '/ops/members/subscriptions', legacyTab: 'subscriptions', componentKey: 'subscriptions', category: 'members', keywords: ['구독', '구독신청', '플랜'], aliases: ['subscription', 'subscriptions'], roles: A, breadcrumb: ['회원·결제', '구독신청'], icon: 'CreditCard', searchable: true },
+  { id: 'members-payments', label: '결제 동기화', description: 'PayApp 결제 상태 동기화', canonicalPath: '/ops/members/payments', legacyTab: 'payment-sync', componentKey: 'payment-sync', category: 'members', keywords: ['결제', '결제 동기화', '페이앱', '청구'], aliases: ['payment', 'payments', 'payapp'], roles: A, breadcrumb: ['회원·결제', '결제 동기화'], icon: 'CreditCard', searchable: true },
+  { id: 'members-revenue', label: '매출', description: '매출 현황', canonicalPath: '/ops/members/revenue', legacyTab: 'revenue', componentKey: 'revenue', category: 'members', keywords: ['매출', '수익', '레비뉴'], aliases: ['revenue', 'sales'], roles: A, breadcrumb: ['회원·결제', '매출'], icon: 'Wallet', searchable: true },
+
+  // ── SYSTEM (PHASE 1-B) ───────────────────────────────
+  { id: 'system-inquiries', label: '문의관리', description: '고객 문의 처리', canonicalPath: '/ops/system/inquiries', legacyTab: 'support-inquiries', componentKey: 'support-inquiries', category: 'system', keywords: ['문의', '문의관리', '고객센터', '티켓'], aliases: ['inquiry', 'inquiries', 'support'], roles: A, breadcrumb: ['시스템', '문의관리'], icon: 'MessageSquare', searchable: true },
+  { id: 'system-logs', label: '운영 로그', description: '관리자 작업 로그', canonicalPath: '/ops/system/logs', legacyTab: 'operation-logs', componentKey: 'operation-logs', category: 'system', keywords: ['로그', '운영 로그', '감사', '작업 기록'], aliases: ['logs', 'audit', 'operation log'], roles: A, breadcrumb: ['시스템', '운영 로그'], icon: 'ScrollText', searchable: true },
+  { id: 'system-notices', label: '공지/팝업', description: '사이트 공지·팝업 관리', canonicalPath: '/ops/system/notices', legacyTab: 'site-notices', componentKey: 'site-notices', category: 'system', keywords: ['공지', '팝업', '안내', '공지사항'], aliases: ['notice', 'notices', 'popup'], roles: A, breadcrumb: ['시스템', '공지/팝업'], icon: 'Bell', searchable: true },
 ];
 
 /** App.tsx 라우트 등록용: '/ops'(홈) 을 제외한 모든 canonicalPath. :param 세그먼트 포함. */
@@ -166,6 +191,25 @@ export function matchOpsRoute(pathname: string): OperatorRouteEntry | undefined 
     if (rsegs.length !== segs.length) return false;
     return rsegs.every((s, i) => s.startsWith(':') || s === segs[i]);
   });
+}
+
+/**
+ * 레거시 AdminPage 탭 key → 접근 가능한 /ops canonical 경로.
+ *
+ * 작업 대기열(AdminWorkQueueBar)은 탭 key 로 이동을 알려주는데, /ops 안에서는 그 탭이
+ * 등록된 canonical 경로로 보내야 콘솔을 벗어나지 않는다. 등록이 없거나 권한이 없으면
+ * undefined — 호출부가 기존 /admin?tab= 로 떨어지게 한다(기능 상실 없음).
+ * 같은 legacyTab 을 여러 라우트가 쓰는 경우 사이드바에 보이는 쪽을 우선한다.
+ */
+export function opsPathForLegacyTab(
+  legacyTab: string,
+  ctx: OperatorAccessContext,
+): string | undefined {
+  const candidates = OPERATOR_ROUTES.filter(
+    (r) => r.legacyTab === legacyTab && !r.canonicalPath.includes(':') && canAccessRoute(r, ctx),
+  );
+  const entry = candidates.find((r) => !r.hiddenFromSidebar) ?? candidates[0];
+  return entry?.canonicalPath;
 }
 
 /** 사이드바용: 역할 필터 + 숨김 제외 후, 카테고리별로 묶는다(빈 카테고리 제외). */
