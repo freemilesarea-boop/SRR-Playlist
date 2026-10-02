@@ -18,4 +18,7 @@ export { AdminSkeleton } from './AdminSkeleton';
 export { AdminTooltip } from './AdminTooltip';
 export { AdminSearch } from './AdminSearch';
 export { AdminModal } from './AdminModal';
+export { AdminTable, type AdminTableColumn, type AdminTableProps } from './AdminTable';
+export { FilterBar, type FilterBarProps } from './FilterBar';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { LastLoginBadge } from './LastLoginBadge';
