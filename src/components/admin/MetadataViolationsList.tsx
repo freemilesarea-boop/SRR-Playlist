@@ -17,6 +17,7 @@ import {
 } from '@/lib/trackMetadataOptions';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import { toast } from '@/store/toastStore';
+import { FilterBar, ConfirmDialog } from './ui';
 
 type StatusFilter = 'pending' | 'reviewed' | 'resolved' | 'ignored' | 'all';
 
@@ -130,7 +131,6 @@ export default function MetadataViolationsList() {
   }
 
   async function exclude(row: MetadataViolation) {
-    if (!window.confirm(`'${row.title}' 곡을 '${row.playlist_title}' 플레이리스트에서 제외할까요?`)) return;
     try {
       await excludeTrackFromPlaylist(row.playlist_id, row.track_id);
       toast.success('플레이리스트에서 제외했어요.');
@@ -139,6 +139,10 @@ export default function MetadataViolationsList() {
       toast.error(`제외 실패: ${(e as Error).message}`);
     }
   }
+
+  // 플레이리스트 제외는 되돌리려면 다시 편성해야 한다. 대상(곡·플레이리스트)을 보여준다.
+  const [excludeRow, setExcludeRow] = useState<MetadataViolation | null>(null);
+  const [excluding, setExcluding] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -201,12 +205,15 @@ export default function MetadataViolationsList() {
         </div>
       )}
 
-      {/* 상태 필터 */}
-      <div className="flex flex-wrap gap-1.5">
-        {(['pending', 'reviewed', 'resolved', 'ignored', 'all'] as StatusFilter[]).map((f) => (
+      {/* 상태 필터 — 칩은 그대로 두고 FilterBar 로 결과 개수와 한 영역에 모았다.
+          이 화면은 검색을 넣지 않는다(목록이 상태별로 짧고 서버가 상태로 이미 거른다). */}
+      <FilterBar
+        filters={(['pending', 'reviewed', 'resolved', 'ignored', 'all'] as StatusFilter[]).map((f) => (
           <button
             key={f}
+            type="button"
             onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
               filter === f ? 'bg-accent text-black' : 'bg-bg-card text-ink-mute hover:bg-bg-hover'
             }`}
@@ -214,7 +221,8 @@ export default function MetadataViolationsList() {
             {f === 'all' ? '전체' : STATUS_LABEL[f]}
           </button>
         ))}
-      </div>
+        count={loading ? undefined : `${rows.length}건`}
+      />
 
       {/* 목록 */}
       {rows.length === 0 ? (
@@ -272,7 +280,7 @@ export default function MetadataViolationsList() {
                     {editing === row.id ? '메타 편집 닫기' : '메타데이터 재세팅'}
                   </button>
                   <button
-                    onClick={() => void exclude(row)}
+                    onClick={() => setExcludeRow(row)}
                     className="inline-flex items-center gap-1 rounded-lg bg-rose-500/20 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
                   >
                     <Ban size={12} /> 플리에서 제외
@@ -331,6 +339,29 @@ export default function MetadataViolationsList() {
           })}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={excludeRow !== null}
+        title="플레이리스트에서 제외"
+        target={excludeRow ? `${excludeRow.title}` : undefined}
+        description={
+          excludeRow
+            ? `'${excludeRow.playlist_title}' 플레이리스트에서 이 곡을 제외합니다. 되돌리려면 다시 편성해야 합니다.`
+            : undefined
+        }
+        confirmLabel="제외"
+        destructive
+        pending={excluding}
+        onConfirm={() => {
+          if (!excludeRow) return;
+          setExcluding(true);
+          void exclude(excludeRow).finally(() => {
+            setExcluding(false);
+            setExcludeRow(null);
+          });
+        }}
+        onCancel={() => setExcludeRow(null)}
+      />
     </div>
   );
 }

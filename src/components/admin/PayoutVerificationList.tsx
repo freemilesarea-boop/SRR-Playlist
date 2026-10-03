@@ -12,7 +12,7 @@
  * payout_incomplete, 0489 와 같은 기준).
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Wallet, Check, X, Clock, Pencil } from 'lucide-react';
+import { Wallet, Clock, Pencil } from 'lucide-react';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingPayoutAccounts,
@@ -24,6 +24,10 @@ import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import RevealPiiButton from './RevealPiiButton';
 import PayoutAccountEditDialog from './PayoutAccountEditDialog';
+import {
+  AdminBadge, AdminButton, AdminEmpty, AdminTable, FilterBar, ConfirmDialog,
+  type AdminTableColumn, type AdminToneName,
+} from './ui';
 import {
   PAYOUT_ACCOUNT_FILTERS as FILTERS,
   matchesPayoutAccountFilter as matchesFilter,
@@ -40,10 +44,10 @@ function taxLabel(t: string): string {
   }
 }
 
-const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
-  pending: { label: '확인 대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200' },
-  verified: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
-  rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
+const STATUS_LABEL: Record<string, { label: string; tone: AdminToneName }> = {
+  pending: { label: '확인 대기', tone: 'warning' },
+  verified: { label: '승인됨', tone: 'success' },
+  rejected: { label: '거절됨', tone: 'danger' },
 };
 
 /**
@@ -51,9 +55,10 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
  * 초록 '승인됨' 하나로 표시하면 관리자도 "다 된 계좌"로 읽는다 — 아티스트 화면에서
  * 같은 모순을 8/31 #525 가 고쳤는데 관리자 화면엔 그대로 남아 있었다.
  */
-function statusLabelFor(r: AdminPayoutRow): { label: string; tone: string } {
+function statusLabelFor(r: AdminPayoutRow): { label: string; tone: AdminToneName } {
   if (r.verification_status === 'verified' && !r.is_pii_complete) {
-    return { label: '승인됨 · 지급 보류', tone: 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50' };
+    // 라벨로 구분을 유지한다 — 초록 '승인됨' 하나로 보이면 "다 된 계좌" 로 읽힌다.
+    return { label: '승인됨 · 지급 보류', tone: 'warning' };
   }
   return STATUS_LABEL[r.verification_status] ?? STATUS_LABEL.pending;
 }
@@ -83,7 +88,6 @@ export default function PayoutVerificationList({
   useFreshFetch(load, []);
 
   async function verify(accountId: string) {
-    if (!window.confirm('이 계좌를 승인 처리할까요? 승인 후 아티스트는 음원 업로드가 가능해집니다.')) return;
     setBusyId(accountId);
     const res = await verifyArtistPayoutAccount(accountId);
     setBusyId(null);
@@ -112,8 +116,188 @@ export default function PayoutVerificationList({
     await load();
   }
 
+  // 검색은 이미 받아온 rows 안에서만 돈다(listPendingPayoutAccounts 는 전 계좌를 한 번에
+  // 가져오므로 서버 pagination 이 없다 — 현재 페이지만 검색하는 상황이 아니다).
+  const [search, setSearch] = useState('');
+  // 승인은 돈이 나가는 경로다. 확인 단계를 둔다.
+  const [verifyRow, setVerifyRow] = useState<AdminPayoutRow | null>(null);
+
   const counts = useMemo(() => countByPayoutAccountFilter(rows), [rows]);
-  const visibleRows = useMemo(() => rows.filter((r) => matchesFilter(r, filter)), [rows, filter]);
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (!matchesFilter(r, filter)) return false;
+      if (!q) return true;
+      return (
+        r.artist_name?.toLowerCase().includes(q) ||
+        r.email?.toLowerCase().includes(q) ||
+        r.legal_name?.toLowerCase().includes(q) ||
+        r.account_holder?.toLowerCase().includes(q) ||
+        r.bank_name?.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, filter, search]);
+
+  const activeFilters = (search.trim() ? 1 : 0) + (filter !== 'all' ? 1 : 0);
+
+  const columns: AdminTableColumn<AdminPayoutRow>[] = [
+    {
+      key: 'artist',
+      header: '아티스트',
+      cell: (r) => (
+        <>
+          <p className="font-medium">{r.artist_name ?? '—'}</p>
+          <p className="text-[10px] text-ink-mute">{r.email ?? '—'}</p>
+        </>
+      ),
+    },
+    {
+      key: 'legal',
+      header: '실명 / RRN',
+      tdClassName: 'text-xs',
+      cell: (r) => (
+        <>
+          <p className="font-medium">{r.legal_name ?? '—'}</p>
+          <div className="mt-1">
+            {r.is_pii_complete && r.masked_rrn ? (
+              <RevealPiiButton
+                accountId={r.account_id}
+                maskedValue={r.masked_rrn}
+                piiType="resident_number"
+                className="font-mono text-[11px]"
+              />
+            ) : (
+              <code className="font-mono text-[11px] text-ink-mute">{r.masked_rrn ?? '—'}</code>
+            )}
+          </div>
+        </>
+      ),
+    },
+    {
+      key: 'bank',
+      header: '은행 / 계좌',
+      tdClassName: 'text-xs',
+      cell: (r) => (
+        <>
+          <p>{r.bank_name}</p>
+          <p className="mt-0.5 text-[10px] text-ink-mute">예금주: {r.account_holder}</p>
+          <div className="mt-1">
+            {r.is_pii_complete ? (
+              <RevealPiiButton
+                accountId={r.account_id}
+                maskedValue={r.masked_account_number}
+                piiType="account_number"
+                className="font-mono text-[11px]"
+              />
+            ) : (
+              <code className="font-mono text-[11px] text-ink-mute">{r.masked_account_number}</code>
+            )}
+          </div>
+        </>
+      ),
+    },
+    {
+      key: 'tax',
+      header: '세금 / 동의',
+      tdClassName: 'text-[11px]',
+      cell: (r) => (
+        <>
+          <p>{taxLabel(r.tax_withholding_type)}</p>
+          <p className="mt-0.5">
+            <AdminBadge tone={r.has_tax_consent ? 'success' : 'warning'} variant="subtle" size="sm">
+              {r.has_tax_consent ? '동의 완료' : '미동의'}
+            </AdminBadge>
+          </p>
+          {r.tax_consent_at && (
+            <p className="mt-0.5 text-[10px] text-ink-dim">
+              {new Date(r.tax_consent_at).toLocaleString('ko-KR', {
+                year: '2-digit', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </p>
+          )}
+          {!r.is_pii_complete && (
+            <p className="mt-0.5">
+              <AdminBadge tone="danger" variant="subtle" size="sm">PII 미완료</AdminBadge>
+            </p>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'status',
+      header: '상태',
+      cell: (r) => {
+        const s = statusLabelFor(r);
+        return (
+          <>
+            <AdminBadge
+              tone={s.tone}
+              variant="subtle"
+              size="sm"
+              icon={r.verification_status === 'pending' ? <Clock size={9} /> : undefined}
+            >
+              {s.label}
+            </AdminBadge>
+            {r.rejected_reason && (
+              <p className="mt-1 text-[10px] text-ink-mute">{r.rejected_reason}</p>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      key: 'created',
+      header: '등록일',
+      align: 'right',
+      tdClassName: 'text-xs text-ink-mute',
+      cell: (r) =>
+        new Date(r.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
+    },
+    {
+      key: 'actions',
+      header: '조치',
+      align: 'right',
+      cell: (r) => (
+        <div className="flex flex-wrap justify-end gap-1">
+          <AdminButton
+            tone="neutral"
+            variant="outline"
+            size="sm"
+            disabled={busyId === r.account_id}
+            title="은행 · 계좌번호 · 예금주 변경 (사유 기록)"
+            leftIcon={<Pencil size={11} />}
+            onClick={() => setEditRow(r)}
+          >
+            계좌 변경
+          </AdminButton>
+          {r.verification_status !== 'verified' && (
+            <AdminButton
+              tone="success"
+              variant="subtle"
+              size="sm"
+              disabled={busyId === r.account_id || !r.is_pii_complete}
+              title={!r.is_pii_complete ? 'PII 미완료 — 승인 불가' : '승인'}
+              onClick={() => setVerifyRow(r)}
+            >
+              승인
+            </AdminButton>
+          )}
+          {r.verification_status !== 'rejected' && (
+            <AdminButton
+              tone="danger"
+              variant="subtle"
+              size="sm"
+              disabled={busyId === r.account_id}
+              onClick={() => void reject(r.account_id)}
+            >
+              거절
+            </AdminButton>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-3">
@@ -133,9 +317,23 @@ export default function PayoutVerificationList({
         승인해주세요. 원본 보기 시 audit log 가 영구 기록됩니다.
       </Alert>
 
-      {/* 상태 필터 — '정보 미완비'(인증됨 + 지급 요건 미충족)를 한 번에 뽑기 위한 것이 핵심 */}
-      <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => {
+      {/* 상태 필터 — '정보 미완비'(인증됨 + 지급 요건 미충족)를 한 번에 뽑기 위한 것이 핵심.
+          칩 자체(개수 표시 · 미완비 강조)는 그대로 두고 FilterBar 로 검색과 한 영역에 모았다. */}
+      <FilterBar
+        search={
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="아티스트 · 이메일 · 실명 · 예금주 · 은행 검색"
+            aria-label="정산 계좌 검색"
+            className="input w-full text-sm"
+          />
+        }
+        activeCount={activeFilters}
+        onReset={() => { setSearch(''); setFilter('all'); }}
+        count={`${visibleRows.length}건 / 전체 ${rows.length}건`}
+        filters={FILTERS.map((f) => {
           const active = filter === f.key;
           const n = counts[f.key] ?? 0;
           // 미완비는 0 이 아니면 처리해야 할 건이라 눈에 띄게.
@@ -158,146 +356,41 @@ export default function PayoutVerificationList({
             </button>
           );
         })}
-      </div>
+      />
 
-      <div className="overflow-x-auto rounded-2xl bg-bg-card ring-1 ring-line/10">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead>
-            <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
-              <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
-              <th className="px-3 py-2.5 text-left font-semibold">실명 / RRN</th>
-              <th className="px-3 py-2.5 text-left font-semibold">은행 / 계좌</th>
-              <th className="px-3 py-2.5 text-left font-semibold">세금 / 동의</th>
-              <th className="px-3 py-2.5 text-left font-semibold">상태</th>
-              <th className="px-3 py-2.5 text-right font-semibold">등록일</th>
-              <th className="px-3 py-2.5 text-right font-semibold">조치</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
-                  불러오는 중…
-                </td>
-              </tr>
-            )}
-            {!loading && visibleRows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-xs text-ink-mute">
-                  {rows.length === 0
-                    ? '등록된 정산 계좌가 없어요.'
-                    : '이 상태에 해당하는 계좌가 없어요.'}
-                </td>
-              </tr>
-            )}
-            {visibleRows.map((r) => {
-              const s = statusLabelFor(r);
-              // X6.21: pending 상태에서도 reveal 가능. 운영자가 RRN/계좌를 확인해야
-              // 승인 결정을 내릴 수 있으므로 verified 조건 제거. is_pii_complete 만 체크.
-              const canReveal = r.is_pii_complete;
-              return (
-                <tr key={r.account_id} className="border-b border-line/10 last:border-b-0 align-top">
-                  <td className="px-3 py-2.5">
-                    <p className="font-medium">{r.artist_name ?? '—'}</p>
-                    <p className="text-[10px] text-ink-mute">{r.email ?? '—'}</p>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">
-                    <p className="font-medium">{r.legal_name ?? '—'}</p>
-                    <div className="mt-1">
-                      {canReveal && r.masked_rrn ? (
-                        <RevealPiiButton
-                          accountId={r.account_id}
-                          maskedValue={r.masked_rrn}
-                          piiType="resident_number"
-                          className="font-mono text-[11px]"
-                        />
-                      ) : (
-                        <code className="font-mono text-[11px] text-ink-mute">{r.masked_rrn ?? '—'}</code>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">
-                    <p>{r.bank_name}</p>
-                    <p className="mt-0.5 text-[10px] text-ink-mute">예금주: {r.account_holder}</p>
-                    <div className="mt-1">
-                      {canReveal ? (
-                        <RevealPiiButton
-                          accountId={r.account_id}
-                          maskedValue={r.masked_account_number}
-                          piiType="account_number"
-                          className="font-mono text-[11px]"
-                        />
-                      ) : (
-                        <code className="font-mono text-[11px] text-ink-mute">{r.masked_account_number}</code>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-[11px]">
-                    <p>{taxLabel(r.tax_withholding_type)}</p>
-                    <p className={`mt-0.5 ${r.has_tax_consent ? 'text-emerald-300' : 'text-amber-300'}`}>
-                      {r.has_tax_consent ? '✓ 동의 완료' : '⚠ 미동의'}
-                    </p>
-                    {r.tax_consent_at && (
-                      <p className="mt-0.5 text-[10px] text-ink-dim">
-                        {new Date(r.tax_consent_at).toLocaleString('ko-KR', {
-                          year: '2-digit', month: '2-digit', day: '2-digit',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      </p>
-                    )}
-                    {!r.is_pii_complete && (
-                      <p className="mt-0.5 text-[10px] font-semibold text-red-300">PII 미완료</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.tone}`}>
-                      {r.verification_status === 'pending' && <Clock size={9} />}
-                      {s.label}
-                    </span>
-                    {r.rejected_reason && (
-                      <p className="mt-1 text-[10px] text-red-300">{r.rejected_reason}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs text-ink-mute">
-                    {new Date(r.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button
-                        onClick={() => setEditRow(r)}
-                        disabled={busyId === r.account_id}
-                        title="은행 · 계좌번호 · 예금주 변경 (사유 기록)"
-                        className="inline-flex items-center gap-1 rounded-md bg-bg-soft px-2 py-1 text-[11px] font-semibold text-ink-mute ring-1 ring-line/15 hover:text-ink disabled:opacity-50"
-                      >
-                        <Pencil size={11} /> 계좌 변경
-                      </button>
-                      {r.verification_status !== 'verified' && (
-                        <button
-                          onClick={() => verify(r.account_id)}
-                          disabled={busyId === r.account_id || !r.is_pii_complete}
-                          title={!r.is_pii_complete ? 'PII 미완료 — 승인 불가' : '승인'}
-                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/25 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
-                        >
-                          <Check size={11} /> 승인
-                        </button>
-                      )}
-                      {r.verification_status !== 'rejected' && (
-                        <button
-                          onClick={() => reject(r.account_id)}
-                          disabled={busyId === r.account_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-rose-500/25 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
-                        >
-                          <X size={11} /> 거절
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <AdminTable
+        caption="정산 계좌 목록"
+        columns={columns}
+        rows={visibleRows}
+        rowKey={(r) => r.account_id}
+        loading={loading}
+        minWidth={760}
+        rowClassName={() => 'align-top'}
+        empty={
+          <AdminEmpty
+            title={
+              rows.length === 0
+                ? '등록된 정산 계좌가 없어요.'
+                : '이 조건에 해당하는 계좌가 없어요.'
+            }
+          />
+        }
+      />
+
+      <ConfirmDialog
+        open={verifyRow !== null}
+        title="정산 계좌 승인"
+        target={verifyRow ? `${verifyRow.artist_name ?? '—'} · ${verifyRow.bank_name} ${verifyRow.masked_account_number}` : undefined}
+        description="승인 후 이 아티스트는 음원을 업로드할 수 있게 되고, 이 계좌로 정산이 지급됩니다. 본인 명의·동의·계좌번호를 확인했는지 다시 봐주세요."
+        confirmLabel="승인"
+        pending={verifyRow ? busyId === verifyRow.account_id : false}
+        onConfirm={() => {
+          const id = verifyRow?.account_id;
+          if (!id) return;
+          void verify(id).finally(() => setVerifyRow(null));
+        }}
+        onCancel={() => setVerifyRow(null)}
+      />
 
       {editRow && (
         <PayoutAccountEditDialog

@@ -1,10 +1,14 @@
-import { useCallback, useState } from 'react';
-import { Mic2, Check, X, Clock, RefreshCw } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Mic2, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import { repairArtistSignups } from '@/lib/artistApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
+import {
+  AdminBadge, AdminButton, AdminEmpty, AdminTable, FilterBar, ConfirmDialog,
+  type AdminTableColumn, type AdminToneName,
+} from './ui';
 
 interface ArtistRow {
   user_id: string;
@@ -17,11 +21,28 @@ interface ArtistRow {
   created_at: string;
 }
 
-const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
-  pending: { label: '심사 대기', tone: 'bg-yellow-500/25 text-slate-900 dark:text-yellow-200' },
-  approved: { label: '승인됨', tone: 'bg-emerald-500/25 text-emerald-300' },
-  rejected: { label: '거절됨', tone: 'bg-rose-500/25 text-red-300' },
+type StatusKey = ArtistRow['approval_status'];
+
+const STATUS_LABEL: Record<StatusKey, { label: string; tone: AdminToneName }> = {
+  pending: { label: '심사 대기', tone: 'warning' },
+  approved: { label: '승인됨', tone: 'success' },
+  rejected: { label: '거절됨', tone: 'danger' },
 };
+
+const FILTERS: Array<{ key: '' | StatusKey; label: string }> = [
+  { key: '', label: '전체' },
+  { key: 'pending', label: '심사 대기' },
+  { key: 'approved', label: '승인됨' },
+  { key: 'rejected', label: '거절됨' },
+];
+
+/** 한 번에 받아오는 상한. 검색·필터가 이 범위 안에서만 동작한다는 표시에 쓴다. */
+const FETCH_LIMIT = 100;
+
+type Pending =
+  | { kind: 'approve'; row: ArtistRow }
+  | { kind: 'reject'; row: ArtistRow }
+  | { kind: 'repair' };
 
 export default function ArtistApprovalList() {
   const [rows, setRows] = useState<ArtistRow[]>([]);
@@ -31,7 +52,7 @@ export default function ArtistApprovalList() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('list_pending_artists', { p_limit: 100 });
+      const { data, error } = await supabase.rpc('list_pending_artists', { p_limit: FETCH_LIMIT });
       if (error) throw error;
       setRows((data ?? []) as ArtistRow[]);
     } catch (e) {
@@ -57,8 +78,7 @@ export default function ArtistApprovalList() {
     }
   }
 
-  async function reject(userId: string) {
-    const reason = window.prompt('거절 사유를 입력하세요 (선택)') ?? '';
+  async function reject(userId: string, reason: string) {
     setBusyId(userId);
     try {
       const { error } = await supabase.rpc('reject_artist_profile', {
@@ -78,11 +98,6 @@ export default function ArtistApprovalList() {
   const [syncing, setSyncing] = useState(false);
 
   async function onRepair() {
-    const ok = window.confirm(
-      '기존 가입자 중 artist_profiles 가 누락된 행을 일괄 보정합니다.\n' +
-        '이미 승인/거절된 상태는 덮어쓰지 않습니다. 계속할까요?',
-    );
-    if (!ok) return;
     setSyncing(true);
     try {
       const res = await repairArtistSignups();
@@ -100,6 +115,133 @@ export default function ArtistApprovalList() {
     }
   }
 
+  // ── 검색/필터 — 전부 이미 받아온 rows 안에서만 계산한다(서버 재조회 없음).
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<'' | StatusKey>('');
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (status && r.approval_status !== status) return false;
+      if (!q) return true;
+      return (
+        r.artist_name?.toLowerCase().includes(q) ||
+        r.real_name?.toLowerCase().includes(q) ||
+        r.email?.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, search, status]);
+
+  const pendingCount = rows.filter((r) => r.approval_status === 'pending').length;
+  const activeFilters = (search.trim() ? 1 : 0) + (status ? 1 : 0);
+  const atLimit = rows.length >= FETCH_LIMIT;
+
+  // ── 확인 단계 — 승인/거절/동기화는 되돌리기 어렵다.
+  const [confirm, setConfirm] = useState<Pending | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const closeConfirm = () => {
+    setConfirm(null);
+    setRejectReason('');
+  };
+
+  const runConfirm = () => {
+    if (!confirm) return;
+    if (confirm.kind === 'approve') void approve(confirm.row.user_id).finally(closeConfirm);
+    else if (confirm.kind === 'reject')
+      void reject(confirm.row.user_id, rejectReason).finally(closeConfirm);
+    else void onRepair().finally(closeConfirm);
+  };
+
+  const confirmPending =
+    confirm?.kind === 'repair' ? syncing : confirm ? busyId === confirm.row.user_id : false;
+
+  const columns: AdminTableColumn<ArtistRow>[] = [
+    {
+      key: 'artist',
+      header: '아티스트',
+      cell: (r) => (
+        <>
+          <p className="font-medium">{r.artist_name}</p>
+          <p className="text-xs text-ink-mute">{r.real_name}</p>
+        </>
+      ),
+    },
+    {
+      key: 'contact',
+      header: '연락처',
+      tdClassName: 'text-xs text-ink-mute',
+      cell: (r) => (
+        <>
+          {r.email}
+          <br />
+          <span className="text-ink-dim">{r.phone}</span>
+        </>
+      ),
+    },
+    {
+      key: 'status',
+      header: '상태',
+      cell: (r) => {
+        const s = STATUS_LABEL[r.approval_status] ?? STATUS_LABEL.pending;
+        return (
+          <>
+            <AdminBadge
+              tone={s.tone}
+              variant="subtle"
+              size="sm"
+              icon={r.approval_status === 'pending' ? <Clock size={9} /> : undefined}
+            >
+              {s.label}
+            </AdminBadge>
+            {r.rejected_reason && (
+              <p className="mt-1 text-[10px] text-ink-mute">{r.rejected_reason}</p>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      key: 'created',
+      header: '가입일',
+      align: 'right',
+      tdClassName: 'text-xs text-ink-mute',
+      cell: (r) =>
+        new Date(r.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
+    },
+    {
+      key: 'actions',
+      header: '조치',
+      align: 'right',
+      cell: (r) => (
+        <div className="flex justify-end gap-1">
+          {r.approval_status !== 'approved' && (
+            <AdminButton
+              tone="success"
+              variant="subtle"
+              size="sm"
+              disabled={busyId === r.user_id}
+              onClick={() => setConfirm({ kind: 'approve', row: r })}
+            >
+              승인
+            </AdminButton>
+          )}
+          {r.approval_status !== 'rejected' && (
+            <AdminButton
+              tone="danger"
+              variant="subtle"
+              size="sm"
+              disabled={busyId === r.user_id}
+              onClick={() => setConfirm({ kind: 'reject', row: r })}
+            >
+              거절
+            </AdminButton>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -107,100 +249,114 @@ export default function ArtistApprovalList() {
           <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
             <Mic2 size={16} className="text-accent" /> 아티스트 승인
           </h2>
-          <p className="text-xs text-ink-mute">
-            심사 대기 {rows.filter((r) => r.approval_status === 'pending').length}건
-          </p>
+          <p className="text-xs text-ink-mute">심사 대기 {pendingCount}건</p>
         </div>
-        <button
-          onClick={onRepair}
+        <AdminButton
+          tone="neutral"
+          variant="outline"
+          size="sm"
+          loading={syncing}
           disabled={syncing}
-          className="inline-flex items-center gap-1.5 rounded-full bg-bg-card px-3 py-1.5 text-[11px] font-semibold ring-1 ring-line/15 hover:bg-bg-hover disabled:opacity-50"
+          leftIcon={<RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />}
+          onClick={() => setConfirm({ kind: 'repair' })}
           title="아직 artist_profiles 가 생성되지 않은 기존 가입자를 백필합니다 (멱등)"
         >
-          <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
           {syncing ? '동기화 중…' : '누락된 아티스트 신청 동기화'}
-        </button>
+        </AdminButton>
       </div>
 
-      <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line/10 text-[11px] uppercase tracking-wider text-ink-dim">
-              <th className="px-3 py-2.5 text-left font-semibold">아티스트</th>
-              <th className="px-3 py-2.5 text-left font-semibold">연락처</th>
-              <th className="px-3 py-2.5 text-left font-semibold">상태</th>
-              <th className="px-3 py-2.5 text-right font-semibold">가입일</th>
-              <th className="px-3 py-2.5 text-right font-semibold">조치</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-xs text-ink-mute">
-                  불러오는 중…
-                </td>
-              </tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-xs text-ink-mute">
-                  아티스트 신청이 없어요.
-                </td>
-              </tr>
-            )}
-            {rows.map((r) => {
-              const s = STATUS_LABEL[r.approval_status] ?? STATUS_LABEL.pending;
-              return (
-                <tr key={r.user_id} className="border-b border-line/10 last:border-b-0">
-                  <td className="px-3 py-2.5">
-                    <p className="font-medium">{r.artist_name}</p>
-                    <p className="text-xs text-ink-mute">{r.real_name}</p>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-ink-mute">
-                    {r.email}
-                    <br />
-                    <span className="text-ink-dim">{r.phone}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.tone}`}>
-                      {r.approval_status === 'pending' && <Clock size={9} />}
-                      {s.label}
-                    </span>
-                    {r.rejected_reason && (
-                      <p className="mt-1 text-[10px] text-red-300">{r.rejected_reason}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs text-ink-mute">
-                    {new Date(r.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex justify-end gap-1">
-                      {r.approval_status !== 'approved' && (
-                        <button
-                          onClick={() => approve(r.user_id)}
-                          disabled={busyId === r.user_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-emerald-500/25 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
-                        >
-                          <Check size={11} /> 승인
-                        </button>
-                      )}
-                      {r.approval_status !== 'rejected' && (
-                        <button
-                          onClick={() => reject(r.user_id)}
-                          disabled={busyId === r.user_id}
-                          className="inline-flex items-center gap-1 rounded-md bg-rose-500/25 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50"
-                        >
-                          <X size={11} /> 거절
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <FilterBar
+        search={
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="아티스트명 · 실명 · 이메일 검색"
+            aria-label="아티스트 검색"
+            className="input w-full text-sm"
+          />
+        }
+        filters={FILTERS.map((f) => (
+          <button
+            key={f.key || 'all'}
+            type="button"
+            onClick={() => setStatus(f.key)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+              status === f.key
+                ? 'bg-accent/15 text-accent ring-accent/30'
+                : 'text-ink-dim ring-line/15 hover:text-ink'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        activeCount={activeFilters}
+        onReset={() => {
+          setSearch('');
+          setStatus('');
+        }}
+        count={
+          activeFilters
+            ? `${visible.length}건 / 불러온 ${rows.length}건${atLimit ? ` (상한 ${FETCH_LIMIT})` : ''}`
+            : `${rows.length}건${atLimit ? ` (상한 ${FETCH_LIMIT})` : ''}`
+        }
+      />
+
+      <AdminTable
+        caption="아티스트 승인 신청 목록"
+        columns={columns}
+        rows={visible}
+        rowKey={(r) => r.user_id}
+        loading={loading}
+        minWidth={720}
+        empty={
+          <AdminEmpty
+            title={activeFilters ? '조건에 맞는 신청이 없어요.' : '아티스트 신청이 없어요.'}
+          />
+        }
+      />
+
+      <ConfirmDialog
+        open={confirm?.kind === 'approve'}
+        title="아티스트 승인"
+        target={confirm?.kind === 'approve' ? confirm.row.artist_name : undefined}
+        description="승인하면 이 아티스트는 음원을 업로드할 수 있게 됩니다."
+        confirmLabel="승인"
+        pending={confirmPending}
+        onConfirm={runConfirm}
+        onCancel={closeConfirm}
+      />
+
+      <ConfirmDialog
+        open={confirm?.kind === 'reject'}
+        title="아티스트 거절"
+        target={confirm?.kind === 'reject' ? confirm.row.artist_name : undefined}
+        description="거절 사유는 아티스트에게 그대로 보입니다. 비워 두면 사유 없이 거절됩니다."
+        confirmLabel="거절"
+        destructive
+        pending={confirmPending}
+        onConfirm={runConfirm}
+        onCancel={closeConfirm}
+      >
+        <textarea
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          rows={3}
+          aria-label="거절 사유"
+          placeholder="거절 사유 (선택)"
+          className="input w-full text-sm"
+        />
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirm?.kind === 'repair'}
+        title="누락된 아티스트 신청 동기화"
+        description="기존 가입자 중 artist_profiles 가 누락된 행을 일괄 보정합니다. 이미 승인/거절된 상태는 덮어쓰지 않습니다."
+        confirmLabel="동기화"
+        pending={confirmPending}
+        onConfirm={runConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }
