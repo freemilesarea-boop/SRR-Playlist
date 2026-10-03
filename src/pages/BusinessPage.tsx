@@ -17,6 +17,7 @@ import {
   Sun,
   Moon,
   MessageCircle,
+  Tag,
 } from 'lucide-react';
 import { BUSINESS_CATEGORIES } from '@/lib/constants';
 import { fetchPlaylistCounts } from '@/lib/api';
@@ -356,6 +357,26 @@ export default function BusinessPage() {
           </p>
         </section>
       )}
+
+      {/* === 브랜드 플레이어 진입 ===
+           데스크톱 사이드바(lg 이상)에만 '브랜드' 항목이 있어 모바일/태블릿 점주는
+           /brand 로 갈 UI 동선이 없었다. 매장 화면에서 항상 보이는 진입점을 둔다.
+           진입만 담당한다 — 코드 인증·바인딩은 기존 /brand 가 그대로 처리한다. */}
+      <button
+        onClick={() => navigate('/brand')}
+        className="flex w-full items-center gap-3 rounded-2xl bg-bg-card px-4 py-3.5 text-left ring-1 ring-line/10 transition hover:bg-bg-hover"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/30">
+          <Tag size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-ink">브랜드 플레이어 열기</span>
+          <span className="mt-0.5 block text-xs text-ink-mute">
+            본사에서 받은 매장 코드로 우리 매장 전용 음악·사이니지를 재생해요
+          </span>
+        </span>
+        <span className="shrink-0 text-[11px] font-semibold text-accent">열기 →</span>
+      </button>
 
       {/* 사업자 플랜 안내 — 1줄 (전환 시 1줄에 끝남) */}
       {!isBusinessPlan && (

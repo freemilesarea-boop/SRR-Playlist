@@ -15,6 +15,7 @@ function pageTitle(pathname: string): { eyebrow?: string; title: string } {
   if (p.startsWith('/track/')) return { eyebrow: 'TRACK', title: '곡 상세' };
   if (p.startsWith('/curator/')) return { eyebrow: 'CURATOR', title: '큐레이터' };
   if (p.startsWith('/business')) return { eyebrow: 'STORE', title: '매장 모드' };
+  if (p.startsWith('/brand')) return { eyebrow: 'BRAND', title: '브랜드' };
   if (p.startsWith('/artist')) return { eyebrow: 'ARTIST', title: '아티스트 스튜디오' };
   if (p.startsWith('/curator/studio')) return { eyebrow: 'CURATOR', title: '큐레이터 스튜디오' };
   if (p.startsWith('/admin')) return { eyebrow: 'ADMIN', title: '관리자' };
