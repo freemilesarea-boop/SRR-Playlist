@@ -29,7 +29,8 @@ import { useAudioOutputAutoRestore } from '@/hooks/useAudioOutputAutoRestore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
 import { resolveMembership } from '@/lib/membership';
-import { shouldResumeStorePlayerOnLaunch } from '@/lib/storePlaybackGate';
+import { resolveLaunchResumeTarget } from '@/lib/storePlaybackGate';
+import { getBrandToken, getRecentBrands } from '@/lib/brandSession';
 import { isStandalone } from '@/hooks/useInstallPrompt';
 
 export default function AppShell() {
@@ -37,6 +38,7 @@ export default function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const businessMode = useBusinessStore((s) => s.businessMode);
+  const lastPlayerSurface = useBusinessStore((s) => s.lastPlayerSurface);
   const membership = resolveMembership(
     useAuthStore((s) => s.session),
     useAuthStore((s) => s.profile),
@@ -71,21 +73,31 @@ export default function AppShell() {
     return cleanup;
   }, [loadBrand]);
 
-  // 설치형 앱을 매장 모드로 켜면 매장 플레이어로 되돌아간다.
-  // PC 전원 → (OS 가 앱 실행: 점주가 1회 설정) → (여기: 매장 화면 복귀) → (StorePlayerPage: 자동 재생)
-  // 조건을 좁게 잡은 이유는 shouldResumeStorePlayerOnLaunch 주석에 적었다.
+  // 설치형 앱을 매장 모드로 켜면 그 기기가 쓰던 매장 화면(매장/브랜드 플레이어)으로 되돌아간다.
+  // PC 전원 → (OS 가 앱 실행: 점주가 1회 설정) → (여기: 매장 화면 복귀) → (플레이어 화면: 재생)
+  // 조건을 좁게 잡은 이유와 목적지 고르는 법은 resolveLaunchResumeTarget 주석에 적었다.
   useEffect(() => {
     if (launchResumeHandledRef.current) return;
-    if (!shouldResumeStorePlayerOnLaunch({
+    // 실행 직후 '/' 가 아닌 곳에 있으면 이번 실행의 복귀 기회는 끝났다. 플레이어에서 "나가기" 로
+    // 홈에 온 사람을 방금 나온 플레이어로 다시 끌고 가지 않기 위해서다.
+    if (pathname !== '/') {
+      launchResumeHandledRef.current = true;
+      return;
+    }
+    const target = resolveLaunchResumeTarget({
       pathname,
       businessMode,
       membership,
       standalone: isStandalone(),
       alreadyResumed: false,
-    })) return;
+      lastSurface: lastPlayerSurface,
+      recentBrandId: getRecentBrands()[0]?.id ?? null,
+      hasBrandBinding: (id) => !!getBrandToken(id),
+    });
+    if (!target) return;
     launchResumeHandledRef.current = true;
-    navigate('/business/player', { replace: true });
-  }, [pathname, businessMode, membership, navigate]);
+    navigate(target, { replace: true });
+  }, [pathname, businessMode, membership, lastPlayerSurface, navigate]);
 
   return (
     <div className="flex min-h-screen flex-col bg-bg pt-safe">

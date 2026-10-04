@@ -55,6 +55,7 @@ export default function BrandPlayerPage() {
   useAudioCachePrefetch(true);
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
+  const setLastPlayerSurface = useBusinessStore((s) => s.setLastPlayerSurface);
   // BRAND-PLAYER-UX-4 — 브랜드/서비스 로고(사이니지 미디어 없을 때 Priority 2). 기존 필드 재사용.
   const brandLogoUrl = useBrandStore((s) => s.logo_url);
   const loadBrandSettings = useBrandStore((s) => s.load);
@@ -148,6 +149,12 @@ export default function BrandPlayerPage() {
     enableForBusinessMode();
     usePlayerStore.getState().setScheduleSuppression(null);
   }, [setBusinessMode, enableForBusinessMode]);
+
+  // 앱을 다시 켰을 때 매장 플레이어가 아니라 이 브랜드 플레이어로 돌아오게 기록한다
+  // (resolveLaunchResumeTarget). 연결 토큰이 있을 때만 — 없으면 곧 /brand 로 돌려보내진다.
+  useEffect(() => {
+    if (brandId && token) setLastPlayerSurface({ kind: 'brand', brandId });
+  }, [brandId, token, setLastPlayerSurface]);
 
   // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
   // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.

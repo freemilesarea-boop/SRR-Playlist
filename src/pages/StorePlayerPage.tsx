@@ -85,13 +85,16 @@ export default function StorePlayerPage() {
   // useStartBusinessMode 를 거치지 않는 진입에 대비.
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
+  const setLastPlayerSurface = useBusinessStore((s) => s.setLastPlayerSurface);
 
   // 매장 모드 진입 → businessMode ON (App 의 useWakeLock(businessMode && playing) 가 화면 꺼짐 방지)
   // + crossfade 강제 OFF (localStorage 정규화)
   useEffect(() => {
     setBusinessMode(true);
     enableForBusinessMode();
-  }, [setBusinessMode, enableForBusinessMode]);
+    // 앱을 다시 켰을 때 이 화면으로 돌아오게 기록한다 (resolveLaunchResumeTarget).
+    setLastPlayerSurface({ kind: 'store' });
+  }, [setBusinessMode, enableForBusinessMode, setLastPlayerSurface]);
 
   // 스케줄은 지금까지 BusinessPage 를 거쳐야만 로드됐다. PWA 바로가기나 앱 자동 복귀로
   // 이 화면에 바로 들어오면 schedules 가 비어 있어 자동 시작이 영원히 판단 불가가 된다.
