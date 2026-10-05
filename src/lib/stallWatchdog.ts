@@ -215,6 +215,60 @@ export function resolveStallAction(i: StallInput): StallAction {
   return 'none';
 }
 
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 사다리가 왜 멈춰 있는가 — 게이트 사유                                        */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * `resolveStallAction` 이 'none' 을 돌려준 이유.
+ *
+ * 왜 필요한가 — 화정점 2026-10-05. 16:50:44 부터 재생 위치가 15초에 박힌 채
+ * 22분이 지났는데 `playback_stalled` 도 Flight Recorder flush 도 **0건**이었다.
+ * 사다리 첫 칸(nudge)에 진입조차 못 했다는 뜻이다. 그런데 위 함수의 이른 반환은
+ * 일곱 갈래이고 어느 갈래였는지는 **클라이언트 메모리에만** 있었다. 서버에서
+ * 원인을 특정할 수단이 없어 조사가 거기서 멈췄다.
+ *
+ * 'open'  = 막은 게이트가 없다(사다리가 움직일 수 있는 상태).
+ * 그 외   = 그 게이트에서 멈췄다.
+ */
+export type StallGate =
+  | 'open'
+  | 'not_business_mode'
+  | 'not_playing'
+  | 'suppressed'
+  | 'autoplay_blocked'
+  | 'subscription_blocked'
+  | 'crossfading'
+  | 'ended'
+  | 'hard_reset_verify'
+  | 'below_threshold';
+
+/**
+ * **판정하지 않는다.** `resolveStallAction` 과 같은 순서로 읽어 이유만 돌려준다.
+ *
+ * 저쪽이 `!playing || suppressed` 처럼 묶어 둔 분기는 여기서 쪼갠다 — 결과(어느 쪽이든
+ * 'none')는 같고 사유만 더 좁다. 두 함수가 어긋나면 안 되므로 stallWatchdog.test.ts 가
+ * 동치성을 고정한다: gate === 'open' ⟺ resolveStallAction !== 'none'.
+ *
+ * 헛skip 분기를 여기서 다시 쓰지 않는 이유: 그 분기의 조건에 `stalledMs >= SKIP_AFTER_MS`
+ * 가 들어 있고 SKIP_AFTER_MS > NUDGE_AFTER_MS 이므로 아래 문턱 검사에 이미 포함된다.
+ */
+export function explainStallGate(i: StallInput): StallGate {
+  if (!i.businessMode) return 'not_business_mode';
+  if (!i.playing) return 'not_playing';
+  if (i.suppressed) return 'suppressed';
+  if (i.autoplayBlocked) return 'autoplay_blocked';
+  if (i.subscriptionBlocked) return 'subscription_blocked';
+  if (i.crossfading) return 'crossfading';
+  if (i.ended) return 'ended';
+
+  const hr = i.hardResetMsAgo;
+  if (hr !== null && hr !== undefined && hr < HARD_RESET_VERIFY_MS) return 'hard_reset_verify';
+
+  if (i.stalledMs >= NUDGE_AFTER_MS) return 'open';
+  return 'below_threshold';
+}
+
 /** 사다리에서 이 칸이 저 칸보다 뒤인가 (되돌아가지 않게). */
 // offline_hold 는 reload_page 와 같은 칸이다 — 마지막 칸에 도달했으나 보류한 상태.
 // 같은 순위로 두면 (a) 오프라인 동안 보류 로그가 매 tick 반복되지 않고,

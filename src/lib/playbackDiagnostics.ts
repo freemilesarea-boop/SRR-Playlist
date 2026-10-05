@@ -216,12 +216,66 @@ export async function logPlaybackDiagnostic(
 export function watchPageLifecycle(playerMode: PlayerMode): () => void {
   if (typeof document === 'undefined') return () => {};
 
+  /**
+   * LIFECYCLE-CONTEXT — 2026-10-05 까지 이 두 이벤트의 context 는 **전 건 빈 객체**였고
+   * reason 은 'unknown' 리터럴이었다. 화정점 1,447건 · 숙대점 2,529건을 다 뒤져도
+   * "왜 얼었는가" 를 말해주는 필드가 하나도 없었다.
+   *
+   * 그래서 서버 쪽 타임스탬프로 역산해야 했는데, 거기서 드러난 것이 중요하다:
+   * 두 매장 모두 **정확히 60초 주기**로 freeze↔resume 이 300ms 안에 20여 번 교대로
+   * 떴다. "1,447번 얼었다" 가 아니라 진동이었다. 그 구조를 클라이언트가 직접
+   * 말해주게 한다 — seq 와 sinceLastMs 가 그것이다.
+   *
+   * 발생 빈도는 건드리지 않는다. 폭풍 자체가 관측 대상이고, 유계로 묶었다면
+   * 이번 조사에서 그 진동을 못 봤을 것이다.
+   */
+  let freezeSeq = 0;
+  let resumeSeq = 0;
+  let lastFreezeAt: number | null = null;
+  let lastResumeAt: number | null = null;
+
+  const nowMs = () => (typeof performance === 'undefined' ? Date.now() : performance.now());
+  /** 문서 수준 상태만 읽는다 — audio element 는 이 모듈의 소관이 아니다. */
+  const lifecycle = () => {
+    try {
+      const d = document as Document & { wasDiscarded?: boolean };
+      return {
+        visibility: d.visibilityState ?? null,
+        hidden: d.hidden ?? null,
+        // 탭이 메모리에서 버려졌다가 복원된 것인가 (freeze 와 구분된다).
+        wasDiscarded: d.wasDiscarded ?? null,
+        online: typeof navigator === 'undefined' ? null : navigator.onLine,
+      };
+    } catch {
+      return {};
+    }
+  };
+
   const onFreeze = () => {
+    const t = nowMs();
+    freezeSeq += 1;
+    const sinceLastMs = lastFreezeAt === null ? null : Math.round(t - lastFreezeAt);
+    // resume 직후 다시 얼었는가 — 진동 판별의 핵심 값이다.
+    const sinceResumeMs = lastResumeAt === null ? null : Math.round(t - lastResumeAt);
+    lastFreezeAt = t;
     // freeze 직후 페이지가 정지되므로 keepalive 로 보낸다.
-    void logPlaybackDiagnostic('page_frozen', { playerMode, reason: 'unknown' });
+    void logPlaybackDiagnostic('page_frozen', {
+      playerMode,
+      reason: 'unknown',
+      context: { seq: freezeSeq, sinceLastMs, sinceResumeMs, ...lifecycle() },
+    });
   };
   const onResume = () => {
-    void logPlaybackDiagnostic('page_resumed', { playerMode });
+    const t = nowMs();
+    resumeSeq += 1;
+    // 얼어 있던 시간 — 진짜 freeze 와 즉시 되돌아온 진동을 가른다.
+    const frozenMs = lastFreezeAt === null ? null : Math.round(t - lastFreezeAt);
+    const sinceLastMs = lastResumeAt === null ? null : Math.round(t - lastResumeAt);
+    lastResumeAt = t;
+    void logPlaybackDiagnostic('page_resumed', {
+      playerMode,
+      context: { seq: resumeSeq, frozenMs, sinceLastMs, ...lifecycle() },
+    });
   };
   const onVisibility = () => {
     if (document.visibilityState === 'hidden') {
