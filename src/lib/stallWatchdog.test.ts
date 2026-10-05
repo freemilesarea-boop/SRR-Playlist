@@ -521,6 +521,7 @@ describe('isPlaybackStateDesync — 상태 비동기 fail-safe', () => {
     return {
       businessMode: true,
       playing: false,      // store: 재생 아님
+      playable: true,      // 소스는 정상
       paused: false,       // 엘리먼트: 재생 중 ← 모순
       ended: false,
       crossfading: false,
@@ -572,6 +573,13 @@ describe('isPlaybackStateDesync — 상태 비동기 fail-safe', () => {
     expect(isPlaybackStateDesync(desync({ ended: true }))).toBe(false);
   });
 
+  it('★ 재생 불가 트랙(playable=false)에는 개입하지 않는다', () => {
+    // Player 의 트랙 동기 effect 는 !playable 이면 audio.pause() 를 건너뛰고 반환하므로
+    // paused 가 false 로 남을 수 있다. 그것을 모순으로 읽으면 정당한 정지와 싸운다.
+    expect(isPlaybackStateDesync(desync({ playable: false }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ playable: false, stalledMs: 60 * 60_000 }))).toBe(false);
+  });
+
   it('소스가 아직 없으면(readyState 낮음) 개입하지 않는다 — 로딩 중 보호', () => {
     expect(isPlaybackStateDesync(desync({ readyState: 0 }))).toBe(false);
     expect(isPlaybackStateDesync(desync({ readyState: DESYNC_MIN_READY_STATE - 1 }))).toBe(false);
@@ -609,7 +617,7 @@ describe('isPlaybackStateDesync — 상태 비동기 fail-safe', () => {
   it('desync 가 참인 경우는 resolveStallAction 이 멈춘 경우의 부분집합이다', () => {
     // 개입은 사다리가 이미 멈춘 상태에서만 일어나야 한다. 돌고 있는 사다리를
     // 가로채면 복구 순서가 깨진다.
-    const flags = ['playing', 'paused', 'ended', 'crossfading',
+    const flags = ['playing', 'playable', 'paused', 'ended', 'crossfading',
                    'suppressed', 'autoplayBlocked', 'subscriptionBlocked'] as const;
     const times = [0, NUDGE_AFTER_MS - 1, NUDGE_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS];
     let trueCount = 0;

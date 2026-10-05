@@ -2021,6 +2021,11 @@ export default function Player() {
         && isPlaybackStateDesync({
           businessMode: true,
           playing: stallInput.playing,
+          // 클로저의 `playable` 을 쓰지 않는다 — 이 effect 는 [businessMode] 로 한 번만
+          // 만들어지므로 그 값이 고정(stale)된다. 워커 ticker 를 트랙마다 재생성하는 것은
+          // 더 위험하므로, 이 파일이 이미 쓰는 방식(1132행)대로 store 에서 live 로 읽는다.
+          // 컴포넌트의 `playable` 정의(405행)와 동일한 식이다.
+          playable: isPlayableUrl(store.queue[store.index]?.audio_url),
           paused: el.paused,
           ended: el.ended,
           crossfading: stallInput.crossfading,

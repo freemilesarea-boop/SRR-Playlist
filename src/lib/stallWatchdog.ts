@@ -227,6 +227,16 @@ export interface DesyncInput {
   businessMode: boolean;
   /** store 의 **재생 의도**. */
   playing: boolean;
+  /**
+   * 이 트랙이 재생 가능한 소스인가 (isPlayableUrl(current.audio_url)).
+   *
+   * 왜 필요한가 — Player 의 트랙 동기 effect 는 `!playable` 이면
+   * `if (playing) { setErrored(true); pause(); } return;` 로 **audio.pause() 를 건너뛰고**
+   * 반환한다. pause() 가 playing=false 로 바꿔 effect 가 다시 돌아도 같은 분기에서 또
+   * 반환하므로 **엘리먼트의 paused 가 false 로 영구히 남을 수 있다.** 그 상태를 모순으로
+   * 읽으면 "재생 불가 트랙" 이라는 정당한 정지와 싸우게 된다.
+   */
+  playable: boolean;
   /** audio element 의 **실제** paused 상태. */
   paused: boolean;
   ended: boolean;
@@ -282,6 +292,9 @@ export function isPlaybackStateDesync(i: DesyncInput): boolean {
   if (i.autoplayBlocked || i.subscriptionBlocked) return false;
   // 크로스페이드 진행 중·정상 종료에는 개입하지 않는다.
   if (i.crossfading || i.ended) return false;
+  // 재생 불가 트랙은 모순이 아니다 — 소스가 없으니 멈춰 있는 것이 정상이다.
+  // 순서는 continue_listening 저장 effect 와 같게 둔다(`!current || !playable || !playing`).
+  if (!i.playable) return false;
   // 의도가 이미 재생이면 모순이 아니다 — 기존 사다리가 담당한다.
   if (i.playing) return false;
   // ★ 엘리먼트가 멈춰 있으면 정상 정지다. 사용자 의도를 절대 덮지 않는다.
