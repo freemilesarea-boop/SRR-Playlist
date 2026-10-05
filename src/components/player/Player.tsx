@@ -21,7 +21,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import {
   resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
-  FROZEN_REPORT_MIN_INTERVAL_MS, type StallAction,
+  FROZEN_REPORT_MIN_INTERVAL_MS, explainStallGate, NUDGE_AFTER_MS, type StallAction,
 } from '@/lib/stallWatchdog';
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
@@ -1710,6 +1710,13 @@ export default function Player() {
 
   /** 얼었다는 보고를 서버로 보낸 마지막 시각. 서버 쓰기를 유계로 묶는다. */
   const lastFrozenReportAtRef = useRef(-Infinity);
+  /**
+   * 사다리가 게이트에 막혀 있다는 보고를 서버로 보낸 마지막 시각.
+   * lastFrozenReportAtRef 와 따로 두는 이유: 둘은 서로 다른 사건이다. 게이트에 막힌
+   * 정지는 audio_frozen 이 한 번도 안 뜨는 경우가 있고(화정점 2026-10-05), 그러면
+   * 같은 시계를 쓰면 한쪽이 다른 쪽을 영구히 가린다.
+   */
+  const lastGateReportAtRef = useRef(-Infinity);
 
   /**
    * HARD RECOVERY 실행 — 죽은 엘리먼트를 버리고 새 세대를 만든다.
@@ -1913,7 +1920,7 @@ export default function Player() {
         }
       }
 
-      const action = resolveStallAction({
+      const stallInput = {
         businessMode: true,
         playing: store.playing,
         paused: el.paused,
@@ -1930,7 +1937,61 @@ export default function Player() {
         // IndexedDB 에 받아둔 곡으로 버티고 있을 수 있고, 리로드 직후에는 자동재생이
         // 막힐 수 있다 — 회선 없음과 재생 죽음은 다른 사건이다.
         online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-      });
+      };
+      const action = resolveStallAction(stallInput);
+
+      // GATE-TRACE — 정지가 문턱을 넘었는데도 사다리가 안 움직이면 **왜** 인지 남긴다.
+      //
+      // 화정점 2026-10-05 16:50:44~: 재생 위치가 15초에 박힌 채 22분이 지났는데
+      // playback_stalled·audio_frozen·Flight Recorder flush 가 전부 0건이었다.
+      // 사다리는 8초면 첫 칸에 올라야 하므로 게이트 중 하나가 계속 참이었다는 뜻인데,
+      // 그 값들(playing·suppressed·autoplayBlocked…)은 클라이언트 메모리에만 있어
+      // 서버에서 원인을 특정할 수 없었다. 그 공백을 메운다.
+      //
+      // 판정에는 개입하지 않는다 — explainStallGate 는 순수 함수이고, 이 블록은
+      // 아래 early return 을 그대로 통과시킨다. beacon 이라 정지 직후에도 도착한다.
+      // 유계: FROZEN_REPORT_MIN_INTERVAL_MS(60초) 바닥 — heartbeat 보다 잦아지지 않는다.
+      if (
+        action === 'none'
+        && stallInput.stalledMs >= NUDGE_AFTER_MS
+        && now - lastGateReportAtRef.current >= FROZEN_REPORT_MIN_INTERVAL_MS
+      ) {
+        lastGateReportAtRef.current = now;
+        beaconPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          // 이 파일의 기존 playback_stalled 행과 같은 값을 쓴다(쿼리 일관성).
+          // 이 컬럼은 store/brand 를 가르는 근거로 쓸 수 없다 — context.path 를 본다.
+          playerMode: 'store',
+          context: {
+            kind: 'gate_blocked',
+            gate: explainStallGate(stallInput),
+            build: pageBuildHash(),
+            playerInstanceId: getPlayerInstanceId(),
+            trackId,
+            stalledSec: Math.round(stallInput.stalledMs / 1000),
+            ladderAt: stallLastActionRef.current,
+            // 게이트 입력값 원본 — 어느 게이트가 걸렸는지 교차 확인용.
+            playing: stallInput.playing,
+            suppressed: stallInput.suppressed,
+            autoplayBlocked: stallInput.autoplayBlocked,
+            subscriptionBlocked: stallInput.subscriptionBlocked,
+            crossfading: stallInput.crossfading,
+            fruitlessSkips: stallInput.fruitlessSkips,
+            hardResetDone: stallInput.hardResetDone,
+            // 엘리먼트 실제 상태 — paused=false 인데 위치가 안 움직이는 경우를 가른다.
+            paused: el.paused,
+            ended: el.ended,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: Math.round(el.currentTime * 1000) / 1000,
+            audioGeneration: audioGenerationRef.current,
+            online: typeof navigator === 'undefined' ? null : navigator.onLine,
+            visibility: typeof document === 'undefined' ? null : document.visibilityState,
+            path: typeof location === 'undefined' ? null : location.pathname,
+          },
+        });
+      }
+
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
       const prevAction = stallLastActionRef.current;

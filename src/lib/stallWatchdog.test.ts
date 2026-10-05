@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveStallAction, isEscalation,
   NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS, FRUITLESS_SKIP_LIMIT,
-  HARD_RESET_VERIFY_MS, verifyHardReset,
+  HARD_RESET_VERIFY_MS, verifyHardReset, explainStallGate,
   type StallInput,
 } from './stallWatchdog';
 
@@ -428,5 +428,80 @@ describe('숙대점 시나리오 재현 — 74곡 무한루프가 이번에는 �
       subscriptionBlocked: false, stalledMs: 0, fruitlessSkips: 0,
       hardResetDone: false, hardResetMsAgo: null,
     })).toBe('none');
+  });
+});
+
+describe('explainStallGate — 사다리가 멈춘 이유', () => {
+  /**
+   * 이 스위트의 목적은 두 가지다.
+   *  1) 게이트 이름이 실제로 걸린 게이트를 가리키는가.
+   *  2) **resolveStallAction 과 어긋나지 않는가.** explainStallGate 는 판정을 복제한
+   *     것이 아니라 같은 순서를 다시 읽는 함수이므로, 한쪽만 고치면 조용히 거짓
+   *     진단을 내보낸다. 아래 동치성 테스트가 그걸 막는다.
+   */
+
+  it('막은 게이트가 없고 문턱을 넘으면 open', () => {
+    expect(explainStallGate(healthy({ stalledMs: NUDGE_AFTER_MS }))).toBe('open');
+    expect(explainStallGate(healthy({ stalledMs: RELOAD_PAGE_AFTER_MS }))).toBe('open');
+  });
+
+  it('문턱 아래는 below_threshold — 정지가 아니다', () => {
+    expect(explainStallGate(healthy())).toBe('below_threshold');
+    expect(explainStallGate(healthy({ stalledMs: NUDGE_AFTER_MS - 1 }))).toBe('below_threshold');
+  });
+
+  it('게이트별로 이유를 정확히 집는다', () => {
+    const stuck = { stalledMs: RELOAD_PAGE_AFTER_MS };
+    expect(explainStallGate(healthy({ ...stuck, businessMode: false }))).toBe('not_business_mode');
+    expect(explainStallGate(healthy({ ...stuck, playing: false }))).toBe('not_playing');
+    expect(explainStallGate(healthy({ ...stuck, suppressed: true }))).toBe('suppressed');
+    expect(explainStallGate(healthy({ ...stuck, autoplayBlocked: true }))).toBe('autoplay_blocked');
+    expect(explainStallGate(healthy({ ...stuck, subscriptionBlocked: true }))).toBe('subscription_blocked');
+    expect(explainStallGate(healthy({ ...stuck, crossfading: true }))).toBe('crossfading');
+    expect(explainStallGate(healthy({ ...stuck, ended: true }))).toBe('ended');
+    expect(explainStallGate(healthy({ ...stuck, hardResetMsAgo: HARD_RESET_VERIFY_MS - 1 })))
+      .toBe('hard_reset_verify');
+  });
+
+  it('hard reset 검증 창이 끝나면 더 이상 그 이유가 아니다', () => {
+    expect(explainStallGate(healthy({
+      stalledMs: RELOAD_PAGE_AFTER_MS, hardResetMsAgo: HARD_RESET_VERIFY_MS,
+    }))).toBe('open');
+  });
+
+  it('화정점 2026-10-05 재현 — 자동재생 차단이면 22분이 지나도 사다리는 안 움직인다', () => {
+    // 재생 의도는 있고(playing) 위치는 15초에 박혀 있는데 autoplayBlocked 가 참인 상태.
+    const i = healthy({ stalledMs: 22 * 60_000, paused: true, autoplayBlocked: true });
+    expect(resolveStallAction(i)).toBe('none');
+    expect(explainStallGate(i)).toBe('autoplay_blocked');
+  });
+
+  it('동치성 — gate === open 이면 그때만 resolveStallAction 이 움직인다', () => {
+    const flags = [
+      'businessMode', 'playing', 'paused', 'ended', 'crossfading',
+      'suppressed', 'autoplayBlocked', 'subscriptionBlocked',
+    ] as const;
+    const times = [
+      0, NUDGE_AFTER_MS - 1, NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS,
+    ];
+    const resets: (number | null | undefined)[] = [null, undefined, 0, HARD_RESET_VERIFY_MS];
+
+    let checked = 0;
+    // 불린 8개를 전수(256) × 시간 6개 × hardReset 4개 × fruitless 3개 = 18,432 조합.
+    for (let mask = 0; mask < 1 << flags.length; mask += 1) {
+      for (const stalledMs of times) {
+        for (const hardResetMsAgo of resets) {
+          for (const fruitlessSkips of [0, FRUITLESS_SKIP_LIMIT, FRUITLESS_SKIP_LIMIT + 1]) {
+            const over: Partial<StallInput> = { stalledMs, hardResetMsAgo, fruitlessSkips };
+            flags.forEach((f, bit) => { over[f] = Boolean(mask & (1 << bit)); });
+            const i = healthy(over);
+            const moved = resolveStallAction(i) !== 'none';
+            expect(explainStallGate(i) === 'open').toBe(moved);
+            checked += 1;
+          }
+        }
+      }
+    }
+    expect(checked).toBe(18_432);
   });
 });
