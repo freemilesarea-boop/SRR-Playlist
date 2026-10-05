@@ -80,3 +80,9 @@ export function getRecentBrands(): RecentBrand[] {
     return parsed.filter((b) => b && typeof b.id === 'string' && typeof b.name === 'string');
   } catch { return []; }
 }
+
+/** 이 기기에 저장된 brand binding 중 가장 최근 것의 플레이어 경로. 없으면 null. */
+export function getSavedBrandPlayerPath(): string | null {
+  const top = getRecentBrands().find((b) => getBrandToken(b.id));
+  return top ? `/brand/player/${top.id}` : null;
+}
