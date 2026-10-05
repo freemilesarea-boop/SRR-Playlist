@@ -3,7 +3,8 @@ import {
   resolveStallAction, isEscalation,
   NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS, FRUITLESS_SKIP_LIMIT,
   HARD_RESET_VERIFY_MS, verifyHardReset, explainStallGate,
-  type StallInput,
+  isPlaybackStateDesync, DESYNC_MIN_READY_STATE,
+  type StallInput, type DesyncInput,
 } from './stallWatchdog';
 
 /** 매장에서 소리가 나고 있는 정상 상태 — 여기서 한 필드씩만 바꿔 테스트한다. */
@@ -503,5 +504,145 @@ describe('explainStallGate — 사다리가 멈춘 이유', () => {
       }
     }
     expect(checked).toBe(18_432);
+  });
+});
+
+describe('isPlaybackStateDesync — 상태 비동기 fail-safe', () => {
+  /**
+   * 화정점 2026-10-05 재현 상태를 기준점으로 둔다:
+   * store 는 "재생 아님" 인데 엘리먼트는 paused=false · readyState=4 이고
+   * 재생 위치가 8초 넘게 안 움직인다.
+   *
+   * 이 스위트는 **개입해도 되는 경우와 절대 안 되는 경우**를 고정한다.
+   * 원인은 미확정이므로, 여기서 지키는 것은 "원인을 고쳤다" 가 아니라
+   * "정상 동작을 침범하지 않는다" 다.
+   */
+  function desync(over: Partial<DesyncInput> = {}): DesyncInput {
+    return {
+      businessMode: true,
+      playing: false,      // store: 재생 아님
+      playable: true,      // 소스는 정상
+      paused: false,       // 엘리먼트: 재생 중 ← 모순
+      ended: false,
+      crossfading: false,
+      suppressed: false,
+      autoplayBlocked: false,
+      subscriptionBlocked: false,
+      readyState: 4,
+      stalledMs: NUDGE_AFTER_MS,
+      ...over,
+    };
+  }
+
+  it('모순 + 실제 정지면 desync 로 판정한다 (화정점 재현 상태)', () => {
+    expect(isPlaybackStateDesync(desync())).toBe(true);
+    expect(isPlaybackStateDesync(desync({ stalledMs: 38 * 60_000 }))).toBe(true);
+  });
+
+  it('정상 재생에는 개입하지 않는다 — 의도가 이미 재생이면 사다리 담당이다', () => {
+    expect(isPlaybackStateDesync(desync({ playing: true }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ playing: true, stalledMs: 0 }))).toBe(false);
+  });
+
+  it('★ 사용자가 의도적으로 pause 한 경우 재생시키지 않는다', () => {
+    // playerStore.pause() → playing=false 이고 트랙 동기 effect 가 audio.pause() 를
+    // 호출하므로 paused=true 가 된다. 그 조합은 모순이 아니다.
+    expect(isPlaybackStateDesync(desync({ paused: true }))).toBe(false);
+  });
+
+  it('★ suppressed(본사 스케줄 억제) 에서는 절대 재생시키지 않는다', () => {
+    expect(isPlaybackStateDesync(desync({ suppressed: true }))).toBe(false);
+    // 엘리먼트가 아직 안 멈춘 과도 상태여도 억제가 서 있으면 손대지 않는다.
+    expect(isPlaybackStateDesync(desync({ suppressed: true, paused: false, stalledMs: 60 * 60_000 })))
+      .toBe(false);
+  });
+
+  it('★ autoplayBlocked 에서 무한 play 시도를 만들지 않는다', () => {
+    expect(isPlaybackStateDesync(desync({ autoplayBlocked: true }))).toBe(false);
+  });
+
+  it('구독 차단에도 개입하지 않는다', () => {
+    expect(isPlaybackStateDesync(desync({ subscriptionBlocked: true }))).toBe(false);
+  });
+
+  it('crossfade 정상 진행 중에는 개입하지 않는다', () => {
+    expect(isPlaybackStateDesync(desync({ crossfading: true }))).toBe(false);
+  });
+
+  it('ended 정상 종료에는 개입하지 않는다', () => {
+    expect(isPlaybackStateDesync(desync({ ended: true }))).toBe(false);
+  });
+
+  it('★ 재생 불가 트랙(playable=false)에는 개입하지 않는다', () => {
+    // Player 의 트랙 동기 effect 는 !playable 이면 audio.pause() 를 건너뛰고 반환하므로
+    // paused 가 false 로 남을 수 있다. 그것을 모순으로 읽으면 정당한 정지와 싸운다.
+    expect(isPlaybackStateDesync(desync({ playable: false }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ playable: false, stalledMs: 60 * 60_000 }))).toBe(false);
+  });
+
+  it('소스가 아직 없으면(readyState 낮음) 개입하지 않는다 — 로딩 중 보호', () => {
+    expect(isPlaybackStateDesync(desync({ readyState: 0 }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ readyState: DESYNC_MIN_READY_STATE - 1 }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ readyState: DESYNC_MIN_READY_STATE }))).toBe(true);
+  });
+
+  it('문턱 전에는 개입하지 않는다 — 트랙 전환 같은 짧은 과도 상태 보호', () => {
+    expect(isPlaybackStateDesync(desync({ stalledMs: 0 }))).toBe(false);
+    expect(isPlaybackStateDesync(desync({ stalledMs: NUDGE_AFTER_MS - 1 }))).toBe(false);
+  });
+
+  it('매장 모드가 아니면 개입하지 않는다 — 일반 청취자 동작 변화 0', () => {
+    expect(isPlaybackStateDesync(desync({ businessMode: false }))).toBe(false);
+  });
+
+  it('재동기화 뒤에는 기존 사다리가 평소대로 올라간다', () => {
+    // 재동기화는 playing 을 true 로 맞추는 것뿐이다. 그 상태를 resolveStallAction 에
+    // 넣으면 문턱대로 사다리가 작동해야 한다 — 복구는 사다리가 한다.
+    const after = (ms: number): StallInput => healthy({
+      playing: true, paused: false, stalledMs: ms,
+    });
+    expect(resolveStallAction(after(NUDGE_AFTER_MS))).toBe('nudge');
+    expect(resolveStallAction(after(RELOAD_AFTER_MS))).toBe('reload');
+    expect(resolveStallAction(after(SKIP_AFTER_MS))).toBe('skip');
+    expect(resolveStallAction(after(RELOAD_PAGE_AFTER_MS))).toBe('reload_page');
+  });
+
+  it('재동기화 전에는 사다리가 반드시 멈춰 있다 — 그래서 이 패치가 필요하다', () => {
+    const before = healthy({ playing: false, paused: false, stalledMs: 38 * 60_000 });
+    expect(resolveStallAction(before)).toBe('none');
+    expect(explainStallGate(before)).toBe('not_playing');
+    expect(isPlaybackStateDesync(desync({ stalledMs: 38 * 60_000 }))).toBe(true);
+  });
+
+  it('desync 가 참인 경우는 resolveStallAction 이 멈춘 경우의 부분집합이다', () => {
+    // 개입은 사다리가 이미 멈춘 상태에서만 일어나야 한다. 돌고 있는 사다리를
+    // 가로채면 복구 순서가 깨진다.
+    const flags = ['playing', 'playable', 'paused', 'ended', 'crossfading',
+                   'suppressed', 'autoplayBlocked', 'subscriptionBlocked'] as const;
+    const times = [0, NUDGE_AFTER_MS - 1, NUDGE_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS];
+    let trueCount = 0;
+    for (let mask = 0; mask < 1 << flags.length; mask += 1) {
+      for (const stalledMs of times) {
+        for (const readyState of [0, 1, 2, 4]) {
+          const over: Partial<DesyncInput> = { stalledMs, readyState };
+          flags.forEach((f, bit) => { over[f] = Boolean(mask & (1 << bit)); });
+          const di = desync(over);
+          if (!isPlaybackStateDesync(di)) continue;
+          trueCount += 1;
+          const si = healthy({
+            playing: di.playing, paused: di.paused, ended: di.ended,
+            crossfading: di.crossfading, suppressed: di.suppressed,
+            autoplayBlocked: di.autoplayBlocked, subscriptionBlocked: di.subscriptionBlocked,
+            stalledMs: di.stalledMs,
+          });
+          // 개입 조건이 참이면 사다리는 반드시 'none' 이어야 한다.
+          expect(resolveStallAction(si)).toBe('none');
+          // 그리고 그 'none' 의 이유는 반드시 not_playing 이어야 한다 —
+          // suppressed 등 다른 게이트를 우회하고 있지 않다는 증명이다.
+          expect(explainStallGate(si)).toBe('not_playing');
+        }
+      }
+    }
+    expect(trueCount).toBeGreaterThan(0);
   });
 });

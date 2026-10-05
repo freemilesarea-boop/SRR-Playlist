@@ -21,7 +21,8 @@ import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import {
   resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
-  FROZEN_REPORT_MIN_INTERVAL_MS, explainStallGate, NUDGE_AFTER_MS, type StallAction,
+  FROZEN_REPORT_MIN_INTERVAL_MS, explainStallGate, NUDGE_AFTER_MS,
+  isPlaybackStateDesync, type StallAction,
 } from '@/lib/stallWatchdog';
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
@@ -1717,6 +1718,12 @@ export default function Player() {
    * 같은 시계를 쓰면 한쪽이 다른 쪽을 영구히 가린다.
    */
   const lastGateReportAtRef = useRef(-Infinity);
+  /**
+   * 상태 재동기화를 마지막으로 적용한 시각. 유계로 묶는 이유는 안전이다 —
+   * 어떤 경로가 playing 을 다시 false 로 되돌리면 tick 마다 싸우게 되는데,
+   * 그러면 복구가 아니라 진동이 된다. 60초 바닥을 두면 진동 대신 기록이 남는다.
+   */
+  const lastDesyncResyncAtRef = useRef(-Infinity);
 
   /**
    * HARD RECOVERY 실행 — 죽은 엘리먼트를 버리고 새 세대를 만든다.
@@ -1990,6 +1997,79 @@ export default function Player() {
             path: typeof location === 'undefined' ? null : location.pathname,
           },
         });
+      }
+
+      // DESYNC-RESYNC — store 의 재생 의도와 엘리먼트 실제 상태가 모순이고 소리도
+      // 멈춘 경우, **의도를 실제 상태에 맞춘다.** 여기서 play() 를 부르지 않는다.
+      //
+      // 왜 필요한가 — 화정점 2026-10-05. store.playing === false 하나로
+      //   · resolveStallAction 이 'none' → 복구 사다리가 영구 정지
+      //   · continue_listening 저장 effect 가 early-return → 감시선도 끊김
+      //   · useAudioRecoveryManager.shouldAttemptPlay() 가 play 를 거부하고
+      //     재생 중인 엘리먼트를 force-pause
+      // 세 개가 동시에 죽어 스스로 유지되는 상태가 된다. 그날 audio_frozen 은
+      // paused:false · readyState:4 로 찍혔는데 playback_stalled 는 0건이었다.
+      //
+      // 원인은 미확정이다. 이 블록은 원인을 고치지 않고, 그 죽은 상태가 오래
+      // 지속되지 않게만 한다. 판정은 isPlaybackStateDesync 가 전담하고
+      // suppressed · autoplayBlocked · subscriptionBlocked · crossfading · ended ·
+      // paused · readyState 를 모두 거른다 — 정상 정지는 엘리먼트도 paused 이므로
+      // 사용자 의도와 본사 스케줄은 구조적으로 침범되지 않는다.
+      if (
+        action === 'none'
+        && now - lastDesyncResyncAtRef.current >= FROZEN_REPORT_MIN_INTERVAL_MS
+        && isPlaybackStateDesync({
+          businessMode: true,
+          playing: stallInput.playing,
+          // 클로저의 `playable` 을 쓰지 않는다 — 이 effect 는 [businessMode] 로 한 번만
+          // 만들어지므로 그 값이 고정(stale)된다. 워커 ticker 를 트랙마다 재생성하는 것은
+          // 더 위험하므로, 이 파일이 이미 쓰는 방식(1132행)대로 store 에서 live 로 읽는다.
+          // 컴포넌트의 `playable` 정의(405행)와 동일한 식이다.
+          playable: isPlayableUrl(store.queue[store.index]?.audio_url),
+          paused: el.paused,
+          ended: el.ended,
+          crossfading: stallInput.crossfading,
+          suppressed: stallInput.suppressed,
+          autoplayBlocked: stallInput.autoplayBlocked,
+          subscriptionBlocked: stallInput.subscriptionBlocked,
+          readyState: el.readyState,
+          stalledMs: stallInput.stalledMs,
+        })
+      ) {
+        lastDesyncResyncAtRef.current = now;
+        const stalledSec = Math.round(stallInput.stalledMs / 1000);
+        recordFlightEvent('STALL_SNAPSHOT', {
+          el, audioElementId: getAudioObjectId(el),
+          extra: { action: 'desync_resync', prevAction: stallLastActionRef.current, stalledMs: Math.round(stallInput.stalledMs) },
+        });
+        beaconPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            kind: 'state_desync',
+            build: pageBuildHash(),
+            playerInstanceId: getPlayerInstanceId(),
+            trackId,
+            stalledSec,
+            ladderAt: stallLastActionRef.current,
+            // 재동기화 직전의 모순 증거.
+            storePlaying: stallInput.playing,
+            audioPaused: el.paused,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: Math.round(el.currentTime * 1000) / 1000,
+            audioGeneration: audioGenerationRef.current,
+            visibility: typeof document === 'undefined' ? null : document.visibilityState,
+            online: typeof navigator === 'undefined' ? null : navigator.onLine,
+            path: typeof location === 'undefined' ? null : location.pathname,
+          },
+        });
+        console.warn('[audio:desync] 재생 의도와 엘리먼트 상태가 모순 — 의도를 실제에 맞춘다', {
+          stalledSec, trackId, paused: el.paused, readyState: el.readyState,
+        });
+        // 다음 tick 부터 기존 사다리가 평소대로 올라간다. 복구는 사다리가 한다.
+        usePlayerStore.setState({ playing: true });
+        return;
       }
 
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.

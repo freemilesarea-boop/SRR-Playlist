@@ -216,6 +216,96 @@ export function resolveStallAction(i: StallInput): StallAction {
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* 상태 비동기(desync) 판정 — fail-safe 재동기화                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** desync 로 보려면 엘리먼트가 적어도 이 readyState 여야 한다(HAVE_CURRENT_DATA). */
+export const DESYNC_MIN_READY_STATE = 2;
+
+export interface DesyncInput {
+  /** 매장/브랜드 플레이어인가. false 면 절대 개입하지 않는다. */
+  businessMode: boolean;
+  /** store 의 **재생 의도**. */
+  playing: boolean;
+  /**
+   * 이 트랙이 재생 가능한 소스인가 (isPlayableUrl(current.audio_url)).
+   *
+   * 왜 필요한가 — Player 의 트랙 동기 effect 는 `!playable` 이면
+   * `if (playing) { setErrored(true); pause(); } return;` 로 **audio.pause() 를 건너뛰고**
+   * 반환한다. pause() 가 playing=false 로 바꿔 effect 가 다시 돌아도 같은 분기에서 또
+   * 반환하므로 **엘리먼트의 paused 가 false 로 영구히 남을 수 있다.** 그 상태를 모순으로
+   * 읽으면 "재생 불가 트랙" 이라는 정당한 정지와 싸우게 된다.
+   */
+  playable: boolean;
+  /** audio element 의 **실제** paused 상태. */
+  paused: boolean;
+  ended: boolean;
+  crossfading: boolean;
+  /** 본사 스케줄 억제. 이 플래그가 서면 어떤 경우에도 개입하지 않는다. */
+  suppressed: boolean;
+  autoplayBlocked: boolean;
+  subscriptionBlocked: boolean;
+  /** HTMLMediaElement.readyState. */
+  readyState: number;
+  /** 마지막으로 재생 위치가 움직인 뒤 흐른 시간(ms). */
+  stalledMs: number;
+}
+
+/**
+ * **store 의 재생 의도와 엘리먼트의 실제 상태가 모순인데 소리도 멈춘 상태**인가.
+ *
+ * 왜 이 판정이 필요한가 — 화정점 2026-10-05.
+ *   · `audio_frozen(FROZEN_AUDIO_STATE)` 가 실제로 찍혔다 — 워치독 tick 은 돌았다.
+ *   · 그 context 가 `paused: false` · `readyState: 4` · `visibility: visible` 이었다.
+ *   · stream heartbeat 간격은 10~11초로 정상이었다(스로틀링 아님).
+ *   · 그런데 `playback_stalled` 사다리 진입은 **0건**이었고,
+ *     `continue_listening` 저장도 장시간 끊겼다.
+ *   이 둘은 같은 게이트를 공유한다 — 저장 effect 의 `if (!current || !playable
+ *   || !playing) return;` 과 resolveStallAction 의 `if (!i.playing || i.suppressed)
+ *   return 'none';`. 즉 `store.playing === false` 하나로 **감시와 복구가 동시에
+ *   영구 차단**된다. 게다가 useAudioRecoveryManager 의 shouldAttemptPlay() 는
+ *   playing=false 면 play 를 거부하고 **재생 중인 엘리먼트를 force-pause** 한다.
+ *   스스로 유지되는 죽은 상태다.
+ *
+ * ★ 원인은 아직 미확정이다. 이 함수는 원인을 고치지 않는다 — 원인이 무엇이든
+ *   **그 죽은 상태가 장시간 지속되지 않게** 하는 fail-safe 다.
+ *
+ * ★★ 판정의 핵심은 `paused` 다. 정상 정지 경로는 **엘리먼트도 함께 멈춘다**:
+ *   playerStore.pause() / toggle() / setScheduleSuppression() 이 playing=false 로
+ *   바꾸면 Player 의 트랙 동기 effect 가 `audio.pause()` 를 호출한다(PLAYER_STOP).
+ *   따라서 **사용자가 멈춘 경우와 스케줄 억제는 반드시 `paused === true`** 다.
+ *   `playing === false` 인데 `paused === false` 는 정상 경로로는 나올 수 없는 모순이고,
+ *   그 모순은 **직전의 재생 의도가 true 였다**는 뜻이다(누군가 play() 를 성공시켰다).
+ *
+ * 판정이 참일 때 호출측이 하는 일은 **의도를 실제 상태에 맞추는 것뿐**이다.
+ * play() 를 부르지 않는다 — 그다음은 기존 사다리(8s nudge → 20s reload → 35s skip
+ * → hard_reset → 150s reload_page)가 평소대로 처리한다. 복구가 실패하면 사다리가
+ * 끝까지 올라간다.
+ */
+export function isPlaybackStateDesync(i: DesyncInput): boolean {
+  // 일반 청취자에게는 동작 변화 0.
+  if (!i.businessMode) return false;
+  // 본사 스케줄 억제 — 절대 침범하지 않는다. suppressed 는 playing 과 별개 플래그라
+  // playing=false 의 사유를 여기서 구분할 수 있다.
+  if (i.suppressed) return false;
+  // 자동재생 차단·구독 차단은 각자 경로가 담당한다. 여기서 되살리면 무한 play 시도가 된다.
+  if (i.autoplayBlocked || i.subscriptionBlocked) return false;
+  // 크로스페이드 진행 중·정상 종료에는 개입하지 않는다.
+  if (i.crossfading || i.ended) return false;
+  // 재생 불가 트랙은 모순이 아니다 — 소스가 없으니 멈춰 있는 것이 정상이다.
+  // 순서는 continue_listening 저장 effect 와 같게 둔다(`!current || !playable || !playing`).
+  if (!i.playable) return false;
+  // 의도가 이미 재생이면 모순이 아니다 — 기존 사다리가 담당한다.
+  if (i.playing) return false;
+  // ★ 엘리먼트가 멈춰 있으면 정상 정지다. 사용자 의도를 절대 덮지 않는다.
+  if (i.paused) return false;
+  // 소스가 아직 없으면 "재생 중" 이라고 볼 수 없다 — 로딩 중 개입 금지.
+  if (i.readyState < DESYNC_MIN_READY_STATE) return false;
+  // 실제로 소리가 멈춰 있어야 한다. 문턱은 사다리 첫 칸과 같게 둔다.
+  return i.stalledMs >= NUDGE_AFTER_MS;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* 사다리가 왜 멈춰 있는가 — 게이트 사유                                        */
 /* ────────────────────────────────────────────────────────────────────────── */
 
