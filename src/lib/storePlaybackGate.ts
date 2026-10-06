@@ -139,3 +139,34 @@ export function shouldResumeStorePlayerOnLaunch(i: {
   if (!i.businessMode) return false;
   return i.membership === 'premium';
 }
+
+/**
+ * 설치형 앱을 '/' 로 켰을 때 갈 플레이어 화면 — 앱 실행 목적지의 **단일 판정**.
+ *
+ * 우선순위: 저장된 브랜드 연결 → 매장 플레이어 복귀 → 그대로(null).
+ * VALID BRAND BINDING ALWAYS WINS OVER STORE RESUME.
+ *
+ * 2026-10-06 숙대점: 브랜드 이동과 매장 복귀가 서로 다른 effect 에서 따로 돌았고,
+ * 먼저 실행된 매장 복귀(businessMode=true · premium)가 '/' 를 '/business/player' 로
+ * 바꿔버려 브랜드 이동은 매번 실행되지 못했다. 한 함수가 한 번에 정하므로 effect
+ * 실행 순서와 무관하다.
+ *
+ * brandPlayerPath 는 기기에 저장된 binding 의 플레이어 경로일 뿐 승인이 아니다.
+ * BrandPlayerPage 가 verify_brand_device_binding 으로 서버 재검증하고, 실패하면
+ * binding 을 지우고 /brand 로 돌려보낸다.
+ */
+export function resolveLaunchDestination(i: {
+  pathname: string;
+  businessMode: boolean;
+  membership: Membership;
+  standalone: boolean;
+  alreadyHandled: boolean;
+  brandPlayerPath: string | null;
+}): string | null {
+  if (i.alreadyHandled) return null;
+  if (!i.standalone) return null;
+  if (i.pathname !== '/') return null;
+  // 브랜드 플레이어는 로그인 필요(RequireAuth). 비로그인이면 보내지 않는다.
+  if (i.brandPlayerPath) return i.membership === 'anonymous' ? null : i.brandPlayerPath;
+  return shouldResumeStorePlayerOnLaunch({ ...i, alreadyResumed: false }) ? '/business/player' : null;
+}

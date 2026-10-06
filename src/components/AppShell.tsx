@@ -29,7 +29,8 @@ import { useAudioOutputAutoRestore } from '@/hooks/useAudioOutputAutoRestore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
 import { resolveMembership } from '@/lib/membership';
-import { shouldResumeStorePlayerOnLaunch } from '@/lib/storePlaybackGate';
+import { resolveLaunchDestination } from '@/lib/storePlaybackGate';
+import { getSavedBrandPlayerPath } from '@/lib/brandSession';
 import { isStandalone } from '@/hooks/useInstallPrompt';
 
 export default function AppShell() {
@@ -71,20 +72,21 @@ export default function AppShell() {
     return cleanup;
   }, [loadBrand]);
 
-  // 설치형 앱을 매장 모드로 켜면 매장 플레이어로 되돌아간다.
-  // PC 전원 → (OS 가 앱 실행: 점주가 1회 설정) → (여기: 매장 화면 복귀) → (StorePlayerPage: 자동 재생)
-  // 조건을 좁게 잡은 이유는 shouldResumeStorePlayerOnLaunch 주석에 적었다.
+  // 설치형 앱을 켜면 플레이어 화면으로 되돌아간다 — 브랜드 연결이 저장돼 있으면 브랜드
+  // 플레이어, 아니면 매장 플레이어. 목적지는 resolveLaunchDestination 한 곳에서만 정한다.
+  // PC 전원 → (OS 가 앱 실행: 점주가 1회 설정) → (여기: 플레이어 화면 복귀) → (플레이어: 자동 재생)
   useEffect(() => {
-    if (launchResumeHandledRef.current) return;
-    if (!shouldResumeStorePlayerOnLaunch({
+    const destination = resolveLaunchDestination({
       pathname,
       businessMode,
       membership,
       standalone: isStandalone(),
-      alreadyResumed: false,
-    })) return;
+      alreadyHandled: launchResumeHandledRef.current,
+      brandPlayerPath: getSavedBrandPlayerPath(),
+    });
+    if (!destination) return;
     launchResumeHandledRef.current = true;
-    navigate('/business/player', { replace: true });
+    navigate(destination, { replace: true });
   }, [pathname, businessMode, membership, navigate]);
 
   return (

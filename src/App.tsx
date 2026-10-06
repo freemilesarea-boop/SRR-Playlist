@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
-import { useBrandLaunchRedirect } from '@/hooks/useBrandLaunchRedirect';
 import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useThemeStore } from '@/store/themeStore';
@@ -210,9 +209,6 @@ export default function App() {
   useEffect(() => () => { void syncBackgroundPlayback(false); }, []);
 
   useTrackVisit();
-
-  // 설치형 앱 실행 시 이 기기에 브랜드 연결이 저장돼 있으면 브랜드 플레이어로 바로 진입.
-  useBrandLaunchRedirect(isAuthReady && !!authUser && isProfileReady && !!authProfile);
 
   if (!isSupabaseConfigured) {
     return <ConfigMissingScreen />;
