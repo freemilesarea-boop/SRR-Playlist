@@ -6,6 +6,7 @@ import {
   isStorePlayerSurface,
   resolveStoreAutoStart,
   shouldResumeStorePlayerOnLaunch,
+  resolveLaunchDestination,
   type StoreGateInput,
 } from './storePlaybackGate';
 
@@ -179,5 +180,62 @@ describe('shouldResumeStorePlayerOnLaunch', () => {
 
   it('앱 실행당 1회만 — 홈으로 나온 사람을 다시 끌고 가지 않는다', () => {
     expect(shouldResumeStorePlayerOnLaunch({ ...base, alreadyResumed: true })).toBe(false);
+  });
+});
+
+// 설치형 앱 실행 목적지 — 단일 판정. VALID BRAND BINDING ALWAYS WINS OVER STORE RESUME.
+// 2026-10-06 숙대점 회귀: 매장 복귀가 브랜드 이동보다 먼저 실행돼 브랜드 매장이
+// 매일 아침 일반 매장 플레이어로 열렸다. 아래 1) 이 그 케이스다.
+describe('resolveLaunchDestination', () => {
+  const BRAND_PATH = '/brand/player/682c08e1-55b7-4324-8572-39afabfe6519';
+  const base = {
+    pathname: '/',
+    businessMode: true,
+    membership: 'premium' as const,
+    standalone: true,
+    alreadyHandled: false,
+    brandPlayerPath: BRAND_PATH as string | null,
+  };
+
+  it('1) 숙대점 회귀: 매장 모드 + premium + 브랜드 연결 → 브랜드 플레이어 (매장 복귀보다 우선)', () => {
+    expect(resolveLaunchDestination(base)).toBe(BRAND_PATH);
+  });
+
+  it('2) 매장 모드 아님 + 브랜드 연결 → 브랜드 플레이어', () => {
+    expect(resolveLaunchDestination({ ...base, businessMode: false })).toBe(BRAND_PATH);
+  });
+
+  it('3) 브랜드 연결 없음 + 매장 모드 + premium → 매장 플레이어 (기존 동작)', () => {
+    expect(resolveLaunchDestination({ ...base, brandPlayerPath: null })).toBe('/business/player');
+  });
+
+  it('4) 브라우저 탭은 브랜드 연결이 있어도 건드리지 않는다', () => {
+    expect(resolveLaunchDestination({ ...base, standalone: false })).toBeNull();
+    expect(resolveLaunchDestination({ ...base, standalone: false, brandPlayerPath: null })).toBeNull();
+  });
+
+  it('5) "/" 가 아닌 진입은 덮어쓰지 않는다', () => {
+    for (const pathname of ['/business', '/charts', '/brand', '/business/player']) {
+      expect(resolveLaunchDestination({ ...base, pathname })).toBeNull();
+      expect(resolveLaunchDestination({ ...base, pathname, brandPlayerPath: null })).toBeNull();
+    }
+  });
+
+  it('앱 실행당 1회 — 홈으로 나온 사람을 다시 끌고 가지 않는다', () => {
+    expect(resolveLaunchDestination({ ...base, alreadyHandled: true })).toBeNull();
+    expect(resolveLaunchDestination({ ...base, alreadyHandled: true, brandPlayerPath: null })).toBeNull();
+  });
+
+  it('브랜드 연결은 등급과 무관하게 우선한다 — 무료 등급이어도 브랜드 플레이어', () => {
+    expect(resolveLaunchDestination({ ...base, membership: 'free' })).toBe(BRAND_PATH);
+  });
+
+  it('비로그인은 어디로도 보내지 않는다 (브랜드 플레이어는 로그인 필요)', () => {
+    expect(resolveLaunchDestination({ ...base, membership: 'anonymous' })).toBeNull();
+    expect(resolveLaunchDestination({ ...base, membership: 'anonymous', brandPlayerPath: null })).toBeNull();
+  });
+
+  it('브랜드 연결 없음 + 무료 등급 → 기존처럼 보내지 않는다', () => {
+    expect(resolveLaunchDestination({ ...base, brandPlayerPath: null, membership: 'free' })).toBeNull();
   });
 });
