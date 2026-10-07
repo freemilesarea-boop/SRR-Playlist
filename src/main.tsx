@@ -11,6 +11,7 @@ import { useBusinessStore } from './store/businessStore';
 import { usePlaybackHealthStore } from './store/playbackHealthStore';
 import { shouldDeferReload, registerApplyUpdate } from './lib/swUpdateGate';
 import { reloadApp } from './lib/playbackGuard';
+import { installVolumeTrace, startVolumeTraceLogger } from './lib/volumeTrace';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -22,6 +23,12 @@ void initNativeShell();
 
 // 0093 — Sentry 초기화 (DSN 없으면 silent skip, production 만 활성)
 void initSentry();
+
+// 볼륨 추적 — 기본 OFF. 켜져 있을 때만 prototype 접근자를 감싸므로, 꺼진
+// 빌드에서는 아래 두 줄이 아무것도 하지 않는다. Player 가 <audio> 를 만들기
+// 전에 설치해야 첫 쓰기부터 잡힌다(그래서 createRoot 보다 위).
+installVolumeTrace();
+startVolumeTraceLogger();
 
 // 과거 SW 가 오디오 Range 요청을 opaque 로 잘못 캐싱한 캐시를 시작 시 1회 정리(모바일 재생 복구).
 void purgeBadAudioCaches();

@@ -43,6 +43,7 @@ import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/
 import { safeRecordStreamV2, safeHeartbeatV2 } from '@/lib/streamingV2Api';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import { captureBusinessError } from '@/lib/sentry';
+import { publishPlayerDiagState } from '@/lib/volumeTrace';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -1344,6 +1345,14 @@ export default function Player() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, playable, playing, queue.length, activeIdx]);
+
+  /* ---------- 진단: activeIdx / crossfading 을 볼륨 추적기에 전달 ---------- */
+  // crossfading 과 activeIdx 는 이 컴포넌트의 로컬 state 라 밖에서 볼 수 없다.
+  // 추적기가 "이 볼륨 쓰기가 crossfade 중에 일어났는가" 를 판정하려면 필요하다.
+  // 읽어서 넘기기만 한다 — 재생·볼륨 동작에는 관여하지 않는다.
+  useEffect(() => {
+    publishPlayerDiagState({ activeIdx, crossfading, storeVolume: volume });
+  }, [activeIdx, crossfading, volume]);
 
   /* ---------- 볼륨 동기화 ---------- */
   useEffect(() => {
