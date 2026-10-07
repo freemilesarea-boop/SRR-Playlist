@@ -7,6 +7,7 @@ import {
   type PlaylistCycleEvent,
 } from '@/lib/playerCycleCompletion';
 import { breadcrumb } from '@/lib/playbackDiag';
+import { perfStart, perfMark } from '@/lib/perfPlayback';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -285,6 +286,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           ? buildSeededShuffleOrder(filtered.length, safeIdx, todayKstSeed())
           : buildShuffleOrder(filtered.length, safeIdx))
       : [];
+    // 사용자가 플레이리스트를 누른 순간이 사실상 여기다 — 이 호출의 호출자가 탭이다.
+    perfStart(playlist?.title ? `playlist:${playlist.title}` : 'setQueue');
+    perfMark('setQueue');
     breadcrumb('setQueue', {
       count: filtered.length, startIdx: safeIdx,
       playlist: playlist?.id ?? '—', suppressed: get().scheduleSuppressed,

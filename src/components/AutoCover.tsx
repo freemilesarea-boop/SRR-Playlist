@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { gradientStyle } from '@/lib/cover';
 import AbstractCover, { type CoverTone } from './AbstractCover';
+import { thumbnailSource, COVER_WIDTH, scaledWidth } from '@/lib/imageUrl';
 
 interface Props {
   title: string;
@@ -11,6 +12,8 @@ interface Props {
   showInitial?: boolean;
   /** 이미지가 없을 때 DEUDDA AbstractCover 로 대체 (opt-in). 기본은 기존 gradient fallback. */
   useAbstract?: boolean;
+  /** 화면에 먼저 보이는 커버(첫 화면·현재 곡)면 우선순위를 올린다. */
+  priority?: boolean;
 }
 
 const SIZE: Record<string, { font: string; padding: string }> = {
@@ -42,26 +45,41 @@ export default function AutoCover({
   className = '',
   showInitial = true,
   useAbstract = false,
+  priority = false,
 }: Props) {
   // 이미지 로드 실패(403/404/깨진 URL) 시 그라데이션 fallback 으로 전환
   const [errored, setErrored] = useState(false);
+  // 리사이즈본이 실패하면(변환 미지원 플랜 등) 원본으로 한 번 되돌아간다.
+  const [useOriginal, setUseOriginal] = useState(false);
   useEffect(() => {
     setErrored(false);
+    setUseOriginal(false);
   }, [imageUrl]);
 
   const hasImage = !!imageUrl && !errored;
 
   if (hasImage) {
+    // 표시 크기에 맞는 이미지를 요청한다. 원본은 아티스트 업로드본이라
+    // 홈 카드 한 장에 수 MB 짜리가 걸리기도 한다 — imageUrl.ts 참고.
+    const thumb = thumbnailSource(imageUrl, scaledWidth(COVER_WIDTH[size] ?? COVER_WIDTH.md));
+    const src = !thumb ? (imageUrl as string) : useOriginal ? thumb.fallback : thumb.src;
     return (
       <img
-        src={imageUrl as string}
+        src={src}
         alt={`${title} 앨범 커버`}
-        loading="lazy"
+        // 지금 보고 있는 커버(현재 곡·첫 화면)는 늦게 오면 바로 티가 난다.
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : 'auto'}
         // 커버는 메인 스레드에서 디코딩할 이유가 없다. 홈 한 화면에 수십 장이
         // 깔리는데 동기 디코딩이면 스크롤이 그만큼 끊긴다.
         decoding="async"
         className={`h-full w-full object-cover ${className}`}
         onError={() => {
+          // 1차 실패가 리사이즈본이면 원본으로 되돌린다. 원본까지 실패해야 포기.
+          if (thumb && !useOriginal && thumb.src !== thumb.fallback) {
+            setUseOriginal(true);
+            return;
+          }
           if (import.meta.env.DEV) {
             console.warn('[AutoCover] 커버 이미지 로드 실패 → fallback:', { title, imageUrl });
           }

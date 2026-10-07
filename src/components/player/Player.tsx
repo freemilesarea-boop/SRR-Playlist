@@ -49,6 +49,7 @@ import {
   markTrackFailed, isTrackFailed, clearTrackFailure, pruneFailedTracks, failedTrackCount,
 } from '@/lib/failedTracks';
 import { logPlaybackDiag, isBenignPlayRejection, breadcrumb, safeUrlId } from '@/lib/playbackDiag';
+import { perfMark, meta as perfMeta, perfFlush } from '@/lib/perfPlayback';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -1266,6 +1267,7 @@ export default function Player() {
           activeIdx,
         });
       }
+      perfMark('currentTrack');
       breadcrumb('track-change', {
         from: lastTrackIdRef.current ?? '—', to: current.id, activeIdx, crossfading,
       });
@@ -1279,12 +1281,16 @@ export default function Player() {
       // 2) 새 src 적용
       // 오프라인 캐시가 준비돼 있으면 로컬 object URL, 아니면 원본 네트워크 URL.
       // 동기 조회만 한다 — 트랙 전환 hot path 에 await 를 넣지 않는다.
+      perfMark('srcResolve');
       const playbackSrc = playbackSrcFor(current.audio_url);
+      perfMark('srcResolved');
+      perfMeta({ 캐시본: playbackSrc !== current.audio_url });
       if (import.meta.env.DEV) {
         console.debug('[Player] src set', { id: current.id, url: current.audio_url, cached: playbackSrc !== current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
       }
       // 이 호출이 진행 중이던 로드를 취소한다 → 직전 요소에 ABORTED 가 난다.
       // 어떤 전환이 그것을 유발했는지 보려면 여기가 기록되어야 한다.
+      perfMark('srcSet');
       breadcrumb('src-set', {
         track: current.id, srcId: safeUrlId(playbackSrc),
         cached: playbackSrc !== current.audio_url, activeIdx,
@@ -1294,6 +1300,7 @@ export default function Player() {
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
       clearMetaTimer();
       if (playing) {
+        perfMark('load');
         breadcrumb('load', { track: current.id, activeIdx });
         try { audio.load(); } catch { /* noop */ }
         // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
@@ -2107,7 +2114,7 @@ export default function Player() {
           // (기존에는 수동 ▶ 클릭에서만 초기화돼, 24시간 매장에서 한 곡이 며칠에 걸쳐
           //  순간 끊김 3회를 누적하면 그 뒤로는 첫 blip 에 바로 영구 정지했다.)
           // 실제 소리 여부를 전역에 반영 — 배포 리로드 게이트가 이 값을 본다.
-          if (ev === 'playing') usePlaybackHealthStore.getState().setAudioActive(!el.paused);
+          if (ev === 'playing') { perfMark('playing'); usePlaybackHealthStore.getState().setAudioActive(!el.paused); }
           if (ev === 'pause' || ev === 'emptied') usePlaybackHealthStore.getState().setAudioActive(false);
           if (ev === 'playing' && !el.paused) {
             const tid = usePlayerStore.getState().queue[usePlayerStore.getState().index]?.id;
@@ -2151,6 +2158,7 @@ export default function Player() {
 
   /* ---------- audio element handlers (active 만) ---------- */
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
+    perfMark('firstProgress');
     const target = e.currentTarget;
     // X6.2.13 — activeRef 가드 완화. currentSrc / current.audio_url 매칭 기반.
     // 오프라인 캐시 적중 시 src 는 blob: object URL 이라 경로 비교가 불가능하다 → 공용 판정 사용.
@@ -2323,6 +2331,7 @@ export default function Player() {
   }
 
   function onLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
+    perfMark('loadedmetadata');
     const target = e.currentTarget;
     const d = target.duration;
     // X6.2.13 — activeRef 가드 완화. metadata 가 어떤 audio 에서 fire 됐든,
@@ -2375,6 +2384,7 @@ export default function Player() {
   }
 
   function onCanPlay(e: React.SyntheticEvent<HTMLAudioElement>) {
+    perfMark('canplay');
     if (e.currentTarget !== activeRef()) return;
     if (!playing) return;
     const audio = e.currentTarget;
@@ -2388,6 +2398,7 @@ export default function Player() {
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
   async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    perfMark('playCall');
     breadcrumb('play-attempt', {
       label, track: current?.id ?? '—', activeIdx,
       readyState: audio.readyState, paused: audio.paused,
@@ -2709,6 +2720,8 @@ export default function Player() {
     }
     // 게이트 없는 실패 기록. 릴리스 APK 에는 주소창이 없어 ?audioDebug=1 을 켤 수
     // 없는데, 정작 기기에서만 나는 실패가 여기다. 중복은 playbackDiag 가 막는다.
+    // 소리가 안 난 채 끝난 사건 — 여기까지의 구간이 곧 "어디서 수십 초를 썼나" 다.
+    perfFlush();
     breadcrumb('media-error', {
       track: current?.id ?? '—', code: err?.code ?? '—', codeName, activeIdx,
     });
