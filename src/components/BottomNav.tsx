@@ -6,6 +6,7 @@ import { bottomNavItems, type NavItem } from '@/lib/appNav';
 import { isStoreAccount } from '@/lib/nativeLanding';
 import { getRecentBrands } from '@/lib/brandSession';
 import { NAV_ICONS } from '@/components/navIcons';
+import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
 
 // 전체 메뉴는 열기 전까지 필요 없다 — 역할 조회까지 딸려오므로 지연 로드.
 const NativeMoreSheet = lazy(() => import('@/components/native/NativeMoreSheet'));
@@ -41,6 +42,10 @@ export default function BottomNav() {
   const profile = useAuthStore((s) => s.profile);
   const [moreOpen, setMoreOpen] = useState(false);
 
+  // 하단탭 실측 높이를 --app-nav-h 로. 미니플레이어와 콘텐츠 하단 여백이 이 값을
+  // 기준으로 자리를 잡는다 (index.css). 기기마다 다른 값을 상수로 적으면 겹친다.
+  const navRef = useMeasuredCssVar('--app-nav-h');
+
   const items = bottomNavItems({
     native: isNativeApp(),
     isCurator: profile?.is_curator ?? false,
@@ -57,6 +62,7 @@ export default function BottomNav() {
       {/* X6.40: aria-label + pl-safe/pr-safe 추가 (노치 좌우 잘림 방지)
           app-bottom-nav — 앱에서는 index.css 가 lg:hidden 을 되돌려 항상 띄운다. */}
       <nav
+        ref={navRef as React.RefObject<HTMLElement>}
         className="app-bottom-nav fixed inset-x-0 bottom-0 z-30 pb-safe pl-safe pr-safe lg:hidden"
         aria-label="주요 메뉴"
       >

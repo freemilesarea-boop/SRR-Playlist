@@ -82,6 +82,20 @@
   }
 }
 
+/* 하단 고정 영역 — 콘텐츠 → 미니플레이어 → 하단탭 → safe-area 순서.
+ *
+ * 전에는 미니플레이어가 bottom: 5.25rem 으로 박혀 있었다. 그 값은 하단탭 높이만
+ * 더한 것이고 env(safe-area-inset-bottom) 이 빠져 있어서, 제스처바가 있는 기기에서는
+ * 탭이 그만큼 위로 올라와 미니플레이어를 덮었다(탭 z-30 > 플레이어 z-20).
+ * 에뮬레이터·웹은 inset 이 0 이라 멀쩡해 보였다.
+ *
+ * 이제 BottomNav 가 자기 실측 높이를 --app-nav-h 로 올린다(pb-safe 포함).
+ * 기기·탭 개수·글꼴 크기가 달라져도 따라간다. 변수가 아직 없을 때를 위한
+ * fallback 은 종전 값으로 둔다.
+ */
+.app-player {
+  bottom: calc(var(--app-nav-h, 5rem) + 0.5rem);
+}
 /* range input */
 input[type='range'] {
   -webkit-appearance: none;
@@ -223,6 +237,23 @@ input[type='range']::-moz-range-thumb {
 
 /* ===== 모든 앱 공통 ===== */
 
+/* 앱에서는 유리 효과를 끄고 불투명하게.
+ *
+ * .glass / .glass-strong 은 backdrop-blur-2xl(24px) 이다. 화면 하단에 미니플레이어와
+ * 하단탭 두 겹이 fixed 로 떠 있고, 그 아래로 홈이 스크롤된다. backdrop-filter 는
+ * 매 스크롤 프레임마다 아래 픽셀을 다시 읽어 블러해야 해서, 안드로이드 WebView 에서는
+ * 이 두 겹만으로 스크롤이 눈에 띄게 끊긴다. 데스크탑 GPU 에서는 티가 안 나서
+ * 웹은 멀쩡하고 앱만 버벅이는 것으로 보인다.
+ *
+ * 불투명하게 칠하면 합성기가 아래를 읽을 필요가 없다. 색만 또렷해질 뿐
+ * 레이아웃·동작은 그대로다. 웹/PWA 는 건드리지 않는다. */
+.native-shell .glass,
+.native-shell .glass-strong {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: rgb(var(--color-surface)) !important;
+}
+
 /* 뼈대: 사이드바 대신 하단탭 */
 .native-shell .app-sidebar {
   display: none !important;
@@ -246,7 +277,11 @@ input[type='range']::-moz-range-thumb {
  * 짧은 화면에서는 맨 아래 칩 한 줄이 플레이어 밑에 깔려 눌리지 않았다.
  * 웹의 pb-44(11rem)와 같은 높이로 맞춘다. */
 .native-shell .app-footer-space {
-  padding-bottom: 11rem !important;
+  /* 하단탭 + 미니플레이어 + 숨 쉴 틈. 둘 다 실측값이라 기기마다 맞는다.
+     미니플레이어가 없으면 --app-player-h 가 0 이라 그만큼 여백이 준다. */
+  padding-bottom: calc(
+    var(--app-nav-h, 5rem) + var(--app-player-h, 4.5rem) + 1.5rem
+  ) !important;
 }
 
 /* 체크박스·라디오 크기.
@@ -418,7 +453,8 @@ input[type='radio'] {
   .native-shell .app-player {
     left: 0 !important;
     right: 0 !important;
-    bottom: 5.5rem !important;
+    /* 데스크탑 미디어쿼리의 bottom: 1rem 을 되돌린다. 앱은 폭이 넓어도 하단탭을 쓴다. */
+    bottom: calc(var(--app-nav-h, 5rem) + 0.5rem) !important;
     max-width: 48rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -487,5 +523,12 @@ input[type='radio'] {
 @media (min-width: 1024px) {
   .native-shell {
     font-size: 17px;
+  }
+
+  /* 데스크탑에는 하단탭이 없다(사이드바를 쓴다) — 플레이어가 화면 바닥에 붙는다.
+     네이티브 셸은 폭이 넓어도 하단탭을 쓰므로 위의 .native-shell .app-player 가
+     이 값을 다시 덮는다. */
+  .app-player {
+    bottom: 1rem;
   }
 }

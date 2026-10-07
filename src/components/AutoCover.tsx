@@ -57,6 +57,9 @@ export default function AutoCover({
         src={imageUrl as string}
         alt={`${title} 앨범 커버`}
         loading="lazy"
+        // 커버는 메인 스레드에서 디코딩할 이유가 없다. 홈 한 화면에 수십 장이
+        // 깔리는데 동기 디코딩이면 스크롤이 그만큼 끊긴다.
+        decoding="async"
         className={`h-full w-full object-cover ${className}`}
         onError={() => {
           if (import.meta.env.DEV) {

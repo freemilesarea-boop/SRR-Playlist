@@ -80,4 +80,23 @@ export function useBrandDailyPlaylistSync({ brandId, sessionToken, enabled, play
     timer = window.setTimeout(() => { void tick(); }, nextPollDelayMs());
     return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
   }, [brandId, sessionToken, enabled]);
+
+  // 이 페이지를 떠날 때 재생 게이트를 반드시 푼다.
+  //
+  // scheduleSuppressed 는 playerStore 의 **전역** 상태다. 영업시간 밖에 브랜드
+  // 플레이어를 열면 위의 applyPlaybackWindow 가 'closed' 로 잠그는데, 그대로
+  // 홈으로 나가면 잠금이 따라나간다. 그러면 홈에서 플레이리스트를 눌러도
+  // setQueue 가 playing: !scheduleSuppressed 로 false 를 넣어 큐만 깔고 멈추고,
+  // 재생 버튼을 눌러도 play() 가 게이트에서 바로 돌아선다. 앱을 껐다 켜야만
+  // 풀리는 이유가 이것이다 — 스토어 초기값이 false 라 재시작이 곧 복구였다.
+  //
+  // useStorePlaybackPolicy 는 같은 이유로 이미 언마운트에서 게이트를 푼다.
+  // 여기만 빠져 있었다.
+  // enabled 가 꺼질 때도 같이 푼다(언마운트뿐 아니라 사용 중단도 게이트를 남기면 안 된다).
+  useEffect(
+    () => () => {
+      usePlayerStore.getState().setScheduleSuppression(null);
+    },
+    [enabled],
+  );
 }

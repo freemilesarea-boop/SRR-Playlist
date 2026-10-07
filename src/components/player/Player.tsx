@@ -44,6 +44,7 @@ import { safeRecordStreamV2, safeHeartbeatV2 } from '@/lib/streamingV2Api';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import { captureBusinessError } from '@/lib/sentry';
 import { publishPlayerDiagState } from '@/lib/volumeTrace';
+import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -351,6 +352,10 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false);
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
+
+  // 미니플레이어 실측 높이를 --app-player-h 로. 페이지 마지막 콘텐츠가 이 바와
+  // 하단탭에 가리지 않도록 하단 여백이 이 값을 더해 쓴다 (index.css).
+  const playerBarRef = useMeasuredCssVar('--app-player-h');
 
   // X6.48: expanded full-screen player Esc + focus trap (a11y)
   // Esc 시 nested queue overlay 먼저 close, 없으면 expanded close
@@ -2944,7 +2949,8 @@ export default function Player() {
       />
 
       {/* Mini player — 모바일은 BottomNav 위, 데스크탑은 사이드바 우측 영역 중앙 */}
-      <div className="app-player fixed inset-x-0 bottom-[5.25rem] z-20 mx-auto max-w-3xl pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:bottom-[5.5rem] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))] lg:left-60 lg:right-0 lg:bottom-4 lg:max-w-[min(960px,calc(100vw-15rem-4rem))] lg:px-6">
+      <div ref={playerBarRef as React.RefObject<HTMLDivElement>}
+        className="app-player fixed inset-x-0 z-20 mx-auto max-w-3xl pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))] lg:left-60 lg:right-0 lg:max-w-[min(960px,calc(100vw-15rem-4rem))] lg:px-6">
         <button
           onClick={() => setExpanded(true)}
           className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl glass-strong p-2.5 transition duration-smooth ease-emphasized hover:-translate-y-0.5"
