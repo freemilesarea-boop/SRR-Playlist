@@ -30,6 +30,7 @@
     "android:paste": "bash scripts/android-paste.sh",
     "icons": "node scripts/make-app-icons.mjs && capacitor-assets generate --android --ios",
     "store-graphics": "node scripts/make-store-graphics.mjs",
+    "audio-probe": "bash scripts/android-audio-probe.sh",
     "apk": "bash scripts/android-apk.sh",
     "aab": "bash scripts/android-apk.sh --aab",
     "keystore": "bash scripts/android-keystore.sh"
