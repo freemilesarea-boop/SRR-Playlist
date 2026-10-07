@@ -128,6 +128,45 @@ export function formatTimeline(now?: number): string {
   return ['[PLAYBACK_TIMELINE] (실패 시점 기준 역순 아님 — 위가 과거)', ...lines].join('\n');
 }
 
+/* ------------------------------------------------------------------ *
+ * 앱 안에서 꺼내보는 기록
+ * ------------------------------------------------------------------ */
+
+/**
+ * 콘솔로만 나가면 기기에서 아무도 못 본다. 릴리스 APK 에는 개발자 도구가
+ * 없고, Capacitor 의 콘솔 전달도 빌드 설정에 달려 있다. 그래서 내보낸 줄을
+ * 여기에도 쌓아 숨은 진단 화면이 그대로 보여줄 수 있게 한다.
+ */
+const LOG_MAX = 200;
+const logLines: string[] = [];
+
+function keepLine(line: string): void {
+  logLines.push(line);
+  if (logLines.length > LOG_MAX) logLines.shift();
+}
+
+export function readDiagLog(): readonly string[] {
+  return logLines;
+}
+
+export function clearDiagLog(): void {
+  logLines.length = 0;
+  resetCrumbs();
+  seen.clear();
+}
+
+/** 복사해서 붙여넣기 좋은 전문. */
+export function diagLogText(): string {
+  return [
+    `# 듣다 재생 진단 · ${new Date().toISOString()}`,
+    `# 기록 ${logLines.length}건 (최대 ${LOG_MAX})`,
+    '',
+    ...logLines,
+    '',
+    formatTimeline(),
+  ].join('\n');
+}
+
 const seen = new Set<string>();
 /** 세션당 기록 상한 — 장애가 길어져도 로그가 기기를 먹지 않도록. */
 const MAX_ENTRIES = 200;
@@ -188,9 +227,13 @@ export function logPlaybackDiag(i: PlaybackDiagInput): boolean {
   if (seen.size >= MAX_ENTRIES) return false;
   seen.add(key);
   try {
-    console.warn(formatPlaybackDiag(i));
+    const line = formatPlaybackDiag(i);
+    keepLine(line);
+    console.warn(line);
     // 실패 한 줄만으로는 "무엇이 이것을 abort 시켰나" 를 못 본다.
-    console.warn(formatTimeline());
+    const tl = formatTimeline();
+    keepLine(tl);
+    console.warn(tl);
   } catch { /* 로그가 재생을 막아서는 안 된다 */ }
   return true;
 }

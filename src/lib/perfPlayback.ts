@@ -32,6 +32,20 @@ interface Session {
 let current: Session | null = null;
 let nextId = 1;
 
+/** 콘솔이 기기에서 안 보일 수 있으므로 앱 안에서도 꺼내볼 수 있게 쌓아둔다. */
+const PERF_MAX = 100;
+const perfLines: string[] = [];
+function keepPerfLine(line: string): void {
+  perfLines.push(line);
+  if (perfLines.length > PERF_MAX) perfLines.shift();
+}
+export function readPerfLog(): readonly string[] {
+  return perfLines;
+}
+export function clearPerfLog(): void {
+  perfLines.length = 0;
+}
+
 const now = (): number =>
   typeof performance !== 'undefined' ? performance.now() : Date.now();
 
@@ -90,7 +104,11 @@ export function perfFlush(): void {
   const s = current;
   if (!s || s.done) return;
   s.done = true;
-  try { console.warn(formatPerf(s)); } catch { /* 로그가 재생을 막지 않는다 */ }
+  try {
+    const line = formatPerf(s);
+    keepPerfLine(line);   // 앱 안의 진단 화면에서도 보이도록
+    console.warn(line);
+  } catch { /* 로그가 재생을 막지 않는다 */ }
   extras.clear();
 }
 

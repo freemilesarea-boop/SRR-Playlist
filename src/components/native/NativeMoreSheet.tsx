@@ -8,7 +8,7 @@
  * 역할 판정 중 관리자/아티스트는 프로필만 보면 되지만(동기), 영업인·본사는 서버에
  * 물어야 한다. 시트를 열 때만 물어보고, 실패하면 그 항목만 빠진다(메뉴 자체는 뜬다).
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -19,6 +19,7 @@ import { isStoreAccount } from '@/lib/nativeLanding';
 import { NAV_ICONS } from '@/components/navIcons';
 import { getRecentBrands } from '@/lib/brandSession';
 import { COMPANY_INFO } from '@/lib/companyInfo';
+const PlaybackDiagnosticsModal = lazy(() => import('@/components/PlaybackDiagnosticsModal'));
 
 interface Props {
   onClose: () => void;
@@ -33,6 +34,9 @@ function hasBoundBrand(): boolean {
 }
 
 export default function NativeMoreSheet({ onClose }: Props) {
+  // 숨은 진단 진입점 — 사업자 정보 제목 7회 탭.
+  const diagTapsRef = useRef(0);
+  const [diagOpen, setDiagOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
@@ -157,7 +161,19 @@ export default function NativeMoreSheet({ onClose }: Props) {
           {/* 사업자 정보 — 전자상거래법상 표시 의무. 웹은 푸터가 맡지만 앱에는 푸터가
               없으므로(터치 화면에서 매번 스크롤 끝까지 내리게 할 수 없다) 여기가 그 자리다. */}
           <section aria-labelledby="more-company">
-            <h3 id="more-company" className="px-1 pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dim">
+            {/* 제목을 일곱 번 누르면 재생 진단이 열린다 — 숨은 진입점.
+                릴리스 APK 에는 개발자 도구가 없고 매장 태블릿에 ADB 를 꽂을 수도
+                없어서, 기기에서만 나는 실패를 건져올 통로가 하나는 필요하다.
+                일반 사용자 동선에는 아무 표시도 없다. */}
+            <h3
+              id="more-company"
+              onClick={() => {
+                const n = diagTapsRef.current + 1;
+                diagTapsRef.current = n;
+                if (n >= 7) { diagTapsRef.current = 0; setDiagOpen(true); }
+              }}
+              className="px-1 pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dim"
+            >
               사업자 정보
             </h3>
             <dl className="space-y-1.5 rounded-2xl bg-bg-card px-4 py-4 text-xs leading-relaxed ring-1 ring-line/10">
@@ -171,6 +187,12 @@ export default function NativeMoreSheet({ onClose }: Props) {
           </section>
         </div>
       </div>
+
+      {diagOpen && (
+        <Suspense fallback={null}>
+          <PlaybackDiagnosticsModal onClose={() => setDiagOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

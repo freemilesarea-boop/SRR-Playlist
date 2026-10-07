@@ -21,6 +21,13 @@ const config: CapacitorConfig = {
   android: {
     // OAuth 딥링크/외부 링크가 기본 브라우저가 아닌 커스텀탭에서 열리도록 @capacitor/browser 사용.
     allowMixedContent: false,
+    // WebView 의 console 을 릴리스 빌드에서도 logcat 으로 넘긴다.
+    //
+    // 기본값('debug')은 디버그 빌드에서만 넘긴다. 그래서 릴리스 APK 로 실기기를
+    // 돌리면 console.warn 이 분명히 실행되는데도 `adb logcat` 에 아무것도 안
+    // 잡힌다 — 계측을 아무리 넣어도 수집이 안 되는 상태였다.
+    // 우리 로그는 실패와 지연 측정뿐이고 양이 적다.
+    loggingBehavior: 'production',
   },
   plugins: {
     SplashScreen: {

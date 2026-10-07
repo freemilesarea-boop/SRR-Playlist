@@ -1303,15 +1303,14 @@ export default function Player() {
         perfMark('load');
         breadcrumb('load', { track: current.id, activeIdx });
         try { audio.load(); } catch { /* noop */ }
-        // 여기서 바로 play() 를 건다.
+        // 재생은 onCanPlay 에서 건다.
         //
-        // 지금까지는 canplay 이벤트에서만 play() 를 불렀다. 그러면 두 가지를 잃는다:
-        //   • 사용자 제스처 창 — 탭에서 canplay 까지 수 초가 지나면 브라우저는
-        //     더 이상 그 재생을 사용자 행동으로 보지 않는다(NotAllowedError).
-        //   • 버퍼링 직렬화 — 메타데이터를 다 받고 canplay 가 뜬 뒤에야 재생용
-        //     버퍼를 다시 채운다. play() 를 먼저 걸면 둘이 겹친다.
-        // onCanPlay 는 그대로 둔다 — 이미 재생 중이면 거기서 no-op 이다.
-        void attemptPlay(audio, 'immediate');
+        // 한 번 load() 직후 바로 play() 를 걸어봤다가 되돌렸다. 같은 엘리먼트에
+        // immediate 와 canplay 두 경로가 겹쳐 들어가고, 둘 다 ensureSinkReady 를
+        // await 한 뒤 play() 를 부른다. readyState=0 에서 시작한 쪽이 뒤늦게
+        // 돌아오면 이미 다음 트랙으로 바뀐 엘리먼트를 건드린다.
+        // 실기기에서 첫 곡 이후 진행이 멈추고 다음 플레이리스트가 재생되지
+        // 않았다. 제스처 창 문제는 다른 방법으로 풀어야 한다.
         // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
         // 시간 선택 이유는 META_TIMEOUT_MS 참고. onLoadedMetadata 에서 해제.
         const trackId = current.id;
@@ -2167,7 +2166,6 @@ export default function Player() {
 
   /* ---------- audio element handlers (active 만) ---------- */
   function onTimeUpdate(e: React.SyntheticEvent<HTMLAudioElement>) {
-    perfMark('firstProgress');
     const target = e.currentTarget;
     // X6.2.13 — activeRef 가드 완화. currentSrc / current.audio_url 매칭 기반.
     // 오프라인 캐시 적중 시 src 는 blob: object URL 이라 경로 비교가 불가능하다 → 공용 판정 사용.
@@ -2176,6 +2174,9 @@ export default function Player() {
       if (m === 'mismatch') return; // 다른 트랙 audio 의 timeupdate 무시
       if (m === 'unknown' && target !== activeRef()) return;
     }
+    // 가드를 통과한 뒤에 찍는다 — 다른 트랙 엘리먼트의 timeupdate 로 사건이
+    // 닫히면 "첫 소리까지 걸린 시간" 이 엉뚱하게 짧아진다.
+    perfMark('firstProgress');
     const t = target.currentTime;
 
     // Phase 3-1 — stuck detection.
@@ -2984,7 +2985,7 @@ export default function Player() {
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
         ref={setAudioARef}
-        preload="auto"
+        preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onDurationChange={onDurationChange}
@@ -3014,7 +3015,7 @@ export default function Player() {
       />
       <audio
         ref={setAudioBRef}
-        preload="auto"
+        preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onDurationChange={onDurationChange}
