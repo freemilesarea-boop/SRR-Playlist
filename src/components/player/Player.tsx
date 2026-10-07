@@ -46,6 +46,10 @@ import { captureBusinessError } from '@/lib/sentry';
 import { publishPlayerDiagState } from '@/lib/volumeTrace';
 import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
 import {
+  markTrackFailed, isTrackFailed, clearTrackFailure, pruneFailedTracks, failedTrackCount,
+} from '@/lib/failedTracks';
+import { logPlaybackDiag, isBenignPlayRejection } from '@/lib/playbackDiag';
+import {
   pushRecentlyPlayed,
   saveContinueListening,
   clearContinueListening,
@@ -97,7 +101,8 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
  *
  * X6.66 — 24시간+ 매장 무중단 운영 시 무한 누적 방지 (truncateSetOldest 로 cap).
  */
-const sessionFailedTrackIds = new Set<string>();
+// 실패 명단은 수명이 있는 별도 모듈로 옮겼다 — failedTracks.ts 참고.
+// 모듈 전역 Set 이던 시절에는 앱 재시작만이 복구 수단이었다.
 
 // X6.66 — track-id 기반 Map/Set 무한 성장 차단 (매장 24h+ 무중단 운영 대비).
 // 한 매장이 한 달 연속 운영해도 메모리 안정. JS Map/Set 은 삽입 순서 유지 → LRU 트림.
@@ -117,19 +122,6 @@ function truncateMapOldest<K, V>(map: Map<K, V>, max: number): number {
   return removed;
 }
 
-function truncateSetOldest<T>(set: Set<T>, max: number): number {
-  if (set.size <= max) return 0;
-  let removed = 0;
-  const overflow = set.size - max;
-  const iter = set.values();
-  for (let i = 0; i < overflow; i++) {
-    const { value, done } = iter.next();
-    if (done) break;
-    set.delete(value);
-    removed += 1;
-  }
-  return removed;
-}
 
 /** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
 let lastErrorToastAt = 0;
@@ -1241,7 +1233,7 @@ export default function Player() {
     // 세션 내 이미 재생 실패(DECODE/SRC_NOT_SUPPORTED)로 확정된 트랙 →
     // 자동으로 다음 곡으로 넘기지 않고 현재 곡에서 정지(에러 표시). 재생 실패는 "곡 종료"가 아니다.
     // (플레이리스트 전체가 자동 스킵되며 토스트가 쌓이던 문제 차단)
-    if (playing && sessionFailedTrackIds.has(current.id)) {
+    if (playing && isTrackFailed(current.id)) {
       setErrored(true);
       pause();
       return;
@@ -1493,19 +1485,26 @@ export default function Player() {
 
     // X6.66 — track-id 기반 Map/Set 1시간마다 prune (24h+ 매장 무중단 누적 차단).
     // 일반 사용자는 1세션이 짧아 불필요 → 매장 모드 한정.
+    // 실패 명단 만료 정리는 **모든 모드**에서 돈다. 매장모드에만 걸어두니
+    // 일반 사용자는 앱을 껐다 켜기 전까지 명단이 비지 않았다 — 홈 플레이리스트가
+    // 계속 같은 자리에서 멈추던 원인 중 하나.
+    const failedPruneId = window.setInterval(() => {
+      pruneFailedTracks();
+    }, 60_000);
+
     let pruneId: number | null = null;
     if (businessMode) {
       pruneId = window.setInterval(() => {
         const a = truncateMapOldest(pev2StartedTracksRef.current, MAX_TRACK_HISTORY);
         const b = truncateMapOldest(networkRetriedRef.current, MAX_TRACK_HISTORY);
-        const c = truncateSetOldest(sessionFailedTrackIds, MAX_TRACK_HISTORY);
-        if (a + b + c > 0) {
-          console.info('[player] track-history prune', { started: a, network: b, failed: c });
+        if (a + b > 0) {
+          console.info('[player] track-history prune', { started: a, network: b, failed: failedTrackCount() });
         }
       }, 60 * 60 * 1000); // 1h
     }
 
     return () => {
+      window.clearInterval(failedPruneId);
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('pageshow', onPageShow);
@@ -2227,7 +2226,7 @@ export default function Player() {
 
     if (wasNaturalEnd) return; // 끝까지 들음(자동 advance / crossfade)
     if (wasPrev) return; // 이전 버튼
-    if (sessionFailedTrackIds.has(outgoingId)) return; // 재생 실패(에러)
+    if (isTrackFailed(outgoingId)) return; // 재생 실패(에러)
     const ctx = playlistContext;
     if (!ctx || ctx.type !== 'catalog') return; // 카탈로그 플레이리스트에서만 집계
 
@@ -2463,6 +2462,23 @@ export default function Player() {
       }
     } catch (err: unknown) {
       const e = err as DOMException;
+      // 실패 기록은 조건 없이 남긴다 — AbortError/NotAllowedError 는 사용자에게
+      // 보일 실패가 아니지만, 왜 소리가 안 나는지 추적할 때는 그게 가장 중요한 단서다.
+      logPlaybackDiag({
+        stage: 'play-reject',
+        trackId: current?.id ?? null,
+        playlistId: playlist?.id ?? null,
+        sourceType: playlistContext?.type ?? null,
+        audio,
+        error: e,
+        extra: {
+          label,
+          benign: isBenignPlayRejection(e?.name),
+          activeIdx,
+          crossfading,
+          storePlaying: playing,
+        },
+      });
       if (e?.name === 'AbortError') {
         if (import.meta.env.DEV) console.debug(`[Player] play() AbortError (${label}) — src 변경으로 인한 무효화`);
         return;
@@ -2675,6 +2691,21 @@ export default function Player() {
         },
       });
     }
+    // 게이트 없는 실패 기록. 릴리스 APK 에는 주소창이 없어 ?audioDebug=1 을 켤 수
+    // 없는데, 정작 기기에서만 나는 실패가 여기다. 중복은 playbackDiag 가 막는다.
+    logPlaybackDiag({
+      stage: 'media-error',
+      trackId: current?.id ?? null,
+      playlistId: playlist?.id ?? null,
+      sourceType: playlistContext?.type ?? null,
+      audio: target,
+      extra: {
+        activeIdx,
+        crossfading,
+        storePlaying: playing,
+        online: typeof navigator !== 'undefined' ? navigator.onLine : '—',
+      },
+    });
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
     void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });
@@ -2775,7 +2806,7 @@ export default function Player() {
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = isPermanentMediaError(err?.code);
     if (current && isPermanent) {
-      sessionFailedTrackIds.add(current.id);
+      markTrackFailed(current.id);
     }
 
     // ── BRAND-PLAYER-UNATTENDED-RECOVERY-1 ────────────────────────────────
@@ -2882,7 +2913,7 @@ export default function Player() {
     }
     // 에러 상태에서 ▶ 다시 누르면 동일 곡 재시도 (실패 마크 해제 + 강제 재로드).
     if (errored) {
-      sessionFailedTrackIds.delete(current.id);
+      clearTrackFailure(current.id);
       networkRetriedRef.current.delete(current.id); // 수동 재시도 시 네트워크 자동재시도 한도 초기화
       setErrored(false);
       lastTrackIdRef.current = null; // 트랙 변경으로 간주 → src 재설정/load/재생

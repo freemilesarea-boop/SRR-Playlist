@@ -14,6 +14,7 @@
  */
 import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
+import { isUserVisibleMediaError, logPlaybackDiag } from '@/lib/playbackDiag';
 import { toast } from '@/store/toastStore';
 import type { AudioSessionState } from '@/hooks/useAudioSessionState';
 
@@ -288,10 +289,23 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
             if (shouldAttemptPlay()) {
               if (!(await tryPlay(active, 'play'))) outcome = 'failed';
             }
-          } else {
-            // DECODE / SRC_NOT_SUPPORTED / ABORTED — auto-skip 하지 않고 로그+toast
+          } else if (isUserVisibleMediaError(errCode)) {
+            // DECODE / SRC_NOT_SUPPORTED — 진짜 재생 불가. 알린다.
             outcome = 'failed';
             try { toast.warning('재생 오류가 발생했어요.'); } catch { /* silent */ }
+          } else {
+            // ABORTED(1) 와 코드 미상(0).
+            //
+            // ABORTED 는 로딩 중에 src 가 바뀌거나 load() 가 다시 불린 정상 신호다.
+            // 플레이리스트를 빠르게 갈아타면 반드시 난다 — 실패가 아니라 취소다.
+            // 여기서 토스트를 띄우면 멀쩡히 다음 곡이 재생되는 중에도 "재생 오류" 가
+            // 뜬다. 기록만 남기고 넘어간다.
+            parts.push('aborted-or-unknown;no-toast;');
+            logPlaybackDiag({
+              stage: 'media-error-benign',
+              audio: active,
+              extra: { errCode, codeName },
+            });
           }
           break;
         }
