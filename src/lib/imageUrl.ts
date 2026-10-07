@@ -11,13 +11,60 @@
  *   /storage/v1/object/public/<bucket>/<path>
  *   /storage/v1/render/image/public/<bucket>/<path>?width=&height=&resize=cover
  *
- * ⚠️ 이미지 변환은 Supabase 유료 플랜 기능이다. 플랜이 안 되면 이 URL 이
- * 실패하는데, 그때 커버가 사라지면 안 되므로 **호출 측이 원본으로 되돌아갈 수
- * 있도록** 원본 URL 을 같이 돌려준다(AutoCover 의 onError 가 그 일을 한다).
+ * ⚠️ 이미지 변환은 Supabase 유료 플랜 기능이다. 지원되지 않는 프로젝트에서
+ * 변환 URL 을 먼저 요청하면 **커버 한 장마다 왕복이 두 번** 생긴다 —
+ * 변환 실패를 기다렸다가 그제서야 원본을 받는다. 빈 사각형이 더 오래 보인다.
+ *
+ * 그래서 "실패하면 되돌린다" 가 아니라 **지원 여부를 먼저 한 번 알아보고,
+ * 모르거나 안 되면 처음부터 원본을 쓴다.** 판정은 앱 실행당 한 번이고
+ * localStorage 에 남아 다음 실행에서는 즉시 안다.
  */
 
 /** 저장소 공개 객체 URL 인가 — 변환 대상인지 판별. */
 const PUBLIC_OBJECT = '/storage/v1/object/public/';
+
+/* ------------------------------------------------------------------ *
+ * 변환 지원 여부 — 한 번만 알아본다
+ * ------------------------------------------------------------------ */
+
+const SUPPORT_KEY = 'deudda.imgTransform';
+type Support = 'yes' | 'no' | 'unknown';
+
+let support: Support = 'unknown';
+try {
+  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(SUPPORT_KEY) : null;
+  if (saved === 'yes' || saved === 'no') support = saved;
+} catch { /* 저장소가 막힌 WebView */ }
+
+export function transformSupport(): Support {
+  return support;
+}
+
+/** 테스트/재판정용. */
+export function setTransformSupport(next: Support): void {
+  support = next;
+  try {
+    if (next === 'unknown') localStorage.removeItem(SUPPORT_KEY);
+    else localStorage.setItem(SUPPORT_KEY, next);
+  } catch { /* 무시 */ }
+}
+
+/**
+ * 변환 엔드포인트가 사는지 아주 작은 이미지 하나로 확인한다.
+ *
+ * 화면에 쓰지 않는 16px 요청이라 비용이 거의 없고, 결과가 나올 때까지는
+ * 원본을 쓰므로 **이 판정이 어떤 커버의 표시도 지연시키지 않는다.**
+ */
+export function probeTransformSupport(sampleUrl: string | null | undefined): void {
+  if (support !== 'unknown') return;
+  if (!sampleUrl || typeof Image === 'undefined') return;
+  const probe = thumbnailSource(sampleUrl, 16, /* force */ true);
+  if (!probe || probe.src === probe.fallback) return;
+  const img = new Image();
+  img.onload = () => setTransformSupport('yes');
+  img.onerror = () => setTransformSupport('no');
+  img.src = probe.src;
+}
 
 export interface ThumbSource {
   /** 실제로 먼저 요청할 URL (가능하면 리사이즈본). */
@@ -32,11 +79,17 @@ export interface ThumbSource {
  * @param url     원본 주소
  * @param width   화면에서 차지하는 폭. 기기 픽셀비는 호출 측이 이미 곱해서 준다.
  */
-export function thumbnailSource(url: string | null | undefined, width: number): ThumbSource | null {
+export function thumbnailSource(
+  url: string | null | undefined,
+  width: number,
+  force = false,
+): ThumbSource | null {
   if (!url) return null;
   const i = url.indexOf(PUBLIC_OBJECT);
   // 저장소 URL 이 아니면 손대지 않는다(외부 이미지, data:, blob: 등).
   if (i < 0) return { src: url, fallback: url };
+  // 지원이 확인되기 전에는 원본을 쓴다 — 실패를 기다리는 왕복을 만들지 않는다.
+  if (!force && support !== 'yes') return { src: url, fallback: url };
 
   const w = Math.max(64, Math.round(width));
   const rendered =

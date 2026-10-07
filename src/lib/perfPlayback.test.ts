@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { perfStart, perfMark, perfFlush, readPerfSession, resetPerf, meta } from './perfPlayback';
-import { thumbnailSource, COVER_WIDTH, scaledWidth } from './imageUrl';
+import { thumbnailSource, COVER_WIDTH, scaledWidth, setTransformSupport, transformSupport } from './imageUrl';
 
 describe('구간 측정', () => {
   beforeEach(() => {
@@ -76,6 +76,8 @@ describe('구간 측정', () => {
 describe('커버 썸네일', () => {
   const PUBLIC = 'https://p.supabase.co/storage/v1/object/public/covers/a/b_cover.jpg';
 
+  beforeEach(() => setTransformSupport('yes'));   // 변환이 되는 프로젝트 기준
+
   it('저장소 URL 을 리사이즈 엔드포인트로 바꾼다', () => {
     const t = thumbnailSource(PUBLIC, 320)!;
     expect(t.src).toContain('/storage/v1/render/image/public/covers/a/b_cover.jpg');
@@ -111,5 +113,41 @@ describe('커버 썸네일', () => {
   it('기기 픽셀비는 2배에서 끊는다 — 4배 기기에서 원본만큼 커지지 않도록', () => {
     expect(scaledWidth(320, 1)).toBe(320);
     expect(scaledWidth(320, 3)).toBe(640);
+  });
+});
+
+describe('변환 지원 판정', () => {
+  afterEach(() => setTransformSupport('unknown'));
+  const PUBLIC = 'https://p.supabase.co/storage/v1/object/public/covers/a/b_cover.jpg';
+
+  // 핵심: 지원 여부를 모르는 동안 변환 URL 을 쓰면, 지원 안 되는 프로젝트에서는
+  // 커버 한 장마다 "실패 대기 → 원본 재요청" 왕복이 두 번 생긴다.
+  it('모르는 동안에는 원본을 쓴다 — 실패를 기다리는 왕복을 만들지 않는다', () => {
+    setTransformSupport('unknown');
+    const t = thumbnailSource(PUBLIC, 320)!;
+    expect(t.src).toBe(PUBLIC);
+    expect(t.src).not.toContain('render/image');
+  });
+
+  it('지원 안 됨이 확인되면 계속 원본을 쓴다', () => {
+    setTransformSupport('no');
+    expect(thumbnailSource(PUBLIC, 320)!.src).toBe(PUBLIC);
+  });
+
+  it('지원됨이 확인되면 그때부터 리사이즈본을 쓴다', () => {
+    setTransformSupport('yes');
+    expect(thumbnailSource(PUBLIC, 320)!.src).toContain('render/image');
+  });
+
+  // localStorage 가 없는 환경(이 테스트 러너, 사생활 보호 모드 WebView)에서도
+  // 판정 자체는 동작해야 한다 — 저장은 다음 실행을 위한 보너스일 뿐이다.
+  it('저장소가 없어도 판정은 동작한다', () => {
+    expect(() => setTransformSupport('yes')).not.toThrow();
+    expect(transformSupport()).toBe('yes');
+  });
+
+  it('force 는 판정 자체를 위한 탐침용이라 판정과 무관하게 변환 URL 을 만든다', () => {
+    setTransformSupport('unknown');
+    expect(thumbnailSource(PUBLIC, 16, true)!.src).toContain('render/image');
   });
 });

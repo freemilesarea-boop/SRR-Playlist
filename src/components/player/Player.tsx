@@ -1303,6 +1303,15 @@ export default function Player() {
         perfMark('load');
         breadcrumb('load', { track: current.id, activeIdx });
         try { audio.load(); } catch { /* noop */ }
+        // 여기서 바로 play() 를 건다.
+        //
+        // 지금까지는 canplay 이벤트에서만 play() 를 불렀다. 그러면 두 가지를 잃는다:
+        //   • 사용자 제스처 창 — 탭에서 canplay 까지 수 초가 지나면 브라우저는
+        //     더 이상 그 재생을 사용자 행동으로 보지 않는다(NotAllowedError).
+        //   • 버퍼링 직렬화 — 메타데이터를 다 받고 canplay 가 뜬 뒤에야 재생용
+        //     버퍼를 다시 채운다. play() 를 먼저 걸면 둘이 겹친다.
+        // onCanPlay 는 그대로 둔다 — 이미 재생 중이면 거기서 no-op 이다.
+        void attemptPlay(audio, 'immediate');
         // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
         // 시간 선택 이유는 META_TIMEOUT_MS 참고. onLoadedMetadata 에서 해제.
         const trackId = current.id;
@@ -2975,7 +2984,7 @@ export default function Player() {
       {/* dual audio — 둘 다 마운트, src 는 동적으로 */}
       <audio
         ref={setAudioARef}
-        preload="metadata"
+        preload="auto"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onDurationChange={onDurationChange}
@@ -3005,7 +3014,7 @@ export default function Player() {
       />
       <audio
         ref={setAudioBRef}
-        preload="metadata"
+        preload="auto"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
         onDurationChange={onDurationChange}

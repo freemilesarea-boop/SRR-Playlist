@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { gradientStyle } from '@/lib/cover';
 import AbstractCover, { type CoverTone } from './AbstractCover';
-import { thumbnailSource, COVER_WIDTH, scaledWidth } from '@/lib/imageUrl';
+import { thumbnailSource, COVER_WIDTH, scaledWidth, probeTransformSupport } from '@/lib/imageUrl';
 
 interface Props {
   title: string;
@@ -54,6 +54,9 @@ export default function AutoCover({
   useEffect(() => {
     setErrored(false);
     setUseOriginal(false);
+    // 변환 지원 여부를 앱 실행당 한 번 알아본다. 결과가 나오기 전에는 원본을
+    // 쓰므로 이 판정이 커버 표시를 늦추지 않는다.
+    probeTransformSupport(imageUrl);
   }, [imageUrl]);
 
   const hasImage = !!imageUrl && !errored;
