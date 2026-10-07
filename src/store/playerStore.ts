@@ -6,6 +6,7 @@ import {
   type NextCause,
   type PlaylistCycleEvent,
 } from '@/lib/playerCycleCompletion';
+import { breadcrumb } from '@/lib/playbackDiag';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -284,6 +285,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           ? buildSeededShuffleOrder(filtered.length, safeIdx, todayKstSeed())
           : buildShuffleOrder(filtered.length, safeIdx))
       : [];
+    breadcrumb('setQueue', {
+      count: filtered.length, startIdx: safeIdx,
+      playlist: playlist?.id ?? '—', suppressed: get().scheduleSuppressed,
+    });
     set({
       queue: filtered,
       index: safeIdx,

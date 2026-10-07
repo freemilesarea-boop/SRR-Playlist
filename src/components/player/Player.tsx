@@ -48,7 +48,7 @@ import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
 import {
   markTrackFailed, isTrackFailed, clearTrackFailure, pruneFailedTracks, failedTrackCount,
 } from '@/lib/failedTracks';
-import { logPlaybackDiag, isBenignPlayRejection } from '@/lib/playbackDiag';
+import { logPlaybackDiag, isBenignPlayRejection, breadcrumb, safeUrlId } from '@/lib/playbackDiag';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -1266,6 +1266,9 @@ export default function Player() {
           activeIdx,
         });
       }
+      breadcrumb('track-change', {
+        from: lastTrackIdRef.current ?? '—', to: current.id, activeIdx, crossfading,
+      });
       lastTrackIdRef.current = current.id;
       cancelCrossfade();
       setCurrentTime(0);
@@ -1280,11 +1283,18 @@ export default function Player() {
       if (import.meta.env.DEV) {
         console.debug('[Player] src set', { id: current.id, url: current.audio_url, cached: playbackSrc !== current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
       }
+      // 이 호출이 진행 중이던 로드를 취소한다 → 직전 요소에 ABORTED 가 난다.
+      // 어떤 전환이 그것을 유발했는지 보려면 여기가 기록되어야 한다.
+      breadcrumb('src-set', {
+        track: current.id, srcId: safeUrlId(playbackSrc),
+        cached: playbackSrc !== current.audio_url, activeIdx,
+      });
       audio.src = playbackSrc;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
       clearMetaTimer();
       if (playing) {
+        breadcrumb('load', { track: current.id, activeIdx });
         try { audio.load(); } catch { /* noop */ }
         // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
         // 시간 선택 이유는 META_TIMEOUT_MS 참고. onLoadedMetadata 에서 해제.
@@ -2378,6 +2388,10 @@ export default function Player() {
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
   async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    breadcrumb('play-attempt', {
+      label, track: current?.id ?? '—', activeIdx,
+      readyState: audio.readyState, paused: audio.paused,
+    });
     // Phase 2-4 hotfix — 첫 play 이전에 audio.sinkId === desired 보장.
     //   • sinkReady=true 이면 즉시 skip (fast path, per-tag idempotent)
     //   • 실패해도 play 자체는 진행 (기본 출력 fallback)
@@ -2469,6 +2483,8 @@ export default function Player() {
         trackId: current?.id ?? null,
         playlistId: playlist?.id ?? null,
         sourceType: playlistContext?.type ?? null,
+        queueIndex: index,
+        failedTrack: current ? isTrackFailed(current.id) : null,
         audio,
         error: e,
         extra: {
@@ -2693,11 +2709,17 @@ export default function Player() {
     }
     // 게이트 없는 실패 기록. 릴리스 APK 에는 주소창이 없어 ?audioDebug=1 을 켤 수
     // 없는데, 정작 기기에서만 나는 실패가 여기다. 중복은 playbackDiag 가 막는다.
+    breadcrumb('media-error', {
+      track: current?.id ?? '—', code: err?.code ?? '—', codeName, activeIdx,
+    });
     logPlaybackDiag({
       stage: 'media-error',
       trackId: current?.id ?? null,
       playlistId: playlist?.id ?? null,
       sourceType: playlistContext?.type ?? null,
+      queueIndex: index,
+      failedTrack: current ? isTrackFailed(current.id) : null,
+      recovery: isPermanentMediaError(err?.code) ? 'mark-failed' : 'recovery-manager',
       audio: target,
       extra: {
         activeIdx,
@@ -2806,6 +2828,7 @@ export default function Player() {
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = isPermanentMediaError(err?.code);
     if (current && isPermanent) {
+      breadcrumb('mark-failed', { track: current.id, code: err?.code ?? '—', codeName });
       markTrackFailed(current.id);
     }
 

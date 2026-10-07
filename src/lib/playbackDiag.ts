@@ -21,6 +21,12 @@ export interface PlaybackDiagInput {
   audio?: HTMLMediaElement | null;
   /** play() 가 reject 한 경우의 예외. */
   error?: unknown;
+  /** 큐에서 몇 번째 곡이었나. */
+  queueIndex?: number | null;
+  /** 이 트랙이 이미 실패 명단에 있었나. */
+  failedTrack?: boolean | null;
+  /** 이 실패에 대해 무엇을 했나 (retry / skip / stop / none). */
+  recovery?: string | null;
   /** 추가 맥락 (activeIdx, crossfading 등). */
   extra?: Record<string, unknown>;
 }
@@ -50,6 +56,78 @@ export function isBenignPlayRejection(name: string | null | undefined): boolean 
   return name === 'AbortError' || name === 'NotAllowedError';
 }
 
+/* ------------------------------------------------------------------ *
+ * 안전한 URL 식별
+ * ------------------------------------------------------------------ */
+
+/**
+ * 로그에 남겨도 되는 형태의 URL 식별자.
+ *
+ * 전체 URL 은 서명·토큰이 붙을 수 있고 길어서 로그를 못 읽게 만든다.
+ * 같은 곡인지 구분할 수 있을 만큼만 남긴다 — 종류 + 파일명 꼬리.
+ */
+export function safeUrlId(url: string | null | undefined): string {
+  if (!url) return '(없음)';
+  if (url.startsWith('blob:')) return `blob:…${url.slice(-8)}`;
+  if (url.startsWith('data:')) return 'data:…';
+  try {
+    const u = new URL(url);                       // 쿼리(서명)는 버린다
+    const base = u.pathname.split('/').pop() ?? '';
+    return `net:…${base.slice(-20)}`;
+  } catch {
+    return `net:…${url.slice(-20)}`;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 브레드크럼 — 실패 직전에 무슨 일이 있었나
+ * ------------------------------------------------------------------ */
+
+/**
+ * 실패 한 줄만으로는 "왜" 를 못 본다. ABORTED 가 났을 때 그것을 abort 시킨
+ * 동작이 무엇이었는지는 직전 몇 개의 호출을 봐야 안다.
+ *
+ * 그래서 재생 경로의 주요 전이를 가볍게 쌓아두고(콘솔 출력 없음),
+ * 실패가 났을 때만 한꺼번에 뱉는다. 평소에는 배열 push 한 번이 전부다.
+ */
+export interface Crumb {
+  t: number;
+  type: string;
+  data?: Record<string, unknown>;
+}
+
+const CRUMB_MAX = 40;
+const crumbs: Crumb[] = [];
+
+export function breadcrumb(type: string, data?: Record<string, unknown>): void {
+  crumbs.push({
+    t: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+    type,
+    data,
+  });
+  if (crumbs.length > CRUMB_MAX) crumbs.shift();
+}
+
+export function readCrumbs(): readonly Crumb[] {
+  return crumbs;
+}
+
+export function resetCrumbs(): void {
+  crumbs.length = 0;
+}
+
+/** 실패 시점 기준 상대시각(ms)으로 되감아 보여준다. */
+export function formatTimeline(now?: number): string {
+  if (crumbs.length === 0) return '[PLAYBACK_TIMELINE] (기록 없음)';
+  const end = now ?? (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const lines = crumbs.map((c) => {
+    const ago = Math.round(end - c.t);
+    const kv = Object.entries(c.data ?? {}).map(([k, v]) => `${k}=${String(v)}`).join(' ');
+    return `  -${String(ago).padStart(6)}ms ${c.type}${kv ? ` · ${kv}` : ''}`;
+  });
+  return ['[PLAYBACK_TIMELINE] (실패 시점 기준 역순 아님 — 위가 과거)', ...lines].join('\n');
+}
+
 const seen = new Set<string>();
 /** 세션당 기록 상한 — 장애가 길어져도 로그가 기기를 먹지 않도록. */
 const MAX_ENTRIES = 200;
@@ -66,16 +144,18 @@ export function formatPlaybackDiag(i: PlaybackDiagInput): string {
   const ex = i.error as { name?: string; message?: string } | undefined;
 
   const src = a ? (a.currentSrc || a.src || '') : '';
-  // blob: URL 은 길고 의미가 없다 — 종류만 남긴다.
   const srcKind = src.startsWith('blob:') ? 'blob(캐시)' : src ? 'network' : '(없음)';
 
   return [
     '[PLAYBACK_DIAG]',
+    `ts=${new Date().toISOString()}`,
     `stage=${i.stage}`,
     `track=${i.trackId ?? '—'}`,
     `playlist=${i.playlistId ?? '—'}`,
     `source=${i.sourceType ?? '—'}`,
+    `queueIndex=${i.queueIndex ?? '—'}`,
     `srcKind=${srcKind}`,
+    `srcId=${safeUrlId(src)}`,
     `mediaError=${errName ?? '—'}${mediaErr?.message ? `(${mediaErr.message})` : ''}`,
     `ex=${ex?.name ?? '—'}${ex?.message ? `(${ex.message})` : ''}`,
     `readyState=${a?.readyState ?? '—'}`,
@@ -85,8 +165,9 @@ export function formatPlaybackDiag(i: PlaybackDiagInput): string {
     `seeking=${a?.seeking ?? '—'}`,
     `duration=${a && Number.isFinite(a.duration) ? a.duration.toFixed(1) : '—'}`,
     `currentTime=${a ? a.currentTime.toFixed(1) : '—'}`,
+    `failedTrack=${i.failedTrack ?? '—'}`,
+    `recovery=${i.recovery ?? '—'}`,
     ...Object.entries(i.extra ?? {}).map(([k, v]) => `${k}=${String(v)}`),
-    `src=${src.slice(0, 160)}`,
   ].join(' · ');
 }
 
@@ -108,6 +189,8 @@ export function logPlaybackDiag(i: PlaybackDiagInput): boolean {
   seen.add(key);
   try {
     console.warn(formatPlaybackDiag(i));
+    // 실패 한 줄만으로는 "무엇이 이것을 abort 시켰나" 를 못 본다.
+    console.warn(formatTimeline());
   } catch { /* 로그가 재생을 막아서는 안 된다 */ }
   return true;
 }

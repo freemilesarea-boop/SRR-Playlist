@@ -15,6 +15,11 @@ import {
   formatPlaybackDiag,
   logPlaybackDiag,
   resetPlaybackDiagDedupe,
+  safeUrlId,
+  breadcrumb,
+  readCrumbs,
+  resetCrumbs,
+  formatTimeline,
 } from './playbackDiag';
 import {
   markTrackFailed, isTrackFailed, clearTrackFailure,
@@ -125,7 +130,8 @@ describe('PLAYBACK_DIAG 한 줄', () => {
     const i = { stage: 'media-error', trackId: 't', audio: audio() };
     expect(logPlaybackDiag(i)).toBe(true);
     expect(logPlaybackDiag(i)).toBe(false);
-    expect(console.warn).toHaveBeenCalledTimes(1);
+    // 한 번의 실패당 두 줄(진단 + 타임라인). 두 번째 호출은 아무것도 찍지 않는다.
+    expect(console.warn).toHaveBeenCalledTimes(2);
   });
 
   it('다른 트랙·다른 단계는 따로 찍는다', () => {
@@ -157,5 +163,86 @@ describe('Player 배선', () => {
   it('media-error 와 play-reject 양쪽에서 진단을 남긴다', () => {
     expect(src).toContain("stage: 'media-error'");
     expect(src).toContain("stage: 'play-reject'");
+  });
+});
+
+describe('안전한 URL 식별자', () => {
+  it('서명/쿼리를 버리고 파일명 꼬리만 남긴다', () => {
+    const id = safeUrlId('https://x.supabase.co/storage/v1/object/public/audio/a/b7c9d1e2f3.mp3?token=SECRET');
+    expect(id).toContain('net:');
+    expect(id).not.toContain('SECRET');
+    expect(id).not.toContain('token');
+  });
+
+  it('blob 은 꼬리만 — 캐시본인지 바로 보인다', () => {
+    const id = safeUrlId('blob:http://localhost/9f8e7d6c-1234');
+    expect(id.startsWith('blob:…')).toBe(true);
+    expect(id.length).toBeLessThan(20);      // 전체 URL 을 남기지 않는다
+    expect(id).toContain('1234');            // 같은 blob 인지 구분은 된다
+  });
+
+  it('빈 값도 안전하다', () => {
+    expect(safeUrlId(null)).toBe('(없음)');
+    expect(safeUrlId('완전히 이상한 값')).toContain('net:');
+  });
+});
+
+describe('타임라인', () => {
+  beforeEach(() => resetCrumbs());
+
+  it('전이를 순서대로 쌓는다', () => {
+    breadcrumb('setQueue', { count: 5 });
+    breadcrumb('track-change', { to: 't1' });
+    breadcrumb('src-set', { srcId: 'blob:…abc' });
+    expect(readCrumbs().map((c) => c.type)).toEqual(['setQueue', 'track-change', 'src-set']);
+  });
+
+  it('상한을 넘으면 오래된 것부터 버린다', () => {
+    for (let i = 0; i < 60; i++) breadcrumb(`e${i}`);
+    const types = readCrumbs().map((c) => c.type);
+    expect(types.length).toBeLessThanOrEqual(40);
+    expect(types).not.toContain('e0');
+    expect(types).toContain('e59');
+  });
+
+  it('출력에 전이와 경과시간이 보인다', () => {
+    breadcrumb('src-set', { srcId: 'net:…x.mp3' });
+    const out = formatTimeline();
+    expect(out).toContain('PLAYBACK_TIMELINE');
+    expect(out).toContain('src-set');
+    expect(out).toContain('srcId=net:…x.mp3');
+    expect(out).toMatch(/-\s*\d+ms/);
+  });
+
+  it('기록이 없어도 던지지 않는다', () => {
+    expect(formatTimeline()).toContain('기록 없음');
+  });
+});
+
+describe('실패 로그에 요구된 필드가 모두 있다', () => {
+  beforeEach(() => {
+    resetPlaybackDiagDedupe();
+    resetCrumbs();
+  });
+
+  it('timestamp · queueIndex · failedTrack · recovery 가 들어간다', () => {
+    const line = formatPlaybackDiag({
+      stage: 'media-error', trackId: 't', playlistId: 'p', sourceType: 'home',
+      queueIndex: 3, failedTrack: false, recovery: 'mark-failed',
+      audio: null,
+    });
+    expect(line).toMatch(/ts=\d{4}-\d{2}-\d{2}T/);
+    expect(line).toContain('queueIndex=3');
+    expect(line).toContain('failedTrack=false');
+    expect(line).toContain('recovery=mark-failed');
+  });
+
+  it('원본 URL 전체를 남기지 않는다', () => {
+    const audio = { currentSrc: 'https://x/y.mp3?token=SECRET', src: '', readyState: 0,
+      networkState: 3, paused: true, ended: false, seeking: false, duration: NaN,
+      currentTime: 0, error: null } as unknown as HTMLMediaElement;
+    const line = formatPlaybackDiag({ stage: 'x', audio });
+    expect(line).not.toContain('SECRET');
+    expect(line).toContain('srcId=');
   });
 });
