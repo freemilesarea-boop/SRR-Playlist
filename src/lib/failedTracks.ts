@@ -60,11 +60,30 @@ const skipCounts = new Map<string, number>(Object.entries(loadJson<Record<string
 const blocked = new Set<string>(loadJson<string[]>(BLOCKED_KEY, []));
 
 /**
+ * 같은 트랙의 실패를 한 번으로 묶는 간격.
+ *
+ * 크로미움은 네트워크가 중간에 끊겨도 SRC_NOT_SUPPORTED(포맷 오류)로 보고한다.
+ * 실제로 ffprobe 로 확인한 실패 음원이 192kbps 44.1kHz 정상 mp3 였다 — 파일이
+ * 아니라 전송이 실패한 것이다. 그런 순간적 실패가 한 세션에 여러 번 날 수 있는데
+ * 그걸 그대로 세면 **멀쩡한 음원이 열 번 만에 앱에서 사라진다.**
+ *
+ * 그래서 이 간격 안의 반복은 한 번으로 친다. 열 번이 되려면 서로 다른 때에
+ * 열 번 실패해야 한다 — 그 정도면 전송 사정이 아니라 음원 쪽 문제로 볼 만하다.
+ */
+export const SKIP_DEDUPE_WINDOW_MS = 30 * 60_000;
+
+const lastSkipAt = new Map<string, number>();
+
+/**
  * 재생 실패로 건너뛴 사실을 기록한다. 임계치에 닿으면 영구 제외한다.
  * @returns 이번 호출로 제외 처리됐으면 true
  */
-export function recordFailureSkip(trackId: string): boolean {
+export function recordFailureSkip(trackId: string, now: number = Date.now()): boolean {
   if (blocked.has(trackId)) return false;
+  // 같은 실패의 연속 보고는 한 번으로 — 순간적인 전송 실패가 누적되지 않게.
+  const prev = lastSkipAt.get(trackId);
+  if (prev !== undefined && now - prev < SKIP_DEDUPE_WINDOW_MS) return false;
+  lastSkipAt.set(trackId, now);
   const n = (skipCounts.get(trackId) ?? 0) + 1;
   skipCounts.set(trackId, n);
   saveJson(SKIP_COUNT_KEY, Object.fromEntries(skipCounts));
@@ -93,6 +112,7 @@ export function blockedTrackIds(): readonly string[] {
 export function clearBlockedTracks(): void {
   blocked.clear();
   skipCounts.clear();
+  lastSkipAt.clear();
   saveJson(BLOCKED_KEY, []);
   saveJson(SKIP_COUNT_KEY, {});
 }

@@ -2186,10 +2186,13 @@ export default function Player() {
       if (m === 'mismatch') return; // 다른 트랙 audio 의 timeupdate 무시
       if (m === 'unknown' && target !== activeRef()) return;
     }
-    // 가드를 통과한 뒤에 찍는다 — 다른 트랙 엘리먼트의 timeupdate 로 사건이
-    // 닫히면 "첫 소리까지 걸린 시간" 이 엉뚱하게 짧아진다.
-    perfMark('firstProgress');
     const t = target.currentTime;
+    // 실제로 진행했을 때만 찍는다.
+    //
+    // load() 는 currentTime 을 0 으로 되돌리면서 timeupdate 를 한 번 발화한다.
+    // 그걸 "첫 소리" 로 치면 사건이 거기서 닫혀 버려서, 뒤에 오는 canplay/playing 이
+    // 측정에서 통째로 빠진다(도달못함=canplay,playCall,playing 으로 보였다).
+    if (t > 0) perfMark('firstProgress');
 
     // Phase 3-1 — stuck detection.
     // paused=false 인데 currentTime 이 2초 이상 진행 안 하면 recovery play 1회.

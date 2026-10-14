@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   recordFailureSkip, isTrackBlocked, failureSkipCount, blockedTrackIds,
-  clearBlockedTracks, resetFailedTracks, BLOCK_AFTER_SKIPS,
+  clearBlockedTracks, resetFailedTracks, BLOCK_AFTER_SKIPS, SKIP_DEDUPE_WINDOW_MS,
 } from './failedTracks';
 import { getTrackPlaybackState, filterPlayableTracks } from './trackPlayability';
 import { isPlayableTrack } from './audio';
@@ -26,37 +26,57 @@ const track = (id: string) =>
 describe('반복 실패 누적', () => {
   beforeEach(() => resetFailedTracks());
 
+  // 서로 다른 때에 실패해야 한 번씩 센다 (아래 '중복 억제' 참고).
+  const far = (i: number) => i * SKIP_DEDUPE_WINDOW_MS;
+
   it('임계치 전에는 제외하지 않는다', () => {
     for (let i = 1; i < BLOCK_AFTER_SKIPS; i++) {
-      expect(recordFailureSkip('t1')).toBe(false);
+      expect(recordFailureSkip('t1', far(i))).toBe(false);
       expect(failureSkipCount('t1')).toBe(i);
     }
     expect(isTrackBlocked('t1')).toBe(false);
   });
 
   it(`${BLOCK_AFTER_SKIPS}번째에 앱에서 내린다`, () => {
-    for (let i = 1; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1');
-    expect(recordFailureSkip('t1')).toBe(true);   // 이번 호출이 제외 처리
+    for (let i = 1; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1', far(i));
+    expect(recordFailureSkip('t1', far(BLOCK_AFTER_SKIPS))).toBe(true);
     expect(isTrackBlocked('t1')).toBe(true);
     expect(blockedTrackIds()).toContain('t1');
   });
 
   it('이미 제외된 음원은 다시 세지 않는다', () => {
-    for (let i = 0; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1');
-    expect(recordFailureSkip('t1')).toBe(false);
+    for (let i = 1; i <= BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1', far(i));
+    expect(recordFailureSkip('t1', far(BLOCK_AFTER_SKIPS + 1))).toBe(false);
   });
 
   it('곡마다 따로 센다', () => {
-    for (let i = 0; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('bad');
-    recordFailureSkip('ok');
+    for (let i = 1; i <= BLOCK_AFTER_SKIPS; i++) recordFailureSkip('bad', far(i));
+    recordFailureSkip('ok', far(1));
     expect(isTrackBlocked('bad')).toBe(true);
     expect(isTrackBlocked('ok')).toBe(false);
   });
 
   it('음원이 고쳐지면 되돌릴 수 있다', () => {
-    for (let i = 0; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1');
+    for (let i = 1; i <= BLOCK_AFTER_SKIPS; i++) recordFailureSkip('t1', far(i));
     clearBlockedTracks();
     expect(isTrackBlocked('t1')).toBe(false);
+  });
+
+  // 이게 없으면 멀쩡한 음원이 전송 실패 열 번에 앱에서 사라진다.
+  // 실제로 실패한 음원을 ffprobe 로 보니 192kbps 44.1kHz 정상 mp3 였다.
+  it('짧은 간격의 반복 실패는 한 번으로 센다', () => {
+    expect(recordFailureSkip('t1', 1_000)).toBe(false);
+    for (let i = 0; i < 50; i++) recordFailureSkip('t1', 1_000 + i * 10);
+    expect(failureSkipCount('t1')).toBe(1);
+    expect(isTrackBlocked('t1')).toBe(false);
+  });
+
+  it('간격이 지나면 다시 센다', () => {
+    recordFailureSkip('t1', 0);
+    recordFailureSkip('t1', SKIP_DEDUPE_WINDOW_MS - 1);
+    expect(failureSkipCount('t1')).toBe(1);
+    recordFailureSkip('t1', SKIP_DEDUPE_WINDOW_MS);
+    expect(failureSkipCount('t1')).toBe(2);
   });
 
   it('빈 값에 대해 안전하다', () => {
@@ -68,7 +88,7 @@ describe('반복 실패 누적', () => {
 describe('제외된 음원은 어디에도 안 나온다', () => {
   beforeEach(() => {
     resetFailedTracks();
-    for (let i = 0; i < BLOCK_AFTER_SKIPS; i++) recordFailureSkip('bad');
+    for (let i = 1; i <= BLOCK_AFTER_SKIPS; i++) recordFailureSkip('bad', i * SKIP_DEDUPE_WINDOW_MS);
   });
 
   it('목록에서 재생 불가로 표시된다', () => {
