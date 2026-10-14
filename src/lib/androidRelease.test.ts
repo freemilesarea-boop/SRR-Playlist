@@ -181,7 +181,11 @@ describe('플레이 SDK 요건', () => {
     expect(major * 100 + minor).toBeGreaterThanOrEqual(813);
   });
 
-  it('minSdk 는 그대로 23 이다 (올리면 구형 매장 태블릿이 떨어져 나간다)', () => {
-    expect(num('minSdkVersion')).toBe(23);
+  // Play 자동 보호가 minSdk 24 를 요구한다. 23 이면 업로드가 막힌다
+  // (화면에서는 선택 안내처럼 빨간 줄로만 보이는데 실제로 진행이 안 됐다).
+  // Android 6.0 기기를 잃지만 2026년 기준 점유율이 0.x% 라 비용보다 이득이 크다.
+  // 한 번 올리면 내리는 것은 사실상 불가능하다.
+  it('minSdk 가 24 이상이다 (Play 자동 보호 요건)', () => {
+    expect(num('minSdkVersion')).toBeGreaterThanOrEqual(24);
   });
 });

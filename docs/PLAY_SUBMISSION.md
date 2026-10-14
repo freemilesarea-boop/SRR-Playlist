@@ -10,7 +10,7 @@
 | 항목 | 상태 |
 | --- | --- |
 | `targetSdk` | ✅ 36 — 2026-08-31 부터의 신규 앱 요건 (미달이면 업로드 자체가 거부된다) |
-| `minSdk` | ✅ 23 (Android 6.0) |
+| `minSdk` | ✅ 24 (Android 7.0) — Play 자동 보호 요건. 23 이면 업로드가 막힌다 |
 | 포그라운드 서비스 | ✅ `mediaPlayback` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` 선언됨 |
 | 권한 | ✅ INTERNET · WAKE_LOCK · POST_NOTIFICATIONS · FOREGROUND_SERVICE 4개뿐 |
 | 회원 탈퇴 | ✅ 인앱 구현 (`ProfilePage`) — Play 필수 요건 |
@@ -80,18 +80,19 @@ minor/patch 가 99 를 넘으면 versionCode 가 역전되므로 Gradle 이 빌�
 
 | 항목 | 상태 |
 | --- | --- |
-| `package.json` version | **1.0.2** → versionCode 10002 |
+| `package.json` version | **1.0.3** → versionCode 10003 |
 | targetSdk | 36 |
 | 서명 키 | `android/deudda-release.jks` (백업 필수) |
 | 결제 진입점 | 앱에서 숨김 (`purchaseGate.ts`) |
 | 계정 삭제 URL | `https://deudda.com/account-deletion` |
 | 진단 로그 | 실패(`[PLAYBACK_DIAG]`)만 콘솔 출력. 지연 측정은 플래그 뒤 |
 
-**이미 태워진 versionCode**: 10000(targetSdk 미달로 거부), 10001(로컬 테스트).
+**이미 태워진 versionCode**: 10000(targetSdk 미달로 거부), 10001(로컬 테스트),
+10002(minSdk 23 으로 업로드 거부).
 업로드가 거부되면 고친 뒤 **반드시 version 을 올리고 다시 빌드한다.**
 
 ```bash
-npm run aab          # dist-apk/deudda-1.0.2-release.aab + 바탕화면 복사
+npm run aab          # dist-apk/deudda-1.0.3-release.aab + 바탕화면 복사
 ```
 
 ---
@@ -109,7 +110,7 @@ npm run aab          # dist-apk/deudda-1.0.2-release.aab + 바탕화면 복사
 | `compileSdkVersion` · `targetSdkVersion` | 36 | 플레이 요건 |
 | AGP (`android/build.gradle`) | 8.11.1 | 8.10 이하는 compileSdk 36 을 모른다 |
 | Gradle 래퍼 | 8.13 | AGP 8.11 이 요구하는 하한 |
-| `minSdkVersion` | **23 그대로** | 올리면 구형 매장 태블릿이 떨어져 나간다 |
+| `minSdkVersion` | **24** | Play 자동 보호가 요구한다(23 이면 업로드 거부) |
 
 `androidRelease.test.ts` 의 '플레이 SDK 요건' 이 네 값을 전부 잡는다.
 
