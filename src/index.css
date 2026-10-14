@@ -11,10 +11,23 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* 루트도 같이 막는다 — body 에만 걸면 일부 안드로이드 WebView 가 문서 자체를 민다. */
+  html {
+    overscroll-behavior-x: none;
+    overflow-x: hidden;
+  }
+
   body {
     background-color: rgb(var(--color-bg));
     color: rgb(var(--color-ink));
+    /* 세로는 당겨서 새로고침 되지 않게, 가로는 화면이 통째로 밀리지 않게.
+     *
+     * 가로 레일(플레이리스트 캐로셀)이 화면 밖으로 넘치는 구조라, 손가락을
+     * 옆으로 쓸면 레일 대신 페이지가 따라 움직여 화면이 좌우로 어긋났다.
+     * 넘치는 건 레일 자신의 overflow-x 로만 스크롤되어야 한다. */
     overscroll-behavior-y: none;
+    overscroll-behavior-x: none;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv09', 'cv10', 'cv11', 'ss01';
