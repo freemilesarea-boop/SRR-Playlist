@@ -6,7 +6,10 @@
  * 남기는지를 잡는다 — 후자가 이번 조사의 핵심이다.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { perfStart, perfMark, perfFlush, readPerfSession, resetPerf, meta } from './perfPlayback';
+import {
+  perfStart, perfMark, perfFlush, readPerfSession, resetPerf, meta,
+  readPerfLog, clearPerfLog, resolvePerfLogEnabled,
+} from './perfPlayback';
 import { thumbnailSource, COVER_WIDTH, scaledWidth, setTransformSupport, transformSupport } from './imageUrl';
 
 describe('구간 측정', () => {
@@ -35,12 +38,13 @@ describe('구간 측정', () => {
     expect(readPerfSession()!.marks.find(([m]) => m === 'srcSet')![1]).toBe(first);
   });
 
-  it('첫 진행에 도달하면 자동으로 한 줄 내보내고 닫는다', () => {
+  it('첫 진행에 도달하면 자동으로 한 줄 기록하고 닫는다', () => {
+    clearPerfLog();
     perfStart('playlist:식당');
     perfMark('setQueue'); perfMark('srcSet'); perfMark('canplay');
     perfMark('playCall'); perfMark('playing'); perfMark('firstProgress');
-    expect(console.warn).toHaveBeenCalledTimes(1);
-    const line = (console.warn as unknown as { mock: { calls: string[][] } }).mock.calls[0][0];
+    expect(readPerfLog()).toHaveLength(1);
+    const line = readPerfLog()[0];
     expect(line).toContain('[PERF_PLAYBACK]');
     expect(line).toContain('what=playlist:식당');
     expect(line).toContain('tap→실제재생=');
@@ -49,10 +53,12 @@ describe('구간 측정', () => {
 
   // 소리가 안 난 채 끝난 사건 — 이게 안 찍히면 조사할 게 없다.
   it('도달하지 못한 단계를 이름으로 남긴다', () => {
+    clearPerfLog();
     perfStart('playlist:편집샵');
     perfMark('setQueue'); perfMark('srcSet');
+    clearPerfLog();
     perfFlush();
-    const line = (console.warn as unknown as { mock: { calls: string[][] } }).mock.calls[0][0];
+    const line = readPerfLog()[0];
     expect(line).toContain('도달못함=');
     expect(line).toContain('canplay');
     expect(line).toContain('playing');
@@ -60,16 +66,34 @@ describe('구간 측정', () => {
     expect(line).toContain('tap→실제재생=—');
   });
 
-  it('닫힌 사건은 두 번 찍지 않는다', () => {
+  it('닫힌 사건은 두 번 기록하지 않는다', () => {
+    clearPerfLog();
     perfStart('x'); perfFlush(); perfFlush();
-    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(readPerfLog()).toHaveLength(1);
   });
 
   it('캐시본 여부 같은 맥락을 같이 남긴다', () => {
+    clearPerfLog();
     perfStart('x');
     meta({ 캐시본: true });
     perfFlush();
-    expect((console.warn as unknown as { mock: { calls: string[][] } }).mock.calls[0][0]).toContain('캐시본=true');
+    expect(readPerfLog()[0]).toContain('캐시본=true');
+  });
+
+  // 출시 빌드의 logcat 을 지연 측정으로 채우지 않는다. 실패 기록은 별개로 항상 나간다.
+  it('콘솔 출력은 기본 OFF 다 — 기록은 그래도 남는다', () => {
+    clearPerfLog();
+    perfStart('x'); perfFlush();
+    expect(console.warn).not.toHaveBeenCalled();
+    expect(readPerfLog()).toHaveLength(1);
+  });
+
+  it('플래그를 켜면 콘솔로도 나간다', () => {
+    expect(resolvePerfLogEnabled()).toBe(false);
+    expect(resolvePerfLogEnabled({ search: '?perfDiag=1' })).toBe(true);
+    expect(resolvePerfLogEnabled({ storage: { getItem: () => '1' } })).toBe(true);
+    expect(resolvePerfLogEnabled({ buildFlag: '1' })).toBe(true);
+    expect(resolvePerfLogEnabled({ audioDebug: true })).toBe(true);
   });
 });
 

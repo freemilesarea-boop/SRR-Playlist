@@ -76,6 +76,26 @@ minor/patch 가 99 를 넘으면 versionCode 가 역전되므로 Gradle 이 빌�
 > 그러니 업로드가 거부되면 고친 뒤 **반드시 `package.json` 의 version 을
 > 올리고 다시 빌드한다** — 같은 파일을 다시 올리는 것으로는 안 된다.
 
+## 2-2. 업로드 전 점검 (1.0.2 기준)
+
+| 항목 | 상태 |
+| --- | --- |
+| `package.json` version | **1.0.2** → versionCode 10002 |
+| targetSdk | 36 |
+| 서명 키 | `android/deudda-release.jks` (백업 필수) |
+| 결제 진입점 | 앱에서 숨김 (`purchaseGate.ts`) |
+| 계정 삭제 URL | `https://deudda.com/account-deletion` |
+| 진단 로그 | 실패(`[PLAYBACK_DIAG]`)만 콘솔 출력. 지연 측정은 플래그 뒤 |
+
+**이미 태워진 versionCode**: 10000(targetSdk 미달로 거부), 10001(로컬 테스트).
+업로드가 거부되면 고친 뒤 **반드시 version 을 올리고 다시 빌드한다.**
+
+```bash
+npm run aab          # dist-apk/deudda-1.0.2-release.aab + 바탕화면 복사
+```
+
+---
+
 ## 2-1. targetSdk
 
 플레이는 **매년 8월 31일에 하한을 한 단계 올린다.** 2026-08-31 부터 신규 앱과

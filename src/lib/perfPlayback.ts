@@ -6,7 +6,56 @@
  * 나기 시작하면(첫 timeupdate) 한 줄로 내보낸다.
  *
  * 재생 경로는 건드리지 않는다. mark() 는 Map 에 숫자 하나를 넣는 게 전부다.
+ *
+ * 콘솔 출력은 **기본 OFF** 다. 지연 측정은 쫓을 때만 필요한데, 플레이리스트를
+ * 누를 때마다 한 줄씩 찍으면 출시 빌드의 logcat 이 지저분해진다.
+ * 다만 **기록은 항상 남긴다** — 앱 안의 진단 화면(더보기 → 사업자 정보 7회 탭)에서
+ * 언제든 꺼내볼 수 있어야 재빌드 없이 현장 문제를 본다.
+ *
+ * 콘솔로도 보려면 (아무거나):
+ *   • URL `?perfDiag=1`
+ *   • localStorage `deudda.perfDiag` = `'1'`
+ *   • 빌드 시 `VITE_PERF_DIAG=1`
+ *   • `?audioDebug=1` 세션이면 자동으로 켜진다
+ *
+ * 실패 기록([PLAYBACK_DIAG])은 이 게이트와 무관하게 항상 콘솔로 나간다 —
+ * 실패는 드물고, 그게 보여야 할 유일한 것이다.
  */
+import { isAudioDebugEnabled } from './audioDebug';
+
+export const PERF_LOG_STORAGE_KEY = 'deudda.perfDiag';
+export const PERF_LOG_QUERY_KEY = 'perfDiag';
+
+/** 순수 판정 — window 없이 테스트에서 그대로 부를 수 있게 분리. */
+export function resolvePerfLogEnabled(input: {
+  search?: string;
+  storage?: Pick<Storage, 'getItem'> | null;
+  buildFlag?: string | undefined;
+  audioDebug?: boolean;
+} = {}): boolean {
+  const truthy = (v: string | null | undefined) => v === '1' || v === 'true';
+  if (input.audioDebug) return true;
+  if (truthy(input.buildFlag)) return true;
+  try {
+    if (truthy(new URLSearchParams(input.search ?? '').get(PERF_LOG_QUERY_KEY))) return true;
+  } catch { /* 이상한 search 문자열 */ }
+  try {
+    if (truthy(input.storage?.getItem(PERF_LOG_STORAGE_KEY))) return true;
+  } catch { /* 저장소가 막힌 WebView */ }
+  return false;
+}
+
+function isPerfLogEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  let storage: Pick<Storage, 'getItem'> | null;
+  try { storage = window.localStorage; } catch { storage = null; }
+  return resolvePerfLogEnabled({
+    search: window.location?.search ?? '',
+    storage,
+    buildFlag: import.meta.env?.VITE_PERF_DIAG as string | undefined,
+    audioDebug: isAudioDebugEnabled(),
+  });
+}
 
 export type PerfMark =
   | 'tap'            // T0  사용자가 플레이리스트를 눌렀다
@@ -106,8 +155,8 @@ export function perfFlush(): void {
   s.done = true;
   try {
     const line = formatPerf(s);
-    keepPerfLine(line);   // 앱 안의 진단 화면에서도 보이도록
-    console.warn(line);
+    keepPerfLine(line);                       // 진단 화면에는 항상 쌓는다
+    if (isPerfLogEnabled()) console.warn(line); // 콘솔은 켠 세션만
   } catch { /* 로그가 재생을 막지 않는다 */ }
   extras.clear();
 }
