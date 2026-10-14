@@ -47,6 +47,7 @@ import { publishPlayerDiagState } from '@/lib/volumeTrace';
 import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
 import {
   markTrackFailed, isTrackFailed, clearTrackFailure, pruneFailedTracks, failedTrackCount,
+  recordFailureSkip, failureSkipCount, BLOCK_AFTER_SKIPS,
 } from '@/lib/failedTracks';
 import { logPlaybackDiag, isBenignPlayRejection, breadcrumb, safeUrlId } from '@/lib/playbackDiag';
 import { perfMark, meta as perfMeta, perfFlush } from '@/lib/perfPlayback';
@@ -1235,8 +1236,19 @@ export default function Player() {
     // 자동으로 다음 곡으로 넘기지 않고 현재 곡에서 정지(에러 표시). 재생 실패는 "곡 종료"가 아니다.
     // (플레이리스트 전체가 자동 스킵되며 토스트가 쌓이던 문제 차단)
     if (playing && isTrackFailed(current.id)) {
-      setErrored(true);
-      pause();
+      // 이 기기에서 안 열리는 곡이다. 여기서 멈추면 그 곡이 들어간 플레이리스트가
+      // 통째로 재생 불가로 보인다 — 805곡짜리 목록이 한 곡 때문에 죽었다.
+      // 멈추는 대신 다음 곡으로 넘긴다.
+      const failedId = current.id;
+      if (recordFailureSkip(failedId)) {
+        console.warn('[audio] 반복 실패로 앱에서 제외', {
+          id: failedId, title: current.title, skips: BLOCK_AFTER_SKIPS,
+        });
+      }
+      breadcrumb('skip-failed-track', {
+        track: failedId, skips: failureSkipCount(failedId),
+      });
+      next({ cause: 'skip_error' });
       return;
     }
 
@@ -2853,6 +2865,12 @@ export default function Player() {
     if (current && isPermanent) {
       breadcrumb('mark-failed', { track: current.id, code: err?.code ?? '—', codeName });
       markTrackFailed(current.id);
+      // 반복 실패 누적 — 열 번 건너뛰어진 음원은 앱에서 내린다(failedTracks.ts).
+      if (recordFailureSkip(current.id)) {
+        console.warn('[audio] 반복 실패로 앱에서 제외', {
+          id: current.id, title: current.title, skips: BLOCK_AFTER_SKIPS,
+        });
+      }
     }
 
     // ── BRAND-PLAYER-UNATTENDED-RECOVERY-1 ────────────────────────────────

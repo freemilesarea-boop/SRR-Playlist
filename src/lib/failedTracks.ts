@@ -23,6 +23,80 @@ export const FAILED_TRACK_MAX = 300;
 
 const failedAt = new Map<string, number>();
 
+/* ------------------------------------------------------------------ *
+ * 영구 제외 — 반복해서 실패하는 음원은 앱에서 내린다
+ * ------------------------------------------------------------------ */
+
+/**
+ * 이만큼 건너뛰어진 음원은 앱에서 빼버린다.
+ *
+ * 한 번 실패는 네트워크 사정일 수 있지만, 열 번 건너뛰어졌다면 그 기기에서
+ * 재생되지 않는 파일이다. 계속 큐에 넣어두면 매번 로딩을 기다렸다가
+ * 건너뛰는 비용만 치른다.
+ *
+ * 서버 데이터는 건드리지 않는다 — 이 기기에서만 빼는 것이고, 원인(파일)이
+ * 고쳐지면 아래 clearBlockedTracks() 로 되돌릴 수 있다.
+ */
+export const BLOCK_AFTER_SKIPS = 10;
+
+const SKIP_COUNT_KEY = 'deudda.trackSkipCounts';
+const BLOCKED_KEY = 'deudda.blockedTracks';
+
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;   // 저장소가 막혔거나 값이 깨졌다
+  }
+}
+
+function saveJson(key: string, value: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 무시 */ }
+}
+
+// 앱을 껐다 켜도 누적이 이어져야 한다 — 그래야 열 번이 의미를 갖는다.
+const skipCounts = new Map<string, number>(Object.entries(loadJson<Record<string, number>>(SKIP_COUNT_KEY, {})));
+const blocked = new Set<string>(loadJson<string[]>(BLOCKED_KEY, []));
+
+/**
+ * 재생 실패로 건너뛴 사실을 기록한다. 임계치에 닿으면 영구 제외한다.
+ * @returns 이번 호출로 제외 처리됐으면 true
+ */
+export function recordFailureSkip(trackId: string): boolean {
+  if (blocked.has(trackId)) return false;
+  const n = (skipCounts.get(trackId) ?? 0) + 1;
+  skipCounts.set(trackId, n);
+  saveJson(SKIP_COUNT_KEY, Object.fromEntries(skipCounts));
+  if (n < BLOCK_AFTER_SKIPS) return false;
+  blocked.add(trackId);
+  skipCounts.delete(trackId);
+  saveJson(SKIP_COUNT_KEY, Object.fromEntries(skipCounts));
+  saveJson(BLOCKED_KEY, [...blocked]);
+  return true;
+}
+
+/** 앱에서 내린 음원인가. 큐·목록 어디에서도 빠진다. */
+export function isTrackBlocked(trackId: string | null | undefined): boolean {
+  return trackId != null && blocked.has(trackId);
+}
+
+export function failureSkipCount(trackId: string): number {
+  return skipCounts.get(trackId) ?? 0;
+}
+
+export function blockedTrackIds(): readonly string[] {
+  return [...blocked];
+}
+
+/** 음원이 고쳐졌을 때 되돌리는 통로. */
+export function clearBlockedTracks(): void {
+  blocked.clear();
+  skipCounts.clear();
+  saveJson(BLOCKED_KEY, []);
+  saveJson(SKIP_COUNT_KEY, {});
+}
+
 export function markTrackFailed(trackId: string, now: number = Date.now()): void {
   failedAt.set(trackId, now);
   if (failedAt.size > FAILED_TRACK_MAX) pruneFailedTracks(now);
@@ -70,4 +144,5 @@ export function failedTrackCount(): number {
 /** 테스트 전용 — 모듈 전역 상태를 비운다. */
 export function resetFailedTracks(): void {
   failedAt.clear();
+  clearBlockedTracks();
 }
