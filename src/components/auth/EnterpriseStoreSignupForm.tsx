@@ -19,6 +19,10 @@ import { supabase } from '@/lib/supabase';
 import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
+import SignupSourceField from '@/components/auth/SignupSourceField';
+import {
+  EMPTY_SIGNUP_SOURCE, validateSignupSource, signupSourceMetadata, type SignupSourceValue,
+} from '@/lib/signupSource';
 import {
   validateEnterpriseInvite,
   claimEnterpriseStoreAccount,
@@ -76,6 +80,7 @@ export default function EnterpriseStoreSignupForm({
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [phone, setPhone] = useState('');
 
+  const [signupSource, setSignupSource] = useState<SignupSourceValue>(EMPTY_SIGNUP_SOURCE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +128,8 @@ export default function EnterpriseStoreSignupForm({
     if (password.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않습니다.';
     if (phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않습니다.';
+    const srcErr = validateSignupSource(signupSource);
+    if (srcErr) return srcErr;
     return null;
   }
 
@@ -146,6 +153,7 @@ export default function EnterpriseStoreSignupForm({
         account_type: 'business',
         full_name: fullName.trim(),
         phone: phone.trim(),
+        ...signupSourceMetadata(signupSource, 'enterprise_store_signup'),
       });
 
       const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
@@ -326,6 +334,9 @@ export default function EnterpriseStoreSignupForm({
           autoComplete="tel"
         />
       </Field>
+
+      <hr className="border-line/10" />
+      <SignupSourceField value={signupSource} onChange={setSignupSource} disabled={!verified} />
 
       <hr className="border-line/10" />
       <p className="text-[11px] font-bold uppercase tracking-wider text-accent">계정</p>

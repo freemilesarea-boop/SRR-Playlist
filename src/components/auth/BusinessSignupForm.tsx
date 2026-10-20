@@ -12,6 +12,10 @@ import {
 import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentApi';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
+import SignupSourceField from '@/components/auth/SignupSourceField';
+import {
+  EMPTY_SIGNUP_SOURCE, validateSignupSource, signupSourceMetadata, type SignupSourceValue,
+} from '@/lib/signupSource';
 
 interface Props {
   onDone: (email: string) => void;
@@ -47,6 +51,8 @@ export default function BusinessSignupForm({ onDone }: Props) {
   const [salesAgent, setSalesAgent] = useState<VerifiedSalesAgent | null>(null);
   const [salesAgentError, setSalesAgentError] = useState<string | null>(null);
   const [salesAgentChecking, setSalesAgentChecking] = useState(false);
+  // 알게 된 경로
+  const [signupSource, setSignupSource] = useState<SignupSourceValue>(EMPTY_SIGNUP_SOURCE);
 
   function validate(): string | null {
     if (!fullName.trim()) return '이름을 입력해주세요';
@@ -62,6 +68,8 @@ export default function BusinessSignupForm({ onDone }: Props) {
     if (salesAgentCode.trim() && !salesAgent) {
       return '유효하지 않은 영업인 코드입니다.';
     }
+    const srcErr = validateSignupSource(signupSource);
+    if (srcErr) return srcErr;
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
@@ -156,6 +164,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
         birth_date: birthDate,
         phone: phone.trim(),
         address: address.trim(),
+        ...signupSourceMetadata(signupSource, 'business_signup'),
       });
 
       const fmt = validateBusinessNumberFormat(businessNumber);
@@ -358,6 +367,9 @@ export default function BusinessSignupForm({ onDone }: Props) {
           </>
         )}
       </Field>
+
+      <hr className="border-line/10" />
+      <SignupSourceField value={signupSource} onChange={setSignupSource} />
 
       {/* 계정 */}
       <hr className="border-line/10" />

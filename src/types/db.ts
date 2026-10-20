@@ -24,6 +24,8 @@ export interface UserRow {
   free_trial_ends_at?: string | null;
   trial_source?: 'sales_agent' | null;
   trial_sales_agent_id?: string | null;
+  // 0535 — 가입 시 "어디서 알게 되셨나요?" 첫 응답
+  signup_source?: string | null;
   is_trial_active?: boolean | null;
   playback_enabled?: boolean | null;
   // 0056 — 회원 탈퇴

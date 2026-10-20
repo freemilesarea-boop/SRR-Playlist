@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
+import SignupSourceField from '@/components/auth/SignupSourceField';
 import { friendlyError } from '@/lib/errorMessages';
 import { formatKRW } from '@/lib/paymentFormat';
 import { createPayappSubscription } from '@/lib/subscriptionApi';
@@ -33,6 +34,9 @@ import {
   franchiseCardState, franchiseCanPayNow, franchisePaymentNotice, normalizeJoinCode,
   type PricingCategory, type PricingContext, type HqApplyForm,
 } from '@/lib/pricingPlans';
+import {
+  EMPTY_SIGNUP_SOURCE, validateSignupSource, recordMySignupSource, type SignupSourceValue,
+} from '@/lib/signupSource';
 
 const CATEGORY_META: Array<{
   key: PricingCategory; Icon: typeof Store; tagline: string; blurb: string;
@@ -137,10 +141,10 @@ export default function PricingPage() {
             <StorePanel ctx={ctx} price={price} defaultPhone={(profile as { phone?: string } | null)?.phone ?? ''} />
           )}
           {open === 'enterprise_hq' && (
-            <HqPanel ctx={ctx} profile={profile as { full_name?: string; phone?: string } | null} onChanged={reload} />
+            <HqPanel ctx={ctx} profile={profile} onChanged={reload} />
           )}
           {open === 'enterprise_store' && (
-            <FranchisePanel ctx={ctx} onChanged={reload} />
+            <FranchisePanel ctx={ctx} signupSourceAnswered={!!profile?.signup_source} onChanged={reload} />
           )}
         </>
       )}
@@ -261,11 +265,13 @@ function StorePanel({ ctx, price, defaultPhone }: {
 
 function HqPanel({ ctx, profile, onChanged }: {
   ctx: PricingContext | null;
-  profile: { full_name?: string; phone?: string } | null;
+  profile: { full_name?: string | null; phone?: string | null; signup_source?: string | null } | null;
   onChanged: () => Promise<void> | void;
 }) {
   const navigate = useNavigate();
   const state = hqCardState(ctx);
+  const askSource = !profile?.signup_source;
+  const [signupSource, setSignupSource] = useState<SignupSourceValue>(EMPTY_SIGNUP_SOURCE);
   const hq = ctx?.hq ?? null;
 
   const [form, setForm] = useState<HqApplyForm>({
@@ -318,6 +324,8 @@ function HqPanel({ ctx, profile, onChanged }: {
 
   async function submit() {
     const errs = validateHqApplyForm(form);
+    const srcErr = askSource ? validateSignupSource(signupSource) : null;
+    if (srcErr) errs.push(srcErr);
     setErrors(errs);
     if (errs.length) return;
     if (!verified) { setErrors(['사업자 인증을 먼저 완료해주세요.']); return; }
@@ -325,6 +333,7 @@ function HqPanel({ ctx, profile, onChanged }: {
     try {
       const r = await applyEnterpriseHq(form);
       if (r.success) {
+        if (askSource) await recordMySignupSource(signupSource, 'enterprise_hq_apply');
         toast.success(r.already_exists ? '이미 등록된 본사 계정이 있어요.' : '본사 신청이 접수됐어요.');
         await onChanged();
       } else {
@@ -450,6 +459,13 @@ function HqPanel({ ctx, profile, onChanged }: {
           />
         </div>
 
+        {askSource && (
+          <>
+            <SectionLabel>유입 경로</SectionLabel>
+            <SignupSourceField value={signupSource} onChange={setSignupSource} />
+          </>
+        )}
+
         {errors.length > 0 && (
           <Alert tone="error">
             <ul className="space-y-0.5">{errors.map((e) => <li key={e}>· {e}</li>)}</ul>
@@ -470,11 +486,13 @@ function HqPanel({ ctx, profile, onChanged }: {
 
 /* ═════════════════════ 3. 엔터프라이즈 가맹 ═════════════════════ */
 
-function FranchisePanel({ ctx, onChanged }: {
-  ctx: PricingContext | null; onChanged: () => Promise<void> | void;
+function FranchisePanel({ ctx, signupSourceAnswered, onChanged }: {
+  ctx: PricingContext | null; signupSourceAnswered: boolean; onChanged: () => Promise<void> | void;
 }) {
   const navigate = useNavigate();
   const state = franchiseCardState(ctx);
+  const askSource = !signupSourceAnswered;
+  const [signupSource, setSignupSource] = useState<SignupSourceValue>(EMPTY_SIGNUP_SOURCE);
 
   const [code, setCode] = useState('');
   const [lookup, setLookup] = useState<JoinCodeLookup | null>(null);
@@ -500,12 +518,15 @@ function FranchisePanel({ ctx, onChanged }: {
   async function join() {
     if (!lookup?.success) return;
     if (!storeName.trim()) { toast.error('매장명을 입력해주세요.'); return; }
+    const srcErr = askSource ? validateSignupSource(signupSource) : null;
+    if (srcErr) { toast.error(srcErr); return; }
     setBusy(true);
     try {
       const r = await joinEnterpriseStoreByCode({
         code: normalizeJoinCode(code), storeName, regionName: region,
       });
       if (!r.success) { toast.error(r.reason ?? '매장 연결에 실패했어요.'); return; }
+      if (askSource) await recordMySignupSource(signupSource, 'enterprise_store_join');
       toast.success('매장이 연결됐어요.');
       await onChanged();
     } catch (e) {
@@ -586,6 +607,9 @@ function FranchisePanel({ ctx, onChanged }: {
           <input value={region} onChange={(e) => setRegion(e.target.value)}
             disabled={!lookup?.success} placeholder="예: 경기 고양" className="input" />
         </Field>
+        {askSource && (
+          <SignupSourceField value={signupSource} onChange={setSignupSource} disabled={!lookup?.success} />
+        )}
 
         <button onClick={() => void join()} disabled={busy || !lookup?.success || !storeName.trim()}
           className="w-full rounded-xl bg-ink py-3 text-sm font-bold text-bg-base transition hover:opacity-90 disabled:opacity-50">
