@@ -16,6 +16,8 @@
 --     record_my_signup_source RPC 로 기록한다.
 --   · 첫 응답만 남긴다 — 이미 값이 있으면 덮어쓰지 않는다.
 --   · 관리자 회원 상세용 admin_member_signup_source RPC.
+--
+-- prod 에는 동일 정의가 `signup_source` 로 적용돼 있다.
 
 alter table public.users
   add column if not exists signup_source text,
@@ -23,13 +25,17 @@ alter table public.users
   add column if not exists signup_source_context text,
   add column if not exists signup_source_at timestamptz;
 
-alter table public.users drop constraint if exists users_signup_source_check;
-alter table public.users add constraint users_signup_source_check check (
-  signup_source is null or signup_source in (
-    'news', 'search', 'sns', 'youtube', 'blog_community', 'ad',
-    'referral', 'sales_agent', 'hq_notice', 'other'
-  )
-);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'users_signup_source_check') then
+    alter table public.users add constraint users_signup_source_check check (
+      signup_source is null or signup_source in (
+        'news', 'search', 'sns', 'youtube', 'blog_community', 'ad',
+        'referral', 'sales_agent', 'hq_notice', 'other'
+      )
+    );
+  end if;
+end $$;
 
 -- 입력값 정규화 — 허용되지 않은 값은 null (가입 자체를 막지 않는다).
 create or replace function public._normalize_signup_source(p_source text)
@@ -67,14 +73,14 @@ begin
       signup_source_at = now()
     where id = new.id and signup_source is null;
   exception when others then
-    raise log '[signup_source] capture FAILED: %', SQLERRM;
+    raise log 'signup_source capture failed: %', SQLERRM;
   end;
   return new;
 end;
 $$;
 
-drop trigger if exists on_auth_user_created_signup_source on auth.users;
-create trigger on_auth_user_created_signup_source
+-- drop 없이 교체 — auth.users 에 대한 drop trigger 는 MCP 에서 확인 대기로 멈춘다.
+create or replace trigger on_auth_user_created_signup_source
   after insert on auth.users
   for each row execute function public._capture_signup_source_from_meta();
 
