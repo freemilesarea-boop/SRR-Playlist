@@ -1,0 +1,33 @@
+-- ============================================================
+-- 0013b_drop_legacy_admin_member_list.sql
+--
+-- 목적: Empty Database 에서 전체 Migration Chain(0001 → 최신)을 순차 적용할 때
+--       0014_signup_profiles.sql 에서 발생하는 replay 실패를 해소한다.
+--
+-- 실패 원인 (실측):
+--   · 0002_analytics.sql 이 public.admin_member_list(text,text,text,integer) 를
+--     RETURNS TABLE(... 9개 컬럼) 으로 생성한다.
+--   · 0014_signup_profiles.sql 이 동일 시그니처(text,text,text,integer) 에 대해
+--     RETURNS TABLE(... 14개 컬럼: +account_type, signup_completed, identity_verified,
+--     business_verified, business_number) 으로 CREATE OR REPLACE 한다.
+--   · PostgreSQL 은 CREATE OR REPLACE FUNCTION 으로 반환 타입을 변경할 수 없다
+--     → ERROR: cannot change return type of existing function
+--   · 0002 와 0014 사이(0003~0013)에는 이 함수를 DROP/재정의하는 migration 이 없다.
+--
+-- 해결:
+--   · 기존 migration(0002, 0014 등)은 절대 수정하지 않는다.
+--   · 이 파일은 파일명 정렬상 0013_ 뒤, 0014_ 앞에 실행되도록 배치되어
+--     (workflow: `ls supabase/migrations/*.sql | sort`, lint: suffix 규칙 0013b 허용),
+--     0014 가 실행되기 직전에 기존 함수를 제거한다.
+--   · 제거만 하면 0014 의 CREATE OR REPLACE 가 신규(14컬럼) 정의를 충돌 없이 생성한다.
+--     (0032/0033/0034/0297 등 이후 migration 이 함수를 계속 진화시키므로,
+--      여기서는 "최신 재생성"이 아니라 순수 DROP 만 수행한다.)
+--
+-- 안전성:
+--   · IF EXISTS 로 idempotent — 함수가 없어도(이미 drop 됐거나 순서상 미생성) 오류 없음.
+--   · CASCADE 미사용 — 0002~0013 구간에 이 함수를 참조하는 의존 객체가 없음(실측).
+--   · Runtime/Production/Playback/Scheduler/Settlement/Recommendation 로직과 무관.
+--   · 이 변경은 admin_member_list 반환타입 충돌 해소에만 한정된다.
+-- ============================================================
+
+drop function if exists public.admin_member_list(text, text, text, integer);
