@@ -263,3 +263,28 @@ export async function adminStreamV2Health(scope: StreamV2HealthScope = 'global',
   if (error) throw error;
   return data as StreamV2Health;
 }
+
+// ── Calibration Report (ALGO-2E — verification timing / player_type 보정 진단) ──
+export interface StreamV2CalibrationMismatch {
+  session_token: string; event_player_type: string; session_player_type: string | null;
+  canonical: string; verified_seconds: number | null;
+}
+export interface StreamV2Calibration {
+  window_days: number;
+  play_30s_count: number;
+  session_verified_count: number;
+  heartbeat_coverage_pct: number;
+  session_verified_rate_pct: number;
+  completed_after_30s_count: number;
+  player_type_mismatch_count: number;
+  verified_before: number; verified_after: number; verified_delta: number;
+  eligible_before: number; eligible_after: number; eligible_delta: number;
+  top_mismatch_examples: StreamV2CalibrationMismatch[];
+  notes: string;
+}
+
+export async function adminStreamV2Calibration(days = 7): Promise<StreamV2Calibration> {
+  const { data, error } = await supabase.rpc('admin_stream_v2_calibration_report', { p_days: days });
+  if (error) throw error;
+  return data as StreamV2Calibration;
+}

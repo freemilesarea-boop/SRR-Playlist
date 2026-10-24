@@ -6,8 +6,8 @@ import { RefreshCw, Radio, Activity, Play } from 'lucide-react';
 import { AdminSection, AdminCard, AdminButton, AdminBadge, AdminAlert, AdminEmpty, AdminSkeleton, AdminStatCard, AdminModal } from '@/components/admin/ui';
 import type { AdminToneName } from '@/components/admin/ui';
 import {
-  adminStreamV2Overview, adminStreamV2Health, adminStreamV2Replay,
-  type StreamV2Overview, type StreamV2Health, type StreamV2ReplayEvent, type StreamV2OverviewFilters,
+  adminStreamV2Overview, adminStreamV2Health, adminStreamV2Replay, adminStreamV2Calibration,
+  type StreamV2Overview, type StreamV2Health, type StreamV2ReplayEvent, type StreamV2OverviewFilters, type StreamV2Calibration,
 } from '@/lib/streamingV2Api';
 
 const RANGES = [{ d: 1, label: '24h' }, { d: 7, label: '7d' }, { d: 30, label: '30d' }] as const;
@@ -22,6 +22,7 @@ export default function StreamingV2Panel() {
   const [brandId, setBrandId] = useState('');
   const [data, setData] = useState<StreamV2Overview | null>(null);
   const [health, setHealth] = useState<StreamV2Health | null>(null);
+  const [calib, setCalib] = useState<StreamV2Calibration | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [replayOpen, setReplayOpen] = useState(false);
@@ -33,11 +34,12 @@ export default function StreamingV2Panel() {
       storeId: storeId.trim() || null, brandId: brandId.trim() || null,
     };
     try {
-      const [ov, h] = await Promise.all([
+      const [ov, h, cal] = await Promise.all([
         adminStreamV2Overview(days, filters),
         adminStreamV2Health(storeId.trim() ? 'store' : brandId.trim() ? 'brand' : 'global', storeId.trim() || brandId.trim() || null, days),
+        adminStreamV2Calibration(days).catch(() => null),
       ]);
-      setData(ov); setHealth(h);
+      setData(ov); setHealth(h); setCalib(cal);
     } catch (e) { setErr(e instanceof Error ? e.message : '조회 실패'); }
     finally { setLoading(false); }
   }, [days, playerType, trackId, storeId, brandId]);
@@ -91,6 +93,54 @@ export default function StreamingV2Panel() {
             <AdminStatCard label="Eligible" value={String(f?.eligible ?? 0)} tone="success" />
             <AdminStatCard label="Settlement Eligible" value={String(f?.settlement_eligible ?? 0)} tone="success" />
           </div>
+
+          {/* Calibration (ALGO-2E) */}
+          {calib && (
+            <AdminCard title="Verification Calibration (ALGO-2E)" subtitle="play_30s 방출 시점 스냅샷 대신 session heartbeat 기준으로 verified 재판정 · player_type 보수적 canonical 보정.">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <AdminStatCard label="Verified (before → after)" value={`${calib.verified_before} → ${calib.verified_after}`} tone={calib.verified_delta > 0 ? 'success' : 'neutral'} />
+                <AdminStatCard label="Eligible (before → after)" value={`${calib.eligible_before} → ${calib.eligible_after}`} tone={calib.eligible_delta > 0 ? 'success' : 'neutral'} />
+                <AdminStatCard label="Player Type Mismatch" value={String(calib.player_type_mismatch_count)} tone={calib.player_type_mismatch_count > 0 ? 'warning' : 'neutral'} />
+                <AdminStatCard label="Session Verified Rate" value={`${calib.session_verified_rate_pct}%`} tone="info" />
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <AdminStatCard label="play_30s" value={String(calib.play_30s_count)} />
+                <AdminStatCard label="Session Verified (≥30s)" value={String(calib.session_verified_count)} />
+                <AdminStatCard label="Heartbeat Coverage" value={`${calib.heartbeat_coverage_pct}%`} />
+                <AdminStatCard label="Completed after 30s" value={String(calib.completed_after_30s_count)} />
+              </div>
+              {calib.verified_delta > 0 && (
+                <p className="mt-2 text-[11px] text-ink-dim">
+                  ✔ 타이밍 보정으로 verified <b className="text-ink">+{calib.verified_delta}</b>, eligible <b className="text-ink">+{calib.eligible_delta}</b> 회복. preview·admin·system·muted·low-volume 은 여전히 eligible 제외.
+                </p>
+              )}
+              {calib.top_mismatch_examples.length > 0 && (
+                <div className="mt-2">
+                  <p className="mb-1 text-[11px] font-semibold text-ink-dim">Player Type Mismatch 예시 (session ↔ event → canonical)</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className="text-ink-dim"><tr>
+                        <th className="px-2 py-1 text-left">session</th>
+                        <th className="px-2 py-1 text-left">event type</th><th className="px-2 py-1 text-left">session type</th>
+                        <th className="px-2 py-1 text-left">→ canonical</th><th className="px-2 py-1 text-right">verified s</th>
+                      </tr></thead>
+                      <tbody>
+                        {calib.top_mismatch_examples.map((m, i) => (
+                          <tr key={m.session_token + i} className="border-t border-line/10">
+                            <td className="px-2 py-1 font-mono text-ink-dim">{m.session_token}…</td>
+                            <td className="px-2 py-1">{m.event_player_type}</td>
+                            <td className="px-2 py-1 text-ink-dim">{m.session_player_type ?? '—'}</td>
+                            <td className="px-2 py-1"><AdminBadge tone={m.canonical === 'USER' ? 'success' : 'warning'}>{m.canonical}</AdminBadge></td>
+                            <td className="px-2 py-1 text-right tabular-nums">{m.verified_seconds ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </AdminCard>
+          )}
 
           {/* v1 대비 차이 */}
           {diff && (
