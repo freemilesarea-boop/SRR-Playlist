@@ -1,0 +1,43 @@
+-- ============================================================
+-- 0211b_drop_legacy_admin_artist_tracks_list.sql
+--
+-- 목적: Empty Database 전체 Migration Replay 시 0212_admin_tracks_paginate.sql 에서
+--       발생하는 replay 실패를 해소한다 (0013b 로 0014 통과 후 확인된 다음 하드 중단).
+--
+-- 실패 원인 (실측):
+--   · 0058_artist_tracks_metadata.sql 이 public.admin_artist_tracks_list(text,text,integer,integer)
+--     를 RETURNS TABLE(track_id, track_code, title, ...) 로 생성한다.
+--     (0058 의 grant 문도 (text, text, int, int) — 4개 인자로 확인됨)
+--   · 0212_admin_tracks_paginate.sql 이 동일 시그니처(text,text,integer,integer) 에 대해
+--     RETURNS TABLE(... + release_date, release_status, removed_reason ...) 로
+--     CREATE OR REPLACE 한다. (0212 의 grant 문도 (text, text, integer, integer) — 4개 인자)
+--   · PostgreSQL 은 CREATE OR REPLACE FUNCTION 으로 반환 타입을 변경할 수 없다
+--     → ERROR: cannot change return type of existing function
+--   · 0058 과 0212 사이에 이 함수를 DROP/재정의하는 migration 이 없다.
+--
+-- 시그니처 정정(추측 아님, migration 파일 실측):
+--   운영자 보고 에러에는 (text,text,text,integer,integer) 5개 인자로 표기되어 있었으나,
+--   Repository migration(0058/0212)의 실제 정의 및 각 grant 문은 모두
+--   (text, text, integer, integer) — **4개 인자**이다. 5개 인자 함수는 어떤 migration 에도
+--   존재하지 않으므로, 5-arg 만 DROP 하면 no-op 이 되어 0212 가 다시 실패한다.
+--   따라서 실제로 존재하는 4-arg 를 DROP 한다(주). 방어적으로 5-arg(운영자 표기)도 함께
+--   IF EXISTS 로 시도하나, 이는 무해한 no-op 이다.
+--
+-- 해결:
+--   · 기존 migration(0058, 0212 등)은 절대 수정하지 않는다.
+--   · 이 파일은 정렬상 0211_ 뒤, 0212_ 앞에 실행되도록 배치되어
+--     (workflow: `ls supabase/migrations/*.sql | sort`, lint: suffix 규칙 0211b 허용),
+--     0212 실행 직전에 기존 함수를 제거한다 → 0212 의 CREATE OR REPLACE 가 신규 반환타입을
+--     충돌 없이 생성한다.
+--
+-- 안전성:
+--   · IF EXISTS 로 idempotent. CASCADE 미사용.
+--   · Runtime/Production/Playback/Scheduler/Settlement/Recommendation 로직과 무관.
+--   · admin_artist_tracks_list 반환타입 충돌 해소에만 한정.
+-- ============================================================
+
+-- (주) 실제 존재하는 4-arg 시그니처 — 이 DROP 이 0212 충돌을 해소한다.
+drop function if exists public.admin_artist_tracks_list(text, text, integer, integer);
+
+-- 방어적: 운영자 보고 표기(5-arg)에 대한 무해한 no-op (해당 함수는 존재하지 않음).
+drop function if exists public.admin_artist_tracks_list(text, text, text, integer, integer);
