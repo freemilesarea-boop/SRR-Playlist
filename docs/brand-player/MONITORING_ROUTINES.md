@@ -212,6 +212,66 @@ cl_age 5 로 멀쩡히 전진 중이었다. 곡 경계 write gap 이 두 표본�
 - 데모 계정(데모 매장 1·2)은 공용 테스트 계정 — **실제 매장 이름 추측 금지.**
 - 감시 제외는 `brand_player_monitoring_exempt` 로 관리한다.
 
+### 감시 범위 — 가맹 2곳 · 매장 5곳 (2026-10-28 확대)
+
+매장 목록은 `franchise_stores` 에서 **두 franchise_id** 로 뽑는다(`monitoring_exempt` 제외).
+
+| 군 | franchise_id | 가맹 | 매장 |
+|---|---|---|---|
+| **BRAND** | `f5d17859-5709-41ba-908e-8c2672cc8089` | 카공시대 | 화정점 `3caef236` · 숙대점 `1311d900` · 분당미금역점 `5b5f2e59` |
+| **USER** | `85ef70ae-6099-4072-bce7-1a0b0487aa40` | 주식회사 뺑스톡 | 마포점 `fcb14222` · 성수 `6c0011ce` |
+
+```sql
+with stores as (
+  select fs.store_id, fs.store_name,
+         case when fs.franchise_id = 'f5d17859-5709-41ba-908e-8c2672cc8089'
+              then 'BRAND' else 'USER' end as grp
+    from public.franchise_stores fs
+   where fs.franchise_id in ('f5d17859-5709-41ba-908e-8c2672cc8089',
+                             '85ef70ae-6099-4072-bce7-1a0b0487aa40')
+     and not exists (select 1 from public.brand_player_monitoring_exempt e
+                      where e.store_user_id = fs.store_id))
+```
+
+**뺑스톡은 브랜드 플레이어를 쓰지 않는다.** `brand_accounts` 도 `brand_player_sessions` 도
+구조적으로 0건이고 `stream_sessions_v2.player_type='USER'` 로 일반 플레이어로 튼다.
+그래서 RC-30.2 의 install 축(playing / unproven / silent)이 **성립하지 않는다.**
+
+USER 군에 **적용하지 않는 것**:
+
+- brand 세션 상태 판정 — 세션이 없는 것이 정상이다
+- **C-2(세션 0건) 보고** — 구조적 정상이므로 감시선 결함이 아니다
+- `brand_daily_playlists` 포함 여부 — 브랜드 플레이리스트를 받지 않는다
+- `brand_player_build_identity` / freshness — 브랜드 빌드 신원 대상이 아니다
+
+USER 군 판정은 **두 축만** 쓴다:
+
+1. `continue_listening` 전진 — cl_age + 70초 이상 간격 재표본, 3표본 규칙 동일
+2. `stream_sessions_v2` heartbeat 간격 — 교훈 B, 20초 초과를 선행 지표로
+
+전진 확인 → STORE PLAYING / B(cl_age≥300) 또는 3표본 고정 → STORE OUTAGE /
+행 부재(C) → UNKNOWN, BRAND 군과 똑같이 FAIL CLOSED.
+
+**★ 자동 감지가 없다.** pg_cron `srr-brand-player-health`(1분)는 brand 세션을 보므로
+USER 군을 커버하지 않는다. USER 군 무음은 incident 행도, Slack 도, 푸시도 자동으로
+나가지 않는다. **두 예약 작업이 유일한 감시선**이고, 매장 감시는 4시간 간격이므로
+최악의 경우 무음을 4시간 뒤에 안다. 이 공백은 설계상 열려 있다.
+
+### 주식회사 뺑스톡 기지 사실
+
+- enterprise_account `5e5c361b` · status **`invited`**(active 아님) · franchise `85ef70ae` active
+- 사업자 2428101107 · 대표 박진수 · 초대 클레임 2건 다 success
+- `brand_account` 없음 · `enterprise_regions` 없음
+- **`billing_enabled=false` · 구독 0건** → `enterprise_billing_gaps` 에 안 나오는 것이
+  정상이다. 미청구 누락으로 읽지 않는다.
+- heartbeat 간격 실측 10.4~11.2초가 정상 대역(2026-10-28)
+- 2026-10-28 05:31:28 / 05:41:00 두 표본에서 두 매장 다 track 교체 확인 — STORE PLAYING
+- **미해결 관측**: 성수에 `player_mode='brand'` 로 태깅된 `audio_frozen` 3건
+  (최종 10-27 07:54). brand_account 가 없는 매장인데 brand 모드로 찍혔다. 태깅 이유가
+  설명되지 않는다 — 장애로도 결함으로도 쓰지 않고 관측으로만 남긴다.
+
+---
+
 ### 감지 파이프라인
 감지는 pg_cron `srr-brand-player-health`(1분)가 **단독으로** 한다. 전달은
 `srr-dispatch-notifications`(1분). 둘 다 `* * * * *` 이고 **각각 정확히 1행**이어야 한다.
