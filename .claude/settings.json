@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push -u origin claude/brand-player-playback-error-cse2c5)",
+      "Bash(git push origin claude/brand-player-playback-error-cse2c5)"
+    ]
+  }
+}
