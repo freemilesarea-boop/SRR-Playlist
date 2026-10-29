@@ -3,7 +3,7 @@ import {
   resolveStallAction, isEscalation,
   NUDGE_AFTER_MS, RELOAD_AFTER_MS, SKIP_AFTER_MS, RELOAD_PAGE_AFTER_MS, FRUITLESS_SKIP_LIMIT,
   HARD_RESET_VERIFY_MS, verifyHardReset, explainStallGate,
-  isPlaybackStateDesync, DESYNC_MIN_READY_STATE,
+  isPlaybackStateDesync, DESYNC_MIN_READY_STATE, shouldStopOnLoadFailure,
   type StallInput, type DesyncInput,
 } from './stallWatchdog';
 
@@ -644,5 +644,26 @@ describe('isPlaybackStateDesync — 상태 비동기 fail-safe', () => {
       }
     }
     expect(trueCount).toBeGreaterThan(0);
+  });
+});
+
+describe('shouldStopOnLoadFailure — 로딩 실패가 재생 의도를 끄는가', () => {
+  it('매장/브랜드 플레이어는 끄지 않는다 — 사다리가 회복한다 (화정점 META_TIMEOUT 무음)', () => {
+    expect(shouldStopOnLoadFailure({ businessMode: true })).toBe(false);
+  });
+
+  it('일반 청취자는 기존대로 정지한다', () => {
+    expect(shouldStopOnLoadFailure({ businessMode: false })).toBe(true);
+  });
+
+  it('의도를 유지하면 정지가 사다리 첫 칸으로 이어진다 (not_playing 게이트에 갇히지 않음)', () => {
+    const stalled: StallInput = {
+      businessMode: true, playing: !shouldStopOnLoadFailure({ businessMode: true }),
+      paused: true, ended: false, crossfading: false, suppressed: false,
+      autoplayBlocked: false, subscriptionBlocked: false,
+      stalledMs: NUDGE_AFTER_MS, fruitlessSkips: 0, hardResetDone: false, hardResetMsAgo: null, online: true,
+    };
+    expect(explainStallGate(stalled)).toBe('open');
+    expect(resolveStallAction(stalled)).toBe('nudge');
   });
 });
