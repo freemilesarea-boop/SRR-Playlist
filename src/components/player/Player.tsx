@@ -84,7 +84,7 @@ import { resolveStoreGate, isStorePlayerSurface } from '@/lib/storePlaybackGate'
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
-import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor, prepareCachedFallback } from '@/lib/audioCache';
 import {
   logPlaybackDiagnostic, beaconPlaybackDiagnostic, takeReloadReason, type DiagnosticReason,
 } from '@/lib/playbackDiagnostics';
@@ -265,6 +265,36 @@ function computeNextIndex(
   }
   if (index + 1 >= queueLength) return repeat === 'all' ? 0 : null;
   return index + 1;
+}
+
+/**
+ * 지금 곡을 네트워크로 못 받는 매장 — 재생 순서상 다음 곡 중 **이미 로컬에 받아둔 곡**으로
+ * 넘어간다. 성공하면 true, 대신 틀 곡이 없으면 false(호출측이 평소 경로로 진행).
+ *
+ * 화정점 2026-10: 느린 회선에서 다음 곡이 12초 넘게 안 받아져 무음이 시작됐다.
+ * 로컬 곡이 있으면 회선 상태와 무관하게 즉시 소리가 난다. 순서가 조금 바뀌는 것은
+ * 매장 BGM 에서 무음보다 훨씬 낫고, 건너뛴 곡은 다음 바퀴에 나온다.
+ *
+ * 준비(블롭 → object URL)가 비동기라, 그 사이 곡이 바뀌었으면 아무것도 하지 않는다.
+ */
+async function jumpToCachedTrack(trigger: 'meta_timeout' | 'stall_skip'): Promise<boolean> {
+  const before = usePlayerStore.getState();
+  const fromId = before.queue[before.index]?.id ?? null;
+  const target = await prepareCachedFallback({
+    urls: before.queue.map((t) => t.audio_url),
+    index: before.index,
+    order: before.shuffle ? before.shuffleOrder : null,
+  });
+  if (target === null) return false;
+  const now = usePlayerStore.getState();
+  if ((now.queue[now.index]?.id ?? null) !== fromId || now.queue[target]?.id !== before.queue[target]?.id) return false;
+  void logPlaybackDiagnostic('playback_stalled', {
+    reason: 'self_heal',
+    playerMode: 'store',
+    context: { kind: 'cached_fallback', trigger, fromTrackId: fromId, toTrackId: now.queue[target]?.id ?? null },
+  });
+  usePlayerStore.setState({ index: target, currentTime: 0, pendingSeekSec: null, playing: true });
+  return true;
 }
 
 export default function Player() {
@@ -1475,8 +1505,12 @@ export default function Player() {
               });
             }
             // 매장 모드에서는 정지하지 않는다 — 느린 회선에서 늦게 도착하는 곡까지
-            // "재생 불가" 로 굳혀 무음이 몇 시간씩 이어졌다(화정점). 사다리가 처리한다.
-            if (!shouldStopOnLoadFailure({ businessMode: useBusinessStore.getState().businessMode })) return;
+            // "재생 불가" 로 굳혀 무음이 몇 시간씩 이어졌다(화정점). 받아둔 곡이 있으면
+            // 그 곡으로 넘어가고, 없으면 사다리가 처리한다.
+            if (!shouldStopOnLoadFailure({ businessMode: useBusinessStore.getState().businessMode })) {
+              void jumpToCachedTrack('meta_timeout');
+              return;
+            }
             setErrored(true);
             pause();
           }
@@ -2226,7 +2260,14 @@ export default function Player() {
           playedSeconds: Math.round(ct), fruitlessSkips: fruitlessSkipsRef.current,
         },
       });
-      store.next();
+      // 받아둔 곡으로 넘어갈 수 있으면 그쪽 — 다음 곡도 네트워크라면 같은 이유로 막힐 수 있다.
+      // 준비를 기다리는 사이 곡이 이미 바뀌었으면 next() 하지 않는다(두 칸 넘어가지 않게).
+      const skipFromId = store.queue[store.index]?.id ?? null;
+      void jumpToCachedTrack('stall_skip').then((jumped) => {
+        if (jumped) return;
+        const st = usePlayerStore.getState();
+        if ((st.queue[st.index]?.id ?? null) === skipFromId) st.next();
+      });
     };
 
     // 화면이 꺼지면 메인 스레드 타이머는 스로틀링된다 — 정작 복구가 필요한 그 상황에서
