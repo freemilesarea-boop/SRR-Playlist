@@ -11,6 +11,10 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
+import SignupSourceField from '@/components/auth/SignupSourceField';
+import {
+  EMPTY_SIGNUP_SOURCE, validateSignupSource, recordMySignupSource, type SignupSourceValue,
+} from '@/lib/signupSource';
 
 /**
  * 0530 — 사업자등록 페이지.
@@ -36,6 +40,7 @@ export default function BusinessRegisterPage() {
   const [businessAddress, setBusinessAddress] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [signupSource, setSignupSource] = useState<SignupSourceValue>(EMPTY_SIGNUP_SOURCE);
 
   const loadGate = useCallback(async () => {
     setGate(await getBusinessTrialGate());
@@ -44,6 +49,8 @@ export default function BusinessRegisterPage() {
 
   const isBusiness = profile?.account_type === 'business';
   const trialDone = !!gate && (gate.trial_active || gate.trial_used || gate.paid);
+  // 이미 답한 회원에겐 다시 묻지 않는다
+  const askSource = !profile?.signup_source;
 
   async function submit() {
     if (!isBusinessNumberChecksumValid(businessNumber)) {
@@ -51,6 +58,10 @@ export default function BusinessRegisterPage() {
     }
     if (!representativeName.trim() || !businessOpenDate) {
       setMsg('대표자명과 개업일자를 입력해주세요.'); return;
+    }
+    if (askSource) {
+      const srcErr = validateSignupSource(signupSource);
+      if (srcErr) { setMsg(srcErr); return; }
     }
     setBusy(true); setMsg(null);
     try {
@@ -64,6 +75,7 @@ export default function BusinessRegisterPage() {
       setMsg(r.message);
       // 'rejected' 면 등록이 기록되지 않는다 — 체험도 열리지 않는다.
       if (r.verification_status !== 'verified' && r.verification_status !== 'manual_review') return;
+      if (askSource) await recordMySignupSource(signupSource, 'business_register');
 
       // 엣지함수가 이미 열었을 수 있다(배포 버전에 따라 다름).
       // 서버가 1회만 허용하므로 중복 호출은 안전하다.
@@ -161,6 +173,8 @@ export default function BusinessRegisterPage() {
               autoComplete="street-address" className="input"
             />
           </Field>
+
+          {askSource && <SignupSourceField value={signupSource} onChange={setSignupSource} />}
 
           {msg && <p className="text-xs text-ink-mute">{msg}</p>}
 

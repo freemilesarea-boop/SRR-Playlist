@@ -22,7 +22,7 @@ import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from
 import {
   resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
   FROZEN_REPORT_MIN_INTERVAL_MS, explainStallGate, NUDGE_AFTER_MS,
-  isPlaybackStateDesync, type StallAction,
+  isPlaybackStateDesync, shouldStopOnLoadFailure, type StallAction,
 } from '@/lib/stallWatchdog';
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
@@ -1474,6 +1474,9 @@ export default function Player() {
                 queueLength: usePlayerStore.getState().queue.length,
               });
             }
+            // 매장 모드에서는 정지하지 않는다 — 느린 회선에서 늦게 도착하는 곡까지
+            // "재생 불가" 로 굳혀 무음이 몇 시간씩 이어졌다(화정점). 사다리가 처리한다.
+            if (!shouldStopOnLoadFailure({ businessMode: useBusinessStore.getState().businessMode })) return;
             setErrored(true);
             pause();
           }
@@ -3199,6 +3202,8 @@ export default function Player() {
         const e2 = err2 as DOMException;
         if (e2?.name === 'AbortError' || e2?.name === 'NotAllowedError') return;
         if (import.meta.env.DEV) console.error(`[Player] play() retry 실패 (${label})`, { name: e2?.name, message: e2?.message });
+        // 매장 모드는 의도를 유지한다 — 복구 사다리가 이어서 처리한다.
+        if (!shouldStopOnLoadFailure({ businessMode })) return;
         pause();
         toast.error('재생 시작에 실패했어요. 다시 시도해주세요.');
       }

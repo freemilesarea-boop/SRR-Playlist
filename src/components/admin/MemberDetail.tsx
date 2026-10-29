@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
-  GraduationCap, Music2, Shield, History,
+  GraduationCap, Music2, Shield, History, Megaphone,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -25,6 +25,10 @@ import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
 import { useModalA11y } from '@/hooks/useModalA11y';
+import {
+  fetchAdminMemberSignupSource, signupSourceLabel, SIGNUP_SOURCE_CONTEXT_LABEL,
+  type AdminSignupSource, type SignupSourceContext,
+} from '@/lib/signupSource';
 
 type DangerAction = 'disable' | 'enable' | 'withdraw' | 'withdraw_repair' | 'mask_pii' | 'password_reset' | 'force_signout';
 interface PendingAction {
@@ -61,6 +65,7 @@ export default function MemberDetail({
   onClose: () => void;
 }) {
   const [data, setData] = useState<MemberDetailType | null>(null);
+  const [signupSource, setSignupSource] = useState<AdminSignupSource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -204,6 +209,16 @@ export default function MemberDetail({
       setActionBusy(false);
     }
   }
+
+  // 0535 — 가입 경로. 부가 정보라 실패해도 상세 화면은 그대로 둔다.
+  useEffect(() => {
+    let alive = true;
+    setSignupSource(null);
+    fetchAdminMemberSignupSource(userId)
+      .then((r) => { if (alive) setSignupSource(r); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [userId]);
 
   useEffect(() => {
     let alive = true;
@@ -507,6 +522,29 @@ export default function MemberDetail({
                 </button>
               )}
             </section>
+
+            {/* 알게 된 경로 (응답이 있을 때만 노출) */}
+            {signupSource && (
+              <section>
+                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+                  <Megaphone size={14} /> 알게 된 경로
+                </h4>
+                <div className="rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
+                  <p className="text-sm font-semibold">
+                    {signupSourceLabel(signupSource.source)}
+                    {signupSource.detail && (
+                      <span className="ml-1 font-normal text-ink-mute">· {signupSource.detail}</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-mute">
+                    {signupSource.context
+                      ? SIGNUP_SOURCE_CONTEXT_LABEL[signupSource.context as SignupSourceContext] ?? signupSource.context
+                      : '—'}
+                    {signupSource.recorded_at && ` · ${new Date(signupSource.recorded_at).toLocaleString('ko-KR')}`}
+                  </p>
+                </div>
+              </section>
+            )}
 
             {/* 영업인 (있을 때만 노출) */}
             {data.sales_agent && (
