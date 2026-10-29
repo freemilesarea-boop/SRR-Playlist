@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import Alert from '@/components/Alert';
@@ -28,6 +28,8 @@ type Mode =
   | 'signup-enterprise-store';
 
 const FIRST_ROUTE_KEY = 'srr-first-route-done';
+/** 비밀번호 연속 오류가 이 횟수에 닿으면 재설정 메일을 자동 발송한다. */
+const PW_FAIL_THRESHOLD = 3;
 
 function firstRouteFor(accountType: string | undefined | null): string {
   switch (accountType) {
@@ -41,7 +43,14 @@ function firstRouteFor(accountType: string | undefined | null): string {
 }
 
 export default function LoginPage() {
-  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, resendSignupEmail } = useAuthStore();
+  const {
+    session,
+    signInWithPassword,
+    signInWithGoogle,
+    signInWithKakao,
+    resendSignupEmail,
+    sendPasswordReset,
+  } = useAuthStore();
   const profile = useAuthStore((s) => s.profile);
   const isProfileReady = useAuthStore((s) => s.isProfileReady);
   const location = useLocation();
@@ -77,6 +86,13 @@ export default function LoginPage() {
   const [signupEmail, setSignupEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  // 비밀번호를 PW_FAIL_THRESHOLD 번 연속 틀리면 재설정 메일을 자동 발송하고 그 안내를 띄운다.
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  // 이메일별 연속 실패 횟수. 로그인 성공·이메일 변경 시 0 으로 돌아간다.
+  // 메모리에만 두므로 새로고침하면 리셋 — 저장해두면 지난 실패가 남아 엉뚱한 때 발송된다.
+  const pwFailRef = useRef<{ email: string; count: number }>({ email: '', count: 0 });
+  // 같은 이메일로 두 번 보내지 않는다. 문턱 넘은 뒤 실패마다 보내면 메일 폭탄이 된다.
+  const autoResetSentRef = useRef<Set<string>>(new Set());
   const [googleBusy, setGoogleBusy] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
   // X6.33: PWA standalone 케이스도 같은 모달 흐름 사용 — isPwa flag 로 분기.
@@ -214,15 +230,46 @@ export default function LoginPage() {
   // (profile 로드 도중엔 기존 LoginPage UI 가 잠깐 보이지만 곧 redirect.)
   if (session && isProfileReady) return <Navigate to={computeTarget()} replace />;
 
+  // 자격 증명 불일치만 실패로 센다. 네트워크 오류·레이트리밋까지 세면 비밀번호를
+  // 맞게 넣은 사람에게도 재설정 메일이 날아간다.
+  function isCredentialError(err: unknown): boolean {
+    const raw = err instanceof Error ? err.message : '';
+    return /invalid login credentials|invalid[_ ]grant|invalid credentials/i.test(raw);
+  }
+
+  async function bumpPasswordFailure(target: string, err: unknown) {
+    if (!target || !isCredentialError(err)) return;
+    const prev = pwFailRef.current;
+    const count = prev.email === target ? prev.count + 1 : 1;
+    pwFailRef.current = { email: target, count };
+    if (count < PW_FAIL_THRESHOLD) return;
+    if (autoResetSentRef.current.has(target)) return;
+    autoResetSentRef.current.add(target);
+    try {
+      await sendPasswordReset(target);
+      setResetNotice(
+        `비밀번호를 ${PW_FAIL_THRESHOLD}번 틀렸어요. ${target} 으로 재설정 링크를 보냈어요. 받은편지함과 스팸함을 확인해주세요.`,
+      );
+    } catch (sendErr) {
+      // 발송 실패로 로그인 실패 메시지를 덮지 않는다. 다시 시도할 수 있게 표시도 해제.
+      autoResetSentRef.current.delete(target);
+      setResetNotice(friendlyError(sendErr, '재설정 메일을 보내지 못했어요. 잠시 후 다시 시도해주세요.'));
+    }
+  }
+
   async function onSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setResetNotice(null);
     setBusy(true);
+    const target = email.trim().toLowerCase();
     try {
       await signInWithPassword(email, password);
+      pwFailRef.current = { email: '', count: 0 };
     } catch (err) {
       // X6.38: 친화 메시지 (Invalid login credentials → "이메일/비밀번호 불일치" 등)
       setError(friendlyError(err, '이메일 또는 비밀번호가 올바르지 않습니다.'));
+      await bumpPasswordFailure(target, err);
     } finally {
       setBusy(false);
     }
@@ -349,6 +396,7 @@ export default function LoginPage() {
                 </div>
 
                 {error && <Alert tone="error">{error}</Alert>}
+                {resetNotice && <Alert tone="info">{resetNotice}</Alert>}
 
                 <button type="submit" disabled={busy} className="btn-primary w-full py-3">
                   {busy ? '잠시만요…' : '로그인'}

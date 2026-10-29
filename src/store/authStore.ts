@@ -39,6 +39,8 @@ interface AuthState {
   signOut: () => Promise<void>;
   /** 회원가입 인증 메일 재발송 — 메일 못 받았거나 만료된 경우 사용. */
   resendSignupEmail: (email: string) => Promise<void>;
+  /** 비밀번호 재설정 메일 발송 — 링크는 /auth/reset (AuthResetPasswordPage) 로 착지. */
+  sendPasswordReset: (email: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -320,6 +322,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       type: 'signup',
       email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw error;
+  },
+
+  sendPasswordReset: async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
     });
     if (error) throw error;
   },
