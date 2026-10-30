@@ -1,6 +1,12 @@
 {
   "permissions": {
     "allow": [
+      "mcp__Supabase__execute_sql",
+      "mcp__Supabase__query_logs",
+      "mcp__Supabase__list_tables",
+      "mcp__Supabase__list_edge_functions",
+      "mcp__Supabase__get_edge_function",
+      "mcp__Supabase__get_advisors",
       "Bash(git push -u origin claude/brand-player-playback-error-cse2c5)",
       "Bash(git push origin claude/brand-player-playback-error-cse2c5)"
     ]

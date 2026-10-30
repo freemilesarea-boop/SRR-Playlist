@@ -572,6 +572,233 @@ select store_label, seconds_since_heartbeat as hb, page_build_hash, sw_build_has
 
 ---
 
+## 2026-10-30 재설계 — 이용매장 점검 (매시간 점검 · 09/21시 보고)
+
+형님 지시 전문:
+> 이용매장 점검에 대해서 정리해서 다시 해야겠다. SQL 은 나한테 허락받지 말고 바로바로
+> 진행하도록 할 것. 모든 사업자 계정, 브랜드 계정, 본사, 가맹 전부 확인할것.
+> 보고는 `매장1 정상 / 매장4 비정상 끊김 (끊김 원인: 우리쪽 또는 매장쪽 정확하게 자동 파악)`.
+> 우리쪽 끊김이면 자동 분석해서 슬랙에 남길 것. 우리쪽이 아니면 방어 문자 메시지를
+> 슬랙에 쌓아둘 것. 아침 9시 · 밤 9시에 보고, 너는 매시간 점검. 특별한 문제 없으면
+> 09/21시에만 보고. 특별한 문제가 있으면 클로드 앱 알람, 그 외 알람 금지.
+
+### SQL 승인 제거
+
+`.claude/settings.json` 의 `permissions.allow` 에 Supabase 읽기 도구를 등록했다.
+`mcp__Supabase__execute_sql` 포함 — 이제 매 호출마다 승인 창이 뜨지 않는다.
+
+```json
+"allow": ["mcp__Supabase__execute_sql", "mcp__Supabase__query_logs",
+          "mcp__Supabase__list_tables", "mcp__Supabase__list_edge_functions",
+          "mcp__Supabase__get_edge_function", "mcp__Supabase__get_advisors"]
+```
+
+`apply_migration` 은 **넣지 않았다.** 스키마 변경은 절대 조건이 금지하므로 승인 창이
+남아 있는 것이 안전장치다. 점검에는 필요 없다.
+
+### 전수 조사 결과 — 사업자 6곳 · 가맹 6곳 · 실매장 8곳
+
+`enterprise_accounts` 6건, 각각 가맹 1곳씩 연결돼 있다.
+
+| 사업자(본사) | 가맹 | 가맹매장 행 | 과금 | 활성구독 |
+|---|---|---|---|---|
+| 카공시대 | 카공시대 | 3 | per_store | 2 |
+| 이루밍 스터디카페 | 이루밍 스터디카페 | **0** | per_store | 0 |
+| 주식회사 뺑스톡 | 주식회사 뺑스톡 | 2 | hq_consolidated | 0 |
+| ming | ming | **0** | hq_consolidated | 0 |
+| Deudda 데모 본사 | Deudda 데모 본사 | 3 | — | — |
+| 루베르 콘텐츠 스튜디오 | 루베르 콘텐츠 스튜디오 | 5 | — | — |
+
+제외: 데모 매장 1~3, TEST_스튜디오오감 5곳 = 테스트·데모 8곳.
+
+**개인 구독(`subscriptions`)에 사업자 플랜이 따로 있다**: `plan_type='business'`
+= 듣다 사업자 정기이용권 6,900원. 활성 4건 중 3건은 이미 가맹 매장이고,
+**1건(`offidewings@gmail.com`)은 어느 가맹에도 없었다** — 가맹 기준 명부로는 영원히
+안 잡히는 유료 사업자다.
+
+### 명부 정의 — 3-arm union, uid 중복 제거
+
+이용매장 = **가맹 매장 ∪ 브랜드 플레이어 계정 ∪ 사업자 플랜 유료 구독자**.
+어느 하나만 쓰면 반드시 빠지는 매장이 생긴다(실측으로 세 번 확인됐다).
+
+```sql
+with cand as (
+  -- arm 1: 가맹 매장 (매장명이 있다) — 테스트 가맹 제외
+  select fs.store_id as uid, fs.store_name as label, 1 as pri, f.name as owner
+    from public.franchise_stores fs join public.franchises f on f.id = fs.franchise_id
+   where f.name not in ('Deudda 데모 본사', '루베르 콘텐츠 스튜디오')
+  union all
+  -- arm 2: 브랜드 플레이어를 쓰는 계정 (가맹 행 없는 브랜드까지 포함)
+  select u.id, u.email, 2, ba.name
+    from public.brand_player_sessions s
+    join public.brand_accounts ba on ba.id = s.brand_id and ba.deleted_at is null
+    join auth.users u on u.id = s.user_id
+   where ba.name not in ('데모', '루베르 콘텐츠 스튜디오')
+     and s.revoked_at is null
+     and s.last_seen_at > now() - interval '30 days'
+  union all
+  -- arm 3: 사업자 플랜 유료 구독자 (가맹 미소속 개별 사업자)
+  select u.id, u.email, 3, '개별 사업자'
+    from public.subscriptions sub join auth.users u on u.id = sub.user_id
+   where sub.plan_type = 'business' and sub.status = 'active'
+), ranked as (
+  select uid, label, owner, pri,
+         row_number() over (partition by uid order by pri, label) as rn
+    from cand
+   where label not ilike '%@swk.today'
+     and lower(label) not in ('qa-store@deudda.test', 'mingseomm99@gmail.com')
+     and not exists (select 1 from public.brand_player_monitoring_exempt e
+                      where e.store_user_id = cand.uid)
+)
+select uid, label, owner from ranked where rn = 1;
+```
+
+★ **uid 중복 제거가 필수다.** 숙대점·분당미금역·성수는 가맹 매장이면서 사업자 구독자라
+세 arm 에 동시에 걸린다. `pri` 로 **가맹 매장명을 우선**해 사람이 읽을 이름을 쓴다.
+★ 2026-10-30 실행 검증: **정확히 8행.**
+
+| 매장 | 소속 | uid |
+|---|---|---|
+| 카공시대 화정점 | 카공시대 | `3caef236` |
+| 르하임스터디카페s 워크라운지 숙대점 | 카공시대 | `1311d900` |
+| 카공시대 분당미금역점 | 카공시대 | `5b5f2e59` |
+| 마포점 | 주식회사 뺑스톡 | `fcb14222` |
+| 성수 | 주식회사 뺑스톡 | `6c0011ce` |
+| `erooming2023@naver.com` | EROOMING | `0b26659f` |
+| `minnnnng27@gmail.com` | EROOMING·카공시대 | `09363876` |
+| `offidewings@gmail.com` | 개별 사업자 | `b2293441` |
+
+★ `minnnnng27@gmail.com` 은 **EROOMING 과 카공시대 두 브랜드에 모두 세션이 있다.**
+  소속 표기는 최근 세션 기준으로 적고, 설명되지 않는 상태이므로 관측으로 남긴다.
+★ 매장명이 없는 3곳은 **계정 이메일을 그대로 쓴다.** 이름을 추측하지 않는다.
+
+### 상태 4분류 — 정상 / 비정상 끊김 / 미사용 / 판정 불가
+
+| 상태 | 조건 | 보고 문구 |
+|---|---|---|
+| **정상** | cl 전진 확인(70초 이상 간격 재표본에서 position 증가 또는 track 교체) | `<매장명> 정상` |
+| **비정상 끊김** | cl_age≥300 **또는** 3표본 고정 — 그리고 전진 증거 없음 | `<매장명> 비정상 끊김` + 원인 |
+| **미사용** | cl_age > 7일 **그리고** 세션 이력 없음 | `<매장명> 미사용 (N일)` |
+| **판정 불가** | cl 행 부재(C) · 3표본 미완 · UNKNOWN 혼입 | `<매장명> 판정 불가 — 재표본` |
+
+★★ **미사용을 끊김으로 쓰지 않는다.** `offidewings@gmail.com` 은 사업자 플랜을 계속
+  결제하면서 플레이어가 **115일째** 조용하다. 이것은 장애가 아니라 이탈 신호이고,
+  매시간 "끊김"으로 올리면 순수 소음이다. 09/21시 보고에 한 줄로만 적는다.
+★★ **cl 행 부재(C)를 끊김으로 쓰지 않는다.** 2026-10-30 10:4x 실측에서 마포점과
+  분당미금역이 **30초 사이에 cl 행이 사라졌다** — 직전 표본에서 둘 다 cl_age 2~5초로
+  정상 재생 중이었다. 곡 경계 delete+insert write gap 이 실시간으로 재현된 것이다.
+  C 는 무조건 재표본이다.
+
+### 끊김 원인 자동 판정 — 우리 쪽 / 매장 쪽
+
+판정은 **두 시계를 비교**해서 한다. `hb_age`(heartbeat, 메인 스레드 타이머)와
+`progress_age`(`last_audio_progress_at`, 오디오 진행)다. 오디오가 막혀도 heartbeat 은
+살아 있으므로 **인과가 한쪽으로만 성립한다**(교훈 B).
+
+| 관측 | 판정 | 근거 |
+|---|---|---|
+| `hb_age` 와 `progress_age` 가 **비슷한 값으로 동시 정지** | **매장 쪽** | 탭 닫힘·전원 off·절전. 오디오만 막히면 heartbeat 은 살아야 한다 |
+| `hb_age` 싱싱 + `progress_age` 만 낡음 | **우리 쪽** | 플레이어는 살아 있는데 소리가 안 난다 = 오디오 파이프라인 |
+| `shell_age` 싱싱 + `hb_age` 낡음 | **우리 쪽** | 껍데기는 살았고 플레이어만 죽었다 |
+| `gate_blocked` = `autoplay_blocked` / `ended` | **매장 쪽** | NotAllowedError — 사람이 눌러야 풀린다. 코드로 못 뚫는다 |
+| `gate_blocked` = `not_playing` + `paused=true` | **매장 쪽** | 사람이 멈췄다 |
+| incident 열려 있는데 cl 전진 중 | **우리 쪽** | 감지 오탐 |
+| cl 전진 없는데 incident 없음 | **우리 쪽** | 감지 누락 |
+| `freshness=STALE` | **우리 쪽** | 구 빌드가 매장에 남아 있다 |
+| 크론 실패 · 미발송 · 플레이리스트 service_date 지연 | **우리 쪽** | 인프라 |
+| `realtime_status=CHANNEL_ERROR` 상태의 정지 | **매장 쪽** + 단서 | 원격 복구가 안 닿아 점주 조작만 남았다고 함께 적는다 |
+| 위 어느 것도 확정 안 됨 | **판정 불가** | 단정하지 않는다 |
+
+★ **증거 없이 매장 쪽이라고 쓰지 않는다.** 책임 전가가 가장 비싼 오판이다.
+
+### 슬랙 적재 — `admin_notifications` 에 INSERT 하면 1분 안에 슬랙으로 간다
+
+경로 확인(2026-10-30): `admin_settings.notification_slack_webhook_url` 이 설정돼 있고
+(`https://hooks.slack.com/...`), `notification_min_severity='info'`,
+pg_cron `srr-dispatch-notifications`(매분)이 `cron_dispatch_pending_notifications(15)` 로
+`dispatched_at is null` 행을 집어 슬랙에 POST 한다. 30일 236건 전부 오류 0건.
+
+★ `dispatch_slack_at` 컬럼은 **함수가 쓰지 않는 유물이다.** 이 값이 null 인 것을
+  "슬랙 미발송"으로 읽지 않는다 — 실제 발송 여부는 `dispatched_at` 과
+  `dispatch_error` 로 판단한다. (2026-10-30 내가 이걸로 한 번 오판했다.)
+
+**우리 쪽 문제 → 분석을 적재**
+
+```sql
+insert into public.admin_notifications (kind, severity, title, body, context)
+select 'store_check_ours', 'error',
+       '[점검·우리 쪽] ' || :label || ' — ' || :symptom,
+       :analysis,
+       jsonb_build_object('store_uid', :uid, 'side', 'ours', 'source', 'store_check')
+ where not exists (
+   select 1 from public.admin_notifications
+    where kind = 'store_check_ours'
+      and context->>'store_uid' = :uid
+      and created_at > now() - interval '6 hours');
+```
+
+**매장 쪽 문제 → 방어 문자 초안을 적재**
+
+```sql
+insert into public.admin_notifications (kind, severity, title, body, context)
+select 'store_check_defense_sms', 'warning',
+       '[방어문자 대기] ' || :label || ' — ' || :cause,
+       :sms_draft,
+       jsonb_build_object('store_uid', :uid, 'side', 'store',
+                          'source', 'store_check', 'draft_sms', true)
+ where not exists (
+   select 1 from public.admin_notifications
+    where kind = 'store_check_defense_sms'
+      and context->>'store_uid' = :uid
+      and created_at > now() - interval '6 hours');
+```
+
+★★ **`where not exists` 6시간 쿨다운을 절대 빼지 않는다.** 매시간 점검이므로 빼면
+  같은 매장 건으로 하루 24건이 슬랙에 쌓인다. 그것이 백로그 사고의 재발이다.
+★ 이 두 INSERT 는 **점검 루틴이 유일하게 허용된 쓰기**다. incident 행·세션 행·스키마는
+  여전히 금지다.
+
+**방어 문자 초안 템플릿** — 점주에게 보낼 문장이다. 우리 책임이 아님을 기록으로
+남기는 것이 목적이므로 관측 사실만 쓰고 추측을 넣지 않는다.
+
+```
+[듣다] <매장명> 음악 재생이 <HH:MM>부터 중단된 것으로 확인됩니다.
+서버·음원 전송은 정상이며, 매장 기기에서 재생이 멈춘 상태입니다.
+(확인된 상태: <hb_age/progress_age 동시 정지 | 자동재생 차단 | 일시정지>)
+매장 태블릿/PC 화면을 한 번 터치하거나 새로고침해 주시면 복구됩니다.
+계속 재생되지 않으면 이 메시지에 회신해 주세요.
+```
+
+★ 이 초안은 **슬랙에 쌓아두는 것까지**다. 점주에게 직접 보내지 않는다 —
+  절대 조건(점주에게 직접 연락 금지)은 그대로다. 보내는 것은 사람이 결정한다.
+
+### 주기 — 매시간 점검 · 09/21시 보고 · 문제 있을 때만 알람
+
+| 루틴 | 주기 | 출력 |
+|---|---|---|
+| 매시간 점검 | `CRON_TZ=Asia/Seoul 34 * * * *` | 문제 없으면 **완전 침묵**. 문제 있으면 슬랙 적재 + 푸시 1회 |
+| 09/21시 보고 | `CRON_TZ=Asia/Seoul 9 9,21 * * *` | 결과와 무관하게 대화 보고. 푸시는 **문제 있을 때만** |
+
+★ 분을 :00 이 아닌 :34 / :09 로 둔 것은 의도적이다 — 정시에 몰리는 지연을 피한다.
+★ **매시간 점검은 가벼워야 한다.** 기본은 명부+상태 **쿼리 1발**이고, 비정상이
+  나온 매장에 대해서만 진단 쿼리로 내려간다. 24회 모두 전체 진단을 돌리지 않는다.
+★ 이전 규칙과 달라진 점: **09/21시 보고도 문제 없으면 푸시를 보내지 않는다.**
+  형님 지시가 "특별한 문제가 있다면 알람, 그 외에는 알람을 주지 말것" 이다.
+
+### 이 설계가 안고 있는 위험 — 숨기지 않고 적는다
+
+매시간 루틴이 **이 영속 세션으로 발사된다.** 하루 24회이므로 미처리 알림이 쌓이면
+백로그 사고가 재발할 여지가 커진다. 그래서 **백로그 흡수 규칙을 매시간 루틴에
+최우선으로 둔다**: 같은 루틴의 미처리 알림이 여러 건이면 **가장 최근 1건만 처리하고
+나머지는 읽어서 버린다.** 과거 시점 상태를 지금 보고하는 것은 소음이다.
+
+새 세션으로 발사(`create_new_session_on_fire`)하면 백로그가 구조적으로 없어지지만,
+새 세션이 Supabase MCP 연결을 물려받는다는 보장이 없어 **점검 자체가 불가능해질
+위험**이 있다. 그 교환이 더 나빠서 영속 세션을 유지했다. 백로그가 실제로 재발하면
+그때 바꾼다.
+
+---
+
 ## 4. 금지 표현
 
 - Hard/Remote Recovery 동작만으로 "장애 해결" · "ROOT CAUSE PROVEN" 금지.
