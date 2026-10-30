@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
-  GraduationCap, Music2, Shield, History,
+  GraduationCap, Music2, Shield, History, Phone, Copy,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -290,6 +290,11 @@ export default function MemberDetail({
                   <KV label="PII 마스킹" value={fmtDateTime(data.user.pii_masked_at)} />
                 )}
               </div>
+
+              {/* 연락 정보 — 해지 의사를 밝힌 회원에게 직접 닿기 위한 자리.
+                  값은 가입 때 이미 받아둔 것이고, 이 화면 자체가 관리자 전용이다
+                  (admin_member_detail RPC 가 관리자만 통과시킨다). */}
+              <ContactCard detail={data} />
 
               {/* X6.10 Phase 2/3 — 아티스트 플랜 정보 + 수동 변경 (artist 계정만) */}
               {data.user.account_type === 'artist' && (
@@ -941,6 +946,127 @@ function DangerConfirmModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 한 줄 — 값이 있으면 눌러서 복사된다. 전화는 바로 걸 수 있게 한다. */
+function ContactLine({
+  label, value, href,
+}: { label: string; value: string | null | undefined; href?: string }) {
+  const text = (value ?? '').toString().trim();
+  if (!text) return null;
+  return (
+    <div className="flex items-start justify-between gap-3 border-t border-line/10 py-1.5 first:border-t-0">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-ink-dim">
+        {label}
+      </span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {href ? (
+          <a href={href} className="truncate text-sm font-semibold text-accent underline">{text}</a>
+        ) : (
+          <span className="truncate text-sm font-semibold">{text}</span>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(text)
+              .then(() => toast.success(`${label} 복사`))
+              .catch(() => toast.info(text));
+          }}
+          aria-label={`${label} 복사`}
+          className="shrink-0 rounded p-0.5 text-ink-dim hover:text-ink"
+        >
+          <Copy size={12} />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * 연락 정보 카드.
+ *
+ * 전에는 이메일과 닉네임만 보여서, 해지하겠다는 회원에게 전화 한 통 할 수가 없었다.
+ * 전화번호·실명·주소·사업자 정보는 가입 때 이미 받아 저장돼 있었고 조회 경로만 없었다.
+ *
+ * 무료체험 상태를 같이 띄운다 — 체험 종료 직전이 해지방어가 가장 급한 시점이다.
+ */
+function ContactCard({ detail }: { detail: MemberDetailType }) {
+  const c = detail.contact;
+  const b = detail.business;
+  const masked = !!detail.user.pii_masked_at;
+  // 아티스트는 가입 경로가 달라 연락처가 별도 프로필에 있다. 사용자 레코드가 비면 그쪽을 쓴다.
+  const name = c?.full_name || c?.artist_real_name || null;
+  const phone = c?.phone || c?.artist_phone || null;
+  const address = c?.address || c?.artist_address || null;
+  const hasAny = !!(name || phone || address || c?.birth_date || b?.business_number || b?.store_name);
+
+  return (
+    <div className="space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+      <div className="flex items-center gap-1.5">
+        <Phone size={12} className="text-ink-mute" />
+        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">연락 정보</p>
+      </div>
+
+      {masked && (
+        <Alert tone="warning">
+          개인정보가 마스킹된 회원입니다. 아래 값은 마스킹된 상태로 저장된 것입니다.
+        </Alert>
+      )}
+
+      {!hasAny ? (
+        <p className="py-2 text-xs text-ink-dim">
+          저장된 연락 정보가 없습니다. 가입 단계를 끝내지 않았거나 소셜 로그인만 한 회원입니다.
+        </p>
+      ) : (
+        <div>
+          <ContactLine label="이름" value={name} />
+          <ContactLine label="전화" value={phone} href={phone ? `tel:${phone.replace(/[^0-9+]/g, '')}` : undefined} />
+          <ContactLine label="이메일" value={detail.user.email} href={detail.user.email ? `mailto:${detail.user.email}` : undefined} />
+          <ContactLine label="주소" value={address} />
+          <ContactLine label="생년월일" value={c?.birth_date} />
+          <ContactLine
+            label="본인확인"
+            value={c?.identity_verified ? `완료${c.identity_provider ? ` (${c.identity_provider})` : ''}` : null}
+          />
+          <ContactLine label="영업담당" value={c?.sales_agent_code} />
+        </div>
+      )}
+
+      {/* 체험 종료가 임박한 회원이 곧 해지 후보다. */}
+      {(c?.is_trial_active || c?.free_trial_ends_at) && (
+        <div className="rounded-lg bg-bg-card px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">무료체험</p>
+          <p className="mt-0.5 text-sm font-semibold">
+            {c?.is_trial_active ? '진행 중' : '종료'}
+            {c?.free_trial_ends_at ? ` · ${new Date(c.free_trial_ends_at).toLocaleDateString('ko-KR')}까지` : ''}
+          </p>
+        </div>
+      )}
+
+      {b && (b.business_number || b.store_name) && (
+        <div className="rounded-lg bg-bg-card px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">사업자 · 매장</p>
+          <div className="mt-0.5">
+            <ContactLine label="상호" value={b.business_name} />
+            <ContactLine label="대표자" value={b.representative_name} />
+            <ContactLine label="사업자번호" value={b.business_number} />
+            <ContactLine label="사업장" value={b.business_address} />
+            <ContactLine label="업태" value={b.business_type} />
+            <ContactLine label="매장명" value={b.store_name} />
+            <ContactLine label="업종" value={b.store_category} />
+            <ContactLine
+              label="영업시간"
+              value={b.open_time && b.close_time ? `${b.open_time} ~ ${b.close_time}` : null}
+            />
+            <ContactLine
+              label="진위확인"
+              value={b.business_verified ? '완료' : (b.verification_status || null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
