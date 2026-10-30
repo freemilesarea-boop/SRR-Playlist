@@ -72,3 +72,48 @@ describe('화면', () => {
     expect(ui).toContain('무료체험');
   });
 });
+
+/**
+ * 결제 실패 이력과 재생량 추이 — 연락처만으로는 "누구에게 먼저 전화할지"를
+ * 알 수 없어서 같이 붙였다. 둘 다 민감한 값이라 조회 경로는 같은 관리자 RPC 하나다.
+ */
+describe('해지 신호', () => {
+  it('청구 이력과 재생량 추이가 MemberDetail 에 들어 있다', () => {
+    const t = api.slice(api.indexOf('export interface MemberDetail'));
+    for (const f of ['billing_failures', 'failure_count_90d', 'playback_trend', 'listened_seconds']) {
+      expect(t).toContain(f);
+    }
+  });
+
+  // payapp_raw 는 카드사 응답 원문이다. 관리자 화면에 흘릴 이유가 없다.
+  // (주석에서 언급하는 건 괜찮다 — 필드로 선언되거나 렌더되는 걸 막는다.)
+  it('카드사 응답 원문은 타입에도 화면에도 없다', () => {
+    expect(api).not.toMatch(/payapp_raw\s*[:?]/);
+    expect(ui).not.toMatch(/payapp_raw\s*[:?}]/);
+  });
+
+  it('실패 판정은 공용 함수 하나를 쓴다 — 화면에서 따로 세지 않는다', () => {
+    expect(ui).toContain('isBillingFailure');
+    expect(ui).not.toMatch(/'provider_rejected'/);
+  });
+
+  it('성공 건까지 같이 보여준다 — 원래 막혀 있던 회원과 구분하려고', () => {
+    expect(ui).toContain('마지막 성공');
+  });
+
+  it('결제 실패 안내가 전달됐는지도 보여준다', () => {
+    expect(ui).toContain('결제 실패 안내 발송');
+  });
+
+  // 진행 중인 달을 전월과 비교하면 멀쩡한 회원도 전부 급감으로 찍힌다.
+  it('진행 중인 달은 추이 비교에서 뺀다', () => {
+    expect(ui).toContain('playbackDrop');
+    expect(ui).toContain('진행 중');
+  });
+
+  it('추이 막대는 색만으로 읽히지 않는다 — 수치와 라벨이 같이 있다', () => {
+    const card = ui.slice(ui.indexOf('function PlaybackTrendCard'));
+    expect(card).toContain('aria-label');
+    expect(card).toContain('title=');
+  });
+});
