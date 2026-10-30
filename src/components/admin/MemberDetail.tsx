@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
-  GraduationCap, Music2, Shield, History, Megaphone,
+  GraduationCap, Music2, Shield, History, Megaphone, Phone, Copy,
+  CreditCard, TrendingDown,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -21,6 +22,11 @@ import {
   type AdminArtistPlanType,
   type PlanAuditRow,
 } from '@/lib/adminApi';
+import {
+  isBillingFailure,
+  currentKstMonth,
+  playbackDrop,
+} from '@/lib/memberChurnSignals';
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
@@ -306,6 +312,11 @@ export default function MemberDetail({
                 )}
               </div>
 
+              {/* 연락 정보 — 해지 의사를 밝힌 회원에게 직접 닿기 위한 자리.
+                  값은 가입 때 이미 받아둔 것이고, 이 화면 자체가 관리자 전용이다
+                  (admin_member_detail RPC 가 관리자만 통과시킨다). */}
+              <ContactCard detail={data} />
+
               {/* X6.10 Phase 2/3 — 아티스트 플랜 정보 + 수동 변경 (artist 계정만) */}
               {data.user.account_type === 'artist' && (
                 <div className="space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
@@ -492,6 +503,9 @@ export default function MemberDetail({
               <Stat icon={<Clock size={14} />} label="누적 청취" value={fmtTime(data.total_listened_seconds)} />
             </section>
 
+            {/* 재생량 추이 — 해지는 결제보다 재생에서 먼저 보인다. */}
+            <PlaybackTrendCard trend={data.playback_trend} />
+
             {/* 큐레이터 권한 — 일반 액션 (Danger Zone 과 분리) */}
             <section className="flex items-center justify-between gap-3 rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
               <div>
@@ -637,6 +651,9 @@ export default function MemberDetail({
                 ))
               )}
             </ListSection>
+
+            {/* 정기결제 청구 시도 — 카드 거절이 쌓이면 해지 전에 연락할 수 있다. */}
+            <BillingFailureCard detail={data} />
 
             {/* 결제 */}
             <ListSection icon={<Wallet size={14} />} title={`결제/매출 (${data.revenue.length})`}>
@@ -980,6 +997,280 @@ function DangerConfirmModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/** 한 줄 — 값이 있으면 눌러서 복사된다. 전화는 바로 걸 수 있게 한다. */
+function ContactLine({
+  label, value, href,
+}: { label: string; value: string | null | undefined; href?: string }) {
+  const text = (value ?? '').toString().trim();
+  if (!text) return null;
+  return (
+    <div className="flex items-start justify-between gap-3 border-t border-line/10 py-1.5 first:border-t-0">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-ink-dim">
+        {label}
+      </span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {href ? (
+          <a href={href} className="truncate text-sm font-semibold text-accent underline">{text}</a>
+        ) : (
+          <span className="truncate text-sm font-semibold">{text}</span>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(text)
+              .then(() => toast.success(`${label} 복사`))
+              .catch(() => toast.info(text));
+          }}
+          aria-label={`${label} 복사`}
+          className="shrink-0 rounded p-0.5 text-ink-dim hover:text-ink"
+        >
+          <Copy size={12} />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * 연락 정보 카드.
+ *
+ * 전에는 이메일과 닉네임만 보여서, 해지하겠다는 회원에게 전화 한 통 할 수가 없었다.
+ * 전화번호·실명·주소·사업자 정보는 가입 때 이미 받아 저장돼 있었고 조회 경로만 없었다.
+ *
+ * 무료체험 상태를 같이 띄운다 — 체험 종료 직전이 해지방어가 가장 급한 시점이다.
+ */
+function ContactCard({ detail }: { detail: MemberDetailType }) {
+  const c = detail.contact;
+  const b = detail.business;
+  const masked = !!detail.user.pii_masked_at;
+  // 아티스트는 가입 경로가 달라 연락처가 별도 프로필에 있다. 사용자 레코드가 비면 그쪽을 쓴다.
+  const name = c?.full_name || c?.artist_real_name || null;
+  const phone = c?.phone || c?.artist_phone || null;
+  const address = c?.address || c?.artist_address || null;
+  const hasAny = !!(name || phone || address || c?.birth_date || b?.business_number || b?.store_name);
+
+  return (
+    <div className="space-y-2 rounded-xl bg-bg-soft p-3 ring-1 ring-line/10">
+      <div className="flex items-center gap-1.5">
+        <Phone size={12} className="text-ink-mute" />
+        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">연락 정보</p>
+      </div>
+
+      {masked && (
+        <Alert tone="warning">
+          개인정보가 마스킹된 회원입니다. 아래 값은 마스킹된 상태로 저장된 것입니다.
+        </Alert>
+      )}
+
+      {!hasAny ? (
+        <p className="py-2 text-xs text-ink-dim">
+          저장된 연락 정보가 없습니다. 가입 단계를 끝내지 않았거나 소셜 로그인만 한 회원입니다.
+        </p>
+      ) : (
+        <div>
+          <ContactLine label="이름" value={name} />
+          <ContactLine label="전화" value={phone} href={phone ? `tel:${phone.replace(/[^0-9+]/g, '')}` : undefined} />
+          <ContactLine label="이메일" value={detail.user.email} href={detail.user.email ? `mailto:${detail.user.email}` : undefined} />
+          <ContactLine label="주소" value={address} />
+          <ContactLine label="생년월일" value={c?.birth_date} />
+          <ContactLine
+            label="본인확인"
+            value={c?.identity_verified ? `완료${c.identity_provider ? ` (${c.identity_provider})` : ''}` : null}
+          />
+          <ContactLine label="영업담당" value={c?.sales_agent_code} />
+        </div>
+      )}
+
+      {/* 체험 종료가 임박한 회원이 곧 해지 후보다. */}
+      {(c?.is_trial_active || c?.free_trial_ends_at) && (
+        <div className="rounded-lg bg-bg-card px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">무료체험</p>
+          <p className="mt-0.5 text-sm font-semibold">
+            {c?.is_trial_active ? '진행 중' : '종료'}
+            {c?.free_trial_ends_at ? ` · ${new Date(c.free_trial_ends_at).toLocaleDateString('ko-KR')}까지` : ''}
+          </p>
+        </div>
+      )}
+
+      {b && (b.business_number || b.store_name) && (
+        <div className="rounded-lg bg-bg-card px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim">사업자 · 매장</p>
+          <div className="mt-0.5">
+            <ContactLine label="상호" value={b.business_name} />
+            <ContactLine label="대표자" value={b.representative_name} />
+            <ContactLine label="사업자번호" value={b.business_number} />
+            <ContactLine label="사업장" value={b.business_address} />
+            <ContactLine label="업태" value={b.business_type} />
+            <ContactLine label="매장명" value={b.store_name} />
+            <ContactLine label="업종" value={b.store_category} />
+            <ContactLine
+              label="영업시간"
+              value={b.open_time && b.close_time ? `${b.open_time} ~ ${b.close_time}` : null}
+            />
+            <ContactLine
+              label="진위확인"
+              value={b.business_verified ? '완료' : (b.verification_status || null)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BILLING_STATUS_LABEL: Record<string, string> = {
+  paid: '결제 성공',
+  failed: '실패',
+  provider_rejected: '카드사 거절',
+  unknown: '응답 없음',
+  skipped: '건너뜀 (카드 미등록)',
+  eligible: '청구 대기',
+  attempted: '시도',
+  requesting: '요청 중',
+  accepted: '접수',
+  provider_accepted: '승인',
+  awaiting_webhook: '입금 확인 대기',
+  reconciled: '정산 보정',
+};
+
+/**
+ * 정기결제 청구 시도 이력.
+ *
+ * 실패만 보여주면 "원래 결제가 안 되던 회원"인지 "이번에 처음 막힌 회원"인지
+ * 구분이 안 돼서 성공 건까지 같이 세워 둔다. 카드 거절이 쌓이는 회원은
+ * 해지 버튼을 누르기 전에 연락할 수 있는 회원이다.
+ */
+function BillingFailureCard({ detail }: { detail: MemberDetailType }) {
+  const billing = detail.billing_failures;
+  if (!billing) return null;
+  const { charges, notifications, failure_count_90d, last_failure_at, last_paid_at } = billing;
+  if (charges.length === 0 && notifications.length === 0 && failure_count_90d === 0) return null;
+
+  return (
+    <ListSection
+      icon={<CreditCard size={14} />}
+      title={`정기결제 청구 (최근 ${charges.length}건)`}
+    >
+      {failure_count_90d > 0 && (
+        <div className="border-t border-line/10 px-3 py-2 first:border-t-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-rose-300">
+            <AlertTriangle size={13} /> 최근 90일 결제 실패 {failure_count_90d}건
+          </p>
+          <p className="mt-0.5 text-xs text-ink-mute">
+            마지막 실패 {last_failure_at ? fmtDateTime(last_failure_at) : '—'}
+            {' · '}
+            마지막 성공 {last_paid_at ? fmtDateTime(last_paid_at) : '없음'}
+          </p>
+        </div>
+      )}
+
+      {charges.length === 0 ? (
+        <Empty>청구 시도 기록이 없어요</Empty>
+      ) : (
+        charges.map((c) => {
+          const failed = isBillingFailure(c.status);
+          return (
+            <Row key={c.id}>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {c.amount != null ? `₩${c.amount.toLocaleString()}` : '—'}
+                  <span className={`ml-2 text-xs font-bold ${failed ? 'text-rose-300' : 'text-ink-mute'}`}>
+                    {failed && <AlertTriangle size={10} className="mr-0.5 inline align-[-1px]" />}
+                    {BILLING_STATUS_LABEL[c.status] ?? c.status}
+                  </span>
+                </p>
+                <p className="text-xs text-ink-mute">
+                  {PLAN_LABEL[c.plan_type ?? ''] ?? c.plan_type ?? '—'}
+                  {c.operation_type ? ` · ${c.operation_type}` : ''}
+                  {c.payapp_state ? ` · state ${c.payapp_state}` : ''}
+                </p>
+                {c.error_message && (
+                  <p className="mt-0.5 break-words text-[11px] text-rose-200/80">{c.error_message}</p>
+                )}
+              </div>
+              <span className="shrink-0 text-xs text-ink-dim">
+                {c.requested_at ? new Date(c.requested_at).toLocaleDateString('ko-KR') : '—'}
+              </span>
+            </Row>
+          );
+        })
+      )}
+
+      {/* 안내가 실제로 전달됐는지. 알림이 실패하면 회원은 결제가 막힌 줄도 모른 채 해지된다. */}
+      {notifications.length > 0 && (
+        <div className="border-t border-line/10 px-3 py-2">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+            결제 실패 안내 발송
+          </p>
+          {notifications.map((n, i) => (
+            <p key={i} className="text-xs text-ink-mute">
+              {n.channel ?? '—'} · {n.template_type ?? '—'} ·{' '}
+              <span className={n.status === 'sent' ? 'text-ink-mute' : 'text-rose-300'}>
+                {n.status ?? '—'}
+                {n.failure_code ? ` (${n.failure_code})` : ''}
+              </span>
+              {' · '}
+              {new Date(n.sent_at ?? n.created_at).toLocaleDateString('ko-KR')}
+            </p>
+          ))}
+        </div>
+      )}
+    </ListSection>
+  );
+}
+
+/**
+ * 최근 6개월 재생량 추이.
+ *
+ * 해지는 결제일보다 먼저 재생량에서 보인다 — 매장이 다른 서비스로 갈아타면
+ * 구독은 살아 있어도 재생이 먼저 끊긴다. 진행 중인 달은 아직 덜 쌓여서
+ * 비교에서 빼고(판정은 memberChurnSignals), 막대만 흐리게 그린다.
+ */
+function PlaybackTrendCard({ trend }: { trend: MemberDetailType['playback_trend'] }) {
+  if (!trend || trend.length === 0) return null;
+  const thisMonth = currentKstMonth();
+  const max = Math.max(...trend.map((p) => p.listened_seconds), 1);
+  const drop = playbackDrop(trend);
+
+  return (
+    <section>
+      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+        <TrendingDown size={14} /> 재생량 추이 (최근 6개월)
+      </h4>
+      <div className="space-y-2 rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+        {drop?.severe && (
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+            <AlertTriangle size={13} />
+            {drop.previous.month} 대비 {drop.latest.month} 청취 {drop.dropPercent}% 감소 — 이탈 신호
+          </p>
+        )}
+        <div className="flex items-end gap-[2px]" role="img"
+             aria-label={trend.map((p) => `${p.month} ${fmtTime(p.listened_seconds)}`).join(', ')}>
+          {trend.map((p) => {
+            const partial = p.month === thisMonth;
+            return (
+              <div key={p.month} className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-[9px] tabular-nums text-ink-dim">
+                  {p.listened_seconds > 0 ? Math.round(p.listened_seconds / 3600) : 0}h
+                </span>
+                <div
+                  className={`w-full rounded-t ${partial ? 'bg-accent/40' : 'bg-accent'}`}
+                  style={{ height: `${Math.max(2, (p.listened_seconds / max) * 56)}px` }}
+                  title={`${p.month} · ${fmtTime(p.listened_seconds)} · ${p.plays.toLocaleString()}회`}
+                />
+                <span className="text-[9px] text-ink-dim">{p.month.slice(5)}월</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-ink-dim">
+          막대는 월 청취 시간. {thisMonth.slice(5)}월은 진행 중이라 비교에서 제외한다.
+        </p>
+      </div>
+    </section>
   );
 }
 
