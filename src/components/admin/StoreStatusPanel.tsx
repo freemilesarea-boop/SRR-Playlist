@@ -9,12 +9,13 @@
  * 상태 목록(장애 우선) / 지금 나오는 곡 / 매장 라이브.
  */
 import { lazy } from 'react';
-import { Activity, Music, Radio } from 'lucide-react';
+import { Activity, Music, Radio, Speaker } from 'lucide-react';
 import AdminMergedPanel from './AdminMergedPanel';
 
 const StoreMonitoringPanel = lazy(() => import('./StoreMonitoringPanel'));
 const StoreNowPlayingPanel = lazy(() => import('./StoreNowPlayingPanel'));
 const BusinessLivePanel = lazy(() => import('./BusinessLivePanel'));
+const OutputSlotMonitorPanel = lazy(() => import('./OutputSlotMonitorPanel'));
 
 export default function StoreStatusPanel({ initialView }: { initialView?: string }) {
   return (
@@ -27,6 +28,8 @@ export default function StoreStatusPanel({ initialView }: { initialView?: string
           icon: <Music size={13} />, render: () => <StoreNowPlayingPanel /> },
         { key: 'live', label: '매장 라이브', hint: '매장 접속·재생 라이브 현황',
           icon: <Radio size={13} />, render: () => <BusinessLivePanel /> },
+        { key: 'multi-output', label: '분리 송출', hint: '분리 송출 매장의 공간(1~3번)별 상태',
+          icon: <Speaker size={13} />, render: () => <OutputSlotMonitorPanel /> },
       ]}
     />
   );

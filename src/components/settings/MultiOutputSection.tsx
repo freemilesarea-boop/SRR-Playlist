@@ -17,8 +17,22 @@ import {
   saveMultiOutput, validateMultiOutputConfig,
   type MultiOutputConfig, type SlotConfig, type SlotMode,
 } from '@/lib/multiOutput';
+import {
+  getMyOutputSlotStatus, slotDisplayState, SLOT_DISPLAY_LABEL,
+  type OutputSlotStatus, type SlotDisplayState,
+} from '@/lib/api/outputSlotApi';
 
 const MODES: SlotMode[] = ['off', 'brand', 'store'];
+const STATUS_POLL_MS = 30_000;
+
+const STATE_DOT: Record<SlotDisplayState, string> = {
+  playing: 'bg-emerald-500',
+  paused: 'bg-amber-500',
+  idle: 'bg-amber-500',
+  hidden: 'bg-amber-500',
+  offline: 'bg-red-500',
+  never: 'bg-ink-dim',
+};
 
 function sinkSupported(): boolean {
   return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
@@ -38,6 +52,19 @@ export default function MultiOutputSection() {
   const [draft, setDraft] = useState<MultiOutputConfig>(savedConfig ?? DEFAULT_MULTI_OUTPUT_CONFIG);
   const [busy, setBusy] = useState(false);
   const [categories, setCategories] = useState<string[] | null>(null);
+  const [statuses, setStatuses] = useState<OutputSlotStatus[]>([]);
+
+  // 공간별 현재 상태 — 켜져 있을 때만 30초마다.
+  useEffect(() => {
+    if (!savedEnabled) return;
+    let alive = true;
+    const load = () => {
+      getMyOutputSlotStatus().then((r) => { if (alive) setStatuses(r); }).catch(() => { /* 표시만 생략 */ });
+    };
+    load();
+    const t = window.setInterval(load, STATUS_POLL_MS);
+    return () => { alive = false; window.clearInterval(t); };
+  }, [savedEnabled]);
 
   useEffect(() => { if (savedConfig) setDraft(savedConfig); }, [savedConfig]);
 
@@ -123,6 +150,7 @@ export default function MultiOutputSection() {
             <SlotCard
               key={s.slot}
               config={s}
+              status={statuses.find((x) => x.slot === s.slot && s.mode !== 'off') ?? null}
               categories={categories}
               canOpen={!dirty && s.mode !== 'off'}
               onChange={(patch) => updateSlot(s.slot, patch)}
@@ -175,8 +203,9 @@ export default function MultiOutputSection() {
   );
 }
 
-function SlotCard({ config, categories, canOpen, onChange, onOpen }: {
+function SlotCard({ config, status, categories, canOpen, onChange, onOpen }: {
   config: SlotConfig;
+  status: OutputSlotStatus | null;
   categories: string[] | null;
   canOpen: boolean;
   onChange: (patch: Partial<SlotConfig>) => void;
@@ -185,13 +214,16 @@ function SlotCard({ config, categories, canOpen, onChange, onOpen }: {
   return (
     <div className="space-y-2 rounded-xl bg-bg-soft p-2.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold">{config.slot}번 플레이어</p>
+        <div className="min-w-0">
+          <p className="text-sm font-bold">{config.slot}번 플레이어</p>
+          {status && <SlotStatusLine status={status} />}
+        </div>
         <button
           type="button"
           disabled={!canOpen}
           onClick={onOpen}
           title={canOpen ? '' : '설정을 저장한 뒤 열 수 있어요'}
-          className="inline-flex items-center gap-1 rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:opacity-40"
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs font-semibold text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:opacity-40"
         >
           <ExternalLink size={12} /> 창 열기
         </button>
@@ -249,5 +281,21 @@ function SlotCard({ config, categories, canOpen, onChange, onOpen }: {
         </div>
       )}
     </div>
+  );
+}
+
+function SlotStatusLine({ status }: { status: OutputSlotStatus }) {
+  const state = slotDisplayState(status);
+  const detail = state === 'playing' || state === 'paused'
+    ? [status.track_title, status.sink_label].filter(Boolean).join(' · ')
+    : state === 'hidden'
+      ? '창을 다시 띄워 주세요'
+      : '';
+  return (
+    <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-mute">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} />
+      <span className="shrink-0 font-semibold">{SLOT_DISPLAY_LABEL[state]}</span>
+      {detail && <span className="truncate">· {detail}</span>}
+    </p>
   );
 }

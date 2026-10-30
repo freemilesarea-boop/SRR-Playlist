@@ -10,6 +10,7 @@ import { getOutputSlot } from '@/lib/outputSlot';
 import { useAudioOutputDevices } from '@/hooks/useAudioOutputDevices';
 import { useAudioOutputStore } from '@/store/audioOutputStore';
 import { playTestTone, type TestToneHandle } from '@/lib/audioOutput';
+import { useOutputSlotHeartbeat } from '@/hooks/useOutputSlotHeartbeat';
 
 export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' }) {
   const slot = getOutputSlot();
@@ -21,6 +22,8 @@ export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' }) {
   const toneRef = useRef<TestToneHandle | null>(null);
 
   useEffect(() => () => toneRef.current?.stop(), []);
+  // 공간별 상태 보고(관리자·점주 모니터링) — 슬롯 창이 아니면 no-op.
+  useOutputSlotHeartbeat(kind);
 
   if (!slot) return null;
 
