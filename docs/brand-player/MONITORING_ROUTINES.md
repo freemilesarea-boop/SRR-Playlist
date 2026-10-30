@@ -1115,6 +1115,111 @@ drop function if exists public.srr_store_check_tick(boolean);  -- 완전 제거
 
 ---
 
+### 2026-10-30 보고까지 DB 로 — Claude 는 감시 경로에서 빠졌다
+
+형님 지시: "보고도 슬랙으로 올리게 해라."
+
+#### 최종 구조
+
+| 주체 | 주기 | 하는 일 | 사람 필요 |
+|---|---|---|---|
+| pg_cron `srr-brand-player-health` | 1분 | brand 플레이어 감지 (기존) | 없음 |
+| pg_cron `srr-store-check` | 매시간 :30 | 전 매장 끊김 판정 + 슬랙 적재 | 없음 |
+| **pg_cron `srr-store-report`** | **00:00·12:00 UTC = 09·21시 KST** | **보고 전문을 슬랙으로** | **없음** |
+| pg_cron `srr-dispatch-notifications` | 1분 | 슬랙 발송 (기존) | 없음 |
+| ~~Claude 매시간~~ | — | 중단 (`trig_01TVJwsJGRiHMjLCxdEfxRPS`) | — |
+| ~~Claude 09/21시~~ | — | 중단 (`trig_015SBmSN8dCqvB41d25gv6Y5`) | — |
+
+**감시 경로에 사람도 Claude 도 없다.** 형님은 슬랙만 보면 된다.
+Claude 는 이제 형님이 **물을 때만** 파고든다 — 그게 맞는 역할 분담이다.
+
+#### 판정 로직을 공용 함수로 통합했다 — 이게 이번 작업의 핵심
+
+처음엔 `srr_store_check_tick` 안에 판정 로직을 직접 넣었다. 보고 함수를 만들면서
+같은 로직을 복사하려다 멈췄다. **이 작업 중에만 판정 로직이 세 번 어긋났기 때문이다**:
+
+1. 괄호 우선순위로 타입 오류
+2. 미사용 창 7일 → 5.4일 이탈 계정이 끊김으로 올라옴 → 24시간
+3. `cl_age` 단독 판정 → brand 플레이어만 쓰는 계정의 실제 끊김을 삼킴 → 가장 싱싱한 축
+
+복사본이 둘이면 이런 수정이 한쪽에만 들어간다. 그래서
+**`public.srr_store_states()`** 하나로 빼고 `tick`·`report` 가 그것만 쓰게 했다.
+
+```
+srr_store_states()   ← 명부 + 축 + status + side + cause. 판정은 여기에만 있다
+   ├─ srr_store_check_tick()   매시간 적재 (6시간 쿨다운)
+   └─ srr_store_report()       09/21시 보고
+```
+
+★ 교훈: **같은 판단을 두 곳에 두면 반드시 어긋난다.** 제외 기준을
+  `brand_player_monitoring_exempt` 한 곳에 둔 것과 같은 원칙이다.
+
+#### 상태 4분류 (공용 함수가 내는 값)
+
+| status | 조건 | 보고 표기 |
+|---|---|---|
+| `playing` | 가장 싱싱한 축 < 300초 | `<매장명> 정상` |
+| `outage` | 300초 ~ 24시간 | `<매장명> 비정상 끊김 (<시각>부터)` + 원인 |
+| `idle` | 24시간 초과 | 건수로 묶음. 유료 계정만 이름 |
+| `unstarted` | 모든 축이 관측 불가 | 건수만 |
+
+`side` 는 `outage` 일 때만 채워진다: `store` / `ours` / `unknown`.
+
+#### 보고 본문 구성
+
+```
+■ 이용매장 점검 — MM-DD HH:MM KST
+<매장명> 정상                         ← 정상 먼저 (형님 지정 순서)
+...
+<매장명> 비정상 끊김 (MM-DD HH:MM부터)
+  └ 원인: 매장 쪽|우리 쪽|판정 불가 — <근거 전문>
+
+■ 요약   재생 중 N · 끊김 N(우리 쪽 a · 매장 쪽 b · 판정 불가 c) · 미사용 N · 미개시 N = 명부 N곳
+■ 유료인데 미사용 (이탈 신호 · 장애 아님)
+■ 미청구·연체
+■ 신규 가입 24시간 (명부에 자동 포함됨)
+■ 인프라   크론 70분 / 미발송 / 슬랙 적재 12시간 / 플레이리스트 최신
+```
+
+제목은 끊김 유무로 갈린다(`error` / `info`) — 슬랙에서 아이콘이 달라진다.
+
+실행 검증 2026-10-30 21:48 → 21:49:00 발송, 오류 없음, 본문 1,071자.
+
+#### SQL 로 넘어오면서 **잃은 것** — 숨기지 않고 적는다
+
+보고 본문은 **사실의 집계**다. 오늘 내가 찾아낸 것들 중 아래는 SQL 이 못 한다:
+
+- **명부 공백 발견** — "활성 브랜드인데 명부에 없다"를 깨닫고 정의를 바꾼 판단
+- **오탐 식별** — 화정점 incident 가 열려 있는데 매장은 재생 중이라는 교차 확인
+- **비매장 계정 판별** — `louverabe@gmail.com` 의 `paused=true` 를 읽고 "아티스트가
+  일시정지한 것"이라고 해석한 것
+- **신규 가입의 의미** — `erooming2023` 이 오늘 생성된 계정이라 하루 종일 붙었다
+  끊긴 것이 "세팅 중"이라는 추론
+- **제 오판 발견** — 독립 축 2개 규칙을 내가 어겼다는 것을 알아챈 것
+
+이건 **정기 보고가 아니라 조사**다. 형님이 슬랙에서 이상한 걸 보면 그때 물어보시면
+된다. 매일 자동으로 나오는 것과 물어봐서 나오는 것을 구분하는 것이 맞다.
+
+#### 되돌리는 방법
+
+```sql
+select cron.unschedule('srr-store-report');   -- 보고만 끈다
+select cron.unschedule('srr-store-check');    -- 매시간 점검도 끈다
+drop function if exists public.srr_store_report(boolean);
+drop function if exists public.srr_store_check_tick(boolean);
+drop function if exists public.srr_store_states();
+```
+Claude 루틴 2개(`trig_01TVJwsJGRiHMjLCxdEfxRPS`, `trig_015SBmSN8dCqvB41d25gv6Y5`)를
+`enabled=true` 로 되돌리면 이전 구조로 복귀한다.
+
+손으로 불러볼 때는 `p_dry_run` 기본값이 **true** 라 실수로 슬랙에 가지 않는다.
+```sql
+select (public.srr_store_report(true))->>'body';   -- 미리보기
+select public.srr_store_check_tick(true);          -- 미리보기
+```
+
+---
+
 ## 4. 금지 표현
 
 - Hard/Remote Recovery 동작만으로 "장애 해결" · "ROOT CAUSE PROVEN" 금지.
