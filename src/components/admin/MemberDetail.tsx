@@ -3,6 +3,7 @@ import {
   X, Mail, User as UserIcon, Calendar, Clock, Headphones, Wallet, Handshake,
   Ban, UserX, Eye, KeyRound, ShieldOff, AlertTriangle, LogOut, Ticket,
   GraduationCap, Music2, Shield, History, Megaphone, Phone, Copy,
+  CreditCard, TrendingDown,
 } from 'lucide-react';
 import {
   fetchMemberDetail,
@@ -21,6 +22,11 @@ import {
   type AdminArtistPlanType,
   type PlanAuditRow,
 } from '@/lib/adminApi';
+import {
+  isBillingFailure,
+  currentKstMonth,
+  playbackDrop,
+} from '@/lib/memberChurnSignals';
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
 import Alert from '@/components/Alert';
@@ -497,6 +503,9 @@ export default function MemberDetail({
               <Stat icon={<Clock size={14} />} label="누적 청취" value={fmtTime(data.total_listened_seconds)} />
             </section>
 
+            {/* 재생량 추이 — 해지는 결제보다 재생에서 먼저 보인다. */}
+            <PlaybackTrendCard trend={data.playback_trend} />
+
             {/* 큐레이터 권한 — 일반 액션 (Danger Zone 과 분리) */}
             <section className="flex items-center justify-between gap-3 rounded-xl bg-bg-card px-3 py-2.5 ring-1 ring-line/10">
               <div>
@@ -642,6 +651,9 @@ export default function MemberDetail({
                 ))
               )}
             </ListSection>
+
+            {/* 정기결제 청구 시도 — 카드 거절이 쌓이면 해지 전에 연락할 수 있다. */}
+            <BillingFailureCard detail={data} />
 
             {/* 결제 */}
             <ListSection icon={<Wallet size={14} />} title={`결제/매출 (${data.revenue.length})`}>
@@ -1106,6 +1118,159 @@ function ContactCard({ detail }: { detail: MemberDetailType }) {
         </div>
       )}
     </div>
+  );
+}
+
+const BILLING_STATUS_LABEL: Record<string, string> = {
+  paid: '결제 성공',
+  failed: '실패',
+  provider_rejected: '카드사 거절',
+  unknown: '응답 없음',
+  skipped: '건너뜀 (카드 미등록)',
+  eligible: '청구 대기',
+  attempted: '시도',
+  requesting: '요청 중',
+  accepted: '접수',
+  provider_accepted: '승인',
+  awaiting_webhook: '입금 확인 대기',
+  reconciled: '정산 보정',
+};
+
+/**
+ * 정기결제 청구 시도 이력.
+ *
+ * 실패만 보여주면 "원래 결제가 안 되던 회원"인지 "이번에 처음 막힌 회원"인지
+ * 구분이 안 돼서 성공 건까지 같이 세워 둔다. 카드 거절이 쌓이는 회원은
+ * 해지 버튼을 누르기 전에 연락할 수 있는 회원이다.
+ */
+function BillingFailureCard({ detail }: { detail: MemberDetailType }) {
+  const billing = detail.billing_failures;
+  if (!billing) return null;
+  const { charges, notifications, failure_count_90d, last_failure_at, last_paid_at } = billing;
+  if (charges.length === 0 && notifications.length === 0 && failure_count_90d === 0) return null;
+
+  return (
+    <ListSection
+      icon={<CreditCard size={14} />}
+      title={`정기결제 청구 (최근 ${charges.length}건)`}
+    >
+      {failure_count_90d > 0 && (
+        <div className="border-t border-line/10 px-3 py-2 first:border-t-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-rose-300">
+            <AlertTriangle size={13} /> 최근 90일 결제 실패 {failure_count_90d}건
+          </p>
+          <p className="mt-0.5 text-xs text-ink-mute">
+            마지막 실패 {last_failure_at ? fmtDateTime(last_failure_at) : '—'}
+            {' · '}
+            마지막 성공 {last_paid_at ? fmtDateTime(last_paid_at) : '없음'}
+          </p>
+        </div>
+      )}
+
+      {charges.length === 0 ? (
+        <Empty>청구 시도 기록이 없어요</Empty>
+      ) : (
+        charges.map((c) => {
+          const failed = isBillingFailure(c.status);
+          return (
+            <Row key={c.id}>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {c.amount != null ? `₩${c.amount.toLocaleString()}` : '—'}
+                  <span className={`ml-2 text-xs font-bold ${failed ? 'text-rose-300' : 'text-ink-mute'}`}>
+                    {failed && <AlertTriangle size={10} className="mr-0.5 inline align-[-1px]" />}
+                    {BILLING_STATUS_LABEL[c.status] ?? c.status}
+                  </span>
+                </p>
+                <p className="text-xs text-ink-mute">
+                  {PLAN_LABEL[c.plan_type ?? ''] ?? c.plan_type ?? '—'}
+                  {c.operation_type ? ` · ${c.operation_type}` : ''}
+                  {c.payapp_state ? ` · state ${c.payapp_state}` : ''}
+                </p>
+                {c.error_message && (
+                  <p className="mt-0.5 break-words text-[11px] text-rose-200/80">{c.error_message}</p>
+                )}
+              </div>
+              <span className="shrink-0 text-xs text-ink-dim">
+                {c.requested_at ? new Date(c.requested_at).toLocaleDateString('ko-KR') : '—'}
+              </span>
+            </Row>
+          );
+        })
+      )}
+
+      {/* 안내가 실제로 전달됐는지. 알림이 실패하면 회원은 결제가 막힌 줄도 모른 채 해지된다. */}
+      {notifications.length > 0 && (
+        <div className="border-t border-line/10 px-3 py-2">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-dim">
+            결제 실패 안내 발송
+          </p>
+          {notifications.map((n, i) => (
+            <p key={i} className="text-xs text-ink-mute">
+              {n.channel ?? '—'} · {n.template_type ?? '—'} ·{' '}
+              <span className={n.status === 'sent' ? 'text-ink-mute' : 'text-rose-300'}>
+                {n.status ?? '—'}
+                {n.failure_code ? ` (${n.failure_code})` : ''}
+              </span>
+              {' · '}
+              {new Date(n.sent_at ?? n.created_at).toLocaleDateString('ko-KR')}
+            </p>
+          ))}
+        </div>
+      )}
+    </ListSection>
+  );
+}
+
+/**
+ * 최근 6개월 재생량 추이.
+ *
+ * 해지는 결제일보다 먼저 재생량에서 보인다 — 매장이 다른 서비스로 갈아타면
+ * 구독은 살아 있어도 재생이 먼저 끊긴다. 진행 중인 달은 아직 덜 쌓여서
+ * 비교에서 빼고(판정은 memberChurnSignals), 막대만 흐리게 그린다.
+ */
+function PlaybackTrendCard({ trend }: { trend: MemberDetailType['playback_trend'] }) {
+  if (!trend || trend.length === 0) return null;
+  const thisMonth = currentKstMonth();
+  const max = Math.max(...trend.map((p) => p.listened_seconds), 1);
+  const drop = playbackDrop(trend);
+
+  return (
+    <section>
+      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-mute">
+        <TrendingDown size={14} /> 재생량 추이 (최근 6개월)
+      </h4>
+      <div className="space-y-2 rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+        {drop?.severe && (
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+            <AlertTriangle size={13} />
+            {drop.previous.month} 대비 {drop.latest.month} 청취 {drop.dropPercent}% 감소 — 이탈 신호
+          </p>
+        )}
+        <div className="flex items-end gap-[2px]" role="img"
+             aria-label={trend.map((p) => `${p.month} ${fmtTime(p.listened_seconds)}`).join(', ')}>
+          {trend.map((p) => {
+            const partial = p.month === thisMonth;
+            return (
+              <div key={p.month} className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-[9px] tabular-nums text-ink-dim">
+                  {p.listened_seconds > 0 ? Math.round(p.listened_seconds / 3600) : 0}h
+                </span>
+                <div
+                  className={`w-full rounded-t ${partial ? 'bg-accent/40' : 'bg-accent'}`}
+                  style={{ height: `${Math.max(2, (p.listened_seconds / max) * 56)}px` }}
+                  title={`${p.month} · ${fmtTime(p.listened_seconds)} · ${p.plays.toLocaleString()}회`}
+                />
+                <span className="text-[9px] text-ink-dim">{p.month.slice(5)}월</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-ink-dim">
+          막대는 월 청취 시간. {thisMonth.slice(5)}월은 진행 중이라 비교에서 제외한다.
+        </p>
+      </div>
+    </section>
   );
 }
 

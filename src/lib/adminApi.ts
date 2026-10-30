@@ -164,6 +164,47 @@ export interface MemberDetail {
     open_time: string | null;
     close_time: string | null;
   } | null;
+  /**
+   * 정기결제 청구 시도 이력. 실패만 따로 세지 않고 성공 건까지 같이 내려서
+   * 화면에서 흐름(마지막 성공 → 연속 실패)을 볼 수 있게 한다.
+   * payapp_raw(카드사 응답 원문)는 내려오지 않는다.
+   */
+  billing_failures?: {
+    failure_count_90d: number;
+    last_failure_at: string | null;
+    last_paid_at: string | null;
+    charges: Array<{
+      id: string;
+      status: string;
+      payapp_state: string | null;
+      error_message: string | null;
+      amount: number | null;
+      plan_type: string | null;
+      operation_type: string | null;
+      cycle_period_end: string | null;
+      requested_at: string | null;
+      resolved_at: string | null;
+    }>;
+    /** 결제 실패 안내 발송 결과 — 알림 자체가 실패하면 회원은 모른 채 해지된다. */
+    notifications: Array<{
+      channel: string | null;
+      template_type: string | null;
+      status: string | null;
+      failure_code: string | null;
+      scheduled_charge_at: string | null;
+      sent_at: string | null;
+      created_at: string;
+    }>;
+  } | null;
+  /**
+   * 최근 6개월 재생량(KST 월, 오래된 달 → 최신 달). 전월 대비 급감은 이탈 신호다.
+   * 집계 소스는 total_listened_seconds 와 같다(v2 컷오버 이후 세션, 이전 stream_events).
+   */
+  playback_trend?: Array<{
+    month: string;
+    plays: number;
+    listened_seconds: number;
+  }> | null;
   total_streams: number;
   /**
    * 실제 재생 시간(초). 세션 경과 기준 — 매장 태블릿 화면이 꺼져 있어도 집계된다.
