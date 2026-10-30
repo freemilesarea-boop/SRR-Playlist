@@ -69,6 +69,7 @@ import {
   getUpcomingAnnouncements, markAnnouncementPlayed, resolveAnnouncementPlayableUrl,
   type UpcomingAnnouncement,
 } from '@/lib/api/announcementApi';
+import { useElementAudioSink } from '@/hooks/useElementAudioSink';
 
 const POLL_INTERVAL_MS    = 15_000;  // 서버 upcoming 폴링/타이머 re-arm 주기 (백업 + 시계 보정)
 const LOOKAHEAD_SECONDS   = 900;     // 서버에 요청할 미래 occurrence 조회 범위 (15min)
@@ -155,6 +156,8 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
   }, [storeId, debug]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 분리 송출 — 이 창에서 고른 스피커로 송출.
+  useElementAudioSink(audioRef);
   const [active, setActive] = useState<UpcomingAnnouncement | null>(null);
   const [error, setError] = useState<string | null>(null);
 

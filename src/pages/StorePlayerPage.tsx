@@ -42,6 +42,10 @@ import { useStorePlaybackPolicy } from '@/hooks/useStorePlaybackPolicy';
 // BRAND-PLAYLIST-ROTATION-4B — Queue 종료 시 다음 curated set 으로 순환.
 // play 모드 + Pool≥2 에서만 동작; break/closed/legacy/fallback 에서는 완전 비활성.
 import { useStorePlaylistRotation } from '@/hooks/useStorePlaylistRotation';
+import OutputSlotBar from '@/components/player/OutputSlotBar';
+import { useStartCategoryPlayback, getQueueCategory } from '@/hooks/useStartCategoryPlayback';
+import { getOutputSlot } from '@/lib/outputSlot';
+import { normalizeMultiOutputConfig, slotConfigOf } from '@/lib/multiOutput';
 // AnnouncementOverlay + EmergencyBroadcastOverlay 는 AppShell 의
 // GlobalStoreAudioOverlays 가 전역 마운트 — /business/player 외 화면에서도 발화.
 // 여기서 import 하면 같은 인스턴스가 두 번 mount 되어 안내음 2회 재생 → 의도적 제거.
@@ -63,6 +67,18 @@ export default function StorePlayerPage() {
   const schedules = useBusinessScheduleStore((s) => s.schedules);
   const schedulesLoading = useBusinessScheduleStore((s) => s.loading);
   const startBusinessMode = useStartBusinessMode();
+  const startCategoryPlayback = useStartCategoryPlayback();
+  // 분리 송출 — 이 창이 "업종 카테고리" 매장 플레이어면 그 카테고리로 튼다(점주가 직접 고른 값).
+  const profileForSlot = useAuthStore((s) => s.profile);
+  const outputSlot = getOutputSlot();
+  const slotConfig = profileForSlot?.multi_output_enabled
+    ? slotConfigOf(normalizeMultiOutputConfig(profileForSlot.multi_output_config), outputSlot)
+    : null;
+  const slotCategory = slotConfig?.mode === 'store' && slotConfig.source === 'category'
+    ? slotConfig.category ?? null
+    : null;
+  // 슬롯 창인데 프로필이 아직 없으면 판단을 미룬다(스케줄로 잘못 시작하지 않게).
+  const slotDecisionPending = outputSlot !== null && !profileForSlot;
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const playing = usePlayerStore((s) => s.playing);
@@ -108,22 +124,31 @@ export default function StorePlayerPage() {
   // 자동재생이 브라우저에 막히면 autoplayBlocked 가 서고 PlaybackBlockedOverlay 가
   // "화면을 눌러주세요" 를 전체화면으로 띄운다 — 조용히 무음으로 남지는 않는다.
   useEffect(() => {
+    if (slotDecisionPending) return;
+    // 카테고리 슬롯은 스케줄이 아니라 카테고리로 판단한다. 저장된 큐가 다른 카테고리로
+    // 만든 것이면(점주가 카테고리를 바꿈) 이어 틀지 않고 새로 만든다.
+    const staleCategoryQueue = !!slotCategory && queue.length > 0 && getQueueCategory() !== slotCategory;
     const action = resolveStoreAutoStart({
       membership,
-      schedulesLoading,
-      hasSchedules: schedules.length > 0,
-      hasQueue: queue.length > 0,
-      playing,
+      schedulesLoading: slotCategory ? false : schedulesLoading,
+      hasSchedules: slotCategory ? true : schedules.length > 0,
+      hasQueue: queue.length > 0 && !staleCategoryQueue,
+      playing: playing && !staleCategoryQueue,
       alreadyTried: autoStartTriedRef.current,
     });
     if (action === 'none') return;
     autoStartTriedRef.current = true;
+    if (slotCategory && action !== 'resume_queue') {
+      void startCategoryPlayback(slotCategory);
+      return;
+    }
     // 진단 이벤트를 새로 찍지 않는다. session_start 는 이 화면 진입 시 이미 1회 기록되고,
     // 여기서 또 찍으면 세션 수가 이중 계산돼 무음 감시 판정이 망가진다.
     // 자동 시작의 성패는 이어지는 audio progress / autoplay_blocked 로 이미 드러난다.
     if (action === 'resume_queue') play();
     else void startBusinessMode();
-  }, [membership, schedulesLoading, schedules.length, queue.length, playing, play, startBusinessMode]);
+  }, [membership, schedulesLoading, schedules.length, queue.length, playing, play, startBusinessMode,
+    slotDecisionPending, slotCategory, startCategoryPlayback]);
 
   // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
   // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
@@ -166,7 +191,8 @@ export default function StorePlayerPage() {
 
   // X6.89 — 본사 정책 자동 동기화. 프랜차이즈 연결된 매장만 정책 적용,
   // 미연결 매장은 has_franchise_policy=false 로 기존 큐 그대로 사용 (회귀 0).
-  const franchiseSync = useFranchisePolicySync({ storeId, enabled: !!storeId });
+  // 카테고리 슬롯은 점주가 고른 카테고리를 튼다 — 본사 정책 큐로 덮어쓰지 않는다.
+  const franchiseSync = useFranchisePolicySync({ storeId, enabled: !!storeId && !slotCategory });
 
   // Phase 1-3 — 매장 관제 heartbeat. /store/player 진입 시점부터 60s 주기 +
   // 트랙 변경 즉시 fire. heartbeat 실패는 silent (player 재생 절대 방해 X).
@@ -176,7 +202,7 @@ export default function StorePlayerPage() {
   // scheduleSuppression 게이트가 자동으로 재생을 정지/재개한다 (아래 UI 는 상태 표시 전용).
   const { decision: schedule } = useStorePlaybackPolicy({ storeId, enabled: !!storeId });
   // Queue 종료 기준 Playlist Set 순환. schedule 상태를 그대로 받아 play 모드에서만 동작.
-  useStorePlaylistRotation({ storeId, enabled: !!storeId, decision: schedule });
+  useStorePlaylistRotation({ storeId, enabled: !!storeId && !slotCategory, decision: schedule });
   const isBreak = schedule.state === 'break';
   const isClosed = schedule.state === 'closed';
   const scheduleActive = isBreak || isClosed; // 재생 억제 중
@@ -193,6 +219,8 @@ export default function StorePlayerPage() {
     <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white">
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
       <PlaybackBlockedOverlay />
+      {/* 분리 송출 창 — N번 플레이어 표시 + 이 창의 스피커 선택 */}
+      <OutputSlotBar kind="store" />
       {/* 상단 바: 상태 + 나가기 */}
       <header className="flex items-center justify-between gap-3 px-5 py-3 sm:px-8">
         <div className="flex items-center gap-2 text-xs font-semibold">

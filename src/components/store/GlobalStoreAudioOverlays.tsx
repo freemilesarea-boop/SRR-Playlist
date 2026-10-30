@@ -21,6 +21,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import AnnouncementOverlay from './AnnouncementOverlay';
 import EmergencyBroadcastOverlay from './EmergencyBroadcastOverlay';
+import { getOutputSlot } from '@/lib/outputSlot';
+import { normalizeMultiOutputConfig, shouldPlayAnnouncementsHere } from '@/lib/multiOutput';
 
 // 자동 발화 금지 라우트 — admin/artist/auth/onboarding.
 // 매장 음악이 흐르는 화면 (/business, /enterprise/*, /, /library, /playlists, /search 등) 은 허용.
@@ -56,7 +58,14 @@ export default function GlobalStoreAudioOverlays() {
   );
 
   const blockedByRoute = isBlockedPath(location.pathname);
-  const shouldMount = !!userId && isStoreCandidate && !blockedByRoute;
+  // 분리 송출 — 점주가 고른 플레이어 창에서만 1회 송출한다(창마다 겹쳐 나가지 않게).
+  const outputSlot = getOutputSlot();
+  const announcementHere = shouldPlayAnnouncementsHere({
+    enabled: !!profile?.multi_output_enabled,
+    config: profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null,
+    slot: outputSlot,
+  });
+  const shouldMount = !!userId && isStoreCandidate && !blockedByRoute && announcementHere;
 
   // 진입 / 언마운트 로그 — 운영에서 "예약이 왜 안 도는지" 즉시 판단
   useEffect(() => {
@@ -69,9 +78,11 @@ export default function GlobalStoreAudioOverlays() {
       business_mode: businessMode,
       is_store_candidate: isStoreCandidate,
       blocked_by_route: blockedByRoute,
+      output_slot: outputSlot,
+      announcement_here: announcementHere,
       should_mount: shouldMount,
     });
-  }, [location.pathname, userId, profile?.role, profile, businessMode, isStoreCandidate, blockedByRoute, shouldMount]);
+  }, [location.pathname, userId, profile?.role, profile, businessMode, isStoreCandidate, blockedByRoute, outputSlot, announcementHere, shouldMount]);
 
   if (!shouldMount) return null;
 

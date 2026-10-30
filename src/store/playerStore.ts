@@ -6,6 +6,7 @@ import {
   type NextCause,
   type PlaylistCycleEvent,
 } from '@/lib/playerCycleCompletion';
+import { slotScopedKey } from '@/lib/outputSlot';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -129,8 +130,9 @@ interface PlayerState {
 }
 
 // 0078 — localStorage 영속화
-const VOLUME_KEY = 'srr.player.volume';
-const MUTED_VOL_KEY = 'srr.player.mutedVolume';
+// 분리 송출 창은 공간마다 볼륨이 다르다.
+const VOLUME_KEY = slotScopedKey('srr.player.volume');
+const MUTED_VOL_KEY = slotScopedKey('srr.player.mutedVolume');
 
 function loadVolume(): number {
   try {

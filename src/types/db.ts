@@ -26,6 +26,9 @@ export interface UserRow {
   trial_sales_agent_id?: string | null;
   // 0535 — 가입 시 "어디서 알게 되셨나요?" 첫 응답
   signup_source?: string | null;
+  // 0536 — 분리 송출(플레이어 1~3 공간별 송출)
+  multi_output_enabled?: boolean | null;
+  multi_output_config?: unknown;
   is_trial_active?: boolean | null;
   playback_enabled?: boolean | null;
   // 0056 — 회원 탈퇴
