@@ -10,11 +10,11 @@ export type SlotPlayerStatus = 'playing' | 'paused' | 'stopped' | 'unknown';
 export interface OutputSlotStatus {
   slot: OutputSlot;
   /** 점주가 설정한 역할. */
-  mode: 'brand' | 'store';
+  mode: 'brand' | 'store' | 'announce';
   source: 'schedule' | 'category' | null;
   category: string | null;
   /** 창이 실제로 보고한 역할(설정과 다르면 창을 다시 열어야 한다). */
-  reported_mode: 'brand' | 'store' | null;
+  reported_mode: 'brand' | 'store' | 'announce' | null;
   player_status: SlotPlayerStatus | null;
   /** 마지막 보고 3분 이내. */
   online: boolean;
@@ -39,7 +39,7 @@ export interface AdminOutputSlotStore {
 
 export async function sendOutputSlotHeartbeat(input: {
   slot: OutputSlot;
-  mode: 'brand' | 'store';
+  mode: 'brand' | 'store' | 'announce';
   playerStatus: SlotPlayerStatus;
   currentTrackId: string | null;
   currentTrackStartedAt: string | null;
@@ -75,12 +75,17 @@ export async function adminListOutputSlotStatus(search?: string): Promise<AdminO
 }
 
 /** 화면 표시용 상태 — 오프라인 > 창 숨김(최소화) > 재생 상태. */
-export type SlotDisplayState = 'offline' | 'hidden' | 'playing' | 'paused' | 'idle' | 'never';
+/** standby — 안내방송 전용 창이 켜져서 다음 안내를 기다리는 정상 상태. */
+export type SlotDisplayState = 'offline' | 'hidden' | 'playing' | 'paused' | 'idle' | 'standby' | 'never';
 
-export function slotDisplayState(s: Pick<OutputSlotStatus, 'online' | 'visibility' | 'player_status' | 'last_heartbeat_at'>): SlotDisplayState {
+export function slotDisplayState(
+  s: Pick<OutputSlotStatus, 'online' | 'visibility' | 'player_status' | 'last_heartbeat_at'> & { mode?: OutputSlotStatus['mode'] },
+): SlotDisplayState {
   if (!s.last_heartbeat_at) return 'never';
   if (!s.online) return 'offline';
   if (s.visibility === 'hidden') return 'hidden';
+  // 안내방송 전용 창은 음악이 없는 게 정상이다 — 켜져 있으면 대기.
+  if (s.mode === 'announce') return s.player_status === 'playing' ? 'playing' : 'standby';
   if (s.player_status === 'playing') return 'playing';
   if (s.player_status === 'paused') return 'paused';
   return 'idle';
@@ -93,4 +98,5 @@ export const SLOT_DISPLAY_LABEL: Record<SlotDisplayState, string> = {
   playing: '재생 중',
   paused: '일시정지',
   idle: '대기',
+  standby: '안내 대기 중',
 };

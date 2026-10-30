@@ -13,7 +13,7 @@ import { friendlyError } from '@/lib/errorMessages';
 import { type OutputSlot } from '@/lib/outputSlot';
 import {
   DEFAULT_MULTI_OUTPUT_CONFIG, SLOT_MODE_LABEL, fetchStoreCategories, normalizeMultiOutputConfig,
-  openSlotPlayer, saveMultiOutput, validateMultiOutputConfig,
+  openSlotPlayer, resolveAnnouncementSlot, saveMultiOutput, validateMultiOutputConfig,
   type MultiOutputConfig, type SlotConfig, type SlotMode,
 } from '@/lib/multiOutput';
 import {
@@ -21,13 +21,15 @@ import {
   type OutputSlotStatus, type SlotDisplayState,
 } from '@/lib/api/outputSlotApi';
 
-const MODES: SlotMode[] = ['off', 'brand', 'store'];
+const MODES: SlotMode[] = ['off', 'brand', 'store', 'announce'];
+const MODE_SHORT: Record<SlotMode, string> = { off: '사용 안 함', brand: '브랜드', store: '매장', announce: '안내방송' };
 const STATUS_POLL_MS = 30_000;
 
 const STATE_DOT: Record<SlotDisplayState, string> = {
   playing: 'bg-emerald-500',
   paused: 'bg-amber-500',
   idle: 'bg-amber-500',
+  standby: 'bg-emerald-500',
   hidden: 'bg-amber-500',
   offline: 'bg-red-500',
   never: 'bg-ink-dim',
@@ -75,6 +77,7 @@ export default function MultiOutputSection() {
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedConfig ?? DEFAULT_MULTI_OUTPUT_CONFIG);
   const problem = validateMultiOutputConfig(draft);
   const activeSlots = draft.slots.filter((s) => s.mode !== 'off');
+  const announceSlot = draft.slots.find((s) => s.mode === 'announce') ?? null;
 
   async function persist(enabled: boolean, config: MultiOutputConfig) {
     setBusy(true);
@@ -98,9 +101,7 @@ export default function MultiOutputSection() {
         const source = next.source ?? 'schedule';
         return source === 'category' ? { slot, mode: 'store', source, category: next.category } : { slot, mode: 'store', source };
       });
-      const active = slots.filter((s) => s.mode !== 'off').map((s) => s.slot);
-      const announcement_slot = active.includes(d.announcement_slot) ? d.announcement_slot : (active[0] ?? 1);
-      return { slots, announcement_slot };
+      return { slots, announcement_slot: resolveAnnouncementSlot(slots, d.announcement_slot) };
     });
   }
 
@@ -150,6 +151,7 @@ export default function MultiOutputSection() {
               config={s}
               status={statuses.find((x) => x.slot === s.slot && s.mode !== 'off') ?? null}
               categories={categories}
+              announceTakenBy={draft.slots.find((x) => x.mode === 'announce' && x.slot !== s.slot)?.slot ?? null}
               canOpen={!dirty && s.mode !== 'off'}
               onChange={(patch) => updateSlot(s.slot, patch)}
               onOpen={() => openSlot(s)}
@@ -160,6 +162,13 @@ export default function MultiOutputSection() {
             <p className="flex items-center gap-1.5 text-xs font-semibold">
               <Megaphone size={14} className="text-accent" /> 안내·긴급방송 송출 플레이어
             </p>
+            {announceSlot ? (
+              <p className="text-[11px] leading-relaxed text-ink-mute">
+                <b className="text-ink">{announceSlot.slot}번 · 안내방송 전용</b> 창으로만 나가요.
+                음악이 나오는 다른 공간에는 안내방송이 나가지 않아요.
+              </p>
+            ) : (
+            <>
             <div className="flex flex-wrap gap-1.5">
               {activeSlots.map((s) => (
                 <button
@@ -177,6 +186,8 @@ export default function MultiOutputSection() {
             <p className="text-[11px] leading-relaxed text-ink-mute">
               고른 플레이어 창의 스피커로 한 번만 나가요. 다른 창에서는 나가지 않아요.
             </p>
+            </>
+            )}
           </div>
 
           {problem && <p className="px-1 text-[11px] text-red-500">{problem}</p>}
@@ -201,8 +212,9 @@ export default function MultiOutputSection() {
   );
 }
 
-function SlotCard({ config, status, categories, canOpen, onChange, onOpen }: {
+function SlotCard({ config, status, categories, announceTakenBy, canOpen, onChange, onOpen }: {
   config: SlotConfig;
+  announceTakenBy: OutputSlot | null;
   status: OutputSlotStatus | null;
   categories: string[] | null;
   canOpen: boolean;
@@ -227,22 +239,33 @@ function SlotCard({ config, status, categories, canOpen, onChange, onOpen }: {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={`${config.slot}번 플레이어 종류`}>
-        {MODES.map((m) => (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={config.mode === m}
-            onClick={() => onChange({ mode: m })}
-            className={`rounded-lg py-2 text-xs font-semibold transition ${
-              config.mode === m ? 'bg-accent text-bg shadow' : 'bg-bg-card text-ink-mute hover:text-ink'
-            }`}
-          >
-            {m === 'off' ? '사용 안 함' : m === 'brand' ? '브랜드' : '매장'}
-          </button>
-        ))}
+      <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label={`${config.slot}번 플레이어 종류`}>
+        {MODES.map((m) => {
+          const taken = m === 'announce' && announceTakenBy !== null;
+          return (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={config.mode === m}
+              disabled={taken}
+              title={taken ? `안내방송 전용은 하나만 — 이미 ${announceTakenBy}번이 사용 중` : undefined}
+              onClick={() => onChange({ mode: m })}
+              className={`whitespace-nowrap rounded-lg py-2 text-xs font-semibold transition disabled:opacity-35 ${
+                config.mode === m ? 'bg-accent text-bg shadow' : 'bg-bg-card text-ink-mute hover:text-ink'
+              }`}
+            >
+              {MODE_SHORT[m]}
+            </button>
+          );
+        })}
       </div>
+
+      {config.mode === 'announce' && (
+        <p className="text-[11px] leading-relaxed text-ink-mute">
+          음악 없이 안내·긴급방송만 나가요. 복도·화장실·대기 공간처럼 노래 없이 안내멘트만 필요한 곳의 스피커로 연결하세요.
+        </p>
+      )}
 
       {config.mode === 'store' && (
         <div className="space-y-1.5">

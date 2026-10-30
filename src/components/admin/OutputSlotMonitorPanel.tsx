@@ -23,6 +23,7 @@ const STATE_TONE: Record<SlotDisplayState, AdminToneName> = {
   playing: 'success',
   paused: 'warning',
   idle: 'warning',
+  standby: 'success',
   hidden: 'warning',
   offline: 'danger',
   never: 'neutral',
@@ -40,6 +41,7 @@ function timeAgo(iso: string | null): string {
 
 function roleLabel(s: OutputSlotStatus): string {
   if (s.mode === 'brand') return '브랜드';
+  if (s.mode === 'announce') return '안내방송 전용';
   return s.source === 'category' && s.category ? `매장 · ${s.category}` : '매장 · 내 스케줄';
 }
 

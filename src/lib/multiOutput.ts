@@ -9,7 +9,8 @@ import { OUTPUT_SLOTS, getOutputSlot, openOutputSlotWindow, type OutputSlot } fr
 import { getSavedBrandPlayerPath } from '@/lib/brandSession';
 import { toast } from '@/store/toastStore';
 
-export type SlotMode = 'brand' | 'store' | 'off';
+/** announce — 음악 없이 안내·긴급방송만 내보내는 창(0538). 최대 1개. */
+export type SlotMode = 'brand' | 'store' | 'announce' | 'off';
 /** 매장 플레이어 음악 출처 — 내 자동 스케줄 | 업종 카테고리(점주가 직접 고름). */
 export type StoreSource = 'schedule' | 'category';
 
@@ -28,6 +29,7 @@ export interface MultiOutputConfig {
 export const SLOT_MODE_LABEL: Record<SlotMode, string> = {
   brand: '브랜드 플레이어',
   store: '매장 플레이어',
+  announce: '안내방송 전용',
   off: '사용 안 함',
 };
 
@@ -50,15 +52,23 @@ export function normalizeMultiOutputConfig(raw: unknown): MultiOutputConfig {
       | Partial<SlotConfig> | undefined;
     const fallback = DEFAULT_MULTI_OUTPUT_CONFIG.slots[slot - 1];
     if (!found) return { ...fallback };
-    const mode: SlotMode = found.mode === 'brand' || found.mode === 'store' || found.mode === 'off' ? found.mode : 'off';
+    const mode: SlotMode = found.mode === 'brand' || found.mode === 'store' || found.mode === 'announce' || found.mode === 'off' ? found.mode : 'off';
     if (mode !== 'store') return { slot, mode };
     const source: StoreSource = found.source === 'category' && found.category ? 'category' : 'schedule';
     return source === 'category' ? { slot, mode, source, category: String(found.category) } : { slot, mode, source };
   });
+  // 안내방송 전용은 하나만 — 둘 이상이면 첫 번째만 남긴다(서버도 하나만 받는다).
+  const firstAnnounce = slots.find((s) => s.mode === 'announce')?.slot ?? null;
+  for (const s of slots) if (s.mode === 'announce' && s.slot !== firstAnnounce) s.mode = 'off';
+  return { slots, announcement_slot: resolveAnnouncementSlot(slots, Number(obj.announcement_slot)) };
+}
+
+/** 안내방송 송출 창 — 전용 창이 있으면 무조건 그 창, 없으면 고른 창(꺼진 창이면 첫 사용 창). */
+export function resolveAnnouncementSlot(slots: SlotConfig[], wanted: number): OutputSlot {
+  const announce = slots.find((s) => s.mode === 'announce');
+  if (announce) return announce.slot;
   const active = slots.filter((s) => s.mode !== 'off').map((s) => s.slot);
-  const ann = Number(obj.announcement_slot);
-  const announcement_slot = (active.includes(ann as OutputSlot) ? ann : active[0] ?? 1) as OutputSlot;
-  return { slots, announcement_slot };
+  return (active.includes(wanted as OutputSlot) ? wanted : active[0] ?? 1) as OutputSlot;
 }
 
 /** 저장 전 검증 — 사람이 읽을 메시지. 문제 없으면 null. */
@@ -67,6 +77,7 @@ export function validateMultiOutputConfig(c: MultiOutputConfig): string | null {
   if (active.length === 0) return '최소 1개 플레이어는 사용해야 해요.';
   const missing = c.slots.find((s) => s.mode === 'store' && s.source === 'category' && !s.category);
   if (missing) return `${missing.slot}번 플레이어의 카테고리를 골라주세요.`;
+  if (c.slots.filter((s) => s.mode === 'announce').length > 1) return '안내방송 전용 플레이어는 하나만 둘 수 있어요.';
   if (!active.some((s) => s.slot === c.announcement_slot)) return '안내방송을 송출할 플레이어를 골라주세요.';
   return null;
 }
@@ -117,7 +128,9 @@ export async function fetchStoreCategories(): Promise<string[]> {
 export async function openSlotPlayer(s: SlotConfig): Promise<void> {
   if (s.mode === 'off') return;
   // 슬롯 창의 브랜드 화면은 그 번호 창에 저장된 브랜드 연결로 스스로 이동한다.
-  const path = s.mode === 'brand' ? ((getOutputSlot() ? null : getSavedBrandPlayerPath()) ?? '/brand') : '/business/player';
+  const path = s.mode === 'brand'
+    ? ((getOutputSlot() ? null : getSavedBrandPlayerPath()) ?? '/brand')
+    : s.mode === 'announce' ? '/business/announcer' : '/business/player';
   const r = await openOutputSlotWindow(path, s.slot);
   if (r === 'already-open') toast.info(`${s.slot}번 플레이어는 이미 열려 있어요. 작업 표시줄에서 그 창을 선택하세요.`);
   else if (r === 'blocked') toast.warning('팝업이 차단됐어요. 주소창 오른쪽의 팝업 차단 아이콘에서 "항상 허용"을 눌러 주세요.');

@@ -22,3 +22,10 @@ describe('분리 송출 공간 상태 판정', () => {
     expect(slotDisplayState({ ...base, player_status: 'stopped' })).toBe('idle');
   });
 });
+
+describe('안내방송 전용 창 상태', () => {
+  it('음악이 없는 게 정상 — 켜져 있으면 안내 대기', () => {
+    expect(slotDisplayState({ ...base, mode: 'announce', player_status: 'stopped' })).toBe('standby');
+    expect(slotDisplayState({ ...base, mode: 'announce', online: false })).toBe('offline');
+  });
+});
