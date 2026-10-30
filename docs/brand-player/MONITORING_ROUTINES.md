@@ -1028,6 +1028,93 @@ paused=true · playing=false · autoplayBlocked=false · readyState=4
 
 ---
 
+### 2026-10-30 매시간 점검을 DB 로 이관 — 승인창 의존을 끊었다
+
+형님 지시: "sql 없이 진행해야지. 내가 자고 일어나고 일하다가 바로바로 확인하지.
+SQL 이번만 허용 이거 계속하니까 불편하잖아."
+
+#### 설계가 틀렸던 지점
+
+매시간 점검을 **Claude 예약 작업**으로 돌렸다. 그런데 발사될 때마다 `execute_sql` 이
+승인창을 띄우고 거기서 멈춘다. 형님이 자는 동안에는 **점검이 아예 실행되지 않는다.**
+`.claude/settings.json` 에 허용 규칙을 넣어도 auto 모드 분류기가 DB 쓰기를 따로
+잡고, 그 파일을 내가 고치려 하면 `[Self-Modification]` 으로 막힌다(막혀야 맞다).
+
+→ **사람 승인에 의존하는 무인 감시는 무인 감시가 아니다.** 판정은 전부 SQL 로
+  표현할 수 있으므로 DB 안으로 옮겼다. 그러면 나도, 승인창도 필요 없다.
+
+#### `public.srr_store_check_tick(p_dry_run boolean default true)`
+
+마이그레이션: `supabase/migrations/0534_srr_store_check_tick.sql`
+크론: `srr-store-check`, `30 * * * *` (jobid 22, active)
+
+- 명부는 매시간 루틴과 **같은 기준**이다: 아티스트가 아닌 모든 live 계정,
+  제외는 계정 신원(이메일 도메인 + `brand_player_monitoring_exempt`)으로.
+- 끊김만 다룬다. 적재는 `admin_notifications` INSERT 뿐이고 매분 크론이 슬랙으로 보낸다.
+- `p_dry_run` 기본값이 **true** 다. 손으로 부를 때 실수로 적재되지 않는다.
+  크론은 `false` 로 명시해 부른다.
+- 같은 매장 같은 `kind` 는 **6시간 쿨다운**. `where not exists` 가 SQL 차원에서 보장한다.
+- incident 행·세션 행·스키마는 건드리지 않는다.
+
+#### 만들면서 잡은 내 오류 3개
+
+**1. 괄호 우선순위** — `now() - make_interval(...) at time zone 'Asia/Seoul'` 이
+`now() - (interval at time zone ...)` 로 묶여 타입 오류가 났다. 전체를 괄호로 싸야 한다.
+
+**2. 미사용 창이 너무 넓었다** — 처음 7일로 뒀더니 `loviz3467@gmail.com`(5.4일 무재생,
+구독 해지 예정)이 끊김으로 올라왔다. **24시간**으로 좁혔다. 실제 조치가 필요한 끊김은
+시간 단위이고, 일 단위는 이탈이다.
+
+**3. ★ 미사용 판정을 `cl_age` 단독으로 했다** — `minnnnng27@gmail.com` 은 `cl_age` 가
+14일인데(그 계정은 continue_listening 을 거의 안 쓴다) **brand heartbeat 은 4.3시간 전
+정지**였다. `cl_age` 로 먼저 걸러서 실제 끊김을 "미사용"으로 삼켰다.
+→ 판정 창은 **가장 싱싱한 축**(`least(cl_age, stream_age, hb_age)`)으로 정한다.
+
+#### ★★ 내가 과하게 판정했던 것을 정정한다
+
+11:36 에 `erooming2023@naver.com` 을 **매장 쪽**이라고 슬랙에 적재했다. 근거를
+"heartbeat 2축이 20초 차이로 동시 정지" 라고 썼다. **그 근거가 약하다.**
+
+`hb_age`(brand 세션 heartbeat)와 `stream_age`(stream 세션 heartbeat)는 **둘 다 같은
+페이지의 메인 스레드 타이머**다. 서로 독립이 아니다. 둘이 같이 멈춘 것은
+**탭 닫힘과 우리 쪽 페이지 크래시를 구분하지 못한다.**
+
+교훈 B 가 성립하는 조합은 `hb_age` 와 **`progress_age`**(미디어 타임라인)뿐이다.
+오디오만 막히면 heartbeat 은 살아 있어야 하므로 인과가 한쪽으로만 성립한다.
+그런데 `erooming2023` 은 `progress_age` 가 null 인 **구 계측 클라이언트**다 —
+즉 쓸 수 있는 축이 실제로 하나뿐이었다.
+
+→ 함수는 이 경우를 **판정 불가**로 낸다. 그것이 맞다. 12:37 에 정정 행을
+  `store_check_ours` / `[점검·판정 불가]` 로 적재했다.
+→ **독립 축 2개를 세는 규칙을 함수에 명시로 박았다.** 주석으로 이유까지 남겼다.
+
+★ 이 사고의 교훈: **"두 축이 동시에 멈췄다"는 말은 그 두 축이 독립일 때만 증거다.**
+  축의 개수가 아니라 독립성을 센다. 책임 전가가 가장 비싼 오판이라고 써 두고도
+  내가 그 오판을 했다.
+
+#### 역할 분담 (변경 후)
+
+| 주체 | 주기 | 하는 일 |
+|---|---|---|
+| pg_cron `srr-brand-player-health` | 1분 | brand 플레이어 감지 (기존) |
+| **pg_cron `srr-store-check`** | **매시간 :30** | **전 매장 끊김 판정 + 슬랙 적재. 사람 불필요** |
+| pg_cron `srr-dispatch-notifications` | 1분 | 슬랙 발송 (기존) |
+| Claude `trig_015SBmSN8dCqvB41d25gv6Y5` | 09:00 / 21:00 KST | 서술 보고 · 명부 전수 · 결제 · 인프라 |
+| ~~Claude 매시간 루틴~~ | — | **중단** (`trig_01TVJwsJGRiHMjLCxdEfxRPS`, enabled=false) |
+
+Claude 는 이제 **하루 2회만** 필요하다. 그 2회는 형님이 깨어 있을 시각이므로
+승인창이 떠도 바로 누를 수 있다.
+
+#### 되돌리는 방법
+
+```sql
+select cron.unschedule('srr-store-check');   -- 크론만 끈다 (함수는 남는다)
+drop function if exists public.srr_store_check_tick(boolean);  -- 완전 제거
+```
+그리고 Claude 매시간 루틴(`trig_01TVJwsJGRiHMjLCxdEfxRPS`)을 다시 enabled=true 로.
+
+---
+
 ## 4. 금지 표현
 
 - Hard/Remote Recovery 동작만으로 "장애 해결" · "ROOT CAUSE PROVEN" 금지.
