@@ -940,6 +940,94 @@ coalesce((select f.name from public.franchise_stores fs
 
 ---
 
+### 2026-10-30 비매장 계정 오탐 차단 — 함수를 고치지 않고 해결했다
+
+형님 지시: "아티스트·테스트 계정이 브랜드 플레이어를 멈출 때 슬랙에 [긴급]이 가는
+문제, 넣어라(고쳐라)."
+
+#### 처음 생각한 방법이 틀렸다
+
+`cron_check_brand_player_health()` 에 제외 조건을 넣겠다고 보고했는데, 읽어보니
+그 함수는 **한 줄짜리 위임**이었다:
+
+```sql
+create or replace function public.cron_check_brand_player_health() returns jsonb as $$
+begin return public.detect_brand_player_incidents(); end; $$
+```
+
+실제 감지는 `detect_brand_player_incidents()`(200줄)가 한다. 그리고 그 함수에는
+**이미 제외 장치가 들어 있었다:**
+
+```sql
+-- 감시 제외 계정에 열려 있던 건은 조용히 닫는다(복구 알림 없음).
+update public.brand_player_incidents i
+   set resolved_at = now(), last_checked_at = now(), resolve_notified_at = now()
+ where i.resolved_at is null
+   and exists (select 1 from public.brand_player_monitoring_exempt e
+                where e.store_user_id = i.store_user_id);
+...
+if b.monitoring_exempt or not b.playback_expected then
+  v_liveness := 'ONLINE'; v_detection := null;
+```
+
+그리고 `_brand_player_liveness()` 가 `monitoring_exempt` 를 그 테이블에서 계산한다.
+
+→ **함수를 건드릴 필요가 없었다.** `brand_player_monitoring_exempt` 에 계정을 넣으면
+  (1) 새 incident 가 안 열리고 (2) 열려 있던 건이 **복구 알림 없이** 닫힌다.
+  200줄 운영 함수를 재작성하는 것보다 비교할 수 없이 안전하다.
+
+★ 교훈: **고치기 전에 전문을 읽는다.** 이름이 `cron_check_*` 라서 거기 로직이 있을
+  거라 가정했는데 위임 한 줄이었고, 진짜 함수에는 필요한 장치가 이미 있었다.
+
+#### 넣은 계정 8곳 (2026-10-30)
+
+브랜드 플레이어 세션이 30일 내 있는 계정 중 **매장이 아닌 것**만 넣었다.
+
+| 계정 | 분류 |
+|---|---|
+| `louverabe@gmail.com` `07d761b1` | **아티스트** — stalled incident 52분 열려 있었다 |
+| `minseo@swk.today` `957c240c` | 내부 도메인 + 아티스트 프로필. "이루밍 분리송출 테스트점" |
+| `gudwns@swk.today` `f2a6526d` | 내부 도메인 + 아티스트 |
+| `mingseomm99@gmail.com` `36100712` | 직원 테스트 (형님 확인) |
+| `ai@swk.today` `24afeb87` | 내부 테스트 |
+| `qa-store@deudda.test` `da000000` | 테스트 |
+| `demohq@deudda.com` `de700001` | 데모 본사 |
+| `demoshop2@deudda.com` `de700002` | 데모 매장 2 |
+
+`freemilesarea@gmail.com` 은 이미 등록돼 있었다. `demoshop1` 도 기존 등록.
+
+`reason` 컬럼에 왜 넣었는지 남겼다 — 나중에 이 행이 왜 있는지 추적 가능하다.
+
+#### `louverabe@gmail.com` 사례 — 왜 장애가 아니었는가
+
+진단이 21:06~21:18 매분 이렇게 찍혔다:
+
+```
+event=playback_stalled · kind=gate_blocked · gate=not_playing
+paused=true · playing=false · autoplayBlocked=false · readyState=4
+```
+
+`readyState=4` 는 오디오가 완전히 로드된 상태이고 `paused=true` 는 **사람이 멈춘
+것**이다. 자동재생 차단도 아니다. 즉 아티스트가 브랜드 플레이어를 열어놓고
+일시정지한 것이고, 감지선은 `seconds_on_current_track >= stall_threshold` 를 보고
+`stalled` 로 올렸다. 매장 기준으로는 맞는 판정이지만 **이 계정은 매장이 아니다.**
+
+#### 남은 구멍
+
+**새 아티스트가 브랜드 플레이어를 처음 열면 [긴급] 1회가 나간다.** 그 계정이 제외
+테이블에 없기 때문이다. 알림이 나간 뒤 계정을 넣으면 그 다음부터 조용해진다.
+
+구조적으로 닫으려면 아티스트 206명을 전부 제외 테이블에 넣으면 되는데, 그건 데이터
+206행이고 형님 지시 범위를 넘으므로 **하지 않았다.** 필요하면 지시 한 줄로 가능하다.
+
+#### 하지 않은 것 — 그리고 이유
+
+`detect_brand_player_incidents()` 자체에 `account_type='artist'` 제외를 넣는 방법도
+있었다. 안 했다: 제외 테이블이 이미 그 일을 하고 있어서 **같은 판단을 두 곳에
+두면 나중에 어긋난다.** 제외 기준은 한 곳(`brand_player_monitoring_exempt`)에만 둔다.
+
+---
+
 ## 4. 금지 표현
 
 - Hard/Remote Recovery 동작만으로 "장애 해결" · "ROOT CAUSE PROVEN" 금지.
