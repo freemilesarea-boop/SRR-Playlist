@@ -437,10 +437,11 @@ with stores as (
     join public.brand_accounts ba on ba.id = s.brand_id and ba.deleted_at is null
     join auth.users u on u.id = s.user_id
    where ba.name not in ('데모', '루베르 콘텐츠 스튜디오')
-     and u.email not ilike '%@swk.today'          -- 내부 도메인
-     and lower(u.email) <> 'qa-store@deudda.test'
+     and u.email not ilike '%@swk.today'              -- 내부 도메인 전체
+     and lower(u.email) not in ('qa-store@deudda.test',
+                                'mingseomm99@gmail.com')  -- 직원 테스트 계정
      and s.revoked_at is null
-     and s.last_seen_at > now() - interval '7 days'   -- ★ 매장은 매일 튼다
+     and s.last_seen_at > now() - interval '30 days'  -- 묵은 세션 차단용(필터가 아니다)
      and not exists (select 1 from public.brand_player_monitoring_exempt e
                       where e.store_user_id = u.id)
      and not exists (select 1 from public.franchise_stores fs2
@@ -451,22 +452,36 @@ with stores as (
 행 없는 브랜드가 또 생기면 자동으로 명부에 들어온다 — 이번 공백이 재발하지 않는다.
 마지막 `not exists` 가 가맹 arm 과의 중복을 막는다.
 
-#### ★ 7일 창이 필요한 이유 — 브랜드 플레이어를 여는 것은 매장만이 아니다
+#### ★ 직원 테스트 계정은 신원으로 제외한다 — 활동 기간으로 거르지 않는다
 
 처음 쓴 arm 은 창을 30일로 두고 내부 도메인을 `ai@swk.today` 하나만 제외했다.
 그 결과 명부가 9곳이 되면서 **매장이 아닌 계정 2개**가 끌려왔다. 둘 다 브랜드는
 **카공시대**이고 `franchise_stores` 행이 없다.
 
-| 계정 | 생성 | 마지막 접속 | 세션 | 정체 |
-|---|---|---|---|---|
-| `minseo@swk.today` `957c240c` | 05-17 | 10-12 (18일 전) | 1 | 내부 도메인 — `ai@swk.today` 와 같다 |
-| `mingseomm99@gmail.com` `36100712` | 10-16 05:02 | 10-16 05:17 (14일 전) | 1 | **생성 당일 15분만 살았다** — 1회성 로그인 |
+| 계정 | 생성 | 마지막 접속 | 정체 |
+|---|---|---|---|
+| `minseo@swk.today` `957c240c` | 05-17 | 10-12 | **직원 테스트 계정** (형님 확인 2026-10-30) |
+| `mingseomm99@gmail.com` `36100712` | 10-16 | 10-16 | **직원 테스트 계정** (형님 확인 2026-10-30) |
 
-즉 `brand_player_sessions` 에 행이 있다는 것은 "이 계정이 브랜드 플레이어를 **한 번
-열어봤다**"는 뜻일 뿐이고 매장이라는 뜻이 아니다. 본사 직원·테스터·형님 본인이 열어도
-행이 생긴다. **매장은 매일 튼다** — 그래서 창을 7일로 좁혔고, `@swk.today` 는 도메인
-단위로 제외했다. EROOMING 두 계정(18분·2.3시간 전)은 남고 위 둘은 빠져 **정확히 7곳**이
-된다(2026-10-30 실행 검증).
+형님 확인: "우리 직원이 테스트용으로만 이리저리 쓰려고 만든 계정들이다. 자유롭게
+냅둬도 된다."
+
+처음엔 창을 7일로 좁혀서 걸렀는데 **그 방식은 틀렸다.** 두 가지 이유다.
+
+1. `mingseomm99@gmail.com` 은 **gmail 이라 도메인 제외에 걸리지 않는다.** 직원이
+   자유롭게 쓰면 7일 창 안으로 들어와 **매장으로 잡힌다.** 그리고 테스트를 끝내고
+   탭을 닫는 순간 "매장 무음"이 된다.
+2. 활동 기간을 필터로 쓰면 **실제 매장이 조용할 때 명부에서 빠진다.** 연휴로 8일
+   쉬는 매장은 감시가 가장 필요한 시점에 명부에서 사라진다 — 그것이 바로 EROOMING
+   과 같은 실패 방식(명부 밖이라 안 보임)이다.
+
+→ **제외는 신원으로 한다.** 창은 묵은 세션을 막는 보조 장치로만 두고 30일로 넓혔다.
+창을 **365일로 열어도 결과가 정확히 7곳**임을 실행 검증했다(2026-10-30) — 즉 지금
+명부를 지키는 것은 창이 아니라 신원 제외다.
+
+★ 직원 테스트 계정이 **개인 메일 주소를 쓸 수 있다**는 것이 핵심 교훈이다. 도메인
+  제외로는 못 잡는다. 새 계정이 나타나면 **명부 행수 불일치(≠7)로 드러나므로** 그때
+  형님께 확인하고 신원 제외에 추가한다. 행수 점검을 빼지 않는다.
 
 이 둘은 장애가 아니다. 명부 위생 문제이므로 **관측으로만 남긴다.**
 
