@@ -256,7 +256,7 @@ cl_age 5 로 멀쩡히 전진 중이었다. 곡 경계 write gap 이 두 표본�
 
 ---
 
-### 감시 범위 — 가맹 2곳 · 매장 5곳 (2026-10-28 확대)
+### 감시 범위 — 2026-10-30 기준 매장 7곳 (아래 "EROOMING 감시 대상 승격" 이 최신 정의다)
 
 매장 목록은 `franchise_stores` 에서 **두 franchise_id** 로 뽑는다(`monitoring_exempt` 제외).
 
@@ -378,6 +378,122 @@ select store_label, brand_name, status, detection, opened_at, down_notified_at
 EROOMING 을 정식 감시 대상으로 승격하려면 `franchise_stores` 행이나 매장명 매핑이
 필요한데, 그건 스키마·데이터 쓰기다. **절대 조건(스키마를 임의로 고치지 않는다)에
 걸려서 하지 않았다.** 형님 지시가 있어야 한다.
+
+### 2026-10-30 EROOMING 감시 대상 승격 — 명부 정의를 브랜드 기준으로 바꿨다
+
+형님 지시: "EROOMING 감시 대상으로 넣어라."
+
+#### 왜 `franchise_stores` 에 행을 넣지 않았는가
+
+가맹 행 자체는 **존재한다**. 없는 것은 그 가맹의 매장 행이다.
+
+| 가맹 | id | status | `franchise_stores` 행 |
+|---|---|---|---|
+| 카공시대 | `f5d17859` | active | 3 |
+| 주식회사 뺑스톡 | `85ef70ae` | active | 2 |
+| Deudda 데모 본사 | `0aa238a1` | active | 3 |
+| 루베르 콘텐츠 스튜디오 | `a9e90e0c` | active | 5 |
+| **이루밍 스터디카페** | **`ea96f588`** | **active** | **0** |
+| **ming** | **`9afe9e8e`** | **active** | **0** |
+
+`franchise_stores` 에 2행을 넣으면 감시에는 잡히지만 **부작용이 둘** 생긴다.
+
+1. 이루밍 enterprise(`01c29230`)는 `billing_enabled=true` · `billing_mode='per_store'`
+   인데 활성 구독이 0건이다. 매장 행이 생기면 per_store 과금 파이프라인이 이 매장을
+   청구 대상으로 집계하기 시작할 수 있다. **감시를 켜려고 과금을 건드리는 것은
+   교환 조건이 맞지 않는다.**
+2. `store_name` 을 내가 지어내야 한다. 실제 매장 이름을 모른다. 절대 조건이 매장
+   이름 추측을 금지한다.
+
+그래서 **DB 쓰기 없이** 명부 쿼리 정의를 바꿨다. 감시 범위는 루틴 프롬프트와 이 문서가
+정의하는 것이므로, 그것을 고치는 것이 곧 감시 대상 추가다.
+
+#### 새 명부 — 매장 7곳 (가맹 2곳 + 브랜드 1곳)
+
+| 군 | 출처 | 대상 |
+|---|---|---|
+| **BRAND-가맹** | `franchise_stores` / `f5d17859` | 카공시대 화정점 `3caef236` · 숙대점 `1311d900` · 분당미금역점 `5b5f2e59` |
+| **BRAND-무가맹** | `brand_player_sessions` / brand `a519eb19` | EROOMING `erooming2023@naver.com` `0b26659f` · `minnnnng27@gmail.com` `09363876` |
+| **USER** | `franchise_stores` / `85ef70ae` | 뺑스톡 마포점 `fcb14222` · 성수 `6c0011ce` |
+
+`freemilesarea@gmail.com` `7752d67f` 도 EROOMING 브랜드에 세션이 있지만
+`brand_player_monitoring_exempt` 에 등록돼 있어 제외된다 — 형님 본인 계정이다.
+
+```sql
+with stores as (
+  -- 가맹 매장 (매장명이 있다)
+  select fs.store_id, fs.store_name,
+         case when fs.franchise_id = 'f5d17859-5709-41ba-908e-8c2672cc8089'
+              then 'BRAND' else 'USER' end as grp
+    from public.franchise_stores fs
+   where fs.franchise_id in ('f5d17859-5709-41ba-908e-8c2672cc8089',
+                             '85ef70ae-6099-4072-bce7-1a0b0487aa40')
+     and not exists (select 1 from public.brand_player_monitoring_exempt e
+                      where e.store_user_id = fs.store_id)
+  union all
+  -- 가맹 매장 행이 없는 브랜드 — 매장 신원이 계정 이메일이다
+  select distinct u.id, u.email, 'BRAND'
+    from public.brand_player_sessions s
+    join public.brand_accounts ba on ba.id = s.brand_id and ba.deleted_at is null
+    join auth.users u on u.id = s.user_id
+   where ba.name not in ('데모', '루베르 콘텐츠 스튜디오')
+     and u.email not ilike '%@swk.today'          -- 내부 도메인
+     and lower(u.email) <> 'qa-store@deudda.test'
+     and s.revoked_at is null
+     and s.last_seen_at > now() - interval '7 days'   -- ★ 매장은 매일 튼다
+     and not exists (select 1 from public.brand_player_monitoring_exempt e
+                      where e.store_user_id = u.id)
+     and not exists (select 1 from public.franchise_stores fs2
+                      where fs2.store_id = u.id))
+```
+
+두 번째 arm 을 **브랜드 id 로 고정하지 않고 일반화**했다. 앞으로 `franchise_stores`
+행 없는 브랜드가 또 생기면 자동으로 명부에 들어온다 — 이번 공백이 재발하지 않는다.
+마지막 `not exists` 가 가맹 arm 과의 중복을 막는다.
+
+#### ★ 7일 창이 필요한 이유 — 브랜드 플레이어를 여는 것은 매장만이 아니다
+
+처음 쓴 arm 은 창을 30일로 두고 내부 도메인을 `ai@swk.today` 하나만 제외했다.
+그 결과 명부가 9곳이 되면서 **매장이 아닌 계정 2개**가 끌려왔다. 둘 다 브랜드는
+**카공시대**이고 `franchise_stores` 행이 없다.
+
+| 계정 | 생성 | 마지막 접속 | 세션 | 정체 |
+|---|---|---|---|---|
+| `minseo@swk.today` `957c240c` | 05-17 | 10-12 (18일 전) | 1 | 내부 도메인 — `ai@swk.today` 와 같다 |
+| `mingseomm99@gmail.com` `36100712` | 10-16 05:02 | 10-16 05:17 (14일 전) | 1 | **생성 당일 15분만 살았다** — 1회성 로그인 |
+
+즉 `brand_player_sessions` 에 행이 있다는 것은 "이 계정이 브랜드 플레이어를 **한 번
+열어봤다**"는 뜻일 뿐이고 매장이라는 뜻이 아니다. 본사 직원·테스터·형님 본인이 열어도
+행이 생긴다. **매장은 매일 튼다** — 그래서 창을 7일로 좁혔고, `@swk.today` 는 도메인
+단위로 제외했다. EROOMING 두 계정(18분·2.3시간 전)은 남고 위 둘은 빠져 **정확히 7곳**이
+된다(2026-10-30 실행 검증).
+
+이 둘은 장애가 아니다. 명부 위생 문제이므로 **관측으로만 남긴다.**
+
+#### EROOMING 판정 규칙 — BRAND 군 그대로
+
+EROOMING 은 `brand_accounts` · `brand_player_sessions` · 당일 `brand_daily_playlists`
+를 **다 가지고 있다.** 뺑스톡과 달리 구조가 BRAND 다. 그래서:
+
+- RC-30.2 install 판정(playing / unproven / silent) **적용한다**
+- `continue_listening` 최종 판단 · 3표본 규칙 **적용한다**
+- C-1~C-4 감시선 결함 **적용한다**
+- `brand_player_build_identity` freshness **적용한다**
+- pg_cron `srr-brand-player-health` 1분 감지가 **실제로 돈다** — 장애 2건이 그렇게
+  떴다. 뺑스톡과 달리 자동 감지 공백이 없다.
+
+단 **매장명이 없다.** 라벨은 계정 이메일이고, 보고에도 이메일로 적는다.
+실제 매장 이름을 추측해 적지 않는다.
+
+#### 아직 안 한 것 · 형님 결정이 필요한 것
+
+- 이루밍 `franchise_stores` 정식 등록 — 실제 매장 이름과 과금 의사가 필요하다.
+  감시는 위 변경으로 이미 되므로 급하지 않다.
+- 이루밍 enterprise 가 `billing_enabled=true` · `per_store` 인데 **활성 구독 0건**이다.
+  의도된 상태인지 청구 누락인지 판단할 근거가 없다 — 다음 회차에 `enterprise_billing_gaps`
+  로 재확인한다.
+- `minnnnng27@gmail.com` 이 `ming` 브랜드가 따로 있는데도 EROOMING 소속으로 찍히는
+  이유. **미해결 관측**으로 남긴다.
 
 ### 주식회사 뺑스톡 기지 사실
 
