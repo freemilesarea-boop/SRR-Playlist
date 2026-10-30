@@ -823,6 +823,123 @@ select 'store_check_defense_sms', 'warning',
 
 ---
 
+### 2026-10-30 명부 기준 2차 변경 — "아티스트가 아니면 전부" · 신규 자동 포함
+
+형님 지시:
+> 새로 가입되는 사업자들이 있으면 리스트에 자동으로 추가하고, 아티스트로 회원가입이
+> 되어있는 계정이 아니라면 전부 포함시켜라.
+
+#### 왜 이 기준이 맞는가 — 사업자 플랜 기준은 실제로 매장을 놓쳤다
+
+직전 설계는 arm 3 을 `subscriptions.plan_type='business'` 로 잡았다. 그런데
+**카공시대 화정점은 `individual` 플랜(4,900원)으로 결제한다.** 실매장인데 사업자
+플랜이 아니다. 가맹 매장 행이 있어서 arm 1 로 겨우 잡혔을 뿐, 가맹에 안 묶인 매장이
+개인 플랜으로 결제하면 **영원히 안 잡힌다.**
+
+반대로 "아티스트가 아니면 전부"는 놓칠 수가 없다. 아티스트는 음원을 올리는 쪽이고
+매장이 될 일이 없으므로, 그것만 빼면 나머지는 전부 잠재적 이용매장이다.
+
+#### 아티스트 판별 — `users.account_type = 'artist'`
+
+| 기준 | 건수 |
+|---|---|
+| `users` 전체 | 329 |
+| `account_type = 'artist'` | 206 |
+| `artist_profiles` 행 | 206 |
+
+두 수가 **정확히 일치한다.** 그래서 아티스트는 `account_type='artist'` 로 판별하고,
+안전하게 `artist_profiles` 존재 여부도 **OR 로 함께** 본다(한쪽만 찍힌 계정이 나중에
+생겨도 걸리도록).
+
+★ `subscriptions.plan_type` 으로 아티스트를 가리지 않는다. 구독이 없는 아티스트가
+  있고(`plan_type` null 인 artist 65건), 플랜 이름 체계가 `users.plan_type` 과
+  `subscriptions.plan_type` 에서 서로 다르다(`student_artist` vs `artist_student`).
+
+#### 새 명부 정의 — 신규 가입이 자동으로 들어온다
+
+```sql
+with roster as (
+  select u.id as uid, au.email, u.account_type, u.membership_tier
+    from public.users u
+    join auth.users au on au.id = u.id
+   where coalesce(u.account_type, '') <> 'artist'
+     and not exists (select 1 from public.artist_profiles ap where ap.user_id = u.id)
+     and u.withdrawn_at is null
+     and u.disabled_at is null
+     -- 테스트·데모·내부 계정은 신원으로 제외한다 (라벨로 걸지 않는다)
+     and au.email not ilike '%@swk.today'
+     and au.email not ilike '%@deudda.local'
+     and au.email not ilike '%@deudda.com'
+     and au.email not ilike '%@deudda.test'
+     and lower(au.email) <> 'mingseomm99@gmail.com'
+     and not exists (select 1 from public.brand_player_monitoring_exempt e
+                      where e.store_user_id = u.id)
+)
+```
+
+라벨과 소속은 있는 것을 쓰고, 없으면 이메일로 떨어진다:
+
+```sql
+coalesce((select fs.store_name from public.franchise_stores fs
+           where fs.store_id = r.uid limit 1), r.email) as label,
+coalesce((select f.name from public.franchise_stores fs
+            join public.franchises f on f.id = fs.franchise_id
+           where fs.store_id = r.uid limit 1),
+         (select ba.name from public.brand_player_sessions s
+            join public.brand_accounts ba on ba.id = s.brand_id
+           where s.user_id = r.uid order by s.last_seen_at desc limit 1),
+         case when exists (select 1 from public.subscriptions sb
+                            where sb.user_id = r.uid and sb.status = 'active'
+                              and sb.plan_type = 'business') then '사업자 구독'
+              else '미분류' end) as owner
+```
+
+★★ **arm 3 종류의 union 이 더 이상 필요 없다.** `users` 전수에서 아티스트만 빼면
+  가맹 매장·브랜드 계정·사업자 구독자가 **모두 이미 포함**된다. 3-arm union 은
+  폐기했다 — union 을 쓰던 이유가 "어느 하나만 보면 빠진다"였는데, 이제 모집단이
+  `users` 자체이므로 빠질 수가 없다. 중복 제거(uid 기준 row_number)도 불필요해졌다.
+★★ **신규 가입은 자동으로 들어온다.** 사람이 명부를 고칠 일이 없다. 아티스트로
+  가입하면 자동으로 빠지고, 그 외로 가입하면 그 시각부터 명부에 있다.
+★ 제외는 전부 **계정 신원(이메일 / `monitoring_exempt`)** 기준이다. 라벨로 걸면
+  가맹 매장명이 붙는 순간 뚫린다(10-30 11:06 사례).
+
+#### 2026-10-30 11:25 실측 — 명부 81곳
+
+| 구간 | 건수 |
+|---|---|
+| **재생 중**(cl_age<300) | 5 |
+| **cl 행 부재지만 다른 축 싱싱** | 1 |
+| **끊김**(cl_age 300초~7일) | 1 |
+| **미사용**(cl_age 7일 초과) | 25 |
+| **재생 이력 자체 없음** | 49 |
+| 합계 | **81** |
+
+실제로 쓰고 있는 것은 **7곳**이고 나머지 74곳은 미사용 또는 미개시다.
+
+#### 보고 분량 — 미사용은 묶어서 적는다
+
+81줄을 매 회차 적는 것은 형님이 줄이라고 한 소음이다. 그래서:
+
+- **재생 중 · 끊김 · 판정 불가**는 **한 줄씩 매장명으로** 전부 적는다(형님 요청 형식).
+- **미사용 · 미개시**는 **건수 한 줄**로 묶고, 그중 **유료 결제 중인 계정만** 이름을
+  적는다(돈을 내면서 안 쓰는 것은 이탈 신호이므로 알 가치가 있다).
+- 미사용 계정이 **재생을 시작하면 그 회차부터 자동으로 한 줄씩** 올라온다.
+
+★ 이것은 명부에서 빼는 것이 아니다. 81곳 전부 매 회차 조회하고, 상태가 바뀌는
+  즉시 개별 줄로 올라온다. **표시만 묶는다.**
+
+#### 유료인데 안 쓰는 계정 (2026-10-30 기준)
+
+| 계정 | 상태 | 마지막 재생 |
+|---|---|---|
+| `offidewings@gmail.com` | `business:active` 6,900원 결제 중 | **115일** |
+| `loviz3467@gmail.com` | `business:cancel_scheduled` | **5.4일** |
+
+둘 다 장애가 아니다. 전자는 돈만 내고 안 쓰는 상태, 후자는 해지 예정이다.
+**끊김으로 올리지 않고 푸시도 보내지 않는다.**
+
+---
+
 ## 4. 금지 표현
 
 - Hard/Remote Recovery 동작만으로 "장애 해결" · "ROOT CAUSE PROVEN" 금지.
