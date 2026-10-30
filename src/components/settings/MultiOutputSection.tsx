@@ -10,11 +10,10 @@ import { Speaker, ExternalLink, Megaphone, AlertTriangle, Loader2 } from 'lucide
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { getSavedBrandPlayerPath } from '@/lib/brandSession';
-import { openOutputSlotWindow, type OutputSlot } from '@/lib/outputSlot';
+import { type OutputSlot } from '@/lib/outputSlot';
 import {
   DEFAULT_MULTI_OUTPUT_CONFIG, SLOT_MODE_LABEL, fetchStoreCategories, normalizeMultiOutputConfig,
-  saveMultiOutput, validateMultiOutputConfig,
+  openSlotPlayer, saveMultiOutput, validateMultiOutputConfig,
   type MultiOutputConfig, type SlotConfig, type SlotMode,
 } from '@/lib/multiOutput';
 import {
@@ -106,8 +105,7 @@ export default function MultiOutputSection() {
   }
 
   function openSlot(s: SlotConfig) {
-    if (s.mode === 'brand') openOutputSlotWindow(getSavedBrandPlayerPath() ?? '/brand', s.slot);
-    else if (s.mode === 'store') openOutputSlotWindow('/business/player', s.slot);
+    void openSlotPlayer(s);
   }
 
   return (

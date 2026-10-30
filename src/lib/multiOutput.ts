@@ -5,7 +5,9 @@
  * 저장은 계정 단위(DB), 출력 장치는 PC 단위(각 창의 저장소 — audioOutputStore)다.
  */
 import { supabase } from '@/lib/supabase';
-import { OUTPUT_SLOTS, type OutputSlot } from '@/lib/outputSlot';
+import { OUTPUT_SLOTS, getOutputSlot, openOutputSlotWindow, type OutputSlot } from '@/lib/outputSlot';
+import { getSavedBrandPlayerPath } from '@/lib/brandSession';
+import { toast } from '@/store/toastStore';
 
 export type SlotMode = 'brand' | 'store' | 'off';
 /** 매장 플레이어 음악 출처 — 내 자동 스케줄 | 업종 카테고리(점주가 직접 고름). */
@@ -109,4 +111,14 @@ export async function fetchStoreCategories(): Promise<string[]> {
     if (c) set.add(c);
   }
   return [...set].sort((a, b) => a.localeCompare(b, 'ko'));
+}
+
+/** 설정된 공간의 플레이어 창을 연다. 결과를 안내 토스트로 알린다. */
+export async function openSlotPlayer(s: SlotConfig): Promise<void> {
+  if (s.mode === 'off') return;
+  // 슬롯 창의 브랜드 화면은 그 번호 창에 저장된 브랜드 연결로 스스로 이동한다.
+  const path = s.mode === 'brand' ? ((getOutputSlot() ? null : getSavedBrandPlayerPath()) ?? '/brand') : '/business/player';
+  const r = await openOutputSlotWindow(path, s.slot);
+  if (r === 'already-open') toast.info(`${s.slot}번 플레이어는 이미 열려 있어요. 작업 표시줄에서 그 창을 선택하세요.`);
+  else if (r === 'blocked') toast.warning('팝업이 차단됐어요. 주소창 오른쪽의 팝업 차단 아이콘에서 "항상 허용"을 눌러 주세요.');
 }

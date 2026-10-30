@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   __resetOutputSlotForTest, getOutputSlot, parseOutputSlot, slotScopedKey, withOutputSlot,
+  isOutputSlotOpen, listenOutputSlotPresence,
 } from './outputSlot';
 
 function setUrl(search: string) {
@@ -45,5 +46,15 @@ describe('outputSlot — 분리 송출 창 번호', () => {
   it('주소에 slot 붙이기', () => {
     expect(withOutputSlot('/business/player', 1)).toBe('/business/player?slot=1');
     expect(withOutputSlot('/brand?x=1', 2)).toBe('/brand?x=1&slot=2');
+  });
+
+  it('이미 열린 같은 번호 창은 다시 열지 않는다 — 재생 중인 음악을 끊지 않게', async () => {
+    const stop = listenOutputSlotPresence(2);
+    try {
+      expect(await isOutputSlotOpen(2)).toBe(true);
+      expect(await isOutputSlotOpen(3, 60)).toBe(false);
+    } finally {
+      stop();
+    }
   });
 });
