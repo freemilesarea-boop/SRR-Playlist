@@ -54,10 +54,67 @@ export function withOutputSlot(path: string, slot: OutputSlot): string {
   return `${path}${path.includes('?') ? '&' : '?'}slot=${slot}`;
 }
 
-/** 슬롯 창을 연다. 같은 번호 창이 이미 있으면 그 창으로 이동한다(창 이름 고정). */
-export function openOutputSlotWindow(path: string, slot: OutputSlot): void {
-  // noopener — 새 창이 이 창의 sessionStorage 를 복사해 가지 않게 한다.
-  window.open(withOutputSlot(path, slot), `deudda-output-${slot}`, 'noopener');
+// ── 열린 슬롯 창 확인 ────────────────────────────────────────────────
+// 같은 이름 창이 이미 있을 때 window.open 을 다시 부르면 그 창을 새 주소로 "다시 불러온다"
+// — 재생 중인 다른 공간 음악이 끊긴다. 그래서 열기 전에 같은 번호 창이 살아 있는지
+// BroadcastChannel 로 물어보고, 있으면 열지 않는다.
+const PRESENCE_CHANNEL = 'deudda-output-slot-presence';
+type PresenceMsg = { t: 'ping'; slot: OutputSlot; id: string } | { t: 'pong'; slot: OutputSlot; id: string };
+
+/** 슬롯 창에서 한 번 부른다 — 다른 창의 "N번 열려 있나?" 질문에 답한다. 해제 함수 반환. */
+export function listenOutputSlotPresence(slot: OutputSlot): () => void {
+  if (typeof BroadcastChannel === 'undefined') return () => {};
+  const ch = new BroadcastChannel(PRESENCE_CHANNEL);
+  ch.onmessage = (e: MessageEvent<PresenceMsg>) => {
+    const m = e.data;
+    if (m?.t === 'ping' && m.slot === slot) ch.postMessage({ t: 'pong', slot, id: m.id } satisfies PresenceMsg);
+  };
+  return () => ch.close();
+}
+
+/** 같은 번호 슬롯 창이 열려 있는지(기다림 최대 timeoutMs). 확인 불가 브라우저는 false. */
+export function isOutputSlotOpen(slot: OutputSlot, timeoutMs = 250): Promise<boolean> {
+  if (typeof BroadcastChannel === 'undefined') return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const ch = new BroadcastChannel(PRESENCE_CHANNEL);
+    const id = Math.random().toString(36).slice(2);
+    const done = (v: boolean) => { window.clearTimeout(t); ch.close(); resolve(v); };
+    const t = window.setTimeout(() => done(false), timeoutMs);
+    ch.onmessage = (e: MessageEvent<PresenceMsg>) => {
+      if (e.data?.t === 'pong' && e.data.slot === slot && e.data.id === id) done(true);
+    };
+    ch.postMessage({ t: 'ping', slot, id } satisfies PresenceMsg);
+  });
+}
+
+export type OpenSlotResult = 'opened' | 'already-open' | 'blocked';
+
+/**
+ * 슬롯 창을 **별도 창**으로 연다. 같은 번호 창이 이미 있으면 그 창으로 이동한다(창 이름 고정).
+ *
+ * 창 크기(features)를 주지 않으면 크롬은 같은 창의 새 "탭" 으로 연다 — 탭은 한 번에
+ * 하나만 보여서 공간별로 나란히 띄울 수 없고, 뒤로 간 탭은 숨김 상태가 되며, 플레이어
+ * 탭이 설정 화면을 가려 다음 플레이어를 켤 수도 없었다. 그래서 크기를 지정해 팝업 창으로 연다.
+ * 새 창은 이 창의 sessionStorage 를 복사해 가지만 슬롯 번호는 주소의 ?slot= 이 우선한다.
+ */
+export async function openOutputSlotWindow(path: string, slot: OutputSlot): Promise<OpenSlotResult> {
+  // 이미 열린 창을 다시 불러와 음악을 끊지 않는다. (크롬은 클릭 후 수 초간 팝업을 허용하므로
+  // 짧게 기다린 뒤 열어도 차단되지 않는다.)
+  if (await isOutputSlotOpen(slot)) return 'already-open';
+  const w = Math.min(1100, Math.max(720, Math.round(window.screen.availWidth * 0.6)));
+  const h = Math.min(800, Math.max(560, Math.round(window.screen.availHeight * 0.75)));
+  // 창이 겹쳐 쌓이지 않게 번호마다 조금씩 비켜 연다.
+  const left = Math.round((window.screen.availWidth - w) / 2) + (slot - 2) * 40;
+  const top = Math.round((window.screen.availHeight - h) / 2) + (slot - 2) * 40;
+  const win = window.open(
+    withOutputSlot(path, slot),
+    `deudda-output-${slot}`,
+    `popup=yes,width=${w},height=${h},left=${Math.max(0, left)},top=${Math.max(0, top)}`,
+  );
+  if (!win) return 'blocked';
+  try { win.opener = null; } catch { /* 무시 */ }
+  win.focus();
+  return 'opened';
 }
 
 export function __resetOutputSlotForTest(): void {
