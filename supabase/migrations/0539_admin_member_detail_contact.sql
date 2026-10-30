@@ -1,0 +1,27 @@
+-- 관리자 회원 상세에 연락 가능한 정보를 추가한다.
+--
+-- 적용 완료(원격 DB). 이 파일은 기록용이며, 전체 정의는
+-- `select pg_get_functiondef('public.admin_member_detail(uuid)'::regprocedure)` 로 확인한다.
+--
+-- 배경: email/nickname 만 내려줘서 해지 의사를 밝힌 회원에게 연락할 방법이
+-- 관리자 화면에 없었다. 전화번호·실명·주소·사업자 정보는 이미 가입 때 받아
+-- users / artist_profiles / business_verification_profiles 에 들어 있고
+-- 조회 경로만 없던 것이다.
+--
+-- 바뀐 것: 반환 jsonb 에 'contact' 와 'business' 두 키를 더했다.
+-- 기존 키는 하나도 바꾸지 않았다(화면 회귀 0).
+--
+-- 게이트는 그대로다:
+--   SECURITY DEFINER + _internal_is_admin_caller() (없으면 users.role='admin' 확인)
+-- 즉 관리자가 아닌 호출은 'admin only' 로 막힌다. 새 조회 경로를 열지 않았다.
+--
+-- contact: full_name, phone, address, birth_date, identity_verified(+provider/at),
+--          signup_completed, sales_agent_code, free_trial_*, is_trial_active,
+--          playback_enabled, artist_real_name/phone/address/approval_status
+-- business: business_number, business_name, representative_name, business_open_date,
+--           business_address, business_type, business_verified, verification_status,
+--           business_state, tax_type, verified_at, store_name, store_category,
+--           open_time, close_time
+--
+-- pii_masked_at 이 찍힌 회원은 저장된 값 자체가 이미 마스킹돼 있으므로 여기서
+-- 따로 가리지 않는다. 화면이 마스킹 상태를 안내한다.

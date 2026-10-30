@@ -122,6 +122,48 @@ export interface MemberDetail {
     plan_monthly_quota?: number;
     plan_used_this_month?: number;
   };
+  /**
+   * 해지방어용 연락 정보 — 관리자만 보는 값이다(admin_member_detail 이 관리자 게이트).
+   * pii_masked_at 이 찍힌 회원은 저장된 값 자체가 이미 마스킹돼 있다.
+   */
+  contact?: {
+    full_name: string | null;
+    phone: string | null;
+    address: string | null;
+    birth_date: string | null;
+    identity_verified: boolean | null;
+    identity_provider: string | null;
+    identity_verified_at: string | null;
+    signup_completed: boolean | null;
+    sales_agent_code: string | null;
+    free_trial_started_at: string | null;
+    free_trial_ends_at: string | null;
+    is_trial_active: boolean | null;
+    playback_enabled: boolean | null;
+    /** 아티스트는 가입 경로가 달라 연락처가 따로 있다. */
+    artist_real_name: string | null;
+    artist_phone: string | null;
+    artist_address: string | null;
+    artist_approval_status: string | null;
+  } | null;
+  /** 사업자 회원의 명의·매장 정보. */
+  business?: {
+    business_number: string | null;
+    business_name: string | null;
+    representative_name: string | null;
+    business_open_date: string | null;
+    business_address: string | null;
+    business_type: string | null;
+    business_verified: boolean | null;
+    verification_status: string | null;
+    business_state: string | null;
+    tax_type: string | null;
+    verified_at: string | null;
+    store_name: string | null;
+    store_category: string | null;
+    open_time: string | null;
+    close_time: string | null;
+  } | null;
   total_streams: number;
   /**
    * 실제 재생 시간(초). 세션 경과 기준 — 매장 태블릿 화면이 꺼져 있어도 집계된다.
