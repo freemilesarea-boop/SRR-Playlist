@@ -301,6 +301,84 @@ USER 군을 커버하지 않는다. USER 군 무음은 incident 행도, Slack �
 나가지 않는다. **두 예약 작업이 유일한 감시선**이고, 매장 감시는 4시간 간격이므로
 최악의 경우 무음을 4시간 뒤에 안다. 이 공백은 설계상 열려 있다.
 
+### 2026-10-30 명부 공백 — 감시 범위 밖에 실 운영 브랜드가 있다
+
+형님이 "정기검증 브랜드와 매장 리스트 보고해" 로 전체 명부를 뽑게 해서 드러난 공백이다.
+
+감시 범위를 `franchise_stores` 의 두 franchise_id 로 정의했는데, **`franchise_stores`
+행이 없는 브랜드는 이 쿼리에 구조적으로 안 잡힌다.** `brand_accounts` 기준으로 다시
+뽑으면 활성 브랜드가 5곳이고, 그중 감시 대상은 카공시대 하나뿐이다.
+
+| 브랜드 | enterprise | 24h 세션 | 미해결 incident | 7일 incident | 감시 |
+|---|---|---|---|---|---|
+| 카공시대 | active · billing_enabled · per_store · 구독 2 | 7 | 1 | 10 | **O** |
+| **EROOMING** | 이루밍 스터디카페 · active · billing_enabled · per_store · 구독 **0** | 4 | **2** | 3 | **X** |
+| 데모 | Deudda 데모 본사 · billing off | 1 | 0 | 1 | 제외(테스트) |
+| ming | ming · billing off | 0 | 0 | 0 | X |
+| 루베르 콘텐츠 스튜디오 | billing off | 0 | 0 | 0 | 제외(TEST_) |
+
+EROOMING 은 `always_on` 이고 당일 `brand_daily_playlists` 도 있다. 즉 **실제로 트는
+브랜드**인데 정기검증 명부에서 통째로 빠져 있었다.
+
+#### EROOMING 매장은 이름이 없다 — 라벨이 이메일이다
+
+`franchise_stores` 행이 없으므로 `brand_player_incidents.store_label` 에 매장명 대신
+계정 이메일이 찍힌다. 그래서 incident 는 떠도 "어느 매장인지" 가 명부로 연결되지 않는다.
+
+- `erooming2023@naver.com` — incident open, `down_notified_at` 10-30 09:59
+- `minnnnng27@gmail.com` — incident open, `down_notified_at` 10-30 07:57
+  **브랜드가 EROOMING 으로 찍힌다.** 동명의 `ming` 브랜드가 따로 있는데 이 계정은
+  EROOMING 소속이다. 설명되지 않는다 — 관측으로만 남긴다.
+
+#### 두 계정 실측 (2026-10-30 10:1x KST)
+
+| | `erooming2023@naver.com` | `minnnnng27@gmail.com` |
+|---|---|---|
+| `continue_listening` | **행 부재 → C(UNKNOWN)** | 행 존재, cl_age **14.1일**(10-16) → B |
+| brand 세션 hb_age | 1064s (~18분) | 8357s (2.3h) |
+| progress_age | null | 8364s (2.3h) |
+| page_build | null (구 세션 형태) | `c6687ce56480` **CURRENT** |
+| `stream_sessions_v2` | 최신 1044s · verified_seconds **0** ×3 | 최신 8354s · verified 0 / 19.8 |
+
+판정: **두 계정 다 재생 중이 아니다.** 화정점 오진과 달리 전진 증거가 전혀 없다.
+
+**어느 쪽 문제인가** — `minnnnng27` 은 `progress_age`(8364)와 `hb_age`(8357)가 **같이
+멈췄다.** 교훈 B 대로 오디오만 막히면 heartbeat 는 살아 있어야 하므로, 두 시계가 동시에
+끊긴 것은 **탭/기기가 사라진 신호**(탭 닫힘·절전·영업 종료)다 → 업체 쪽 환경.
+`erooming2023` 은 `continue_listening` 행이 아예 없어 **판정 불가**다. C 를 B 로
+읽지 않는다.
+
+**우리 쪽 문제는 따로 있다**: 이 브랜드가 감시 명부에 없었다는 것 자체. 감지 cron 은
+돌아서 incident 를 띄웠는데 정기검증은 그걸 안 봤다.
+
+#### 명부 쿼리를 바꾼다 — `franchise_stores` 가 아니라 `brand_accounts` 부터
+
+다음 점검부터 명부는 **두 단계**로 뽑는다.
+
+```sql
+-- 1단계: 활성 브랜드 전수 (franchise_stores 유무와 무관)
+select ba.id, ba.name, ea.enterprise_name, ea.status, ea.billing_enabled
+  from public.brand_accounts ba
+  left join public.enterprise_accounts ea on ea.id = ba.enterprise_account_id
+ where ba.deleted_at is null;
+
+-- 2단계: 미해결 incident 는 브랜드 무관 전수로 본다
+select store_label, brand_name, status, detection, opened_at, down_notified_at
+  from public.brand_player_incidents where resolved_at is null;
+```
+
+2단계가 핵심이다. **미해결 incident 는 감시 범위로 필터하지 않는다.** 범위 밖에서
+뜬 incident 가 바로 명부 공백을 알려주는 신호이기 때문이다.
+
+제외는 이름 기준으로만 한다: `데모` · `루베르 콘텐츠 스튜디오`(TEST_ 접두) ·
+`ai@swk.today` · `qa-store@deudda.test`.
+
+#### 아직 안 한 것
+
+EROOMING 을 정식 감시 대상으로 승격하려면 `franchise_stores` 행이나 매장명 매핑이
+필요한데, 그건 스키마·데이터 쓰기다. **절대 조건(스키마를 임의로 고치지 않는다)에
+걸려서 하지 않았다.** 형님 지시가 있어야 한다.
+
 ### 주식회사 뺑스톡 기지 사실
 
 - enterprise_account `5e5c361b` · status **`invited`**(active 아님) · franchise `85ef70ae` active
