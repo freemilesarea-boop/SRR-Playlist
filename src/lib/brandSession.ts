@@ -8,7 +8,11 @@
 //   • 최근 접속 브랜드는 비민감 정보(id, name)만 저장.
 //   • 레거시 sessionStorage 토큰은 최초 접근 시 localStorage 로 1회 마이그레이션.
 
-const BINDING_PREFIX = 'srr.brand.binding.';  // localStorage (영속 · 불투명 device token)
+import { slotScopedKey } from '@/lib/outputSlot';
+
+// 분리 송출 창은 창마다 별도 연결(서버 세션)을 갖는다 — 같은 브랜드 창 2개가 세션 1줄을
+// 나눠 쓰면 원격 명령·장애 감지가 엉뚱한 창으로 간다.
+const BINDING_PREFIX = slotScopedKey('srr.brand.binding') + '.';  // localStorage (영속 · 불투명 device token)
 const LEGACY_TOKEN_PREFIX = 'srr.brand.token.'; // sessionStorage (레거시)
 const RECENT_KEY = 'srr.brand.recent';         // localStorage
 
@@ -49,7 +53,8 @@ export function clearAllBrandBindings(): void {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(BINDING_PREFIX)) keys.push(k);
+      // 슬롯 창의 연결(srr.brand.binding::slotN.)까지 함께 지운다 — 로그아웃은 기기 전체 기준.
+      if (k && k.startsWith('srr.brand.binding')) keys.push(k);
     }
     keys.forEach((k) => localStorage.removeItem(k));
   } catch { /* ignore */ }

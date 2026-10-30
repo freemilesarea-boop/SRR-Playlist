@@ -30,6 +30,7 @@ import {
   type RuntimeDecision,
 } from '@/lib/storePlaybackRuntime';
 import { shouldConsumeCycleEvent } from '@/lib/playerCycleCompletion';
+import { slotScopedKey } from '@/lib/outputSlot';
 
 interface Options {
   storeId: string | null;
@@ -46,7 +47,7 @@ interface RotPoolMemory {
   updatedAt: number;
 }
 
-const MEM_PREFIX = 'srr.playback.rotpool.';
+const MEM_PREFIX = slotScopedKey('srr.playback.rotpool') + '.';
 
 function loadMem(storeId: string): RotPoolMemory | null {
   try {

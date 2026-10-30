@@ -48,6 +48,7 @@ import PushNotificationToggle from '@/components/PushNotificationToggle';
 import EnterpriseHqProfileCard from '@/components/profile/EnterpriseHqProfileCard';
 import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCard';
 import EnterprisePaymentBanner from '@/components/enterprise/EnterprisePaymentBanner';
+import MultiOutputSection from '@/components/settings/MultiOutputSection';
 import AudioOutputSection from '@/components/settings/AudioOutputSection';
 import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import {
@@ -411,6 +412,12 @@ export default function ProfilePage() {
 
       {/* Audio Output Phase 1 — 재생 설정 하위 · setSinkId 지원 브라우저 자동 감지 */}
       <AudioOutputSection />
+
+      {/* 0536 — 분리 송출. 매장을 운영하는 계정(사업자·가맹·본사)에게만 보인다. */}
+      {(profile?.account_type === 'business'
+        || (!enterpriseRole.loading && (enterpriseRole.role.is_hq || enterpriseRole.storeInfo.is_store))) && (
+        <MultiOutputSection />
+      )}
 
       <PushNotificationToggle />
 
