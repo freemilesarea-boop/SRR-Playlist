@@ -22,7 +22,7 @@ import { useBusinessStore } from '@/store/businessStore';
 import AnnouncementOverlay from './AnnouncementOverlay';
 import EmergencyBroadcastOverlay from './EmergencyBroadcastOverlay';
 import { getOutputSlot } from '@/lib/outputSlot';
-import { normalizeMultiOutputConfig, shouldPlayAnnouncementsHere } from '@/lib/multiOutput';
+import { normalizeMultiOutputConfig, shouldPlayAnnouncementsHere, slotConfigOf } from '@/lib/multiOutput';
 
 // 자동 발화 금지 라우트 — admin/artist/auth/onboarding.
 // 매장 음악이 흐르는 화면 (/business, /enterprise/*, /, /library, /playlists, /search 등) 은 허용.
@@ -60,11 +60,14 @@ export default function GlobalStoreAudioOverlays() {
   const blockedByRoute = isBlockedPath(location.pathname);
   // 분리 송출 — 점주가 고른 플레이어 창에서만 1회 송출한다(창마다 겹쳐 나가지 않게).
   const outputSlot = getOutputSlot();
+  const multiConfig = profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null;
   const announcementHere = shouldPlayAnnouncementsHere({
     enabled: !!profile?.multi_output_enabled,
-    config: profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null,
+    config: multiConfig,
     slot: outputSlot,
   });
+  // 안내방송 전용 창 — 안내가 끝나도 음악을 다시 틀지 않는다.
+  const announceOnly = !!profile?.multi_output_enabled && slotConfigOf(multiConfig, outputSlot)?.mode === 'announce';
   const shouldMount = !!userId && isStoreCandidate && !blockedByRoute && announcementHere;
 
   // 진입 / 언마운트 로그 — 운영에서 "예약이 왜 안 도는지" 즉시 판단
@@ -90,7 +93,7 @@ export default function GlobalStoreAudioOverlays() {
   // 본사/관리자 등은 위 isStoreCandidate 에서 false 처리되어 여기 도달 X.
   return (
     <>
-      <AnnouncementOverlay storeId={userId} />
+      <AnnouncementOverlay storeId={userId} controlBgm={!announceOnly} />
       <EmergencyBroadcastOverlay storeId={userId} />
     </>
   );

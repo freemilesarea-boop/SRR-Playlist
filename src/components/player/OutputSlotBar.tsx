@@ -19,7 +19,9 @@ import { toast } from '@/store/toastStore';
 import { playTestTone, type TestToneHandle } from '@/lib/audioOutput';
 import { useOutputSlotHeartbeat } from '@/hooks/useOutputSlotHeartbeat';
 
-export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' }) {
+const KIND_LABEL = { brand: '브랜드 플레이어', store: '매장 플레이어', announce: '안내방송 전용' } as const;
+
+export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' | 'announce' }) {
   const slot = getOutputSlot();
   const { devices, supportSink, needPermission, requestLabelPermission } = useAudioOutputDevices();
   const sinkId = useAudioOutputStore((s) => s.sinkId);
@@ -74,7 +76,7 @@ export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' }) {
     <div className="fixed left-1/2 top-2 z-[95] flex w-max max-w-[calc(100vw-16px)] -translate-x-1/2 flex-col items-stretch gap-1.5 rounded-2xl bg-black/75 px-3 py-2 text-xs text-white ring-1 ring-white/15 backdrop-blur">
       <div className="flex items-center gap-2">
         <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 font-bold text-black">{slot}번</span>
-        <span className="shrink-0 font-semibold">{kind === 'brand' ? '브랜드' : '매장'} 플레이어</span>
+        <span className="shrink-0 font-semibold">{KIND_LABEL[kind]}</span>
         <Speaker size={14} className="shrink-0 text-white/70" />
         {supportSink ? (
           <>
@@ -136,7 +138,7 @@ export default function OutputSlotBar({ kind }: { kind: 'brand' | 'store' }) {
               className="flex items-center gap-1 whitespace-nowrap rounded-md bg-white/10 px-2 py-0.5 hover:bg-white/20"
             >
               <Plus size={11} />
-              {s.slot}번 {s.mode === 'brand' ? '브랜드' : '매장'} 창 열기
+              {s.slot}번 {s.mode === 'brand' ? '브랜드' : s.mode === 'announce' ? '안내방송' : '매장'} 창 열기
             </button>
           ))}
         </div>

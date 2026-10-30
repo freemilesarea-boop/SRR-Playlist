@@ -138,9 +138,16 @@ export interface AnnouncementOverlayProps {
   storeId: string | null;
   /** 디버그 로그 활성화 (또는 localStorage 'debug' === 'announcement-overlay'). */
   debug?: boolean;
+  /**
+   * 안내음 앞뒤로 매장음악을 멈추고 다시 트는가(기본 true).
+   * 분리 송출의 안내방송 전용 창은 음악이 없어야 하므로 false — 끝나고 음악을 다시 틀지 않는다.
+   */
+  controlBgm?: boolean;
 }
 
-export default function AnnouncementOverlay({ storeId, debug = false }: AnnouncementOverlayProps) {
+export default function AnnouncementOverlay({ storeId, debug = false, controlBgm = true }: AnnouncementOverlayProps) {
+  const controlBgmRef = useRef(controlBgm);
+  controlBgmRef.current = controlBgm;
   // 진입/언마운트 — debug flag 와 무관하게 항상 1회 출력 (운영 마운트 확인)
   useEffect(() => {
     console.warn('[announcement-overlay] mount', {
@@ -225,8 +232,10 @@ export default function AnnouncementOverlay({ storeId, debug = false }: Announce
       log('mark played failed', e);
     }
 
-    // BGM 재개 (안내음 재생 전 우리가 pause 했으므로 복귀)
-    try { usePlayerStore.getState().play(); } catch (e) { log('resume BGM failed', e); }
+    // BGM 재개 (안내음 재생 전 우리가 pause 했으므로 복귀) — 안내방송 전용 창은 음악이 없다.
+    if (controlBgmRef.current) {
+      try { usePlayerStore.getState().play(); } catch (e) { log('resume BGM failed', e); }
+    }
   }, [log]);
 
   // ───────────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ const INTERVAL_MS = 60_000;
  * (매장, 슬롯) 단위로 따로 쌓여 관리자·점주가 "2번 룸 스피커가 멈췄다" 를 볼 수 있다.
  * 보고 실패는 조용히 넘긴다 — 재생을 절대 막지 않는다. 슬롯 창이 아니면 아무것도 하지 않는다.
  */
-export function useOutputSlotHeartbeat(kind: 'brand' | 'store'): void {
+export function useOutputSlotHeartbeat(kind: 'brand' | 'store' | 'announce'): void {
   const slot = getOutputSlot();
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const playing = usePlayerStore((s) => s.playing);
