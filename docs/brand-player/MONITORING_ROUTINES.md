@@ -642,16 +642,40 @@ with cand as (
     from public.subscriptions sub join auth.users u on u.id = sub.user_id
    where sub.plan_type = 'business' and sub.status = 'active'
 ), ranked as (
-  select uid, label, owner, pri,
-         row_number() over (partition by uid order by pri, label) as rn
+  select cand.uid, cand.label, cand.owner, cand.pri,
+         row_number() over (partition by cand.uid order by cand.pri, cand.label) as rn
     from cand
-   where label not ilike '%@swk.today'
-     and lower(label) not in ('qa-store@deudda.test', 'mingseomm99@gmail.com')
+   where cand.label not ilike 'TEST_%'
      and not exists (select 1 from public.brand_player_monitoring_exempt e
                       where e.store_user_id = cand.uid)
+     -- ★★ 제외는 **계정 신원(auth.users.email)** 으로 한다. 라벨로 걸지 않는다.
+     and not exists (select 1 from auth.users us
+                      where us.id = cand.uid
+                        and (us.email ilike '%@swk.today'
+                          or lower(us.email) in ('qa-store@deudda.test',
+                                                 'mingseomm99@gmail.com')))
 )
 select uid, label, owner from ranked where rn = 1;
 ```
+
+#### ★★ 2026-10-30 11:06 — 라벨 기준 제외가 실제로 뚫렸다
+
+재설계 직후 첫 실행에서 명부가 **9행**으로 나왔다. 새로 들어온 행은
+**"이루밍 분리송출 테스트점"** 이었고, 정체는 `minseo@swk.today` `957c240c` —
+형님이 직원 테스트 계정이라고 확인해 준 그 계정이다.
+
+원인은 내 쿼리였다. 제외 조건을 `label not ilike '%@swk.today'` 로 **라벨에**
+걸어놨는데, arm 1(가맹)은 라벨이 **`store_name`** 이다. 그 계정에 `franchise_stores`
+행이 생기는 순간 라벨이 이메일에서 매장명으로 바뀌고 **도메인 제외를 그대로
+빠져나간다.** 실제로 11:06 경에 이루밍 가맹에 그 매장 행이 생겼다(10:55 조사
+시점에는 `franchise_stores` 행이 0개였다).
+
+→ 제외는 **`cand.uid` 로 `auth.users` 를 조회해 이메일을 보고** 판단한다. 라벨은
+  사람이 읽는 표시값일 뿐이고 **신원이 아니다.** 고친 뒤 다시 8행으로 돌아왔다.
+→ `TEST_` 접두 라벨 제외도 함께 넣었다(루베르 가맹 이름이 바뀌어도 걸리도록).
+
+이것이 "직원 테스트 계정은 개인 메일을 쓸 수 있다"에 이어 같은 교훈의 두 번째
+사례다. **표시값으로 거르면 표시값이 바뀌는 순간 뚫린다.**
 
 ★ **uid 중복 제거가 필수다.** 숙대점·분당미금역·성수는 가맹 매장이면서 사업자 구독자라
 세 arm 에 동시에 걸린다. `pri` 로 **가맹 매장명을 우선**해 사람이 읽을 이름을 쓴다.
