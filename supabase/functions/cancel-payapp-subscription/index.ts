@@ -17,6 +17,10 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const PAYAPP_USERID = Deno.env.get('PAYAPP_USERID') ?? '';
 const PAYAPP_LINKKEY = Deno.env.get('PAYAPP_LINKKEY') ?? '';
+// 판매자 관리 사이트 "설정 > 연동 정보" 의 '결제 KEY'.
+// 연동 KEY(linkkey) 와 다른 값이다. 요청 위변조·재전송 방지 해시에만 쓰고
+// 요청 본문에는 절대 싣지 않는다.
+const PAYAPP_REQUESTKEY = Deno.env.get('PAYAPP_REQUESTKEY') ?? '';
 const PAYAPP_API_URL = Deno.env.get('PAYAPP_API_URL') ?? 'https://api.payapp.kr/oapi/apiLoad.html';
 
 const corsHeaders = {
@@ -30,6 +34,27 @@ function json(body: unknown, status = 200) {
     status,
     headers: { 'content-type': 'application/json', ...corsHeaders },
   });
+}
+
+/**
+ * PayApp 요청 일시 — yyyymmddhhiiss, PayApp 서버 시각 기준 ±15분 이내여야 한다.
+ *
+ * Deno 런타임은 UTC 로 돌고 PayApp 은 한국 서비스라, UTC 로 찍으면 9시간이 어긋나
+ * 허용 창을 벗어나 전부 거부된다. 반드시 KST 로 포맷한다(KST 는 DST 가 없어 고정 +9).
+ */
+function requestDateKst(now: Date = new Date()): string {
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${kst.getUTCFullYear()}${p(kst.getUTCMonth() + 1)}${p(kst.getUTCDate())}` +
+         `${p(kst.getUTCHours())}${p(kst.getUTCMinutes())}${p(kst.getUTCSeconds())}`;
+}
+
+/** hash = sha256(userid + requestdate + requestkey) — 문서 정의 그대로. */
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 serve(async (req) => {
@@ -81,6 +106,14 @@ serve(async (req) => {
     params.set('userid', PAYAPP_USERID);
     params.set('rebill_no', sub.payapp_rebill_no);
     params.set('linkkey', PAYAPP_LINKKEY);
+    // 문서상 rebillCancel 은 requestdate + hash 가 필수다. 다만 결제 KEY 가 아직
+    // 시크릿에 없을 수 있어, 있을 때만 서명한다. 없으면 종전 동작 그대로 —
+    // 배포만으로 해지가 깨지지 않게 하기 위함이다.
+    if (PAYAPP_REQUESTKEY) {
+      const requestdate = requestDateKst();
+      params.set('requestdate', requestdate);
+      params.set('hash', await sha256Hex(`${PAYAPP_USERID}${requestdate}${PAYAPP_REQUESTKEY}`));
+    }
     try {
       const resp = await fetch(PAYAPP_API_URL, {
         method: 'POST',
@@ -91,7 +124,7 @@ serve(async (req) => {
       const parsed = Object.fromEntries(new URLSearchParams(payappRaw).entries());
       // state=1 성공. 그 외는 실패로 간주하되, "이미 해지됨" 류는 OK 취급.
       if (parsed.state !== '1') {
-        const msg = (parsed.errmsg ?? '').toString();
+        const msg = (parsed.errmsg ?? parsed.errorMessage ?? '').toString();
         // 이미 해지된 케이스는 우리 입장에선 성공
         if (/already|이미|해지/i.test(msg)) {
           payappOk = true;

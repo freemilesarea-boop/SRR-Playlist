@@ -320,7 +320,44 @@ billingPayApp PHP 등) 및 매뉴얼이 일치하게 지원하는 cmd 는 다음
 | 분류 | cmd | 용도 |
 |---|---|---|
 | 결제 | `payrequest` / `paycancel` / `paycancelreq` | 결제 요청·취소 |
-| 정기결제 | `rebillRegist` / `rebillPay` / `rebillStop` | 정기결제 등록·즉시결제·해지 |
+| 정기결제 | `rebillRegist` / `rebillStart` / `rebillStop` / `rebillCancel` | 등록 · 승인 · 일시정지 · 해지 |
+| 등록결제(BILL) | `billPay` / `billDelete` | 저장된 카드 즉시 결제 · 삭제 (`encBill` 필요) |
+
+> ⚠️ **`rebillPay` 라는 cmd 는 존재하지 않는다.** 이전 판 표에 그렇게 적혀 있었고
+> 그 믿음 위에 소급 청구 디스패처가 만들어졌다. 실제로 호출하면 전건
+> `errno=70040 "cmd 값을 확인 하세요."` 로 거부된다(2026-11-01 실측, 47건 전건 거절).
+>
+> **등록된 `rebill_no` 에 임의 시점·임의 금액으로 결제를 일으키는 API 는 없다.**
+> `rebillStart` 는 "일시정지 → 승인" 상태 전환이고, 문서에 "승인된 정기결제
+> 요청건은 **다음 정기결제 주기에** 결제승인이 발생"이라고 명시돼 있다.
+> 정기결제 회차는 PayApp 이 스스로 돌린다. 밀린 회차를 받아야 하면
+> `payrequest` 로 개별 결제요청을 만들어 링크를 보내는 수밖에 없다.
+>
+> 즉시 결제가 가능한 `billPay` 는 정기결제(rebill) 가 아니라 등록결제(BILL)
+> 계열이고 `encBill` 이라는 별도 키가 필요하다 — 우리는 발급받은 적이 없다.
+> (문서상 등록결제 등록 API 자체가 "추후 이용 불가" 예정)
+
+### 관리 API 는 requestdate + hash 가 필수
+
+`rebillCancel` · `rebillStop` · `rebillStart` · `paycancel` · `paycancelreq` ·
+`billPay` · `billDelete` 는 아래 두 값을 요구한다.
+
+```
+requestdate : yyyymmddhhiiss  (PayApp 서버 시각 ±15분)
+hash        : sha256(userid + requestdate + requestkey)
+```
+
+`requestkey` 는 판매자 관리 사이트 "설정 > 연동 정보" 의 **결제 KEY** 로,
+연동 KEY(`linkkey`) 와 다른 값이다. 시크릿 이름은 `PAYAPP_REQUESTKEY`.
+
+⚠️ **`requestdate` 는 반드시 KST 로 찍어야 한다.** 엣지 런타임은 UTC 로 돌아서
+그대로 포맷하면 9시간이 어긋나 허용 창을 벗어나고 전건 거부된다.
+
+### REST 엔드포인트
+
+현행 문서 기준 `https://api.payapp.kr/oapi/v2` 다. 우리 코드의 기본값은 구버전
+`/oapi/apiLoad.html` 이며 아직 동작한다(별칭으로 보인다). 전환은 코드 수정 없이
+`PAYAPP_API_URL` 시크릿만 바꾸면 되고, 되돌리기도 같은 방법이다.
 
 → `paymentList` / `payList` / `tradeList` 등의 cmd 는 존재하지 않으며, 호출 시
 `errno=70040 "cmd을 가져오지 못했습니다"` 가 반환되는 것이 **정상 응답**. 따라서 결제
