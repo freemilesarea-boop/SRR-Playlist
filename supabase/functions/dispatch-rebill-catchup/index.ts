@@ -27,6 +27,22 @@ const corsHeaders = {
 
 const REBILL_TIMEOUT_MS = 15_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FALLBACK_GOODNAME = '듣다 정기이용권';
+
+/**
+ * 회차별 상품명 — "듣다 7월 이용료".
+ *
+ * 소급 청구는 한 사람에게 여러 건이 연달아 찍힌다. 상품명이 전부 같으면
+ * 고객도 우리도 어느 달 것인지 구분할 수 없고, 중복청구로 오해받는다.
+ * cycle_period_end 는 그 이용월의 시작점(직전 결제 주기가 끝난 시각)이라
+ * 그 달을 KST 로 읽어 적는다. KST 는 DST 가 없어 고정 +9 로 충분하다.
+ */
+function cycleGoodname(cyclePeriodEnd: string): string {
+  const t = Date.parse(cyclePeriodEnd);
+  if (!Number.isFinite(t)) return FALLBACK_GOODNAME;
+  const kst = new Date(t + 9 * 60 * 60 * 1000);
+  return `듣다 ${kst.getUTCMonth() + 1}월 이용료`;
+}
 
 function readEnv() {
   return {
@@ -217,6 +233,7 @@ Deno.serve(async (req: Request) => {
       would_charge: targets.map((c) => ({
         subscription_id: anonId(c.subscription_id), plan_type: c.plan_type, amount: c.amount,
         cycle_period_end: c.cycle_period_end, cycle: `${c.cycle_index}/${c.cycles_owed}`,
+        goodname: cycleGoodname(c.cycle_period_end),
       })),
       would_charge_total: targets.reduce((s, c) => s + c.amount, 0),
     });
@@ -229,6 +246,7 @@ Deno.serve(async (req: Request) => {
     const r: Record<string, unknown> = {
       subscription_id: anonId(c.subscription_id), amount: c.amount,
       cycle_period_end: c.cycle_period_end, cycle: `${c.cycle_index}/${c.cycles_owed}`,
+      goodname: cycleGoodname(c.cycle_period_end),
     };
     try {
       // rebill_no 를 먼저 확보한다. subscription_rebill_charges.rebill_no 는 NOT NULL 이라
@@ -258,7 +276,7 @@ Deno.serve(async (req: Request) => {
       let pay: { ok: boolean; state: string; raw: Record<string, string> };
       try {
         pay = await rebillPay(env, {
-          rebillNo, amount: c.amount, goodname: '듣다 정기이용권',
+          rebillNo, amount: c.amount, goodname: cycleGoodname(c.cycle_period_end),
           orderNo, subscriptionId: c.subscription_id,
         });
       } catch (e) {
@@ -286,6 +304,7 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({ status: 'failed', raw_response: pay.raw }),
         }).catch(() => undefined);
         r.status = 'provider_rejected';
+        r.payapp_error = pay.raw.errorMessage ?? pay.raw.errormessage ?? null;
       }
       r.order_no = orderNo;
       r.payapp_state = pay.state;
