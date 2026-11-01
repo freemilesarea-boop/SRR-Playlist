@@ -1,21 +1,23 @@
-// supabase/functions/dispatch-arrears-request/index.ts
+// dispatch-arrears-request — 연체분 회수용 결제요청(payrequest) 생성기.
 //
-// 연체분 회수 — 밀린 회차마다 PayApp 개별 결제요청(payrequest)으로 결제링크를 만든다.
+// 왜 이 방식뿐인가: PayApp 에는 등록된 rebill_no 를 임의 시점·임의 금액으로 긁는
+// API 가 없다. cmd=rebillPay 는 존재하지 않는 명령이다(0543 / docs/PAYMENT.md).
 //
-// 왜 이 방식뿐인가: PayApp 에는 등록된 rebill_no 를 임의 시점·임의 금액으로 긁는 API 가
-// 없다. cmd=rebillPay 는 존재하지 않는 명령이다(0543 / docs/PAYMENT.md).
+// 회원당 1건으로 묶어 보낸다. 회차별로 쪼개면 "왜 4번 결제하냐" 민원이 먼저 오고
+// 일부만 내고 멈춘다. 월 구분은 상품명("듣다 7~10월 이용료 (4개월)")과
+// arrears_payment_requests 회차 행들에 남는다.
+// 분할이 필요한 회원은 split_by_cycle 로 그 사람만 회차별로 다시 돌리면 된다.
 //
-// 기존 결제 파이프라인을 탄다: payment_orders(requested) 를 먼저 만들고 그 order_no 를
-// var1 로 보낸다. 결제되면 payapp-feedback 이 order_no 로 주문을 집어 paid 처리하고
-// 구독 기간을 한 회차 민다. 회차당 1건이라 4건 결제 = 4회차 반영.
+// 결제 통보는 payapp-arrears-feedback 으로 받는다. 기존 payapp-feedback 은
+// 결제를 "오늘부터 한 달"로 보기 때문에 과거 회차를 받으면 기간이 틀리고
+// 남은 연체가 사라진다(2026-11-01 실측 확인).
 //
 // 안전 게이트(전부 fail-closed):
 //   1) x-cron-secret 또는 service_role Bearer 없으면 401
 //   2) dry_run 기본 true. Kill Switch(BILLING_ARREARS_ENABLED)가 참이 아니면 강등
 //   3) 대상은 admin_list_arrears_cycles 가 eligible=true 로 확정한 회차만
-//   4) (구독, 회차) 멱등 — arrears_payment_requests UNIQUE 가 중복 발송을 막는다
-//   5) smsuse 기본 'n' — PayApp 이 회원에게 문자를 보내지 않는다. 링크를 받아
-//      확인한 뒤 우리가 직접 전달하는 게 기본. 문자는 명시적으로 켜야 한다.
+//   4) (구독, 회차) 멱등 — UNIQUE 가 같은 회차의 중복 청구를 막는다
+//   5) smsuse 기본 'n' — 링크를 받아 확인한 뒤 우리가 직접 전달한다
 //
 // 개인정보: 응답에 이메일·전화번호를 싣지 않는다(구독 id 앞 8자만).
 
@@ -61,10 +63,16 @@ function anonId(id: string): string {
   return id.slice(0, 8);
 }
 
-/** 상품명 — "듣다 7월 이용료". cycle_month 는 RPC 가 KST 로 계산해 준다. */
-function goodnameFor(cycleMonth: string): string {
-  const m = Number(cycleMonth.slice(5, 7));
-  return Number.isFinite(m) && m >= 1 && m <= 12 ? `듣다 ${m}월 이용료` : '듣다 이용료';
+function monthOf(cycleMonth: string): number {
+  return Number(cycleMonth.slice(5, 7));
+}
+
+/** 상품명 — 1건이면 "듣다 7월 이용료", 묶으면 "듣다 7~10월 이용료 (4개월)". */
+function goodnameFor(months: number[]): string {
+  const valid = months.filter((m) => Number.isFinite(m) && m >= 1 && m <= 12);
+  if (valid.length === 0) return '듣다 이용료';
+  if (valid.length === 1) return `듣다 ${valid[0]}월 이용료`;
+  return `듣다 ${valid[0]}~${valid[valid.length - 1]}월 이용료 (${valid.length}개월)`;
 }
 
 /** payment_orders.order_no — 기존 주문과 같은 모양이어야 결제통보 매칭이 깨지지 않는다. */
@@ -85,19 +93,19 @@ async function rpc<T>(env: Env, fn: string, body: Record<string, unknown> = {}):
   return (text.trim().length > 0 ? JSON.parse(text) : null) as T;
 }
 
-async function insertRow(env: Env, table: string, row: Record<string, unknown>): Promise<void> {
+async function insertRows(env: Env, table: string, rows: Record<string, unknown>[]): Promise<void> {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
       apikey: env.SERVICE_ROLE, Authorization: `Bearer ${env.SERVICE_ROLE}`,
       'content-type': 'application/json', Prefer: 'return=minimal',
     },
-    body: JSON.stringify(row),
+    body: JSON.stringify(rows),
   });
   if (!res.ok) throw new Error(`${table} insert failed: ${res.status} ${await res.text()}`);
 }
 
-async function patchRow(env: Env, table: string, filter: string, patch: Record<string, unknown>): Promise<void> {
+async function patchRows(env: Env, table: string, filter: string, patch: Record<string, unknown>): Promise<void> {
   await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${filter}`, {
     method: 'PATCH',
     headers: {
@@ -135,7 +143,9 @@ async function payRequest(
   params.set('goodname', args.goodname);
   params.set('price', String(args.price));
   params.set('recvphone', args.recvphone);
-  params.set('feedbackurl', `${env.PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`);
+  // 연체 전용 수신기. 기존 payapp-feedback 은 과거 회차를 잘못 반영한다
+  // (결제를 '오늘부터 한 달'로 봐서 남은 연체가 사라진다 — 2026-11-01 실측).
+  params.set('feedbackurl', `${env.PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-arrears-feedback`);
   params.set('checkretry', 'y');
   params.set('var1', args.orderNo);
   params.set('var2', args.userId);
@@ -175,6 +185,7 @@ Deno.serve(async (req: Request) => {
   let body: {
     dry_run?: boolean; limit?: number; max_cycles?: number;
     subscription_ids?: string[]; exclude_user_ids?: string[]; smsuse?: string;
+    split_by_cycle?: boolean;
   } = {};
   try { body = await req.json(); } catch { /* 빈 body → dry run */ }
 
@@ -200,10 +211,32 @@ Deno.serve(async (req: Request) => {
   }
 
   // Edge 는 RPC 가 내준 목록을 좁히기만 한다. 넓히지 못한다.
-  let targets = cycles.filter((c) => c.eligible && !!c.recvphone);
-  if (onlyIds && onlyIds.length > 0) targets = targets.filter((c) => onlyIds.includes(c.subscription_id));
-  if (excludeUsers.length > 0) targets = targets.filter((c) => !excludeUsers.includes(c.user_id));
-  targets = targets.slice(0, limit);
+  const splitByCycle = body.split_by_cycle === true;
+
+  // Edge 는 RPC 가 내준 목록을 좁히기만 한다. 넓히지 못한다.
+  let pool = cycles.filter((c) => c.eligible && !!c.recvphone);
+  if (onlyIds && onlyIds.length > 0) pool = pool.filter((c) => onlyIds.includes(c.subscription_id));
+  if (excludeUsers.length > 0) pool = pool.filter((c) => !excludeUsers.includes(c.user_id));
+
+  // 회원(구독)당 한 묶음. split_by_cycle 이면 회차마다 따로 묶는다.
+  const groups = new Map<string, ArrearsCycle[]>();
+  for (const c of pool) {
+    const key = splitByCycle ? `${c.subscription_id}:${c.cycle_period_end}` : c.subscription_id;
+    const arr = groups.get(key);
+    if (arr) arr.push(c); else groups.set(key, [c]);
+  }
+  for (const arr of groups.values()) {
+    arr.sort((a, b) => a.cycle_period_end.localeCompare(b.cycle_period_end));
+  }
+  const batches = Array.from(groups.values()).slice(0, limit);
+
+  const describe = (g: ArrearsCycle[]) => ({
+    subscription_id: anonId(g[0].subscription_id),
+    goodname: goodnameFor(g.map((c) => monthOf(c.cycle_month))),
+    months: g.map((c) => c.cycle_month).join(','),
+    cycles: g.length,
+    amount: g.reduce((s, c) => s + c.amount, 0),
+  });
 
   const summary = {
     cycles_total: cycles.length,
@@ -211,43 +244,37 @@ Deno.serve(async (req: Request) => {
     eligible_subscriptions: new Set(cycles.filter((c) => c.eligible).map((c) => c.subscription_id)).size,
     eligible_amount: cycles.filter((c) => c.eligible).reduce((s, c) => s + c.amount, 0),
     excluded,
-    selected_cycles: targets.length,
-    selected_amount: targets.reduce((s, c) => s + c.amount, 0),
-    selected_subscriptions: new Set(targets.map((c) => c.subscription_id)).size,
+    mode: splitByCycle ? 'per_cycle' : 'combined',
+    selected_links: batches.length,
+    selected_cycles: batches.reduce((s, g) => s + g.length, 0),
+    selected_amount: batches.reduce((s, g) => s + g.reduce((t, c) => t + c.amount, 0), 0),
   };
 
   if (dryRun) {
     return json({
       ok: true, mode: 'arrears', dry_run: true, kill_switch: kill, smsuse,
       ran_at: new Date().toISOString(), summary,
-      would_request: targets.map((c) => ({
-        subscription_id: anonId(c.subscription_id),
-        cycle_month: c.cycle_month,
-        goodname: goodnameFor(c.cycle_month),
-        amount: c.amount,
-        cycle: `${c.cycle_index}/${c.cycles_owed}`,
-      })),
+      would_request: batches.map(describe),
     });
   }
 
   if (!env.PAYAPP_USERID || !env.PAYAPP_LINKKEY) return json({ error: 'payapp_credentials_missing' }, 500);
 
   const results: Array<Record<string, unknown>> = [];
-  for (const c of targets) {
-    const goodname = goodnameFor(c.cycle_month);
-    const r: Record<string, unknown> = {
-      subscription_id: anonId(c.subscription_id),
-      cycle_month: c.cycle_month, goodname, amount: c.amount,
-    };
-    const orderNo = generateOrderNo(c.user_id);
+  for (const g of batches) {
+    const first = g[0];
+    const goodname = goodnameFor(g.map((c) => monthOf(c.cycle_month)));
+    const total = g.reduce((s, c) => s + c.amount, 0);
+    const r: Record<string, unknown> = { ...describe(g) };
+    const orderNo = generateOrderNo(first.user_id);
     try {
-      // (구독, 회차) 멱등키 — UNIQUE 충돌이면 이미 보낸 회차다.
+      // (구독, 회차) 멱등키 — UNIQUE 충돌이면 이미 보낸 회차가 섞여 있다.
       try {
-        await insertRow(env, 'arrears_payment_requests', {
+        await insertRows(env, 'arrears_payment_requests', g.map((c) => ({
           subscription_id: c.subscription_id, user_id: c.user_id,
           cycle_period_end: c.cycle_period_end, cycle_month: c.cycle_month,
           amount: c.amount, goodname, order_no: orderNo, status: 'requested',
-        });
+        })));
       } catch (e) {
         if (String(e).includes('23505') || String(e).includes('duplicate')) {
           r.status = 'skipped_already_requested'; results.push(r); continue;
@@ -255,32 +282,32 @@ Deno.serve(async (req: Request) => {
         throw e;
       }
 
-      // 결제 통보가 이 주문을 집어 paid 로 바꾸고 구독 기간을 한 회차 민다.
-      await insertRow(env, 'payment_orders', {
-        user_id: c.user_id, subscription_id: c.subscription_id,
-        order_no: orderNo, plan_type: c.plan_type, amount: c.amount, status: 'requested',
-      });
+      // 합계 금액으로 주문 1건. 결제 통보가 이걸 집어 paid 로 바꾼다.
+      await insertRows(env, 'payment_orders', [{
+        user_id: first.user_id, subscription_id: first.subscription_id,
+        order_no: orderNo, plan_type: first.plan_type, amount: total, status: 'requested',
+      }]);
 
       const pay = await payRequest(env, {
-        goodname, price: c.amount, recvphone: c.recvphone as string,
-        orderNo, userId: c.user_id, smsuse,
+        goodname, price: total, recvphone: first.recvphone as string,
+        orderNo, userId: first.user_id, smsuse,
       });
 
       if (pay.ok) {
-        await patchRow(env, 'arrears_payment_requests', `order_no=eq.${encodeURIComponent(orderNo)}`, {
+        await patchRows(env, 'arrears_payment_requests', `order_no=eq.${encodeURIComponent(orderNo)}`, {
           payurl: pay.raw.payurl ?? null, payapp_mul_no: pay.raw.mul_no ?? null, status: 'requested',
         });
-        await patchRow(env, 'payment_orders', `order_no=eq.${encodeURIComponent(orderNo)}`, {
+        await patchRows(env, 'payment_orders', `order_no=eq.${encodeURIComponent(orderNo)}`, {
           payapp_mul_no: pay.raw.mul_no ?? null, payapp_payurl: pay.raw.payurl ?? null,
         });
         r.status = 'link_created';
         r.payurl = pay.raw.payurl ?? null;
       } else {
         const msg = pay.raw.errorMessage ?? pay.raw.errormessage ?? 'payrequest rejected';
-        await patchRow(env, 'arrears_payment_requests', `order_no=eq.${encodeURIComponent(orderNo)}`, {
+        await patchRows(env, 'arrears_payment_requests', `order_no=eq.${encodeURIComponent(orderNo)}`, {
           status: 'failed', error_message: msg,
         });
-        await patchRow(env, 'payment_orders', `order_no=eq.${encodeURIComponent(orderNo)}`, {
+        await patchRows(env, 'payment_orders', `order_no=eq.${encodeURIComponent(orderNo)}`, {
           status: 'failed', raw_response: pay.raw,
         });
         r.status = 'provider_rejected';
@@ -298,7 +325,7 @@ Deno.serve(async (req: Request) => {
   return json({
     ok: true, mode: 'arrears', dry_run: false, kill_switch: kill, smsuse,
     ran_at: new Date().toISOString(), summary,
-    attempted: targets.length,
+    attempted: batches.length,
     created: results.filter((r) => r.status === 'link_created').length,
     rejected: results.filter((r) => r.status === 'provider_rejected').length,
     skipped: results.filter((r) => String(r.status).startsWith('skipped')).length,
