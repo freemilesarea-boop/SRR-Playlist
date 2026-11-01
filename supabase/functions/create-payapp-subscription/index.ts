@@ -41,6 +41,9 @@ const PAYAPP_FEEDBACK_BASE_URL =
   Deno.env.get('PAYAPP_FEEDBACK_BASE_URL') || APP_BASE_LEGACY || SUPABASE_URL;
 const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || APP_BASE_LEGACY;
 
+/** 정기결제 2회차+ 승인 실패 노티를 받는 엣지 함수. 화면이 아니라 웹훅이다. */
+const PAYAPP_REBILL_FAIL_URL = `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-rebill-fail`;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -249,7 +252,11 @@ serve(async (req) => {
   params.set('rebillExpire', PAYAPP_REBILL_EXPIRE);
   params.set('feedbackurl', `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`);
   params.set('returnurl', `${PUBLIC_APP_URL}/payment/success?order_no=${orderNo}`);
-  params.set('failurl', `${PUBLIC_APP_URL}/payment/fail?order_no=${orderNo}`);
+  // failurl 은 '화면' 이 아니라 '노티 수신기' 다. PayApp 은 2회차+ 승인 실패 때 이 주소로
+  // POST 하고 HTTP 200 + 본문 'SUCCESS' 를 기다린다(문서: pay_state=99). 예전에는 여기에
+  // React 화면을 걸어놔서 HTML 이 돌아갔고, PayApp 은 재통보하다 포기했다 — 그래서 실패가
+  // 한 건도 기록되지 않았고 회원이 조용히 끊겼다.
+  params.set('failurl', PAYAPP_REBILL_FAIL_URL);
   params.set('var1', orderNo);
   params.set('var2', user.id);
   params.set('smsuse', 'n');
@@ -268,7 +275,7 @@ serve(async (req) => {
     userid_present: PAYAPP_USERID.length > 0,
     feedbackurl: `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-feedback`,
     returnurl: `${PUBLIC_APP_URL}/payment/success?order_no=${orderNo}`,
-    failurl: `${PUBLIC_APP_URL}/payment/fail?order_no=${orderNo}`,
+    failurl: PAYAPP_REBILL_FAIL_URL,
     order_no: orderNo,
     plan_type: plan.plan_type,
   });

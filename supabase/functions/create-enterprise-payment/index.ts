@@ -97,7 +97,11 @@ serve(async (req) => {
   params.set('rebillExpire', PAYAPP_REBILL_EXPIRE);
   params.set('feedbackurl', `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/enterprise-payment-feedback`);
   params.set('returnurl', `${PUBLIC_APP_URL}/enterprise/pay/success?order_no=${orderNo}`);
-  params.set('failurl', `${PUBLIC_APP_URL}/enterprise/pay/fail?order_no=${orderNo}`);
+  // failurl 은 '화면' 이 아니라 '노티 수신기' 다. PayApp 은 2회차+ 승인 실패 때 이 주소로
+  // POST 하고 HTTP 200 + 본문 'SUCCESS' 를 기다린다(문서: pay_state=99). 예전에는 여기에
+  // React 화면을 걸어놔서 HTML 이 돌아갔고, PayApp 은 재통보하다 포기했다 — 그래서 실패가
+  // 한 건도 기록되지 않았고 회원이 조용히 끊겼다.
+  params.set('failurl', `${PAYAPP_FEEDBACK_BASE_URL}/functions/v1/payapp-rebill-fail`);
   params.set('var1', orderNo);
   params.set('var2', user.id);
   params.set('smsuse', 'n');
