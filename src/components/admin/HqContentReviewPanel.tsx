@@ -15,7 +15,7 @@ import { friendlyError } from '@/lib/errorMessages';
 import { genreLabel, moodLabel } from '@/lib/brandMusicPolicy';
 import { adminPreviewBrandMusicPolicy } from '@/lib/api/brandPlayerApi';
 import {
-  adminListHqContentRequests, adminReviewHqContentRequest, describeRecurrence, describeScope,
+  adminListHqContentRequests, adminReviewHqContentRequest, describeRecurrence, describeScope, removeRejectedUpload,
   HQ_KIND_LABEL, HQ_STATUS_LABEL,
   type AdminHqContentRequest, type HqRequestStatus, type HqScopeType,
 } from '@/lib/api/hqContentApi';
@@ -35,6 +35,11 @@ const VOCAL: Record<string, string> = {
   any: '제한 없음', vocal_ok: '보컬 허용', prefer_instrumental: '연주곡 선호', instrumental_only: '연주곡만',
 };
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 서버(0543)가 스토리지 URL 만 받지만, 링크로 여는 곳은 한 번 더 https 만 허용한다. */
+function safeHttps(url: string): string | undefined {
+  return /^https:\/\//i.test(url) ? url : undefined;
+}
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -117,10 +122,10 @@ function Detail({ r }: { r: AdminHqContentRequest }) {
     case 'media_add':
       return (
         <div className="flex gap-3">
-          <a href={s('url')} target="_blank" rel="noreferrer" className="block w-48 shrink-0 overflow-hidden rounded-lg bg-black">
+          <a href={safeHttps(s('url'))} target="_blank" rel="noreferrer" className="block w-48 shrink-0 overflow-hidden rounded-lg bg-black">
             {p.asset_type === 'video'
-              ? <video src={s('url')} controls muted className="max-h-32 w-full" />
-              : <img src={s('url')} alt="" className="max-h-32 w-full object-contain" />}
+              ? <video src={safeHttps(s('url'))} controls muted className="max-h-32 w-full" />
+              : <img src={safeHttps(s('url'))} alt="" className="max-h-32 w-full object-contain" />}
           </a>
           <div className="text-[12px] leading-relaxed">
             <p className="font-semibold">{s('title') || '제목 없음'}</p>
@@ -144,7 +149,7 @@ function Detail({ r }: { r: AdminHqContentRequest }) {
       return (
         <div className="space-y-1 text-[12px]">
           <p className="font-semibold">{s('title')}</p>
-          <audio src={s('file_url')} controls preload="none" className="h-8 w-full max-w-sm" />
+          <audio src={safeHttps(s('file_url'))} controls preload="none" className="h-8 w-full max-w-sm" />
         </div>
       );
     case 'announcement_asset_delete':
@@ -184,6 +189,8 @@ function RequestCard({ r, onDone }: { r: AdminHqContentRequest; onDone: () => vo
     setBusy(true);
     try {
       await adminReviewHqContentRequest(r.id, approve, note);
+      // 반려한 업로드 파일은 공개 버킷에 남기지 않는다(실패해도 검수 결과는 유지).
+      if (!approve) await removeRejectedUpload(r).catch(() => undefined);
       toast.success(approve ? '승인했어요 — 매장에 반영됩니다' : '반려했어요');
       onDone();
     } catch (e) {

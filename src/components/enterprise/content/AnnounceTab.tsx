@@ -2,7 +2,7 @@
  * 본사 > 브랜드 콘텐츠 > 안내방송 — 안내 음원과 방송 일정.
  * 정해진 시각에 매장 음악을 잠깐 멈추고 안내가 나간다. 모든 변경은 검수 후 반영.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Mic, Pause, Play, Plus, Power, Trash2, Upload } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
@@ -36,6 +36,9 @@ export default function AnnounceTab({ data, onChanged, onCancel }: {
   const [regionId, setRegionId] = useState('');
   const [storeIds, setStoreIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
+
+  // 탭을 떠나거나 새로 그려질 때 미리듣기를 멈춘다(멈출 버튼이 사라지므로).
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   const pendingAssets = data.requests.filter((r) => r.kind === 'announcement_asset_add' && r.status === 'pending');
   const pendingSchedules = data.requests.filter((r) => r.kind === 'schedule_create' && r.status === 'pending');

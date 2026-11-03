@@ -30,7 +30,7 @@ export default function EnterpriseHqContentPage() {
   const { user, loading: authLoading } = useAuthStore();
   const [tab, setTab] = useState<Tab>('music');
   const [data, setData] = useState<HqBrandContent | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ forbidden: boolean; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
   // 탭 안의 입력 상태를 서버 값으로 다시 맞출 때 쓴다(요청 후 새로 불러오면 증가).
   const [version, setVersion] = useState(0);
@@ -40,7 +40,11 @@ export default function EnterpriseHqContentPage() {
       setData(await getMyBrandContent());
       setError(null);
     } catch (e) {
-      setError(friendlyError(e, '불러오지 못했어요'));
+      const err = e as { code?: string; message?: string };
+      setError({
+        forbidden: err?.code === '42501' || /forbidden/i.test(err?.message ?? ''),
+        message: friendlyError(e, '불러오지 못했어요'),
+      });
     } finally {
       setLoading(false);
     }
@@ -48,6 +52,8 @@ export default function EnterpriseHqContentPage() {
 
   useEffect(() => { if (user) void load(); }, [user, load]);
 
+  // 요청을 보낸 뒤에는 탭을 서버 값으로 다시 맞춘다(remount). 취소는 목록만 새로 고친다 —
+  // 작성 중이던 입력을 날리지 않게.
   const reload = useCallback(() => { void load().then(() => setVersion((v) => v + 1)); }, [load]);
 
   const cancel = useCallback(async (id: string) => {
@@ -55,11 +61,11 @@ export default function EnterpriseHqContentPage() {
     try {
       await cancelContentRequest(id);
       toast.success('요청을 취소했어요.');
-      reload();
+      void load();
     } catch (e) {
       toast.error(friendlyError(e, '취소하지 못했어요'));
     }
-  }, [reload]);
+  }, [load]);
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
 
@@ -110,9 +116,15 @@ export default function EnterpriseHqContentPage() {
         <div className="flex justify-center py-16 text-ink-mute"><Loader2 className="animate-spin" /></div>
       ) : error || !data ? (
         <div className="rounded-2xl bg-bg-card p-6 text-center ring-1 ring-line/10">
-          <p className="text-sm font-semibold">본사 계정에서만 쓸 수 있어요</p>
-          <p className="mt-1 text-[12px] text-ink-mute">{error}</p>
-          <Link to="/enterprise/me" className="mt-3 inline-block text-[12px] font-semibold text-accent underline">본사 대시보드로</Link>
+          <p className="text-sm font-semibold">{error?.forbidden ? '본사 계정에서만 쓸 수 있어요' : '불러오지 못했어요'}</p>
+          <p className="mt-1 text-[12px] text-ink-mute">{error?.message}</p>
+          {error?.forbidden ? (
+            <Link to="/enterprise/me" className="mt-3 inline-block text-[12px] font-semibold text-accent underline">본사 대시보드로</Link>
+          ) : (
+            <button type="button" onClick={() => { setLoading(true); void load(); }} className="mt-3 text-[12px] font-semibold text-accent underline">
+              다시 시도
+            </button>
+          )}
         </div>
       ) : (
         <div key={version}>

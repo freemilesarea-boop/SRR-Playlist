@@ -2,7 +2,7 @@
  * 본사 > 브랜드 콘텐츠 > 브랜드 음악 — 음악 정책·재생 시간 변경 요청.
  * 관리자 '음악 정책 스튜디오'와 같은 항목을 본사가 직접 정한다(검수 후 반영).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Search, Send } from 'lucide-react';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
@@ -79,6 +79,7 @@ export default function MusicTab({ data, onChanged, onCancel }: {
   const [bMax, setBMax] = useState(str(pol?.bpm_max));
   const [note, setNote] = useState('');
   const [preview, setPreview] = useState<MusicPolicyPreview | null>(null);
+  const previewKey = useRef<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'music' | 'playback' | null>(null);
 
   const [pbMode, setPbMode] = useState<'always_on' | 'business_hours'>(brand?.playback_mode ?? 'always_on');
@@ -130,8 +131,11 @@ export default function MusicTab({ data, onChanged, onCancel }: {
 
   async function runPreview() {
     if (!validate()) return;
+    // 같은 기준을 다시 누르면 서버를 다시 부르지 않는다(전 곡을 훑는 무거운 계산).
+    const key = JSON.stringify(musicPayload());
+    if (preview && previewKey.current === key) return;
     setBusy('preview');
-    try { setPreview(await previewMyMusicPolicy(musicPayload())); }
+    try { setPreview(await previewMyMusicPolicy(musicPayload())); previewKey.current = key; }
     catch (e) { toast.error(friendlyError(e, '곡 수를 확인하지 못했어요')); }
     finally { setBusy(null); }
   }
