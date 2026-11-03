@@ -202,13 +202,34 @@ export async function adminReviewHqContentRequest(id: string, approve: boolean, 
   if (error) throw error;
 }
 
-/** 반려된 업로드 요청의 파일을 지운다 — 관리자만 버킷 삭제 권한이 있다. */
-export async function removeRejectedUpload(r: Pick<HqContentRequest, 'kind' | 'payload'>): Promise<void> {
+/**
+ * 반려·취소된 업로드 요청의 파일을 지운다. 관리자는 버킷 삭제 권한으로,
+ * 본사는 0544 정책(자기 hq 폴더 + 대기 요청·매장 자산이 쓰지 않는 파일)으로 지울 수 있다.
+ */
+export async function removeRequestUpload(r: Pick<HqContentRequest, 'kind' | 'payload'>): Promise<void> {
   const bucket = r.kind === 'media_add' ? 'brand-media' : r.kind === 'announcement_asset_add' ? 'enterprise-announcements' : null;
   const path = typeof r.payload.file_path === 'string' ? r.payload.file_path : null;
   if (!bucket || !path || !path.startsWith('hq/')) return;
   const { error } = await supabase.storage.from(bucket).remove([path]);
   if (error) throw error;
+}
+
+/**
+ * 쓰이지 않는 내 업로드 정리 — 취소한 요청, 올리고 요청 전송에 실패한 파일 등(1시간 지난 것만, 0544).
+ * 본사 화면을 열 때 조용히 돈다. 실패해도 다음에 다시 시도된다.
+ */
+export async function cleanupMyOrphanUploads(): Promise<number> {
+  const { data, error } = await supabase.rpc('hq_list_orphan_uploads');
+  if (error) throw error;
+  const rows = (data ?? []) as { bucket: string; path: string }[];
+  const byBucket = new Map<string, string[]>();
+  for (const r of rows) byBucket.set(r.bucket, [...(byBucket.get(r.bucket) ?? []), r.path]);
+  let removed = 0;
+  for (const [bucket, paths] of byBucket) {
+    const { error: e } = await supabase.storage.from(bucket).remove(paths);
+    if (!e) removed += paths.length;
+  }
+  return removed;
 }
 
 // ── 표시용 ──────────────────────────────────────────────────────────────

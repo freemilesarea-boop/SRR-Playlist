@@ -8,7 +8,7 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import { IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, isVideoMime } from '@/lib/brandMediaType';
 import {
-  submitContentRequest, summarizeRequest, uploadHqMedia, HQ_KIND_LABEL,
+  removeRequestUpload, submitContentRequest, summarizeRequest, uploadHqMedia, HQ_KIND_LABEL,
   type HqBrandContent, type HqBrandMedia,
 } from '@/lib/api/hqContentApi';
 import { Card, NoteInput, PendingRow, ResponsibilityCheck } from './shared';
@@ -54,8 +54,10 @@ export default function ScreenTab({ data, onChanged, onCancel }: {
     if (!agree) { toast.error('저작권·내용 책임 확인에 체크해 주세요'); return; }
     if (startDate && endDate && endDate < startDate) { toast.error('끝나는 날이 시작일보다 빨라요'); return; }
     setBusy('upload');
+    let uploaded: { file_path: string } | null = null;
     try {
       const up = await uploadHqMedia(data.enterprise.id, brandId, file);
+      uploaded = up;
       await submitContentRequest('media_add', {
         ...up,
         title: title.trim() || file.name.replace(/\.[^.]+$/, ''),
@@ -67,7 +69,11 @@ export default function ScreenTab({ data, onChanged, onCancel }: {
       setFile(null); setTitle(''); setStartDate(''); setEndDate(''); setNote(''); setAgree(false);
       if (fileRef.current) fileRef.current.value = '';
       onChanged();
-    } catch (e) { toast.error(friendlyError(e, '올리지 못했어요')); }
+    } catch (e) {
+      // 파일은 올라갔는데 요청 전송이 실패하면 그 파일을 바로 지운다.
+      if (uploaded) void removeRequestUpload({ kind: 'media_add', payload: uploaded }).catch(() => undefined);
+      toast.error(friendlyError(e, '올리지 못했어요'));
+    }
     finally { setBusy(null); }
   }
 

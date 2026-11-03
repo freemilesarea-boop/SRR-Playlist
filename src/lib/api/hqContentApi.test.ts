@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/supabase', () => ({ supabase: { rpc: vi.fn(), storage: { from: vi.fn() } } }));
+const remove = vi.fn(async () => ({ error: null }));
+const rpc = vi.fn();
+vi.mock('@/lib/supabase', () => ({ supabase: { rpc: (...a: unknown[]) => rpc(...a), storage: { from: () => ({ remove }) } } }));
 
-import { describeRecurrence, describeScope, hqUploadFolder, summarizeRequest } from './hqContentApi';
+import {
+  cleanupMyOrphanUploads, describeRecurrence, describeScope, hqUploadFolder, removeRequestUpload, summarizeRequest,
+} from './hqContentApi';
 
 describe('본사 콘텐츠 요청 — 표시', () => {
   it('반복 규칙을 사람 말로', () => {
@@ -33,5 +37,28 @@ describe('본사 콘텐츠 요청 — 표시', () => {
 
   it('업로드 폴더는 스토리지 정책(hq/<본사 id>/)과 같아야 한다', () => {
     expect(hqUploadFolder('abc')).toBe('hq/abc');
+  });
+});
+
+describe('본사 업로드 정리', () => {
+  it('쓰이지 않는 파일을 버킷별로 묶어 지운다', async () => {
+    rpc.mockResolvedValueOnce({ data: [
+      { bucket: 'brand-media', path: 'hq/e/a.png' },
+      { bucket: 'enterprise-announcements', path: 'hq/e/b.mp3' },
+      { bucket: 'brand-media', path: 'hq/e/c.mp4' },
+    ], error: null });
+    remove.mockClear();
+    expect(await cleanupMyOrphanUploads()).toBe(3);
+    expect(remove).toHaveBeenCalledWith(['hq/e/a.png', 'hq/e/c.mp4']);
+    expect(remove).toHaveBeenCalledWith(['hq/e/b.mp3']);
+  });
+
+  it('업로드 요청이 아니거나 hq 폴더 밖이면 아무것도 지우지 않는다', async () => {
+    remove.mockClear();
+    await removeRequestUpload({ kind: 'music_policy', payload: {} });
+    await removeRequestUpload({ kind: 'media_add', payload: { file_path: 'brand/x.png' } });
+    expect(remove).not.toHaveBeenCalled();
+    await removeRequestUpload({ kind: 'announcement_asset_add', payload: { file_path: 'hq/e/x.mp3' } });
+    expect(remove).toHaveBeenCalledWith(['hq/e/x.mp3']);
   });
 });

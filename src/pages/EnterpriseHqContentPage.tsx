@@ -11,7 +11,9 @@ import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import EnterpriseHqNotificationBell from '@/components/enterprise/EnterpriseHqNotificationBell';
-import { cancelContentRequest, getMyBrandContent, type HqBrandContent } from '@/lib/api/hqContentApi';
+import {
+  cancelContentRequest, cleanupMyOrphanUploads, getMyBrandContent, removeRequestUpload, type HqBrandContent,
+} from '@/lib/api/hqContentApi';
 import MusicTab from '@/components/enterprise/content/MusicTab';
 import ScreenTab from '@/components/enterprise/content/ScreenTab';
 import AnnounceTab from '@/components/enterprise/content/AnnounceTab';
@@ -51,6 +53,8 @@ export default function EnterpriseHqContentPage() {
   }, []);
 
   useEffect(() => { if (user) void load(); }, [user, load]);
+  // 쓰이지 않는 예전 업로드(취소·전송 실패) 정리 — 화면을 열 때 한 번, 조용히.
+  useEffect(() => { if (user) void cleanupMyOrphanUploads().catch(() => undefined); }, [user]);
 
   // 요청을 보낸 뒤에는 탭을 서버 값으로 다시 맞춘다(remount). 취소는 목록만 새로 고친다 —
   // 작성 중이던 입력을 날리지 않게.
@@ -59,13 +63,16 @@ export default function EnterpriseHqContentPage() {
   const cancel = useCallback(async (id: string) => {
     if (!window.confirm('이 요청을 취소할까요?')) return;
     try {
+      const req = data?.requests.find((r) => r.id === id);
       await cancelContentRequest(id);
+      // 취소한 요청의 파일은 바로 지운다(실패하면 다음 접속 때 정리).
+      if (req) void removeRequestUpload(req).catch(() => undefined);
       toast.success('요청을 취소했어요.');
       void load();
     } catch (e) {
       toast.error(friendlyError(e, '취소하지 못했어요'));
     }
-  }, [load]);
+  }, [load, data]);
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
 

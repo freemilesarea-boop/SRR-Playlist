@@ -8,7 +8,7 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
 import {
-  describeRecurrence, describeScope, submitContentRequest, summarizeRequest, uploadHqAnnouncement,
+  describeRecurrence, describeScope, removeRequestUpload, submitContentRequest, summarizeRequest, uploadHqAnnouncement,
   HQ_KIND_LABEL,
   type HqBrandContent, type HqScopeType, type HqSchedule,
 } from '@/lib/api/hqContentApi';
@@ -60,14 +60,20 @@ export default function AnnounceTab({ data, onChanged, onCancel }: {
     if (!assetTitle.trim()) { toast.error('음원 이름을 적어 주세요'); return; }
     if (!agree) { toast.error('저작권·내용 책임 확인에 체크해 주세요'); return; }
     setBusy('upload');
+    let uploaded: { file_path: string } | null = null;
     try {
       const up = await uploadHqAnnouncement(data.enterprise.id, file);
+      uploaded = up;
       await submitContentRequest('announcement_asset_add', { ...up, title: assetTitle.trim() });
       toast.success('올렸어요. 검수 대기 중에도 이 음원으로 일정을 미리 만들 수 있어요.');
       setFile(null); setAssetTitle(''); setAgree(false);
       if (fileRef.current) fileRef.current.value = '';
       onChanged();
-    } catch (e) { toast.error(friendlyError(e, '올리지 못했어요')); }
+    } catch (e) {
+      // 파일은 올라갔는데 요청 전송이 실패하면 그 파일을 바로 지운다.
+      if (uploaded) void removeRequestUpload({ kind: 'announcement_asset_add', payload: uploaded }).catch(() => undefined);
+      toast.error(friendlyError(e, '올리지 못했어요'));
+    }
     finally { setBusy(null); }
   }
 
