@@ -15,7 +15,7 @@ import { friendlyError } from '@/lib/errorMessages';
 import { genreLabel, moodLabel } from '@/lib/brandMusicPolicy';
 import { adminPreviewBrandMusicPolicy } from '@/lib/api/brandPlayerApi';
 import {
-  adminListHqContentRequests, adminReviewHqContentRequest, describeRecurrence, describeScope, removeRejectedUpload,
+  adminListHqContentRequests, adminReviewHqContentRequest, describeRecurrence, describeScope, removeRequestUpload,
   HQ_KIND_LABEL, HQ_STATUS_LABEL,
   type AdminHqContentRequest, type HqRequestStatus, type HqScopeType,
 } from '@/lib/api/hqContentApi';
@@ -190,7 +190,7 @@ function RequestCard({ r, onDone }: { r: AdminHqContentRequest; onDone: () => vo
     try {
       await adminReviewHqContentRequest(r.id, approve, note);
       // 반려한 업로드 파일은 공개 버킷에 남기지 않는다(실패해도 검수 결과는 유지).
-      if (!approve) await removeRejectedUpload(r).catch(() => undefined);
+      if (!approve) await removeRequestUpload(r).catch(() => undefined);
       toast.success(approve ? '승인했어요 — 매장에 반영됩니다' : '반려했어요');
       onDone();
     } catch (e) {
