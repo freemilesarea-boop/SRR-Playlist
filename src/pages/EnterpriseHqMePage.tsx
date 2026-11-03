@@ -17,7 +17,7 @@ import {
   Building2, RefreshCw, AlertCircle, ArrowLeft, Store, MapPin, Save,
   Key, CheckCircle2, Sparkles, Banknote, FileText, Upload, AlertTriangle,
   Clock as ClockIcon, XCircle, Wallet, Copy, Link2, BarChart3, TrendingUp,
-  PauseCircle, PowerOff, Activity, ChevronRight, Bell,
+  PauseCircle, PowerOff, Activity, ChevronRight, Bell, Clapperboard,
 } from 'lucide-react';
 import {
   getMyEnterpriseDashboard, upsertMyEnterpriseBusinessProfileV2,
@@ -150,8 +150,24 @@ function DashboardContent({
         </div>
       </section>
 
-      {/* 운영센터 · 운영 관제 · 브랜드 인텔리전스 · 알림센터 진입 CTA */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* 브랜드 콘텐츠 · 운영센터 · 운영 관제 · 브랜드 인텔리전스 · 알림센터 진입 CTA */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Link
+          to="/enterprise/content"
+          className="group flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-4 ring-1 ring-amber-200 transition hover:bg-amber-100 dark:bg-amber-500/20 dark:border-transparent dark:ring-amber-400/40 dark:hover:bg-amber-500/25"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/40 dark:text-amber-50" aria-hidden>
+            <Clapperboard size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold text-slate-950 dark:text-amber-50">브랜드 콘텐츠 관리</p>
+            <p className="text-[12px] text-slate-700 dark:text-amber-100">
+              브랜드 음악 · 매장 화면 광고 · 안내방송.
+            </p>
+          </div>
+          <ChevronRight size={16} className="text-slate-700 dark:text-amber-100 transition group-hover:translate-x-0.5" />
+        </Link>
+
         <Link
           to="/enterprise/operations/stores"
           className="group flex items-center gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 ring-1 ring-emerald-200 transition hover:bg-emerald-100 dark:bg-emerald-500/20 dark:border-transparent dark:ring-emerald-400/40 dark:hover:bg-emerald-500/25"

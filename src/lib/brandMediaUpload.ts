@@ -40,8 +40,9 @@ async function probeVideoDuration(file: File): Promise<number | undefined> {
 /**
  * 이미지/동영상 검증 → 'brand-media/{brandId}/{uuid}.{ext}' 업로드 → public URL 반환.
  * 실패 시 { ok:false, error } (throw 하지 않음).
+ * folder 를 주면 brandId 대신 그 폴더에 올린다(본사 검수 전 업로드 — 'hq/{본사 id}', 0541).
  */
-export async function uploadBrandMedia(brandId: string, file: File): Promise<BrandMediaUploadResult> {
+export async function uploadBrandMedia(brandId: string, file: File, opts?: { folder?: string }): Promise<BrandMediaUploadResult & { path?: string }> {
   if (!file) return { ok: false, error: '파일을 선택해주세요.' };
 
   const assetType = mediaTypeForMime(file.type);
@@ -59,7 +60,7 @@ export async function uploadBrandMedia(brandId: string, file: File): Promise<Bra
   // 동영상이면 업로드 전에 재생 길이 추출(실패해도 업로드는 진행).
   const durationSeconds = isVideoMime(file.type) ? await probeVideoDuration(file) : undefined;
 
-  const path = `${brandId}/${crypto.randomUUID()}.${ext}`;
+  const path = `${opts?.folder ?? brandId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from('brand-media').upload(path, file, {
     cacheControl: '3600',
     upsert: false,
@@ -70,7 +71,7 @@ export async function uploadBrandMedia(brandId: string, file: File): Promise<Bra
   if (!data?.publicUrl) return { ok: false, error: 'public URL 생성 실패' };
 
   return {
-    ok: true, url: data.publicUrl, assetType, mimeType: file.type,
+    ok: true, url: data.publicUrl, path, assetType, mimeType: file.type,
     durationSeconds, sizeBytes: file.size,
   };
 }

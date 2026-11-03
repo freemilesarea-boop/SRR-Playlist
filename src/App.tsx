@@ -56,6 +56,7 @@ const MyPlaylistsPage = lazyWithRetry(() => import('@/pages/MyPlaylistsPage'));
 const UserPlaylistDetailPage = lazyWithRetry(() => import('@/pages/UserPlaylistDetailPage'));
 const StorePlayerPage = lazyWithRetry(() => import('@/pages/StorePlayerPage'));
 const AnnouncerPage = lazyWithRetry(() => import('@/pages/AnnouncerPage'));
+const EnterpriseHqContentPage = lazyWithRetry(() => import('@/pages/EnterpriseHqContentPage'));
 const SalespersonDashboardPage = lazyWithRetry(() => import('@/pages/SalespersonDashboardPage'));
 const FranchiseHqDashboardPage = lazyWithRetry(() => import('@/pages/FranchiseHqDashboardPage'));
 const EnterpriseHqMePage = lazyWithRetry(() => import('@/pages/EnterpriseHqMePage'));
@@ -329,6 +330,7 @@ export default function App() {
                 <Route path="/enterprise/operations/stores/:storeId" element={<RequireAuth><EnterpriseOpsStoreDetailPage /></RequireAuth>} />
                 <Route path="/enterprise/intel" element={<RequireAuth><EnterpriseHqIntelPage /></RequireAuth>} />
                 <Route path="/enterprise/notifications" element={<RequireAuth><EnterpriseHqNotificationsPage /></RequireAuth>} />
+                <Route path="/enterprise/content" element={<RequireAuth><EnterpriseHqContentPage /></RequireAuth>} />
                 <Route path="/my/playlist/:id" element={<UserPlaylistDetailPage />} />
                 <Route
                   path="/admin"

@@ -206,6 +206,8 @@ export async function resolveAnnouncementPlayableUrl(
 export async function uploadAnnouncementFile(
   file: File,
   enterpriseAccountId?: string | null,
+  /** 올릴 폴더 — 본사 검수 전 업로드는 'hq/{본사 id}' (0541). 없으면 기존 경로. */
+  folder?: string,
 ): Promise<{ path: string; publicUrl: string; sizeBytes: number; mimeType: string }> {
   if (!file) throw new Error('파일이 비어 있습니다.');
   if (file.size > ANNOUNCEMENT_MAX_BYTES) {
@@ -218,7 +220,7 @@ export async function uploadAnnouncementFile(
   const uuid = crypto.randomUUID();
   const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(0, 80);
   const ownerSeg = enterpriseAccountId ?? 'shared';
-  const path = `enterprise/${ownerSeg}/announcements/${uuid}-${safeName || `audio.${ext}`}`;
+  const path = `${folder ?? `enterprise/${ownerSeg}/announcements`}/${uuid}-${safeName || `audio.${ext}`}`;
 
   const { error } = await supabase.storage
     .from(ANNOUNCEMENT_BUCKET)

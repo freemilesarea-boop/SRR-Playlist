@@ -102,6 +102,7 @@ export const OPERATOR_NAV_SECTIONS: OperatorNavSection[] = [
       { id: 'store-now-playing', label: '실시간 재생', description: '매장별 현재 재생 곡', href: tab('store-now-playing'), legacyTab: 'store-now-playing', allowedRoles: ['super_admin', 'admin'] },
       { id: 'franchise', label: '매장 만들기·연결', description: '프랜차이즈 매장 생성·연결·재생설정', href: tab('franchise'), legacyTab: 'franchise', allowedRoles: ['super_admin', 'admin'], helpText: '프랜차이즈 관리 화면에서 매장 등록과 정책 연결을 한 번에.' },
       { id: 'hq-dashboard', label: '본사 대시보드', description: '본사(HQ) 관점 매장 종합 현황', href: '/enterprise/me', allowedRoles: ['hq', 'super_admin', 'admin'], helpText: '본사 계정의 매장·정책·동기화 현황.' },
+      { id: 'hq-content', label: '브랜드 콘텐츠 관리', description: '브랜드 음악·매장 화면 광고·안내방송 변경 요청', href: '/enterprise/content', allowedRoles: ['hq'], helpText: '바꾼 내용은 운영사 확인 후 전 가맹점에 반영됩니다.' },
     ],
   },
   {
@@ -112,6 +113,7 @@ export const OPERATOR_NAV_SECTIONS: OperatorNavSection[] = [
     items: [
       { id: 'enterprise-overview', label: '엔터프라이즈 현황', description: '본사·브랜드·매장 종합 현황', href: tab('enterprise-overview'), legacyTab: 'enterprise-overview', allowedRoles: ['super_admin', 'admin'] },
       { id: 'enterprise-accounts', label: '초대코드 관리', description: '본사 계정·가입 초대코드 발급/회전', href: tab('enterprise-accounts'), legacyTab: 'enterprise-accounts', allowedRoles: ['super_admin', 'admin'], helpText: '본사 계정을 만들고 매장 가입용 초대코드를 발급·회전합니다.' },
+      { id: 'hq-content-review', label: '본사 콘텐츠 검수', description: '본사가 요청한 음악·매장 화면·안내방송 변경 승인', href: tab('hq-content-review'), legacyTab: 'hq-content-review', allowedRoles: ['super_admin', 'admin'] },
       { id: 'enterprise-regions', label: '지역 관리', description: '본사 하위 지역(region) 구성', href: tab('enterprise-regions'), legacyTab: 'enterprise-regions', allowedRoles: ['super_admin', 'admin'] },
       { id: 'enterprise-contracts', label: '계약 관리', description: '본사 계약 등록·상태 관리', href: tab('enterprise-contracts'), legacyTab: 'enterprise-contracts', allowedRoles: ['super_admin', 'admin'] },
       { id: 'brand-registry', label: '브랜드 자동가입', description: '브랜드 코드 기반 매장 자동 등록(brand_registry)', href: tab('brand-registry'), legacyTab: 'brand-registry', allowedRoles: ['super_admin'], superOnly: true, helpText: '브랜드 코드로 신규 매장이 자동 가입되도록 관리하는 화면.' },

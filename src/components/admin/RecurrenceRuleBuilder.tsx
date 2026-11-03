@@ -213,12 +213,12 @@ export default function RecurrenceRuleBuilder({
           <div className="mt-0.5 flex items-center gap-1">
             <Clock size={12} className="text-ink-dim" />
             <select value={state.hh} onChange={(e) => setHH(e.target.value)} disabled={disabled}
-              className="rounded-md bg-bg-deep px-2 py-1.5 font-mono">
+              className="rounded-md bg-bg-soft px-2 py-1.5 font-mono text-ink">
               {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
             </select>
             <span className="text-ink-mute">시</span>
             <select value={state.mm} onChange={(e) => setMM(e.target.value)} disabled={disabled}
-              className="rounded-md bg-bg-deep px-2 py-1.5 font-mono">
+              className="rounded-md bg-bg-soft px-2 py-1.5 font-mono text-ink">
               {MINS.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
             <span className="text-ink-mute">분</span>
