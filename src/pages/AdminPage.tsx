@@ -105,6 +105,7 @@ const EnterpriseMonthlySettlementsPanel = lazy(() => import('@/components/admin/
 const PolicyDeploymentPanel = lazy(() => import('@/components/admin/PolicyDeploymentPanel'));
 const PolicyAutomationPanel = lazy(() => import('@/components/admin/PolicyAutomationPanel'));
 const EnterpriseAnnouncementsPanel = lazy(() => import('@/components/admin/EnterpriseAnnouncementsPanel'));
+const HqContentReviewPanel = lazy(() => import('@/components/admin/HqContentReviewPanel'));
 const EnterpriseBillingPanel = lazy(() => import('@/components/admin/EnterpriseBillingPanel'));
 const EnterpriseContractsPanel = lazy(() => import('@/components/admin/EnterpriseContractsPanel'));
 const EnterpriseEmergencyBroadcastPanel = lazy(() => import('@/components/admin/EnterpriseEmergencyBroadcastPanel'));
@@ -142,6 +143,7 @@ type Tab =
   | 'policy-deployment'
   | 'policy-automation'
   | 'enterprise-announcements'
+  | 'hq-content-review'
   | 'enterprise-billing'
   | 'enterprise-contracts'
   | 'enterprise-emergency'
@@ -206,6 +208,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'enterprise-overview', label: '통합 관제', icon: <Compass size={14} /> },
   { key: 'enterprise-accounts', label: '본사 계정', icon: <Building2 size={14} /> },
   { key: 'enterprise-regions', label: '지역 관리', icon: <Building2 size={14} /> },
+  { key: 'hq-content-review', label: '본사 콘텐츠 검수', icon: <ShieldCheck size={14} /> },
   { key: 'enterprise-monthly-settlements', label: '본사 월 정산', icon: <Wallet size={14} /> },
   // business-live / store-now-playing 병합 (adminNav.MERGED_TABS) — 구 딥링크 유지.
   { key: 'store-monitoring', label: '매장 상태', icon: <Activity size={14} /> },
@@ -648,6 +651,7 @@ export default function AdminPage() {
             />
           )}
           {tab === 'enterprise-announcements' && <EnterpriseAnnouncementsPanel />}
+          {tab === 'hq-content-review' && <HqContentReviewPanel />}
           {tab === 'enterprise-billing' && <EnterpriseBillingPanel />}
           {tab === 'enterprise-contracts' && <EnterpriseContractsPanel />}
           {tab === 'enterprise-emergency' && <EnterpriseEmergencyBroadcastPanel />}

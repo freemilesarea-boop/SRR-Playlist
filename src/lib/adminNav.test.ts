@@ -31,7 +31,7 @@ const EXISTING_TAB_KEYS = [
   'audio-reencode', 'audio-diagnostics', 'audio-engine-diagnostics', 'metadata-violations', 'upload-audit',
   'ai-curation', 'clap-curation', 'ai-metadata', 'ai-taxonomy', 'ai-genre', 'ai-mood', 'ai-storetype',
   'placement-audit', 'site-settings', 'site-notices', 'artist-settlements', 'recommendation',
-  'upload-integrity', 'brand', 'admins',
+  'upload-integrity', 'brand', 'admins', 'hq-content-review',
 ];
 
 describe('IA structure', () => {

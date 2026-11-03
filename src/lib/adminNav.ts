@@ -89,7 +89,7 @@ export const GROUP_TREE: NavGroupNode[] = [
     subgroups: [
       // 프랜차이즈 현황 · 매장 관제 · 시스템 운영 · 사업 현황을 한 탭 네 뷰로.
       { name: '전체 현황', tabs: ['enterprise-overview'] },
-      { name: '본사·브랜드', tabs: ['enterprise-accounts', 'brand-registry', 'enterprise-regions'] },
+      { name: '본사·브랜드', tabs: ['enterprise-accounts', 'brand-registry', 'enterprise-regions', 'hq-content-review'] },
       { name: '프랜차이즈·계약', tabs: ['franchise', 'enterprise-contracts'] },
     ],
   },
