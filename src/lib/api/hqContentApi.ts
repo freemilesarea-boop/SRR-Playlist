@@ -202,6 +202,15 @@ export async function adminReviewHqContentRequest(id: string, approve: boolean, 
   if (error) throw error;
 }
 
+/** 반려된 업로드 요청의 파일을 지운다 — 관리자만 버킷 삭제 권한이 있다. */
+export async function removeRejectedUpload(r: Pick<HqContentRequest, 'kind' | 'payload'>): Promise<void> {
+  const bucket = r.kind === 'media_add' ? 'brand-media' : r.kind === 'announcement_asset_add' ? 'enterprise-announcements' : null;
+  const path = typeof r.payload.file_path === 'string' ? r.payload.file_path : null;
+  if (!bucket || !path || !path.startsWith('hq/')) return;
+  const { error } = await supabase.storage.from(bucket).remove([path]);
+  if (error) throw error;
+}
+
 // ── 표시용 ──────────────────────────────────────────────────────────────
 
 export const HQ_KIND_LABEL: Record<HqContentKind, string> = {
