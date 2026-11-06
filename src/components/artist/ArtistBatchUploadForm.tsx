@@ -31,6 +31,7 @@ import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPaylo
 import { toast } from '@/store/toastStore';
 import { supabase } from '@/lib/supabase';
 import Alert from '@/components/Alert';
+import { checkTrackTitle } from '@/lib/titleRules';
 import TrackMetaSelectors from '@/components/artist/TrackMetaSelectors';
 import AudioQcGuideCard from '@/components/artist/AudioQcGuideCard';
 import { captureError } from '@/lib/sentry';
@@ -48,7 +49,9 @@ function defaultReleaseDate(): string {
 }
 
 function titleFromFilename(filename: string): string {
-  return filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 80);
+  const base = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  // 파일명에 흔히 붙는 순번·작업 표기(master, LUFS, preview …)는 처음부터 빼 둔다 — 검수 거절 1순위 사유.
+  return (checkTrackTitle(base).suggestion ?? base).slice(0, 80);
 }
 
 function formatFileSize(bytes: number): string {
@@ -828,6 +831,7 @@ export default function ArtistBatchUploadForm({
                     </button>
                   )}
                 </div>
+                <TitleWarnings title={t.title} disabled={submitting || t.status === 'success'} onFix={(v) => patchTrack(t.id, { title: v })} />
                 {expanded === t.id && (
                   <div className="space-y-2 border-t border-line/10 p-2">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1037,5 +1041,24 @@ function StatusBadge({ status, trackCode }: { status: TrackStatus; trackCode?: s
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-bg-soft px-2 py-0.5 text-[10px] font-semibold text-ink-dim ring-1 ring-line/10">
       준비
     </span>
+  );
+}
+
+/** 곡 제목 자동 검사 경고 — 검수에서 자주 거절되는 제목 규칙(순번·언어 중복·작업 표기). 막지는 않는다. */
+function TitleWarnings({ title, disabled, onFix }: { title: string; disabled: boolean; onFix: (v: string) => void }) {
+  const { issues, suggestion } = checkTrackTitle(title);
+  if (issues.length === 0) return null;
+  return (
+    <div className="mx-2 mb-2 rounded-md bg-amber-500/15 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-800 ring-1 ring-amber-400/40 dark:text-amber-200">
+      <p className="font-semibold">검수에서 거절될 수 있는 제목이에요</p>
+      <ul className="mt-0.5 list-disc pl-4">
+        {issues.map((i) => <li key={i.code}>{i.message}</li>)}
+      </ul>
+      {suggestion && !disabled && (
+        <button type="button" onClick={() => onFix(suggestion)} className="mt-1 font-semibold underline">
+          "{suggestion}"(으)로 고치기
+        </button>
+      )}
+    </div>
   );
 }
