@@ -5,8 +5,10 @@ import {
   updateUserRole,
   updateUserPlan,
   memberCategory,
+  MEMBER_SORT_OPTIONS,
   type MemberRow,
   type MemberCategory,
+  type MemberSort,
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
@@ -57,6 +59,7 @@ export default function MembersList() {
   const [role, setRole] = useState<string>('');
   const [category, setCategory] = useState<'' | MemberCategory>('');
   const [status, setStatus] = useState<'' | 'active' | 'withdrawn' | 'cancel_scheduled'>('');
+  const [sort, setSort] = useState<MemberSort>('created_desc');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
 
@@ -70,6 +73,7 @@ export default function MembersList() {
         role: role || undefined,
         status: status || undefined,
         category: category || undefined,
+        sort,
       });
       setRows(data);
     } catch (e) {
@@ -82,7 +86,7 @@ export default function MembersList() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, role, status, category]);
+  }, [plan, role, status, category, sort]);
 
   // 검색은 디바운스
   useEffect(() => {
@@ -373,6 +377,19 @@ export default function MembersList() {
               <option value="withdrawn">탈퇴</option>
             </select>
           </>
+        }
+        extra={
+          // 정렬은 필터가 아니다 — 적용 중 개수에 넣지 않고 초기화로도 되돌리지 않는다.
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as MemberSort)}
+            aria-label="정렬"
+            className="input w-auto text-sm"
+          >
+            {MEMBER_SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         }
         activeCount={activeFilters}
         onReset={() => {

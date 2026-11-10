@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
-import type { MemberRow } from '@/lib/adminApi';
+import { memberListRpcArgs, MEMBER_SORT_OPTIONS, type MemberRow } from '@/lib/adminApi';
 
 const fetchMemberList = vi.fn();
 const updateUserRole = vi.fn();
@@ -114,6 +114,59 @@ describe('MembersList — 로드/필터 (서버 파라미터 유지)', () => {
     await screen.findByText('회원m1');
     expect(container.querySelector('caption')?.textContent).toBe('회원 목록');
     expect(container.querySelector('table')?.style.minWidth).toBe('980px');
+  });
+});
+
+describe('MembersList — 정렬 (0549, 서버 정렬)', () => {
+  it('기본은 최신 가입순이다', async () => {
+    await ready();
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('created_desc');
+    expect(fetchMemberList).toHaveBeenCalledWith(expect.objectContaining({ sort: 'created_desc' }));
+  });
+
+  it('정렬 선택지 6가지를 보여준다', async () => {
+    await ready();
+    const labels = Array.from((screen.getByLabelText('정렬') as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual([
+      '최신 가입순', '오래된 가입순', '최근 접속순', '청취시간 많은순', '스트리밍 많은순', '이름순 (가나다)',
+    ]);
+  });
+
+  it('정렬을 바꾸면 서버에 다시 요청한다 (받아온 100명만 다시 정렬하지 않는다)', async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'created_asc' } });
+    await waitFor(() =>
+      expect(fetchMemberList).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'created_asc' })),
+    );
+  });
+
+  it('정렬은 필터 개수에 들어가지 않고 초기화로 되돌아가지 않는다', async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'listened_desc' } });
+    fireEvent.change(screen.getByLabelText('권한'), { target: { value: 'admin' } });
+    expect(await screen.findByText('필터 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /초기화/ }));
+    await waitFor(() => expect(screen.queryByText('필터 1')).toBeNull());
+    expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('listened_desc');
+  });
+});
+
+describe('memberListRpcArgs', () => {
+  it('기본 정렬이면 p_sort 를 보내지 않는다 — 0549 이전 서버(7인자)와도 맞는다', () => {
+    expect(memberListRpcArgs({})).not.toHaveProperty('p_sort');
+    expect(memberListRpcArgs({ sort: 'created_desc' })).not.toHaveProperty('p_sort');
+  });
+
+  it('그 밖의 정렬은 p_sort 로 보낸다', () => {
+    for (const { value } of MEMBER_SORT_OPTIONS.filter((o) => o.value !== 'created_desc')) {
+      expect(memberListRpcArgs({ sort: value }).p_sort).toBe(value);
+    }
+  });
+
+  it('기존 인자는 그대로다', () => {
+    expect(memberListRpcArgs({ search: 'a', category: 'artist' })).toEqual({
+      p_limit: 100, p_offset: 0, p_search: 'a', p_plan: null, p_role: null, p_status: null, p_category: 'artist',
+    });
   });
 });
 

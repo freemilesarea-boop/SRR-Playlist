@@ -331,17 +331,41 @@ export async function fetchTopPlaylists(limit = 10): Promise<TopPlaylist[]> {
   return (data ?? []) as TopPlaylist[];
 }
 
-export async function fetchMemberList(opts: {
+/**
+ * 0549 — 회원 목록 정렬. 서버에서 정렬한다 — 목록은 한 번에 100명만 받으므로 브라우저에서
+ * 다시 정렬하면 "오래된 가입순" 이 "최근 100명 중 오래된 순" 이 된다.
+ */
+export type MemberSort =
+  | 'created_desc'
+  | 'created_asc'
+  | 'last_seen_desc'
+  | 'listened_desc'
+  | 'streams_desc'
+  | 'nickname_asc';
+
+export const MEMBER_SORT_OPTIONS: ReadonlyArray<{ value: MemberSort; label: string }> = [
+  { value: 'created_desc', label: '최신 가입순' },
+  { value: 'created_asc', label: '오래된 가입순' },
+  { value: 'last_seen_desc', label: '최근 접속순' },
+  { value: 'listened_desc', label: '청취시간 많은순' },
+  { value: 'streams_desc', label: '스트리밍 많은순' },
+  { value: 'nickname_asc', label: '이름순 (가나다)' },
+];
+
+/** RPC 인자 구성 — 기본 정렬이면 p_sort 를 보내지 않는다(0549 이전 서버와도 호환). */
+export function memberListRpcArgs(opts: {
   search?: string;
   plan?: string;
   role?: string;
   status?: 'active' | 'withdrawn' | 'cancel_scheduled';
   category?: MemberCategory;
+  sort?: MemberSort;
   limit?: number;
   offset?: number;
-} = {}): Promise<MemberRow[]> {
+}): Record<string, unknown> {
   // 0491 시그니처: (p_limit, p_offset, p_search, p_plan, p_role, p_status, p_category)
-  const { data, error } = await supabase.rpc('admin_member_list', {
+  // 0549 에서 8번째 p_sort(default 'created_desc') 추가.
+  const args: Record<string, unknown> = {
     p_limit: opts.limit ?? 100,
     p_offset: opts.offset ?? 0,
     p_search: opts.search ?? null,
@@ -349,7 +373,13 @@ export async function fetchMemberList(opts: {
     p_role: opts.role ?? null,
     p_status: opts.status ?? null,
     p_category: opts.category ?? null,
-  });
+  };
+  if (opts.sort && opts.sort !== 'created_desc') args.p_sort = opts.sort;
+  return args;
+}
+
+export async function fetchMemberList(opts: Parameters<typeof memberListRpcArgs>[0] = {}): Promise<MemberRow[]> {
+  const { data, error } = await supabase.rpc('admin_member_list', memberListRpcArgs(opts));
   if (error) throw error;
   return (data ?? []) as MemberRow[];
 }
