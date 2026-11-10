@@ -11,8 +11,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { audioDebugWarn } from '@/lib/audioDebug';
+import { slotScopedKey } from '@/lib/outputSlot';
 
-const STORAGE_KEY = 'deudda.audioOutput.v1';
+// 분리 송출 창은 창마다 다른 스피커를 쓴다 — 슬롯 번호를 붙여 창끼리 덮어쓰지 않게 한다.
+const STORAGE_KEY = slotScopedKey('deudda.audioOutput.v1');
 
 export type AudioConnectionStatus =
   | 'default'       // 저장된 장치 없음 → 브라우저 기본 출력 사용

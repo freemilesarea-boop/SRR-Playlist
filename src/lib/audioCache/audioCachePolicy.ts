@@ -20,8 +20,15 @@ export interface AudioCacheEntry {
   cachedAt: number;
 }
 
-/** 기본 상한 1GB — 매장 로테이션 150곡(곡당 5MB 내외)을 담고도 여유가 있는 크기. */
-export const DEFAULT_CACHE_LIMIT_BYTES = 1_024 * 1_024 * 1_024;
+/**
+ * 기본 상한 4GB — 실제 상한은 effectiveCacheLimit 이 브라우저 quota 의 절반으로 다시 깎는다.
+ *
+ * 1GB 였을 때 화정점(2026-10) 브랜드 로테이션은 303곡 ≈ 1.5GB 라 다 담기지 않았다.
+ * 캐시가 꽉 찬 채로 LRU 축출과 재다운로드를 반복했고, 그만큼 곡이 네트워크에 의존했다.
+ * 브랜드 일일 플레이리스트는 전날 곡을 모두 유지한 채 새 곡만 더하므로(303 → 363곡)
+ * 하루치를 다 담으면 다음 날 교체 때도 대부분 로컬에서 나온다.
+ */
+export const DEFAULT_CACHE_LIMIT_BYTES = 4 * 1_024 * 1_024 * 1_024;
 
 /** 한 곡이 이 크기를 넘으면 캐시하지 않는다(비정상 파일이 캐시를 통째로 먹는 것 방지). */
 export const MAX_TRACK_BYTES = 60 * 1_024 * 1_024;
@@ -54,10 +61,40 @@ export function isCacheableSize(bytes: number, maxBytes = MAX_TRACK_BYTES): bool
 }
 
 /**
+ * 현재 곡부터 **실제로 재생될 순서**대로 큐 인덱스를 돌려준다(현재 곡 포함, 첫 원소).
+ *
+ * order 는 playerStore.shuffleOrder 다. 브랜드/매장 플레이어는 셔플로 돌기 때문에
+ * 큐 배열의 다음 칸(index+1)은 다음에 나올 곡이 **아니다**. 화정점 2026-10-28 에는
+ * 큐 152번 곡을 네트워크로 받는 동안 선반입이 큐 순서상 이웃 곡(안 나올 곡)을 받고 있었다.
+ *
+ * order 가 큐와 맞지 않으면(길이 불일치·현재 곡 없음) 큐 순서로 폴백한다 —
+ * playerStore.next() 가 같은 조건에서 선형 진행으로 폴백하는 것과 같다.
+ */
+export function playOrderFrom(opts: {
+  length: number;
+  index: number;
+  order?: readonly number[] | null;
+  wrap?: boolean;
+}): number[] {
+  const { length: n, index, order, wrap = true } = opts;
+  if (n <= 0) return [];
+  const pos = order && order.length === n ? order.indexOf(index) : -1;
+  const out: number[] = [];
+  if (order && pos !== -1) {
+    const span = wrap ? n : n - pos;
+    for (let step = 0; step < span; step++) out.push(order[(pos + step) % n]);
+    return out;
+  }
+  const span = wrap ? n : Math.max(0, n - index);
+  for (let step = 0; step < span; step++) out.push(wrap ? (index + step) % n : index + step);
+  return out;
+}
+
+/**
  * 다음에 미리 받아둘 URL 목록.
  *
- * 현재 인덱스 다음 곡부터 순서대로 훑고, repeat='all' 이면 큐 끝에서 앞으로 되감는다
- * (매장은 같은 로테이션을 하루 종일 도므로 되감기 구간이 곧 다음에 쓸 곡이다).
+ * 현재 곡부터 재생 순서(order — 셔플이면 shuffleOrder)대로 훑고, repeat='all' 이면 끝에서
+ * 앞으로 되감는다(매장은 같은 로테이션을 하루 종일 도므로 되감기 구간이 곧 다음에 쓸 곡이다).
  * 이미 캐시된 것과 캐시 불가 URL 은 건너뛴다. 중복은 제거된다.
  */
 export function pickPrefetchTargets(opts: {
@@ -66,18 +103,18 @@ export function pickPrefetchTargets(opts: {
   cached: ReadonlySet<string>;
   ahead?: number;
   wrap?: boolean;
+  /** 재생 순서(셔플 순서). 없거나 큐와 안 맞으면 큐 순서. */
+  order?: readonly number[] | null;
 }): string[] {
-  const { urls, index, cached, ahead = DEFAULT_PREFETCH_AHEAD, wrap = true } = opts;
+  const { urls, index, cached, ahead = DEFAULT_PREFETCH_AHEAD, wrap = true, order } = opts;
   const n = urls.length;
   if (n === 0 || ahead <= 0) return [];
 
   const out: string[] = [];
   const seen = new Set<string>();
   // 현재 곡 자신도 후보에 넣는다 — 재생 중 캐시가 비어 있으면 다음 루프를 위해 받아둔다.
-  const span = wrap ? n : Math.max(0, n - index);
-
-  for (let step = 0; step < span && out.length < ahead; step++) {
-    const i = wrap ? (index + step) % n : index + step;
+  for (const i of playOrderFrom({ length: n, index, order, wrap })) {
+    if (out.length >= ahead) break;
     const url = urls[i];
     if (!isCacheableAudioUrl(url)) continue;
     if (cached.has(url) || seen.has(url)) continue;
@@ -85,6 +122,30 @@ export function pickPrefetchTargets(opts: {
     out.push(url);
   }
   return out;
+}
+
+/**
+ * 지금 곡이 네트워크에서 안 받아질 때 대신 틀 곡 — 재생 순서상 다음 곡들 중
+ * **이미 로컬에 있는** 첫 곡의 큐 인덱스. 없으면 null(호출측이 평소대로 next()).
+ *
+ * 순서가 조금 바뀌어도 무음보다 낫다(매장 BGM). 건너뛴 곡은 다음 바퀴에 나온다.
+ * 현재 곡과 같은 URL 은 고르지 않는다 — 같은 파일이면 같은 이유로 막혀 있다.
+ */
+export function pickCachedFallbackIndex(opts: {
+  urls: (string | null | undefined)[];
+  index: number;
+  isCached: (url: string) => boolean;
+  order?: readonly number[] | null;
+}): number | null {
+  const { urls, index, isCached, order } = opts;
+  const currentUrl = urls[index];
+  const seq = playOrderFrom({ length: urls.length, index, order, wrap: true });
+  for (const i of seq.slice(1)) {
+    const url = urls[i];
+    if (!isCacheableAudioUrl(url) || url === currentUrl) continue;
+    if (isCached(url)) return i;
+  }
+  return null;
 }
 
 /**

@@ -16,6 +16,10 @@ import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
 import { recordPauseRequest, observePlay } from '@/lib/playbackFlightRecorder';
 import { toast } from '@/store/toastStore';
+import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
+import { useBusinessStore } from '@/store/businessStore';
+import { logPlaybackDiagnostic } from '@/lib/playbackDiagnostics';
+import { noteAutoplayBlocked } from '@/lib/autoplayRecovery';
 import type { AudioSessionState } from '@/hooks/useAudioSessionState';
 
 export type RecoveryReason =
@@ -207,6 +211,53 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
       return false;
     };
 
+    /**
+     * AUTOPLAY-BLOCK-PARITY — play() 가 자동재생 차단으로 거절되면 **Player.tsx 와 같은
+     * 처리**를 한다.
+     *
+     * 왜 필요한가 — 화정점 2026-10-05 07:08. Flight Recorder 에 이 경로의
+     * `PLAY_REJECTED errName:NotAllowedError` 가 **4건** 찍혔는데,
+     * store_playback_diagnostics 의 `autoplay_blocked` 는 26시간 내내 **0건**이었다.
+     *
+     * 원인은 경로 분기였다. Player.tsx 의 play() 래퍼는 NotAllowedError 를 받으면
+     * setAutoplayBlocked(true) → 전체화면 안내(PlaybackBlockedOverlay) → 진단 기록까지
+     * 하는데, 이 훅의 tryPlay 는 observePlay(순수 관측) + 지역 catch 로 끝나서 그 셋을
+     * 전부 건너뛰었다. 결과:
+     *   · 점주는 "화면을 한 번 눌러주세요" 안내를 **못 본다** → 무인 매장 영구 무음
+     *   · 서버는 차단 사실을 **모른다** → 감시가 "원인 불명 정지" 로만 본다
+     * Player.tsx 주석이 바로 그 안내를 최후 수단으로 못박아 둔 것인데
+     * ("무인 매장에서는 토스트를 아무도 못 본다"), 이 경로가 조용히 무력화하고 있었다.
+     *
+     * 자동재생 차단 자체는 코드로 뚫을 수 없다. 사람이 화면을 눌러야 한다.
+     * 그래서 여기서 하는 일은 **그 사실을 화면과 서버에 알리는 것뿐**이다 —
+     * play() 를 더 부르지도, playing 을 바꾸지도, pause() 하지도 않는다.
+     */
+    const reportAutoplayBlocked = (el: HTMLAudioElement, tag: string) => {
+      // Player.tsx 와 같은 게이트: 일반 청취자에게는 토스트 경로가 이미 따로 있다.
+      if (!useBusinessStore.getState().businessMode) return;
+      try {
+        usePlaybackHealthStore.getState().setAutoplayBlocked(true);
+        noteAutoplayBlocked();
+        void logPlaybackDiagnostic('autoplay_blocked', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            site: 'recovery-manager',
+            tag,
+            recoveryReason: reason,
+            paused: el.paused,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: Math.round(el.currentTime * 1000) / 1000,
+            online: typeof navigator === 'undefined' ? null : navigator.onLine,
+            visibility: typeof document === 'undefined' ? null : document.visibilityState,
+          },
+        });
+      } catch {
+        /* 보고 실패가 복구를 막아선 안 된다 */
+      }
+    };
+
     const tryPlay = async (el: HTMLAudioElement | null, tag: string): Promise<boolean> => {
       if (!el) { parts.push(`${tag}=no-el;`); return false; }
       try {
@@ -217,6 +268,10 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
       } catch (e) {
         const err = e as { name?: string; message?: string };
         parts.push(`${tag}=err(${err.name ?? err.message ?? String(e)});`);
+        if (err.name === 'NotAllowedError') {
+          parts.push('autoplay-blocked-reported;');
+          reportAutoplayBlocked(el, tag);
+        }
         return false;
       }
     };

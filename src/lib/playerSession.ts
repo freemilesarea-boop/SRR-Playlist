@@ -5,6 +5,7 @@ import { useBusinessStore } from '@/store/businessStore';
 import { useAuthStore } from '@/store/authStore';
 import { saveContinueListeningFull } from '@/lib/libraryApi';
 import { supabase } from '@/lib/supabase';
+import { slotScopedKey } from '@/lib/outputSlot';
 
 /**
  * Continue Listening Phase 2 — full session snapshot.
@@ -14,7 +15,8 @@ import { supabase } from '@/lib/supabase';
  * 새로고침/탭종료 후에도 큐 그대로 이어재생 가능하게 한다.
  */
 
-const LS_KEY = 'srr-player-session';
+// 분리 송출 창은 창마다 재생 목록이 다르다(매장 창이 브랜드 목록을 이어 틀지 않게).
+const LS_KEY = slotScopedKey('srr-player-session');
 const SCHEMA_VERSION = 1;
 const DEBOUNCE_MS = 5_000;
 /** 30일 이후 만료 */

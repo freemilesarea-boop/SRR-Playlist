@@ -25,6 +25,7 @@
  */
 import type { StorePlaybackResolution, PlaybackMode, PolicySource } from '@/lib/api/franchiseApi';
 import { selectRotationSet, type RotationSet } from '@/lib/storePlaybackPolicy';
+import { slotScopedKey } from '@/lib/outputSlot';
 
 export type PlayerRuntimeState =
   | 'legacy'
@@ -317,7 +318,7 @@ export function advanceRotation(
 
 // ---- localStorage persistence (side-effecting; guarded, never throws) --------
 
-const ROTATION_KEY_PREFIX = 'srr.playback.rotation.';
+const ROTATION_KEY_PREFIX = slotScopedKey('srr.playback.rotation') + '.';
 
 export function loadRotationMemory(storeId: string): RotationMemory {
   try {

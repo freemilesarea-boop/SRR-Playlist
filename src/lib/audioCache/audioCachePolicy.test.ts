@@ -8,8 +8,10 @@ import {
   isCacheableAudioUrl,
   isCacheableSize,
   needsRoomFor,
+  pickCachedFallbackIndex,
   pickEvictions,
   pickPrefetchTargets,
+  playOrderFrom,
   DEFAULT_CACHE_LIMIT_BYTES,
   MAX_TRACK_BYTES,
   type AudioCacheEntry,
@@ -188,5 +190,59 @@ describe('audioSourceMatch', () => {
 
   it('파싱 불가 URL 은 unknown (기존 catch 폴백과 동일한 의미)', () => {
     expect(audioSourceMatch('::::', 'http://a/b', { origin: 'not a url' })).toBe('unknown');
+  });
+});
+
+describe('재생 순서 따라가기 (셔플) — 화정점 2026-10', () => {
+  const urls = ['a', 'b', 'c', 'd', 'e'].map((x) => `https://s/${x}.mp3`);
+  // 셔플 순서: 2 → 0 → 4 → 1 → 3
+  const order = [2, 0, 4, 1, 3];
+
+  it('playOrderFrom 은 현재 곡부터 셔플 순서대로, 끝에서 되감는다', () => {
+    expect(playOrderFrom({ length: 5, index: 4, order })).toEqual([4, 1, 3, 2, 0]);
+  });
+
+  it('order 가 큐와 안 맞으면 큐 순서로 폴백한다', () => {
+    expect(playOrderFrom({ length: 5, index: 3, order: [0, 1] })).toEqual([3, 4, 0, 1, 2]);
+    expect(playOrderFrom({ length: 5, index: 3, order: null })).toEqual([3, 4, 0, 1, 2]);
+  });
+
+  it('선반입은 큐 이웃이 아니라 실제로 다음에 나올 곡을 받는다', () => {
+    const got = pickPrefetchTargets({ urls, index: 4, cached: new Set([urls[4]]), ahead: 2, order });
+    expect(got).toEqual([urls[1], urls[3]]);
+  });
+
+  it('order 없이는 기존 동작(큐 순서)과 같다', () => {
+    const got = pickPrefetchTargets({ urls, index: 4, cached: new Set([urls[4]]), ahead: 2 });
+    expect(got).toEqual([urls[0], urls[1]]);
+  });
+});
+
+describe('pickCachedFallbackIndex — 못 받는 곡 대신 틀 로컬 곡', () => {
+  const urls = ['a', 'b', 'c', 'd', 'e'].map((x) => `https://s/${x}.mp3`);
+  const order = [2, 0, 4, 1, 3];
+
+  it('재생 순서상 다음 곡들 중 받아둔 첫 곡', () => {
+    const cached = new Set([urls[3], urls[0]]);
+    // index 2 다음 순서: 0(캐시됨) → …
+    expect(pickCachedFallbackIndex({ urls, index: 2, order, isCached: (u) => cached.has(u) })).toBe(0);
+    // index 4 다음 순서: 1(없음) → 3(캐시됨)
+    expect(pickCachedFallbackIndex({ urls, index: 4, order, isCached: (u) => cached.has(u) })).toBe(3);
+  });
+
+  it('지금 곡 자신이나 같은 파일은 고르지 않는다', () => {
+    const dup = [urls[0], urls[1], urls[0]];
+    expect(pickCachedFallbackIndex({ urls: dup, index: 0, isCached: () => true })).toBe(1);
+    expect(pickCachedFallbackIndex({ urls: [urls[0]], index: 0, isCached: () => true })).toBeNull();
+  });
+
+  it('받아둔 곡이 없으면 null — 호출측이 평소대로 next()', () => {
+    expect(pickCachedFallbackIndex({ urls, index: 2, order, isCached: () => false })).toBeNull();
+  });
+});
+
+describe('캐시 상한 — 하루치 브랜드 로테이션을 담는다', () => {
+  it('기본 상한은 363곡 × 5MB 보다 크다', () => {
+    expect(DEFAULT_CACHE_LIMIT_BYTES).toBeGreaterThan(363 * 5 * MB);
   });
 });

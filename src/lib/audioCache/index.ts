@@ -16,6 +16,7 @@ import {
   effectiveCacheLimit,
   isCacheableSize,
   needsRoomFor,
+  pickCachedFallbackIndex,
   pickEvictions,
   pickPrefetchTargets,
   type AudioCacheEntry,
@@ -87,6 +88,59 @@ export function isPlayableOffline(audioUrl: string | null | undefined): boolean 
   return !!audioUrl && objectUrlByAudioUrl.has(audioUrl);
 }
 
+/** IndexedDB 에 받아둔 곡인지(object URL 준비 여부와 무관). 색인을 아직 안 읽었으면 false. */
+export function isCachedAudio(audioUrl: string | null | undefined): boolean {
+  return !!audioUrl && (objectUrlByAudioUrl.has(audioUrl) || (cachedUrls?.has(audioUrl) ?? false));
+}
+
+/**
+ * 지금 곡을 네트워크로 못 받을 때 대신 틀 **로컬 곡**을 골라 재생 준비까지 해둔다.
+ * 돌려준 인덱스의 곡은 playbackSrcFor 가 즉시 object URL 을 준다. 없으면 null.
+ *
+ * 블롭을 못 읽는 후보(그 사이 축출 등)는 건너뛰고 다음 후보를 본다 — 몇 곡까지만.
+ */
+export async function prepareCachedFallback(opts: {
+  urls: (string | null | undefined)[];
+  index: number;
+  order?: readonly number[] | null;
+}): Promise<number | null> {
+  try {
+    if (!cachedUrls && (await cacheStoreReady())) cachedUrls = await cachedUrlSet();
+  } catch {
+    return null;
+  }
+  const skip = new Set<string>();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const i = pickCachedFallbackIndex({
+      urls: opts.urls,
+      index: opts.index,
+      order: opts.order,
+      isCached: (u) => !skip.has(u) && isCachedAudio(u),
+    });
+    if (i === null) return null;
+    const url = opts.urls[i] as string;
+    if (await materialize(url)) return i;
+    skip.add(url);
+    forgetCached([url]);
+  }
+  return null;
+}
+
+let persistRequested = false;
+/**
+ * 브라우저에 "이 사이트 저장소를 임의로 지우지 말라" 고 요청한다(1회, best-effort).
+ * 디스크가 빠듯해지면 브라우저는 영구 표시가 없는 사이트부터 통째로 비운다 —
+ * 수 GB 를 받아둔 매장 캐시가 하루아침에 사라지면 그날은 전부 네트워크 재생이다.
+ */
+function requestPersistentStorage(): void {
+  if (persistRequested) return;
+  persistRequested = true;
+  try {
+    const st = typeof navigator === 'undefined' ? undefined : navigator.storage;
+    if (st && typeof st.persist === 'function') void st.persist().catch(() => { /* 무시 */ });
+  } catch { /* 무시 */ }
+}
+
 function markLive(objUrl: string) {
   const i = liveOrder.indexOf(objUrl);
   if (i >= 0) liveOrder.splice(i, 1);
@@ -146,17 +200,25 @@ async function materialize(audioUrl: string): Promise<boolean> {
   return true;
 }
 
-/** 네트워크에서 받아 IndexedDB 에 저장. 이미 있으면 받지 않는다. */
-async function download(audioUrl: string, signal?: AbortSignal): Promise<boolean> {
+/** 캐시에 자리가 없어서 받지 않았다 — 채우기(fill) 단계는 여기서 멈춘다. */
+const FULL = 'full' as const;
+
+/**
+ * 네트워크에서 받아 IndexedDB 에 저장. 이미 있으면 받지 않는다.
+ * evict=false 면 자리를 만들려고 다른 곡을 지우지 않는다 — 꽉 찼으면 받지 않고 FULL.
+ */
+async function download(audioUrl: string, signal?: AbortSignal, evict = true): Promise<boolean | typeof FULL> {
   if (inFlight.has(audioUrl)) return false;
   inFlight.add(audioUrl);
   try {
+    if (!evict && (await cacheIsFull())) return FULL;
     // Range 헤더 없이 전체를 받는다 — 206 부분응답을 저장하면 재생이 깨진다.
     const res = await fetch(audioUrl, { signal, credentials: 'omit', mode: 'cors' });
     if (!res.ok || res.status === 206) return false;
     const blob = await res.blob();
     if (!isCacheableSize(blob.size)) return false;
 
+    if (!evict && (await cacheIsFull(blob.size))) return FULL;
     await makeRoomFor(blob.size);
     await putAudio({
       url: audioUrl,
@@ -193,6 +255,13 @@ function forgetCached(urls: readonly string[]): void {
   }
 }
 
+/** 지금 bytes 를 더 넣으면 상한을 넘는가(축출 없이). */
+async function cacheIsFull(bytes = 0): Promise<boolean> {
+  const entries = await listEntries();
+  const total = entries.reduce((s, e) => s + e.bytes, 0);
+  return needsRoomFor(Math.max(bytes, 1), total, effectiveCacheLimit(await storageQuota()));
+}
+
 /** 새 항목이 들어갈 자리 확보 — LRU 로 정리. */
 async function makeRoomFor(bytes: number): Promise<void> {
   const entries = await listEntries();
@@ -218,10 +287,18 @@ export async function prefetchQueue(opts: {
   index: number;
   ahead?: number;
   signal?: AbortSignal;
+  /** 재생 순서(셔플이면 playerStore.shuffleOrder). 없으면 큐 순서. */
+  order?: readonly number[] | null;
+  /**
+   * 채우기 모드 — 캐시가 꽉 차면 다른 곡을 지우지 않고 멈춘다.
+   * 큐가 캐시보다 큰 브랜드(수천 곡)에서 "받고 지우고" 를 끝없이 반복하지 않게 한다.
+   */
+  fill?: boolean;
 }): Promise<number> {
-  const { urls, index, ahead = DEFAULT_PREFETCH_AHEAD, signal } = opts;
+  const { urls, index, ahead = DEFAULT_PREFETCH_AHEAD, signal, order, fill = false } = opts;
   try {
     if (!(await cacheStoreReady())) return 0;
+    requestPersistentStorage();
     if (!cachedUrls) cachedUrls = await cachedUrlSet();
   } catch {
     // 저장소를 열 수 없다 = 오프라인 캐시를 쓸 수 없다. 네트워크 재생은 그대로 간다.
@@ -229,11 +306,13 @@ export async function prefetchQueue(opts: {
   }
 
   // 1) 아직 안 받은 것 내려받기
-  const targets = pickPrefetchTargets({ urls, index, cached: cachedUrls, ahead });
+  const targets = pickPrefetchTargets({ urls, index, cached: cachedUrls, ahead, order });
   let gained = 0;
   for (const url of targets) {
     if (signal?.aborted) break;
-    if (await download(url, signal)) gained++;
+    const r = await download(url, signal, !fill);
+    if (r === FULL) break;
+    if (r) gained++;
   }
 
   // 2) 곧 쓸 곡은 object URL 까지 준비 — 재생 시점에 동기 조회가 되도록.
@@ -242,6 +321,7 @@ export async function prefetchQueue(opts: {
     index,
     cached: new Set<string>(), // 캐시 여부와 무관하게 "다음에 쓸 순서"만 뽑는다
     ahead: MAX_LIVE_OBJECT_URLS,
+    order,
   });
   for (const url of soon) {
     if (signal?.aborted) break;

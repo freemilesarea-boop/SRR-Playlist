@@ -30,6 +30,7 @@ import {
   getActiveEmergencyBroadcast, markEmergencyBroadcastStatus,
   type ActiveBroadcastPayload,
 } from '@/lib/api/emergencyBroadcastApi';
+import { useElementAudioSink } from '@/hooks/useElementAudioSink';
 
 const POLL_INTERVAL_MS = 5_000;
 const FADE_OUT_MS = 500;
@@ -57,6 +58,8 @@ export interface EmergencyBroadcastOverlayProps {
 
 export default function EmergencyBroadcastOverlay({ storeId, debug = false }: EmergencyBroadcastOverlayProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 분리 송출 — 이 창에서 고른 스피커로 송출.
+  useElementAudioSink(audioRef);
   const [active, setActive] = useState<ActiveBroadcastPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [visible, setVisible] = useState<boolean>(() =>

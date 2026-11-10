@@ -2,6 +2,15 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <!-- Google Analytics (GA4) — gtag.js 는 async 로 받아 렌더링을 막지 않는다.
+         SPA 라우트 전환은 GA4 향상된 측정(브라우저 기록 이벤트)이 page_view 로 잡는다. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-GBS7QGPY8Q"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag('js', new Date());
+      gtag('config', 'G-GBS7QGPY8Q');
+    </script>
     <!-- 네이버 서치어드바이저 사이트 소유권 확인 -->
     <meta name="naver-site-verification" content="bc194df7be3ba9802a44d72166cf1e0babf29ae1" />
     <!-- 브랜드 아이콘 (캐시 무력화용 ?v=2) -->

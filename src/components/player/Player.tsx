@@ -21,7 +21,8 @@ import { usePlayerStore } from '@/store/playerStore';
 import { shouldAutoSkipUnattended, autoSkipDelayMs, isPermanentMediaError } from '@/lib/unattendedRecovery';
 import {
   resolveStallAction, isEscalation, verifyHardReset, decideReconnectReset, HARD_RESET_VERIFY_MS,
-  FROZEN_REPORT_MIN_INTERVAL_MS, type StallAction,
+  FROZEN_REPORT_MIN_INTERVAL_MS, explainStallGate, NUDGE_AFTER_MS,
+  isPlaybackStateDesync, shouldStopOnLoadFailure, type StallAction,
 } from '@/lib/stallWatchdog';
 import {
   isMeaningfulProgress, advanceProgressAnchor, countsAsPlayback, type ProgressAnchor,
@@ -83,7 +84,7 @@ import { resolveStoreGate, isStorePlayerSurface } from '@/lib/storePlaybackGate'
 import { useGateStore } from '@/store/gateStore';
 import { trackShareUrl } from '@/lib/shareApi';
 import { toast } from '@/store/toastStore';
-import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor } from '@/lib/audioCache';
+import { audioSourceMatch, blobOwner, dropCachedAudio, playbackSrcFor, prepareCachedFallback } from '@/lib/audioCache';
 import {
   logPlaybackDiagnostic, beaconPlaybackDiagnostic, takeReloadReason, type DiagnosticReason,
 } from '@/lib/playbackDiagnostics';
@@ -264,6 +265,36 @@ function computeNextIndex(
   }
   if (index + 1 >= queueLength) return repeat === 'all' ? 0 : null;
   return index + 1;
+}
+
+/**
+ * 지금 곡을 네트워크로 못 받는 매장 — 재생 순서상 다음 곡 중 **이미 로컬에 받아둔 곡**으로
+ * 넘어간다. 성공하면 true, 대신 틀 곡이 없으면 false(호출측이 평소 경로로 진행).
+ *
+ * 화정점 2026-10: 느린 회선에서 다음 곡이 12초 넘게 안 받아져 무음이 시작됐다.
+ * 로컬 곡이 있으면 회선 상태와 무관하게 즉시 소리가 난다. 순서가 조금 바뀌는 것은
+ * 매장 BGM 에서 무음보다 훨씬 낫고, 건너뛴 곡은 다음 바퀴에 나온다.
+ *
+ * 준비(블롭 → object URL)가 비동기라, 그 사이 곡이 바뀌었으면 아무것도 하지 않는다.
+ */
+async function jumpToCachedTrack(trigger: 'meta_timeout' | 'stall_skip'): Promise<boolean> {
+  const before = usePlayerStore.getState();
+  const fromId = before.queue[before.index]?.id ?? null;
+  const target = await prepareCachedFallback({
+    urls: before.queue.map((t) => t.audio_url),
+    index: before.index,
+    order: before.shuffle ? before.shuffleOrder : null,
+  });
+  if (target === null) return false;
+  const now = usePlayerStore.getState();
+  if ((now.queue[now.index]?.id ?? null) !== fromId || now.queue[target]?.id !== before.queue[target]?.id) return false;
+  void logPlaybackDiagnostic('playback_stalled', {
+    reason: 'self_heal',
+    playerMode: 'store',
+    context: { kind: 'cached_fallback', trigger, fromTrackId: fromId, toTrackId: now.queue[target]?.id ?? null },
+  });
+  usePlayerStore.setState({ index: target, currentTime: 0, pendingSeekSec: null, playing: true });
+  return true;
 }
 
 export default function Player() {
@@ -1473,6 +1504,13 @@ export default function Player() {
                 queueLength: usePlayerStore.getState().queue.length,
               });
             }
+            // 매장 모드에서는 정지하지 않는다 — 느린 회선에서 늦게 도착하는 곡까지
+            // "재생 불가" 로 굳혀 무음이 몇 시간씩 이어졌다(화정점). 받아둔 곡이 있으면
+            // 그 곡으로 넘어가고, 없으면 사다리가 처리한다.
+            if (!shouldStopOnLoadFailure({ businessMode: useBusinessStore.getState().businessMode })) {
+              void jumpToCachedTrack('meta_timeout');
+              return;
+            }
             setErrored(true);
             pause();
           }
@@ -1710,6 +1748,19 @@ export default function Player() {
 
   /** 얼었다는 보고를 서버로 보낸 마지막 시각. 서버 쓰기를 유계로 묶는다. */
   const lastFrozenReportAtRef = useRef(-Infinity);
+  /**
+   * 사다리가 게이트에 막혀 있다는 보고를 서버로 보낸 마지막 시각.
+   * lastFrozenReportAtRef 와 따로 두는 이유: 둘은 서로 다른 사건이다. 게이트에 막힌
+   * 정지는 audio_frozen 이 한 번도 안 뜨는 경우가 있고(화정점 2026-10-05), 그러면
+   * 같은 시계를 쓰면 한쪽이 다른 쪽을 영구히 가린다.
+   */
+  const lastGateReportAtRef = useRef(-Infinity);
+  /**
+   * 상태 재동기화를 마지막으로 적용한 시각. 유계로 묶는 이유는 안전이다 —
+   * 어떤 경로가 playing 을 다시 false 로 되돌리면 tick 마다 싸우게 되는데,
+   * 그러면 복구가 아니라 진동이 된다. 60초 바닥을 두면 진동 대신 기록이 남는다.
+   */
+  const lastDesyncResyncAtRef = useRef(-Infinity);
 
   /**
    * HARD RECOVERY 실행 — 죽은 엘리먼트를 버리고 새 세대를 만든다.
@@ -1913,7 +1964,7 @@ export default function Player() {
         }
       }
 
-      const action = resolveStallAction({
+      const stallInput = {
         businessMode: true,
         playing: store.playing,
         paused: el.paused,
@@ -1930,7 +1981,134 @@ export default function Player() {
         // IndexedDB 에 받아둔 곡으로 버티고 있을 수 있고, 리로드 직후에는 자동재생이
         // 막힐 수 있다 — 회선 없음과 재생 죽음은 다른 사건이다.
         online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-      });
+      };
+      const action = resolveStallAction(stallInput);
+
+      // GATE-TRACE — 정지가 문턱을 넘었는데도 사다리가 안 움직이면 **왜** 인지 남긴다.
+      //
+      // 화정점 2026-10-05 16:50:44~: 재생 위치가 15초에 박힌 채 22분이 지났는데
+      // playback_stalled·audio_frozen·Flight Recorder flush 가 전부 0건이었다.
+      // 사다리는 8초면 첫 칸에 올라야 하므로 게이트 중 하나가 계속 참이었다는 뜻인데,
+      // 그 값들(playing·suppressed·autoplayBlocked…)은 클라이언트 메모리에만 있어
+      // 서버에서 원인을 특정할 수 없었다. 그 공백을 메운다.
+      //
+      // 판정에는 개입하지 않는다 — explainStallGate 는 순수 함수이고, 이 블록은
+      // 아래 early return 을 그대로 통과시킨다. beacon 이라 정지 직후에도 도착한다.
+      // 유계: FROZEN_REPORT_MIN_INTERVAL_MS(60초) 바닥 — heartbeat 보다 잦아지지 않는다.
+      if (
+        action === 'none'
+        && stallInput.stalledMs >= NUDGE_AFTER_MS
+        && now - lastGateReportAtRef.current >= FROZEN_REPORT_MIN_INTERVAL_MS
+      ) {
+        lastGateReportAtRef.current = now;
+        beaconPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          // 이 파일의 기존 playback_stalled 행과 같은 값을 쓴다(쿼리 일관성).
+          // 이 컬럼은 store/brand 를 가르는 근거로 쓸 수 없다 — context.path 를 본다.
+          playerMode: 'store',
+          context: {
+            kind: 'gate_blocked',
+            gate: explainStallGate(stallInput),
+            build: pageBuildHash(),
+            playerInstanceId: getPlayerInstanceId(),
+            trackId,
+            stalledSec: Math.round(stallInput.stalledMs / 1000),
+            ladderAt: stallLastActionRef.current,
+            // 게이트 입력값 원본 — 어느 게이트가 걸렸는지 교차 확인용.
+            playing: stallInput.playing,
+            suppressed: stallInput.suppressed,
+            autoplayBlocked: stallInput.autoplayBlocked,
+            subscriptionBlocked: stallInput.subscriptionBlocked,
+            crossfading: stallInput.crossfading,
+            fruitlessSkips: stallInput.fruitlessSkips,
+            hardResetDone: stallInput.hardResetDone,
+            // 엘리먼트 실제 상태 — paused=false 인데 위치가 안 움직이는 경우를 가른다.
+            paused: el.paused,
+            ended: el.ended,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: Math.round(el.currentTime * 1000) / 1000,
+            audioGeneration: audioGenerationRef.current,
+            online: typeof navigator === 'undefined' ? null : navigator.onLine,
+            visibility: typeof document === 'undefined' ? null : document.visibilityState,
+            path: typeof location === 'undefined' ? null : location.pathname,
+          },
+        });
+      }
+
+      // DESYNC-RESYNC — store 의 재생 의도와 엘리먼트 실제 상태가 모순이고 소리도
+      // 멈춘 경우, **의도를 실제 상태에 맞춘다.** 여기서 play() 를 부르지 않는다.
+      //
+      // 왜 필요한가 — 화정점 2026-10-05. store.playing === false 하나로
+      //   · resolveStallAction 이 'none' → 복구 사다리가 영구 정지
+      //   · continue_listening 저장 effect 가 early-return → 감시선도 끊김
+      //   · useAudioRecoveryManager.shouldAttemptPlay() 가 play 를 거부하고
+      //     재생 중인 엘리먼트를 force-pause
+      // 세 개가 동시에 죽어 스스로 유지되는 상태가 된다. 그날 audio_frozen 은
+      // paused:false · readyState:4 로 찍혔는데 playback_stalled 는 0건이었다.
+      //
+      // 원인은 미확정이다. 이 블록은 원인을 고치지 않고, 그 죽은 상태가 오래
+      // 지속되지 않게만 한다. 판정은 isPlaybackStateDesync 가 전담하고
+      // suppressed · autoplayBlocked · subscriptionBlocked · crossfading · ended ·
+      // paused · readyState 를 모두 거른다 — 정상 정지는 엘리먼트도 paused 이므로
+      // 사용자 의도와 본사 스케줄은 구조적으로 침범되지 않는다.
+      if (
+        action === 'none'
+        && now - lastDesyncResyncAtRef.current >= FROZEN_REPORT_MIN_INTERVAL_MS
+        && isPlaybackStateDesync({
+          businessMode: true,
+          playing: stallInput.playing,
+          // 클로저의 `playable` 을 쓰지 않는다 — 이 effect 는 [businessMode] 로 한 번만
+          // 만들어지므로 그 값이 고정(stale)된다. 워커 ticker 를 트랙마다 재생성하는 것은
+          // 더 위험하므로, 이 파일이 이미 쓰는 방식(1132행)대로 store 에서 live 로 읽는다.
+          // 컴포넌트의 `playable` 정의(405행)와 동일한 식이다.
+          playable: isPlayableUrl(store.queue[store.index]?.audio_url),
+          paused: el.paused,
+          ended: el.ended,
+          crossfading: stallInput.crossfading,
+          suppressed: stallInput.suppressed,
+          autoplayBlocked: stallInput.autoplayBlocked,
+          subscriptionBlocked: stallInput.subscriptionBlocked,
+          readyState: el.readyState,
+          stalledMs: stallInput.stalledMs,
+        })
+      ) {
+        lastDesyncResyncAtRef.current = now;
+        const stalledSec = Math.round(stallInput.stalledMs / 1000);
+        recordFlightEvent('STALL_SNAPSHOT', {
+          el, audioElementId: getAudioObjectId(el),
+          extra: { action: 'desync_resync', prevAction: stallLastActionRef.current, stalledMs: Math.round(stallInput.stalledMs) },
+        });
+        beaconPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: {
+            kind: 'state_desync',
+            build: pageBuildHash(),
+            playerInstanceId: getPlayerInstanceId(),
+            trackId,
+            stalledSec,
+            ladderAt: stallLastActionRef.current,
+            // 재동기화 직전의 모순 증거.
+            storePlaying: stallInput.playing,
+            audioPaused: el.paused,
+            readyState: el.readyState,
+            networkState: el.networkState,
+            currentTime: Math.round(el.currentTime * 1000) / 1000,
+            audioGeneration: audioGenerationRef.current,
+            visibility: typeof document === 'undefined' ? null : document.visibilityState,
+            online: typeof navigator === 'undefined' ? null : navigator.onLine,
+            path: typeof location === 'undefined' ? null : location.pathname,
+          },
+        });
+        console.warn('[audio:desync] 재생 의도와 엘리먼트 상태가 모순 — 의도를 실제에 맞춘다', {
+          stalledSec, trackId, paused: el.paused, readyState: el.readyState,
+        });
+        // 다음 tick 부터 기존 사다리가 평소대로 올라간다. 복구는 사다리가 한다.
+        usePlayerStore.setState({ playing: true });
+        return;
+      }
+
       // 같은 칸을 반복 실행하거나 사다리를 되돌아가지 않는다.
       if (action === 'none' || !isEscalation(stallLastActionRef.current, action)) return;
       const prevAction = stallLastActionRef.current;
@@ -2082,7 +2260,14 @@ export default function Player() {
           playedSeconds: Math.round(ct), fruitlessSkips: fruitlessSkipsRef.current,
         },
       });
-      store.next();
+      // 받아둔 곡으로 넘어갈 수 있으면 그쪽 — 다음 곡도 네트워크라면 같은 이유로 막힐 수 있다.
+      // 준비를 기다리는 사이 곡이 이미 바뀌었으면 next() 하지 않는다(두 칸 넘어가지 않게).
+      const skipFromId = store.queue[store.index]?.id ?? null;
+      void jumpToCachedTrack('stall_skip').then((jumped) => {
+        if (jumped) return;
+        const st = usePlayerStore.getState();
+        if ((st.queue[st.index]?.id ?? null) === skipFromId) st.next();
+      });
     };
 
     // 화면이 꺼지면 메인 스레드 타이머는 스로틀링된다 — 정작 복구가 필요한 그 상황에서
@@ -3058,6 +3243,8 @@ export default function Player() {
         const e2 = err2 as DOMException;
         if (e2?.name === 'AbortError' || e2?.name === 'NotAllowedError') return;
         if (import.meta.env.DEV) console.error(`[Player] play() retry 실패 (${label})`, { name: e2?.name, message: e2?.message });
+        // 매장 모드는 의도를 유지한다 — 복구 사다리가 이어서 처리한다.
+        if (!shouldStopOnLoadFailure({ businessMode })) return;
         pause();
         toast.error('재생 시작에 실패했어요. 다시 시도해주세요.');
       }

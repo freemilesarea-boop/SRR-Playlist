@@ -14,7 +14,6 @@
  * 이 게이트에 걸리지 않는다 — 시연용 무제한 청취는 의도된 동작이다.
  */
 import type { Membership } from '@/lib/membership';
-import type { LastPlayerSurface } from '@/store/businessStore';
 
 export type StoreGateDecision =
   | 'allow'                 // 재생 가능
@@ -114,7 +113,7 @@ export function resolveStoreAutoStart(i: {
 }
 
 /**
- * 앱을 켰을 때 어느 매장 재생 화면으로 되돌아갈지. 되돌아가지 않으면 null.
+ * 앱을 켰을 때 매장 플레이어 화면으로 되돌아갈지.
  *
  * PC 전원을 켜면 음악이 나오게 하려면 (1) OS 가 앱을 띄우고 (2) 앱이 매장 화면으로 가고
  * (3) 재생이 시작돼야 한다. (1)은 웹이 할 수 없어 점주가 1회 설정한다(PWA 설치 + 시작 시 열기).
@@ -126,42 +125,48 @@ export function resolveStoreAutoStart(i: {
  *  - start_url('/') 로 들어왔을 때만. 특정 페이지를 겨냥한 진입은 존중한다.
  *  - 재생 가능한 등급일 때만. 무료 등급을 보내면 전체화면 차단 화면만 보게 된다.
  *  - 앱 실행당 1회만. 사용자가 홈으로 나오면 다시 끌고 가지 않는다.
- *
- * **어느 화면으로 갈지는 그 기기가 마지막으로 쓴 화면을 따른다.** 매장 플레이어와 브랜드
- * 플레이어는 둘 다 businessMode 를 켠다. 예전에는 그것만 보고 무조건 /business/player 로
- * 보내서, 웹앱으로 브랜드 플레이어를 쓰던 매장이 앱을 열 때마다 매장 플레이어에 떨어졌다
- * (2026-10-01 배포 이후 웹앱 브랜드 세션 0건 — 회원 신고 "웹앱에서 브랜드 플레이어가 안 된다").
- *
- *  - 마지막이 브랜드 → 그 브랜드의 기기 연결이 남아 있을 때만 /brand/player/:id.
- *    연결이 없으면(해제·만료·다른 매장 전환) 아무 데도 보내지 않는다. 매장 플레이어로
- *    보내면 같은 회귀가 된다.
- *  - 마지막이 매장 → /business/player.
- *  - 기록 없음(이 판정이 생기기 전부터 쓰던 기기) → 최근 브랜드의 기기 연결이 남아 있으면
- *    브랜드 기기로 본다. 아니면 기존대로 매장 플레이어.
  */
-export function resolveLaunchResumeTarget(i: {
+export function shouldResumeStorePlayerOnLaunch(i: {
   pathname: string;
   businessMode: boolean;
   membership: Membership;
   standalone: boolean;
   alreadyResumed: boolean;
-  lastSurface: LastPlayerSurface | null;
-  /** 최근 접속 브랜드 중 맨 앞 (getRecentBrands()[0]?.id). */
-  recentBrandId: string | null;
-  /** 이 기기에 해당 브랜드의 연결(device token)이 남아 있는가. */
-  hasBrandBinding: (brandId: string) => boolean;
+}): boolean {
+  if (i.alreadyResumed) return false;
+  if (!i.standalone) return false;
+  if (i.pathname !== '/') return false;
+  if (!i.businessMode) return false;
+  return i.membership === 'premium';
+}
+
+/**
+ * 설치형 앱을 '/' 로 켰을 때 갈 플레이어 화면 — 앱 실행 목적지의 **단일 판정**.
+ *
+ * 우선순위: 저장된 브랜드 연결 → 매장 플레이어 복귀 → 그대로(null).
+ * VALID BRAND BINDING ALWAYS WINS OVER STORE RESUME.
+ *
+ * 2026-10-06 숙대점: 브랜드 이동과 매장 복귀가 서로 다른 effect 에서 따로 돌았고,
+ * 먼저 실행된 매장 복귀(businessMode=true · premium)가 '/' 를 '/business/player' 로
+ * 바꿔버려 브랜드 이동은 매번 실행되지 못했다. 한 함수가 한 번에 정하므로 effect
+ * 실행 순서와 무관하다.
+ *
+ * brandPlayerPath 는 기기에 저장된 binding 의 플레이어 경로일 뿐 승인이 아니다.
+ * BrandPlayerPage 가 verify_brand_device_binding 으로 서버 재검증하고, 실패하면
+ * binding 을 지우고 /brand 로 돌려보낸다.
+ */
+export function resolveLaunchDestination(i: {
+  pathname: string;
+  businessMode: boolean;
+  membership: Membership;
+  standalone: boolean;
+  alreadyHandled: boolean;
+  brandPlayerPath: string | null;
 }): string | null {
-  if (i.alreadyResumed) return null;
+  if (i.alreadyHandled) return null;
   if (!i.standalone) return null;
   if (i.pathname !== '/') return null;
-  if (!i.businessMode) return null;
-  if (i.membership !== 'premium') return null;
-
-  const brandPath = (id: string) => `/brand/player/${encodeURIComponent(id)}`;
-  if (i.lastSurface?.kind === 'brand') {
-    return i.hasBrandBinding(i.lastSurface.brandId) ? brandPath(i.lastSurface.brandId) : null;
-  }
-  if (i.lastSurface?.kind === 'store') return '/business/player';
-  if (i.recentBrandId && i.hasBrandBinding(i.recentBrandId)) return brandPath(i.recentBrandId);
-  return '/business/player';
+  // 브랜드 플레이어는 로그인 필요(RequireAuth). 비로그인이면 보내지 않는다.
+  if (i.brandPlayerPath) return i.membership === 'anonymous' ? null : i.brandPlayerPath;
+  return shouldResumeStorePlayerOnLaunch({ ...i, alreadyResumed: false }) ? '/business/player' : null;
 }

@@ -215,6 +215,172 @@ export function resolveStallAction(i: StallInput): StallAction {
   return 'none';
 }
 
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 로딩 실패 시 재생 의도를 끌 것인가                                          */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 곡 로딩/재생 시도가 실패했을 때 Player 가 `pause()` 로 재생 의도를 꺼도 되는가.
+ *
+ * 왜 필요한가 — 화정점 2026-10-18~28 장애 6건(1.3~17.5시간 무음). 느린 회선에서
+ * 다음 곡의 메타데이터가 12초 안에 오지 않자 META_TIMEOUT 이 `pause()` 를 불렀다.
+ * 파일은 곧 다 받아졌지만 playing=false · paused=true 는 "사용자가 멈춘 정상 정지" 와
+ * 구별되지 않아 복구 사다리(not_playing 게이트)와 desync fail-safe 가 둘 다 손을 뗐고,
+ * 누가 새로고침할 때까지 무음이었다.
+ *
+ * 매장/브랜드 플레이어는 지켜보는 사람이 없다. 의도는 그대로 두고(playing=true)
+ * 회복은 사다리(nudge → reload → skip → hard_reset → reload_page)에 맡긴다.
+ * 같은 파일의 NotAllowedError·onError 경로가 이미 이 원칙을 따른다.
+ * 일반 청취자는 기존대로 정지 + 안내한다.
+ */
+export function shouldStopOnLoadFailure(i: { businessMode: boolean }): boolean {
+  return !i.businessMode;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 상태 비동기(desync) 판정 — fail-safe 재동기화                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** desync 로 보려면 엘리먼트가 적어도 이 readyState 여야 한다(HAVE_CURRENT_DATA). */
+export const DESYNC_MIN_READY_STATE = 2;
+
+export interface DesyncInput {
+  /** 매장/브랜드 플레이어인가. false 면 절대 개입하지 않는다. */
+  businessMode: boolean;
+  /** store 의 **재생 의도**. */
+  playing: boolean;
+  /**
+   * 이 트랙이 재생 가능한 소스인가 (isPlayableUrl(current.audio_url)).
+   *
+   * 왜 필요한가 — Player 의 트랙 동기 effect 는 `!playable` 이면
+   * `if (playing) { setErrored(true); pause(); } return;` 로 **audio.pause() 를 건너뛰고**
+   * 반환한다. pause() 가 playing=false 로 바꿔 effect 가 다시 돌아도 같은 분기에서 또
+   * 반환하므로 **엘리먼트의 paused 가 false 로 영구히 남을 수 있다.** 그 상태를 모순으로
+   * 읽으면 "재생 불가 트랙" 이라는 정당한 정지와 싸우게 된다.
+   */
+  playable: boolean;
+  /** audio element 의 **실제** paused 상태. */
+  paused: boolean;
+  ended: boolean;
+  crossfading: boolean;
+  /** 본사 스케줄 억제. 이 플래그가 서면 어떤 경우에도 개입하지 않는다. */
+  suppressed: boolean;
+  autoplayBlocked: boolean;
+  subscriptionBlocked: boolean;
+  /** HTMLMediaElement.readyState. */
+  readyState: number;
+  /** 마지막으로 재생 위치가 움직인 뒤 흐른 시간(ms). */
+  stalledMs: number;
+}
+
+/**
+ * **store 의 재생 의도와 엘리먼트의 실제 상태가 모순인데 소리도 멈춘 상태**인가.
+ *
+ * 왜 이 판정이 필요한가 — 화정점 2026-10-05.
+ *   · `audio_frozen(FROZEN_AUDIO_STATE)` 가 실제로 찍혔다 — 워치독 tick 은 돌았다.
+ *   · 그 context 가 `paused: false` · `readyState: 4` · `visibility: visible` 이었다.
+ *   · stream heartbeat 간격은 10~11초로 정상이었다(스로틀링 아님).
+ *   · 그런데 `playback_stalled` 사다리 진입은 **0건**이었고,
+ *     `continue_listening` 저장도 장시간 끊겼다.
+ *   이 둘은 같은 게이트를 공유한다 — 저장 effect 의 `if (!current || !playable
+ *   || !playing) return;` 과 resolveStallAction 의 `if (!i.playing || i.suppressed)
+ *   return 'none';`. 즉 `store.playing === false` 하나로 **감시와 복구가 동시에
+ *   영구 차단**된다. 게다가 useAudioRecoveryManager 의 shouldAttemptPlay() 는
+ *   playing=false 면 play 를 거부하고 **재생 중인 엘리먼트를 force-pause** 한다.
+ *   스스로 유지되는 죽은 상태다.
+ *
+ * ★ 원인은 아직 미확정이다. 이 함수는 원인을 고치지 않는다 — 원인이 무엇이든
+ *   **그 죽은 상태가 장시간 지속되지 않게** 하는 fail-safe 다.
+ *
+ * ★★ 판정의 핵심은 `paused` 다. 정상 정지 경로는 **엘리먼트도 함께 멈춘다**:
+ *   playerStore.pause() / toggle() / setScheduleSuppression() 이 playing=false 로
+ *   바꾸면 Player 의 트랙 동기 effect 가 `audio.pause()` 를 호출한다(PLAYER_STOP).
+ *   따라서 **사용자가 멈춘 경우와 스케줄 억제는 반드시 `paused === true`** 다.
+ *   `playing === false` 인데 `paused === false` 는 정상 경로로는 나올 수 없는 모순이고,
+ *   그 모순은 **직전의 재생 의도가 true 였다**는 뜻이다(누군가 play() 를 성공시켰다).
+ *
+ * 판정이 참일 때 호출측이 하는 일은 **의도를 실제 상태에 맞추는 것뿐**이다.
+ * play() 를 부르지 않는다 — 그다음은 기존 사다리(8s nudge → 20s reload → 35s skip
+ * → hard_reset → 150s reload_page)가 평소대로 처리한다. 복구가 실패하면 사다리가
+ * 끝까지 올라간다.
+ */
+export function isPlaybackStateDesync(i: DesyncInput): boolean {
+  // 일반 청취자에게는 동작 변화 0.
+  if (!i.businessMode) return false;
+  // 본사 스케줄 억제 — 절대 침범하지 않는다. suppressed 는 playing 과 별개 플래그라
+  // playing=false 의 사유를 여기서 구분할 수 있다.
+  if (i.suppressed) return false;
+  // 자동재생 차단·구독 차단은 각자 경로가 담당한다. 여기서 되살리면 무한 play 시도가 된다.
+  if (i.autoplayBlocked || i.subscriptionBlocked) return false;
+  // 크로스페이드 진행 중·정상 종료에는 개입하지 않는다.
+  if (i.crossfading || i.ended) return false;
+  // 재생 불가 트랙은 모순이 아니다 — 소스가 없으니 멈춰 있는 것이 정상이다.
+  // 순서는 continue_listening 저장 effect 와 같게 둔다(`!current || !playable || !playing`).
+  if (!i.playable) return false;
+  // 의도가 이미 재생이면 모순이 아니다 — 기존 사다리가 담당한다.
+  if (i.playing) return false;
+  // ★ 엘리먼트가 멈춰 있으면 정상 정지다. 사용자 의도를 절대 덮지 않는다.
+  if (i.paused) return false;
+  // 소스가 아직 없으면 "재생 중" 이라고 볼 수 없다 — 로딩 중 개입 금지.
+  if (i.readyState < DESYNC_MIN_READY_STATE) return false;
+  // 실제로 소리가 멈춰 있어야 한다. 문턱은 사다리 첫 칸과 같게 둔다.
+  return i.stalledMs >= NUDGE_AFTER_MS;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* 사다리가 왜 멈춰 있는가 — 게이트 사유                                        */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * `resolveStallAction` 이 'none' 을 돌려준 이유.
+ *
+ * 왜 필요한가 — 화정점 2026-10-05. 16:50:44 부터 재생 위치가 15초에 박힌 채
+ * 22분이 지났는데 `playback_stalled` 도 Flight Recorder flush 도 **0건**이었다.
+ * 사다리 첫 칸(nudge)에 진입조차 못 했다는 뜻이다. 그런데 위 함수의 이른 반환은
+ * 일곱 갈래이고 어느 갈래였는지는 **클라이언트 메모리에만** 있었다. 서버에서
+ * 원인을 특정할 수단이 없어 조사가 거기서 멈췄다.
+ *
+ * 'open'  = 막은 게이트가 없다(사다리가 움직일 수 있는 상태).
+ * 그 외   = 그 게이트에서 멈췄다.
+ */
+export type StallGate =
+  | 'open'
+  | 'not_business_mode'
+  | 'not_playing'
+  | 'suppressed'
+  | 'autoplay_blocked'
+  | 'subscription_blocked'
+  | 'crossfading'
+  | 'ended'
+  | 'hard_reset_verify'
+  | 'below_threshold';
+
+/**
+ * **판정하지 않는다.** `resolveStallAction` 과 같은 순서로 읽어 이유만 돌려준다.
+ *
+ * 저쪽이 `!playing || suppressed` 처럼 묶어 둔 분기는 여기서 쪼갠다 — 결과(어느 쪽이든
+ * 'none')는 같고 사유만 더 좁다. 두 함수가 어긋나면 안 되므로 stallWatchdog.test.ts 가
+ * 동치성을 고정한다: gate === 'open' ⟺ resolveStallAction !== 'none'.
+ *
+ * 헛skip 분기를 여기서 다시 쓰지 않는 이유: 그 분기의 조건에 `stalledMs >= SKIP_AFTER_MS`
+ * 가 들어 있고 SKIP_AFTER_MS > NUDGE_AFTER_MS 이므로 아래 문턱 검사에 이미 포함된다.
+ */
+export function explainStallGate(i: StallInput): StallGate {
+  if (!i.businessMode) return 'not_business_mode';
+  if (!i.playing) return 'not_playing';
+  if (i.suppressed) return 'suppressed';
+  if (i.autoplayBlocked) return 'autoplay_blocked';
+  if (i.subscriptionBlocked) return 'subscription_blocked';
+  if (i.crossfading) return 'crossfading';
+  if (i.ended) return 'ended';
+
+  const hr = i.hardResetMsAgo;
+  if (hr !== null && hr !== undefined && hr < HARD_RESET_VERIFY_MS) return 'hard_reset_verify';
+
+  if (i.stalledMs >= NUDGE_AFTER_MS) return 'open';
+  return 'below_threshold';
+}
+
 /** 사다리에서 이 칸이 저 칸보다 뒤인가 (되돌아가지 않게). */
 // offline_hold 는 reload_page 와 같은 칸이다 — 마지막 칸에 도달했으나 보류한 상태.
 // 같은 순위로 두면 (a) 오프라인 동안 보류 로그가 매 tick 반복되지 않고,

@@ -5,6 +5,9 @@ import { applyAiMetadata, adminGetTrackPredictionsBatch, type TrackPredictionRow
 import MetaApproveModal from '@/components/admin/MetaApproveModal';
 import AudioDistributionStatsCard from '@/components/admin/AudioDistributionStatsCard';
 import RejectReasonSelector from '@/components/admin/RejectReasonSelector';
+import { checkTrackTitle, TITLE_ISSUE_SHORT } from '@/lib/titleRules';
+import { recordReviewDetail, type ReviewDetail } from '@/lib/reviewSymptoms';
+import { fetchSegmentQc, formatClock, segmentSignals, type SegmentQcRow } from '@/lib/segmentQc';
 import { useFreshFetch } from '@/hooks/useFreshFetch';
 import {
   listPendingReviewTracks,
@@ -67,6 +70,8 @@ export default function TrackReviewList() {
 
   // X6.64: 검수 화면에 자동 예측 badge 표시 — track_pattern_predictions 배치 fetch
   const [predictionsByTrack, setPredictionsByTrack] = useState<Map<string, TrackPredictionRow[]>>(new Map());
+  // 0548: 구간별 음질 분석 결과 — '먼저 들어 볼 곡·구간' 참고 표시
+  const [segmentQcByTrack, setSegmentQcByTrack] = useState<Map<string, SegmentQcRow>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +86,12 @@ export default function TrackReviewList() {
 
       // 예측 배치 fetch (실패 silent — badge 만 못 보임)
       const ids = data.map((r) => r.track_id);
+      fetchSegmentQc(ids)
+        .then(setSegmentQcByTrack)
+        .catch((e) => {
+          console.warn('[TrackReviewList] segment qc fetch failed:', e);
+          setSegmentQcByTrack(new Map());
+        });
       if (ids.length > 0) {
         adminGetTrackPredictionsBatch(ids)
           .then((preds) => {
@@ -177,6 +188,7 @@ export default function TrackReviewList() {
     adminNote: string,
     /** approve 액션 한정: true=즉시 공개, false=예약 발매 유지, null=admin_settings 기본값 */
     immediateRelease: boolean | null = null,
+    detail: ReviewDetail | null = null,
   ) {
     if (!modal) return;
     const { kind, track } = modal;
@@ -196,6 +208,7 @@ export default function TrackReviewList() {
           return;
         }
         await adminRejectArtistRelease(track.track_id, combinedReason);
+        void recordReviewDetail([track.track_id], 'reject', detail);
         toast.success('거절·삭제 완료 — 서비스에서 즉시 미노출되고 "삭제 음원" 탭으로 이동했습니다');
       } else if (kind === 'changes') {
         if (!combinedReason) {
@@ -203,6 +216,7 @@ export default function TrackReviewList() {
           return;
         }
         await adminRequestTrackChanges(track.track_id, combinedReason, 'all');
+        void recordReviewDetail([track.track_id], 'changes', detail);
         toast.success('수정 요청 완료 — 아티스트가 수정 후 재제출할 수 있습니다');
       }
       // 알림 메일 자동 발송 (실패해도 검수 자체는 진행됨)
@@ -269,7 +283,7 @@ export default function TrackReviewList() {
   }
 
   // 선택 곡 일괄 거절
-  async function runBulkReject(reason: string) {
+  async function runBulkReject(reason: string, detail: ReviewDetail | null = null) {
     const ids = [...selected];
     if (ids.length === 0) return;
     if (!reason.trim()) {
@@ -280,6 +294,7 @@ export default function TrackReviewList() {
     setBulkProgress(`${ids.length}곡 거절 중…`);
     try {
       const res = await adminBulkRejectTracks(ids, reason.trim());
+      void recordReviewDetail(ids, 'reject', detail);
       const mail = await dispatchAllModerationEmails();
       const sentMsg = mail.ok && (mail.sent ?? 0) > 0 ? ` — 메일 ${mail.sent}통 발송` : '';
       if (res.failed.length === 0) {
@@ -449,6 +464,13 @@ export default function TrackReviewList() {
                         <p className="truncate text-sm font-semibold">{r.title}</p>
                         {/* X6.64: 자동 예측 badge — track_pattern_predictions (0333) 기반 */}
                         <PredictionBadges predictions={predictionsByTrack.get(r.track_id) ?? []} />
+                        <SegmentQcBadges row={segmentQcByTrack.get(r.track_id)} />
+                        {checkTrackTitle(r.title ?? '').issues.map((i) => (
+                          <span key={i.code} title={i.message}
+                            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-500/25 dark:text-amber-200">
+                            제목: {TITLE_ISSUE_SHORT[i.code]}
+                          </span>
+                        ))}
                       </div>
                       {r.track_code && (
                         <code className="inline-block rounded bg-bg-soft px-1.5 py-0.5 font-mono text-[10px] text-ink-mute">
@@ -727,7 +749,7 @@ export default function TrackReviewList() {
           busy={bulkBusy}
           onCancel={() => !bulkBusy && setBulk(null)}
           onApprove={(immediate) => (bulk === 'approveAll' ? runApproveAll(immediate) : runBulkApprove(immediate))}
-          onReject={(reason) => runBulkReject(reason)}
+          onReject={(reason, detail) => runBulkReject(reason, detail)}
         />
       )}
     </div>
@@ -747,9 +769,10 @@ function BulkActionModal({
   busy: boolean;
   onCancel: () => void;
   onApprove: (immediate: boolean | null) => void;
-  onReject: (reason: string) => void;
+  onReject: (reason: string, detail: ReviewDetail | null) => void;
 }) {
   const [reason, setReason] = useState('');
+  const [detail, setDetail] = useState<ReviewDetail | null>(null);
   const isReject = kind === 'reject';
   const title = isReject ? '선택 일괄 거절' : kind === 'approveAll' ? '현재 필터 전체 승인' : '선택 일괄 승인';
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -783,7 +806,7 @@ function BulkActionModal({
               아티스트에게 노출될 거절 사유 (전체 공통) — 표준 분류 선택
             </p>
             {/* X6.65 — 표준 사유 dropdown 강제 (cluster 학습 정확도 향상) */}
-            <RejectReasonSelector onChange={setReason} disabled={busy} />
+            <RejectReasonSelector onChange={setReason} onDetail={setDetail} disabled={busy} />
           </div>
         )}
         <div className="flex flex-wrap justify-end gap-2 pt-1">
@@ -792,7 +815,7 @@ function BulkActionModal({
           </button>
           {isReject ? (
             <button
-              onClick={() => onReject(reason)}
+              onClick={() => onReject(reason, detail)}
               disabled={busy || !reason.trim()}
               className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
             >
@@ -837,9 +860,10 @@ function ReviewActionModal({
   releaseDate: string | null;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string, adminNote: string, immediateRelease: boolean | null) => void;
+  onConfirm: (reason: string, adminNote: string, immediateRelease: boolean | null, detail?: ReviewDetail | null) => void;
 }) {
   const [reason, setReason] = useState('');
+  const [detail, setDetail] = useState<ReviewDetail | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [defaultImmediate, setDefaultImmediate] = useState<boolean>(true);
 
@@ -900,7 +924,7 @@ function ReviewActionModal({
               거절 사유 — 표준 분류 선택 (거절 시 즉시 서비스 미노출 → "삭제 음원" 탭으로 이동)
             </p>
             {/* X6.65 — 표준 사유 dropdown 강제 (cluster 학습 정확도 향상) */}
-            <RejectReasonSelector onChange={setReason} disabled={busy} />
+            <RejectReasonSelector onChange={setReason} onDetail={setDetail} disabled={busy} />
           </div>
         )}
         {kind === 'changes' && (
@@ -966,7 +990,7 @@ function ReviewActionModal({
             </>
           ) : (
             <button
-              onClick={() => onConfirm(reason, adminNote, null)}
+              onClick={() => onConfirm(reason, adminNote, null, detail)}
               disabled={busy}
               className={`rounded-lg px-4 py-2 text-xs font-bold text-white disabled:opacity-60 ${buttonColor[kind]}`}
             >
@@ -1094,6 +1118,33 @@ function PredictionBadges({ predictions }: { predictions: TrackPredictionRow[] }
           <Brain size={9} /> 통과 가능 {approve.similarity_pct.toFixed(0)}%
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * 0548: 구간별 음질 분석 신호. 자동 판정이 아니라 '먼저 들어 볼 곡·지점' 참고용.
+ * 근거와 기준은 src/lib/segmentQc.ts 머리말 참고.
+ */
+function SegmentQcBadges({ row }: { row: SegmentQcRow | undefined }) {
+  const signals = segmentSignals(row);
+  if (signals.length === 0) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {signals.map((s) => (
+        <span
+          key={s.label}
+          title={s.detail}
+          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ring-1 ${
+            s.level === 'high'
+              ? 'bg-rose-100 text-rose-900 ring-rose-300/40 dark:bg-rose-500/20 dark:text-rose-200 dark:ring-rose-400/30'
+              : 'bg-amber-100 text-amber-900 ring-amber-300/40 dark:bg-amber-500/25 dark:text-amber-200 dark:ring-amber-400/30'
+          }`}
+        >
+          <AlertTriangle size={9} /> 음질: {s.label}
+          {s.listenAt != null && <span className="font-mono font-semibold opacity-80">{formatClock(s.listenAt)}</span>}
+        </span>
+      ))}
     </span>
   );
 }

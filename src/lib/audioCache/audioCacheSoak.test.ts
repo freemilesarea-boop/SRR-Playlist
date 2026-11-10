@@ -171,3 +171,31 @@ describe('축출이 인메모리 색인과 어긋나지 않는다 (실제로 있
     expect(mod.audioCacheDiagnostics().cachedIndex).toBeLessThanOrEqual(store.size);
   }, 60_000);
 });
+
+describe('전곡 채우기 · 대체곡 — 화정점 2026-10', () => {
+  it('채우기(fill)는 꽉 차면 멈추고 다른 곡을 지우지 않는다', async () => {
+    quota = 2 * 10 * TRACK_BYTES; // 상한 = quota/2 = 10곡
+    const mod = await import('./index');
+    await mod.prefetchQueue({ urls, index: 0, ahead: urls.length, fill: true });
+    expect(store.size).toBe(10);
+    const kept = new Set(store.keys());
+    // 다시 돌려도 축출·재다운로드가 없다.
+    await mod.prefetchQueue({ urls, index: 50, ahead: urls.length, fill: true });
+    expect(new Set(store.keys())).toEqual(kept);
+  });
+
+  it('대체곡은 재생 순서상 다음 곡 중 받아둔 곡이고, 즉시 로컬 재생이 된다', async () => {
+    const mod = await import('./index');
+    const order = Array.from({ length: ROTATION }, (_, i) => (i * 7) % ROTATION); // 7 과 150 은 서로소
+    // 지금 곡(0) 다음 순서: 7, 14, 21 … — 21 만 받아둔다.
+    store.set(urls[21], { url: urls[21], bytes: TRACK_BYTES, lastUsedAt: 1, cachedAt: 1 });
+    const target = await mod.prepareCachedFallback({ urls, index: 0, order });
+    expect(target).toBe(21);
+    expect(mod.playbackSrcFor(urls[21]).startsWith('blob:')).toBe(true);
+  });
+
+  it('받아둔 곡이 없으면 null', async () => {
+    const mod = await import('./index');
+    expect(await mod.prepareCachedFallback({ urls, index: 0 })).toBeNull();
+  });
+});

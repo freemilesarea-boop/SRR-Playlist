@@ -32,6 +32,7 @@ import { normalizeSignageSettings } from '@/lib/brandSignageSettings';
 import { useBrandStore } from '@/store/brandStore';
 import type { BrandPlayerConfig } from '@/types/brand';
 import type { PlaylistRow } from '@/types/db';
+import OutputSlotBar from '@/components/player/OutputSlotBar';
 
 export default function BrandPlayerPage() {
   const { brandId } = useParams<{ brandId: string }>();
@@ -55,7 +56,6 @@ export default function BrandPlayerPage() {
   useAudioCachePrefetch(true);
   const enableForBusinessMode = usePlaybackSettingsStore((s) => s.enableForBusinessMode);
   const setBusinessMode = useBusinessStore((s) => s.setBusinessMode);
-  const setLastPlayerSurface = useBusinessStore((s) => s.setLastPlayerSurface);
   // BRAND-PLAYER-UX-4 — 브랜드/서비스 로고(사이니지 미디어 없을 때 Priority 2). 기존 필드 재사용.
   const brandLogoUrl = useBrandStore((s) => s.logo_url);
   const loadBrandSettings = useBrandStore((s) => s.load);
@@ -149,12 +149,6 @@ export default function BrandPlayerPage() {
     enableForBusinessMode();
     usePlayerStore.getState().setScheduleSuppression(null);
   }, [setBusinessMode, enableForBusinessMode]);
-
-  // 앱을 다시 켰을 때 매장 플레이어가 아니라 이 브랜드 플레이어로 돌아오게 기록한다
-  // (resolveLaunchResumeTarget). 연결 토큰이 있을 때만 — 없으면 곧 /brand 로 돌려보내진다.
-  useEffect(() => {
-    if (brandId && token) setLastPlayerSurface({ kind: 'brand', brandId });
-  }, [brandId, token, setLastPlayerSurface]);
 
   // 탭이 얼거나 백그라운드로 밀리는 순간을 기록 — 숙대점 102분 무음의 원인을
   // 추론이 아니라 기록으로 확인하기 위해. 진입 사유(직전 리로드)도 함께 남긴다.
@@ -364,6 +358,8 @@ export default function BrandPlayerPage() {
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다.
           전체화면(presentation) 위에도 떠야 하므로 z-[120] (BrandPresentationOverlays 보다 위). */}
       <PlaybackBlockedOverlay />
+      {/* 분리 송출 창 — N번 플레이어 표시 + 이 창의 스피커 선택 */}
+      <OutputSlotBar kind="brand" />
       {/* 상단 최소 바 (presentation 모드에서 숨김) */}
       <header className={`flex items-center justify-between gap-3 px-5 py-3 ${presentation ? 'hidden' : ''}`}>
         <div className="flex items-center gap-2 text-xs font-semibold">
