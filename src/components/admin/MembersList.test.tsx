@@ -151,6 +151,106 @@ describe('MembersList — 정렬 (0549, 서버 정렬)', () => {
   });
 });
 
+describe('MembersList — 더 보기 (100명씩)', () => {
+  const page = (from: number, n: number) =>
+    Array.from({ length: n }, (_, i) => member({ id: `p${from + i}` }));
+
+  it('100명 미만이면 더 보기를 보여주지 않는다', async () => {
+    await ready();
+    expect(screen.queryByRole('button', { name: /더 보기/ })).toBeNull();
+    expect(screen.getByText('1명 표시 중')).toBeTruthy();
+  });
+
+  it('100명이 꽉 차면 더 보기 → offset 100 으로 다음 장을 받아 뒤에 붙인다', async () => {
+    fetchMemberList.mockImplementation((o: { offset?: number }) =>
+      Promise.resolve(o.offset === 100 ? page(100, 30) : page(0, 100)));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    expect(screen.getByText('100명 표시 중 · 더 있음')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /더 보기/ }));
+    await screen.findByText('회원p129');
+    expect(fetchMemberList).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 100, limit: 100, sort: 'created_desc' }),
+    );
+    expect(screen.getByText('회원p0')).toBeTruthy(); // 앞 장이 그대로 남는다
+    expect(screen.getByText('130명 표시 중')).toBeTruthy();
+    // 마지막 장(30명)이면 버튼이 사라진다
+    expect(screen.queryByRole('button', { name: /더 보기/ })).toBeNull();
+  });
+
+  it('다음 장은 지금 걸린 필터·정렬 그대로 받는다', async () => {
+    fetchMemberList.mockResolvedValue(page(0, 100));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'listened_desc' } });
+    fireEvent.change(screen.getByLabelText('회원 유형'), { target: { value: 'business' } });
+    await waitFor(() =>
+      expect(fetchMemberList).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'business', offset: 0 })),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /더 보기/ }));
+    await waitFor(() =>
+      expect(fetchMemberList).toHaveBeenLastCalledWith(
+        expect.objectContaining({ offset: 100, category: 'business', sort: 'listened_desc' }),
+      ),
+    );
+  });
+
+  it('필터를 바꾸면 처음 장부터 다시 받는다 (펼친 목록을 이어 붙이지 않는다)', async () => {
+    fetchMemberList.mockImplementation((o: { offset?: number; role?: string }) =>
+      Promise.resolve(o.role === 'admin' ? [member({ id: 'adm' })] : o.offset === 100 ? page(100, 10) : page(0, 100)));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    fireEvent.click(screen.getByRole('button', { name: /더 보기/ }));
+    await screen.findByText('회원p109');
+    fireEvent.change(screen.getByLabelText('권한'), { target: { value: 'admin' } });
+    await screen.findByText('회원adm');
+    expect(screen.queryByText('회원p0')).toBeNull();
+    expect(screen.getByText('1명 표시 중')).toBeTruthy();
+  });
+
+  it('페이지 사이에 가입이 생겨 경계 행이 겹쳐 와도 두 번 보이지 않는다', async () => {
+    fetchMemberList.mockImplementation((o: { offset?: number }) =>
+      Promise.resolve(o.offset === 100 ? page(99, 5) : page(0, 100)));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    fireEvent.click(screen.getByRole('button', { name: /더 보기/ }));
+    await screen.findByText('회원p103');
+    expect(screen.getAllByText('회원p99')).toHaveLength(1);
+    expect(screen.getByText('104명 표시 중')).toBeTruthy();
+  });
+
+  it('더 보기 실패는 목록을 지우지 않고 toast 로 알린다', async () => {
+    fetchMemberList.mockImplementation((o: { offset?: number }) =>
+      o.offset === 100 ? Promise.reject(new Error('net')) : Promise.resolve(page(0, 100)));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    fireEvent.click(screen.getByRole('button', { name: /더 보기/ }));
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(screen.getByText('회원p0')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /더 보기/ })).toBeTruthy();
+  });
+
+  it('탭 복귀 새로고침은 지금 필터로, 펼쳐 둔 만큼 다시 받는다', async () => {
+    fetchMemberList.mockImplementation((o: { offset?: number }) =>
+      Promise.resolve(o.offset === 100 ? page(100, 100) : page(0, 100)));
+    render(<MembersList />);
+    await screen.findByText('회원p0');
+    fireEvent.change(screen.getByLabelText('정렬'), { target: { value: 'created_asc' } });
+    await waitFor(() =>
+      expect(fetchMemberList).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'created_asc', offset: 0 })),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /더 보기/ }));
+    await screen.findByText('회원p199');
+    fireEvent(window, new Event('focus'));
+    await waitFor(() =>
+      expect(fetchMemberList).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'created_asc', offset: 0, limit: 200 }),
+      ),
+    );
+  });
+});
+
 describe('memberListRpcArgs', () => {
   it('기본 정렬이면 p_sort 를 보내지 않는다 — 0549 이전 서버(7인자)와도 맞는다', () => {
     expect(memberListRpcArgs({})).not.toHaveProperty('p_sort');
