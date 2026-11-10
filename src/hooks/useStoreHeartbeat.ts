@@ -4,7 +4,7 @@
  * 매장 운영 관제용 60s heartbeat. 모든 business 모드 사용자 대상.
  * franchise 연결 여부 무관 (X6.89.1 의 franchise-only 게이트 제거).
  *
- * - StorePlayerPage mount 시 시작 / unmount 시 정리
+ * - AppShell <GlobalStoreHeartbeat /> 가 전역 mount (매장 후보 + 곡 로드 시) / unmount 시 정리
  * - 60s interval (Player lifecycle 에 종속)
  * - heartbeat 실패는 silent (재생을 막지 않음)
  * - 중복 호출 방지: 다른 hook (예: useFranchisePolicySync) 은 heartbeat 안 보냄

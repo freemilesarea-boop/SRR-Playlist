@@ -34,7 +34,6 @@ import { useAudioCachePrefetch } from '@/hooks/useAudioCachePrefetch';
 import { useFranchisePolicySync } from '@/hooks/useFranchisePolicySync';
 // Phase 1-3 — 매장 관제 heartbeat (60s + 트랙 변경 즉시 fire).
 // StorePlayerPage 한정으로 mount — Player rendering 과 격리해서 audio lifecycle 영향 방지.
-import { useStoreHeartbeat } from '@/hooks/useStoreHeartbeat';
 // BRAND-PLAYLIST-ROTATION-4 — 본사 재생 스케줄(운영/브레이크/종료) 런타임 오버레이.
 // resolve_store_playback_policy 를 조회해 break/closed 시 재생 억제 게이트를 구동한다.
 // 프랜차이즈 미연결/legacy 매장은 has_franchise_policy=false → 게이트 항상 off (회귀 0).
@@ -194,9 +193,8 @@ export default function StorePlayerPage() {
   // 카테고리 슬롯은 점주가 고른 카테고리를 튼다 — 본사 정책 큐로 덮어쓰지 않는다.
   const franchiseSync = useFranchisePolicySync({ storeId, enabled: !!storeId && !slotCategory });
 
-  // Phase 1-3 — 매장 관제 heartbeat. /store/player 진입 시점부터 60s 주기 +
-  // 트랙 변경 즉시 fire. heartbeat 실패는 silent (player 재생 절대 방해 X).
-  useStoreHeartbeat({ storeId, enabled: !!storeId });
+  // Phase 1-3 매장 관제 heartbeat 는 AppShell <GlobalStoreHeartbeat /> 가 전역 마운트 —
+  // 매장 기기가 '/' 등 다른 화면에서 틀어도 관제가 갱신되도록 (2026-11-10 뺑스톡 성수점).
 
   // BRAND-PLAYLIST-ROTATION-4 — 본사 스케줄 오버레이. break/closed 진입 시 playerStore
   // scheduleSuppression 게이트가 자동으로 재생을 정지/재개한다 (아래 UI 는 상태 표시 전용).
