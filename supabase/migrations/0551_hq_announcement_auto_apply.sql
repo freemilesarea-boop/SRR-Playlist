@@ -1,4 +1,4 @@
--- 0550_hq_announcement_auto_apply.sql
+-- 0551_hq_announcement_auto_apply.sql
 --
 -- 본사(브랜드)가 올린 안내방송 음원·일정은 운영사 검수 없이 바로 반영한다.
 --
@@ -70,7 +70,7 @@ begin
   elsif r.kind = 'schedule_create' then
     v_asset := (r.payload->>'asset_id')::uuid;
     if v_asset is null then
-      -- (0550 이전 화면) 검수 대기 음원 요청을 가리키는 일정 — 그 음원 요청을 먼저 반영
+      -- (0551 이전 화면) 검수 대기 음원 요청을 가리키는 일정 — 그 음원 요청을 먼저 반영
       select * into v_dep from public.hq_content_requests
        where id = (r.payload->>'asset_request_id')::uuid and enterprise_account_id = r.enterprise_account_id;
       if v_dep.status = 'pending' then
@@ -181,7 +181,7 @@ begin
   values (v_ea, v_brand, p_kind, p_payload, auth.uid(), nullif(btrim(coalesce(p_note, '')), ''))
   returning id into v_id;
 
-  -- 0550: 안내방송은 검수 없이 바로 반영
+  -- 0551: 안내방송은 검수 없이 바로 반영
   if v_auto then
     v_res := public._hq_apply_announcement_request(v_id);
     return jsonb_build_object('success', true, 'id', v_id, 'applied', true, 'result', v_res);

@@ -1,4 +1,4 @@
--- 0549_announcement_multi_times.sql
+-- 0550_announcement_multi_times.sql
 --
 -- 안내방송 예약 시간을 여러 개 + 시간 반복(구간 안에서 N분마다)으로.
 --
@@ -459,7 +459,7 @@ begin
       end if;
     end if;
 
-    -- 0549: 여러 시간 · 시간 반복 문법 — 서버 해석기로 검사.
+    -- 0550: 여러 시간 · 시간 반복 문법 — 서버 해석기로 검사.
     v_rule := p_payload->>'recurrence_rule';
     if v_rule is not null and not public._announcement_rule_valid(v_rule) then
       raise exception 'invalid_recurrence_rule';

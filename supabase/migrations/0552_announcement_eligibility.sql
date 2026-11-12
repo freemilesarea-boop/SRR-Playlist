@@ -1,4 +1,4 @@
--- 0551_announcement_eligibility.sql
+-- 0552_announcement_eligibility.sql
 --
 -- 이 로그인 계정이 안내방송을 받아야 하는 매장인지 — 클라이언트 수신 여부 판정용.
 --

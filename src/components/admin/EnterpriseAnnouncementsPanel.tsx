@@ -298,7 +298,7 @@ export default function EnterpriseAnnouncementsPanel() {
 // Sub
 // =============================================================================
 
-/** 0554 — 브랜드별 송출 현황 요약 → 행을 누르면 상세(안내 전용 기기 · 오늘 결과). */
+/** 0555 — 브랜드별 송출 현황 요약 → 행을 누르면 상세(안내 전용 기기 · 오늘 결과). */
 function AnnouncementOverviewView() {
   const [rows, setRows] = useState<AnnouncementStatusBrandRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);

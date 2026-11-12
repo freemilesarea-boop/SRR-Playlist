@@ -1,4 +1,4 @@
--- 0554_announcement_monitoring.sql
+-- 0555_announcement_monitoring.sql
 --
 -- 안내방송 전용 플레이어 3단계 — 본사·관리자 송출 현황 + 꺼짐/실패 알림.
 --

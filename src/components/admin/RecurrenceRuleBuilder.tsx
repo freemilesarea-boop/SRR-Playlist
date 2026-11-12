@@ -3,7 +3,7 @@
  *
  * 한 번 / 매일 / 매주 + 재생 시간 여러 개 + 시간 반복(구간 N분마다)을 위젯으로 고르면
  * `recurrence_rule` 문자열로 만들어 onChange 로 넘긴다.
- * 문법·검증은 `@/lib/announcementRecurrence` (서버 0549 해석기와 동일).
+ * 문법·검증은 `@/lib/announcementRecurrence` (서버 0550 해석기와 동일).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Calendar, Clock, Repeat, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';

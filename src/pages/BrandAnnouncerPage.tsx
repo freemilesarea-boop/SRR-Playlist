@@ -6,7 +6,7 @@
  * 꺼져도 안내는 이 기기에서 따로 나간다.
  *
  * 안내 재생 자체는 AppShell 의 GlobalStoreAudioOverlays(AnnouncementOverlay)가 맡는다
- * (브랜드 플레이어 세션이 있으면 0551 판정으로 마운트, 이 경로는 announceOnly).
+ * (브랜드 플레이어 세션이 있으면 0552 판정으로 마운트, 이 경로는 announceOnly).
  * 이 화면은
  *   · 매장 코드 연결(device binding)을 서버에서 다시 확인하고
  *   · 이 창에서 음악이 나오지 않게 막고
@@ -90,7 +90,7 @@ export default function BrandAnnouncerPage() {
   // 화면 꺼짐 방지 — 안내를 받기 시작한 뒤부터. (상태 표시는 App 의 다른 wake lock 과
   // 같은 store 를 공유해 정확하지 않으므로 화면에 띄우지 않는다.)
   useWakeLock(armed);
-  // 0553 — 켜짐 신호. 이 기기가 살아 있는 동안 같은 계정의 음악 플레이어는 안내를 넘겨준다.
+  // 0554 — 켜짐 신호. 이 기기가 살아 있는 동안 같은 계정의 음악 플레이어는 안내를 넘겨준다.
   useAnnouncerHeartbeat({ enabled: !!brandId && !!token, armed, brandId: brandId ?? null });
 
   // 연결 없음 → 코드 입력 화면(안내방송 전용 모드 유지)

@@ -40,7 +40,7 @@ export default function AnnouncerPage() {
   const profile = useAuthStore((s) => s.profile);
   const [armed, setArmed] = useState(hasUserActivation);
   const [upcoming, setUpcoming] = useState<UpcomingAnnouncement[] | null>(null);
-  // 0553 — 켜짐 신호 (분리 송출 안내 창이거나 번호 없는 단독 안내 창일 때).
+  // 0554 — 켜짐 신호 (분리 송출 안내 창이거나 번호 없는 단독 안내 창일 때).
   const isAnnounceWindow = !slot || (!!profile?.multi_output_enabled
     && slotConfigOf(profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null, slot)?.mode === 'announce');
   useAnnouncerHeartbeat({ enabled: !!userId && isAnnounceWindow, armed });

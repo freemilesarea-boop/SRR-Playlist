@@ -1,4 +1,4 @@
--- 0553_announcer_devices.sql
+-- 0554_announcer_devices.sql
 --
 -- 안내방송 전용 플레이어 2단계 — 켜짐 상태(heartbeat)와 중복 송출 방지.
 --
@@ -83,7 +83,7 @@ as $$
   delete from public.announcer_devices where user_id = auth.uid() and instance_id = p_instance_id;
 $$;
 
--- 0551 판정 + 이 계정에 살아 있는 안내 전용 기기가 있는가.
+-- 0552 판정 + 이 계정에 살아 있는 안내 전용 기기가 있는가.
 create or replace function public.my_announcement_status()
 returns jsonb
 language sql

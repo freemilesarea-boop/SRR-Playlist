@@ -423,7 +423,7 @@ export interface MyAnnouncementLogRow {
   played_at: string | null;
 }
 
-/** 0552 — 이 기기가 오늘(KST) 내보낸 안내방송 (회차별 최종 상태). */
+/** 0553 — 이 기기가 오늘(KST) 내보낸 안내방송 (회차별 최종 상태). */
 export async function getMyAnnouncementToday(limit = 50): Promise<MyAnnouncementLogRow[]> {
   const { data, error } = await supabase.rpc('store_my_announcement_today', { p_limit: limit });
   if (error) throw error;
@@ -431,13 +431,13 @@ export async function getMyAnnouncementToday(limit = 50): Promise<MyAnnouncement
 }
 
 export interface MyAnnouncementStatus {
-  /** 0551 — 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가 */
+  /** 0552 — 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가 */
   eligible: boolean;
-  /** 0553 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있는가 */
+  /** 0554 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있는가 */
   announcer_online: boolean;
 }
 
-/** 0553 — 수신 판정 + 안내 전용 기기 온라인 여부를 한 번에. */
+/** 0554 — 수신 판정 + 안내 전용 기기 온라인 여부를 한 번에. */
 export async function fetchMyAnnouncementStatus(): Promise<MyAnnouncementStatus> {
   const { data, error } = await supabase.rpc('my_announcement_status');
   if (error) throw error;
@@ -445,7 +445,7 @@ export async function fetchMyAnnouncementStatus(): Promise<MyAnnouncementStatus>
   return { eligible: d.eligible === true, announcer_online: d.announcer_online === true };
 }
 
-/** 0553 — 안내 전용 창 heartbeat (60초 주기). */
+/** 0554 — 안내 전용 창 heartbeat (60초 주기). */
 export async function sendAnnouncerHeartbeat(input: {
   instanceId: string; brandId?: string | null; armed: boolean;
 }): Promise<void> {
@@ -458,13 +458,13 @@ export async function sendAnnouncerHeartbeat(input: {
   if (error) throw error;
 }
 
-/** 0553 — 안내 전용 창을 닫을 때 즉시 내림 (음악 플레이어가 바로 이어받게). */
+/** 0554 — 안내 전용 창을 닫을 때 즉시 내림 (음악 플레이어가 바로 이어받게). */
 export async function sendAnnouncerGoodbye(instanceId: string): Promise<void> {
   const { error } = await supabase.rpc('announcer_goodbye', { p_instance_id: instanceId });
   if (error) throw error;
 }
 
-// ── 0554 송출 현황 (본사 · 관리자) ─────────────────────────────────────
+// ── 0555 송출 현황 (본사 · 관리자) ─────────────────────────────────────
 export type AnnouncerDeviceState = 'online' | 'waiting_tap' | 'offline' | 'closed';
 
 export interface AnnouncerDeviceRow {
@@ -528,7 +528,7 @@ export async function getAdminAnnouncementDetail(enterpriseAccountId: string): P
   return data as AnnouncementStatusDetail;
 }
 
-/** 0551 — 이 계정이 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가. */
+/** 0552 — 이 계정이 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가. */
 export async function fetchMyAnnouncementEligible(): Promise<boolean> {
   const { data, error } = await supabase.rpc('my_announcement_eligible');
   if (error) throw error;

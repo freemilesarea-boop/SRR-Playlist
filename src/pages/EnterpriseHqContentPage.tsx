@@ -3,7 +3,7 @@
  *
  * 본사가 브랜드 음악 기준·재생 시간, 매장 화면(TV) 이미지·영상, 안내 음원·방송 일정을
  * 직접 바꾼다. 음악·재생 시간·매장 화면은 운영사 검수(관리자 > 본사 콘텐츠 검수) 후 반영되고,
- * 안내방송(음원·일정)은 검수 없이 바로 반영된다 (0550).
+ * 안내방송(음원·일정)은 검수 없이 바로 반영된다 (0551).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';

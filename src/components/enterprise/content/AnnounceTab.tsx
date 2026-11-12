@@ -1,7 +1,7 @@
 /**
  * 본사 > 브랜드 콘텐츠 > 안내방송 — 안내 음원과 방송 일정.
  * 정해진 시각에 매장 음악을 잠깐 멈추고 안내가 나간다.
- * 안내방송은 운영사 검수 없이 저장 즉시 매장에 반영된다 (0550).
+ * 안내방송은 운영사 검수 없이 저장 즉시 매장에 반영된다 (0551).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Mic, Pause, Play, Plus, Power, RefreshCw, Trash2, Upload } from 'lucide-react';
@@ -307,7 +307,7 @@ export default function AnnounceTab({ data, onChanged, onCancel }: {
   );
 }
 
-/** 0554 — 송출 현황: 안내 전용 플레이어 켜짐/꺼짐 + 오늘 매장별 결과 (1분마다 갱신). */
+/** 0555 — 송출 현황: 안내 전용 플레이어 켜짐/꺼짐 + 오늘 매장별 결과 (1분마다 갱신). */
 function StatusCard() {
   const [data, setData] = useState<AnnouncementStatusDetail | null>(null);
   const [loading, setLoading] = useState(false);

@@ -58,11 +58,11 @@ export default function GlobalStoreAudioOverlays() {
   // 매장 후보 판정 — business 가입자(account_type/subscription_type) 또는 매장 모드 진입자.
   // 본사(enterprise) 계정은 store_id 매핑이 다른 RPC 체계라 overlay 내부에서 forbidden 응답 → no-op.
   // 관리자(role=admin) 는 별도 화면에서 BGM 들을 수 있으나, 자동 발화는 admin route guard 로 차단.
-  // 0551 — 브랜드에 연결된 기기(가맹 매장 계정 · 브랜드 플레이어 세션)는 계정 종류와 무관하게 받는다.
+  // 0552 — 브랜드에 연결된 기기(가맹 매장 계정 · 브랜드 플레이어 세션)는 계정 종류와 무관하게 받는다.
   // 2026-11-12 ming: '개인/무료' 계정으로 브랜드 플레이어를 틀었더니 수신이 아예 꺼져 있었다.
   const onPlayerPath = isPlayerPath(location.pathname);
   const [brandLinked, setBrandLinked] = useState(false);
-  // 0553 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있으면 이 창(음악 플레이어)은 안내를 넘긴다.
+  // 0554 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있으면 이 창(음악 플레이어)은 안내를 넘긴다.
   const [announcerOnline, setAnnouncerOnline] = useState(false);
   useEffect(() => {
     if (!userId) { setBrandLinked(false); setAnnouncerOnline(false); return; }

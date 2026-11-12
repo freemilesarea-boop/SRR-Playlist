@@ -1,7 +1,7 @@
 /**
  * 안내방송 예약 규칙(recurrence_rule) — 파싱 · 직렬화 · 설명.
  *
- * 서버 해석기(0549 `_announcement_rule_parts`)와 같은 문법:
+ * 서버 해석기(0550 `_announcement_rule_parts`)와 같은 문법:
  *   once:YYYY-MM-DDTHH:MM
  *   daily:<시간들>
  *   weekly:MON,WED:<시간들>

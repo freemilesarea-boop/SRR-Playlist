@@ -1,4 +1,4 @@
--- 0552_announcement_today_log.sql
+-- 0553_announcement_today_log.sql
 --
 -- 안내방송 전용 플레이어(/brand/announcer/:brandId) 화면의 "오늘 송출 기록".
 -- 이 기기(로그인 계정)가 오늘(KST) 내보낸 안내방송의 회차별 결과를 돌려준다.
