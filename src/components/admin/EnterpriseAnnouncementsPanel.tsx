@@ -10,6 +10,7 @@ import {
   Calendar, ListChecks, History, Volume2,
 } from 'lucide-react';
 import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
+import { describeRule } from '@/lib/announcementRecurrence';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge, AdminButton,
   AdminModal, AdminAlert, AdminEmpty, AdminSkeleton, AdminTooltip,
@@ -487,7 +488,7 @@ function SchedulesView(props: {
                       <div className="text-[10px] text-ink-dim">{s.enterprise_name}</div>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-ink-mute">{s.recurrence_rule ?? '—'}</td>
+                  <td className="px-3 py-2 text-[11px] text-ink-mute" title={s.recurrence_rule ?? ''}>{s.recurrence_rule ? describeRule(s.recurrence_rule) : '—'}</td>
                   <td className="px-3 py-2 text-right text-[10px] text-ink-mute">{fmtDate(s.last_played_at)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     <span className="text-ink-mute">{s.plays_7d ?? 0} / {s.max_plays_per_day * 7}</span>
@@ -854,7 +855,7 @@ function ScheduleModal({
             <option value="between_tracks">곡 사이 (V1: 동일)</option>
           </select>
         </Field>
-        <Field label="일별 최대 재생 횟수 (1~100)">
+        <Field label="일별 최대 재생 횟수 (1~100 · 예약 회차가 더 많으면 회차 수를 따름)">
           <input type="number" min={1} max={100} value={maxPlays}
             onChange={(e) => setMaxPlays(parseInt(e.target.value || '10', 10))}
             className="w-full rounded-md bg-bg-deep px-2 py-1.5" />

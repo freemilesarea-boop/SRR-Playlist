@@ -8,6 +8,7 @@
 import { supabase } from '@/lib/supabase';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import { uploadAnnouncementFile } from '@/lib/api/announcementApi';
+import { describeRule } from '@/lib/announcementRecurrence';
 
 export type HqContentKind =
   | 'music_policy' | 'playback_policy'
@@ -255,18 +256,10 @@ export const HQ_STATUS_LABEL: Record<HqRequestStatus, string> = {
   superseded: '새 요청으로 대체',
 };
 
-const DOW_KO: Record<string, string> = { MON: '월', TUE: '화', WED: '수', THU: '목', FRI: '금', SAT: '토', SUN: '일' };
 
 /** 'daily:22:30' → '매일 22:30' 처럼 사람이 읽는 반복 규칙. */
 export function describeRecurrence(rule: string | null | undefined): string {
-  if (!rule) return '반복 없음';
-  const once = /^once:(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})$/.exec(rule);
-  if (once) return `${Number(once[2])}/${Number(once[3])} ${once[4]} 한 번`;
-  const daily = /^daily:(\d{2}:\d{2})$/.exec(rule);
-  if (daily) return `매일 ${daily[1]}`;
-  const weekly = /^weekly:([A-Z,]+):(\d{2}:\d{2})$/.exec(rule);
-  if (weekly) return `매주 ${weekly[1].split(',').map((d) => DOW_KO[d] ?? d).join('·')} ${weekly[2]}`;
-  return rule;
+  return describeRule(rule);
 }
 
 export function describeScope(
