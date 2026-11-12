@@ -1,5 +1,8 @@
 /**
- * AnnouncerPage — 분리 송출의 "안내방송 전용" 창 (/business/announcer?slot=N, 0538).
+ * AnnouncerPage — "안내방송 전용" 창 (/business/announcer[?slot=N], 0538).
+ *
+ * 창 번호 없이 열면 단독 안내방송 송출기로 동작한다 (2026-11-12) — 분리 송출 설정 없이도
+ * 매장/브랜드에 연결된 기기 하나를 안내 전용 스피커로 쓸 수 있다.
  *
  * 음악 없이 안내·긴급방송만 내보낸다. 복도·화장실·대기 공간처럼 노래 없이 안내멘트만
  * 필요한 스피커용. 안내 재생 자체는 AppShell 의 GlobalStoreAudioOverlays 가 맡고
@@ -17,6 +20,7 @@ import { useAuthStore } from '@/store/authStore';
 import { getOutputSlot } from '@/lib/outputSlot';
 import { normalizeMultiOutputConfig, slotConfigOf } from '@/lib/multiOutput';
 import { getUpcomingAnnouncements, type UpcomingAnnouncement } from '@/lib/api/announcementApi';
+import { useAnnouncerHeartbeat } from '@/hooks/useAnnouncerHeartbeat';
 
 const POLL_MS = 60_000;
 
@@ -36,6 +40,10 @@ export default function AnnouncerPage() {
   const profile = useAuthStore((s) => s.profile);
   const [armed, setArmed] = useState(hasUserActivation);
   const [upcoming, setUpcoming] = useState<UpcomingAnnouncement[] | null>(null);
+  // 0554 — 켜짐 신호 (분리 송출 안내 창이거나 번호 없는 단독 안내 창일 때).
+  const isAnnounceWindow = !slot || (!!profile?.multi_output_enabled
+    && slotConfigOf(profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null, slot)?.mode === 'announce');
+  useAnnouncerHeartbeat({ enabled: !!userId && isAnnounceWindow, armed });
 
   const config = profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null;
   const isAnnounceSlot = !!profile?.multi_output_enabled && slotConfigOf(config, slot)?.mode === 'announce';
@@ -89,7 +97,7 @@ export default function AnnouncerPage() {
           </p>
         </div>
 
-        {!slot || !isAnnounceSlot ? (
+        {slot && !isAnnounceSlot ? (
           <p className="rounded-xl bg-amber-400/15 p-3 text-xs leading-relaxed text-amber-100 ring-1 ring-amber-300/30">
             이 창은 안내방송 전용으로 설정돼 있지 않아요.{' '}
             <Link to="/profile" className="font-bold underline">내 정보 → 분리 송출</Link>에서 플레이어 하나를

@@ -20,6 +20,7 @@ vi.mock('./player/Player', () => ({ default: () => null }));
 vi.mock('./ThemeQuickToggle', () => ({ default: () => null }));
 vi.mock('./common/Footer', () => ({ default: () => null }));
 vi.mock('./store/GlobalStoreAudioOverlays', () => ({ default: () => null }));
+vi.mock('./store/GlobalStoreHeartbeat', () => ({ default: () => null }));
 vi.mock('./RecoveryControlPlane', () => ({ default: () => null }));
 vi.mock('@/lib/playerSession', () => ({
   restorePlayerSessionToStore: () => false,

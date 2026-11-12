@@ -72,6 +72,7 @@ const ExplorePlaylistsPage = lazyWithRetry(() => import('@/pages/ExplorePlaylist
 const CuratorsListPage = lazyWithRetry(() => import('@/pages/CuratorsListPage'));
 const BrandPage = lazyWithRetry(() => import('@/pages/BrandPage'));
 const BrandPlayerPage = lazyWithRetry(() => import('@/pages/BrandPlayerPage'));
+const BrandAnnouncerPage = lazyWithRetry(() => import('@/pages/BrandAnnouncerPage'));
 // ADMIN-UX-IMPLEMENT-1 — 운영자 전용 셸(소비자 AppShell 과 분리). 자체 게이트로 운영자만 진입.
 const OperatorLayout = lazyWithRetry(() => import('@/components/operator/OperatorLayout'));
 const OperatorHomePage = lazyWithRetry(() => import('@/pages/OperatorHomePage'));
@@ -312,6 +313,7 @@ export default function App() {
                 <Route path="/business/announcer" element={<RequireAuth><AnnouncerPage /></RequireAuth>} />
                 <Route path="/brand" element={<RequireAuth><BrandPage /></RequireAuth>} />
                 <Route path="/brand/player/:brandId" element={<RequireAuth><BrandPlayerPage /></RequireAuth>} />
+                <Route path="/brand/announcer/:brandId" element={<RequireAuth><BrandAnnouncerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
                 <Route path="/pricing" element={<RequireAuth><PricingPage /></RequireAuth>} />

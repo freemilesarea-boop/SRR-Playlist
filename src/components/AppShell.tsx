@@ -12,6 +12,8 @@ import Footer from './common/Footer';
 // 매장 BGM 이 어떤 화면에서 흐르고 있어도 예약 안내/긴급 방송 발화 보장.
 // /admin · /artist · /auth/* 등은 내부 route guard 가 차단.
 import GlobalStoreAudioOverlays from './store/GlobalStoreAudioOverlays';
+// 매장 관제 heartbeat 전역 마운트 — /business/player 밖에서 재생해도 관제가 갱신되게.
+import GlobalStoreHeartbeat from './store/GlobalStoreHeartbeat';
 // 27 — 복구 명령 수신기. **플레이어와 다른 failure domain 에 둔다.**
 // 2026-09-15 숙대점: 플레이어 계층이 멈춘 뒤에도 이 계층은 26분 38초 동안
 // 5초마다 서버와 200 OK 로 왕복하고 있었다. 그때 발행된 복구 명령이 배달되지
@@ -119,6 +121,7 @@ export default function AppShell() {
       <Player key={`player-${playerGeneration}`} />
       <BottomNav />
       <GlobalStoreAudioOverlays />
+      <GlobalStoreHeartbeat />
       {/* 오디오·큐·라우트에 의존하지 않는다. 렌더 결과도 없다(null). */}
       <RecoveryControlPlane onRemountPlayer={remountPlayer} />
     </div>

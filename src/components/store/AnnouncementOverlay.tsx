@@ -73,6 +73,8 @@ import { useElementAudioSink } from '@/hooks/useElementAudioSink';
 
 const POLL_INTERVAL_MS    = 15_000;  // 서버 upcoming 폴링/타이머 re-arm 주기 (백업 + 시계 보정)
 const LOOKAHEAD_SECONDS   = 900;     // 서버에 요청할 미래 occurrence 조회 범위 (15min)
+// 자동재생이 막혔을 때 사용자 조작을 기다리는 시간 — 서버 재생 허용창(15분)과 같게.
+const AUTOPLAY_WAIT_WINDOW_MS = 15 * 60_000;
 const LEAD_ARM_MS         = 1_000;   // delay 가 이보다 크면 setTimeout 예약, 작으면 즉시 발화
 const ON_TIME_TOLERANCE_MS = 3_000;  // 예약 시각 대비 이 범위 내 지각이면 'exact', 넘으면 'recovery'
 const FIRED_KEY_TTL_MS    = 3_600_000; // firedKeys 보관 시간 (1h) — recovery window(15min) 보다 충분히 김
@@ -167,6 +169,9 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
   useElementAudioSink(audioRef);
   const [active, setActive] = useState<UpcomingAnnouncement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 브라우저 자동재생 차단 시 — 화면을 한 번 누르면 이어서 재생 (회차 허용창 안에서만).
+  const [needsTap, setNeedsTap] = useState(false);
+  const gestureCleanupRef = useRef<(() => void) | null>(null);
 
   // Trigger 추적 refs
   const playingRef       = useRef(false);                      // overlay 자체 재생 중 flag
@@ -218,6 +223,9 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
   ) => {
     const ann = playingAnnRef.current;
     if (!ann) return;
+    gestureCleanupRef.current?.();
+    gestureCleanupRef.current = null;
+    setNeedsTap(false);
     playingRef.current = false;
     playingAnnRef.current = null;
     setActive(null);
@@ -313,6 +321,43 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
           js_error_name: (playErr as Error)?.name ?? null,
           js_error_message: (playErr as Error)?.message ?? null,
         });
+        // 자동재생 차단 — 실패로 끝내지 않고 사용자 조작(탭/클릭/키)을 기다렸다 이어서 재생한다.
+        // 2026-11-12 ming 테스트: 탭을 열자마자 회차가 와서 NotAllowedError → 'failed' 로
+        // 기록되고 서버 dedup 때문에 그 회차는 다시 나가지 않았다.
+        if (failReason === 'autoplay_blocked') {
+          const scheduledMs = ann.scheduled_at ? Date.parse(ann.scheduled_at) : NaN;
+          const deadline = (Number.isFinite(scheduledMs) ? scheduledMs - serverOffsetRef.current : Date.now())
+            + AUTOPLAY_WAIT_WINDOW_MS;
+          const waitMs = Math.max(deadline - Date.now(), 0);
+          if (waitMs > 0 && playingAnnRef.current === ann) {
+            setNeedsTap(true);
+            const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+            let timer = 0;
+            const cleanup = () => {
+              for (const ev of events) window.removeEventListener(ev, onGesture, true);
+              window.clearTimeout(timer);
+            };
+            function onGesture() {
+              cleanup();
+              gestureCleanupRef.current = null;
+              if (playingAnnRef.current !== ann) return;
+              setNeedsTap(false);
+              void a!.play().then(() => {
+                console.warn('[announcement-overlay] play started after gesture', { schedule_id: ann.schedule_id });
+              }).catch((e2) => {
+                void finishAnnouncement('failed', `${classifyAnnouncementError(e2, a!)} :: ${(e2 as Error).message}`);
+              });
+            }
+            for (const ev of events) window.addEventListener(ev, onGesture, true);
+            timer = window.setTimeout(() => {
+              cleanup();
+              gestureCleanupRef.current = null;
+              if (playingAnnRef.current === ann) void finishAnnouncement('failed', `${errorMsg} (no user gesture)`);
+            }, waitMs);
+            gestureCleanupRef.current = cleanup;
+            return;
+          }
+        }
         // failed 기록 (last_played_at 은 played 만 갱신 → debounce 영향 없음).
         // firedKey 는 유지하여 같은 occurrence 무한 재시도 방지 (occurrence 당 1회 시도).
         void finishAnnouncement('failed', errorMsg);
@@ -502,6 +547,8 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
     };
   }, [finishAnnouncement, armUpcoming, logTrigger]);
 
+  useEffect(() => () => { gestureCleanupRef.current?.(); }, []);
+
   if (!storeId) return null;
 
   return (
@@ -515,7 +562,9 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
           className="fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-black/30"
         >
           <Volume2 size={12} className="animate-pulse" />
-          안내방송 재생 중 · {active.asset_title}
+          {needsTap
+            ? <>안내방송 대기 중 · 화면을 한 번 눌러 주세요</>
+            : <>안내방송 재생 중 · {active.asset_title}</>}
         </div>
       )}
 

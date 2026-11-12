@@ -2,7 +2,8 @@
  * EnterpriseHqContentPage — 본사 브랜드 콘텐츠 관리 (/enterprise/content, 0541).
  *
  * 본사가 브랜드 음악 기준·재생 시간, 매장 화면(TV) 이미지·영상, 안내 음원·방송 일정을
- * 직접 바꾼다. 바로 반영되지 않고 운영사 검수(관리자 > 본사 콘텐츠 검수) 후 반영된다.
+ * 직접 바꾼다. 음악·재생 시간·매장 화면은 운영사 검수(관리자 > 본사 콘텐츠 검수) 후 반영되고,
+ * 안내방송(음원·일정)은 검수 없이 바로 반영된다 (0551).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
@@ -96,7 +97,8 @@ export default function EnterpriseHqContentPage() {
       <p className="flex items-start gap-2 rounded-2xl bg-sky-50 p-3 text-[12px] leading-relaxed text-sky-900 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-100 dark:ring-sky-400/30">
         <Info size={15} className="mt-0.5 shrink-0" />
         <span>
-          바꾼 내용은 <b>운영사 확인 후</b> 전 가맹점에 반영돼요. 반영되거나 반려되면 알림센터로 알려드려요.
+          <b>안내방송</b>은 저장하면 바로 매장에 반영돼요.
+          음악·재생 시간·매장 화면은 <b>운영사 확인 후</b> 반영되고, 반영되거나 반려되면 알림센터로 알려드려요.
           확인 전에는 언제든 요청을 취소할 수 있어요.
         </span>
       </p>

@@ -413,6 +413,128 @@ export async function getDueAnnouncements(
  * 보정하고, scheduled_at 까지 setTimeout 을 걸어 HH:MM:00 에 즉시 interrupt 재생한다.
  * scheduled_at 이 이미 과거(놓침)면 즉시 복구 재생.
  */
+export interface MyAnnouncementLogRow {
+  schedule_id: string | null;
+  schedule_name: string | null;
+  asset_title: string | null;
+  status: 'played' | 'failed' | 'skipped' | 'started' | string;
+  error: string | null;
+  scheduled_at: string;
+  played_at: string | null;
+}
+
+/** 0553 — 이 기기가 오늘(KST) 내보낸 안내방송 (회차별 최종 상태). */
+export async function getMyAnnouncementToday(limit = 50): Promise<MyAnnouncementLogRow[]> {
+  const { data, error } = await supabase.rpc('store_my_announcement_today', { p_limit: limit });
+  if (error) throw error;
+  return ((data as { data?: MyAnnouncementLogRow[] } | null)?.data ?? []);
+}
+
+export interface MyAnnouncementStatus {
+  /** 0552 — 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가 */
+  eligible: boolean;
+  /** 0554 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있는가 */
+  announcer_online: boolean;
+}
+
+/** 0554 — 수신 판정 + 안내 전용 기기 온라인 여부를 한 번에. */
+export async function fetchMyAnnouncementStatus(): Promise<MyAnnouncementStatus> {
+  const { data, error } = await supabase.rpc('my_announcement_status');
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<MyAnnouncementStatus>;
+  return { eligible: d.eligible === true, announcer_online: d.announcer_online === true };
+}
+
+/** 0554 — 안내 전용 창 heartbeat (60초 주기). */
+export async function sendAnnouncerHeartbeat(input: {
+  instanceId: string; brandId?: string | null; armed: boolean;
+}): Promise<void> {
+  const { error } = await supabase.rpc('announcer_heartbeat', {
+    p_instance_id: input.instanceId,
+    p_brand_id: input.brandId ?? null,
+    p_armed: input.armed,
+    p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  });
+  if (error) throw error;
+}
+
+/** 0554 — 안내 전용 창을 닫을 때 즉시 내림 (음악 플레이어가 바로 이어받게). */
+export async function sendAnnouncerGoodbye(instanceId: string): Promise<void> {
+  const { error } = await supabase.rpc('announcer_goodbye', { p_instance_id: instanceId });
+  if (error) throw error;
+}
+
+// ── 0555 송출 현황 (본사 · 관리자) ─────────────────────────────────────
+export type AnnouncerDeviceState = 'online' | 'waiting_tap' | 'offline' | 'closed';
+
+export interface AnnouncerDeviceRow {
+  store_user_id: string;
+  store_label: string;
+  state: AnnouncerDeviceState;
+  last_seen_at: string;
+  closed_at: string | null;
+  user_agent: string | null;
+}
+
+export interface AnnouncementResultRow {
+  store_user_id: string;
+  store_label: string;
+  schedule_name: string | null;
+  asset_title: string | null;
+  status: string;
+  error: string | null;
+  scheduled_at: string;
+}
+
+export interface AnnouncementStatusDetail {
+  enterprise_account_id: string;
+  now: string;
+  devices: AnnouncerDeviceRow[];
+  today: AnnouncementResultRow[];
+  summary: {
+    devices_online: number; devices_offline: number;
+    played: number; failed: number; active_schedules: number;
+  };
+}
+
+export interface AnnouncementStatusBrandRow {
+  enterprise_account_id: string;
+  enterprise_name: string;
+  active_schedules: number;
+  devices_online: number;
+  devices_offline: number;
+  played_today: number;
+  failed_today: number;
+}
+
+/** 본사 — 우리 브랜드 안내 전용 기기 + 오늘 매장별 송출 결과. */
+export async function getHqAnnouncementStatus(): Promise<AnnouncementStatusDetail> {
+  const { data, error } = await supabase.rpc('hq_announcement_status');
+  if (error) throw error;
+  return data as AnnouncementStatusDetail;
+}
+
+/** 관리자 — 브랜드별 요약. */
+export async function getAdminAnnouncementOverview(): Promise<AnnouncementStatusBrandRow[]> {
+  const { data, error } = await supabase.rpc('admin_announcement_status', { p_enterprise_account_id: null });
+  if (error) throw error;
+  return ((data as { data?: AnnouncementStatusBrandRow[] } | null)?.data ?? []);
+}
+
+/** 관리자 — 한 브랜드 상세. */
+export async function getAdminAnnouncementDetail(enterpriseAccountId: string): Promise<AnnouncementStatusDetail> {
+  const { data, error } = await supabase.rpc('admin_announcement_status', { p_enterprise_account_id: enterpriseAccountId });
+  if (error) throw error;
+  return data as AnnouncementStatusDetail;
+}
+
+/** 0552 — 이 계정이 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가. */
+export async function fetchMyAnnouncementEligible(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('my_announcement_eligible');
+  if (error) throw error;
+  return data === true;
+}
+
 export async function getUpcomingAnnouncements(
   storeId?: string | null,
   lookaheadSeconds = 900,

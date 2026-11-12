@@ -3,9 +3,12 @@
 // (사용자 입력 "브랜드 코드"는 사용하지 않음. 브랜드는 관리자 내부 객체.)
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Tag, ArrowRight, Loader2, KeyRound, Clock } from 'lucide-react';
+import { Tag, ArrowRight, Loader2, KeyRound, Clock, Music, Megaphone } from 'lucide-react';
 import { verifyStoreCode } from '@/lib/api/brandPlayerApi';
-import { saveBrandToken, pushRecentBrand, getRecentBrands, getBrandToken } from '@/lib/brandSession';
+import {
+  saveBrandToken, pushRecentBrand, getRecentBrands, getBrandToken,
+  brandEntryPath, getBrandEntryMode, setBrandEntryMode, type BrandEntryMode,
+} from '@/lib/brandSession';
 import { STORE_VERIFY_ERROR_MESSAGES } from '@/types/brand';
 
 interface BrandNavState { fromPlayerReject?: boolean; deviceRevoked?: boolean; switchStore?: boolean; reason?: string }
@@ -19,6 +22,11 @@ export default function BrandPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const recent = getRecentBrands();
+  // ?mode=announcer 로 들어오면 안내방송 전용 플레이어로 연결한다.
+  const [mode, setMode] = useState<BrandEntryMode>(() =>
+    new URLSearchParams(location.search).get('mode') === 'announcer'
+      ? 'announcer'
+      : (recent[0] ? getBrandEntryMode(recent[0].id) : 'player'));
   const autoTriedRef = useRef(false);
 
   // BRAND-DEVICE-BINDING-1: 재방문 자동 진입.
@@ -35,7 +43,7 @@ export default function BrandPage() {
     }
     const top = recent[0];
     if (top && getBrandToken(top.id)) {
-      navigate(`/brand/player/${top.id}`, { replace: true });
+      navigate(brandEntryPath(top.id), { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -54,7 +62,8 @@ export default function BrandPage() {
       }
       saveBrandToken(res.brand_id, res.session_token);
       pushRecentBrand({ id: res.brand_id, name: res.store_label ?? '매장' });
-      navigate(`/brand/player/${res.brand_id}`);
+      setBrandEntryMode(res.brand_id, mode);
+      navigate(brandEntryPath(res.brand_id, mode));
     } catch (err) {
       setError(err instanceof Error ? err.message : '매장 코드 확인 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.');
     } finally {
@@ -63,7 +72,7 @@ export default function BrandPage() {
   }
 
   function openRecent(id: string) {
-    if (getBrandToken(id)) navigate(`/brand/player/${id}`);
+    if (getBrandToken(id)) { setBrandEntryMode(id, mode); navigate(brandEntryPath(id, mode)); }
     else setError('세션이 만료되었어요. 매장 코드를 다시 입력해주세요.');
   }
 
@@ -84,6 +93,21 @@ export default function BrandPage() {
       {notice && (
         <p className="w-full rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-medium text-amber-600 dark:text-amber-300">{notice}</p>
       )}
+
+      <div className="grid w-full grid-cols-2 gap-2" role="radiogroup" aria-label="이 기기 용도">
+        {([
+          { id: 'player' as const, icon: Music, label: '음악 플레이어', sub: '매장 음악 + 안내방송' },
+          { id: 'announcer' as const, icon: Megaphone, label: '안내방송 전용', sub: '음악 없이 안내멘트만' },
+        ]).map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={mode === o.id} onClick={() => setMode(o.id)}
+            className={`flex flex-col items-center gap-1 rounded-2xl border px-3 py-3 text-center transition ${
+              mode === o.id ? 'border-accent bg-accent/10 text-ink' : 'border-line/30 text-ink-mute hover:bg-bg-hover'}`}>
+            <o.icon size={18} className={mode === o.id ? 'text-accent' : ''} />
+            <span className="text-sm font-bold">{o.label}</span>
+            <span className="text-[11px] text-ink-dim">{o.sub}</span>
+          </button>
+        ))}
+      </div>
 
       <form onSubmit={handleSubmit} className="w-full space-y-4">
         <div className="space-y-2">
@@ -117,7 +141,7 @@ export default function BrandPage() {
           disabled={loading || !code.trim()}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-4 text-base font-bold text-black transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? (<><Loader2 size={20} className="animate-spin" /> 확인 중…</>) : (<>재생 시작 <ArrowRight size={20} /></>)}
+          {loading ? (<><Loader2 size={20} className="animate-spin" /> 확인 중…</>) : (<>{mode === 'announcer' ? '안내방송 받기 시작' : '재생 시작'} <ArrowRight size={20} /></>)}
         </button>
       </form>
 
