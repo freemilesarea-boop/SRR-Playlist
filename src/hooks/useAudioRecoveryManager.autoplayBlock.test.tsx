@@ -13,7 +13,7 @@
 //
 // 자동재생 차단은 코드로 뚫을 수 없다 — 그래서 이 테스트가 지키는 것은 "뚫는다" 가
 // 아니라 **알린다** 뿐이다.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 /** 호출 인자를 타입으로 고정한다 — tsc -b 가 테스트 파일도 검사한다. */
@@ -55,10 +55,23 @@ function ctxFor(el: HTMLAudioElement): RecoveryContext {
 }
 
 describe('복구 매니저 — 자동재생 차단 보고', () => {
+  let nowSpy: ReturnType<typeof vi.spyOn> | null = null;
+
   beforeEach(() => {
     logPlaybackDiagnostic.mockClear();
+    // 시계를 고정한다. jsdom 의 performance.now() 는 환경 생성 시점부터 재므로 이 테스트가
+    // 도는 시점의 값이 실행 순서·부하에 따라 1s 앞뒤로 흔들렸고, 1s 미만이면 첫 복구가
+    // per-reason cooldown 에 걸려 skip 됐다 (전체 스위트에서만 간헐 실패하던 원인).
+    // 1s 미만으로 고정해 그 경계를 항상 밟게 한다 — 훅이 "첫 호출" 을 cooldown 으로
+    // 오인하면 여기서 매번 깨진다.
+    nowSpy = vi.spyOn(performance, 'now').mockReturnValue(500);
     usePlaybackHealthStore.getState().setAutoplayBlocked(false);
     useBusinessStore.getState().setBusinessMode(true);
+  });
+
+  afterEach(() => {
+    nowSpy?.mockRestore();
+    nowSpy = null;
   });
 
   it('NotAllowedError 면 전체화면 안내 상태를 켜고 서버에 알린다', async () => {
