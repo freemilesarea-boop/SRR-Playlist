@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
 import AnnouncementStatusView from '@/components/announcement/AnnouncementStatusView';
+import { adminTones } from '@/lib/adminTones';
 import {
   getAdminAnnouncementDetail, getAdminAnnouncementOverview,
   type AnnouncementStatusBrandRow, type AnnouncementStatusDetail,
@@ -350,10 +351,10 @@ function AnnouncementOverviewView() {
                 className={`cursor-pointer hover:bg-bg-hover ${openId === r.enterprise_account_id ? 'bg-bg-hover' : ''}`}>
                 <td className="px-3 py-2 font-semibold">{r.enterprise_name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.active_schedules}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-500">{r.devices_online}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${r.devices_offline ? 'font-bold text-rose-500' : 'text-ink-mute'}`}>{r.devices_offline}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${adminTones.success.text}`}>{r.devices_online}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${r.devices_offline ? `font-bold ${adminTones.danger.text}` : 'text-ink-mute'}`}>{r.devices_offline}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.played_today}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${r.failed_today ? 'font-bold text-rose-500' : 'text-ink-mute'}`}>{r.failed_today}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${r.failed_today ? `font-bold ${adminTones.danger.text}` : 'text-ink-mute'}`}>{r.failed_today}</td>
               </tr>
             ))}
           </tbody>
