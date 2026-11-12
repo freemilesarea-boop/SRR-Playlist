@@ -430,6 +430,40 @@ export async function getMyAnnouncementToday(limit = 50): Promise<MyAnnouncement
   return ((data as { data?: MyAnnouncementLogRow[] } | null)?.data ?? []);
 }
 
+export interface MyAnnouncementStatus {
+  /** 0551 — 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가 */
+  eligible: boolean;
+  /** 0553 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있는가 */
+  announcer_online: boolean;
+}
+
+/** 0553 — 수신 판정 + 안내 전용 기기 온라인 여부를 한 번에. */
+export async function fetchMyAnnouncementStatus(): Promise<MyAnnouncementStatus> {
+  const { data, error } = await supabase.rpc('my_announcement_status');
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<MyAnnouncementStatus>;
+  return { eligible: d.eligible === true, announcer_online: d.announcer_online === true };
+}
+
+/** 0553 — 안내 전용 창 heartbeat (60초 주기). */
+export async function sendAnnouncerHeartbeat(input: {
+  instanceId: string; brandId?: string | null; armed: boolean;
+}): Promise<void> {
+  const { error } = await supabase.rpc('announcer_heartbeat', {
+    p_instance_id: input.instanceId,
+    p_brand_id: input.brandId ?? null,
+    p_armed: input.armed,
+    p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  });
+  if (error) throw error;
+}
+
+/** 0553 — 안내 전용 창을 닫을 때 즉시 내림 (음악 플레이어가 바로 이어받게). */
+export async function sendAnnouncerGoodbye(instanceId: string): Promise<void> {
+  const { error } = await supabase.rpc('announcer_goodbye', { p_instance_id: instanceId });
+  if (error) throw error;
+}
+
 /** 0551 — 이 계정이 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가. */
 export async function fetchMyAnnouncementEligible(): Promise<boolean> {
   const { data, error } = await supabase.rpc('my_announcement_eligible');

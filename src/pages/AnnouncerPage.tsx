@@ -20,6 +20,7 @@ import { useAuthStore } from '@/store/authStore';
 import { getOutputSlot } from '@/lib/outputSlot';
 import { normalizeMultiOutputConfig, slotConfigOf } from '@/lib/multiOutput';
 import { getUpcomingAnnouncements, type UpcomingAnnouncement } from '@/lib/api/announcementApi';
+import { useAnnouncerHeartbeat } from '@/hooks/useAnnouncerHeartbeat';
 
 const POLL_MS = 60_000;
 
@@ -39,6 +40,10 @@ export default function AnnouncerPage() {
   const profile = useAuthStore((s) => s.profile);
   const [armed, setArmed] = useState(hasUserActivation);
   const [upcoming, setUpcoming] = useState<UpcomingAnnouncement[] | null>(null);
+  // 0553 — 켜짐 신호 (분리 송출 안내 창이거나 번호 없는 단독 안내 창일 때).
+  const isAnnounceWindow = !slot || (!!profile?.multi_output_enabled
+    && slotConfigOf(profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null, slot)?.mode === 'announce');
+  useAnnouncerHeartbeat({ enabled: !!userId && isAnnounceWindow, armed });
 
   const config = profile?.multi_output_config ? normalizeMultiOutputConfig(profile.multi_output_config) : null;
   const isAnnounceSlot = !!profile?.multi_output_enabled && slotConfigOf(config, slot)?.mode === 'announce';

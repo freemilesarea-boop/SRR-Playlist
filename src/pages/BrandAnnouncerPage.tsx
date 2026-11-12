@@ -21,6 +21,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useWakeLock } from '@/hooks/useWakeLock';
+import { useAnnouncerHeartbeat } from '@/hooks/useAnnouncerHeartbeat';
 import { verifyBrandDeviceBinding, revokeBrandDeviceByToken } from '@/lib/api/brandPlayerApi';
 import { getBrandToken, clearBrandToken, setBrandEntryMode } from '@/lib/brandSession';
 import {
@@ -89,6 +90,8 @@ export default function BrandAnnouncerPage() {
   // 화면 꺼짐 방지 — 안내를 받기 시작한 뒤부터. (상태 표시는 App 의 다른 wake lock 과
   // 같은 store 를 공유해 정확하지 않으므로 화면에 띄우지 않는다.)
   useWakeLock(armed);
+  // 0553 — 켜짐 신호. 이 기기가 살아 있는 동안 같은 계정의 음악 플레이어는 안내를 넘겨준다.
+  useAnnouncerHeartbeat({ enabled: !!brandId && !!token, armed, brandId: brandId ?? null });
 
   // 연결 없음 → 코드 입력 화면(안내방송 전용 모드 유지)
   useEffect(() => {

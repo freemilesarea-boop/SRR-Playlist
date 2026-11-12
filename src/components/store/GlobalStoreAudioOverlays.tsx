@@ -23,7 +23,7 @@ import AnnouncementOverlay from './AnnouncementOverlay';
 import EmergencyBroadcastOverlay from './EmergencyBroadcastOverlay';
 import { getOutputSlot } from '@/lib/outputSlot';
 import { usePlayerStore } from '@/store/playerStore';
-import { fetchMyAnnouncementEligible } from '@/lib/api/announcementApi';
+import { fetchMyAnnouncementStatus } from '@/lib/api/announcementApi';
 
 // 음악/안내를 내보내는 플레이어 화면 — 분리 송출 번호가 없는 창이라도 여기서는 안내를 낸다.
 const PLAYER_PATH_PREFIXES = ['/brand/player/', '/brand/announcer/', '/business/player', '/business/announcer'];
@@ -62,19 +62,31 @@ export default function GlobalStoreAudioOverlays() {
   // 2026-11-12 ming: '개인/무료' 계정으로 브랜드 플레이어를 틀었더니 수신이 아예 꺼져 있었다.
   const onPlayerPath = isPlayerPath(location.pathname);
   const [brandLinked, setBrandLinked] = useState(false);
+  // 0553 — 이 계정에 소리 허용된 안내 전용 기기가 살아 있으면 이 창(음악 플레이어)은 안내를 넘긴다.
+  const [announcerOnline, setAnnouncerOnline] = useState(false);
   useEffect(() => {
-    if (!userId) { setBrandLinked(false); return; }
+    if (!userId) { setBrandLinked(false); setAnnouncerOnline(false); return; }
     let alive = true;
-    const check = () => {
-      fetchMyAnnouncementEligible()
-        .then((v) => { if (alive) setBrandLinked(v); })
-        .catch(() => { /* 실패 시 이전 값 유지 */ });
+    let timer = 0;
+    // 매장 기기는 1분마다 확인 (안내 전용 기기가 꺼지면 바로 이어받도록), 그 밖은 10분.
+    const schedule = (eligible: boolean) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(check, eligible || onPlayerPath ? 60_000 : 10 * 60_000);
     };
+    function check() {
+      fetchMyAnnouncementStatus()
+        .then((st) => {
+          if (!alive) return;
+          setBrandLinked(st.eligible);
+          setAnnouncerOnline(st.announcer_online);
+          schedule(st.eligible);
+        })
+        .catch(() => { if (alive) schedule(false); /* 실패 시 이전 값 유지 */ });
+    }
     check();
     // 브랜드 플레이어 세션은 플레이어 화면 진입 후 만들어지므로 잠시 뒤 한 번 더 확인.
     const t1 = onPlayerPath ? window.setTimeout(check, 5_000) : 0;
-    const t2 = window.setInterval(check, 10 * 60_000);
-    return () => { alive = false; window.clearTimeout(t1); window.clearInterval(t2); };
+    return () => { alive = false; window.clearTimeout(t1); window.clearTimeout(timer); };
   }, [userId, onPlayerPath]);
 
   const isStoreCandidate = !!userId && (
@@ -100,7 +112,9 @@ export default function GlobalStoreAudioOverlays() {
   // 안내방송 전용 창 — 안내가 끝나도 음악을 다시 틀지 않는다.
   const announceOnly = location.pathname.startsWith('/business/announcer') || location.pathname.startsWith('/brand/announcer/') ||
     (!!profile?.multi_output_enabled && slotConfigOf(multiConfig, outputSlot)?.mode === 'announce');
-  const shouldMount = !!userId && isStoreCandidate && !blockedByRoute && announcementHere;
+  // 안내 전용 창이 아닌데 같은 계정의 안내 전용 기기가 살아 있으면 넘긴다 (중복 송출 방지).
+  const deferToAnnouncer = announcerOnline && !announceOnly;
+  const shouldMount = !!userId && isStoreCandidate && !blockedByRoute && announcementHere && !deferToAnnouncer;
 
   // 진입 / 언마운트 로그 — 운영에서 "예약이 왜 안 도는지" 즉시 판단
   useEffect(() => {
@@ -115,9 +129,10 @@ export default function GlobalStoreAudioOverlays() {
       blocked_by_route: blockedByRoute,
       output_slot: outputSlot,
       announcement_here: announcementHere,
+      defer_to_announcer: deferToAnnouncer,
       should_mount: shouldMount,
     });
-  }, [location.pathname, userId, profile?.role, profile, businessMode, isStoreCandidate, blockedByRoute, outputSlot, announcementHere, shouldMount]);
+  }, [location.pathname, userId, profile?.role, profile, businessMode, isStoreCandidate, blockedByRoute, outputSlot, announcementHere, deferToAnnouncer, shouldMount]);
 
   if (!shouldMount) return null;
 
