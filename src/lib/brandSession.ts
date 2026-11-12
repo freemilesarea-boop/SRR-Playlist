@@ -86,8 +86,27 @@ export function getRecentBrands(): RecentBrand[] {
   } catch { return []; }
 }
 
-/** 이 기기에 저장된 brand binding 중 가장 최근 것의 플레이어 경로. 없으면 null. */
+// 이 기기를 브랜드의 무엇으로 쓰는가 — 음악 플레이어 / 안내방송 전용 플레이어.
+// 재실행(설치형 앱 실행·자동 재진입) 때 같은 화면으로 돌아가기 위해 브랜드별로 기억한다.
+export type BrandEntryMode = 'player' | 'announcer';
+const ENTRY_MODE_PREFIX = slotScopedKey('srr.brand.mode') + '.';
+
+export function setBrandEntryMode(brandId: string, mode: BrandEntryMode): void {
+  try { localStorage.setItem(ENTRY_MODE_PREFIX + brandId, mode); } catch { /* ignore */ }
+}
+
+export function getBrandEntryMode(brandId: string): BrandEntryMode {
+  try { return localStorage.getItem(ENTRY_MODE_PREFIX + brandId) === 'announcer' ? 'announcer' : 'player'; }
+  catch { return 'player'; }
+}
+
+/** 브랜드 진입 경로 — 기억해 둔 모드에 맞춰 음악 플레이어 또는 안내방송 전용 플레이어. */
+export function brandEntryPath(brandId: string, mode: BrandEntryMode = getBrandEntryMode(brandId)): string {
+  return mode === 'announcer' ? `/brand/announcer/${brandId}` : `/brand/player/${brandId}`;
+}
+
+/** 이 기기에 저장된 brand binding 중 가장 최근 것의 진입 경로. 없으면 null. */
 export function getSavedBrandPlayerPath(): string | null {
   const top = getRecentBrands().find((b) => getBrandToken(b.id));
-  return top ? `/brand/player/${top.id}` : null;
+  return top ? brandEntryPath(top.id) : null;
 }

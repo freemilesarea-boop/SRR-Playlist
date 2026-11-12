@@ -26,7 +26,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { fetchMyAnnouncementEligible } from '@/lib/api/announcementApi';
 
 // 음악/안내를 내보내는 플레이어 화면 — 분리 송출 번호가 없는 창이라도 여기서는 안내를 낸다.
-const PLAYER_PATH_PREFIXES = ['/brand/player/', '/business/player', '/business/announcer'];
+const PLAYER_PATH_PREFIXES = ['/brand/player/', '/brand/announcer/', '/business/player', '/business/announcer'];
 function isPlayerPath(pathname: string): boolean {
   return PLAYER_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
@@ -98,7 +98,7 @@ export default function GlobalStoreAudioOverlays() {
     slot: outputSlot,
   }) || (outputSlot === null && (onPlayerPath || hasTrack));
   // 안내방송 전용 창 — 안내가 끝나도 음악을 다시 틀지 않는다.
-  const announceOnly = location.pathname.startsWith('/business/announcer') ||
+  const announceOnly = location.pathname.startsWith('/business/announcer') || location.pathname.startsWith('/brand/announcer/') ||
     (!!profile?.multi_output_enabled && slotConfigOf(multiConfig, outputSlot)?.mode === 'announce');
   const shouldMount = !!userId && isStoreCandidate && !blockedByRoute && announcementHere;
 
