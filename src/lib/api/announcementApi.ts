@@ -413,6 +413,13 @@ export async function getDueAnnouncements(
  * 보정하고, scheduled_at 까지 setTimeout 을 걸어 HH:MM:00 에 즉시 interrupt 재생한다.
  * scheduled_at 이 이미 과거(놓침)면 즉시 복구 재생.
  */
+/** 0551 — 이 계정이 안내방송을 받아야 하는 매장(가맹 매장 · 브랜드 플레이어)인가. */
+export async function fetchMyAnnouncementEligible(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('my_announcement_eligible');
+  if (error) throw error;
+  return data === true;
+}
+
 export async function getUpcomingAnnouncements(
   storeId?: string | null,
   lookaheadSeconds = 900,
