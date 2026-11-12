@@ -3,8 +3,10 @@
  * 정해진 시각에 매장 음악을 잠깐 멈추고 안내가 나간다.
  * 안내방송은 운영사 검수 없이 저장 즉시 매장에 반영된다 (0550).
  */
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, Mic, Pause, Play, Plus, Power, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2, Mic, Pause, Play, Plus, Power, RefreshCw, Trash2, Upload } from 'lucide-react';
+import AnnouncementStatusView from '@/components/announcement/AnnouncementStatusView';
+import { getHqAnnouncementStatus, type AnnouncementStatusDetail } from '@/lib/api/announcementApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
@@ -131,6 +133,8 @@ export default function AnnounceTab({ data, onChanged, onCancel }: {
 
   return (
     <div className="space-y-3">
+      <StatusCard />
+
       <Card title="안내 음원" subtitle="MP3·WAV·M4A, 20MB까지. 매장 음악을 잠깐 멈추고 이 음원이 나가요.">
         {pendingAssets.length > 0 && (
           <div className="mb-3 space-y-1.5">
@@ -300,5 +304,43 @@ export default function AnnounceTab({ data, onChanged, onCancel }: {
         )}
       </Card>
     </div>
+  );
+}
+
+/** 0554 — 송출 현황: 안내 전용 플레이어 켜짐/꺼짐 + 오늘 매장별 결과 (1분마다 갱신). */
+function StatusCard() {
+  const [data, setData] = useState<AnnouncementStatusDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    getHqAnnouncementStatus()
+      .then((d) => { setData(d); setFailed(false); })
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = window.setInterval(load, 60_000);
+    return () => window.clearInterval(t);
+  }, [load]);
+
+  return (
+    <Card
+      title="송출 현황"
+      subtitle="매장 안내 전용 플레이어 상태와 오늘 나간 안내방송. 꺼지거나 실패하면 알림센터로도 알려드려요."
+      action={(
+        <button type="button" onClick={load} disabled={loading} aria-label="새로고침"
+          className="rounded-md p-1.5 text-ink-mute hover:bg-bg-hover hover:text-ink disabled:opacity-40">
+          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+        </button>
+      )}
+    >
+      {data ? <AnnouncementStatusView data={data} />
+        : failed ? <p className="text-[12px] text-ink-mute">현황을 불러오지 못했어요.</p>
+        : <p className="text-[12px] text-ink-mute">불러오는 중…</p>}
+    </Card>
   );
 }

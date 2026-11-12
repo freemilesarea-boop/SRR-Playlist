@@ -10,6 +10,11 @@ import {
   Calendar, ListChecks, History, Volume2,
 } from 'lucide-react';
 import RecurrenceRuleBuilder from '@/components/admin/RecurrenceRuleBuilder';
+import AnnouncementStatusView from '@/components/announcement/AnnouncementStatusView';
+import {
+  getAdminAnnouncementDetail, getAdminAnnouncementOverview,
+  type AnnouncementStatusBrandRow, type AnnouncementStatusDetail,
+} from '@/lib/api/announcementApi';
 import { describeRule } from '@/lib/announcementRecurrence';
 import {
   AdminSection, AdminCard, AdminStatCard, AdminSearch, AdminBadge, AdminButton,
@@ -48,7 +53,7 @@ const SCOPE_LABEL: Record<AnnouncementScopeType, string> = {
   store:      '특정 매장',
 };
 
-type Tab = 'assets' | 'schedules';
+type Tab = 'assets' | 'schedules' | 'status';
 
 export default function EnterpriseAnnouncementsPanel() {
   const [tab, setTab] = useState<Tab>('assets');
@@ -220,9 +225,14 @@ export default function EnterpriseAnnouncementsPanel() {
         <TabBtn active={tab === 'schedules'} onClick={() => setTab('schedules')}>
           <ListChecks size={12} /> 예약 재생 <span className="text-[10px] text-ink-mute tabular-nums">{schedulesTotal}</span>
         </TabBtn>
+        <TabBtn active={tab === 'status'} onClick={() => setTab('status')}>
+          <History size={12} /> 송출 현황
+        </TabBtn>
       </div>
 
-      {tab === 'assets' ? (
+      {tab === 'status' ? (
+        <AnnouncementOverviewView />
+      ) : tab === 'assets' ? (
         <AssetsView
           assets={assets} loading={assetsLoading} error={assetsError}
           search={assetSearch} setSearch={setAssetSearch}
@@ -287,6 +297,76 @@ export default function EnterpriseAnnouncementsPanel() {
 // =============================================================================
 // Sub
 // =============================================================================
+
+/** 0554 — 브랜드별 송출 현황 요약 → 행을 누르면 상세(안내 전용 기기 · 오늘 결과). */
+function AnnouncementOverviewView() {
+  const [rows, setRows] = useState<AnnouncementStatusBrandRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<AnnouncementStatusDetail | null>(null);
+
+  const load = useCallback(() => {
+    getAdminAnnouncementOverview().then((r) => { setRows(r); setErr(null); }).catch((e: Error) => setErr(e.message));
+  }, []);
+  useEffect(() => {
+    load();
+    const t = window.setInterval(load, 60_000);
+    return () => window.clearInterval(t);
+  }, [load]);
+
+  useEffect(() => {
+    if (!openId) { setDetail(null); return; }
+    let alive = true;
+    const fetchDetail = () => {
+      getAdminAnnouncementDetail(openId).then((d) => { if (alive) setDetail(d); }).catch(() => undefined);
+    };
+    fetchDetail();
+    const t = window.setInterval(fetchDetail, 60_000);
+    return () => { alive = false; window.clearInterval(t); };
+  }, [openId]);
+
+  if (err) return <AdminAlert tone="danger" title="현황을 불러오지 못했어요" description={err} />;
+  if (!rows) return <p className="p-4 text-xs text-ink-mute">불러오는 중…</p>;
+  if (rows.length === 0) return <p className="p-4 text-xs text-ink-mute">활성 안내방송 일정이나 안내 전용 플레이어가 있는 브랜드가 없어요.</p>;
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-xl bg-bg-card ring-1 ring-line/10">
+        <table className="w-full text-xs">
+          <thead className="text-[10px] uppercase tracking-wider text-ink-mute">
+            <tr>
+              <th className="px-3 py-2 text-left">브랜드</th>
+              <th className="px-3 py-2 text-right">활성 일정</th>
+              <th className="px-3 py-2 text-right">안내 전용 켜짐</th>
+              <th className="px-3 py-2 text-right">꺼짐</th>
+              <th className="px-3 py-2 text-right">오늘 송출</th>
+              <th className="px-3 py-2 text-right">오늘 실패</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line/10">
+            {rows.map((r) => (
+              <tr key={r.enterprise_account_id}
+                onClick={() => setOpenId(openId === r.enterprise_account_id ? null : r.enterprise_account_id)}
+                className={`cursor-pointer hover:bg-bg-hover ${openId === r.enterprise_account_id ? 'bg-bg-hover' : ''}`}>
+                <td className="px-3 py-2 font-semibold">{r.enterprise_name}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{r.active_schedules}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-emerald-500">{r.devices_online}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${r.devices_offline ? 'font-bold text-rose-500' : 'text-ink-mute'}`}>{r.devices_offline}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{r.played_today}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${r.failed_today ? 'font-bold text-rose-500' : 'text-ink-mute'}`}>{r.failed_today}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {openId && (
+        <div className="rounded-xl bg-bg-card p-3 ring-1 ring-line/10">
+          {detail ? <AnnouncementStatusView data={detail} /> : <p className="text-xs text-ink-mute">불러오는 중…</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
