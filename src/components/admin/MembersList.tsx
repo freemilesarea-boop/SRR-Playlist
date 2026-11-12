@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   fetchMemberList,
   updateUserRole,
   updateUserPlan,
   memberCategory,
+  MEMBER_SORT_OPTIONS,
   type MemberRow,
   type MemberCategory,
+  type MemberSort,
 } from '@/lib/adminApi';
 import { classifyAdminError, type AdminError } from '@/lib/adminErrors';
 import AdminErrorState from './AdminErrorState';
@@ -14,8 +16,11 @@ import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import MemberDetail from './MemberDetail';
 import {
-  AdminEmpty, AdminTable, FilterBar, ConfirmDialog, type AdminTableColumn,
+  AdminButton, AdminEmpty, AdminTable, FilterBar, ConfirmDialog, type AdminTableColumn,
 } from './ui';
+
+/** 한 번에 받는 회원 수. "더 보기" 한 번에 이만큼 더 받는다. */
+const MEMBER_PAGE_SIZE = 100;
 
 const PLAN_LABEL: Record<string, string> = {
   free: '무료',
@@ -57,45 +62,98 @@ export default function MembersList() {
   const [role, setRole] = useState<string>('');
   const [category, setCategory] = useState<'' | MemberCategory>('');
   const [status, setStatus] = useState<'' | 'active' | 'withdrawn' | 'cancel_scheduled'>('');
+  const [sort, setSort] = useState<MemberSort>('created_desc');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
 
-  async function load() {
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // 응답 순서 보장 — 필터를 바꾼 뒤 늦게 도착한 이전 요청의 결과가 화면을 덮지 않게 한다.
+  const reqIdRef = useRef(0);
+  // 지금까지 받아온 행 수. 새로고침 때 펼쳐 둔 만큼 다시 받는 데 쓴다.
+  const loadedRef = useRef(0);
+
+  function filterArgs() {
+    return {
+      search: search || undefined,
+      plan: plan || undefined,
+      role: role || undefined,
+      status: status || undefined,
+      category: category || undefined,
+      sort,
+    };
+  }
+
+  /**
+   * 처음부터 다시 받는다. keepCount 면 "더 보기" 로 펼쳐 둔 만큼 받는다 — 탭 복귀 새로고침이
+   * 300번째 회원을 보던 사람을 처음 100명으로 되돌리지 않게.
+   */
+  async function load(opts?: { keepCount?: boolean }) {
+    const id = ++reqIdRef.current;
+    const limit = opts?.keepCount ? Math.max(MEMBER_PAGE_SIZE, loadedRef.current) : MEMBER_PAGE_SIZE;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchMemberList({
-        search: search || undefined,
-        plan: plan || undefined,
-        role: role || undefined,
-        status: status || undefined,
-        category: category || undefined,
-      });
+      const data = await fetchMemberList({ ...filterArgs(), limit, offset: 0 });
+      if (id !== reqIdRef.current) return;
       setRows(data);
+      loadedRef.current = data.length;
+      setHasMore(data.length === limit);
     } catch (e) {
+      if (id !== reqIdRef.current) return;
       setError(classifyAdminError(e));
     } finally {
-      setLoading(false);
+      if (id === reqIdRef.current) setLoading(false);
+    }
+  }
+
+  async function loadMore() {
+    const id = reqIdRef.current;
+    setLoadingMore(true);
+    try {
+      const data = await fetchMemberList({ ...filterArgs(), limit: MEMBER_PAGE_SIZE, offset: rows.length });
+      // 그 사이 필터·정렬이 바뀌었으면 이 결과는 다른 목록의 다음 장이다 — 버린다.
+      if (id !== reqIdRef.current) return;
+      // 페이지 사이에 가입이 생기면 경계 행이 한 번 더 올 수 있다 — id 로 거른다.
+      const seen = new Set(rows.map((r) => r.id));
+      const next = [...rows, ...data.filter((r) => !seen.has(r.id))];
+      setRows(next);
+      loadedRef.current = next.length;
+      setHasMore(data.length === MEMBER_PAGE_SIZE);
+    } catch (e) {
+      if (id === reqIdRef.current) toast.error(friendlyError(e, '회원을 더 불러오지 못했어요.'));
+    } finally {
+      setLoadingMore(false);
     }
   }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, role, status, category]);
+  }, [plan, role, status, category, sort]);
 
-  // 검색은 디바운스
+  // 검색은 디바운스. 마운트 때는 건너뛴다 — 첫 로드는 위 effect 가 이미 했고, 여기서 300ms 뒤
+  // 또 받으면 그 사이 "더 보기" 로 붙인 행을 처음 100명으로 덮어쓴다.
+  const searchMountedRef = useRef(false);
   useEffect(() => {
+    if (!searchMountedRef.current) {
+      searchMountedRef.current = true;
+      return;
+    }
     const t = window.setTimeout(load, 300);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // 탭 복귀 / 윈도우 포커스 시 최신 refetch
+  // 탭 복귀 / 윈도우 포커스 시 최신 refetch.
+  // 리스너는 마운트 때 한 번 붙으므로 최신 load 를 ref 로 부른다. 예전에는 마운트 시점의 load 를
+  // 붙잡고 있어서, 필터를 걸어 둔 채 탭을 다녀오면 필터 없는 목록으로 조용히 바뀌었다.
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => {
-    const onFocus = () => void load();
+    const onFocus = () => void loadRef.current({ keepCount: true });
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load();
+      if (document.visibilityState === 'visible') void loadRef.current({ keepCount: true });
     };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
@@ -103,7 +161,6 @@ export default function MembersList() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function changeRole(id: string, newRole: 'user' | 'admin') {
@@ -308,7 +365,9 @@ export default function MembersList() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold tracking-tight">회원관리</h2>
-          <p className="text-xs text-ink-mute">{rows.length}명 표시 중</p>
+          <p className="text-xs text-ink-mute">
+            {rows.length}명 표시 중{hasMore ? ' · 더 있음' : ''}
+          </p>
         </div>
       </div>
 
@@ -374,6 +433,19 @@ export default function MembersList() {
             </select>
           </>
         }
+        extra={
+          // 정렬은 필터가 아니다 — 적용 중 개수에 넣지 않고 초기화로도 되돌리지 않는다.
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as MemberSort)}
+            aria-label="정렬"
+            className="input w-auto text-sm"
+          >
+            {MEMBER_SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        }
         activeCount={activeFilters}
         onReset={() => {
           setSearch('');
@@ -395,6 +467,21 @@ export default function MembersList() {
         rowClassName={(m) => (m.withdrawn_at ? 'opacity-50' : '')}
         empty={<AdminEmpty title={activeFilters ? '조건에 맞는 회원이 없어요.' : '회원이 없어요.'} />}
       />
+
+      {hasMore && !loading && (
+        <div className="flex justify-center">
+          <AdminButton
+            variant="outline"
+            tone="neutral"
+            size="lg"
+            loading={loadingMore}
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+          >
+            더 보기 ({MEMBER_PAGE_SIZE}명씩)
+          </AdminButton>
+        </div>
+      )}
 
       <ConfirmDialog
         open={roleChange !== null}
