@@ -186,7 +186,7 @@ export default function BrandAnnouncerPage() {
   const clock = new Date(now);
 
   return (
-    <div className="fixed inset-0 z-[90] overflow-y-auto bg-gradient-to-b from-bg-deep to-black px-4 pb-10 pt-6 text-white">
+    <div className="fixed inset-0 z-[90] overflow-y-auto bg-black bg-gradient-to-b from-zinc-900 to-black px-4 pb-10 pt-6 text-white">
       <div className="mx-auto w-full max-w-md space-y-4">
         <header className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 ring-1 ring-accent/30">

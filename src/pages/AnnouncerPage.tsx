@@ -83,7 +83,7 @@ export default function AnnouncerPage() {
   }, [userId]);
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center overflow-y-auto bg-gradient-to-b from-bg-deep to-black px-4 pb-8 pt-28 text-white">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center overflow-y-auto bg-black bg-gradient-to-b from-zinc-900 to-black px-4 pb-8 pt-28 text-white">
       <OutputSlotBar kind="announce" />
 
       <div className="w-full max-w-md space-y-4 text-center">

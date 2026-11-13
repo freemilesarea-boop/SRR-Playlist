@@ -214,7 +214,7 @@ export default function StorePlayerPage() {
   const hasQueue = queue.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-bg-deep to-black text-white">
+    <div className="fixed inset-0 z-[90] flex flex-col bg-black bg-gradient-to-b from-zinc-900 to-black text-white">
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
       <PlaybackBlockedOverlay />
       {/* 분리 송출 창 — N번 플레이어 표시 + 이 창의 스피커 선택 */}
