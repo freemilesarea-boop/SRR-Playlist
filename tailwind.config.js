@@ -8,6 +8,9 @@ export default {
         bg: {
           DEFAULT: 'rgb(var(--color-bg) / <alpha-value>)',
           soft: 'rgb(var(--color-bg-soft) / <alpha-value>)',
+          // bg-bg-deep — 바탕보다 한 단계 깊은(들어간) 면: 입력칸·칩·보조 버튼.
+          // 61개 파일에서 쓰였지만 정의가 없어 배경이 투명했다(2026-11-13). bg-soft 와 같은 값.
+          deep: 'rgb(var(--color-bg-soft) / <alpha-value>)',
           card: 'rgb(var(--color-surface) / <alpha-value>)',
           hover: 'rgb(var(--color-surface-soft) / <alpha-value>)',
         },
