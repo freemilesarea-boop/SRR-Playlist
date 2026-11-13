@@ -35,7 +35,8 @@ function hasKakaoIdentity(user: User | null | undefined): boolean {
   return user.identities.some((i) => i.provider === 'kakao');
 }
 
-const HIDDEN_PREFIXES = ['/admin', '/login', '/auth'];
+// 안내방송 전용 화면은 무인 송출기라 문의 버튼이 화면 버튼(스피커 테스트 등)을 가린다.
+const HIDDEN_PREFIXES = ['/admin', '/login', '/auth', '/brand/announcer', '/business/announcer'];
 
 export default function FloatingSupportButton() {
   const user = useAuthStore((s) => s.user);
