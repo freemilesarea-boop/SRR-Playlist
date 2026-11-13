@@ -47,6 +47,18 @@ export function trialRemainingMs(profile: UserRow | null): number {
   return Math.max(0, new Date(ends).getTime() - Date.now());
 }
 
+/** 체험 남은 기간 배너를 띄울 상한 — 1년. */
+export const TRIAL_BANNER_MAX_MS = 365 * 86_400_000;
+
+/**
+ * 체험 남은 기간 배너를 보여줄지.
+ * 운영에서 테스트·제휴 계정에 체험 종료일을 2099년 같은 먼 미래로 넣는 경우가 있어
+ * "남은 기간 26711일" 처럼 의미 없는 배너가 떴다 — 1년이 넘게 남았으면 숨긴다.
+ */
+export function shouldShowTrialCountdown(remainingMs: number): boolean {
+  return remainingMs <= TRIAL_BANNER_MAX_MS;
+}
+
 /**
  * 구독/체험 상태 판정 (서버 컬럼 기반).
  * - 세션 없음 → anonymous

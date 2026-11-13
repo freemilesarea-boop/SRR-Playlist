@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Crown } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { resolveSubscriptionStatus, trialRemainingMs } from '@/lib/membership';
+import { resolveSubscriptionStatus, shouldShowTrialCountdown, trialRemainingMs } from '@/lib/membership';
 
 /**
  * 영업인 코드 3일 무료 체험 배너 (0195).
  * - trial: 남은 기간(일/시간) 표시 + 결제 유도. D-1 이내면 강조.
  * - expired: 체험 종료 안내 + 결제 유도.
- * 유료/일반/비로그인 회원에겐 표시하지 않음.
+ * 유료/일반/비로그인 회원에겐 표시하지 않음. 1년 넘게 남은 체험도 표시하지 않음.
  */
 export default function TrialBanner() {
   const session = useAuthStore((s) => s.session);
@@ -45,6 +45,8 @@ export default function TrialBanner() {
   }
 
   const ms = trialRemainingMs(profile);
+  // 1년 넘게 남은 체험(테스트·제휴 계정의 먼 미래 종료일)은 배너를 띄우지 않는다.
+  if (!shouldShowTrialCountdown(ms)) return null;
   const days = Math.floor(ms / 86_400_000);
   const hours = Math.floor((ms % 86_400_000) / 3_600_000);
   const urgent = ms <= 86_400_000; // D-1 이내

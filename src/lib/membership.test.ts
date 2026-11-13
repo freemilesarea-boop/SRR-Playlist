@@ -89,3 +89,19 @@ describe('non-demo users keep existing policy (회귀 없음)', () => {
     expect(resolveMembership(null, null)).toBe('anonymous');
   });
 });
+
+describe('shouldShowTrialCountdown', () => {
+  const DAY = 86_400_000;
+  it('3일 체험처럼 일반적인 남은 기간은 배너를 보여 준다', async () => {
+    const { shouldShowTrialCountdown } = await import('@/lib/membership');
+    expect(shouldShowTrialCountdown(3 * DAY)).toBe(true);
+    expect(shouldShowTrialCountdown(0)).toBe(true);
+    expect(shouldShowTrialCountdown(365 * DAY)).toBe(true);
+  });
+
+  it('1년 넘게 남았으면 숨긴다 — 2099년 종료일("26711일") 같은 테스트·제휴 계정', async () => {
+    const { shouldShowTrialCountdown } = await import('@/lib/membership');
+    expect(shouldShowTrialCountdown(365 * DAY + 1)).toBe(false);
+    expect(shouldShowTrialCountdown(26711 * DAY)).toBe(false);
+  });
+});
