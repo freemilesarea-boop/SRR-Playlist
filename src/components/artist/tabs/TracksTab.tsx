@@ -15,6 +15,7 @@ import type { ArtistPlanInfo } from '@/lib/artistPlanApi';
 import SectionHeader from '@/components/ui/SectionHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import { UploadGate, MyTrackRow } from '@/components/artist/dashboard/parts';
+import { isRejectedTrack } from '@/components/artist/dashboard/constants';
 
 type Filter = 'all' | 'pending_review' | 'approved' | 'rejected';
 
@@ -57,20 +58,23 @@ export default function TracksTab({
     if (editingTrack) setUploadOpen(true);
   }, [editingTrack]);
 
+  // 반려 = 검수에서 반려되어 삭제 처리된 곡(release_status='removed'). 나머지는 visibility 상태로 나눈다.
+  const active = tracks.filter((t) => !isRejectedTrack(t));
+  const rejected = tracks.filter(isRejectedTrack);
   const counts = {
     all: tracks.length,
-    pending_review: tracks.filter((t) => t.visibility_status === 'pending_review').length,
-    approved: tracks.filter((t) => t.visibility_status === 'approved').length,
-    rejected: tracks.filter((t) => t.visibility_status === 'rejected').length,
+    pending_review: active.filter((t) => t.visibility_status === 'pending_review').length,
+    approved: active.filter((t) => t.visibility_status === 'approved').length,
+    rejected: rejected.length,
   };
 
   const visible = filter === 'all'
-    ? tracks.filter((t) => t.visibility_status !== 'rejected')
-    : tracks.filter((t) => t.visibility_status === filter);
+    ? active
+    : filter === 'rejected'
+      ? rejected
+      : active.filter((t) => t.visibility_status === filter);
   // '전체' 에서만 반려 음원을 접어서 따로 보여준다. 반려 필터에서는 그 자체가 목록이다.
-  const rejectedFolded = filter === 'all'
-    ? tracks.filter((t) => t.visibility_status === 'rejected')
-    : [];
+  const rejectedFolded = filter === 'all' ? rejected : [];
 
   const renderRow = (t: MyArtistTrackRow) => (
     <MyTrackRow
