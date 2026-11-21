@@ -48,7 +48,7 @@ import {
   emptySelectedMeta, validateSelectedMeta, setTrackSelectedMetadata, type SelectedMeta,
 } from '@/lib/trackMetadataOptions';
 
-import { STATUS_LABEL } from '@/components/artist/dashboard/constants';
+import { STATUS_LABEL, isRejectedTrack } from '@/components/artist/dashboard/constants';
 
 
 
@@ -1368,7 +1368,10 @@ export function MyTrackRow({
   /** X6.37: QC 뱃지 클릭 시 상세 모달 오픈 */
   onOpenQcDetail?: () => void;
 }) {
-  const status = STATUS_LABEL[track.visibility_status] ?? STATUS_LABEL.pending_review;
+  // 검수 반려는 release_status='removed' + visibility 'hidden' 으로 저장된다 — '숨김' 대신 '반려됨' 으로 보여준다.
+  const status = isRejectedTrack(track)
+    ? STATUS_LABEL.rejected
+    : STATUS_LABEL[track.visibility_status] ?? STATUS_LABEL.pending_review;
   const Icon = status.Icon;
   const canDelete = track.visibility_status === 'pending_review';
   const canEdit =
@@ -1432,7 +1435,7 @@ export function MyTrackRow({
         )}
         {!track.changes_requested_reason && track.rejected_reason && (
           <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
-            거절 사유: {track.rejected_reason}
+            반려 사유: {track.rejected_reason}
           </p>
         )}
       </div>
