@@ -323,35 +323,74 @@ export async function fetchMyArtistProfile(userId: string): Promise<ArtistProfil
   }
 }
 
+/** 한 번에 받는 곡 수 — PostgREST 기본 최대 행 수(1000) 안쪽. */
+const MY_TRACKS_PAGE_SIZE = 500;
+/** 안전 상한 — 무한 루프 방지 (500 × 40 = 20,000곡). */
+const MY_TRACKS_MAX_PAGES = 40;
+
+/**
+ * 페이지 단위로 끝까지 받아 이어 붙인다.
+ * 첫 페이지가 실패하면 에러를 던지고, 이후 페이지가 실패하면 그때까지 받은 것을 돌려준다
+ * (일부라도 보여주는 편이 빈 목록보다 낫다).
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  pageSize = MY_TRACKS_PAGE_SIZE,
+  maxPages = MY_TRACKS_MAX_PAGES,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let page = 0; page < maxPages; page++) {
+    const from = page * pageSize;
+    const { data, error } = await fetchPage(from, from + pageSize - 1);
+    if (error) {
+      if (page === 0) throw error;
+      break;
+    }
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return all;
+}
+
 export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
   // 0064: RLS tracks_select_owner 정책으로 본인 트랙 직접 조회 (release_* 컬럼 포함).
   // 기존 list_my_artist_tracks RPC 는 release_status / changes_requested_reason 미반환이므로 우회.
   // 0077-hotfix: getSession 무한 pending 방지 — getCurrentUserFast 의 3단 fallback 사용.
+  //
+  // 2026-11-21: 예전에는 최신 200곡까지만 받아(.limit(200)), 곡을 많이 올린 아티스트의
+  // 오래된 발매곡이 목록 밖으로 밀려나 "음원 관리에서 사라진다" 는 문의가 왔다
+  // (NORE 계정: 265곡 중 발매 18곡의 13곡이 안 보임). 페이지로 나눠 전부 받는다.
   const me = await getCurrentUserFast();
   const uid = me?.id;
   if (!uid) return [];
-  const { data, error } = await supabase
-    .from('tracks')
-    .select(
-      'id, track_code, title, artist, album_name, release_title, release_type, release_date, ' +
-        'release_status, audio_review_status, cover_review_status, metadata_review_status, ' +
-        'admin_review_note, changes_requested_reason, submission_version, submitted_at, ' +
-        'resubmitted_at, reviewed_at, approved_at, scheduled_at, released_at, ' +
-        'visibility_status, rejected_reason, rights_holder_name, isrc, explicit_content, ' +
-        'instrumental, genre, main_genre, sub_genre, mood, suitable_store, lyrics, ' +
-        'cover_url, audio_url, duration, created_at, ' +
-        'audio_health_status, audio_health_checked_at',
-    )
-    .eq('owner_user_id', uid)
-    .eq('source_type', 'artist_upload')
-    .order('created_at', { ascending: false })
-    .limit(200);
-  if (error) {
+  try {
+    const rows = await fetchAllPages<Record<string, unknown> & { id: string }>(async (from, to) => {
+      const { data, error } = await supabase
+        .from('tracks')
+        .select(
+          'id, track_code, title, artist, album_name, release_title, release_type, release_date, ' +
+            'release_status, audio_review_status, cover_review_status, metadata_review_status, ' +
+            'admin_review_note, changes_requested_reason, submission_version, submitted_at, ' +
+            'resubmitted_at, reviewed_at, approved_at, scheduled_at, released_at, ' +
+            'visibility_status, rejected_reason, rights_holder_name, isrc, explicit_content, ' +
+            'instrumental, genre, main_genre, sub_genre, mood, suitable_store, lyrics, ' +
+            'cover_url, audio_url, duration, created_at, ' +
+            'audio_health_status, audio_health_checked_at',
+        )
+        .eq('owner_user_id', uid)
+        .eq('source_type', 'artist_upload')
+        // 같은 시각에 올린 곡이 페이지 경계에서 빠지거나 겹치지 않게 id 로 순서를 고정한다.
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+      return { data: (data ?? null) as unknown as Array<Record<string, unknown> & { id: string }> | null, error };
+    });
+    return rows.map((row) => ({ ...row, track_id: row.id })) as unknown as MyArtistTrackRow[];
+  } catch (error) {
     if (import.meta.env.DEV) console.error('[fetchMyArtistTracks] failed:', error);
     return [];
   }
-  const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>;
-  return rows.map((row) => ({ ...row, track_id: row.id })) as unknown as MyArtistTrackRow[];
 }
 
 /** 0062 — eligibility reasons 를 사용자에게 보일 한국어 메시지로 변환 */
