@@ -5,6 +5,8 @@ import {
   adminListMdPolicyRules,
   adminListMdPolicyViolations,
   adminBackfillStoreGenrePolicyReview,
+  adminSetMdPolicyRuleEnabled,
+  adminSetMdPolicyRulePriority,
   type MdPolicySummary,
   type MdPolicyRule,
   type MdPolicyViolationRow,
@@ -76,6 +78,33 @@ export default function MdPolicyTab() {
   }, [storeFilter]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
+
+  // 규칙 변경 뒤 위반 목록·요약을 다시 계산 (규칙 목록은 바로 반영)
+  const [ruleBusyId, setRuleBusyId] = useState<string | null>(null);
+  async function toggleRule(r: MdPolicyRule) {
+    const next = !r.is_enabled;
+    setRuleBusyId(r.id);
+    try {
+      await adminSetMdPolicyRuleEnabled(r.id, next);
+      setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, is_enabled: next } : x)));
+      toast.success(`${r.store_type} · ${r.genre} 규칙을 ${next ? '켰어요' : '껐어요'}`);
+      void loadAll();
+    } catch (e) {
+      toast.error(`규칙 변경 실패: ${(e as Error).message}`);
+    } finally { setRuleBusyId(null); }
+  }
+  async function changePriority(r: MdPolicyRule, priority: number) {
+    if (priority === r.priority) return;
+    setRuleBusyId(r.id);
+    try {
+      await adminSetMdPolicyRulePriority(r.id, priority);
+      setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, priority } : x)));
+      toast.success(`${r.store_type} · ${r.genre} 우선순위 ${r.priority} → ${priority}`);
+      void loadAll();
+    } catch (e) {
+      toast.error(`우선순위 변경 실패: ${(e as Error).message}`);
+    } finally { setRuleBusyId(null); }
+  }
 
   async function reDryRun() {
     setBusy(true);
@@ -187,7 +216,7 @@ export default function MdPolicyTab() {
 
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="총 규칙" v={summary.total_rules} />
+          <Stat label={`켜진 규칙 (전체 ${summary.total_rules})`} v={summary.enabled_rules ?? summary.total_rules} />
           <Stat label="매장 수" v={summary.distinct_stores} />
           <Stat label="vocal" v={summary.by_vocal_policy?.vocal ?? 0} icon={Mic} />
           <Stat label="instrumental" v={summary.by_vocal_policy?.instrumental ?? 0} icon={MicOff} />
@@ -243,29 +272,23 @@ export default function MdPolicyTab() {
       <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
         <div className="rounded-xl bg-bg-card p-3">
           <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
-            <Shield size={11} /> 매장별 허용 규칙
+            <Shield size={11} /> 매장별 규칙
             {storeFilter && <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">{storeFilter}</span>}
           </h4>
+          <p className="mb-2 text-[10px] text-ink-dim">
+            끈 규칙은 판정에서 빠져요. 우선순위 숫자가 낮을수록 먼저 적용돼요 (1~100).
+          </p>
           {rules.length === 0 ? (
             <p className="py-6 text-center text-[11px] text-ink-dim">
               {loading ? '로딩 중…' : '규칙 없음'}
             </p>
           ) : (
             <ul className="max-h-[480px] space-y-1 overflow-y-auto text-[11px]">
-              {rules.map((r, i) => (
-                <li key={`${r.store_type}:${r.genre}:${r.vocal_policy}:${i}`}
-                  className="flex items-center justify-between gap-1 rounded bg-bg-deep px-2 py-1">
-                  <span className="flex items-center gap-1.5">
-                    {!storeFilter && <span className="font-mono text-ink-dim">{r.store_type}</span>}
-                    <span className="font-bold">{r.genre}</span>
-                    {r.vocal_policy === 'vocal'
-                      ? <Mic size={10} className="text-sky-300" />
-                      : <MicOff size={10} className="text-violet-400" />}
-                  </span>
-                  {r.priority === 10 && (
-                    <span className="rounded bg-rose-500/25 px-1 py-0.5 text-[9px] font-bold text-rose-300">strict</span>
-                  )}
-                </li>
+              {rules.map((r) => (
+                <RuleRow key={r.id} rule={r} showStore={!storeFilter}
+                  busy={ruleBusyId === r.id}
+                  onToggle={() => void toggleRule(r)}
+                  onPriority={(p) => void changePriority(r, p)} />
               ))}
             </ul>
           )}
@@ -398,6 +421,55 @@ export default function MdPolicyTab() {
         </div>
       </details>
     </div>
+  );
+}
+
+function RuleRow({ rule: r, showStore, busy, onToggle, onPriority }: {
+  rule: MdPolicyRule;
+  showStore: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onPriority: (p: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(r.priority));
+  useEffect(() => { setDraft(String(r.priority)); }, [r.priority]);
+  function commit() {
+    const n = Number(draft);
+    if (!Number.isInteger(n) || n < 1 || n > 100) {
+      toast.error('우선순위는 1~100 사이 숫자로 넣어 주세요');
+      setDraft(String(r.priority));
+      return;
+    }
+    onPriority(n);
+  }
+  return (
+    <li className={`flex items-center justify-between gap-1 rounded bg-bg-deep px-2 py-1 ${r.is_enabled ? '' : 'opacity-50'}`}>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {showStore && <span className="font-mono text-ink-dim">{r.store_type}</span>}
+        <span className={`truncate font-bold ${r.is_enabled ? '' : 'line-through'}`}>{r.genre}</span>
+        {r.vocal_policy === 'vocal'
+          ? <Mic size={10} className="shrink-0 text-sky-300" />
+          : <MicOff size={10} className="shrink-0 text-violet-400" />}
+        {!r.is_allowed && (
+          <span className="shrink-0 rounded bg-rose-500/25 px-1 py-0.5 text-[9px] font-bold text-rose-300">차단</span>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <input type="number" min={1} max={100} value={draft} disabled={busy}
+          aria-label={`${r.store_type} ${r.genre} 우선순위`}
+          title="우선순위 — 낮을수록 먼저 적용"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          className="w-11 rounded bg-bg-card px-1 py-0.5 text-right tabular-nums" />
+        <button type="button" onClick={onToggle} disabled={busy}
+          aria-pressed={r.is_enabled}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
+            r.is_enabled ? 'bg-emerald-500/25 text-emerald-300' : 'bg-ink/5 text-ink-dim'}`}>
+          {r.is_enabled ? '켜짐' : '꺼짐'}
+        </button>
+      </span>
+    </li>
   );
 }
 
