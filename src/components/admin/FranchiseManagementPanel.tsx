@@ -60,6 +60,7 @@ import {
 } from '@/lib/api/policyDeploymentApi';
 import type { PlaylistRow } from '@/types/db';
 import { toast } from '@/store/toastStore';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 type View = 'list' | 'detail';
 type DetailTab = 'stores' | 'policies' | 'sets' | 'overrides' | 'schedule' | 'sync';
@@ -1618,7 +1619,7 @@ function RegisterFromPlaylistModal({
       const r = await listAvailablePlaylistsForDeployment({
         search: debounced || null,
         sourceType: sourceFilter || null,
-        limit: 100,
+        limit: ADMIN_LIST_ALL,
       });
       setAvailable(r.data);
     } catch (e) {

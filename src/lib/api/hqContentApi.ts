@@ -5,6 +5,7 @@
  * 본사는 바로 바꾸지 않는다. 요청(hq_content_requests)을 남기고, 운영사가 관리자 화면에서
  * 승인하면 기존 관리자 기능(admin_* RPC)으로 그대로 적용된다. 결과는 본사 알림센터로 간다.
  */
+import { ADMIN_LIST_ALL } from '../fetchAllPages';
 import { supabase } from '@/lib/supabase';
 import { uploadBrandMedia } from '@/lib/brandMediaUpload';
 import { uploadAnnouncementFile } from '@/lib/api/announcementApi';
@@ -189,7 +190,7 @@ export interface AdminHqContentRequest extends HqContentRequest {
 }
 
 export async function adminListHqContentRequests(status: HqRequestStatus | null = 'pending'): Promise<AdminHqContentRequest[]> {
-  const { data, error } = await supabase.rpc('admin_list_hq_content_requests', { p_status: status, p_limit: 150 });
+  const { data, error } = await supabase.rpc('admin_list_hq_content_requests', { p_status: status, p_limit: ADMIN_LIST_ALL });
   if (error) throw error;
   return (data ?? []) as AdminHqContentRequest[];
 }

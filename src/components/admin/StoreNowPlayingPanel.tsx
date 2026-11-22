@@ -31,6 +31,7 @@ import {
 } from '@/lib/api/nowPlayingApi';
 import { adminListFranchises, type FranchiseListRow } from '@/lib/api/franchiseApi';
 import { listEnterpriseRegions, type EnterpriseRegion } from '@/lib/api/enterpriseRegionsApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const PAGE_SIZE = 100;
 const FALLBACK_POLL_MS = 15_000;
@@ -216,7 +217,7 @@ export default function StoreNowPlayingPanel() {
     void adminListFranchises()
       .then(setFranchises)
       .catch((e) => console.warn('[NowPlaying] franchises load failed', e));
-    void listEnterpriseRegions({ limit: 200 })
+    void listEnterpriseRegions({ limit: ADMIN_LIST_ALL })
       .then((r) => setRegions(r.data))
       .catch((e) => console.warn('[NowPlaying] regions load failed', e));
   }, []);

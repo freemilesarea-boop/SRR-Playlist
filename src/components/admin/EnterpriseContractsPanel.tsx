@@ -21,6 +21,7 @@ import {
   CONTRACT_ALLOWED_MIME, CONTRACT_MAX_BYTES,
 } from '@/lib/api/enterpriseContractApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const PAGE_SIZE = 50;
 
@@ -96,7 +97,7 @@ export default function EnterpriseContractsPanel() {
   useEffect(() => { void loadKpi(); }, [loadKpi]);
 
   useEffect(() => {
-    void adminListEnterpriseAccounts({ limit: 200 }).then((r) => setEnterprises(r.data))
+    void adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL }).then((r) => setEnterprises(r.data))
       .catch((e) => console.warn('[contracts] enterprises load failed', e));
   }, []);
 

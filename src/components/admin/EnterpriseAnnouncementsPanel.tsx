@@ -32,8 +32,8 @@ import {
 } from '@/lib/api/announcementApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import { listEnterpriseRegions, type EnterpriseRegion } from '@/lib/api/enterpriseRegionsApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
-const PAGE_SIZE = 50;
 
 const ASSET_STATUS_META: Record<AnnouncementAssetStatus, { ko: string; tone: AdminToneName }> = {
   active:   { ko: '활성',   tone: 'success' },
@@ -95,7 +95,7 @@ export default function EnterpriseAnnouncementsPanel() {
       const r = await listAnnouncementAssets({
         search: assetSearch.trim() || null,
         status: assetStatus || null,
-        limit: PAGE_SIZE,
+        limit: ADMIN_LIST_ALL,
       });
       setAssets(r.data);
       setAssetsTotal(r.pagination.total);
@@ -110,7 +110,7 @@ export default function EnterpriseAnnouncementsPanel() {
       const r = await listAnnouncementSchedules({
         search: schedSearch.trim() || null,
         status: schedStatus || null,
-        limit: PAGE_SIZE,
+        limit: ADMIN_LIST_ALL,
       });
       setSchedules(r.data);
       setSchedulesTotal(r.pagination.total);
@@ -122,9 +122,9 @@ export default function EnterpriseAnnouncementsPanel() {
   useEffect(() => { void loadSchedules(); }, [loadSchedules]);
 
   useEffect(() => {
-    void adminListEnterpriseAccounts({ limit: 200 }).then((r) => setEnterprises(r.data))
+    void adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL }).then((r) => setEnterprises(r.data))
       .catch((e) => console.warn('[announcements] enterprises load failed', e));
-    void listEnterpriseRegions({ limit: 200 }).then((r) => setRegions(r.data))
+    void listEnterpriseRegions({ limit: ADMIN_LIST_ALL }).then((r) => setRegions(r.data))
       .catch((e) => console.warn('[announcements] regions load failed', e));
   }, []);
 

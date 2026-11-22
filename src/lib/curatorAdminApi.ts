@@ -9,6 +9,7 @@
  * 정책: hard delete 없음. status='deleted' + deleted_at + delete_reason 만 기록.
  */
 import { supabase } from '@/lib/supabase';
+import { ADMIN_LIST_ALL } from './fetchAllPages';
 
 export type CuratorStatus = 'active' | 'inactive' | 'deleted';
 
@@ -44,7 +45,7 @@ export async function adminListCurators(filter: ListCuratorsFilter = {}): Promis
   const { data, error } = await supabase.rpc('admin_list_curators', {
     p_status: filter.status || null,
     p_search: filter.search || null,
-    p_limit: filter.limit ?? 100,
+    p_limit: filter.limit ?? ADMIN_LIST_ALL,
     p_offset: filter.offset ?? 0,
   });
   if (error) throw error;

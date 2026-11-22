@@ -15,6 +15,7 @@ import {
 } from '@/lib/storeGenrePolicy';
 import { toast } from '@/store/toastStore';
 import TrackPlacementEditor from '@/components/admin/TrackPlacementEditor';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 // 정규화 슬러그 → 한글 라벨
 const STORE_KO: Record<string, string> = {
@@ -289,7 +290,7 @@ function ViolationsInner() {
         storeType: storeFilter || undefined,
         issueType: issueFilter || undefined,
         status: statusFilter,
-        limit: 500,
+        limit: ADMIN_LIST_ALL,
       }));
     } catch (e) {
       toast.error(`위반 목록 로딩 실패: ${(e as Error).message}`);

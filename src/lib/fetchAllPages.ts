@@ -37,3 +37,9 @@ export async function fetchAllPages<T>(
   }
   return all;
 }
+
+/** 관리자 목록·선택 목록(본사 계정·지역·정책 등)에 넘길 '전부' 개수 — 서버 상한도 10000 (0559). */
+export const ADMIN_LIST_ALL = HQ_LIST_ALL;
+
+/** 곡 전체(관리자 콘텐츠 관리 등)용 페이지 상한 — 500 × 200 = 10만 곡. */
+export const TRACKS_MAX_PAGES = 200;

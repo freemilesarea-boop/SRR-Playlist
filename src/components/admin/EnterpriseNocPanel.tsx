@@ -26,6 +26,7 @@ import {
   type NocStoreHealth, type NocStoreDetail, type NocNotificationChannel,
   type NocSeverity, type NocChannelType,
 } from '@/lib/api/nocApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const POLL_INTERVAL_MS = 7_000;
 
@@ -85,9 +86,9 @@ export default function EnterpriseNocPanel() {
       const [k, r, a, e, h, s, c] = await Promise.all([
         getNocKpi(),
         getNocRegionSummary(),
-        getNocActiveAlerts(50, severityFilter || null),
+        getNocActiveAlerts(ADMIN_LIST_ALL, severityFilter || null),
         getNocRecentEvents(100),
-        getNocStoreHealthList({ limit: 100 }),
+        getNocStoreHealthList({ limit: ADMIN_LIST_ALL }),
         getNocSettings(),
         listNotificationChannels(),
       ]);

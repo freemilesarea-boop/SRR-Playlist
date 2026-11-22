@@ -39,6 +39,7 @@ import {
   adminListEnterpriseAccounts, type EnterpriseAccount,
 } from '@/lib/api/enterpriseAccountsApi';
 import { currentMonthFirstDay, SETTLEMENT_STATUS_LABEL, type EnterpriseMonthlySettlementStatus } from '@/lib/api/enterpriseMonthlySettlementApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 // ============================================================================
 // Utils
@@ -200,7 +201,7 @@ function ContractsView({ tick, onChange }: { tick: number; onChange: () => void 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
-      const r = await listEnterpriseContracts({ search: search || null, limit: 100 });
+      const r = await listEnterpriseContracts({ search: search || null, limit: ADMIN_LIST_ALL });
       setRows(r.data ?? []);
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
@@ -386,7 +387,7 @@ function SettlementsView({ tick, onChange }: { tick: number; onChange: () => voi
     setLoading(true); setErr(null);
     try {
       const mod = await import('@/lib/api/enterpriseMonthlySettlementApi');
-      const r = await mod.adminListEnterpriseMonthlySettlements({ limit: 50 });
+      const r = await mod.adminListEnterpriseMonthlySettlements({ limit: ADMIN_LIST_ALL });
       setRows(r.rows ?? []);
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
@@ -597,7 +598,7 @@ function GenerateSettlementModal({
   useEffect(() => {
     (async () => {
       try {
-        const r = await adminListEnterpriseAccounts({ status: 'active', limit: 200 });
+        const r = await adminListEnterpriseAccounts({ status: 'active', limit: ADMIN_LIST_ALL });
         setEnterprises(r.data ?? []);
       } catch (e) { toast.error(`본사 목록 조회 실패: ${(e as Error).message}`); }
     })();
@@ -712,7 +713,7 @@ function BillingView({ tick, onChange }: { tick: number; onChange: () => void })
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
-      const r = await listBillingInvoices({ limit: 100 });
+      const r = await listBillingInvoices({ limit: ADMIN_LIST_ALL });
       setRows(r.data ?? []);
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }

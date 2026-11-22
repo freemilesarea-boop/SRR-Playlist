@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { fetchAllPages, ALL_PAGES_PAGE_SIZE, TRACKS_MAX_PAGES } from './fetchAllPages';
 import { applyDemoMode } from './demoMode';
 import type { PlaylistRow, TrackRow } from '@/types/db';
 
@@ -143,13 +144,19 @@ export async function fetchPlaylistCovers(): Promise<Map<string, string>> {
   return map;
 }
 
+/** 곡 전체 — PostgREST 한 번 응답 상한(1000행)에 잘리지 않게 500행씩 끝까지 받는다. */
 export async function fetchTracks(): Promise<TrackRow[]> {
-  const { data, error } = await supabase
-    .from('tracks')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  return fetchAllPages<TrackRow>(
+    (from, to) =>
+      supabase
+        .from('tracks')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    ALL_PAGES_PAGE_SIZE,
+    TRACKS_MAX_PAGES,
+  );
 }
 
 export async function toggleLike(userId: string, playlistId: string, liked: boolean) {

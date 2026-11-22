@@ -40,6 +40,7 @@ import {
   type AdminToneName,
 } from '@/components/admin/ui';
 import { adminTypography } from '@/lib/adminTypography';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: EnterpriseRegionStatus; label: string }> = [
   { value: 'active',      label: '정상' },
@@ -105,7 +106,7 @@ export default function EnterpriseRegionsPanel() {
   // 본사 select 옵션 (한 번만 로드)
   useEffect(() => {
     let alive = true;
-    adminListEnterpriseAccounts({ limit: 200, offset: 0 })
+    adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL, offset: 0 })
       .then((r) => { if (alive) setAccounts(r.data); })
       .catch(() => {});
     return () => { alive = false; };

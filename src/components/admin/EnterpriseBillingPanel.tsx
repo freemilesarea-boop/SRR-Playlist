@@ -24,6 +24,7 @@ import {
 } from '@/lib/api/enterpriseBillingApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import ConsolidatedBillingCard from '@/components/admin/ConsolidatedBillingCard';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const PAGE_SIZE = 50;
 
@@ -94,7 +95,7 @@ export default function EnterpriseBillingPanel() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    void adminListEnterpriseAccounts({ limit: 200 }).then((r) => setEnterprises(r.data))
+    void adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL }).then((r) => setEnterprises(r.data))
       .catch((e) => console.warn('[billing] enterprises load failed', e));
   }, []);
 
