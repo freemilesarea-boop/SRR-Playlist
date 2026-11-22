@@ -3,8 +3,8 @@
 // 23개 sub-tab 을 dispatch 만 담당. 각 탭 구현은 다음 위치:
 //   - src/components/admin/aiCuration/*.tsx — 본 패널 전용 14개 tab
 //   - src/components/admin/{QcQueueTab,BehaviorTab,BehaviorInsightTab,StoreLearningTab,
-//       EventQualityTab,GenreGuardrailTab,FeedbackSummaryTab,MdPolicyTab,AbuseMonitorTab,
-//       StoreGenrePolicyTab}.tsx — 다른 위치에서도 재사용되는 9개 tab
+//       EventQualityTab,GenreGuardrailTab,FeedbackSummaryTab,MdPolicyTab,AbuseMonitorTab}.tsx
+//       — 다른 위치에서도 재사용되는 tab
 //
 // 공유 유틸은 src/components/admin/aiCuration/shared.tsx.
 import { useState } from 'react';
@@ -36,19 +36,17 @@ import GenreGuardrailTab from '@/components/admin/GenreGuardrailTab';
 import FeedbackSummaryTab from '@/components/admin/FeedbackSummaryTab';
 import MdPolicyTab from '@/components/admin/MdPolicyTab';
 import AbuseMonitorTab from '@/components/admin/AbuseMonitorTab';
-import StoreGenrePolicyTab from '@/components/admin/StoreGenrePolicyTab';
 
 type SubTab = 'perf' | 'pending' | 'results' | 'fit' | 'review' | 'embedding' | 'embed_review'
   | 'guardrail' | 'genre_guardrail' | 'md_policy' | 'abuse_monitor' | 'highrisk' | 'rereview'
   | 'flow' | 'reorder' | 'business' | 'duplicates' | 'qc_queue' | 'behavior' | 'behavior_insight'
-  | 'store_learning' | 'event_quality' | 'feedback_summary' | 'store_genre_policy' | 'admin_learning'
+  | 'store_learning' | 'event_quality' | 'feedback_summary' | 'admin_learning'
   | 'weight_tuning';
 
 const TABS: [SubTab, string][] = [
   ['perf', '운영 성과'],
   ['admin_learning', '🧠 검수 패턴 학습'],
   ['weight_tuning', '⚖️ 가중치 튜닝'],
-  ['store_genre_policy', '매장 장르 정책 (v1)'],
   ['qc_queue', 'AI 검수 큐'],
   ['behavior', '행동 지표'],
   ['behavior_insight', '행동 인사이트'],
@@ -60,7 +58,7 @@ const TABS: [SubTab, string][] = [
   ['review', '위반/검토 후보'],
   ['guardrail', 'Guardrail 대시보드'],
   ['genre_guardrail', '장르 가드레일'],
-  ['md_policy', '매장 장르 정책 (MD)'],
+  ['md_policy', '매장 장르 정책'],
   ['abuse_monitor', '어뷰징 모니터'],
   ['feedback_summary', '운영자 학습'],
   ['highrisk', '고위험 검수'],
@@ -118,7 +116,6 @@ export default function AiCurationPanel() {
       {sub === 'behavior_insight' && <BehaviorInsightTab />}
       {sub === 'store_learning' && <StoreLearningTab />}
       {sub === 'event_quality' && <EventQualityTab />}
-      {sub === 'store_genre_policy' && <StoreGenrePolicyTab />}
     </div>
   );
 }

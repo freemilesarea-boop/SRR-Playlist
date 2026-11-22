@@ -3,6 +3,8 @@
  * 스코어링 규칙은 서버(SQL RPC)에 단일 구현. 여기서는 호출 래퍼만 제공.
  */
 import { supabase } from '@/lib/supabase';
+import { fetchAllPages } from '@/lib/fetchAllPages';
+import { fetchAllRpcRows } from '@/lib/fetchAllRpcRows';
 import type { AudioFeatureValues } from '@/lib/audioAnalysis';
 
 export type CurationFilter =
@@ -1660,26 +1662,23 @@ export async function adminMdPolicySummary(): Promise<MdPolicySummary> {
 }
 
 export async function adminListMdPolicyRules(storeType?: string | null): Promise<MdPolicyRule[]> {
-  let q = supabase
-    .from('store_genre_placement_rules')
-    .select('store_type, genre, vocal_policy, is_allowed, priority, source')
-    .order('store_type', { ascending: true })
-    .order('vocal_policy', { ascending: true })
-    .order('genre', { ascending: true });
-  if (storeType) q = q.eq('store_type', storeType);
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as MdPolicyRule[];
+  return fetchAllPages<MdPolicyRule>((from, to) => {
+    let q = supabase
+      .from('store_genre_placement_rules')
+      .select('store_type, genre, vocal_policy, is_allowed, priority, source')
+      .order('store_type', { ascending: true })
+      .order('vocal_policy', { ascending: true })
+      .order('genre', { ascending: true });
+    if (storeType) q = q.eq('store_type', storeType);
+    return q.range(from, to) as unknown as PromiseLike<{ data: MdPolicyRule[] | null; error: unknown }>;
+  });
 }
 
-export async function adminListMdPolicyViolations(
-  store?: string | null, limit = 500,
-): Promise<MdPolicyViolationRow[]> {
-  const { data, error } = await supabase.rpc('admin_list_md_policy_violations', {
-    p_store: store ?? null, p_limit: limit,
-  });
-  if (error) throw error;
-  return (data ?? []) as MdPolicyViolationRow[];
+/** 정책 위반 곡 전부 — 응답 상한(1000행)에 잘리지 않게 끝까지 받는다. 한 번 계산이 무거워(~3초) 1000행씩. */
+export async function adminListMdPolicyViolations(store?: string | null): Promise<MdPolicyViolationRow[]> {
+  return fetchAllRpcRows<MdPolicyViolationRow>(
+    'admin_list_md_policy_violations', { p_store: store ?? null }, { pageSize: 1000 },
+  );
 }
 
 export async function adminBackfillStoreGenrePolicyReview(
