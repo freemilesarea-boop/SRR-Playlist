@@ -1613,16 +1613,22 @@ export async function adminGetTrackFeedback(trackId: string): Promise<TrackFeedb
 // Phase X5.4: MD 기반 매장 장르 정책
 export interface MdPolicySummary {
   total_rules: number;
+  /** 켜진 규칙 수 (0562) */
+  enabled_rules?: number;
   distinct_stores: number;
   by_store: Record<string, number>;
   by_vocal_policy: Record<'vocal' | 'instrumental', number>;
 }
 
 export interface MdPolicyRule {
+  id: string;
   store_type: string;
   genre: string;
   vocal_policy: 'vocal' | 'instrumental';
   is_allowed: boolean;
+  /** 꺼진 규칙은 판정에서 빠진다 (0562) */
+  is_enabled: boolean;
+  /** 1~100, 낮을수록 먼저 적용 */
   priority: number;
   source: string;
 }
@@ -1665,13 +1671,25 @@ export async function adminListMdPolicyRules(storeType?: string | null): Promise
   return fetchAllPages<MdPolicyRule>((from, to) => {
     let q = supabase
       .from('store_genre_placement_rules')
-      .select('store_type, genre, vocal_policy, is_allowed, priority, source')
+      .select('id, store_type, genre, vocal_policy, is_allowed, is_enabled, priority, source')
       .order('store_type', { ascending: true })
       .order('vocal_policy', { ascending: true })
       .order('genre', { ascending: true });
     if (storeType) q = q.eq('store_type', storeType);
     return q.range(from, to) as unknown as PromiseLike<{ data: MdPolicyRule[] | null; error: unknown }>;
   });
+}
+
+/** 규칙 켜기·끄기 — 꺼진 규칙은 매장 장르 판정에서 빠진다. */
+export async function adminSetMdPolicyRuleEnabled(id: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_md_policy_rule_enabled', { p_id: id, p_enabled: enabled });
+  if (error) throw error;
+}
+
+/** 규칙 우선순위 (1~100, 낮을수록 먼저 적용). */
+export async function adminSetMdPolicyRulePriority(id: string, priority: number): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_md_policy_rule_priority', { p_id: id, p_priority: priority });
+  if (error) throw error;
 }
 
 /** 정책 위반 곡 전부 — 응답 상한(1000행)에 잘리지 않게 끝까지 받는다. 한 번 계산이 무거워(~3초) 1000행씩. */
