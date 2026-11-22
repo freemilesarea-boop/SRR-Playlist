@@ -10,7 +10,7 @@ import { formatWhen } from './format';
 export default function RequestsTab({ data, onCancel }: { data: HqBrandContent; onCancel: (id: string) => void }) {
   const regionName = (id: unknown) => data.regions.find((r) => r.id === id)?.name ?? null;
   return (
-    <Card title="요청 내역" subtitle="최근 100건. 반영되거나 반려되면 알림센터로도 알려드려요.">
+    <Card title="요청 내역" subtitle="지금까지 보낸 요청 전부. 반영되거나 반려되면 알림센터로도 알려드려요.">
       {data.requests.length === 0 ? (
         <p className="rounded-xl bg-bg-soft p-4 text-center text-[12px] text-ink-mute">아직 보낸 요청이 없어요.</p>
       ) : (

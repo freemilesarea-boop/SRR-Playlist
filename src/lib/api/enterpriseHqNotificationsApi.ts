@@ -7,6 +7,7 @@
  * SQL: supabase/migrations/0403_enterprise_hq_notification_center.sql
  */
 import { supabase } from '@/lib/supabase';
+import { HQ_LIST_ALL } from '@/lib/fetchAllPages';
 
 // =============================================================================
 // Types
@@ -180,7 +181,7 @@ export async function getMyEnterpriseIncidents(
     p_status: input.status ?? null,
     p_severity: input.severity ?? null,
     p_type: input.type ?? null,
-    p_limit: input.limit ?? 50,
+    p_limit: input.limit ?? HQ_LIST_ALL,
     p_offset: input.offset ?? 0,
   });
   if (error) {
@@ -224,7 +225,7 @@ export async function resolveMyEnterpriseIncident(incidentId: string): Promise<{
 }
 
 export async function getMyEnterpriseNotifications(
-  limit = 50,
+  limit = HQ_LIST_ALL,
   offset = 0,
   unreadOnly = false,
 ): Promise<HqNotificationListResult> {

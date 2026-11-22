@@ -220,7 +220,7 @@ function IncidentsSection({ onSelectDetail }: { onSelectDetail: (id: string) => 
         status: (status as IncidentStatus | '') || null,
         severity: (severity as IncidentSeverity | '') || null,
         type: (type as IncidentType | '') || null,
-        limit: 50, offset: 0,
+        offset: 0, // limit 생략 = 전부
       });
       setRows(r.data);
       setTotal(r.pagination.total);
@@ -388,7 +388,7 @@ function NotificationsSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await getMyEnterpriseNotifications(30, 0, false);
+      const r = await getMyEnterpriseNotifications(undefined, 0, false);
       setRows(r.data);
       setUnread(r.unread_count);
       setError(null);

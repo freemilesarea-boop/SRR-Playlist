@@ -34,7 +34,7 @@ export default function EnterpriseHqMonthlySettlementsCard() {
     setLoading(true);
     setError(null);
     try {
-      const r = await getMyEnterpriseMonthlySettlements(12);
+      const r = await getMyEnterpriseMonthlySettlements();
       setRows(r.rows);
     } catch (e) {
       setError((e as Error).message);

@@ -12,6 +12,11 @@ export const ALL_PAGES_PAGE_SIZE = 500;
 export const ALL_PAGES_MAX_PAGES = 40;
 /** RPC 가 자체 p_limit 을 받는 경우 넘길 값 — 사실상 무제한, 실제 분할은 range() 가 한다. */
 export const RPC_NO_LIMIT = 1_000_000;
+/**
+ * 본사·매장 jsonb RPC(get_my_enterprise_* 등)에 넘길 '전부' 개수 — 서버 상한도 10000 (0556).
+ * jsonb 한 덩어리로 오므로 PostgREST 최대 행 수와 무관하다.
+ */
+export const HQ_LIST_ALL = 10_000;
 
 export async function fetchAllPages<T>(
   fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
