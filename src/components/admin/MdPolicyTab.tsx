@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock, CheckCircle2, Trash2 } from 'lucide-react';
+import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock, CheckCircle2, Trash2, Plus } from 'lucide-react';
 import {
   adminMdPolicySummary,
   adminListMdPolicyRules,
@@ -7,6 +7,10 @@ import {
   adminBackfillStoreGenrePolicyReview,
   adminSetMdPolicyRuleEnabled,
   adminSetMdPolicyRulePriority,
+  adminMdPolicyRuleOptions,
+  adminAddMdPolicyRule,
+  adminDeleteMdPolicyRule,
+  type MdPolicyRuleOptions,
   type MdPolicySummary,
   type MdPolicyRule,
   type MdPolicyViolationRow,
@@ -91,6 +95,17 @@ export default function MdPolicyTab() {
       void loadAll();
     } catch (e) {
       toast.error(`규칙 변경 실패: ${(e as Error).message}`);
+    } finally { setRuleBusyId(null); }
+  }
+  async function deleteRule(r: MdPolicyRule) {
+    setRuleBusyId(r.id);
+    try {
+      await adminDeleteMdPolicyRule(r.id);
+      setRules((prev) => prev.filter((x) => x.id !== r.id));
+      toast.success(`${r.store_type} · ${r.genre} 규칙을 삭제했어요`);
+      void loadAll();
+    } catch (e) {
+      toast.error(`규칙 삭제 실패: ${(e as Error).message}`);
     } finally { setRuleBusyId(null); }
   }
   async function changePriority(r: MdPolicyRule, priority: number) {
@@ -269,7 +284,7 @@ export default function MdPolicyTab() {
         <span className="text-ink-dim">{filteredViolations.length} 행</span>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
+      <div className="grid gap-3 lg:grid-cols-[380px_1fr]">
         <div className="rounded-xl bg-bg-card p-3">
           <h4 className="mb-2 flex items-center gap-1 text-xs font-bold">
             <Shield size={11} /> 매장별 규칙
@@ -278,6 +293,7 @@ export default function MdPolicyTab() {
           <p className="mb-2 text-[10px] text-ink-dim">
             끈 규칙은 판정에서 빠져요. 우선순위 숫자가 낮을수록 먼저 적용돼요 (1~100).
           </p>
+          <AddRuleForm defaultStore={storeFilter} onAdded={() => void loadAll()} />
           {rules.length === 0 ? (
             <p className="py-6 text-center text-[11px] text-ink-dim">
               {loading ? '로딩 중…' : '규칙 없음'}
@@ -288,6 +304,7 @@ export default function MdPolicyTab() {
                 <RuleRow key={r.id} rule={r} showStore={!storeFilter}
                   busy={ruleBusyId === r.id}
                   onToggle={() => void toggleRule(r)}
+                  onDelete={() => void deleteRule(r)}
                   onPriority={(p) => void changePriority(r, p)} />
               ))}
             </ul>
@@ -424,13 +441,115 @@ export default function MdPolicyTab() {
   );
 }
 
-function RuleRow({ rule: r, showStore, busy, onToggle, onPriority }: {
+function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<MdPolicyRuleOptions | null>(null);
+  const [storeType, setStoreType] = useState(defaultStore);
+  const [genre, setGenre] = useState('');
+  const [vocalPolicy, setVocalPolicy] = useState<'vocal' | 'instrumental'>('vocal');
+  const [isAllowed, setIsAllowed] = useState(true);
+  const [priority, setPriority] = useState('50');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setStoreType(defaultStore); }, [defaultStore]);
+  useEffect(() => {
+    if (!open || options) return;
+    adminMdPolicyRuleOptions()
+      .then(setOptions)
+      .catch((e) => toast.error(`후보 불러오기 실패: ${(e as Error).message}`));
+  }, [open, options]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const p = Number(priority);
+    if (!storeType) { toast.error('매장 종류를 골라 주세요'); return; }
+    if (!genre.trim()) { toast.error('장르를 입력해 주세요'); return; }
+    if (!Number.isInteger(p) || p < 1 || p > 100) { toast.error('우선순위는 1~100 사이 숫자로 넣어 주세요'); return; }
+    setSaving(true);
+    try {
+      await adminAddMdPolicyRule({ storeType, genre: genre.trim(), vocalPolicy, isAllowed, priority: p });
+      toast.success(`${storeType} · ${genre.trim()} 규칙을 추가했어요`);
+      setGenre('');
+      onAdded();
+    } catch (err) {
+      toast.error(`규칙 추가 실패: ${(err as Error).message}`);
+    } finally { setSaving(false); }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="mb-2 inline-flex items-center gap-1 rounded bg-accent/20 px-2 py-1 text-[11px] font-semibold text-accent hover:bg-accent/30">
+        <Plus size={11} /> 규칙 추가
+      </button>
+    );
+  }
+  const field = 'rounded bg-bg-deep px-1.5 py-1';
+  return (
+    <form onSubmit={(e) => void submit(e)} className="mb-2 grid grid-cols-2 gap-1.5 rounded bg-bg-deep/60 p-2 text-[11px]">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ink-dim">매장 종류</span>
+        <select value={storeType} onChange={(e) => setStoreType(e.target.value)} className={field} required>
+          <option value="">선택</option>
+          {(options?.store_types ?? (defaultStore ? [defaultStore] : [])).map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ink-dim">장르</span>
+        <input value={genre} onChange={(e) => setGenre(e.target.value)} list="md-policy-genres"
+          placeholder="예: indie_pop" className={field} required />
+        <datalist id="md-policy-genres">
+          {(options?.genres ?? []).map((g) => <option key={g} value={g} />)}
+        </datalist>
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ink-dim">보컬</span>
+        <select value={vocalPolicy} onChange={(e) => setVocalPolicy(e.target.value as 'vocal' | 'instrumental')} className={field}>
+          <option value="vocal">보컬 있음 (vocal)</option>
+          <option value="instrumental">연주곡 (instrumental)</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ink-dim">허용 / 차단</span>
+        <select value={isAllowed ? 'allow' : 'block'} onChange={(e) => setIsAllowed(e.target.value === 'allow')} className={field}>
+          <option value="allow">허용</option>
+          <option value="block">차단</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ink-dim">우선순위 (낮을수록 먼저)</span>
+        <input type="number" min={1} max={100} value={priority} onChange={(e) => setPriority(e.target.value)}
+          className={`${field} tabular-nums`} />
+      </label>
+      <div className="flex items-end gap-1">
+        <button type="submit" disabled={saving}
+          className="flex-1 rounded bg-accent px-2 py-1 font-bold text-white disabled:opacity-50">
+          {saving ? '추가 중…' : '추가'}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="rounded bg-ink/5 px-2 py-1 text-ink-dim">
+          닫기
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function RuleRow({ rule: r, showStore, busy, onToggle, onPriority, onDelete }: {
   rule: MdPolicyRule;
   showStore: boolean;
   busy: boolean;
   onToggle: () => void;
   onPriority: (p: number) => void;
+  onDelete: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    if (!confirming) return;
+    const t = window.setTimeout(() => setConfirming(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirming]);
   const [draft, setDraft] = useState(String(r.priority));
   useEffect(() => { setDraft(String(r.priority)); }, [r.priority]);
   function commit() {
@@ -468,6 +587,18 @@ function RuleRow({ rule: r, showStore, busy, onToggle, onPriority }: {
             r.is_enabled ? 'bg-emerald-500/25 text-emerald-300' : 'bg-ink/5 text-ink-dim'}`}>
           {r.is_enabled ? '켜짐' : '꺼짐'}
         </button>
+        {confirming ? (
+          <button type="button" onClick={() => { setConfirming(false); onDelete(); }} disabled={busy}
+            className="rounded bg-rose-500/25 px-1.5 py-0.5 text-[10px] font-bold text-rose-300 disabled:opacity-40">
+            삭제?
+          </button>
+        ) : (
+          <button type="button" onClick={() => setConfirming(true)} disabled={busy}
+            aria-label={`${r.store_type} ${r.genre} 규칙 삭제`} title="규칙 삭제"
+            className="rounded px-1 py-0.5 text-ink-dim hover:text-rose-300 disabled:opacity-40">
+            <Trash2 size={11} />
+          </button>
+        )}
       </span>
     </li>
   );
