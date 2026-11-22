@@ -11,12 +11,12 @@ import { fetchAllPages, ALL_PAGES_PAGE_SIZE, RPC_NO_LIMIT } from './fetchAllPage
 export async function fetchAllRpcRows<T>(
   fn: string,
   args: Record<string, unknown> = {},
-  opts: { withLimit?: boolean } = {},
+  opts: { withLimit?: boolean; pageSize?: number } = {},
 ): Promise<T[]> {
   const params = opts.withLimit === false ? args : { ...args, p_limit: RPC_NO_LIMIT };
   return fetchAllPages<T>(
     (from, to) =>
       supabase.rpc(fn, params).range(from, to) as unknown as PromiseLike<{ data: T[] | null; error: unknown }>,
-    ALL_PAGES_PAGE_SIZE,
+    opts.pageSize ?? ALL_PAGES_PAGE_SIZE,
   );
 }

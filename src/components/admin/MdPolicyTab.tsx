@@ -65,7 +65,7 @@ export default function MdPolicyTab() {
       const [sum, rs, vs] = await Promise.all([
         adminMdPolicySummary(),
         adminListMdPolicyRules(storeFilter || null),
-        adminListMdPolicyViolations(storeFilter || null, 500),
+        adminListMdPolicyViolations(storeFilter || null),
       ]);
       setSummary(sum);
       setRules(rs);
