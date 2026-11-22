@@ -8,6 +8,7 @@
  *   4) tracks 본 테이블 채워짐 → 추천/필터/검색에 활용
  */
 import { supabase } from './supabase';
+import { fetchAllRpcRows } from './fetchAllRpcRows';
 
 export interface PendingAiPrediction {
   id: string;
@@ -36,10 +37,8 @@ export interface AiPredictionsSummary {
   high_conf_pending: number;
 }
 
-export async function listPendingAiPredictions(limit = 50): Promise<PendingAiPrediction[]> {
-  const { data, error } = await supabase.rpc('list_pending_ai_predictions', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as PendingAiPrediction[];
+export async function listPendingAiPredictions(): Promise<PendingAiPrediction[]> {
+  return fetchAllRpcRows<PendingAiPrediction>('list_pending_ai_predictions');
 }
 
 export async function aiPredictionsSummary(): Promise<AiPredictionsSummary> {

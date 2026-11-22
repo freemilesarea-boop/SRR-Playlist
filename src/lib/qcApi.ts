@@ -6,6 +6,7 @@
  *  - listQcReviewQueue: 검수 대기 큐 (위험도 우선 정렬)
  */
 import { supabase } from './supabase';
+import { fetchAllRpcRows } from './fetchAllRpcRows';
 
 export type QcGrade = 'A' | 'B' | 'C' | 'D';
 export type QcRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -63,10 +64,8 @@ export async function getTrackQcReport(trackId: string): Promise<AudioQcReport |
   return data as AudioQcReport | null;
 }
 
-export async function listQcReviewQueue(limit = 50): Promise<QcReviewQueueRow[]> {
-  const { data, error } = await supabase.rpc('list_admin_qc_review_queue', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as QcReviewQueueRow[];
+export async function listQcReviewQueue(): Promise<QcReviewQueueRow[]> {
+  return fetchAllRpcRows<QcReviewQueueRow>('list_admin_qc_review_queue');
 }
 
 export interface QcPipelineStatus {

@@ -10,7 +10,6 @@ import {
 } from '@/lib/placementAuditApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 /**
  * AI 배치 진단 — 관찰 모드 (0232):
@@ -40,7 +39,7 @@ export default function PlacementAuditPanel() {
     setLoading(true);
     try {
       const [items, st] = await Promise.all([
-        listPlacementRisks(filter, ADMIN_LIST_ALL),
+        listPlacementRisks(filter),
         getPlacementRiskStatus(),
       ]);
       setRows(items);

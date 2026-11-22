@@ -2,6 +2,7 @@
  * adminTrackApi.ts — admin 트랙 관리 (메타데이터 수정 + 완전 삭제).
  */
 import { supabase } from './supabase';
+import { fetchAllRpcRows } from './fetchAllRpcRows';
 import { fetchAllPages, ALL_PAGES_PAGE_SIZE, RPC_NO_LIMIT, TRACKS_MAX_PAGES } from './fetchAllPages';
 
 export interface AdminTrackDetail {
@@ -226,10 +227,8 @@ export interface MetadataMismatch {
   reasons: string;
 }
 
-export async function listSevereMismatches(limit = 100): Promise<MetadataMismatch[]> {
-  const { data, error } = await supabase.rpc('list_severe_metadata_mismatches', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as MetadataMismatch[];
+export async function listSevereMismatches(): Promise<MetadataMismatch[]> {
+  return fetchAllRpcRows<MetadataMismatch>('list_severe_metadata_mismatches');
 }
 
 export interface PurgeAllResult {

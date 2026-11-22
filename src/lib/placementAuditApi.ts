@@ -11,6 +11,7 @@
  * 자동 차단 정책은 보류 — taxonomy-v1 precision > 90% 검증 후 재검토.
  */
 import { supabase } from './supabase';
+import { fetchAllRpcRows } from './fetchAllRpcRows';
 
 export const LOUNGE_BUSINESS_CATEGORIES = [
   '호텔', '라운지', '와인바', '카페 라운지', '칵테일바',
@@ -87,10 +88,8 @@ export async function flagPlacementRisks(
   return data as FlagResult;
 }
 
-export async function listPlacementRisks(status: RiskStatusFilter = 'pending', limit = 100): Promise<PlacementRiskFlag[]> {
-  const { data, error } = await supabase.rpc('admin_list_placement_risks', { p_status: status, p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as PlacementRiskFlag[];
+export async function listPlacementRisks(status: RiskStatusFilter = 'pending'): Promise<PlacementRiskFlag[]> {
+  return fetchAllRpcRows<PlacementRiskFlag>('admin_list_placement_risks', { p_status: status });
 }
 
 export async function decidePlacementRisk(

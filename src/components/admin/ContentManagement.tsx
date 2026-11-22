@@ -15,7 +15,6 @@ import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail
 import { bulkApplyHighConfidence } from '@/lib/trackAiPredictionsApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 type SubTab = 'playlists' | 'tracks';
 
@@ -268,7 +267,7 @@ function AdminTrackList({
   async function loadMismatches() {
     setShowMismatch(true);
     try {
-      const rows = await listSevereMismatches(ADMIN_LIST_ALL);
+      const rows = await listSevereMismatches();
       setMismatches(rows);
     } catch (e) {
       toast.error(friendlyError(e, '불일치 조회 실패'));
