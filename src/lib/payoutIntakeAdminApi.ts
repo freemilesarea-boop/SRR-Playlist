@@ -8,6 +8,7 @@
  * 평문 PII 는 admin_reveal_payout_intake_pii RPC 만 사용.
  */
 import { supabase } from '@/lib/supabase';
+import { ADMIN_LIST_ALL } from './fetchAllPages';
 
 export type IntakeStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'needs_revision';
 
@@ -34,7 +35,7 @@ export interface PayoutIntakeRow {
 
 export async function adminListPayoutIntake(
   status: IntakeStatus | '' = '',
-  limit = 200,
+  limit = ADMIN_LIST_ALL,
 ): Promise<PayoutIntakeRow[]> {
   const { data, error } = await supabase.rpc('admin_list_payout_intake', {
     p_status: status || null,

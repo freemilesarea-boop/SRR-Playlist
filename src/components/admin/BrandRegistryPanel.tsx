@@ -30,6 +30,7 @@ import { planBrandPricingSave, type BrandPriceApplyScope } from '@/lib/brandPric
 import {
   adminListEnterpriseAccounts, type EnterpriseAccount,
 } from '@/lib/api/enterpriseAccountsApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -205,7 +206,7 @@ function BrandRegistryList({ tick, onChange }: { tick: number; onChange: () => v
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
-      const r = await adminListBrandRegistry({ search: search || null, limit: 200 });
+      const r = await adminListBrandRegistry({ search: search || null, limit: ADMIN_LIST_ALL });
       setRows(r.data ?? []);
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }

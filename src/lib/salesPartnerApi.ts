@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { ADMIN_LIST_ALL } from './fetchAllPages';
 
 export type SalesPartnerStatus = 'submitted' | 'reviewing' | 'approved' | 'rejected' | 'contacted';
 
@@ -44,7 +45,7 @@ export async function submitSalesPartnerApplication(input: SalesPartnerApplicati
 }
 
 export async function listSalesPartnerApplications(status?: SalesPartnerStatus): Promise<SalesPartnerApplication[]> {
-  const { data, error } = await supabase.rpc('admin_list_sales_partner_applications', { p_status: status ?? null, p_limit: 200 });
+  const { data, error } = await supabase.rpc('admin_list_sales_partner_applications', { p_status: status ?? null, p_limit: ADMIN_LIST_ALL });
   if (error) throw error;
   return (data ?? []) as SalesPartnerApplication[];
 }

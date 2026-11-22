@@ -4,6 +4,7 @@ import {
   adminListFreeTrials, adminExtendTrial, adminEndTrial, type AdminFreeTrialRow,
 } from '@/lib/trialApi';
 import { toast } from '@/store/toastStore';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const dt = (s: string | null) => (s ? new Date(s).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
@@ -18,7 +19,7 @@ export default function FreeTrialsPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await adminListFreeTrials(filter === 'all' ? undefined : filter, 500));
+      setRows(await adminListFreeTrials(filter === 'all' ? undefined : filter, ADMIN_LIST_ALL));
     } catch (e) {
       toast.error(`불러오기 실패: ${(e as Error).message}`);
     } finally {

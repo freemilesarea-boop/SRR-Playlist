@@ -40,6 +40,7 @@ import {
   type AdminToneName,
 } from '@/components/admin/ui';
 import { adminTypography } from '@/lib/adminTypography';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const PAGE_SIZE = 25;
 const AUTO_REFRESH_MS = 15_000;
@@ -166,7 +167,7 @@ export default function StoreMonitoringPanel() {
     let alive = true;
     Promise.all([
       adminListFranchises().catch(() => [] as FranchiseListRow[]),
-      listEnterpriseRegions({ limit: 200, offset: 0 }).catch(() => ({ data: [] as EnterpriseRegion[] })),
+      listEnterpriseRegions({ limit: ADMIN_LIST_ALL, offset: 0 }).catch(() => ({ data: [] as EnterpriseRegion[] })),
     ]).then(([f, r]) => {
       if (!alive) return;
       setFranchises(Array.isArray(f) ? f : []);

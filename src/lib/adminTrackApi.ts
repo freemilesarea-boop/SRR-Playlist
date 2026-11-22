@@ -2,6 +2,7 @@
  * adminTrackApi.ts — admin 트랙 관리 (메타데이터 수정 + 완전 삭제).
  */
 import { supabase } from './supabase';
+import { fetchAllPages, ALL_PAGES_PAGE_SIZE, RPC_NO_LIMIT, TRACKS_MAX_PAGES } from './fetchAllPages';
 
 export interface AdminTrackDetail {
   id: string;
@@ -185,10 +186,15 @@ export interface AdminTrackWithAi {
   ai_applied_at: string | null;
 }
 
-export async function listAdminTracksWithAi(limit = 1000): Promise<AdminTrackWithAi[]> {
-  const { data, error } = await supabase.rpc('list_admin_tracks_with_ai', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as AdminTrackWithAi[];
+/** 곡 전체의 AI 메타 — 응답 상한(1000행)에 잘리지 않게 500행씩 끝까지 받는다. */
+export async function listAdminTracksWithAi(): Promise<AdminTrackWithAi[]> {
+  return fetchAllPages<AdminTrackWithAi>(
+    (from, to) =>
+      supabase.rpc('list_admin_tracks_with_ai', { p_limit: RPC_NO_LIMIT }).range(from, to) as unknown as
+        PromiseLike<{ data: AdminTrackWithAi[] | null; error: unknown }>,
+    ALL_PAGES_PAGE_SIZE,
+    TRACKS_MAX_PAGES,
+  );
 }
 
 export interface AiCorrectionStat {

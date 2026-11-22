@@ -11,6 +11,7 @@
  *   - admin_*: 관리자 연장/강제종료/목록
  */
 
+import { ADMIN_LIST_ALL } from './fetchAllPages';
 import { supabase } from './supabase';
 import type { UserRow } from '@/types/db';
 
@@ -154,7 +155,7 @@ export interface AdminFreeTrialRow {
 
 export async function adminListFreeTrials(
   status?: 'active' | 'expired' | 'revoked',
-  limit = 200,
+  limit = ADMIN_LIST_ALL,
 ): Promise<AdminFreeTrialRow[]> {
   const { data, error } = await supabase.rpc('admin_list_free_trials', {
     p_limit: limit,

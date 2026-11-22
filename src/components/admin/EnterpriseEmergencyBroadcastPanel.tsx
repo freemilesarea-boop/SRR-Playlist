@@ -24,6 +24,7 @@ import {
 } from '@/lib/api/announcementApi';
 import { adminListEnterpriseAccounts, type EnterpriseAccount } from '@/lib/api/enterpriseAccountsApi';
 import { listEnterpriseRegions, type EnterpriseRegion } from '@/lib/api/enterpriseRegionsApi';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const PAGE_SIZE = 50;
 
@@ -107,11 +108,11 @@ export default function EnterpriseEmergencyBroadcastPanel() {
   useEffect(() => { void loadKpi(); }, [loadKpi]);
 
   useEffect(() => {
-    void listAnnouncementAssets({ status: 'active', limit: 200 }).then((r) => setAssets(r.data))
+    void listAnnouncementAssets({ status: 'active', limit: ADMIN_LIST_ALL }).then((r) => setAssets(r.data))
       .catch((e) => console.warn('[emergency] assets load failed', e));
-    void adminListEnterpriseAccounts({ limit: 200 }).then((r) => setEnterprises(r.data))
+    void adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL }).then((r) => setEnterprises(r.data))
       .catch((e) => console.warn('[emergency] enterprises load failed', e));
-    void listEnterpriseRegions({ limit: 200 }).then((r) => setRegions(r.data))
+    void listEnterpriseRegions({ limit: ADMIN_LIST_ALL }).then((r) => setRegions(r.data))
       .catch((e) => console.warn('[emergency] regions load failed', e));
   }, []);
 

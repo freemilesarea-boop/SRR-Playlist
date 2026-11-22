@@ -15,6 +15,7 @@ import { adminHardDeleteTrack, adminUpdateTrackMetadataFull, getAdminTrackDetail
 import { bulkApplyHighConfidence } from '@/lib/trackAiPredictionsApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 type SubTab = 'playlists' | 'tracks';
 
@@ -31,7 +32,7 @@ export default function ContentManagement() {
     const [pls, trs, aiTs] = await Promise.all([
       fetchPlaylists(),
       fetchTracks(),
-      listAdminTracksWithAi(1500).catch((e) => {
+      listAdminTracksWithAi().catch((e) => {
         console.warn('[ContentManagement] listAdminTracksWithAi failed — AI 메타 컬럼 비활성:', e);
         return [] as AdminTrackWithAi[];
       }),
@@ -267,7 +268,7 @@ function AdminTrackList({
   async function loadMismatches() {
     setShowMismatch(true);
     try {
-      const rows = await listSevereMismatches(200);
+      const rows = await listSevereMismatches(ADMIN_LIST_ALL);
       setMismatches(rows);
     } catch (e) {
       toast.error(friendlyError(e, '불일치 조회 실패'));

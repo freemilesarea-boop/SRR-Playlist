@@ -31,6 +31,7 @@ import {
   validateCustomPolicy, clampStudyCafeBrandPolicy, genreLabel,
   type BrandPolicyWarning, type TaxonomyOption, type BrandVocalPolicyLite,
 } from '@/lib/brandMusicPolicy';
+import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 /** 업종 자유입력 + 선택 목록(datalist) 공용 id. 스터디카페 포함. */
 const STORE_TYPE_DATALIST_ID = 'brand-store-type-options';
@@ -190,7 +191,7 @@ function useEnterpriseOptions() {
   const [opts, setOpts] = useState<EnterpriseAccount[]>([]);
   useEffect(() => {
     let alive = true;
-    void adminListEnterpriseAccounts({ limit: 200, offset: 0 })
+    void adminListEnterpriseAccounts({ limit: ADMIN_LIST_ALL, offset: 0 })
       .then((r) => { if (alive) setOpts(r.data); })
       .catch(() => { /* silent — 선택 안 함 유지 */ });
     return () => { alive = false; };
