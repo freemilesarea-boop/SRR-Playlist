@@ -1,8 +1,8 @@
 // Artist payout admin API (X6.50 — extracted from artistApi.ts)
 // admin PII reveal (계좌/주민번호), 정산 계좌 verify/reject, pending 목록.
 import { supabase } from '../supabase';
+import { fetchAllRpcRows } from '../fetchAllRpcRows';
 import type { TaxWithholdingType } from '../artistApi';
-import { ADMIN_LIST_ALL } from '../fetchAllPages';
 
 export interface AdminPayoutRow {
   account_id: string;
@@ -26,9 +26,7 @@ export interface AdminPayoutRow {
 
 export async function listPendingPayoutAccounts(): Promise<AdminPayoutRow[]> {
   try {
-    const { data, error } = await supabase.rpc('list_pending_payout_accounts', { p_limit: ADMIN_LIST_ALL });
-    if (error) return [];
-    return (data ?? []) as AdminPayoutRow[];
+    return await fetchAllRpcRows<AdminPayoutRow>('list_pending_payout_accounts');
   } catch {
     return [];
   }

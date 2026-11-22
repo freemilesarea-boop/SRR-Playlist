@@ -12,7 +12,6 @@ import {
 import QcReportCard from '@/components/admin/QcReportCard';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 export default function QcReviewQueuePanel() {
   const [rows, setRows] = useState<QcReviewQueueRow[]>([]);
@@ -24,7 +23,7 @@ export default function QcReviewQueuePanel() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, s] = await Promise.all([listQcReviewQueue(ADMIN_LIST_ALL), getQcPipelineStatus()]);
+      const [r, s] = await Promise.all([listQcReviewQueue(), getQcPipelineStatus()]);
       setRows(r);
       setStatus(s);
     } catch (e) {

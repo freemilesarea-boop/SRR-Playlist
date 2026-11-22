@@ -12,6 +12,7 @@
  *   rejected  = release_status in ('rejected','removed')
  */
 import { supabase } from './supabase';
+import { fetchAllRpcRows } from './fetchAllRpcRows';
 
 export interface AudioDistributionStats {
   total_submitted: number;
@@ -56,7 +57,5 @@ export async function fetchAudioDistributionStats(
 }
 
 export async function fetchTrackArtistOwners(): Promise<TrackArtistOwner[]> {
-  const { data, error } = await supabase.rpc('admin_list_track_artist_owners');
-  if (error) throw error;
-  return (data ?? []) as TrackArtistOwner[];
+  return fetchAllRpcRows<TrackArtistOwner>('admin_list_track_artist_owners', {}, { withLimit: false });
 }

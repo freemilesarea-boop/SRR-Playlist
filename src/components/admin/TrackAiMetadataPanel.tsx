@@ -11,7 +11,6 @@ import {
 import AutoCover from '@/components/AutoCover';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
-import { ADMIN_LIST_ALL } from '../../lib/fetchAllPages';
 
 const ENERGY_LABELS: Record<number, string> = {
   1: '매우 차분',
@@ -39,7 +38,7 @@ export default function TrackAiMetadataPanel() {
     setLoading(true);
     try {
       const [rows, sum] = await Promise.all([
-        listPendingAiPredictions(ADMIN_LIST_ALL),
+        listPendingAiPredictions(),
         aiPredictionsSummary(),
       ]);
       setItems(rows);
