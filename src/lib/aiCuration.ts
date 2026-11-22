@@ -1680,6 +1680,42 @@ export async function adminListMdPolicyRules(storeType?: string | null): Promise
   });
 }
 
+export interface MdPolicyRuleOptions {
+  store_types: string[];
+  genres: string[];
+}
+
+/** 규칙 추가 폼 후보 — 매장 종류(규칙·플레이리스트 기준), 장르(규칙·곡 기준). */
+export async function adminMdPolicyRuleOptions(): Promise<MdPolicyRuleOptions> {
+  const { data, error } = await supabase.rpc('admin_md_policy_rule_options');
+  if (error) throw error;
+  return data as MdPolicyRuleOptions;
+}
+
+/** 규칙 추가 — 표기는 서버가 소문자·밑줄로 맞춘다. 같은 매장·보컬에 같은 장르가 있으면 거부. */
+export async function adminAddMdPolicyRule(input: {
+  storeType: string;
+  genre: string;
+  vocalPolicy: 'vocal' | 'instrumental';
+  isAllowed: boolean;
+  priority: number;
+}): Promise<void> {
+  const { error } = await supabase.rpc('admin_add_md_policy_rule', {
+    p_store_type: input.storeType,
+    p_genre: input.genre,
+    p_vocal_policy: input.vocalPolicy,
+    p_is_allowed: input.isAllowed,
+    p_priority: input.priority,
+  });
+  if (error) throw error;
+}
+
+/** 규칙 삭제 — 지운 규칙 내용은 운영 로그에 남는다. */
+export async function adminDeleteMdPolicyRule(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_md_policy_rule', { p_id: id });
+  if (error) throw error;
+}
+
 /** 규칙 켜기·끄기 — 꺼진 규칙은 매장 장르 판정에서 빠진다. */
 export async function adminSetMdPolicyRuleEnabled(id: string, enabled: boolean): Promise<void> {
   const { error } = await supabase.rpc('admin_set_md_policy_rule_enabled', { p_id: id, p_enabled: enabled });
