@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { fetchAllPages } from './fetchAllPages';
 import { applyDemoMode } from './demoMode';
 import { getSessionId } from './analytics';
 import type { TrackRow, PlaylistRow } from '@/types/db';
@@ -110,7 +111,6 @@ export async function fetchLikedTrackIds(userId: string | null): Promise<Set<str
 /** 좋아요한 곡 목록 — DB + localStorage union, snapshot fallback 가능 */
 export async function fetchLikedTracks(
   userId: string | null,
-  limit = 500,
 ): Promise<TrackRow[]> {
   const local = readLikedLocal();
   // 비로그인: snapshot 그대로
@@ -118,24 +118,21 @@ export async function fetchLikedTracks(
     return applyDemoMode(local.map(snapshotToTrack));
   }
 
-  // 로그인: DB + 로컬 union (limit 적용 — usage limit 환경 보호)
+  // 로그인: DB + 로컬 union. 좋아요한 곡은 개수와 상관없이 전부 보여준다 (예전엔 최신 500곡).
   let dbTracks: TrackRow[] = [];
   try {
-    const { data, error } = await supabase
-      .from('liked_tracks')
-      .select('created_at, tracks(*)')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) {
-      // X6.88 — usage limit / 4xx / 5xx → 로컬 snapshot 으로 graceful fallback
-      console.warn('[libraryApi] liked_tracks fetch failed', error);
-    } else {
-      const rows = (data ?? []) as unknown as Array<{ created_at: string; tracks: TrackRow }>;
-      dbTracks = rows.map((r) => r.tracks).filter(Boolean);
-    }
+    const rows = await fetchAllPages<{ created_at: string; tracks: TrackRow }>((from, to) =>
+      supabase
+        .from('liked_tracks')
+        .select('created_at, tracks(*)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .order('track_id', { ascending: false })
+        .range(from, to) as unknown as PromiseLike<{ data: Array<{ created_at: string; tracks: TrackRow }> | null; error: unknown }>);
+    dbTracks = rows.map((r) => r.tracks).filter(Boolean);
   } catch (e) {
-    console.warn('[libraryApi] liked_tracks network failed', e);
+    // X6.88 — usage limit / 4xx / 5xx / 네트워크 → 로컬 snapshot 으로 graceful fallback
+    console.warn('[libraryApi] liked_tracks fetch failed', e);
   }
 
   // DB 가 비어있고 로컬에 있다면 → 로컬 snapshot 사용 (마이그레이션 미적용/장애 케이스)

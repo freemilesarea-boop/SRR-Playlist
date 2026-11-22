@@ -2,6 +2,7 @@
  * audioQcGuideApi.ts — 음원 업로드 가이드 + 본인 QC 리포트 (X6.35)
  */
 import { supabase } from './supabase';
+import { fetchAllPages, RPC_NO_LIMIT } from './fetchAllPages';
 
 export interface AudioUploadGuidelines {
   integrated_lufs: {
@@ -74,8 +75,18 @@ export interface MyTrackQcRow {
   has_report: boolean;
 }
 
-export async function fetchMyTrackQcReport(limit = 50): Promise<MyTrackQcRow[]> {
-  const { data, error } = await supabase.rpc('get_my_track_qc_report', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as MyTrackQcRow[];
+/**
+ * 내 음원 QC 리포트. limit 을 주지 않으면 전부 받는다 — 곡이 많은 아티스트(600곡+)도
+ * 음원 관리의 모든 곡에 QC 배지가 붙어야 한다 (예전엔 최신 100곡만).
+ */
+export async function fetchMyTrackQcReport(limit?: number): Promise<MyTrackQcRow[]> {
+  if (limit != null) {
+    const { data, error } = await supabase.rpc('get_my_track_qc_report', { p_limit: limit });
+    if (error) throw error;
+    return (data ?? []) as MyTrackQcRow[];
+  }
+  return fetchAllPages<MyTrackQcRow>((from, to) =>
+    supabase.rpc('get_my_track_qc_report', { p_limit: RPC_NO_LIMIT })
+      .order('created_at', { ascending: false }).order('track_id').range(from, to) as unknown as
+      PromiseLike<{ data: MyTrackQcRow[] | null; error: unknown }>);
 }

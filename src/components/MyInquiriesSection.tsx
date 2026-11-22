@@ -39,7 +39,7 @@ export default function MyInquiriesSection() {
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    try { setRows(await listMyInquiries(50)); }
+    try { setRows(await listMyInquiries()); }
     catch { /* silent — no toast for empty page */ }
     finally { setLoading(false); }
   }, [user?.id]);

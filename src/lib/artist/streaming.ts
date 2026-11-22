@@ -1,6 +1,7 @@
 // Artist streaming analytics (X6.50 — extracted from artistApi.ts)
 // 아티스트/관리자 스트리밍 집계: 일별/월별/제외사유/TOP 트랙.
 import { supabase } from '../supabase';
+import { fetchAllPages } from '../fetchAllPages';
 
 export interface ArtistStreamingSummaryRow {
   track_id: string;
@@ -22,9 +23,12 @@ export interface ArtistDailyStreamRow {
 
 export async function fetchArtistStreamingSummary(): Promise<ArtistStreamingSummaryRow[]> {
   try {
-    const { data, error } = await supabase.rpc('get_artist_streaming_summary');
-    if (error) return [];
-    return ((data ?? []) as ArtistStreamingSummaryRow[]).map((r) => ({
+    // 곡별 행 — 곡이 많아도 전부 받는다 (PostgREST 최대 행 수에 잘리지 않게 나눠서).
+    const data = await fetchAllPages<ArtistStreamingSummaryRow>((from, to) =>
+      supabase.rpc('get_artist_streaming_summary')
+        .order('total_streams', { ascending: false }).order('track_id').range(from, to) as unknown as
+        PromiseLike<{ data: ArtistStreamingSummaryRow[] | null; error: unknown }>);
+    return data.map((r) => ({
       ...r,
       total_streams: Number(r.total_streams ?? 0),
       today_streams: Number(r.today_streams ?? 0),

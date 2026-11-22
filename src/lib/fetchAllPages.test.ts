@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('./supabase', () => ({ supabase: {}, supabaseProjectRef: 'test' }));
 
-import { fetchAllPages } from './artistApi';
+
+import { fetchAllPages } from './fetchAllPages';
 
 function source(total: number) {
   const rows = Array.from({ length: total }, (_, i) => i);
