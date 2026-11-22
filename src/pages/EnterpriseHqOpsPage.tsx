@@ -523,7 +523,7 @@ function NowPlayingSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await getMyEnterpriseOpsNowPlaying(20);
+      const r = await getMyEnterpriseOpsNowPlaying();
       setRows(r.data);
       setTotalPlaying(r.total_playing);
       setError(null);
@@ -598,7 +598,7 @@ function AlertsSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await getMyEnterpriseOpsAlerts(40);
+      const r = await getMyEnterpriseOpsAlerts();
       setRows(r.data);
       setError(null);
     } catch (e) {

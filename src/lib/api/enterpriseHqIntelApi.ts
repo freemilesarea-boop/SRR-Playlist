@@ -7,6 +7,7 @@
  * SQL: supabase/migrations/0402_enterprise_hq_intel_center.sql
  */
 import { supabase } from '@/lib/supabase';
+import { HQ_LIST_ALL } from '@/lib/fetchAllPages';
 
 // =============================================================================
 // Types
@@ -232,7 +233,7 @@ export async function getMyEnterpriseIntelStoreRanking(
 }
 
 export async function getMyEnterpriseIntelRiskStores(
-  limit = 20,
+  limit = HQ_LIST_ALL,
 ): Promise<HqIntelRiskResult> {
   const { data, error } = await supabase.rpc('get_my_enterprise_intel_risk_stores', {
     p_limit: limit,

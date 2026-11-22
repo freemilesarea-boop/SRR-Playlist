@@ -602,7 +602,7 @@ function RiskStoresSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await getMyEnterpriseIntelRiskStores(20);
+      const r = await getMyEnterpriseIntelRiskStores();
       setRows(r.data);
       setError(null);
     } catch (e) {

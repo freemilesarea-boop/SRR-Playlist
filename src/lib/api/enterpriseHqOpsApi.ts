@@ -7,6 +7,7 @@
  * SQL: supabase/migrations/0401_enterprise_hq_ops_center.sql
  */
 import { supabase } from '@/lib/supabase';
+import { HQ_LIST_ALL } from '@/lib/fetchAllPages';
 
 // =============================================================================
 // Types
@@ -214,7 +215,7 @@ export async function getMyEnterpriseOpsStores(
 }
 
 export async function getMyEnterpriseOpsNowPlaying(
-  limit = 30,
+  limit = HQ_LIST_ALL,
 ): Promise<HqOpsNowPlayingResult> {
   const { data, error } = await supabase.rpc('get_my_enterprise_ops_now_playing', {
     p_limit: limit,
@@ -227,7 +228,7 @@ export async function getMyEnterpriseOpsNowPlaying(
 }
 
 export async function getMyEnterpriseOpsAlerts(
-  limit = 50,
+  limit = HQ_LIST_ALL,
 ): Promise<HqOpsAlertsResult> {
   const { data, error } = await supabase.rpc('get_my_enterprise_ops_alerts', {
     p_limit: limit,

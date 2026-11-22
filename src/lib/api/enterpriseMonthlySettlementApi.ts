@@ -7,6 +7,7 @@
  * SQL: supabase/migrations/0372_enterprise_monthly_settlement.sql
  */
 import { supabase } from '@/lib/supabase';
+import { HQ_LIST_ALL } from '@/lib/fetchAllPages';
 
 // =============================================================================
 // Types
@@ -314,7 +315,7 @@ export async function adminCancelEnterpriseMonthlySettlement(
 // =============================================================================
 
 export async function getMyEnterpriseMonthlySettlements(
-  limit = 12,
+  limit = HQ_LIST_ALL,
 ): Promise<{ success: boolean; rows: HqEnterpriseMonthlySettlementRow[] }> {
   const { data, error } = await supabase.rpc('get_my_enterprise_monthly_settlements', {
     p_limit: limit,

@@ -24,6 +24,7 @@ import { useWakeLock } from '@/hooks/useWakeLock';
 import { useAnnouncerHeartbeat } from '@/hooks/useAnnouncerHeartbeat';
 import { verifyBrandDeviceBinding, revokeBrandDeviceByToken } from '@/lib/api/brandPlayerApi';
 import { getBrandToken, clearBrandToken, setBrandEntryMode } from '@/lib/brandSession';
+import { RPC_NO_LIMIT } from '@/lib/fetchAllPages';
 import {
   getMyAnnouncementToday, getUpcomingAnnouncements,
   type MyAnnouncementLogRow, type UpcomingAnnouncement,
@@ -142,7 +143,7 @@ export default function BrandAnnouncerPage() {
         .filter((a) => new Date(a.scheduled_at).getTime() >= Date.now() - 60_000)
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))))
       .catch(() => setUpcoming((prev) => prev ?? []));
-    getMyAnnouncementToday(30)
+    getMyAnnouncementToday(RPC_NO_LIMIT)
       .then(setToday)
       .catch(() => setToday((prev) => prev ?? []));
   }, []);
@@ -235,7 +236,7 @@ export default function BrandAnnouncerPage() {
               <p className="truncate text-sm">{next.schedule_name} · {next.asset_title}</p>
               {upcoming.length > 1 && (
                 <ul className="mt-3 space-y-1 border-t border-white/10 pt-2">
-                  {upcoming.slice(1, 6).map((a) => (
+                  {upcoming.slice(1).map((a) => (
                     <li key={a.occurrence_key} className="flex items-center gap-2 text-xs text-white/70">
                       <span className="shrink-0 font-mono font-bold">{hhmm(a.scheduled_at)}</span>
                       <span className="truncate">{a.schedule_name} · {a.asset_title}</span>
