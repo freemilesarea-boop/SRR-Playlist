@@ -7,6 +7,7 @@
  * 관리자 알림은 0284 RPC 내부에서 admin_notifications 에 INSERT → Resend 자동 발송.
  */
 import { supabase } from '@/lib/supabase';
+import { fetchAllPages, RPC_NO_LIMIT } from './fetchAllPages';
 
 export type InquiryType =
   | '재생 오류'
@@ -104,10 +105,17 @@ export interface MyInquiryRow {
   resolved_at: string | null;
 }
 
-export async function listMyInquiries(limit = 50): Promise<MyInquiryRow[]> {
-  const { data, error } = await supabase.rpc('list_my_inquiries', { p_limit: limit });
-  if (error) throw error;
-  return (data ?? []) as MyInquiryRow[];
+/** 내 문의 전부 (limit 을 주면 그 개수까지). */
+export async function listMyInquiries(limit?: number): Promise<MyInquiryRow[]> {
+  if (limit != null) {
+    const { data, error } = await supabase.rpc('list_my_inquiries', { p_limit: limit });
+    if (error) throw error;
+    return (data ?? []) as MyInquiryRow[];
+  }
+  return fetchAllPages<MyInquiryRow>((from, to) =>
+    supabase.rpc('list_my_inquiries', { p_limit: RPC_NO_LIMIT })
+      .order('created_at', { ascending: false }).order('id').range(from, to) as unknown as
+      PromiseLike<{ data: MyInquiryRow[] | null; error: unknown }>);
 }
 
 export interface InquiryDetail {

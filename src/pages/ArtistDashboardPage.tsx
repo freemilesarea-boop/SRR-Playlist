@@ -105,7 +105,7 @@ export default function ArtistDashboardPage() {
         fetchMyArtistPlan(),
         fetchMySettlementHoldStatus(),
         // X6.36 — QC report fetch 실패해도 다른 데이터 영향 없음
-        fetchMyTrackQcReport(100).catch(() => [] as MyTrackQcRow[]),
+        fetchMyTrackQcReport().catch(() => [] as MyTrackQcRow[]),
         // 정산 조회 실패가 대시보드 전체를 막지 않도록 분리해서 받는다.
         getMySettlements()
           .then((r) => { setSettlementsError(null); return r; })

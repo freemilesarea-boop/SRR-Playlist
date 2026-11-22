@@ -9,6 +9,7 @@
  */
 
 import { supabase, supabaseProjectRef } from './supabase';
+import { fetchAllPages } from './fetchAllPages';
 import { getArtistBillingAccess, recordArtistBillingDenial, billingRequiredPayload, isArtistBillingRequiredError } from './artistBillingAccess';
 import { uploadDebug } from '@/store/uploadDebugStore';
 import { generateSafeStoragePath, safeExtension } from './storagePath';
@@ -323,35 +324,8 @@ export async function fetchMyArtistProfile(userId: string): Promise<ArtistProfil
   }
 }
 
-/** 한 번에 받는 곡 수 — PostgREST 기본 최대 행 수(1000) 안쪽. */
-const MY_TRACKS_PAGE_SIZE = 500;
-/** 안전 상한 — 무한 루프 방지 (500 × 40 = 20,000곡). */
-const MY_TRACKS_MAX_PAGES = 40;
-
-/**
- * 페이지 단위로 끝까지 받아 이어 붙인다.
- * 첫 페이지가 실패하면 에러를 던지고, 이후 페이지가 실패하면 그때까지 받은 것을 돌려준다
- * (일부라도 보여주는 편이 빈 목록보다 낫다).
- */
-export async function fetchAllPages<T>(
-  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
-  pageSize = MY_TRACKS_PAGE_SIZE,
-  maxPages = MY_TRACKS_MAX_PAGES,
-): Promise<T[]> {
-  const all: T[] = [];
-  for (let page = 0; page < maxPages; page++) {
-    const from = page * pageSize;
-    const { data, error } = await fetchPage(from, from + pageSize - 1);
-    if (error) {
-      if (page === 0) throw error;
-      break;
-    }
-    const rows = data ?? [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-  }
-  return all;
-}
+// 페이지 분할 조회는 공용 유틸로 옮겼다 — 기존 import 경로 호환을 위해 다시 내보낸다.
+export { fetchAllPages } from './fetchAllPages';
 
 export async function fetchMyArtistTracks(): Promise<MyArtistTrackRow[]> {
   // 0064: RLS tracks_select_owner 정책으로 본인 트랙 직접 조회 (release_* 컬럼 포함).
