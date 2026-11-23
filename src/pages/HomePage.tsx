@@ -9,6 +9,7 @@ import type { PlaylistRow } from '@/types/db';
 import PlaylistRow_ from '@/components/PlaylistRow';
 import FeaturedHero from '@/components/FeaturedHero';
 import SiteNoticeModal from '@/components/SiteNoticeModal';
+import HomeNoticeBar from '@/components/HomeNoticeBar';
 import HomeChartSection from '@/components/HomeChartSection';
 import HomeSearchBar from '@/components/HomeSearchBar';
 import HomeLibrarySections from '@/components/HomeLibrarySections';
@@ -194,6 +195,7 @@ export default function HomePage() {
           </p>
         </div>
         <HomeSearchBar />
+        <HomeNoticeBar />
       </header>
 
       {error && (
