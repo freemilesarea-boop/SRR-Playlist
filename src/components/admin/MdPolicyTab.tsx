@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock, CheckCircle2, Trash2, Plus } from 'lucide-react';
+import { RefreshCw, Shield, AlertTriangle, FlaskConical, Mic, MicOff, Lock, CheckCircle2, Trash2, Plus, Pencil } from 'lucide-react';
 import {
   adminMdPolicySummary,
   adminListMdPolicyRules,
@@ -10,6 +10,7 @@ import {
   adminMdPolicyRuleOptions,
   adminAddMdPolicyRule,
   adminDeleteMdPolicyRule,
+  adminUpdateMdPolicyRule,
   type MdPolicyRuleOptions,
   type MdPolicySummary,
   type MdPolicyRule,
@@ -22,12 +23,13 @@ import {
 } from '@/lib/adminPlaylistInspectorApi';
 import { toast } from '@/store/toastStore';
 
-type ViolationTypeFilter = '' | 'md_policy_no_match' | 'md_policy_undefined_store';
+type ViolationTypeFilter = '' | 'md_policy_no_match' | 'md_policy_undefined_store' | 'md_policy_explicit_block';
 type StatusFilter = '' | 'review_needed' | 'excluded' | 'active' | 'no_fit';
 
 const VIOLATION_LABEL: Record<Exclude<ViolationTypeFilter, ''>, string> = {
   md_policy_no_match: '장르/보컬 불일치',
   md_policy_undefined_store: '정책 미정의 매장',
+  md_policy_explicit_block: '차단 규칙',
 };
 
 const STATUS_LABEL: Record<Exclude<StatusFilter, ''>, string> = {
@@ -95,6 +97,19 @@ export default function MdPolicyTab() {
       void loadAll();
     } catch (e) {
       toast.error(`규칙 변경 실패: ${(e as Error).message}`);
+    } finally { setRuleBusyId(null); }
+  }
+  async function editRule(r: MdPolicyRule, d: RuleDraft): Promise<boolean> {
+    setRuleBusyId(r.id);
+    try {
+      await adminUpdateMdPolicyRule(r.id, d);
+      invalidateRuleOptions();
+      toast.success(`${d.storeType} · ${d.genre} 규칙을 수정했어요`);
+      void loadAll();
+      return true;
+    } catch (e) {
+      toast.error(`규칙 수정 실패: ${(e as Error).message}`);
+      return false;
     } finally { setRuleBusyId(null); }
   }
   async function deleteRule(r: MdPolicyRule) {
@@ -271,6 +286,7 @@ export default function MdPolicyTab() {
           <option value="">전체</option>
           <option value="md_policy_no_match">{VIOLATION_LABEL.md_policy_no_match}</option>
           <option value="md_policy_undefined_store">{VIOLATION_LABEL.md_policy_undefined_store}</option>
+          <option value="md_policy_explicit_block">{VIOLATION_LABEL.md_policy_explicit_block}</option>
         </select>
         <span className="font-bold">상태:</span>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -305,6 +321,7 @@ export default function MdPolicyTab() {
                   busy={ruleBusyId === r.id}
                   onToggle={() => void toggleRule(r)}
                   onDelete={() => void deleteRule(r)}
+                  onEdit={(d) => editRule(r, d)}
                   onPriority={(p) => void changePriority(r, p)} />
               ))}
             </ul>
@@ -441,23 +458,47 @@ export default function MdPolicyTab() {
   );
 }
 
-function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded: () => void }) {
-  const [open, setOpen] = useState(false);
+export interface RuleDraft {
+  storeType: string;
+  genre: string;
+  vocalPolicy: 'vocal' | 'instrumental';
+  isAllowed: boolean;
+  priority: number;
+}
+
+/** 추가·수정 폼의 매장 종류·장르 후보 — 폼이 열릴 때 한 번만 불러온다. */
+let ruleOptionsCache: Promise<MdPolicyRuleOptions> | null = null;
+function invalidateRuleOptions() { ruleOptionsCache = null; }
+function useRuleOptions(enabled: boolean): MdPolicyRuleOptions | null {
   const [options, setOptions] = useState<MdPolicyRuleOptions | null>(null);
-  const [storeType, setStoreType] = useState(defaultStore);
-  const [genre, setGenre] = useState('');
-  const [vocalPolicy, setVocalPolicy] = useState<'vocal' | 'instrumental'>('vocal');
-  const [isAllowed, setIsAllowed] = useState(true);
-  const [priority, setPriority] = useState('50');
+  useEffect(() => {
+    if (!enabled || options) return;
+    ruleOptionsCache ??= adminMdPolicyRuleOptions();
+    ruleOptionsCache.then(setOptions).catch((e) => {
+      ruleOptionsCache = null;
+      toast.error(`후보 불러오기 실패: ${(e as Error).message}`);
+    });
+  }, [enabled, options]);
+  return options;
+}
+
+function RuleForm({ initial, submitLabel, savingLabel, onSubmit, onClose }: {
+  initial: RuleDraft;
+  submitLabel: string;
+  savingLabel: string;
+  /** 성공하면 true — 폼이 입력값을 비울지 정한다 */
+  onSubmit: (d: RuleDraft) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const options = useRuleOptions(true);
+  const [storeType, setStoreType] = useState(initial.storeType);
+  const [genre, setGenre] = useState(initial.genre);
+  const [vocalPolicy, setVocalPolicy] = useState(initial.vocalPolicy);
+  const [isAllowed, setIsAllowed] = useState(initial.isAllowed);
+  const [priority, setPriority] = useState(String(initial.priority));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setStoreType(defaultStore); }, [defaultStore]);
-  useEffect(() => {
-    if (!open || options) return;
-    adminMdPolicyRuleOptions()
-      .then(setOptions)
-      .catch((e) => toast.error(`후보 불러오기 실패: ${(e as Error).message}`));
-  }, [open, options]);
+  useEffect(() => { setStoreType(initial.storeType); }, [initial.storeType]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -467,40 +508,31 @@ function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded:
     if (!Number.isInteger(p) || p < 1 || p > 100) { toast.error('우선순위는 1~100 사이 숫자로 넣어 주세요'); return; }
     setSaving(true);
     try {
-      await adminAddMdPolicyRule({ storeType, genre: genre.trim(), vocalPolicy, isAllowed, priority: p });
-      toast.success(`${storeType} · ${genre.trim()} 규칙을 추가했어요`);
-      setGenre('');
-      onAdded();
-    } catch (err) {
-      toast.error(`규칙 추가 실패: ${(err as Error).message}`);
+      await onSubmit({ storeType, genre: genre.trim(), vocalPolicy, isAllowed, priority: p });
     } finally { setSaving(false); }
   }
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)}
-        className="mb-2 inline-flex items-center gap-1 rounded bg-accent/20 px-2 py-1 text-[11px] font-semibold text-accent hover:bg-accent/30">
-        <Plus size={11} /> 규칙 추가
-      </button>
-    );
-  }
+  // 목록에 없는 현재 값(수정 중인 규칙의 매장)도 고를 수 있게
+  const storeChoices = Array.from(new Set([
+    ...(options?.store_types ?? []),
+    ...(initial.storeType ? [initial.storeType] : []),
+  ])).sort();
   const field = 'rounded bg-bg-deep px-1.5 py-1';
+  const listId = `md-policy-genres-${submitLabel}`;
   return (
-    <form onSubmit={(e) => void submit(e)} className="mb-2 grid grid-cols-2 gap-1.5 rounded bg-bg-deep/60 p-2 text-[11px]">
+    <form onSubmit={(e) => void submit(e)} className="grid grid-cols-2 gap-1.5 rounded bg-bg-deep/60 p-2 text-[11px]">
       <label className="flex flex-col gap-0.5">
         <span className="text-ink-dim">매장 종류</span>
         <select value={storeType} onChange={(e) => setStoreType(e.target.value)} className={field} required>
           <option value="">선택</option>
-          {(options?.store_types ?? (defaultStore ? [defaultStore] : [])).map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
+          {storeChoices.map((st) => <option key={st} value={st}>{st}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-0.5">
         <span className="text-ink-dim">장르</span>
-        <input value={genre} onChange={(e) => setGenre(e.target.value)} list="md-policy-genres"
+        <input value={genre} onChange={(e) => setGenre(e.target.value)} list={listId}
           placeholder="예: indie_pop" className={field} required />
-        <datalist id="md-policy-genres">
+        <datalist id={listId}>
           {(options?.genres ?? []).map((g) => <option key={g} value={g} />)}
         </datalist>
       </label>
@@ -526,9 +558,9 @@ function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded:
       <div className="flex items-end gap-1">
         <button type="submit" disabled={saving}
           className="flex-1 rounded bg-accent px-2 py-1 font-bold text-white disabled:opacity-50">
-          {saving ? '추가 중…' : '추가'}
+          {saving ? savingLabel : submitLabel}
         </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded bg-ink/5 px-2 py-1 text-ink-dim">
+        <button type="button" onClick={onClose} className="rounded bg-ink/5 px-2 py-1 text-ink-dim">
           닫기
         </button>
       </div>
@@ -536,14 +568,52 @@ function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded:
   );
 }
 
-function RuleRow({ rule: r, showStore, busy, onToggle, onPriority, onDelete }: {
+function AddRuleForm({ defaultStore, onAdded }: { defaultStore: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  // 추가에 성공하면 장르만 비운 새 폼으로 (같은 매장에 여러 개 연달아 넣기 쉽게)
+  const [formKey, setFormKey] = useState(0);
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="mb-2 inline-flex items-center gap-1 rounded bg-accent/20 px-2 py-1 text-[11px] font-semibold text-accent hover:bg-accent/30">
+        <Plus size={11} /> 규칙 추가
+      </button>
+    );
+  }
+  return (
+    <div className="mb-2">
+      <RuleForm key={formKey}
+        initial={{ storeType: defaultStore, genre: '', vocalPolicy: 'vocal', isAllowed: true, priority: 50 }}
+        submitLabel="추가" savingLabel="추가 중…"
+        onClose={() => setOpen(false)}
+        onSubmit={async (d) => {
+          try {
+            await adminAddMdPolicyRule(d);
+            invalidateRuleOptions(); // 새 장르가 다음 폼 후보에 보이게
+            toast.success(`${d.storeType} · ${d.genre} 규칙을 추가했어요`);
+            setFormKey((k) => k + 1);
+            onAdded();
+            return true;
+          } catch (err) {
+            toast.error(`규칙 추가 실패: ${(err as Error).message}`);
+            return false;
+          }
+        }} />
+    </div>
+  );
+}
+
+function RuleRow({ rule: r, showStore, busy, onToggle, onPriority, onDelete, onEdit }: {
   rule: MdPolicyRule;
   showStore: boolean;
   busy: boolean;
   onToggle: () => void;
   onPriority: (p: number) => void;
   onDelete: () => void;
+  /** 성공하면 true */
+  onEdit: (d: RuleDraft) => Promise<boolean>;
 }) {
+  const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (!confirming) return;
@@ -560,6 +630,21 @@ function RuleRow({ rule: r, showStore, busy, onToggle, onPriority, onDelete }: {
       return;
     }
     onPriority(n);
+  }
+  if (editing) {
+    return (
+      <li>
+        <RuleForm
+          initial={{ storeType: r.store_type, genre: r.genre, vocalPolicy: r.vocal_policy, isAllowed: r.is_allowed, priority: r.priority }}
+          submitLabel="저장" savingLabel="저장 중…"
+          onClose={() => setEditing(false)}
+          onSubmit={async (d) => {
+            const ok = await onEdit(d);
+            if (ok) setEditing(false);
+            return ok;
+          }} />
+      </li>
+    );
   }
   return (
     <li className={`flex items-center justify-between gap-1 rounded bg-bg-deep px-2 py-1 ${r.is_enabled ? '' : 'opacity-50'}`}>
@@ -586,6 +671,11 @@ function RuleRow({ rule: r, showStore, busy, onToggle, onPriority, onDelete }: {
           className={`rounded px-1.5 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
             r.is_enabled ? 'bg-emerald-500/25 text-emerald-300' : 'bg-ink/5 text-ink-dim'}`}>
           {r.is_enabled ? '켜짐' : '꺼짐'}
+        </button>
+        <button type="button" onClick={() => setEditing(true)} disabled={busy}
+          aria-label={`${r.store_type} ${r.genre} 규칙 수정`} title="규칙 수정"
+          className="rounded px-1 py-0.5 text-ink-dim hover:text-accent disabled:opacity-40">
+          <Pencil size={11} />
         </button>
         {confirming ? (
           <button type="button" onClick={() => { setConfirming(false); onDelete(); }} disabled={busy}
