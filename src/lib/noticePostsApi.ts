@@ -129,3 +129,16 @@ export function formatNoticeDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** 홈 상단에 띄울 공지 — 고정하지 않은 글은 게시 후 이 기간까지만. */
+export const HOME_NOTICE_MAX_AGE_DAYS = 30;
+
+/** 홈에 띄울 공지 하나 — 목록은 서버가 '고정 먼저, 최신순'으로 준다. */
+export function pickHomeNotice(
+  rows: NoticePostSummary[], dismissedNo: number | null, now = Date.now(),
+): NoticePostSummary | null {
+  const maxAge = HOME_NOTICE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const candidate = rows.find((r) => r.is_pinned || (r.published_at && now - new Date(r.published_at).getTime() <= maxAge));
+  if (!candidate || candidate.no === dismissedNo) return null;
+  return candidate;
+}
