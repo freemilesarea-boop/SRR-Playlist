@@ -26,7 +26,7 @@ import {
   Activity,
   MessageSquare,
   Compass,
-  Mail,
+  Mail, BookOpen,
 } from 'lucide-react';
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -94,6 +94,7 @@ const TrackAiMetadataPanel = lazy(() => import('@/components/admin/TrackAiMetada
 const TaxonomyManagerPanel = lazy(() => import('@/components/admin/TaxonomyManagerPanel'));
 const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAuditPanel'));
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
+const EnterpriseGuidesPanel = lazy(() => import('@/components/admin/EnterpriseGuidesPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 // 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
@@ -188,6 +189,7 @@ type Tab =
   | 'placement-audit'
   | 'site-settings'
   | 'site-notices'
+  | 'enterprise-guides'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -258,6 +260,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   // brand(로고) 병합.
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
+  { key: 'enterprise-guides', label: '엔터프라이즈 가이드', icon: <BookOpen size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
   { key: 'admins', label: '관리자 설정', icon: <ShieldCheck size={14} />, superOnly: true },
@@ -700,6 +703,7 @@ export default function AdminPage() {
           {tab === 'placement-audit' && <PlacementAuditPanel />}
           {tab === 'site-settings' && <SiteConfigPanel initialView={mergedView ?? undefined} />}
           {tab === 'site-notices' && <SiteNoticesManagerPanel />}
+          {tab === 'enterprise-guides' && <EnterpriseGuidesPanel />}
           {tab === 'artist-settlements' && <ArtistSettlementsList />}
           {tab === 'recommendation' && <RecommendationTester />}
           {tab === 'admins' && <AdminUsersList />}

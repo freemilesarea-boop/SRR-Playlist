@@ -207,6 +207,7 @@ export const OPERATOR_NAV_SECTIONS: OperatorNavSection[] = [
     items: [
       { id: 'site-settings', label: '사이트 설정', description: '전역 사이트 설정', href: tab('site-settings'), legacyTab: 'site-settings', allowedRoles: ['super_admin', 'admin'] },
       { id: 'site-notices', label: '공지/팝업', description: '공지·팝업 관리', href: tab('site-notices'), legacyTab: 'site-notices', allowedRoles: ['super_admin', 'admin'] },
+      { id: 'enterprise-guides', label: '엔터프라이즈 가이드', description: '엔터프라이즈 가이드 글 관리', href: tab('enterprise-guides'), legacyTab: 'enterprise-guides', allowedRoles: ['super_admin', 'admin'] },
       { id: 'audio-diagnostics', label: '오디오 진단', description: '오디오 재생 진단', href: tab('audio-diagnostics'), legacyTab: 'audio-diagnostics', allowedRoles: ['super_admin', 'admin'] },
       { id: 'upload-audit', label: '업로드/스토리지 점검', description: '업로드·스토리지 무결성 점검', href: tab('upload-audit'), legacyTab: 'upload-audit', allowedRoles: ['super_admin', 'admin'] },
       { id: 'admins', label: '관리자 설정', description: '관리자 계정·권한 관리', href: tab('admins'), legacyTab: 'admins', allowedRoles: ['super_admin'], superOnly: true },

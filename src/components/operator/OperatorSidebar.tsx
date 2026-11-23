@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles,
   Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, Search,
-  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature,
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -16,7 +16,7 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles, Settings, KeyRound,
   // PHASE 1-B 로 추가된 항목용 — 맵에 없으면 전부 Home 아이콘으로 보인다.
-  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature,
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen,
 };
 function iconFor(name: string): LucideIcon {
   return ICONS[name] ?? Home;
