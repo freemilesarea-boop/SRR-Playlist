@@ -26,7 +26,7 @@ import {
   Activity,
   MessageSquare,
   Compass,
-  Mail, BookOpen,
+  Mail, BookOpen, Megaphone,
 } from 'lucide-react';
 // X6.39 — Eager (초기 admin 진입 시 표시)
 import OnboardingChecklist from '@/components/admin/OnboardingChecklist';
@@ -95,6 +95,7 @@ const TaxonomyManagerPanel = lazy(() => import('@/components/admin/TaxonomyManag
 const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAuditPanel'));
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const EnterpriseGuidesPanel = lazy(() => import('@/components/admin/EnterpriseGuidesPanel'));
+const NoticePostsPanel = lazy(() => import('@/components/admin/NoticePostsPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 // 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
@@ -190,6 +191,7 @@ type Tab =
   | 'site-settings'
   | 'site-notices'
   | 'enterprise-guides'
+  | 'notice-posts'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -260,6 +262,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   // brand(로고) 병합.
   { key: 'site-settings', label: '사이트 설정', icon: <ShieldCheck size={14} /> },
   { key: 'site-notices', label: '공지/팝업', icon: <Bell size={14} /> },
+  { key: 'notice-posts', label: '공지사항', icon: <Megaphone size={14} /> },
   { key: 'enterprise-guides', label: '엔터프라이즈 가이드', icon: <BookOpen size={14} /> },
   { key: 'artist-settlements', label: '아티스트 정산', icon: <Wallet size={14} /> },
   { key: 'recommendation', label: '추천 테스트', icon: <Sparkles size={14} /> },
@@ -704,6 +707,7 @@ export default function AdminPage() {
           {tab === 'site-settings' && <SiteConfigPanel initialView={mergedView ?? undefined} />}
           {tab === 'site-notices' && <SiteNoticesManagerPanel />}
           {tab === 'enterprise-guides' && <EnterpriseGuidesPanel />}
+          {tab === 'notice-posts' && <NoticePostsPanel />}
           {tab === 'artist-settlements' && <ArtistSettlementsList />}
           {tab === 'recommendation' && <RecommendationTester />}
           {tab === 'admins' && <AdminUsersList />}

@@ -26,7 +26,7 @@ const KNOWN_ADMIN_TABS = new Set([
   'artist-tracks', 'track-review', 'qc-review', 'metadata-violations', 'deleted-tracks',
   'artist-contracts', 'artist-settlements', 'payout-intake', 'members', 'subscriptions',
   'payment-sync', 'revenue', 'support-inquiries', 'operation-logs', 'site-notices',
-  'enterprise-guides',
+  'enterprise-guides', 'notice-posts',
 ]);
 
 describe('registry integrity', () => {
@@ -227,6 +227,7 @@ const PHASE1_ROUTES: Array<[string, string]> = [
   ['/ops/system/logs', 'operation-logs'],
   ['/ops/system/notices', 'site-notices'],
   ['/ops/system/enterprise-guides', 'enterprise-guides'],
+  ['/ops/system/notice-posts', 'notice-posts'],
 ];
 
 /** PHASE 1 이전에 존재했던 /ops 경로 — 하나도 사라지면 안 된다. */

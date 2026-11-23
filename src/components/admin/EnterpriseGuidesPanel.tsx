@@ -5,13 +5,12 @@
  * 본문은 마크다운 — 옆(작은 화면은 탭)에서 실제 모양을 미리 본다. 이미지는 본문 커서 위치에 바로 넣고,
  * PDF 등은 첨부로 붙인다. 삭제는 숨김이라 운영 로그로 되살릴 수 있다.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   BookOpen, Plus, Save, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Pencil, ExternalLink,
-  ImagePlus, Paperclip, Heading2, Bold, List, Link2, FileText, Loader2,
+  ImagePlus, Loader2,
 } from 'lucide-react';
-import GuideMarkdown from '@/components/common/GuideMarkdown';
-import { applyMarkdown } from '@/lib/guideMarkdown';
+import { MarkdownBodyEditor, AttachmentsEditor, postField, postTool } from '@/components/admin/posts/PostEditorParts';
 import {
   adminListEnterpriseGuides,
   adminUpsertEnterpriseGuide,
@@ -19,7 +18,6 @@ import {
   adminReorderEnterpriseGuides,
   adminDeleteEnterpriseGuide,
   adminUploadEnterpriseGuideFile,
-  formatFileSize,
   type AdminEnterpriseGuide,
   type EnterpriseGuideInput,
 } from '@/lib/enterpriseGuideApi';
@@ -241,43 +239,21 @@ function GuideEditor({ draft, dirty, onChange, onClose, onSaved }: {
   onSaved: (g: AdminEnterpriseGuide) => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<null | 'cover' | 'inline' | 'attachment'>(null);
-  const [view, setView] = useState<'write' | 'preview'>('write');
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [bodyBusy, setBodyBusy] = useState(false);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const busy = coverUploading || bodyBusy || attachBusy;
   const set = <K extends keyof EnterpriseGuideInput>(k: K, v: EnterpriseGuideInput[K]) => onChange({ ...draft, [k]: v });
 
-  function edit(kind: 'h2' | 'bold' | 'list' | 'link' | 'insert', insert = '') {
-    const el = bodyRef.current;
-    const start = el?.selectionStart ?? draft.body_md.length;
-    const end = el?.selectionEnd ?? draft.body_md.length;
-    const r = applyMarkdown(draft.body_md, start, end, kind, insert);
-    set('body_md', r.text);
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(r.cursor, r.cursor);
-    });
-  }
-
-  async function upload(kind: 'cover' | 'inline' | 'attachment', files: FileList | null) {
+  async function uploadCover(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setUploading(kind);
+    setCoverUploading(true);
     try {
-      if (kind === 'cover') {
-        const f = await adminUploadEnterpriseGuideFile(files[0], 'cover');
-        set('cover_image_url', f.url);
-      } else if (kind === 'inline') {
-        const f = await adminUploadEnterpriseGuideFile(files[0], 'inline');
-        const alt = f.name.replace(/\.[^.]+$/, '').replace(/[[\]]/g, '');
-        edit('insert', `![${alt}](${f.url})`);
-      } else {
-        const added = [];
-        for (const file of Array.from(files)) added.push(await adminUploadEnterpriseGuideFile(file, 'attachment'));
-        onChange({ ...draft, attachments: [...draft.attachments, ...added] });
-      }
+      const f = await adminUploadEnterpriseGuideFile(files[0], 'cover');
+      set('cover_image_url', f.url);
     } catch (e) {
       toast.error(friendlyError(e, '파일 올리기 실패'));
-    } finally { setUploading(null); }
+    } finally { setCoverUploading(false); }
   }
 
   async function save(publish: boolean) {
@@ -291,9 +267,6 @@ function GuideEditor({ draft, dirty, onChange, onClose, onSaved }: {
       toast.error(friendlyError(e, '저장 실패'));
     } finally { setSaving(false); }
   }
-
-  const field = 'w-full rounded-lg bg-bg-soft px-3 py-2 text-sm ring-1 ring-line/10 focus:outline-none focus:ring-accent/50';
-  const tool = 'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-ink-mute hover:bg-bg-hover hover:text-ink disabled:opacity-40';
 
   return (
     <div className="space-y-4 rounded-2xl bg-bg-card p-4 ring-1 ring-accent/30">
@@ -311,24 +284,24 @@ function GuideEditor({ draft, dirty, onChange, onClose, onSaved }: {
         <label className="space-y-1 sm:col-span-2">
           <span className="text-[11px] font-semibold text-ink-mute">제목 *</span>
           <input value={draft.title} onChange={(e) => set('title', e.target.value)} maxLength={200}
-            placeholder="예: 듣다 도입 절차 한눈에 보기" className={field} />
+            placeholder="예: 듣다 도입 절차 한눈에 보기" className={postField} />
         </label>
         <label className="space-y-1 sm:col-span-2">
           <span className="text-[11px] font-semibold text-ink-mute">한 줄 요약 (목록에 보여요)</span>
           <input value={draft.summary} onChange={(e) => set('summary', e.target.value)} maxLength={300}
-            placeholder="예: 계약부터 매장 연결까지 5단계로 정리했어요" className={field} />
+            placeholder="예: 계약부터 매장 연결까지 5단계로 정리했어요" className={postField} />
         </label>
         <label className="space-y-1">
           <span className="text-[11px] font-semibold text-ink-mute">카테고리 (같은 이름끼리 묶여요)</span>
           <input value={draft.category} onChange={(e) => set('category', e.target.value)} maxLength={40}
-            placeholder="일반" className={field} />
+            placeholder="일반" className={postField} />
         </label>
         <label className="space-y-1">
           <span className="text-[11px] font-semibold text-ink-mute">주소 (영문 소문자·숫자·-, 비우면 자동)</span>
           <div className="flex items-center gap-1">
             <span className="shrink-0 text-[11px] text-ink-dim">/enterprise-guide/</span>
             <input value={draft.slug} onChange={(e) => set('slug', e.target.value.toLowerCase())} maxLength={80}
-              placeholder="getting-started" className={`${field} font-mono`} />
+              placeholder="getting-started" className={`${postField} font-mono`} />
           </div>
         </label>
       </div>
@@ -339,91 +312,31 @@ function GuideEditor({ draft, dirty, onChange, onClose, onSaved }: {
           {draft.cover_image_url && (
             <img src={draft.cover_image_url} alt="대표 이미지" className="h-16 w-28 rounded-lg bg-bg-soft object-cover ring-1 ring-line/10" />
           )}
-          <label className={`${tool} cursor-pointer bg-bg-soft`}>
-            {uploading === 'cover' ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+          <label className={`${postTool} cursor-pointer bg-bg-soft`}>
+            {coverUploading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
             {draft.cover_image_url ? '바꾸기' : '이미지 올리기'}
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only"
-              disabled={uploading !== null} onChange={(e) => { void upload('cover', e.target.files); e.target.value = ''; }} />
+              disabled={coverUploading} onChange={(e) => { void uploadCover(e.target.files); e.target.value = ''; }} />
           </label>
           {draft.cover_image_url && (
-            <button type="button" onClick={() => set('cover_image_url', null)} className={tool}>빼기</button>
+            <button type="button" onClick={() => set('cover_image_url', null)} className={postTool}>빼기</button>
           )}
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold text-ink-mute">본문</span>
-          <div className="flex rounded-lg bg-bg-soft p-0.5 lg:hidden" role="tablist">
-            {(['write', 'preview'] as const).map((v) => (
-              <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${view === v ? 'bg-bg-card text-ink' : 'text-ink-mute'}`}>
-                {v === 'write' ? '쓰기' : '미리보기'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className={`${view === 'preview' ? 'hidden lg:block' : ''} space-y-1`}>
-            <div className="flex flex-wrap gap-0.5 rounded-lg bg-bg-soft p-1">
-              <button type="button" onClick={() => edit('h2')} className={tool} title="소제목"><Heading2 size={12} /> 소제목</button>
-              <button type="button" onClick={() => edit('bold')} className={tool} title="굵게"><Bold size={12} /> 굵게</button>
-              <button type="button" onClick={() => edit('list')} className={tool} title="목록"><List size={12} /> 목록</button>
-              <button type="button" onClick={() => edit('link')} className={tool} title="링크"><Link2 size={12} /> 링크</button>
-              <label className={`${tool} cursor-pointer`} title="본문에 이미지 넣기">
-                {uploading === 'inline' ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />} 이미지
-                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only"
-                  disabled={uploading !== null} onChange={(e) => { void upload('inline', e.target.files); e.target.value = ''; }} />
-              </label>
-            </div>
-            <textarea ref={bodyRef} value={draft.body_md} onChange={(e) => set('body_md', e.target.value)}
-              aria-label="본문"
-              placeholder={'## 소제목\n\n내용을 쓰세요. 빈 줄로 문단을 나눠요.\n\n- 목록은 줄 앞에 -\n- **굵게** 는 별표 두 개'}
-              className={`${field} min-h-[420px] font-mono text-[13px] leading-6`} />
-          </div>
-          <div className={`${view === 'write' ? 'hidden lg:block' : ''} min-h-[420px] overflow-y-auto rounded-lg bg-bg-soft/50 p-4 ring-1 ring-line/10`}>
-            {draft.body_md.trim()
-              ? <GuideMarkdown source={draft.body_md} />
-              : <p className="text-xs text-ink-dim">본문을 쓰면 여기에 사이트에서 보일 모습이 나와요.</p>}
-          </div>
-        </div>
-      </div>
+      <MarkdownBodyEditor value={draft.body_md} onChange={(v) => set('body_md', v)}
+        onUploadImage={(f) => adminUploadEnterpriseGuideFile(f, 'inline')} onBusyChange={setBodyBusy} />
 
-      <div className="space-y-1.5">
-        <span className="text-[11px] font-semibold text-ink-mute">첨부 (PDF·이미지, 20MB 이하 · 최대 20개)</span>
-        {draft.attachments.length > 0 && (
-          <ul className="space-y-1">
-            {draft.attachments.map((a, i) => (
-              <li key={a.url} className="flex items-center gap-2 rounded-lg bg-bg-soft px-3 py-1.5 text-xs">
-                <FileText size={12} className="shrink-0 text-accent" />
-                <input value={a.name} aria-label="첨부 이름"
-                  onChange={(e) => set('attachments', draft.attachments.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                  className="min-w-0 flex-1 bg-transparent focus:outline-none" />
-                <span className="shrink-0 text-ink-dim">{formatFileSize(a.size)}</span>
-                <button type="button" aria-label={`${a.name} 첨부 빼기`}
-                  onClick={() => set('attachments', draft.attachments.filter((_, j) => j !== i))}
-                  className="shrink-0 rounded p-0.5 text-ink-mute hover:text-rose-300">
-                  <X size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <label className={`${tool} cursor-pointer bg-bg-soft`}>
-          {uploading === 'attachment' ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />} 파일 첨부
-          <input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" className="sr-only"
-            disabled={uploading !== null || draft.attachments.length >= 20}
-            onChange={(e) => { void upload('attachment', e.target.files); e.target.value = ''; }} />
-        </label>
-      </div>
+      <AttachmentsEditor value={draft.attachments} onChange={(v) => set('attachments', v)}
+        onUpload={(f) => adminUploadEnterpriseGuideFile(f, 'attachment')} onBusyChange={setAttachBusy} />
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-line/10 pt-3">
         <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-xs text-ink-mute hover:bg-bg-hover">닫기</button>
-        <button type="button" onClick={() => void save(false)} disabled={saving || uploading !== null}
+        <button type="button" onClick={() => void save(false)} disabled={saving || busy}
           className="inline-flex items-center gap-1 rounded-lg bg-bg-soft px-3 py-2 text-xs font-semibold ring-1 ring-line/15 hover:bg-bg-hover disabled:opacity-50">
           <Save size={12} /> 비공개로 저장
         </button>
-        <button type="button" onClick={() => void save(true)} disabled={saving || uploading !== null}
+        <button type="button" onClick={() => void save(true)} disabled={saving || busy}
           className="btn-primary h-9 px-3 text-xs disabled:opacity-50">
           {saving ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} 저장하고 공개
         </button>

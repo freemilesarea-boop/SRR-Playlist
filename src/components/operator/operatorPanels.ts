@@ -61,6 +61,7 @@ export const OPERATOR_PANELS: Record<string, OperatorPanel> = {
   'operation-logs': lazy(() => import('@/components/admin/AdminOperationLogs')),
   'site-notices': lazy(() => import('@/components/admin/SiteNoticesManagerPanel')),
   'enterprise-guides': lazy(() => import('@/components/admin/EnterpriseGuidesPanel')),
+  'notice-posts': lazy(() => import('@/components/admin/NoticePostsPanel')),
 };
 
 export function getOperatorPanel(componentKey: string): OperatorPanel | undefined {
