@@ -18,6 +18,8 @@ const api = {
   adminSetNoticePostFlags: vi.fn(),
   adminDeleteNoticePost: vi.fn(),
   adminUploadNoticePostFile: vi.fn(),
+  adminSendNoticePush: vi.fn(),
+  adminNoticePushAudience: vi.fn(),
 };
 vi.mock('@/lib/noticePostsApi', async (orig) => ({ ...(await orig<object>()), ...api }));
 const toastMock = { success: vi.fn(), error: vi.fn() };
@@ -31,6 +33,8 @@ beforeEach(() => {
   api.adminListNoticePosts.mockResolvedValue([N({}), N({ id: 'n2', no: 2, title: '새 기능', category: '업데이트', is_pinned: false, is_published: false })]);
   api.adminSetNoticePostFlags.mockResolvedValue(undefined);
   api.adminDeleteNoticePost.mockResolvedValue(undefined);
+  api.adminSendNoticePush.mockResolvedValue(undefined);
+  api.adminNoticePushAudience.mockResolvedValue({ web: 1, ios: 2, android: 5, users: 6 });
 });
 afterEach(() => cleanup());
 
@@ -56,6 +60,53 @@ describe('NoticePostsPanel', () => {
       id: null, title: '연말 이벤트', category: '이벤트', is_pinned: true, body_md: '**당첨** 안내', attachments: [], is_published: true,
     }));
     expect(await screen.findByText('공지 수정')).toBeTruthy();
+    // 새 공지는 기본으로 푸시도 보낸다
+    await waitFor(() => expect(api.adminSendNoticePush).toHaveBeenCalledWith('new'));
+  });
+
+  it('푸시 끄고 공개하면 푸시를 보내지 않는다 · 비공개 저장도 보내지 않는다', async () => {
+    api.adminUpsertNoticePost.mockImplementation(async (d) => N({ ...d, id: 'new2', no: 5, published_at: d.is_published ? '2026-11-23T00:00:00Z' : null }));
+    render(<NoticePostsPanel />);
+    await screen.findByText('점검 안내');
+    fireEvent.click(screen.getByRole('button', { name: /새 공지/ }));
+    fireEvent.change(screen.getByPlaceholderText(/서버 점검 안내/), { target: { value: '조용한 공지' } });
+    fireEvent.click(screen.getByRole('button', { name: /비공개로 저장/ }));
+    await waitFor(() => expect(api.adminUpsertNoticePost).toHaveBeenCalledTimes(1));
+    expect(api.adminSendNoticePush).not.toHaveBeenCalled();
+    // 비공개 초안도 아직 공개한 적이 없으니 푸시는 기본 켬 → 끄고 공개
+    const box = await screen.findByLabelText(/앱 푸시 알림도 보내기/) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button', { name: /저장하고 공개/ }));
+    await waitFor(() => expect(api.adminUpsertNoticePost).toHaveBeenCalledTimes(2));
+    expect(api.adminSendNoticePush).not.toHaveBeenCalled();
+  });
+
+  it('이미 공개했던 공지를 고칠 때는 푸시 기본 끔', async () => {
+    render(<NoticePostsPanel />);
+    await screen.findByText('새 기능');
+    const row = screen.getByText('점검 안내').closest('li')!;
+    fireEvent.click(row.querySelector('button[class*="bg-bg-card"]') as HTMLButtonElement);
+    expect((await screen.findByLabelText(/앱 푸시 알림도 보내기/) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('목록 — 받을 기기 수, 푸시 보내기, 보낸 공지는 한 번 더 눌러야 다시 보낸다', async () => {
+    api.adminListNoticePosts.mockResolvedValue([
+      N({ id: 'a', title: '보낸 공지', push_status: 'sent', push_sent_at: '2026-11-20T01:00:00Z',
+          push_result: { web: { total: 1, sent: 1, gone: 0, failed: 0, skipped: 0 }, android: { total: 5, sent: 4, gone: 1, failed: 0, skipped: 0 } } }),
+      N({ id: 'b', no: 2, title: '안 보낸 공지', is_pinned: false }),
+    ]);
+    render(<NoticePostsPanel />);
+    expect(await screen.findByText(/앱 7대 \(Android 5 · iOS 2\) · 웹 1대/)).toBeTruthy();
+    expect(screen.getByText(/푸시 6대 중 5대 보냄/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '안 보낸 공지 푸시 보내기' }));
+    await waitFor(() => expect(api.adminSendNoticePush).toHaveBeenCalledWith('b', false));
+
+    fireEvent.click(await screen.findByRole('button', { name: '보낸 공지 푸시 다시 보내기' }));
+    expect(api.adminSendNoticePush).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '다시 보낼까요?' }));
+    await waitFor(() => expect(api.adminSendNoticePush).toHaveBeenCalledWith('a', true));
   });
 
   it('고정 해제·공개 전환은 바꿀 것만 보낸다', async () => {

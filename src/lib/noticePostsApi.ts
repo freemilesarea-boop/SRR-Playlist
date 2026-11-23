@@ -59,6 +59,46 @@ export interface AdminNoticePost {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  /** 앱 푸시 (0567) — null 이면 아직 안 보냄 */
+  push_status?: NoticePushStatus | null;
+  push_requested_at?: string | null;
+  push_sent_at?: string | null;
+  push_result?: NoticePushResult | null;
+}
+
+export type NoticePushStatus = 'pending' | 'sending' | 'sent' | 'failed';
+
+interface PushChannelTally { total: number; sent: number; gone: number; failed: number; skipped: number }
+export interface NoticePushResult {
+  ready?: { web: boolean; android: boolean; ios: boolean };
+  web?: PushChannelTally;
+  ios?: PushChannelTally;
+  android?: PushChannelTally;
+  error?: string;
+}
+
+export interface NoticePushAudience { web: number; ios: number; android: number; users: number }
+
+/** 보낸 결과 한 줄 요약 — "3대 중 3대 보냄" 처럼. */
+export function summarizePushResult(r: NoticePushResult | null | undefined): { sent: number; total: number } {
+  const ch = [r?.web, r?.ios, r?.android];
+  return {
+    sent: ch.reduce((a, c) => a + (c?.sent ?? 0), 0),
+    total: ch.reduce((a, c) => a + (c?.total ?? 0), 0),
+  };
+}
+
+/** 공개한 공지를 푸시로 보낸다. 이미 보낸 공지는 resend=true 일 때만. */
+export async function adminSendNoticePush(id: string, resend = false): Promise<void> {
+  const { error } = await supabase.rpc('admin_send_notice_push', { p_id: id, p_resend: resend });
+  if (error) throw error;
+}
+
+/** 지금 푸시를 받을 수 있는 기기 수. */
+export async function adminNoticePushAudience(): Promise<NoticePushAudience> {
+  const { data, error } = await supabase.rpc('admin_notice_push_audience');
+  if (error) throw error;
+  return data as NoticePushAudience;
 }
 
 export interface NoticePostInput {

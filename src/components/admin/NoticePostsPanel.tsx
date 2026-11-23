@@ -5,7 +5,7 @@
  * 화면 위에 띄우는 '공지/팝업'(site_notices)과는 별개 — 이건 지난 공지가 쌓이는 게시판.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Plus, Save, X, Eye, EyeOff, Pin, PinOff, Trash2, Pencil, ExternalLink, Loader2 } from 'lucide-react';
+import { Megaphone, Plus, Save, X, Eye, EyeOff, Pin, PinOff, Trash2, Pencil, ExternalLink, Loader2, BellRing } from 'lucide-react';
 import { MarkdownBodyEditor, AttachmentsEditor, postField } from '@/components/admin/posts/PostEditorParts';
 import {
   adminListNoticePosts,
@@ -13,11 +13,15 @@ import {
   adminSetNoticePostFlags,
   adminDeleteNoticePost,
   adminUploadNoticePostFile,
+  adminSendNoticePush,
+  adminNoticePushAudience,
+  summarizePushResult,
   formatNoticeDate,
   NOTICE_CATEGORIES,
   type AdminNoticePost,
   type NoticePostInput,
   type NoticeCategory,
+  type NoticePushAudience,
 } from '@/lib/noticePostsApi';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
@@ -40,9 +44,12 @@ export default function NoticePostsPanel() {
   const [baseline, setBaseline] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmResendId, setConfirmResendId] = useState<string | null>(null);
+  const [audience, setAudience] = useState<NoticePushAudience | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
+    adminNoticePushAudience().then(setAudience).catch(() => setAudience(null));
     try {
       setList(await adminListNoticePosts());
     } catch (e) {
@@ -58,6 +65,29 @@ export default function NoticePostsPanel() {
     const t = window.setTimeout(() => setConfirmDeleteId(null), 4000);
     return () => window.clearTimeout(t);
   }, [confirmDeleteId]);
+  useEffect(() => {
+    if (!confirmResendId) return;
+    const t = window.setTimeout(() => setConfirmResendId(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirmResendId]);
+  // 보내는 중인 공지가 있으면 결과가 나올 때까지 10초마다 다시 본다
+  const inFlight = list.some((n) => n.push_status === 'pending' || n.push_status === 'sending');
+  useEffect(() => {
+    if (!inFlight) return;
+    const t = window.setInterval(() => { void adminListNoticePosts().then(setList).catch(() => {}); }, 10000);
+    return () => window.clearInterval(t);
+  }, [inFlight]);
+
+  async function sendPush(n: AdminNoticePost, resend: boolean) {
+    setBusyId(n.id);
+    try {
+      await adminSendNoticePush(n.id, resend);
+      toast.success('푸시 알림을 보내고 있어요');
+      await reload();
+    } catch (e) {
+      toast.error(friendlyError(e, '푸시 보내기 실패'));
+    } finally { setBusyId(null); setConfirmResendId(null); }
+  }
 
   const dirty = draft !== null && JSON.stringify(draft) !== baseline;
 
@@ -110,6 +140,7 @@ export default function NoticePostsPanel() {
             <Plus size={14} /> 새 공지
           </button>
         </div>
+        <PushAudienceLine audience={audience} />
         <p className="mt-1 text-[11px] text-ink-dim">
           공개한 글만 사이트(푸터 › 지원 › 공지사항)에 보여요. 상단 고정 글이 맨 위, 나머지는 최신순이에요.
           화면 위에 잠깐 띄우는 안내는 ‘공지/팝업’ 탭에서 따로 관리해요.
@@ -121,6 +152,8 @@ export default function NoticePostsPanel() {
           key={draft.id ?? 'new'}
           draft={draft}
           dirty={dirty}
+          pushAlreadySent={list.some((n) => n.id === draft.id && n.push_status === 'sent')}
+          neverPublished={!list.some((n) => n.id === draft.id && n.published_at)}
           onChange={setDraft}
           onClose={close}
           onSaved={(saved) => {
@@ -164,6 +197,7 @@ export default function NoticePostsPanel() {
                     {n.published_at && <span>게시 {formatNoticeDate(n.published_at)}</span>}
                     {n.attachments.length > 0 && <span>첨부 {n.attachments.length}</span>}
                     <span>수정 {new Date(n.updated_at).toLocaleString()}</span>
+                    <PushStatus post={n} />
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -186,6 +220,22 @@ export default function NoticePostsPanel() {
                     className="rounded-md px-2 py-1 text-ink-mute hover:bg-bg-hover hover:text-ink disabled:opacity-40">
                     {n.is_published ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
+                  {n.is_published && n.push_status !== 'pending' && n.push_status !== 'sending' && (
+                    n.push_status === 'sent' && confirmResendId !== n.id ? (
+                      <button type="button" onClick={() => setConfirmResendId(n.id)} disabled={busyId === n.id}
+                        aria-label={`${n.title} 푸시 다시 보내기`} title="푸시 다시 보내기"
+                        className="rounded-md px-2 py-1 text-ink-mute hover:bg-bg-hover hover:text-ink disabled:opacity-40">
+                        <BellRing size={12} />
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => void sendPush(n, n.push_status === 'sent')} disabled={busyId === n.id}
+                        aria-label={n.push_status === 'sent' ? '다시 보낼까요?' : `${n.title} 푸시 보내기`}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold disabled:opacity-40 ${
+                          n.push_status === 'sent' ? 'bg-amber-500/25 text-amber-300' : 'bg-accent/15 text-accent hover:bg-accent/25'}`}>
+                        <BellRing size={11} /> {n.push_status === 'sent' ? '다시 보낼까요?' : '푸시'}
+                      </button>
+                    )
+                  )}
                   <button type="button" onClick={() => open(toInput(n))}
                     className="inline-flex items-center gap-1 rounded-md bg-bg-card px-2.5 py-1 text-[11px] text-ink-mute hover:bg-bg-hover hover:text-ink">
                     <Pencil size={11} /> 수정
@@ -212,14 +262,20 @@ export default function NoticePostsPanel() {
   );
 }
 
-function NoticeEditor({ draft, dirty, onChange, onClose, onSaved }: {
+function NoticeEditor({ draft, dirty, pushAlreadySent, neverPublished, onChange, onClose, onSaved }: {
   draft: NoticePostInput;
   dirty: boolean;
+  /** 한 번도 공개한 적 없는 공지(새 글·비공개 초안) — 푸시 기본 켬 */
+  neverPublished: boolean;
+  /** 이미 푸시를 보낸 공지 — 저장할 때 다시 보내지 않는다(다시 보내기는 목록에서) */
+  pushAlreadySent: boolean;
   onChange: (d: NoticePostInput) => void;
   onClose: () => void;
   onSaved: (n: AdminNoticePost) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  // 처음 공개하는 공지는 기본으로 푸시를 함께 보낸다. 이미 공개했던 글을 고칠 때는 기본 끔.
+  const [withPush, setWithPush] = useState(neverPublished);
   const [bodyBusy, setBodyBusy] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
   const busy = bodyBusy || attachBusy;
@@ -230,8 +286,17 @@ function NoticeEditor({ draft, dirty, onChange, onClose, onSaved }: {
     setSaving(true);
     try {
       const saved = await adminUpsertNoticePost({ ...draft, is_published: publish });
-      toast.success(publish ? '저장하고 공개했어요' : '비공개로 저장했어요');
-      onSaved(saved);
+      let pushed = false;
+      if (publish && withPush && !pushAlreadySent) {
+        try {
+          await adminSendNoticePush(saved.id);
+          pushed = true;
+        } catch (e) {
+          toast.error(friendlyError(e, '공개는 됐지만 푸시 보내기에 실패했어요 — 목록에서 다시 보내 주세요'));
+        }
+      }
+      toast.success(publish ? (pushed ? '공개하고 푸시 알림을 보내고 있어요' : '저장하고 공개했어요') : '비공개로 저장했어요');
+      onSaved(pushed ? { ...saved, push_status: 'pending' } : saved);
     } catch (e) {
       toast.error(friendlyError(e, '저장 실패'));
     } finally { setSaving(false); }
@@ -262,10 +327,20 @@ function NoticeEditor({ draft, dirty, onChange, onClose, onSaved }: {
             placeholder="예: 11월 30일 새벽 서버 점검 안내" className={postField} />
         </label>
       </div>
-      <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
-        <input type="checkbox" checked={draft.is_pinned} onChange={(e) => set('is_pinned', e.target.checked)} />
-        <span>목록 맨 위에 고정</span>
-      </label>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
+          <input type="checkbox" checked={draft.is_pinned} onChange={(e) => set('is_pinned', e.target.checked)} />
+          <span>목록 맨 위에 고정</span>
+        </label>
+        {pushAlreadySent ? (
+          <span className="inline-flex items-center gap-1 text-xs text-ink-dim"><BellRing size={12} /> 푸시 보낸 공지 — 다시 보내기는 목록에서</span>
+        ) : (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
+            <input type="checkbox" checked={withPush} onChange={(e) => setWithPush(e.target.checked)} />
+            <span>‘저장하고 공개’ 할 때 앱 푸시 알림도 보내기</span>
+          </label>
+        )}
+      </div>
 
       <MarkdownBodyEditor value={draft.body_md} onChange={(v) => set('body_md', v)} previewVariant="paper"
         onUploadImage={(f) => adminUploadNoticePostFile(f, 'inline')} onBusyChange={setBodyBusy}
@@ -286,5 +361,33 @@ function NoticeEditor({ draft, dirty, onChange, onClose, onSaved }: {
         </button>
       </div>
     </div>
+  );
+}
+
+function PushAudienceLine({ audience }: { audience: NoticePushAudience | null }) {
+  if (!audience) return null;
+  const app = audience.android + audience.ios;
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-ink-mute">
+      <BellRing size={11} className="text-accent" />
+      푸시를 받을 수 있는 기기: 앱 {app}대 (Android {audience.android} · iOS {audience.ios}) · 웹 {audience.web}대
+      {app + audience.web === 0 && <span className="text-ink-dim">— 아직 알림을 허용한 기기가 없어요. 내 정보 › 알림에서 켤 수 있어요.</span>}
+    </p>
+  );
+}
+
+function PushStatus({ post: n }: { post: AdminNoticePost }) {
+  if (!n.push_status) return null;
+  if (n.push_status === 'pending' || n.push_status === 'sending') {
+    return <span className="inline-flex items-center gap-1 text-accent"><Loader2 size={10} className="animate-spin" /> 푸시 보내는 중</span>;
+  }
+  if (n.push_status === 'failed') {
+    return <span className="text-rose-300" title={n.push_result?.error ?? ''}>푸시 실패</span>;
+  }
+  const { sent, total } = summarizePushResult(n.push_result);
+  return (
+    <span className="inline-flex items-center gap-1 text-emerald-300" title={n.push_sent_at ? new Date(n.push_sent_at).toLocaleString() : ''}>
+      <BellRing size={10} /> 푸시 {total}대 중 {sent}대 보냄
+    </span>
   );
 }
