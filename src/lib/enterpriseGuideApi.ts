@@ -5,18 +5,11 @@
  * 관리자: 작성·수정·공개 전환·순서·삭제(숨김), 이미지·PDF 업로드(storage 'enterprise-guides').
  */
 import { supabase } from './supabase';
+import { uploadPostFile, type PostAttachment } from './postFiles';
 
 export const ENTERPRISE_GUIDE_BUCKET = 'enterprise-guides';
-export const ENTERPRISE_GUIDE_MAX_FILE_BYTES = 20 * 1024 * 1024;
-export const ENTERPRISE_GUIDE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-export const ENTERPRISE_GUIDE_ATTACHMENT_TYPES = [...ENTERPRISE_GUIDE_IMAGE_TYPES, 'application/pdf'];
-
-export interface EnterpriseGuideAttachment {
-  name: string;
-  url: string;
-  size?: number | null;
-  type?: string | null;
-}
+export { safeStorageName, formatFileSize } from './postFiles';
+export type EnterpriseGuideAttachment = PostAttachment;
 
 export interface EnterpriseGuideSummary {
   id: string;
@@ -134,40 +127,10 @@ export async function adminDeleteEnterpriseGuide(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** 파일 이름에서 저장 경로에 쓸 안전한 부분만 (원래 이름은 첨부 표시용으로 따로 보관). */
-export function safeStorageName(name: string): string {
-  const dot = name.lastIndexOf('.');
-  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-  const base = (dot > 0 ? name.slice(0, dot) : name)
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  return `${base || 'file'}${ext ? `.${ext}` : ''}`;
-}
-
 /** 이미지·PDF 업로드 → 공개 주소. kind 는 저장 폴더(cover / inline / attachment). */
-export async function adminUploadEnterpriseGuideFile(
+export function adminUploadEnterpriseGuideFile(
   file: File,
   kind: 'cover' | 'inline' | 'attachment',
 ): Promise<EnterpriseGuideAttachment> {
-  const allowed = kind === 'attachment' ? ENTERPRISE_GUIDE_ATTACHMENT_TYPES : ENTERPRISE_GUIDE_IMAGE_TYPES;
-  if (!allowed.includes(file.type)) {
-    throw new Error(kind === 'attachment' ? '이미지(JPG·PNG·WebP·GIF) 또는 PDF 만 올릴 수 있어요' : '이미지(JPG·PNG·WebP·GIF) 만 올릴 수 있어요');
-  }
-  if (file.size > ENTERPRISE_GUIDE_MAX_FILE_BYTES) {
-    throw new Error('파일은 20MB 이하만 올릴 수 있어요');
-  }
-  const month = new Date().toISOString().slice(0, 7);
-  const rand = Math.random().toString(36).slice(2, 10);
-  const path = `${kind}/${month}/${Date.now()}-${rand}-${safeStorageName(file.name)}`;
-  const { error } = await supabase.storage.from(ENTERPRISE_GUIDE_BUCKET).upload(path, file, {
-    cacheControl: '3600', upsert: false, contentType: file.type,
-  });
-  if (error) throw error;
-  const { data } = supabase.storage.from(ENTERPRISE_GUIDE_BUCKET).getPublicUrl(path);
-  return { name: file.name, url: data.publicUrl, size: file.size, type: file.type };
-}
-
-export function formatFileSize(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '';
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  return uploadPostFile(ENTERPRISE_GUIDE_BUCKET, file, kind);
 }

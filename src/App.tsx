@@ -50,6 +50,7 @@ const EnterpriseGuidePage = lazyWithRetry(() => import('@/pages/EnterpriseGuideP
 const SalesPartnersPage = lazyWithRetry(() => import('@/pages/SalesPartnersPage'));
 const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
+const NoticePostPage = lazyWithRetry(() => import('@/pages/legal/NoticePostPage'));
 const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
 const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
 const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
@@ -296,6 +297,7 @@ export default function App() {
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/notice" element={<NoticePage />} />
+                <Route path="/notice/:no" element={<NoticePostPage />} />
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/service" element={<ServicePage />} />
                 <Route path="/service/preview" element={<ServicePreviewPage />} />
