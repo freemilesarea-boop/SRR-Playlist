@@ -18,6 +18,7 @@ const SERVICE_LINKS: LinkItem[] = [
 const DEUDDA_SERVICE_LINKS: LinkItem[] = [
   { label: '듣다 서비스 소개', href: '/service' },
   { label: '업종별 미리듣기', href: '/service/preview' },
+  { label: '엔터프라이즈 가이드', href: '/enterprise-guide' },
 ];
 
 const SUPPORT_LINKS: LinkItem[] = [
@@ -153,7 +154,7 @@ function FooterSection({
                   href={it.href}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
+                  className="break-keep text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
                 >
                   {it.label}
                 </a>
@@ -164,7 +165,7 @@ function FooterSection({
             <li key={it.label}>
               <Link
                 to={it.href}
-                className="text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
+                className="break-keep text-sm text-slate-500 dark:text-neutral-400 transition-colors duration-smooth hover:text-accent"
               >
                 {it.label}
               </Link>

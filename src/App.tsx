@@ -45,6 +45,8 @@ const ArtistSettlementsPage = lazyWithRetry(() => import('@/pages/ArtistSettleme
 const TermsPage = lazyWithRetry(() => import('@/pages/legal/TermsPage'));
 const ServicePage = lazyWithRetry(() => import('@/pages/ServicePage'));
 const ServicePreviewPage = lazyWithRetry(() => import('@/pages/ServicePreviewPage'));
+const EnterpriseGuideListPage = lazyWithRetry(() => import('@/pages/EnterpriseGuideListPage'));
+const EnterpriseGuidePage = lazyWithRetry(() => import('@/pages/EnterpriseGuidePage'));
 const SalesPartnersPage = lazyWithRetry(() => import('@/pages/SalesPartnersPage'));
 const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
@@ -297,6 +299,8 @@ export default function App() {
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/service" element={<ServicePage />} />
                 <Route path="/service/preview" element={<ServicePreviewPage />} />
+                <Route path="/enterprise-guide" element={<EnterpriseGuideListPage />} />
+                <Route path="/enterprise-guide/:slug" element={<EnterpriseGuidePage />} />
                 <Route path="/sales-partners" element={<SalesPartnersPage />} />
 
                 {/* ---- 보호 (로그인 필요) ---- */}
