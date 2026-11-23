@@ -1710,6 +1710,25 @@ export async function adminAddMdPolicyRule(input: {
   if (error) throw error;
 }
 
+/** 규칙 수정 — 추가와 같은 검사(표기 정리·중복·매장 종류). 켜짐/꺼짐은 그대로. 전/후는 운영 로그에. */
+export async function adminUpdateMdPolicyRule(id: string, input: {
+  storeType: string;
+  genre: string;
+  vocalPolicy: 'vocal' | 'instrumental';
+  isAllowed: boolean;
+  priority: number;
+}): Promise<void> {
+  const { error } = await supabase.rpc('admin_update_md_policy_rule', {
+    p_id: id,
+    p_store_type: input.storeType,
+    p_genre: input.genre,
+    p_vocal_policy: input.vocalPolicy,
+    p_is_allowed: input.isAllowed,
+    p_priority: input.priority,
+  });
+  if (error) throw error;
+}
+
 /** 규칙 삭제 — 지운 규칙 내용은 운영 로그에 남는다. */
 export async function adminDeleteMdPolicyRule(id: string): Promise<void> {
   const { error } = await supabase.rpc('admin_delete_md_policy_rule', { p_id: id });

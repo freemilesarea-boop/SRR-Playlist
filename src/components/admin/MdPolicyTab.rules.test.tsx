@@ -22,6 +22,7 @@ const api = {
   adminMdPolicyRuleOptions: vi.fn(),
   adminAddMdPolicyRule: vi.fn(),
   adminDeleteMdPolicyRule: vi.fn(),
+  adminUpdateMdPolicyRule: vi.fn(),
 };
 vi.mock('@/lib/aiCuration', () => api);
 vi.mock('@/lib/adminPlaylistInspectorApi', () => ({
@@ -43,6 +44,7 @@ beforeEach(() => {
   api.adminSetMdPolicyRulePriority.mockResolvedValue(undefined);
   api.adminAddMdPolicyRule.mockResolvedValue(undefined);
   api.adminDeleteMdPolicyRule.mockResolvedValue(undefined);
+  api.adminUpdateMdPolicyRule.mockResolvedValue(undefined);
 });
 afterEach(() => cleanup());
 
@@ -89,5 +91,26 @@ describe('MdPolicyTab 규칙 편집', () => {
     await waitFor(() => expect(api.adminAddMdPolicyRule).toHaveBeenCalledWith({
       storeType: 'hotel', genre: 'lofi', vocalPolicy: 'instrumental', isAllowed: false, priority: 30,
     }));
+  });
+
+  it('규칙 수정 — 지금 값으로 폼이 열리고, 바꾼 값을 그대로 보낸다. 실패하면 폼을 닫지 않는다', async () => {
+    render(<MdPolicyTab />);
+    fireEvent.click(await screen.findByRole('button', { name: 'cafe jazz 규칙 수정' }));
+    const genre = await screen.findByLabelText('장르') as HTMLInputElement;
+    expect(genre.value).toBe('jazz');
+    expect((screen.getByLabelText('매장 종류') as HTMLSelectElement).value).toBe('cafe');
+    fireEvent.change(genre, { target: { value: 'smooth jazz' } });
+    fireEvent.change(screen.getByLabelText('허용 / 차단'), { target: { value: 'block' } });
+
+    api.adminUpdateMdPolicyRule.mockRejectedValueOnce(new Error('duplicate: 이미 같은 규칙이 있다'));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(api.adminUpdateMdPolicyRule).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: '저장' })).toBeTruthy(); // 실패 — 폼 유지
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(api.adminUpdateMdPolicyRule).toHaveBeenLastCalledWith('r1', {
+      storeType: 'cafe', genre: 'smooth jazz', vocalPolicy: 'vocal', isAllowed: false, priority: 50,
+    }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '저장' })).toBeNull()); // 성공 — 닫힘
   });
 });
