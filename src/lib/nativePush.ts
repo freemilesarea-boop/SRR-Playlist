@@ -14,6 +14,19 @@
  */
 import { supabase } from '@/lib/supabase';
 import { isNativeApp, nativePlatform } from '@/lib/native';
+import { writePushOptedOut } from '@/lib/pushPrompt';
+
+/** 이 기기에서 마지막으로 서버에 저장한 토큰 — 끌 때 서버에서 지우려고 기억한다. */
+const LAST_TOKEN_KEY = 'deudda.push.lastToken';
+function rememberToken(token: string | null) {
+  try {
+    if (token) window.localStorage.setItem(LAST_TOKEN_KEY, token);
+    else window.localStorage.removeItem(LAST_TOKEN_KEY);
+  } catch { /* noop */ }
+}
+function lastToken(): string | null {
+  try { return window.localStorage.getItem(LAST_TOKEN_KEY); } catch { return null; }
+}
 
 /** 네이티브 푸시 권한 상태 — Web Push 의 NotificationPermission 과 같은 어휘를 쓴다. */
 export type NativePushPermission = 'granted' | 'denied' | 'default';
@@ -107,6 +120,8 @@ export async function enableNativePush(): Promise<{ ok: boolean; token?: string;
     });
 
     await saveToken(token);
+    rememberToken(token);
+    writePushOptedOut(false);
     return { ok: true, token };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -114,8 +129,11 @@ export async function enableNativePush(): Promise<{ ok: boolean; token?: string;
 }
 
 /** 서버에서 이 기기 토큰 제거 + OS 등록 해제. */
-export async function disableNativePush(token: string | null): Promise<boolean> {
+export async function disableNativePush(tokenArg: string | null): Promise<boolean> {
   if (!nativePushSupported()) return false;
+  // 사용자가 직접 껐다 — 앱을 다시 열어도 자동으로 다시 등록하거나 묻지 않는다.
+  writePushOptedOut(true);
+  const token = tokenArg ?? lastToken();
   try {
     if (token) {
       const { error } = await supabase.rpc('delete_device_push_token', { p_token: token });
@@ -123,6 +141,7 @@ export async function disableNativePush(token: string | null): Promise<boolean> 
     }
     const PushNotifications = await loadPlugin();
     await PushNotifications.unregister();
+    rememberToken(null);
     return true;
   } catch {
     return false;
