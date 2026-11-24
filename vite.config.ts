@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import fs from 'fs';
 
 // 빌드 시점 BUILD_ID — main.tsx 의 SW_RELOAD_KEY + src/sw.ts 의 __SW_BUILD_ID__ 가 공유.
 // 같은 빌드 안에서 한 번 평가되어 양쪽 모두 같은 값을 가짐.
@@ -12,6 +13,18 @@ const BUILD_ID = Date.now().toString(36);
 // 같은 커밋을 두 번 빌드해도 SW 갱신이 막히지 않도록 이 값은 별도로 둔다.
 // Vercel 이 주는 커밋 SHA 를 쓰고, 없으면 'dev'. Secret 아님.
 const BUILD_HASH = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 12) || 'dev';
+
+// Android 앱 푸시(FCM)를 켜도 되는지 — android/app/build.gradle 과 같은 기준(google-services.json 이 있고
+// 비어 있지 않음)으로 빌드할 때 정한다. 이 파일 없이 빌드한 앱에서 PushNotifications.register() 를 부르면
+// FirebaseMessaging 초기화 예외로 앱이 꺼진다 — 그래서 '0' 이면 앱은 등록·알림 허용 묻기를 하지 않는다.
+// (웹 배포에서는 쓰지 않는 값. iOS 는 Firebase 없이 APNs 를 직접 쓰므로 해당 없음.)
+const ANDROID_PUSH_READY = (() => {
+  try {
+    return fs.readFileSync(path.resolve(__dirname, 'android/app/google-services.json'), 'utf8').trim() ? '1' : '0';
+  } catch {
+    return '0';
+  }
+})();
 
 export default defineConfig({
   plugins: [
@@ -120,6 +133,7 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID),
     'import.meta.env.VITE_BUILD_HASH': JSON.stringify(BUILD_HASH),
+    'import.meta.env.VITE_ANDROID_PUSH_READY': JSON.stringify(ANDROID_PUSH_READY),
     __SW_BUILD_ID__: JSON.stringify(BUILD_ID),
     // 16A — SW 자신의 build identity. `/sw.js` URL 은 모든 배포가 같아서
     // 어느 deployment 의 SW 인지 구분할 수 없다. 페이지가 물어보면 이 값을 답한다.
