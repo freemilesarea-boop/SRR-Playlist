@@ -77,6 +77,12 @@ describe('푸시 알림 네이티브 설정', () => {
     expect(gradle).toContain('google-services.json');
   });
 
+  it('Android: 웹 번들도 같은 파일로 푸시 사용 여부를 정한다 — 없이 빌드한 앱이 register() 로 꺼지지 않게', () => {
+    expect(repoFile('vite.config.ts')).toContain("android/app/google-services.json");
+    expect(repoFile('vite.config.ts')).toContain('VITE_ANDROID_PUSH_READY');
+    expect(repoFile('src/lib/nativePush.ts')).toContain("VITE_ANDROID_PUSH_READY === '1'");
+  });
+
   it('iOS: AppDelegate 가 APNs 토큰을 Capacitor 로 넘긴다', () => {
     // 이 두 콜백이 없으면 iOS 에서 registration 이벤트가 영원히 오지 않는다.
     const appDelegate = repoFile('ios/App/App/AppDelegate.swift');

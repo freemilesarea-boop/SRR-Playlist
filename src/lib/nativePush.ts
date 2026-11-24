@@ -40,10 +40,22 @@ export interface NativePushState {
   error: string | null;
 }
 
+/**
+ * Android 빌드에 Firebase 설정(google-services.json)이 들어갔는지 — vite.config.ts 가 빌드할 때 정한다.
+ * 없이 빌드한 앱에서 register() 를 부르면 FirebaseMessaging 초기화 예외가 Capacitor 브리지에서
+ * RuntimeException 으로 다시 던져져 앱이 꺼진다. 그래서 '1' 이 아니면 Android 푸시는 아예 쓰지 않는다.
+ */
+export function androidPushConfigured(): boolean {
+  return import.meta.env.VITE_ANDROID_PUSH_READY === '1';
+}
+
 /** 이 실행 환경에서 네이티브 푸시를 쓸 수 있는지. */
 export function nativePushSupported(): boolean {
+  if (!isNativeApp()) return false;
   const p = nativePlatform();
-  return isNativeApp() && (p === 'ios' || p === 'android');
+  if (p === 'ios') return true;
+  if (p === 'android') return androidPushConfigured();
+  return false;
 }
 
 function platformOrNull(): 'ios' | 'android' | null {

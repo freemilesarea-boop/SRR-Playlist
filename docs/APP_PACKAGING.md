@@ -246,6 +246,10 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 1. **Android**: Firebase 프로젝트 생성 → Android 앱(`com.deudda.app`) 등록 →
    `google-services.json` 을 `android/app/` 에 저장.
    Gradle 은 파일이 있을 때만 플러그인을 적용하므로, **없어도 빌드는 그대로 성공**한다(푸시만 비활성).
+   > **반드시 `npm run cap:sync`(웹 빌드) 전에 넣는다.** 웹 번들도 빌드할 때 이 파일이 있는지 보고
+   > Android 푸시 사용 여부를 정한다(`vite.config.ts` → `VITE_ANDROID_PUSH_READY`). 파일 없이 빌드하면
+   > 앱은 알림 등록·허용 묻기를 아예 하지 않는다 — Firebase 없이 `PushNotifications.register()` 를 부르면
+   > Capacitor 브리지에서 예외가 다시 던져져 **앱이 꺼지기 때문**이다. 파일을 넣은 뒤에는 웹 빌드부터 다시 한다.
 2. **iOS**: Xcode → Signing & Capabilities → **+ Push Notifications** 추가
    (`ios/App/App/App.entitlements` 가 타깃에 연결된다).
    Apple Developer → Keys 에서 APNs 키(.p8) 발급.

@@ -15,10 +15,11 @@ const plugin = {
 const listeners: Record<string, ((x: { value: string }) => void) | undefined> = {};
 vi.mock('@capacitor/push-notifications', () => ({ PushNotifications: plugin }));
 
-const { enableNativePush, disableNativePush } = await import('./nativePush');
+const { enableNativePush, disableNativePush, nativePushSupported } = await import('./nativePush');
 const { readPushOptedOut } = await import('./pushPrompt');
 
 beforeEach(() => {
+  vi.stubEnv('VITE_ANDROID_PUSH_READY', '1');
   window.localStorage.clear();
   rpc.mockReset().mockResolvedValue({ error: null });
 });
@@ -37,5 +38,17 @@ describe('알림 켜기/끄기 — 이 기기 토큰 기억', () => {
     expect(plugin.unregister).toHaveBeenCalled();
     expect(readPushOptedOut()).toBe(true);
     expect(window.localStorage.getItem('deudda.push.lastToken')).toBeNull();
+  });
+});
+
+describe('Android — google-services.json 없이 빌드한 앱', () => {
+  it('푸시를 아예 쓰지 않는다(register 를 부르면 앱이 꺼지므로)', async () => {
+    vi.stubEnv('VITE_ANDROID_PUSH_READY', '0');
+    expect(nativePushSupported()).toBe(false);
+    plugin.register.mockClear();
+    expect(await enableNativePush()).toEqual({ ok: false, error: 'not_native' });
+    expect(plugin.register).not.toHaveBeenCalled();
+    vi.stubEnv('VITE_ANDROID_PUSH_READY', '1');
+    expect(nativePushSupported()).toBe(true);
   });
 });
