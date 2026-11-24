@@ -16,6 +16,7 @@ import ConfigMissingScreen from '@/components/ConfigMissingScreen';
 import Toaster from '@/components/Toaster';
 import GlobalGate from '@/components/player/GlobalGate';
 import Onboarding from '@/components/Onboarding';
+import NativePushPrompt from '@/components/NativePushPrompt';
 import AppShell from '@/components/AppShell';
 import FloatingSupportButton from '@/components/FloatingSupportButton';
 import { LogoMark } from '@/components/Logo';
@@ -277,6 +278,8 @@ export default function App() {
         <>
           <GlobalGate />
           <Onboarding />
+          {/* 앱(iOS/Android)만 — 알림 허용 묻기 · 허용된 기기 토큰 재등록 */}
+          <NativePushPrompt />
           {/* FAB 는 createPortal 로 body 마운트 — AppShell/라우트 의존성 0 */}
           <FloatingSupportButton />
           <Suspense fallback={<RouteFallback />}>
