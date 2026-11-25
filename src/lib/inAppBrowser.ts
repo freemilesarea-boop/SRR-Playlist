@@ -167,3 +167,16 @@ export function isPwaStandalone(): boolean {
     return false;
   }
 }
+
+/**
+ * Google 로그인 전에 "외부 브라우저로 열어 주세요" 안내가 필요한지.
+ *
+ * 우리 앱(Capacitor)은 화면이 Android WebView 라 UA 에 `; wv)` 가 붙어 인앱 브라우저로
+ * 잡히지만, Google 로그인은 WebView 가 아니라 시스템 브라우저(크롬 커스텀탭·SFSafariVC)로
+ * 연다(nativeAuth.ts) — Google 이 허용하는 방식이라 안내가 필요 없다.
+ * 이 판정이 없을 땐 앱에서 Google 로그인·회원가입이 안내창에 막혀 시작조차 안 됐다.
+ */
+export function needsExternalBrowserForGoogle(env: { native: boolean; inApp: boolean; pwa: boolean }): boolean {
+  if (env.native) return false;
+  return env.inApp || env.pwa;
+}

@@ -5,7 +5,8 @@ import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isKakaoLoginEnabled } from '@/lib/kakao';
-import { detectInAppBrowser, isPwaStandalone, type InAppBrowserName } from '@/lib/inAppBrowser';
+import { detectInAppBrowser, isPwaStandalone, needsExternalBrowserForGoogle, type InAppBrowserName } from '@/lib/inAppBrowser';
+import { isNativeApp } from '@/lib/native';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
@@ -170,7 +171,8 @@ export default function LoginPage() {
     // 브라우저 UI 부재를 이유로 disallowed_useragent 로 차단. 동일 모달 노출.
     const det = detectInAppBrowser();
     const pwa = isPwaStandalone();
-    if (det.isInApp || pwa) {
+    // 우리 앱은 Google 로그인을 시스템 브라우저로 열므로 안내 없이 바로 진행한다.
+    if (needsExternalBrowserForGoogle({ native: isNativeApp(), inApp: det.isInApp, pwa })) {
       setInAppWarning({ label: det.label, name: det.name, isPwa: pwa });
       return;
     }
