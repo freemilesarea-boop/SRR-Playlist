@@ -577,7 +577,8 @@ function StoreTypeTable({ rows }: { rows: StoreLearningDashboard['storeTypes'] }
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-xs text-ink-dim">데이터 없음</p>
       ) : (
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs min-w-[560px]">
           <thead>
             <tr className="text-[10px] uppercase text-ink-dim">
               <th className="px-2 py-1.5">유형</th>
@@ -603,6 +604,7 @@ function StoreTypeTable({ rows }: { rows: StoreLearningDashboard['storeTypes'] }
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -617,7 +619,8 @@ function GenreTable({ rows }: { rows: StoreLearningDashboard['genres'] }) {
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-xs text-ink-dim">데이터 없음</p>
       ) : (
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs min-w-[560px]">
           <thead>
             <tr className="text-[10px] uppercase text-ink-dim">
               <th className="px-2 py-1.5">장르</th>
@@ -643,6 +646,7 @@ function GenreTable({ rows }: { rows: StoreLearningDashboard['genres'] }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

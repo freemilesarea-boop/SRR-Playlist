@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, X, Wifi, WifiOff, Sun, MonitorSmartphone,
   Music, AlertTriangle, Sparkles, ListMusic, Coffee, Moon, Clock, HardDriveDownload,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
@@ -24,6 +25,7 @@ import { useStartBusinessMode } from '@/hooks/useStartBusinessMode';
 import { currentPlaybackDeviceRisk } from '@/lib/mobileBrowserPlaybackRisk';
 import { listenForRecoverySignal } from '@/lib/playerRecoverySignal';
 import PlayerRecoveryOptIn from '@/components/player/PlayerRecoveryOptIn';
+import { isIOSVolumeLocked, nudgeVolume, VOLUME_STEP } from '@/lib/iosAudio';
 import { logPlaybackDiagnostic, takeReloadReason, watchPageLifecycle } from '@/lib/playbackDiagnostics';
 import { ensurePlayerInstanceId } from '@/lib/playbackFlightRecorder';
 import { buildHash } from '@/lib/playbackFlightRecorder';
@@ -214,7 +216,12 @@ export default function StorePlayerPage() {
   const hasQueue = queue.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-black bg-gradient-to-b from-zinc-900 to-black text-white">
+    // 배경은 테마를 따르지 않고 항상 어둡다. 이 화면은 글자·아이콘이 전부 text-white 로
+    // 짜여 있어서, 라이트 테마의 밝은 배경이 깔리면 흰 글자가 흰 바탕에 얹혀 아무것도 안 보인다
+    // (실제로 그랬다 — 그라데이션 시작색으로 쓰던 토큰이 정의돼 있지 않아 색이 비었고,
+    //  위쪽이 흰 화면인데 글자도 희어서 제목이 안 보였다).
+    // 매장 손님에게 보이는 화면이기도 해서, 조명이 어두운 매장에서도 어두운 편이 맞다.
+    <div className="fixed inset-0 z-[90] flex flex-col bg-gradient-to-b from-[#171327] via-[#0b0a10] to-black text-white pt-safe pb-safe pl-safe pr-safe">
       {/* 자동재생 차단 / 업데이트 대기 안내 — 무인 매장에서 토스트는 아무도 못 본다 */}
       <PlaybackBlockedOverlay />
       {/* 분리 송출 창 — N번 플레이어 표시 + 이 창의 스피커 선택 */}
@@ -227,7 +234,7 @@ export default function StorePlayerPage() {
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
-              online ? 'bg-emerald-500/20 text-slate-900 dark:text-emerald-200' : 'bg-red-500/20 text-slate-900 dark:text-red-200'
+              online ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'
             }`}
           >
             {online ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -235,42 +242,47 @@ export default function StorePlayerPage() {
           </span>
           {franchiseSync.policy?.has_franchise_policy && (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-slate-900 dark:text-indigo-200"
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200"
               title={`본사 정책: ${franchiseSync.policy.policy_name ?? ''} · 슬롯: ${franchiseSync.policy.matched_slot?.slot_name ?? '—'}`}
             >
               <Sparkles size={12} /> 본사 정책 자동 동기화
             </span>
           )}
           {isBreak && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-slate-900 dark:text-amber-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-amber-200">
               <Coffee size={12} /> 브레이크타임
             </span>
           )}
           {isClosed && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/25 px-2.5 py-1 text-slate-900 dark:text-slate-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/25 px-2.5 py-1 text-slate-200">
               <Moon size={12} /> 운영 시간 아님
             </span>
           )}
         </div>
         <button
           onClick={() => navigate('/business')}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-xs font-semibold hover:bg-white/20"
         >
           <X size={14} /> 나가기
         </button>
       </header>
 
-      {/* 본문 */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-4">
+      {/* 본문
+          폰은 세로 한 줄. 태블릿(lg+)은 가로로 벌려 커버 | 정보·컨트롤 2단 —
+          매장 태블릿은 가로로 세워두므로, 세로로 쌓으면 커버가 작아지고 좌우가 텅 빈다.
+          매장에서는 몇 걸음 떨어져서 "지금 무슨 곡인지" 를 보므로 커버와 제목이 커야 한다. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-4 lg:flex-row lg:gap-12 lg:px-12">
         {hasQueue && current ? (
           <>
-            <div className="relative aspect-square w-56 max-w-[60vw] overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10 sm:w-72">
+            <div className="relative aspect-square w-56 max-w-[60vw] shrink-0 overflow-hidden rounded-3xl shadow-2xl ring-1 ring-white/10 sm:w-72 lg:w-[min(40vw,26rem)] lg:max-w-none">
               <AutoCover title={current.title} category={current.genre} imageUrl={current.cover_url} size="lg" />
             </div>
 
-            <div className="space-y-2 text-center">
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{current.title}</h1>
-              <p className="text-base text-white/70">{current.artist ?? '—'}</p>
+            {/* 태블릿에서 오른쪽 단 — 폰에서는 그냥 이어지는 흐름 (display: contents) */}
+            <div className="contents lg:flex lg:w-full lg:max-w-xl lg:flex-col lg:items-start lg:gap-6">
+            <div className="space-y-2 text-center lg:text-left">
+              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{current.title}</h1>
+              <p className="text-base text-white/70 lg:text-lg">{current.artist ?? '—'}</p>
               {playlist && (
                 <p className="inline-flex items-center gap-1 text-xs text-white/50">
                   <ListMusic size={12} /> {playlist.title}
@@ -278,7 +290,7 @@ export default function StorePlayerPage() {
               )}
               {/* X6.84 — 매장주 행동 데이터 (👍/👎) 수집. 로그인 + current 트랙 있을 때만. */}
               {storeId && current?.id && (
-                <div className="flex justify-center pt-2">
+                <div className="flex justify-center pt-2 lg:justify-start">
                   <StoreTrackReactionButtons
                     storeId={storeId}
                     trackId={current.id}
@@ -289,7 +301,7 @@ export default function StorePlayerPage() {
             </div>
 
             {/* 진행바 */}
-            <div className="flex w-full max-w-xl items-center gap-3 text-xs tabular-nums text-white/60">
+            <div className="flex w-full max-w-xl items-center gap-3 text-xs tabular-nums text-white/60 lg:max-w-none">
               <span>{formatTime(currentTime)}</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
                 <div
@@ -301,12 +313,12 @@ export default function StorePlayerPage() {
             </div>
 
             {/* 큰 컨트롤 — 브레이크/운영종료 중에는 본사 스케줄 준수를 위해 비활성. */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 lg:gap-8">
               <button
                 onClick={prev}
                 disabled={scheduleActive}
                 aria-label="이전 곡"
-                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10 lg:p-5"
               >
                 <SkipBack size={24} fill="currentColor" />
               </button>
@@ -314,7 +326,7 @@ export default function StorePlayerPage() {
                 onClick={() => (playing ? pause() : play())}
                 disabled={scheduleActive}
                 aria-label={playing ? '일시정지' : '재생'}
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-black shadow-lift hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:h-24 lg:w-24"
               >
                 {playing ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
               </button>
@@ -322,11 +334,17 @@ export default function StorePlayerPage() {
                 onClick={() => next()}
                 disabled={scheduleActive}
                 aria-label="다음 곡"
-                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
+                className="rounded-full bg-white/10 p-4 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10 lg:p-5"
               >
                 <SkipForward size={24} fill="currentColor" />
               </button>
             </div>
+
+            {/* 볼륨 — 매장에서 제일 자주 만지는 조작부다.
+                전역 미니 플레이어에도 볼륨이 있지만 그건 이 전체화면에 가려서 닿지 않는다.
+                팝오버로 숨기지 않고 항상 펼쳐둔다 — 손님이 "좀 줄여주세요" 할 때
+                두 번 누르게 하면 안 된다. */}
+            <StoreVolumeControl />
 
             {/* 본사 스케줄 안내 (브레이크/운영종료). 오류처럼 보이지 않도록 별도 배너로 표시. */}
             {scheduleActive && (
@@ -349,6 +367,7 @@ export default function StorePlayerPage() {
                 <SkipForward size={12} /> 다음 곡: <span className="text-white/85">{upcoming.title}</span>
               </div>
             )}
+            </div>
           </>
         ) : (
           <div className="space-y-4 text-center">
@@ -433,6 +452,75 @@ export default function StorePlayerPage() {
       </footer>
 
       {/* Priority 5/7 overlays 는 AppShell <GlobalStoreAudioOverlays /> 에서 전역 마운트. */}
+    </div>
+  );
+}
+
+/**
+ * 매장용 볼륨 조절.
+ *
+ * 슬라이더 하나로 끝내지 않고 -10/+10 버튼을 같이 둔다. 벽에 세워둔 태블릿에서 얇은
+ * 슬라이더를 정확히 집는 건 생각보다 어렵고, 손님 앞에서 만지작거리게 된다.
+ * 숫자를 크게 띄우는 것도 같은 이유다 — 한 걸음 떨어져서 지금 몇인지 보여야 한다.
+ */
+function StoreVolumeControl() {
+  const volume = usePlayerStore((s) => s.volume);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const toggleMute = usePlayerStore((s) => s.toggleMute);
+  const percent = Math.round(volume * 100);
+  const locked = isIOSVolumeLocked();
+
+  // iOS/iPadOS 는 audio.volume 을 무시한다. 움직여도 소리가 그대로인 슬라이더는
+  // 고장으로 보이므로, 조작부를 내리고 기기 볼륨 버튼을 쓰라고 알린다.
+  if (locked) {
+    return (
+      <div className="flex w-full max-w-md items-center gap-2 rounded-2xl bg-white/5 px-4 py-3 text-xs text-white/70 ring-1 ring-white/10">
+        <Volume2 size={16} className="shrink-0" />
+        <span>이 기기에서는 <b className="text-white">기기 볼륨 버튼</b>으로 조절해주세요.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex w-full max-w-md items-center gap-3">
+      <button
+        onClick={toggleMute}
+        aria-label={volume === 0 ? '음소거 해제' : '음소거'}
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+      >
+        {volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+      </button>
+
+      <button
+        onClick={() => setVolume(nudgeVolume(volume, -VOLUME_STEP))}
+        aria-label="볼륨 낮추기"
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg font-bold hover:bg-white/20"
+      >
+        −
+      </button>
+
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={volume}
+        onChange={(e) => setVolume(Number(e.target.value))}
+        aria-label="볼륨"
+        className="app-volume-range h-2 flex-1 cursor-pointer appearance-none rounded-full bg-white/20 accent-accent"
+      />
+
+      <button
+        onClick={() => setVolume(nudgeVolume(volume, VOLUME_STEP))}
+        aria-label="볼륨 높이기"
+        className="app-tap flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg font-bold hover:bg-white/20"
+      >
+        +
+      </button>
+
+      <span className="w-12 shrink-0 text-right font-mono text-base font-bold tabular-nums text-white/80">
+        {percent}
+      </span>
     </div>
   );
 }

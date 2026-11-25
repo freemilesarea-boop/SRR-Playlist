@@ -216,8 +216,8 @@ function ReplayModal({ onClose, initialTrackId }: { onClose: () => void; initial
                 <AdminBadge tone={finalEligible ? 'success' : 'neutral'}>{finalEligible ? 'eligible=true' : 'eligible=false'}</AdminBadge>
                 <span className="text-ink-dim">{events.length} events</span>
               </div>
-              <div className="max-h-[55vh] overflow-y-auto">
-                <table className="w-full text-[11px]">
+              <div className="max-h-[55vh] overflow-y-auto overflow-x-auto">
+                <table className="w-full text-[11px] min-w-[760px]">
                   <thead className="sticky top-0 bg-bg-card text-ink-dim"><tr>
                     <th className="px-2 py-1 text-left">시각</th><th className="px-2 py-1 text-left">event</th>
                     <th className="px-2 py-1 text-left">type</th><th className="px-2 py-1 text-right">verif_s</th>

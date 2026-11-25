@@ -18,12 +18,13 @@ export function AdminCard({ title, subtitle, action, className = '', bodyClassNa
   return (
     <section className={`${adminTokens.radius.xl} bg-bg-card ring-1 ring-line/10 ${adminTokens.shadow.card} ${className}`}>
       {(title || subtitle || action) && (
-        <header className="flex items-start justify-between gap-2 border-b border-line/10 px-4 py-3">
+        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-line/10 px-4 py-3">
           <div className="min-w-0">
             {title && <h3 className={adminTypography.heading.h2}>{title}</h3>}
             {subtitle && <p className={`mt-0.5 ${adminTypography.description}`}>{subtitle}</p>}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
+          {/* AdminSection 과 같은 이유 — shrink-0 만 있으면 좁은 화면에서 액션이 밖으로 나간다. */}
+          {action && <div className="max-w-full shrink-0">{action}</div>}
         </header>
       )}
       <div className={`px-4 py-3 ${bodyClassName}`}>{children}</div>

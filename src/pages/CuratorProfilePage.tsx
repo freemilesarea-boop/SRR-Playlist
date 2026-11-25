@@ -56,7 +56,7 @@ export default function CuratorProfilePage() {
       <div className="space-y-3 px-4 py-16 text-center sm:px-6">
         <Sparkles size={28} className="mx-auto text-ink-dim" />
         <p className="text-sm text-ink-mute">큐레이터를 찾을 수 없어요.</p>
-        <Link to="/" className="inline-flex rounded-full bg-bg-card px-3 py-1.5 text-xs hover:bg-bg-hover">
+        <Link to="/" className="inline-flex min-h-11 items-center rounded-full bg-bg-card px-4 py-2.5 text-xs hover:bg-bg-hover">
           홈으로
         </Link>
       </div>

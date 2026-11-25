@@ -35,15 +35,46 @@ export function nativePlatform(): string {
 export async function initNativeShell(): Promise<void> {
   if (!isNativeApp()) return;
 
-  // 상태바: 다크 테마 고정(앱 배경 #0a0a0a 와 일치).
+  // 가장 먼저 — 이 아래에서 찍히는 로그부터 logcat 에서 읽을 수 있어야 한다.
+  // Capacitor 는 객체 인자를 [object Object] 로 뭉개서, 그냥 두면 진단 정보가 통째로
+  // 사라진다(기기에서만 나는 문제를 쫓을 때 치명적).
   try {
-    const { StatusBar, Style } = await import('@capacitor/status-bar');
-    await StatusBar.setStyle({ style: Style.Dark });
-    if (nativePlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#0a0a0a' });
-    }
+    const { installNativeConsoleJson } = await import('@/lib/nativeConsole');
+    installNativeConsoleJson();
+  } catch {
+    /* 로그 포맷 때문에 부팅을 막지는 않는다 */
+  }
+
+  // 레이아웃 오버라이드 훅. 앱은 폭이 태블릿(≥1024px)이라 Tailwind 의 lg: 분기가
+  // 그대로 걸려 데스크톱 사이드바 레이아웃이 뜬다 — 매장 태블릿에는 맞지 않는다.
+  // index.css 의 .native-shell 블록이 이 클래스를 보고 터치 우선 레이아웃으로 되돌린다.
+  try {
+    document.documentElement.classList.add('native-shell');
+    document.documentElement.dataset.nativePlatform = nativePlatform();
+  } catch {
+    /* DOM 없는 환경 — skip */
+  }
+
+  // 상태바: 앱 테마를 따라간다. 예전에는 다크로 고정해서, 라이트 모드로 쓰면
+  // 화면 위쪽 한 줄만 시커멓게 남아 있었다 — 그 한 줄이 "웹뷰" 라고 광고한다.
+  try {
+    const { syncNativeStatusBar } = await import('@/lib/nativeStatusBar');
+    await syncNativeStatusBar();
+    // 테마가 바뀌면(사용자 전환 · OS 다크모드 · 시간대) 상태바도 따라가야 한다.
+    const { useThemeStore } = await import('@/store/themeStore');
+    useThemeStore.subscribe(() => {
+      void syncNativeStatusBar();
+    });
   } catch {
     /* 플러그인 미탑재 환경 — skip */
+  }
+
+  // 누를 때 짧게 울린다. 촉감이 없으면 아무리 다듬어도 웹처럼 읽힌다.
+  try {
+    const { installTapHaptics } = await import('@/lib/nativeHaptics');
+    installTapHaptics();
+  } catch {
+    /* 진동이 안 되는 기기 — skip */
   }
 
   // 스플래시: 첫 렌더 이후 수동 숨김(깜빡임 방지).

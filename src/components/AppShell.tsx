@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import RouteTransition from './native/RouteTransition';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import TrialBanner from './TrialBanner';
@@ -34,6 +35,7 @@ import { resolveMembership } from '@/lib/membership';
 import { resolveLaunchDestination } from '@/lib/storePlaybackGate';
 import { getSavedBrandPlayerPath } from '@/lib/brandSession';
 import { isStandalone } from '@/hooks/useInstallPrompt';
+import { useNativeLanding } from '@/hooks/useNativeLanding';
 
 export default function AppShell() {
   const loadBrand = useBrandStore((s) => s.load);
@@ -63,6 +65,8 @@ export default function AppShell() {
   // Audio Output Phase 2 — 앱 mount 시 저장된 sinkId 자동 복원 · devicechange 이벤트로 auto-reconnect.
   // 새 polling 도입 0. Player 재생 로직 무영향.
   useAudioOutputAutoRestore();
+  // 앱을 켰을 때 역할에 맞는 화면으로 한 번 이동 (웹에서는 no-op).
+  useNativeLanding();
   useEffect(() => {
     // 새로고침/탭종료 후 큐+위치 복원 (자동재생은 X — 사용자 ▶ 누르면 시작)
     const restored = restorePlayerSessionToStore();
@@ -92,29 +96,35 @@ export default function AppShell() {
   }, [pathname, businessMode, membership, navigate]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg pt-safe">
+    <div className="flex min-h-dvh flex-col bg-bg pt-safe">
       <Sidebar />
 
       {/* 모바일 전용 상단 우측 테마 토글 — lg+ 에서는 TopBar 안에 통합돼 숨김 */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end px-4 pt-safe pl-safe pr-safe sm:px-6 lg:hidden">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-end pt-safe pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))] lg:hidden">
         <div className="pointer-events-auto pt-2.5">
           <ThemeQuickToggle />
         </div>
       </div>
 
       {/* main + footer 영역을 사이드바 우측 영역에 두고, 그 안에서 max-w 컨텐츠를 mx-auto 로 중앙 정렬 */}
-      <div className="flex-1 lg:pl-60">
+      <div className="app-main flex-1 lg:pl-60">
         <TopBar />
         <main className="mx-auto w-full max-w-[1500px]">
           <div className="px-4 pt-3 sm:px-6">
             <TrialBanner />
             <InstallPromptBanner />
           </div>
-          <Outlet />
+          {/* 앱에서만 화면 전환 애니메이션이 붙는다(웹은 브라우저 뒤로가기와 충돌). */}
+          <RouteTransition>
+            <Outlet />
+          </RouteTransition>
         </main>
         {/* Player + BottomNav 가 화면 하단을 fixed 로 가리므로 footer 는 충분한 padding-bottom 으로 마지막 줄 보호 */}
-        <div className="pb-44">
-          <Footer />
+        {/* app-footer / app-footer-space — 앱에서는 index.css 가 푸터를 숨기고 여백만 남긴다. */}
+        <div className="app-footer-space pb-44">
+          <div className="app-footer">
+            <Footer />
+          </div>
         </div>
       </div>
 

@@ -16,6 +16,8 @@ import {
   Store, Building2, Network, Check, ShieldCheck, Loader2, Copy, ArrowLeft, AlertTriangle,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { openExternalUrl } from '@/lib/externalNav';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { toast } from '@/store/toastStore';
 import Alert from '@/components/Alert';
 import SignupSourceField from '@/components/auth/SignupSourceField';
@@ -189,7 +191,20 @@ function StorePanel({ ctx, price, defaultPhone }: {
         promotion_code: promo ? promoInput.trim() : null,
       });
       // 권한 부여는 절대 프론트에서 하지 않는다 — PayApp 웹훅에서만.
-      if (res.ok && res.payurl) { window.location.href = res.payurl; return; }
+      // 앱에서는 WebView 를 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
+      if (res.ok && res.payurl) {
+        // 앱에서는 외부 결제창을 열지 않는다(스토어 결제 정책 — purchaseGate.ts).
+        // 라우트에서 이미 막히지만, 화면을 재사용할 때를 대비한 최후 방어선이다.
+        if (!canShowPurchaseUi()) return;
+        await openExternalUrl(res.payurl, {
+          onReturn: () => {
+            // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는
+            // 서버 상태를 다시 읽어 화면만 갱신한다(반영에 몇 초 걸릴 수 있음).
+            void useAuthStore.getState().refreshProfile();
+          },
+        });
+        return;
+      }
       toast.error(res.error ?? '결제를 시작하지 못했어요.');
     } catch (e) {
       toast.error(friendlyError(e, '결제 시작 실패'));
@@ -627,7 +642,9 @@ function FranchisePanel({ ctx, signupSourceAnswered, onChanged }: {
 
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-4 rounded-3xl bg-bg-card p-5 ring-1 ring-line/10 sm:p-6">
+    // Panel 안은 전부 입력 폼이다. 태블릿에서 폭을 잡지 않으면 연락처 입력칸 하나가
+    // 1200px 을 가로질러, 어디를 눌러 무엇을 쓰는지 한눈에 안 들어온다.
+    <section className="space-y-4 rounded-3xl bg-bg-card p-5 ring-1 ring-line/10 sm:p-6 lg:mx-auto lg:max-w-2xl">
       <div>
         <h2 className="text-lg font-extrabold tracking-tight">{title}</h2>
         {subtitle && <p className="text-xs text-ink-mute">{subtitle}</p>}

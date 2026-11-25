@@ -23,10 +23,16 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     // 웹 화면이 그려지기 전 WebView 기본 흰 배경이 번쩍이지 않게 앱 배경색으로 칠한다.
     backgroundColor: '#0a0a0a',
-    // targetSdk 35 앱은 Android 15+ 에서 화면이 상태바·내비게이션바 밑까지 강제로 늘어난다
-    // (edge-to-edge). 'auto' 면 그 기기에서만 WebView 에 시스템 바 만큼 여백을 줘서
-    // 상단 메뉴·하단 플레이어가 가려지지 않게 한다. Android 14 이하는 그대로.
-    adjustMarginsForEdgeToEdge: 'auto',
+    // 시스템 바(상태바·제스처바) 여백은 CSS env(safe-area-inset-*) 로 처리한다(index.css).
+    // adjustMarginsForEdgeToEdge 를 켜면 WebView 가 여백을 먹어 그 처리와 겹친다 — 기본값(disable) 유지.
+    //
+    // WebView 의 console 을 릴리스 빌드에서도 logcat 으로 넘긴다.
+    //
+    // 기본값('debug')은 디버그 빌드에서만 넘긴다. 그래서 릴리스 APK 로 실기기를
+    // 돌리면 console.warn 이 분명히 실행되는데도 `adb logcat` 에 아무것도 안
+    // 잡힌다 — 계측을 아무리 넣어도 수집이 안 되는 상태였다.
+    // 우리 로그는 실패와 지연 측정뿐이고 양이 적다.
+    loggingBehavior: 'production',
   },
   plugins: {
     SplashScreen: {

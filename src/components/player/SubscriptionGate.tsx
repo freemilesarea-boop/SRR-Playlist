@@ -4,6 +4,7 @@ import { Lock, Crown, X, ShieldCheck } from 'lucide-react';
 import type { GateMode } from '@/store/gateStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { getBusinessTrialGate, type BusinessTrialGate } from '@/lib/trialApi';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 export type { GateMode };
 
@@ -103,7 +104,9 @@ export default function SubscriptionGate({
               <p className="mt-1 text-sm text-ink-mute">
                 {needsBusinessRegistration
                   ? '사업자등록을 마치면 3일 무료체험이 바로 열려요. 체험 기간에는 모든 곡을 매장에서 무제한으로 사용할 수 있어요.'
-                  : '무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.'}
+                  : canShowPurchaseUi()
+                    ? '무료 회원은 곡당 25초까지 미리들을 수 있어요. 프리미엄을 구독하면 모든 곡을 무제한으로 즐길 수 있어요.'
+                    : '무료 회원은 곡당 25초까지 미리들을 수 있어요.'}
               </p>
             </div>
             <div className="space-y-2">
@@ -114,7 +117,7 @@ export default function SubscriptionGate({
                 >
                   <ShieldCheck size={16} /> 사업자등록하고 체험 시작
                 </button>
-              ) : (
+              ) : canShowPurchaseUi() && (
                 <button onClick={() => navigate('/subscription')} className="btn-primary w-full py-3">
                   <Crown size={16} /> 프리미엄 구독하기
                 </button>

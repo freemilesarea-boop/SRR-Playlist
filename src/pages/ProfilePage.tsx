@@ -22,6 +22,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { supabase } from '@/lib/supabase';
 import { requestWithdrawal } from '@/lib/subscriptionApi';
 import { toast } from '@/store/toastStore';
@@ -227,7 +228,9 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="space-y-8 px-4 pb-8 pt-6 sm:px-6">
+    // 설정·목록형 화면이다. 폭을 잡지 않으면 태블릿에서 "구독 관리" 라벨과
+    // 오른쪽 화살표가 1200px 떨어져 한 줄로 안 읽힌다.
+    <div className="app-tap-area app-settings-cols space-y-8 px-4 pb-8 pt-6 sm:px-6 lg:mx-auto lg:max-w-3xl">
       <EnterprisePaymentBanner />
       <header className="flex items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-soft text-2xl font-bold text-bg">
@@ -249,8 +252,10 @@ export default function ProfilePage() {
       <section className="space-y-2">
         <SectionHeader title="계정" desc="요금제와 구독, 서비스 모드를 관리합니다." />
       <div className="divide-y divide-line/10 overflow-hidden rounded-2xl bg-bg-card">
-        <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
-          desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
+        {canShowPurchaseUi() && (
+          <Row to="/pricing" icon={<Tag size={18} />} label="요금제 가입"
+            desc="매장 가입 · 엔터프라이즈 본사 · 엔터프라이즈 가맹 — 언제든 결제하실 수 있어요." />
+        )}
         <Row to="/subscription" icon={<CreditCard size={18} />} label="구독 관리" />
         {profile?.role === 'admin' && (
           <Row to="/admin" icon={<Shield size={18} />} label="관리자 페이지" />

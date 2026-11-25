@@ -24,6 +24,7 @@ import { fetchPlaylistCounts } from '@/lib/api';
 import { useBusinessStore } from '@/store/businessStore';
 import { useBusinessScheduleStore } from '@/store/businessScheduleStore';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { usePlayerStore } from '@/store/playerStore';
 import { useBusinessAutoSwitch } from '@/hooks/useBusinessAutoSwitch';
 import { useStartBusinessMode } from '@/hooks/useStartBusinessMode';
@@ -174,7 +175,7 @@ export default function BusinessPage() {
   const SlotIcon = slotIcon(displaySchedule?.slot_name);
 
   return (
-    <div className="space-y-5 px-4 pb-8 pt-6 sm:px-6">
+    <div className="flex flex-col gap-5 px-4 pb-8 pt-6 sm:px-6 lg:gap-6">
       {/* 헤더 — 1줄 컴팩트 (제목 + ON AIR/OFF 클릭 토글) */}
       <header className="flex items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/30">
@@ -185,7 +186,7 @@ export default function BusinessPage() {
           onClick={handleToggleBusinessMode}
           disabled={starting || (!businessMode && schedules.length === 0)}
           aria-pressed={businessMode}
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
+          className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 transition ${
             isPlaying
               ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-200 ring-emerald-400/30 hover:bg-emerald-500/25'
               : 'bg-bg-card text-ink-dim ring-line/10 hover:bg-bg-hover hover:text-ink'
@@ -288,7 +289,7 @@ export default function BusinessPage() {
 
             {/* 표지 + 제목 */}
             <div className="flex items-end gap-4">
-              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-line/20 sm:w-24">
+              <div className="aspect-square w-20 shrink-0 overflow-hidden rounded-xl shadow-2xl ring-1 ring-line/20 sm:w-24 lg:w-32">
                 <AutoCover
                   title={displayPlaylist.title}
                   category={displayPlaylist.category}
@@ -300,7 +301,7 @@ export default function BusinessPage() {
                 <p className="text-[11px] uppercase tracking-wider text-white/65">
                   {displayIsFallback ? '폴백 재생' : '지금 자동 재생 슬롯'}
                 </p>
-                <h2 className="text-xl font-extrabold leading-tight text-white drop-shadow sm:text-2xl">
+                <h2 className="text-xl font-extrabold leading-tight text-white drop-shadow sm:text-2xl lg:text-3xl">
                   {displayPlaylist.title}
                 </h2>
               </div>
@@ -315,8 +316,10 @@ export default function BusinessPage() {
               </div>
             )}
 
-            {/* 시작/끄기 통합 버튼 */}
-            <div className="flex flex-col gap-2 sm:flex-row">
+            {/* 시작/끄기 통합 버튼
+                태블릿에서 버튼이 1200px 로 늘어나면 "어디를 눌러야 하는지" 가 흐려진다.
+                최대 폭을 잡아 손이 가는 크기로 남긴다. */}
+            <div className="flex flex-col gap-2 sm:flex-row lg:max-w-2xl">
               {isPlaying ? (
                 <button
                   onClick={stopBusinessMode}
@@ -379,7 +382,7 @@ export default function BusinessPage() {
       </button>
 
       {/* 사업자 플랜 안내 — 1줄 (전환 시 1줄에 끝남) */}
-      {!isBusinessPlan && (
+      {!isBusinessPlan && canShowPurchaseUi() && (
         <button
           onClick={() => navigate('/subscription')}
           className="flex w-full items-center gap-2 rounded-2xl bg-accent/8 px-3.5 py-2.5 text-left text-xs ring-1 ring-accent/25 transition hover:bg-accent/12"
@@ -392,8 +395,12 @@ export default function BusinessPage() {
         </button>
       )}
 
+      {/* 자동 스케줄 + 매장 QR — 앱 태블릿에서만 좌우 2단.
+          contents 라서 폰·웹에서는 이 래퍼가 없는 것과 똑같이 한 줄로 쌓인다(순서·간격 그대로).
+          매장 태블릿은 가로가 남는데 한 줄로 쌓으면 스크롤만 길어진다. */}
+      <div className="app-store-grid contents">
       {/* === 자동 스케줄 운영 — 첫 사용자면 자동 펼침 (load 완료 후 마운트로 defaultOpen 정확히 반영) === */}
-      <div id="scheduler-section">
+      <div id="scheduler-section" className="app-store-main">
         {scheduleLoading ? (
           <div className="rounded-2xl bg-bg-card/60 px-4 py-3.5 text-xs text-ink-dim ring-1 ring-line/10">
             자동 스케줄 불러오는 중…
@@ -415,15 +422,19 @@ export default function BusinessPage() {
       </div>
 
       {/* 매장 QR */}
-      <CollapseSection
-        icon={<QrCode size={14} className="text-accent" />}
-        title="매장 QR 공유"
-        subtitle="손님이 찍으면 매장 플레이리스트를 같이 들을 수 있어요"
-      >
-        <BusinessQRSection playlists={businessOnlyPlaylists} />
-      </CollapseSection>
+      <div className="app-store-side">
+        <CollapseSection
+          icon={<QrCode size={14} className="text-accent" />}
+          title="매장 QR 공유"
+          subtitle="손님이 찍으면 매장 플레이리스트를 같이 들을 수 있어요"
+        >
+          <BusinessQRSection playlists={businessOnlyPlaylists} />
+        </CollapseSection>
+      </div>
+      </div>
 
-      {/* 다른 플레이리스트 둘러보기 */}
+      {/* 다른 플레이리스트 둘러보기
+          (자동 스케줄·QR 과 달리 가로로 긴 플레이리스트 행이 들어가므로 전체 폭을 쓴다) */}
       <CollapseSection
         icon={<Compass size={14} className="text-accent" />}
         title="다른 플레이리스트 둘러보기"

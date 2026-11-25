@@ -149,7 +149,8 @@ export default function PlacementAuditPanel() {
 
       {/* 큐 */}
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[640px]">
           <thead>
             <tr className="bg-bg-soft text-left font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">
               <th className="px-3 py-2">플레이리스트</th>
@@ -226,6 +227,7 @@ export default function PlacementAuditPanel() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-line/10 text-[11px] leading-relaxed text-ink-dim">

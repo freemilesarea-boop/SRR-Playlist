@@ -430,7 +430,8 @@ export default function BusinessScheduler() {
       {/* 프로필 + 영업시간 */}
       <section className="space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-ink-mute">매장 정보</h3>
-        <div className="grid gap-2 sm:grid-cols-2">
+        {/* 태블릿에서는 매장명·업종·시작·종료가 한 줄에 들어간다 — 스크롤 없이 한눈에 본다. */}
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <input
             value={profile?.store_name ?? ''}
             onChange={(e) =>
@@ -572,7 +573,18 @@ export default function BusinessScheduler() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            {/* 태블릿에서는 오전·오후·저녁을 가로로 나란히 — 하루 전체 설정이 한 화면에 들어온다.
+                세로로 쌓으면 저녁 슬롯을 보려고 스크롤해야 해서 시간 관계가 안 보인다.
+
+                칸 수를 화면 폭(xl:)으로 정하면 안 된다. 태블릿 2단 레이아웃에서 이 영역은
+                화면의 60% 뿐이라, xl 이라고 3칸으로 벌리면 카드 하나가 208px 이 되어
+                종료 시간 입력이 카드 밖으로 밀려 잘렸다 — 카드가 overflow-hidden 이라
+                잘린 줄도 모르고 "시간이 하나뿐인 화면" 처럼 보였다.
+                auto-fit + minmax 는 화면이 아니라 이 영역의 실제 폭을 보고 칸 수를 정한다.
+                21rem = 시작·종료 입력 두 개와 ~ 가 들어가는 최소 폭.
+          min(21rem,100%) — 21rem 만 쓰면 그보다 좁은 화면(아이폰 SE 375px)에서
+          최소 폭이 그대로 남아 13px 이 화면 밖으로 나갔다. */}
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(21rem,100%),1fr))] gap-2">
               {SLOT_NAMES.map((name) => (
                 <SimpleSlotCard
                   key={name}
@@ -634,7 +646,7 @@ export default function BusinessScheduler() {
         <button
           onClick={() => void saveSimpleSchedule()}
           disabled={savingSimple || !synced}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card transition hover:opacity-95 disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-sm font-bold text-bg shadow-card transition hover:opacity-95 disabled:opacity-60 lg:mx-auto lg:max-w-md"
         >
           <Save size={16} />
           {savingSimple
@@ -694,7 +706,8 @@ function SplitSlotGroup({
           <p className="text-[10px] text-ink-dim">{sub}</p>
         </div>
       </div>
-      <div className="space-y-2">
+      {/* 칸 수는 화면이 아니라 이 영역의 실제 폭으로 — 위 그리드와 같은 이유. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(21rem,100%),1fr))] gap-2">
         {SLOT_NAMES.map((name) => (
           <SimpleSlotCard
             key={name}
@@ -806,6 +819,8 @@ function SimpleSlotCard({
         </span>
       </div>
 
+      {/* min-w-0 — grid 아이템의 기본 min-width 는 auto 라 min-content 밑으로 줄지 않는다.
+          칸이 좁아지면 줄어드는 대신 옆으로 밀려 나가 잘렸다. 마지막 방어선. */}
       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_1fr]">
         <input
           type="time"
@@ -813,7 +828,7 @@ function SimpleSlotCard({
           onChange={(e) => onChange({ start: e.target.value })}
           onClick={openTimePicker}
           onFocus={openTimePicker}
-          className="input py-1.5 text-sm font-mono"
+          className="input min-w-0 py-1.5 text-sm font-mono"
         />
         <span className="hidden items-center justify-center text-ink-dim sm:flex">~</span>
         <input
@@ -822,7 +837,7 @@ function SimpleSlotCard({
           onChange={(e) => onChange({ end: e.target.value })}
           onClick={openTimePicker}
           onFocus={openTimePicker}
-          className="input py-1.5 text-sm font-mono"
+          className="input min-w-0 py-1.5 text-sm font-mono"
         />
       </div>
 
@@ -863,7 +878,7 @@ function SimpleSlotCard({
         <button
           onClick={onAutoMatch}
           title="이 시간대에 맞는 플레이리스트 자동 추천"
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-bg-hover px-2.5 py-1.5 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg bg-bg-hover px-3 py-1.5 text-[11px] font-semibold text-ink-mute ring-1 ring-line/10 hover:text-ink"
         >
           <ListMusic size={12} /> 자동
         </button>

@@ -11,10 +11,23 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* 루트도 같이 막는다 — body 에만 걸면 일부 안드로이드 WebView 가 문서 자체를 민다. */
+  html {
+    overscroll-behavior-x: none;
+    overflow-x: hidden;
+  }
+
   body {
     background-color: rgb(var(--color-bg));
     color: rgb(var(--color-ink));
+    /* 세로는 당겨서 새로고침 되지 않게, 가로는 화면이 통째로 밀리지 않게.
+     *
+     * 가로 레일(플레이리스트 캐로셀)이 화면 밖으로 넘치는 구조라, 손가락을
+     * 옆으로 쓸면 레일 대신 페이지가 따라 움직여 화면이 좌우로 어긋났다.
+     * 넘치는 건 레일 자신의 overflow-x 로만 스크롤되어야 한다. */
     overscroll-behavior-y: none;
+    overscroll-behavior-x: none;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv09', 'cv10', 'cv11', 'ss01';
@@ -34,9 +47,20 @@
     color: rgb(var(--color-ink));
   }
 
+}
+
+/* 안전영역(노치 · Dynamic Island · 홈 인디케이터).
+ *
+ * @layer base 에 있었는데, base 는 Tailwind utilities 보다 먼저 깔린다. 그래서
+ * `px-3 pl-safe` 처럼 같이 쓰면 px-3 이 이겨서 안전영역이 통째로 무시됐다 —
+ * 아이폰 가로 화면에서 미니 플레이어와 토스트가 노치에 물리던 이유다.
+ * utilities 로 올려서 그 역전을 없앤다.
+ *
+ * 주의: padding 을 그대로 덮어쓴다. 여백을 함께 주려면 이 클래스 대신
+ * pl-[max(0.75rem,env(safe-area-inset-left))] 처럼 max() 로 적어야 한다. */
+@layer utilities {
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pt-safe { padding-top: env(safe-area-inset-top); }
-  /* X6.40: 노치/Dynamic Island 좌우 잘림 방지 — fixed 요소에 적용 */
   .pl-safe { padding-left: env(safe-area-inset-left); }
   .pr-safe { padding-right: env(safe-area-inset-right); }
   .px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
@@ -71,6 +95,20 @@
   }
 }
 
+/* 하단 고정 영역 — 콘텐츠 → 미니플레이어 → 하단탭 → safe-area 순서.
+ *
+ * 전에는 미니플레이어가 bottom: 5.25rem 으로 박혀 있었다. 그 값은 하단탭 높이만
+ * 더한 것이고 env(safe-area-inset-bottom) 이 빠져 있어서, 제스처바가 있는 기기에서는
+ * 탭이 그만큼 위로 올라와 미니플레이어를 덮었다(탭 z-30 > 플레이어 z-20).
+ * 에뮬레이터·웹은 inset 이 0 이라 멀쩡해 보였다.
+ *
+ * 이제 BottomNav 가 자기 실측 높이를 --app-nav-h 로 올린다(pb-safe 포함).
+ * 기기·탭 개수·글꼴 크기가 달라져도 따라간다. 변수가 아직 없을 때를 위한
+ * fallback 은 종전 값으로 둔다.
+ */
+.app-player {
+  bottom: calc(var(--app-nav-h, 5rem) + 0.5rem);
+}
 /* range input */
 input[type='range'] {
   -webkit-appearance: none;
@@ -190,4 +228,320 @@ input[type='range']::-moz-range-thumb {
 }
 @media (prefers-reduced-motion: reduce) {
   .eq-bars > span { animation: none; height: 8px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 앱(네이티브 쉘) 레이아웃
+ *
+ * 앱 하나가 세 종류의 기기에서 돈다:
+ *   폰   (아이폰 · 갤럭시, 390~430px) — 웹 모바일과 같은 한 줄 레이아웃
+ *   태블릿(매장용, 1280~2000px)       — 폭이 lg: 를 넘어 데스크톱 레이아웃이 걸린다
+ *
+ * 태블릿이 문제다. Tailwind 의 lg: 분기가 그대로 걸려 사이드바 + 1500px 본문이 뜨는데,
+ * 손가락으로 쓰는 기기에는 맞지 않는다(hover 없음, 한 줄이 화면 끝까지 늘어남).
+ *
+ * 그래서 뼈대(사이드바/하단탭/푸터)는 모든 앱에 공통으로 적용하고,
+ * 크기에 관한 것(글자 · 본문 폭 · 탭 높이)만 태블릿에서 바꾼다.
+ * 폰에서 글자까지 키우면 좁은 화면이 넘친다.
+ *
+ * .native-shell 은 initNativeShell() 이 <html> 에 붙인다. 웹에는 절대 붙지 않으므로
+ * 아래 규칙은 브라우저 사용자에게 영향이 없다.
+ * ───────────────────────────────────────────────────────────── */
+
+/* ===== 모든 앱 공통 ===== */
+
+/* 앱에서는 유리 효과를 끄고 불투명하게.
+ *
+ * .glass / .glass-strong 은 backdrop-blur-2xl(24px) 이다. 화면 하단에 미니플레이어와
+ * 하단탭 두 겹이 fixed 로 떠 있고, 그 아래로 홈이 스크롤된다. backdrop-filter 는
+ * 매 스크롤 프레임마다 아래 픽셀을 다시 읽어 블러해야 해서, 안드로이드 WebView 에서는
+ * 이 두 겹만으로 스크롤이 눈에 띄게 끊긴다. 데스크탑 GPU 에서는 티가 안 나서
+ * 웹은 멀쩡하고 앱만 버벅이는 것으로 보인다.
+ *
+ * 불투명하게 칠하면 합성기가 아래를 읽을 필요가 없다. 색만 또렷해질 뿐
+ * 레이아웃·동작은 그대로다. 웹/PWA 는 건드리지 않는다. */
+.native-shell .glass,
+.native-shell .glass-strong {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: rgb(var(--color-surface)) !important;
+}
+
+/* 뼈대: 사이드바 대신 하단탭 */
+.native-shell .app-sidebar {
+  display: none !important;
+}
+.native-shell .app-main {
+  padding-left: 0 !important;
+}
+.native-shell .app-bottom-nav {
+  display: block !important;
+}
+
+/* 회사 정보·약관 푸터는 웹 문서용이다. 앱에서는 "더보기" 전체 메뉴가 대신한다
+   (약관/개인정보/사업자 정보가 모두 거기 있다 — 스토어 심사·전자상거래법 요건). */
+.native-shell .app-footer {
+  display: none !important;
+}
+/* 푸터가 사라지면 하단탭/플레이어에 가려질 여백만 남기면 된다.
+ *
+ * 9rem 이었는데 그건 하단탭만 계산한 값이다. 플레이어 바가 떠 있으면
+ * bottom: 5.25rem + 높이 4.5rem ≈ 9.75rem 을 차지해서, 아이폰 SE(667px) 처럼
+ * 짧은 화면에서는 맨 아래 칩 한 줄이 플레이어 밑에 깔려 눌리지 않았다.
+ * 웹의 pb-44(11rem)와 같은 높이로 맞춘다. */
+.native-shell .app-footer-space {
+  /* 하단탭 + 미니플레이어 + 숨 쉴 틈. 둘 다 실측값이라 기기마다 맞는다.
+     미니플레이어가 없으면 --app-player-h 가 0 이라 그만큼 여백이 준다. */
+  padding-bottom: calc(
+    var(--app-nav-h, 5rem) + var(--app-player-h, 4.5rem) + 1.5rem
+  ) !important;
+}
+
+/* 체크박스·라디오 크기.
+ *
+ * 브라우저 기본값이 13×13 이다. 마우스 커서로는 충분해도 손가락으로는 못 짚는다 —
+ * 렌더 점검에서 /내 정보, /아티스트, /관리자 두 탭에서 같은 크기로 잡혔다.
+ * 웹(.native-shell 밖)에도 적용한다: 아이폰·아이패드는 지금 PWA 로만 돌기 때문에
+ * .native-shell 안에 넣으면 정작 손가락으로 쓰는 기기가 빠진다. */
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: rgb(var(--color-accent));
+}
+
+/* 볼륨 슬라이더 손잡이를 손가락 크기로.
+ *
+ * range 기본 손잡이는 12~14px 라 마우스로는 충분해도 손가락으로는 못 집는다.
+ * 매장에서 볼륨을 못 줄이면 결국 기기 버튼을 찾게 되고, 그건 앱을 안 쓰게 되는 길이다.
+ * 트랙은 얇게 두고 손잡이만 키운다 — 트랙까지 두꺼우면 화면이 투박해진다. */
+.native-shell .app-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent));
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+.native-shell .app-volume-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent));
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+/* 손가락으로 누를 수 있는 최소 크기.
+ *
+ * 웹은 마우스 포인터라 높이 29px 짜리 칩도 정확히 눌린다. 앱은 아니다 — 손가락 접촉면이
+ * 9mm 안팎이라 그 크기는 옆 것을 같이 누른다. 권장치는 44px(Apple HIG / Material).
+ *
+ * 다만 앱에서도 모든 버튼을 키우면 관리자 화면처럼 조작부가 빽빽한 곳은 오히려 못 쓰게 된다.
+ * 그래서 전역 규칙 대신 .app-tap 을 붙인 것만 키운다 — 어디를 키웠는지 코드에서 보이게.
+ */
+.native-shell .app-tap {
+  min-height: 44px;
+}
+
+/* 조작부가 수십 개 컴포넌트에 흩어진 화면(관리자·내 정보)은 하나씩 붙이는 게 불가능하다.
+ * 그런데 거기가 앱에서 가장 작다 — 높이 16~28px 짜리가 화면마다 10개씩 나온다.
+ * 그래서 그 화면 안에서만 일괄로 바닥을 깐다.
+ *
+ * 44px 가 아니라 40px 인 이유는, 표가 빽빽한 관리자 화면에서 행 높이가 한 번에 2.5배가 되면
+ * 오히려 한 화면에 아무것도 안 들어오기 때문이다.
+ * 웹(마우스)에는 적용되지 않으므로 데스크톱 밀도는 그대로다. */
+.native-shell .app-tap-area button,
+.native-shell .app-tap-area a[href],
+.native-shell .app-tap-area [role='button'] {
+  min-height: 40px;
+}
+
+/* 터치: 300ms 탭 지연 제거 + 길게 눌렀을 때 파란 하이라이트 제거 */
+.native-shell button,
+.native-shell a,
+.native-shell [role='button'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 길게 눌러도 글자가 잡히지 않게.
+ *
+ * 앱에서 제목을 길게 눌렀을 때 파란 선택 블록과 "복사 / 전체 선택" 말풍선이 뜨면
+ * 그 순간 웹페이지로 보인다. 네이티브 앱은 본문 글자가 선택되지 않는다.
+ *
+ * 다만 전부 막으면 안 된다 — 매장 코드나 아이디처럼 복사해야 하는 값이 있다.
+ * 입력란과 등폭(mono) 글자는 열어둔다. 등폭은 이 앱에서 코드·ID·토큰에만 쓰여서
+ * "복사할 값" 과 거의 정확히 겹친다. 그 밖에 열어둘 곳은 .app-selectable 로 표시한다. */
+.native-shell {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.native-shell input,
+.native-shell textarea,
+.native-shell [contenteditable='true'],
+.native-shell code,
+.native-shell .font-mono,
+.native-shell .app-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 스크롤이 바깥으로 전파되지 않게. 안쪽 목록 끝까지 내렸을 때 페이지가 같이 밀리면
+   (스크롤 체이닝) 앱에서는 창이 흔들리는 것처럼 보인다. body 의 세로 당김은 이미 막혀 있다. */
+.native-shell [data-scroll-lock],
+.native-shell .overflow-y-auto,
+.native-shell .overflow-auto {
+  overscroll-behavior: contain;
+}
+
+/* ===== 화면 전환 =====
+ *
+ * 앞으로 가면 오른쪽에서, 뒤로 가면 왼쪽에서 들어온다. 방향 감각이 없으면 아무리
+ * 레이아웃을 다듬어도 "링크를 눌렀더니 문서가 바뀐" 웹처럼 읽힌다.
+ *
+ * 거리를 화면 폭이 아니라 32px 로 잡은 이유: 나가는 화면을 붙잡지 않기 때문에,
+ * 전체 폭을 밀면 뒤에 아무것도 없는 빈 공간이 그대로 보인다. 짧게 미는 편이 자연스럽다.
+ * 시간도 220ms 를 넘기지 않는다 — 매장에서 하루에 수백 번 누르는 화면이다. */
+/* fill-mode 는 backwards 다. both(=forwards 포함) 로 두면 애니메이션이 끝난 뒤에도
+ * transform 이 계속 적용된 상태로 남는다(none 이어도 computed 는 matrix 라 마찬가지다).
+ * transform 이 있는 요소는 stacking context 를 만들어서, 그 안의 z-index 가 바깥과
+ * 겨루지 못한다 — 매장 플레이어(z-[90]) 가 이 래퍼 안에 갇혀 하단탭(z-30) 아래로
+ * 내려갔다. 전체화면이어야 할 화면 위로 탭바와 미니 플레이어가 떠 있었다.
+ * backwards 면 끝난 뒤 원래 스타일로 돌아가고, 마지막 키프레임과 값이 같아 튀지 않는다. */
+@media (prefers-reduced-motion: no-preference) {
+  .native-shell .app-route-push {
+    animation: app-route-push 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+  .native-shell .app-route-pop {
+    animation: app-route-pop 190ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+}
+@keyframes app-route-push {
+  from {
+    opacity: 0;
+    transform: translate3d(32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes app-route-pop {
+  from {
+    opacity: 0;
+    transform: translate3d(-32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ===== 태블릿 — 짧은 변이 600px 이상인 기기 =====
+ *
+ * 예전에는 이 구간이 (min-width: 1024px) 하나였다. 그러면 세워 든 아이패드가 전부
+ * 빠진다: 아이패드 미니 744, 아이패드 10.9 820, 갤럭시 탭 753 — 전부 폰 레이아웃을
+ * 그대로 받아서, 10인치 화면에 폰용 한 줄짜리 화면이 떴다.
+ *
+ * 그렇다고 width 만 낮추면 이번엔 폰을 눕혔을 때(아이폰 16 Pro Max 가로 956px)
+ * 태블릿으로 잡힌다. 그래서 가로·세로를 함께 본다 — deviceClass.ts 의
+ * "짧은 변 ≥ 600" 과 같은 판정이다. 폭 700 은 2단으로 나눠도 한 단이 폰 폭만큼
+ * 남는 하한선이고, 높이 600 이 폰 가로를 걸러낸다. */
+@media (min-width: 700px) and (min-height: 600px) {
+  /* 본문이 화면 끝까지 늘어나면 카드 하나가 1900px 이 되어 제목과 값이 양 끝으로
+     갈라진다 — 눈이 따라가지 못한다. 그렇다고 너무 좁히면 큰 태블릿에서 휑해진다.
+     1200px 이 그 사이다(10인치 1280px 기기에서는 거의 꽉 차고, 큰 기기에서는 잡아준다). */
+  .native-shell .app-main > main {
+    max-width: 75rem !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* 플레이어 바를 하단탭 위로. lg: 에서 사이드바(15rem) 만큼 밀려 있던 것을 되돌린다. */
+  .native-shell .app-player {
+    left: 0 !important;
+    right: 0 !important;
+    /* 데스크탑 미디어쿼리의 bottom: 1rem 을 되돌린다. 앱은 폭이 넓어도 하단탭을 쓴다. */
+    bottom: calc(var(--app-nav-h, 5rem) + 0.5rem) !important;
+    max-width: 48rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  /* 하단탭은 서서 누른다 — 손가락 하나가 확실히 들어가는 높이. */
+  .native-shell .app-bottom-nav li > a > span,
+  .native-shell .app-bottom-nav li > button > span {
+    min-height: 56px;
+    font-size: 12px;
+  }
+
+  /* 매장 대시보드 2단.
+   *
+   * 폰에서 만든 세로 한 줄을 태블릿에 그대로 띄우면, 가로는 텅 비고 스케줄을 고치려면
+   * 계속 내려야 한다. 매장 태블릿은 카운터에 세워두고 잠깐씩 만지는 기기라 스크롤이 곧 비용이다.
+   *
+   * 래퍼는 평소 display:contents 라 폰·웹에서는 존재하지 않는 것처럼 동작한다(순서·간격 그대로).
+   * 여기서만 실제 박스로 되살려 그리드를 만든다.
+   *
+   * 좌우 비율 2:1 — 왼쪽은 시간대 3개를 편집하는 곳이라 넓어야 하고,
+   * 오른쪽 QR 은 정사각형 코드 하나라 그 이상 넓어질 이유가 없다.
+   * 1.5:1 이었을 때 왼쪽이 719px 이었는데, 시간대 카드 두 장이 나란히 서려면
+   * 722px 이 필요하다. 3px 이 모자라서 세 장이 전부 세로로 쌓이고 오른쪽이 비었다.
+   * align-items: start — 한쪽을 펼쳤을 때 반대쪽이 같이 늘어나면 빈 카드가 길어진다. */
+  .native-shell .app-store-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .native-shell .app-store-main {
+    min-width: 0;
+  }
+  .native-shell .app-store-side {
+    min-width: 0;
+  }
+
+  /* 설정 화면(내 정보)을 두 단으로 흘린다.
+   *
+   * 서로 독립적인 설정 카드가 길게 쌓여 있어서, 1280×800 태블릿에서 문서 높이가 3300px —
+   * 네 화면을 넘게 내려야 맨 아래(로그아웃·탈퇴)에 닿는다. 폭은 768px 로 묶여 있어 좌우는 비어 있다.
+   *
+   * 카드끼리 순서 의존이 없으니 다단(column)으로 흘리면 된다. grid 와 달리 DOM 을 건드리지
+   * 않고, 카드 높이가 제각각이어도 행이 안 어긋난다.
+   *
+   * space-y 는 형제 사이 margin-top 이라 두 번째 단 맨 위 카드에 위쪽 여백이 남아 단끼리
+   * 어긋난다. 그래서 margin-top 을 지우고 아래쪽 여백으로 바꾼다. */
+  .native-shell .app-settings-cols {
+    max-width: none !important;
+    columns: 2;
+    column-gap: 1.5rem;
+  }
+  .native-shell .app-settings-cols > * {
+    break-inside: avoid;
+    margin-bottom: 1.5rem;
+  }
+  .native-shell .app-settings-cols > * + * {
+    margin-top: 0 !important;
+  }
+}
+
+/* 매장 태블릿은 손에 드는 폰도, 무릎에 둔 아이패드도 아니다 — 카운터에 세워두고
+   한 걸음 떨어져 본다. rem 기반이라 루트만 키우면 화면 전체가 비례해서 커진다.
+   손에 드는 크기(1024px 미만)에는 적용하지 않는다. */
+@media (min-width: 1024px) {
+  .native-shell {
+    font-size: 17px;
+  }
+
+  /* 데스크탑에는 하단탭이 없다(사이드바를 쓴다) — 플레이어가 화면 바닥에 붙는다.
+     네이티브 셸은 폭이 넓어도 하단탭을 쓰므로 위의 .native-shell .app-player 가
+     이 값을 다시 덮는다. */
+  .app-player {
+    bottom: 1rem;
+  }
 }

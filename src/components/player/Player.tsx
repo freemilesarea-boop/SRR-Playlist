@@ -34,6 +34,7 @@ import {
   getPlayerInstanceId,
 } from '@/lib/playbackFlightRecorder';
 import { disposeAudioElement, registerHardRecovery } from '@/lib/hardRecovery';
+import { isIOSVolumeLocked } from '@/lib/iosAudio';
 import { useAuthStore } from '@/store/authStore';
 import { useBusinessStore } from '@/store/businessStore';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -62,6 +63,14 @@ import { trackStream, recordPlaylistQualifiedView, getAnonymousId } from '@/lib/
 import { safeRecordStreamV2, safeHeartbeatV2 } from '@/lib/streamingV2Api';
 import { logPlaybackEventV2 } from '@/lib/playbackEventsV2';
 import { captureBusinessError } from '@/lib/sentry';
+import { publishPlayerDiagState } from '@/lib/volumeTrace';
+import { useMeasuredCssVar } from '@/hooks/useMeasuredCssVar';
+import {
+  markTrackFailed, isTrackFailed, clearTrackFailure, pruneFailedTracks, failedTrackCount,
+  recordFailureSkip, failureSkipCount, BLOCK_AFTER_SKIPS,
+} from '@/lib/failedTracks';
+import { logPlaybackDiag, isBenignPlayRejection, breadcrumb, safeUrlId } from '@/lib/playbackDiag';
+import { perfMark, meta as perfMeta, perfFlush } from '@/lib/perfPlayback';
 import {
   pushRecentlyPlayed,
   saveContinueListening,
@@ -89,6 +98,7 @@ import {
   logPlaybackDiagnostic, beaconPlaybackDiagnostic, takeReloadReason, type DiagnosticReason,
 } from '@/lib/playbackDiagnostics';
 import { pageBuildHash } from '@/lib/pwaBuildIdentity';
+import { probeAudioLevel, snapshotPlayerVolume, formatLevelReport, isLevelProbeEnabled } from '@/lib/audioLevelProbe';
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
 import { noteAutoplayBlocked, noteAudiblePlayback } from '@/lib/autoplayRecovery';
 import { reloadApp, SELF_HEAL_RELOAD_KEY } from '@/lib/playbackGuard';
@@ -115,19 +125,6 @@ const MEDIA_ERROR_CODES: Record<number, string> = {
 };
 
 /**
- * X6.79 — iOS/iPadOS Safari 감지.
- * WebKit 은 audio.volume setter 를 무시 (Apple 정책) → 슬라이더 작동 X.
- * iPadOS 13+ 는 navigator.platform='MacIntel' 로 위장하므로 maxTouchPoints 로 추가 판별.
- */
-function isIOSSafari(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent;
-  if (/iPad|iPhone|iPod/.test(ua)) return true;
-  // iPadOS 위장 케이스
-  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
-}
-
-/**
  * 세션당 1회만 실패 처리되는 트랙 id 집합.
  * 모듈 스코프라 페이지 이동/컴포넌트 언마운트해도 유지 (브라우저 탭 단위).
  * SRC_NOT_SUPPORTED / DECODE 등 "재생 불가" 가 확정된 트랙을 같은 세션에서
@@ -135,7 +132,8 @@ function isIOSSafari(): boolean {
  *
  * X6.66 — 24시간+ 매장 무중단 운영 시 무한 누적 방지 (truncateSetOldest 로 cap).
  */
-const sessionFailedTrackIds = new Set<string>();
+// 실패 명단은 수명이 있는 별도 모듈로 옮겼다 — failedTracks.ts 참고.
+// 모듈 전역 Set 이던 시절에는 앱 재시작만이 복구 수단이었다.
 
 // X6.66 — track-id 기반 Map/Set 무한 성장 차단 (매장 24h+ 무중단 운영 대비).
 // 한 매장이 한 달 연속 운영해도 메모리 안정. JS Map/Set 은 삽입 순서 유지 → LRU 트림.
@@ -155,22 +153,24 @@ function truncateMapOldest<K, V>(map: Map<K, V>, max: number): number {
   return removed;
 }
 
-function truncateSetOldest<T>(set: Set<T>, max: number): number {
-  if (set.size <= max) return 0;
-  let removed = 0;
-  const overflow = set.size - max;
-  const iter = set.values();
-  for (let i = 0; i < overflow; i++) {
-    const { value, done } = iter.next();
-    if (done) break;
-    set.delete(value);
-    removed += 1;
-  }
-  return removed;
-}
 
 /** 재생 에러 토스트 디바운스 — 연속 실패 시 토스트 스택 방지(같은 메시지 1개). */
 let lastErrorToastAt = 0;
+/**
+ * loadedmetadata 를 기다리는 한계 시간.
+ *
+ * 이 타임아웃이 잡으려는 것은 "이 파일은 이 기기에서 절대 못 연다" 는 경우다
+ * (iOS 가 못 푸는 WAV 등). 그런 파일은 보통 error 이벤트로 먼저 걸러지고, 여기까지
+ * 오는 건 duration 이 0:00 에 고착돼 조용히 멈춘 경우뿐이다.
+ *
+ * 예전 12초는 짧았다. 서버가 Range 를 쓰지 않고 200 으로 파일 전체를 내려주면
+ * (에뮬레이터·느린 회선에서 실제로 그렇게 된다) 12초 안에 메타데이터가 못 온다.
+ * 그러면 멀쩡한 파일을 "재생 불가" 로 처리해버린다 — 매장에서는 그게 곧 무음이다.
+ * 느린 회선을 고장으로 오판하지 않을 만큼 늘렸다. 진짜 디코딩 실패는 error 이벤트가
+ * 즉시 잡으므로, 이 시간을 늘려도 고장 감지가 늦어지지는 않는다.
+ */
+const META_TIMEOUT_MS = 25_000;
+
 const ERROR_TOAST_DEBOUNCE_MS = 3_000;
 
 /**
@@ -439,6 +439,10 @@ export default function Player() {
   const [errored, setErrored] = useState(false);
   const [crossfading, setCrossfading] = useState(false);
 
+  // 미니플레이어 실측 높이를 --app-player-h 로. 페이지 마지막 콘텐츠가 이 바와
+  // 하단탭에 가리지 않도록 하단 여백이 이 값을 더해 쓴다 (index.css).
+  const playerBarRef = useMeasuredCssVar('--app-player-h');
+
   // X6.48: expanded full-screen player Esc + focus trap (a11y)
   // Esc 시 nested queue overlay 먼저 close, 없으면 expanded close
   const expandedRef = useRef<HTMLDivElement>(null);
@@ -464,6 +468,43 @@ export default function Player() {
     return () => { try { delete (w as { __playerDiag?: () => unknown }).__playerDiag; } catch { /* noop */ } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, playing, crossfading, current?.id]);
+
+  // 재생 레벨 자가진단 — 켜둔 세션에 한해, 앱 실행당 딱 한 번, 첫 곡에서.
+  //
+  // "소리가 작다" 는 제보는 원인이 셋(음원 / 플레이어 / 기기)인데 귀로는 구분이 안 된다.
+  // 그래서 첫 곡이 실제로 재생될 때 그 파일을 따로 디코딩해 LUFS 를 재고,
+  // 같은 순간의 audio.volume 과 같이 한 줄로 남긴다. 셋 중 어디를 봐야 할지 바로 나온다.
+  //
+  // 기본은 OFF 다 — 디코딩을 한 번 더 하는 값을 매장 태블릿이 매번 치를 이유가 없다.
+  // 켜는 법은 isLevelProbeEnabled 주석 참고(?levelDiag=1 · localStorage · VITE_LEVEL_DIAG).
+  //
+  // warn 으로 찍는 이유: 프로덕션 빌드는 log/debug/info 를 지워서 logcat 에 안 남는다.
+  // 재생 중인 엘리먼트에는 손대지 않는다(createMediaElementSource 는 되돌릴 수 없다).
+  const levelProbeDoneRef = useRef(false);
+  useEffect(() => {
+    if (levelProbeDoneRef.current) return;
+    if (!playing || !current?.audio_url) return;
+    if (!isLevelProbeEnabled()) return;
+    levelProbeDoneRef.current = true;
+
+    // 캐시에 이미 받아둔 blob 이 있으면 그걸 잰다 — 네트워크를 다시 타지 않고,
+    // 무엇보다 "실제로 재생된 그 바이트" 를 재게 된다.
+    const url = playbackSrcFor(current.audio_url) || current.audio_url;
+    void probeAudioLevel(url)
+      .then((probe) => {
+        const snap = snapshotPlayerVolume(
+          usePlayerStore.getState().volume,
+          activeIdx,
+          audioARef.current,
+          audioBRef.current,
+        );
+        console.warn(formatLevelReport(probe, snap));
+      })
+      .catch((e) => {
+        console.warn('[레벨진단] 측정 실패 — 재생에는 영향 없음', e instanceof Error ? e.message : String(e));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, current?.id]);
 
   // 0078 — 미니 플레이어 볼륨 popover
   const [volumePopover, setVolumePopover] = useState(false);
@@ -1428,9 +1469,20 @@ export default function Player() {
     // 세션 내 이미 재생 실패(DECODE/SRC_NOT_SUPPORTED)로 확정된 트랙 →
     // 자동으로 다음 곡으로 넘기지 않고 현재 곡에서 정지(에러 표시). 재생 실패는 "곡 종료"가 아니다.
     // (플레이리스트 전체가 자동 스킵되며 토스트가 쌓이던 문제 차단)
-    if (playing && sessionFailedTrackIds.has(current.id)) {
-      setErrored(true);
-      pause();
+    if (playing && isTrackFailed(current.id)) {
+      // 이 기기에서 안 열리는 곡이다. 여기서 멈추면 그 곡이 들어간 플레이리스트가
+      // 통째로 재생 불가로 보인다 — 805곡짜리 목록이 한 곡 때문에 죽었다.
+      // 멈추는 대신 다음 곡으로 넘긴다.
+      const failedId = current.id;
+      if (recordFailureSkip(failedId)) {
+        console.warn('[audio] 반복 실패로 앱에서 제외', {
+          id: failedId, title: current.title, skips: BLOCK_AFTER_SKIPS,
+        });
+      }
+      breadcrumb('skip-failed-track', {
+        track: failedId, skips: failureSkipCount(failedId),
+      });
+      next({ cause: 'skip_error' });
       return;
     }
 
@@ -1461,6 +1513,10 @@ export default function Player() {
           activeIdx,
         });
       }
+      perfMark('currentTrack');
+      breadcrumb('track-change', {
+        from: lastTrackIdRef.current ?? '—', to: current.id, activeIdx, crossfading,
+      });
       lastTrackIdRef.current = current.id;
       cancelCrossfade();
       setCurrentTime(0);
@@ -1472,18 +1528,38 @@ export default function Player() {
       // 2) 새 src 적용
       // 오프라인 캐시가 준비돼 있으면 로컬 object URL, 아니면 원본 네트워크 URL.
       // 동기 조회만 한다 — 트랙 전환 hot path 에 await 를 넣지 않는다.
+      perfMark('srcResolve');
       const playbackSrc = playbackSrcFor(current.audio_url);
+      perfMark('srcResolved');
+      perfMeta({ 캐시본: playbackSrc !== current.audio_url });
       if (import.meta.env.DEV) {
         console.debug('[Player] src set', { id: current.id, url: current.audio_url, cached: playbackSrc !== current.audio_url, readyState_before: audio.readyState, networkState_before: audio.networkState });
       }
+      // 이 호출이 진행 중이던 로드를 취소한다 → 직전 요소에 ABORTED 가 난다.
+      // 어떤 전환이 그것을 유발했는지 보려면 여기가 기록되어야 한다.
+      perfMark('srcSet');
+      breadcrumb('src-set', {
+        track: current.id, srcId: safeUrlId(playbackSrc),
+        cached: playbackSrc !== current.audio_url, activeIdx,
+      });
       audio.src = playbackSrc;
       // 3) load() 는 playing=true 일 때만 호출 — preload="metadata" 와 결합해
       //    사용자 의도 없는 자동 fetch / preload 에러 toast 폭주 차단 (0077-hotfix)
       clearMetaTimer();
       if (playing) {
+        perfMark('load');
+        breadcrumb('load', { track: current.id, activeIdx });
         try { audio.load(); } catch { /* noop */ }
-        // 메타데이터 로딩 타임아웃 — 12초 안에 loadedmetadata 가 없으면(duration 0:00 고착)
-        // 재생 불가로 처리(iOS 가 디코딩 못 하는 WAV 등). onLoadedMetadata 에서 해제.
+        // 재생은 onCanPlay 에서 건다.
+        //
+        // 한 번 load() 직후 바로 play() 를 걸어봤다가 되돌렸다. 같은 엘리먼트에
+        // immediate 와 canplay 두 경로가 겹쳐 들어가고, 둘 다 ensureSinkReady 를
+        // await 한 뒤 play() 를 부른다. readyState=0 에서 시작한 쪽이 뒤늦게
+        // 돌아오면 이미 다음 트랙으로 바뀐 엘리먼트를 건드린다.
+        // 실기기에서 첫 곡 이후 진행이 멈추고 다음 플레이리스트가 재생되지
+        // 않았다. 제스처 창 문제는 다른 방법으로 풀어야 한다.
+        // 메타데이터 로딩 타임아웃 — duration 0:00 고착을 재생 불가로 처리.
+        // 시간 선택 이유는 META_TIMEOUT_MS 참고. onLoadedMetadata 에서 해제.
         const trackId = current.id;
         metaTimerRef.current = window.setTimeout(() => {
           const a = activeRef();
@@ -1492,7 +1568,9 @@ export default function Player() {
               && (!a || !Number.isFinite(dur) || (dur ?? 0) <= 0)) {
              
             console.warn('[audio] metadata timeout — duration 0:00, 재생 불가 처리', {
-              id: trackId, title: current.title, src: a?.currentSrc, readyState: a?.readyState, networkState: a?.networkState,
+              id: trackId, title: current.title, src: a?.currentSrc,
+              readyState: a?.readyState, networkState: a?.networkState,
+              timeoutMs: META_TIMEOUT_MS,
             });
             usePlaybackHealthStore.getState().reportPlaybackError('META_TIMEOUT');
             // X6.67 — 매장 무인환경에서는 무음 (사용자 보이지 않음) → Sentry alert.
@@ -1514,7 +1592,7 @@ export default function Player() {
             setErrored(true);
             pause();
           }
-        }, 12000);
+        }, META_TIMEOUT_MS);
       }
       audio.currentTime = 0;
       audio.volume = volume;
@@ -1557,6 +1635,14 @@ export default function Player() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, playable, playing, queue.length, activeIdx, audioGeneration]);
+
+  /* ---------- 진단: activeIdx / crossfading 을 볼륨 추적기에 전달 ---------- */
+  // crossfading 과 activeIdx 는 이 컴포넌트의 로컬 state 라 밖에서 볼 수 없다.
+  // 추적기가 "이 볼륨 쓰기가 crossfade 중에 일어났는가" 를 판정하려면 필요하다.
+  // 읽어서 넘기기만 한다 — 재생·볼륨 동작에는 관여하지 않는다.
+  useEffect(() => {
+    publishPlayerDiagState({ activeIdx, crossfading, storeVolume: volume });
+  }, [activeIdx, crossfading, volume]);
 
   /* ---------- 볼륨 동기화 ---------- */
   useEffect(() => {
@@ -1610,9 +1696,13 @@ export default function Player() {
           console.warn('[player] silent silence detected — unmute', { reason, id: st.queue[st.index]?.id });
           audio.muted = false;
         }
-        if (audio.volume === 0 && !crossfading) {
-          console.warn('[player] silent silence detected — restore volume', {
-            reason, id: st.queue[st.index]?.id, restored: storeVol,
+        // volume === 0 만 보던 것을 "설정값과 어긋나면" 으로 넓혔다.
+        // crossfade 가 중간에 끊기면 audio.volume 이 0 이 아니라 0.2 같은 값으로 남는다.
+        // 그러면 소리가 아주 작게 계속 나오고, 슬라이더는 100% 를 가리킨다 —
+        // 사용자 눈에는 "볼륨이 너무 작다" 로만 보인다.
+        if (!crossfading && Math.abs(audio.volume - storeVol) > 0.01) {
+          console.warn('[player] 볼륨이 설정값과 다름 — 복구', {
+            reason, id: st.queue[st.index]?.id, actual: audio.volume, restored: storeVol,
           });
           audio.volume = storeVol;
         }
@@ -1689,19 +1779,26 @@ export default function Player() {
 
     // X6.66 — track-id 기반 Map/Set 1시간마다 prune (24h+ 매장 무중단 누적 차단).
     // 일반 사용자는 1세션이 짧아 불필요 → 매장 모드 한정.
+    // 실패 명단 만료 정리는 **모든 모드**에서 돈다. 매장모드에만 걸어두니
+    // 일반 사용자는 앱을 껐다 켜기 전까지 명단이 비지 않았다 — 홈 플레이리스트가
+    // 계속 같은 자리에서 멈추던 원인 중 하나.
+    const failedPruneId = window.setInterval(() => {
+      pruneFailedTracks();
+    }, 60_000);
+
     let pruneId: number | null = null;
     if (businessMode) {
       pruneId = window.setInterval(() => {
         const a = truncateMapOldest(pev2StartedTracksRef.current, MAX_TRACK_HISTORY);
         const b = truncateMapOldest(networkRetriedRef.current, MAX_TRACK_HISTORY);
-        const c = truncateSetOldest(sessionFailedTrackIds, MAX_TRACK_HISTORY);
-        if (a + b + c > 0) {
-          console.info('[player] track-history prune', { started: a, network: b, failed: c });
+        if (a + b > 0) {
+          console.info('[player] track-history prune', { started: a, network: b, failed: failedTrackCount() });
         }
       }, 60 * 60 * 1000); // 1h
     }
 
     return () => {
+      window.clearInterval(failedPruneId);
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('pageshow', onPageShow);
@@ -2793,6 +2890,7 @@ export default function Player() {
           const activeIdxNow = healthStateRef.current.activeIdx;
           const isActiveEl = (slot === 'A' && activeIdxNow === 0) || (slot === 'B' && activeIdxNow === 1);
           // 소리가 나기 시작한 것은 어느 슬롯이든 사실이다(크로스페이드 중엔 둘 다 난다).
+          if (ev === 'playing') perfMark('playing');
           if (ev === 'playing') usePlaybackHealthStore.getState().setAudioActive(!el.paused);
           // 반대로 **꺼졌다** 는 판정은 활성 슬롯에서만 받는다. 비활성(프리로드)
           // 슬롯을 정리할 때 나는 pause/emptied 까지 받으면, 활성이 멀쩡히 재생
@@ -2875,6 +2973,12 @@ export default function Player() {
       if (m === 'unknown' && target !== activeRef()) return;
     }
     const t = target.currentTime;
+    // 실제로 진행했을 때만 찍는다.
+    //
+    // load() 는 currentTime 을 0 으로 되돌리면서 timeupdate 를 한 번 발화한다.
+    // 그걸 "첫 소리" 로 치면 사건이 거기서 닫혀 버려서, 뒤에 오는 canplay/playing 이
+    // 측정에서 통째로 빠진다(도달못함=canplay,playCall,playing 으로 보였다).
+    if (t > 0) perfMark('firstProgress');
 
     // Phase 3-1 — stuck detection.
     // paused=false 인데 currentTime 이 2초 이상 진행 안 하면 recovery play 1회.
@@ -2965,7 +3069,7 @@ export default function Player() {
 
     if (wasNaturalEnd) return; // 끝까지 들음(자동 advance / crossfade)
     if (wasPrev) return; // 이전 버튼
-    if (sessionFailedTrackIds.has(outgoingId)) return; // 재생 실패(에러)
+    if (isTrackFailed(outgoingId)) return; // 재생 실패(에러)
     const ctx = playlistContext;
     if (!ctx || ctx.type !== 'catalog') return; // 카탈로그 플레이리스트에서만 집계
 
@@ -3052,6 +3156,7 @@ export default function Player() {
   }
 
   function onLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
+    perfMark('loadedmetadata');
     const target = e.currentTarget;
     const d = target.duration;
     // X6.2.13 — activeRef 가드 완화. metadata 가 어떤 audio 에서 fire 됐든,
@@ -3104,6 +3209,7 @@ export default function Player() {
   }
 
   function onCanPlay(e: React.SyntheticEvent<HTMLAudioElement>) {
+    perfMark('canplay');
     if (e.currentTarget !== activeRef()) return;
     if (!playing) return;
     const audio = e.currentTarget;
@@ -3117,6 +3223,11 @@ export default function Player() {
 
   // play() 호출 + 성공/실패 로그 + 일시적 실패 시 1회 재시도 (AbortError/NotAllowedError 제외)
   async function attemptPlay(audio: HTMLAudioElement, label: string) {
+    perfMark('playCall');
+    breadcrumb('play-attempt', {
+      label, track: current?.id ?? '—', activeIdx,
+      readyState: audio.readyState, paused: audio.paused,
+    });
     // Phase 2-4 hotfix — 첫 play 이전에 audio.sinkId === desired 보장.
     //   • sinkReady=true 이면 즉시 skip (fast path, per-tag idempotent)
     //   • 실패해도 play 자체는 진행 (기본 출력 fallback)
@@ -3171,9 +3282,12 @@ export default function Player() {
         if (import.meta.env.DEV) console.warn(`[Player] muted=true 감지 — 자동 해제 (${label})`);
         audio.muted = false;
       }
-      // volume=0 이면 경고 (크로스페이드 중간 아님)
-      if (audio.volume === 0 && !crossfading) {
-        if (import.meta.env.DEV) console.warn(`[Player] volume=0 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`);
+      // 설정값과 어긋나면 되돌린다(크로스페이드 중간 아님).
+      // 0 만 보면, 끊긴 crossfade 가 남긴 0.2 같은 값은 그대로 지나가 소리만 작아진다.
+      if (!crossfading && Math.abs(audio.volume - volume) > 0.01) {
+        console.warn(`[player] 볼륨 어긋남 감지 — 사용자 볼륨(${volume})으로 복원 (${label})`, {
+          actual: audio.volume,
+        });
         audio.volume = volume;
       }
       if (import.meta.env.DEV) {
@@ -3198,6 +3312,25 @@ export default function Player() {
       }
     } catch (err: unknown) {
       const e = err as DOMException;
+      // 실패 기록은 조건 없이 남긴다 — AbortError/NotAllowedError 는 사용자에게
+      // 보일 실패가 아니지만, 왜 소리가 안 나는지 추적할 때는 그게 가장 중요한 단서다.
+      logPlaybackDiag({
+        stage: 'play-reject',
+        trackId: current?.id ?? null,
+        playlistId: playlist?.id ?? null,
+        sourceType: playlistContext?.type ?? null,
+        queueIndex: index,
+        failedTrack: current ? isTrackFailed(current.id) : null,
+        audio,
+        error: e,
+        extra: {
+          label,
+          benign: isBenignPlayRejection(e?.name),
+          activeIdx,
+          crossfading,
+          storePlaying: playing,
+        },
+      });
       if (e?.name === 'AbortError') {
         if (import.meta.env.DEV) console.debug(`[Player] play() AbortError (${label}) — src 변경으로 인한 무효화`);
         return;
@@ -3433,6 +3566,29 @@ export default function Player() {
       });
     }
     flushFlightRecorderRef.current('media_error', codeName);
+    // 게이트 없는 실패 기록. 릴리스 APK 에는 주소창이 없어 ?audioDebug=1 을 켤 수
+    // 없는데, 정작 기기에서만 나는 실패가 여기다. 중복은 playbackDiag 가 막는다.
+    // 소리가 안 난 채 끝난 사건 — 여기까지의 구간이 곧 "어디서 수십 초를 썼나" 다.
+    perfFlush();
+    breadcrumb('media-error', {
+      track: current?.id ?? '—', code: err?.code ?? '—', codeName, activeIdx,
+    });
+    logPlaybackDiag({
+      stage: 'media-error',
+      trackId: current?.id ?? null,
+      playlistId: playlist?.id ?? null,
+      sourceType: playlistContext?.type ?? null,
+      queueIndex: index,
+      failedTrack: current ? isTrackFailed(current.id) : null,
+      recovery: isPermanentMediaError(err?.code) ? 'mark-failed' : 'recovery-manager',
+      audio: target,
+      extra: {
+        activeIdx,
+        crossfading,
+        storePlaying: playing,
+        online: typeof navigator !== 'undefined' ? navigator.onLine : '—',
+      },
+    });
     // Phase 4-1 — Recovery Manager 위임 (Network 는 play retry · Decode/SrcNotSupported 는 log+toast).
     // 기존 재시도 로직 (아래) 은 유지 · Recovery Manager 는 병행 진입점.
     void recoverAudioRef.current?.('media-error', { errorCode: err?.code, codeName });
@@ -3533,7 +3689,14 @@ export default function Player() {
     // 디코딩/포맷 문제로 확정된 트랙 표시 (자동 스킵엔 쓰지 않고, 재시도 시 정리됨)
     const isPermanent = isPermanentMediaError(err?.code);
     if (current && isPermanent) {
-      sessionFailedTrackIds.add(current.id);
+      breadcrumb('mark-failed', { track: current.id, code: err?.code ?? '—', codeName });
+      markTrackFailed(current.id);
+      // 반복 실패 누적 — 열 번 건너뛰어진 음원은 앱에서 내린다(failedTracks.ts).
+      if (recordFailureSkip(current.id)) {
+        console.warn('[audio] 반복 실패로 앱에서 제외', {
+          id: current.id, title: current.title, skips: BLOCK_AFTER_SKIPS,
+        });
+      }
     }
 
     // ── BRAND-PLAYER-UNATTENDED-RECOVERY-1 ────────────────────────────────
@@ -3640,7 +3803,7 @@ export default function Player() {
     }
     // 에러 상태에서 ▶ 다시 누르면 동일 곡 재시도 (실패 마크 해제 + 강제 재로드).
     if (errored) {
-      sessionFailedTrackIds.delete(current.id);
+      clearTrackFailure(current.id);
       networkRetriedRef.current.delete(current.id); // 수동 재시도 시 네트워크 자동재시도 한도 초기화
       setErrored(false);
       lastTrackIdRef.current = null; // 트랙 변경으로 간주 → src 재설정/load/재생
@@ -3709,7 +3872,8 @@ export default function Player() {
       />
 
       {/* Mini player — 모바일은 BottomNav 위, 데스크탑은 사이드바 우측 영역 중앙 */}
-      <div className="fixed inset-x-0 bottom-[5.25rem] z-20 mx-auto max-w-3xl px-3 pl-safe pr-safe sm:bottom-[5.5rem] sm:px-4 lg:left-60 lg:right-0 lg:bottom-4 lg:max-w-[min(960px,calc(100vw-15rem-4rem))] lg:px-6">
+      <div ref={playerBarRef as React.RefObject<HTMLDivElement>}
+        className="app-player fixed inset-x-0 z-20 mx-auto max-w-3xl pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))] lg:left-60 lg:right-0 lg:max-w-[min(960px,calc(100vw-15rem-4rem))] lg:px-6">
         <button
           onClick={() => setExpanded(true)}
           className="group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl glass-strong p-2.5 transition duration-smooth ease-emphasized hover:-translate-y-0.5"
@@ -3822,7 +3986,7 @@ export default function Player() {
         )}
         {/* X6.79 — iOS/iPadOS Safari 는 audio.volume setter 를 무시 (WebKit 정책).
             매장 iPad 에서 슬라이더 안 먹힘 문제 안내. 데스크탑/안드로이드 정상. */}
-        {volumePopover && isIOSSafari() && (
+        {volumePopover && isIOSVolumeLocked() && (
           <div className="px-3 py-1 text-[10px] leading-tight text-amber-700 dark:text-amber-300">
             ⚠️ iPhone/iPad 에서는 슬라이더가 작동하지 않습니다.
             기기 측면 <b>볼륨 ↑↓ 하드웨어 버튼</b> 으로 조절해주세요.

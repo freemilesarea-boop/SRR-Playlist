@@ -195,7 +195,8 @@ export default function TaxonomyManagerPanel() {
 
       {/* 목록 */}
       <div className="overflow-hidden rounded-2xl bg-bg-card ring-1 ring-line/10">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
           <thead>
             <tr className="bg-bg-soft text-left font-mono text-[10px] uppercase tracking-[0.12em] text-ink-dim">
               <th className="px-3 py-2 w-16">순서</th>
@@ -246,6 +247,7 @@ export default function TaxonomyManagerPanel() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <p className="text-[11px] leading-relaxed text-ink-dim">

@@ -345,9 +345,15 @@ export default function PlaylistPage() {
                   </span>
                 )}
               </div>
+              {/* 40px 썸네일인데 원본 커버를 그대로 받던 자리다.
+                  805곡짜리 플레이리스트면 수백 장이 한꺼번에 요청되고, 그게
+                  오디오와 **같은 호스트**라 음원이 뒤로 밀린다. 실기기에서
+                  메타데이터가 61초 걸린 원인이 이것이다(25초 타임아웃이 먼저 터져
+                  '포맷 오류' 로 보였다). AutoCover 는 표시 크기에 맞춰 받고
+                  lazy + decoding=async 로 띄운다. */}
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-card">
                 {t.cover_url ? (
-                  <img src={t.cover_url} alt="" className="h-full w-full object-cover" />
+                  <AutoCover title={t.title} imageUrl={t.cover_url} size="sm" showInitial={false} />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-ink-dim">
                     <Music size={14} />

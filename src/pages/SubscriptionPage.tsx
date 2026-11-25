@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Check, X, ArrowLeft, Mail, Clock, Sparkles, Store, Music, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { openExternalUrl } from '@/lib/externalNav';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
 import { friendlyError } from '@/lib/errorMessages';
@@ -173,6 +175,9 @@ export default function SubscriptionPage() {
     promotionCode?: string | null,
   ) {
     if (!user) return;
+    // 앱에서는 어떤 경로로도 외부 결제창을 열지 않는다(스토어 결제 정책).
+    // UI 를 한 군데 빠뜨려도 여기서 막힌다 — purchaseGate.ts 참고.
+    if (!canShowPurchaseUi()) return;
     setBusy(planUi);
     try {
       // SubscriptionType 'personal' ↔ PayApp 'individual' 매핑
@@ -184,7 +189,14 @@ export default function SubscriptionPage() {
       });
       if (res.ok && res.payurl) {
         // PayApp 결제창으로 이동. 권한 부여는 절대 여기서 X — feedbackurl 웹훅에서만.
-        window.location.href = res.payurl;
+        // 앱에서는 WebView 를 그대로 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
+        await openExternalUrl(res.payurl, {
+          onReturn: () => {
+            // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는
+            // 서버 상태를 다시 읽어 화면만 갱신한다(반영에 몇 초 걸릴 수 있음).
+            void useAuthStore.getState().refreshProfile();
+          },
+        });
         return;
       }
       // 결제 직전 서버 재검증에서 프로모션 사유가 오면 친화 메시지로 표시
@@ -364,7 +376,8 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* 플랜 카드 (요약) */}
+      {/* 플랜 카드 (요약) — 앱에서는 가격·결제 CTA 가 모두 붙어 있어 통째로 감춘다. */}
+      {canShowPurchaseUi() && (
       <div className="grid gap-3 md:grid-cols-3">
         {PLANS.map((p) => {
           // 정지 상태에서는 '이용 중' 잠금 없이 재결제 CTA 를 노출한다.
@@ -432,6 +445,7 @@ export default function SubscriptionPage() {
           );
         })}
       </div>
+      )}
 
       {/* 비교표 */}
       <section className="overflow-hidden rounded-3xl bg-bg-card ring-1 ring-line/10">
@@ -507,7 +521,8 @@ export default function SubscriptionPage() {
       {resume && activeSub && (
         <Alert tone="warning" title={resume.title}>
           <p className="leading-relaxed">{resume.body}</p>
-          {resumeTarget.kind === 'plan' ? (
+          {/* 앱에서는 재결제 CTA 도 감춘다 — 상태 안내(resume.body)는 그대로 남긴다. */}
+          {canShowPurchaseUi() && (resumeTarget.kind === 'plan' ? (
             <button
               onClick={() => setPhoneModal({ plan: resumeTarget.plan, phone: '' })}
               disabled={busy !== null}
@@ -523,7 +538,7 @@ export default function SubscriptionPage() {
             >
               {resume.ctaLabel}
             </Link>
-          )}
+          ))}
         </Alert>
       )}
       {activeSub && activeSub.status === 'active' && (
@@ -565,7 +580,7 @@ export default function SubscriptionPage() {
         </p>
         <a
           href="mailto:freemilesarea@gmail.com?subject=듣다 매장 구독 문의"
-          className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+          className="inline-flex min-h-11 items-center gap-1 text-xs text-accent hover:underline"
         >
           <Mail size={12} /> 매장 일괄 도입 문의
         </a>

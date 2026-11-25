@@ -132,7 +132,7 @@ export default function EnterpriseOpsStoresPage() {
   const hasMore = result?.pagination.has_more ?? false;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="app-tap-area mx-auto w-full max-w-6xl px-4 py-6">
       {/* header */}
       <div className="mb-4 flex items-center gap-3">
         <Link to="/enterprise/me" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card" aria-label="뒤로">
@@ -147,7 +147,7 @@ export default function EnterpriseOpsStoresPage() {
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="ml-auto inline-flex items-center gap-1 rounded bg-bg-card px-2.5 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50"
+          className="ml-auto inline-flex min-h-11 items-center gap-1 rounded bg-bg-card px-3 py-1.5 text-[11px] font-semibold hover:bg-bg-hover disabled:opacity-50"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
         </button>

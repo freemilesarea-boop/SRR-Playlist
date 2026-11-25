@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 앱 배경(웹 테마 #0a0a0a 와 같음). Android 15+ 에서 시스템 바 여백, WebView 로드 전 화면에 보인다. -->
+    <!-- 앱 배경(웹 테마 #0a0a0a 와 같음). WebView 가 그려지기 전 첫 화면에 보인다. -->
     <color name="deudda_background">#0A0A0A</color>
     <!-- 알림 아이콘·앱 이름 강조색(웹 테마 강조색 color-accent 와 같음). -->
     <color name="deudda_accent">#7B3FF2</color>

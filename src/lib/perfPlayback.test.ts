@@ -1,0 +1,177 @@
+/**
+ * 재생 지연 계측 회귀.
+ *
+ * 수십 초가 어디서 쓰이는지 모르면 최적화가 추측이 된다. 이 계측이 구간을
+ * 정확히 나누는지, 그리고 **소리가 안 난 채 끝난 사건도** 어디까지 갔는지
+ * 남기는지를 잡는다 — 후자가 이번 조사의 핵심이다.
+ */
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import {
+  perfStart, perfMark, perfFlush, readPerfSession, resetPerf, meta,
+  readPerfLog, clearPerfLog, resolvePerfLogEnabled,
+} from './perfPlayback';
+import { thumbnailSource, COVER_WIDTH, scaledWidth, setTransformSupport, transformSupport } from './imageUrl';
+
+describe('구간 측정', () => {
+  beforeEach(() => {
+    resetPerf();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('탭이 사건을 연다', () => {
+    perfStart('playlist:미용실');
+    expect(readPerfSession()?.label).toBe('playlist:미용실');
+    expect(readPerfSession()?.marks.map(([m]) => m)).toEqual(['tap']);
+  });
+
+  it('사건이 열리지 않았으면 mark 는 조용히 무시된다', () => {
+    expect(() => perfMark('canplay')).not.toThrow();
+    expect(readPerfSession()).toBeNull();
+  });
+
+  it('같은 전이는 한 번만 기록한다 — 재시도가 첫 측정을 덮지 않도록', () => {
+    perfStart('x');
+    perfMark('srcSet');
+    const first = readPerfSession()!.marks.find(([m]) => m === 'srcSet')![1];
+    perfMark('srcSet');
+    expect(readPerfSession()!.marks.find(([m]) => m === 'srcSet')![1]).toBe(first);
+  });
+
+  it('첫 진행에 도달하면 자동으로 한 줄 기록하고 닫는다', () => {
+    clearPerfLog();
+    perfStart('playlist:식당');
+    perfMark('setQueue'); perfMark('srcSet'); perfMark('canplay');
+    perfMark('playCall'); perfMark('playing'); perfMark('firstProgress');
+    expect(readPerfLog()).toHaveLength(1);
+    const line = readPerfLog()[0];
+    expect(line).toContain('[PERF_PLAYBACK]');
+    expect(line).toContain('what=playlist:식당');
+    expect(line).toContain('tap→실제재생=');
+    expect(line).toContain('ok');
+  });
+
+  // 소리가 안 난 채 끝난 사건 — 이게 안 찍히면 조사할 게 없다.
+  it('도달하지 못한 단계를 이름으로 남긴다', () => {
+    clearPerfLog();
+    perfStart('playlist:편집샵');
+    perfMark('setQueue'); perfMark('srcSet');
+    clearPerfLog();
+    perfFlush();
+    const line = readPerfLog()[0];
+    expect(line).toContain('도달못함=');
+    expect(line).toContain('canplay');
+    expect(line).toContain('playing');
+    expect(line).toContain('firstProgress');
+    expect(line).toContain('tap→실제재생=—');
+  });
+
+  it('닫힌 사건은 두 번 기록하지 않는다', () => {
+    clearPerfLog();
+    perfStart('x'); perfFlush(); perfFlush();
+    expect(readPerfLog()).toHaveLength(1);
+  });
+
+  it('캐시본 여부 같은 맥락을 같이 남긴다', () => {
+    clearPerfLog();
+    perfStart('x');
+    meta({ 캐시본: true });
+    perfFlush();
+    expect(readPerfLog()[0]).toContain('캐시본=true');
+  });
+
+  // 출시 빌드의 logcat 을 지연 측정으로 채우지 않는다. 실패 기록은 별개로 항상 나간다.
+  it('콘솔 출력은 기본 OFF 다 — 기록은 그래도 남는다', () => {
+    clearPerfLog();
+    perfStart('x'); perfFlush();
+    expect(console.warn).not.toHaveBeenCalled();
+    expect(readPerfLog()).toHaveLength(1);
+  });
+
+  it('플래그를 켜면 콘솔로도 나간다', () => {
+    expect(resolvePerfLogEnabled()).toBe(false);
+    expect(resolvePerfLogEnabled({ search: '?perfDiag=1' })).toBe(true);
+    expect(resolvePerfLogEnabled({ storage: { getItem: () => '1' } })).toBe(true);
+    expect(resolvePerfLogEnabled({ buildFlag: '1' })).toBe(true);
+    expect(resolvePerfLogEnabled({ audioDebug: true })).toBe(true);
+  });
+});
+
+describe('커버 썸네일', () => {
+  const PUBLIC = 'https://p.supabase.co/storage/v1/object/public/covers/a/b_cover.jpg';
+
+  beforeEach(() => setTransformSupport('yes'));   // 변환이 되는 프로젝트 기준
+
+  it('저장소 URL 을 리사이즈 엔드포인트로 바꾼다', () => {
+    const t = thumbnailSource(PUBLIC, 320)!;
+    expect(t.src).toContain('/storage/v1/render/image/public/covers/a/b_cover.jpg');
+    expect(t.src).toContain('width=320');
+    expect(t.src).toContain('resize=cover');
+  });
+
+  // 변환은 유료 기능이다. 실패했을 때 되돌아갈 원본이 반드시 있어야 한다.
+  it('원본을 fallback 으로 같이 준다', () => {
+    expect(thumbnailSource(PUBLIC, 320)!.fallback).toBe(PUBLIC);
+  });
+
+  it('저장소 URL 이 아니면 손대지 않는다', () => {
+    const ext = 'https://example.com/x.png';
+    const t = thumbnailSource(ext, 320)!;
+    expect(t.src).toBe(ext);
+    expect(t.fallback).toBe(ext);
+  });
+
+  it('빈 값은 null', () => {
+    expect(thumbnailSource(null, 320)).toBeNull();
+  });
+
+  it('너무 작은 폭은 하한을 둔다', () => {
+    expect(thumbnailSource(PUBLIC, 1)!.src).toContain('width=64');
+  });
+
+  it('홈 카드가 전체화면보다 작은 이미지를 받는다', () => {
+    expect(COVER_WIDTH.md).toBeLessThan(COVER_WIDTH.xl);
+    expect(COVER_WIDTH.sm).toBeLessThan(COVER_WIDTH.md);
+  });
+
+  it('기기 픽셀비는 2배에서 끊는다 — 4배 기기에서 원본만큼 커지지 않도록', () => {
+    expect(scaledWidth(320, 1)).toBe(320);
+    expect(scaledWidth(320, 3)).toBe(640);
+  });
+});
+
+describe('변환 지원 판정', () => {
+  afterEach(() => setTransformSupport('unknown'));
+  const PUBLIC = 'https://p.supabase.co/storage/v1/object/public/covers/a/b_cover.jpg';
+
+  // 핵심: 지원 여부를 모르는 동안 변환 URL 을 쓰면, 지원 안 되는 프로젝트에서는
+  // 커버 한 장마다 "실패 대기 → 원본 재요청" 왕복이 두 번 생긴다.
+  it('모르는 동안에는 원본을 쓴다 — 실패를 기다리는 왕복을 만들지 않는다', () => {
+    setTransformSupport('unknown');
+    const t = thumbnailSource(PUBLIC, 320)!;
+    expect(t.src).toBe(PUBLIC);
+    expect(t.src).not.toContain('render/image');
+  });
+
+  it('지원 안 됨이 확인되면 계속 원본을 쓴다', () => {
+    setTransformSupport('no');
+    expect(thumbnailSource(PUBLIC, 320)!.src).toBe(PUBLIC);
+  });
+
+  it('지원됨이 확인되면 그때부터 리사이즈본을 쓴다', () => {
+    setTransformSupport('yes');
+    expect(thumbnailSource(PUBLIC, 320)!.src).toContain('render/image');
+  });
+
+  // localStorage 가 없는 환경(이 테스트 러너, 사생활 보호 모드 WebView)에서도
+  // 판정 자체는 동작해야 한다 — 저장은 다음 실행을 위한 보너스일 뿐이다.
+  it('저장소가 없어도 판정은 동작한다', () => {
+    expect(() => setTransformSupport('yes')).not.toThrow();
+    expect(transformSupport()).toBe('yes');
+  });
+
+  it('force 는 판정 자체를 위한 탐침용이라 판정과 무관하게 변환 URL 을 만든다', () => {
+    setTransformSupport('unknown');
+    expect(thumbnailSource(PUBLIC, 16, true)!.src).toContain('render/image');
+  });
+});

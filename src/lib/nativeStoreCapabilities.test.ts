@@ -97,12 +97,210 @@ describe('푸시 알림 네이티브 설정', () => {
   });
 });
 
+describe('앱 전용 셸(터치 레이아웃)', () => {
+  // 매장 태블릿은 CSS 폭이 1024px 을 넘어서 Tailwind 의 lg: 분기가 그대로 걸린다.
+  // 그러면 데스크톱 레이아웃(사이드바 + 1500px 본문)이 뜨는데, 손가락으로 쓰는 기기에는
+  // 맞지 않는다. index.css 의 .native-shell 규칙이 이를 되돌리는데, 그 규칙은 컴포넌트에
+  // 붙은 클래스 훅에 의존한다 — 한쪽만 이름이 바뀌면 조용히 깨지므로 양쪽을 함께 고정한다.
+  const css = repoFile('src/index.css');
+
+  it('네이티브 표식을 <html> 에 붙인다', () => {
+    expect(repoFile('src/lib/native.ts')).toContain("classList.add('native-shell')");
+  });
+
+  it.each([
+    ['app-sidebar', 'src/components/Sidebar.tsx'],
+    ['app-bottom-nav', 'src/components/BottomNav.tsx'],
+    ['app-player', 'src/components/player/Player.tsx'],
+    ['app-main', 'src/components/AppShell.tsx'],
+    ['app-footer', 'src/components/AppShell.tsx'],
+  ])('%s 훅이 CSS 와 컴포넌트 양쪽에 있다', (hook, file) => {
+    expect(css).toContain(`.native-shell .${hook}`);
+    expect(repoFile(file)).toContain(hook);
+  });
+
+  it('본문 폭을 제한한다 — 태블릿에서 한 줄이 화면 끝까지 늘어나지 않도록', () => {
+    expect(css).toContain('.native-shell .app-main > main');
+  });
+
+  it('글자 키우기는 큰 화면에서만 — 폰에서 키우면 좁은 화면이 넘친다', () => {
+    // 앱 하나가 아이폰(393px) · 갤럭시(412px) · 아이패드(744~1024px) · 매장 태블릿(1280~2000px)에서
+    // 같이 돈다. 루트 글자를 무조건 키우면 폰에서 글자가 잘리고 버튼이 겹친다.
+    // 글자 확대는 "세워두고 한 걸음 떨어져 보는" 매장 태블릿 이야기라 1024px 유지.
+    const media = css.slice(css.indexOf('@media (min-width: 1024px)'));
+    expect(media).toContain('font-size: 17px');
+    const beforeMedia = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+    expect(beforeMedia).not.toContain('font-size: 17px');
+  });
+
+  it('태블릿 레이아웃은 짧은 변 기준 — 세워 든 아이패드(744px)도 들어와야 한다', () => {
+    // 예전에는 이것도 1024px 였다. 그러면 아이패드 미니·갤럭시 탭 세로가 전부 폰 레이아웃이 된다.
+    const TABLET_AT = '@media (min-width: 700px) and (min-height: 600px)';
+    const media = css.slice(css.indexOf(TABLET_AT));
+    expect(css).toContain(TABLET_AT);
+    expect(media).toContain('.native-shell .app-main > main');
+    expect(media).toContain('min-height: 56px');
+  });
+
+  it('뼈대(사이드바·하단탭·푸터)는 폰에도 적용된다', () => {
+    const beforeMedia = css.slice(0, css.indexOf('@media (min-width: 1024px)'));
+    expect(beforeMedia).toContain('.native-shell .app-sidebar');
+    expect(beforeMedia).toContain('.native-shell .app-bottom-nav');
+    expect(beforeMedia).toContain('.native-shell .app-footer');
+  });
+
+  it.each([
+    'src/pages/StorePlayerPage.tsx',
+    'src/pages/BrandPlayerPage.tsx',
+  ])('%s 의 전체화면이 노치/홈바를 피한다', (file) => {
+    // fixed inset-0 은 화면 전체를 덮으므로, 아이폰에서는 상단 바가 노치 밑으로,
+    // 하단 상태줄이 홈 인디케이터 밑으로 들어가 가려진다.
+    const src = repoFile(file);
+    for (const m of src.matchAll(/className="fixed inset-0 z-\[90\][^"]*"/g)) {
+      expect(m[0]).toContain('pt-safe');
+      expect(m[0]).toContain('pb-safe');
+    }
+  });
+
+  it('앱을 켰을 때 역할에 맞는 화면으로 보내는 훅이 셸에 붙어 있다', () => {
+    // 이게 빠지면 매장 태블릿이 재부팅 후 마케팅 홈에 머물고, 아무도 안 누르면 무음이 된다.
+    expect(repoFile('src/components/AppShell.tsx')).toContain('useNativeLanding()');
+  });
+
+  it('사업자 정보가 앱에서도 표시된다 (전자상거래법)', () => {
+    // 앱은 푸터를 숨기므로, 그 정보가 전체 메뉴로 옮겨졌는지 확인한다.
+    // 값은 companyInfo.ts 한 곳에서만 관리한다 — 두 군데면 한쪽만 바뀌어 어긋난다.
+    expect(repoFile('src/components/native/NativeMoreSheet.tsx')).toContain('COMPANY_INFO');
+    expect(repoFile('src/components/common/Footer.tsx')).toContain("from '@/lib/companyInfo'");
+    expect(repoFile('src/lib/companyInfo.ts')).toContain('사업자번호');
+  });
+
+  it('브랜드 플레이어 상단 바가 폰에서 넘치지 않는다', () => {
+    // 폰(390px)에서 칩 3개 + 버튼 3개가 한 줄에 안 들어간다.
+    // 줄바꿈을 허용하고, 장식성 칩과 버튼 글자는 좁은 화면에서 숨긴다(아이콘은 남는다).
+    const src = repoFile('src/pages/BrandPlayerPage.tsx');
+    expect(src).toContain('flex flex-wrap items-center justify-between');
+    expect(src).toContain('md:inline-flex');
+    for (const label of ['다른 매장', '연결 해제', '나가기']) {
+      expect(src).toContain(`<span className="hidden sm:inline">${label}</span>`);
+    }
+  });
+
+  it.each([
+    ['src/pages/ArtistDashboardPage.tsx', '아티스트 대시보드'],
+    ['src/pages/ArtistSettlementsPage.tsx', '아티스트 정산'],
+    ['src/pages/ArtistContractPage.tsx', '아티스트 계약서'],
+  ])('%s (%s) 도 태블릿에서 폭을 잡는다', (file) => {
+    // 정산 계좌·업로드 폼과 계약서가 1200px 을 가로지르면 읽고 쓰기 어렵다.
+    // (엔터프라이즈 본사 화면들은 이미 max-w-6xl/3xl 이라 그대로 둔다.)
+    expect(repoFile(file)).toMatch(/lg:mx-auto lg:max-w-(3xl|4xl|5xl)/);
+  });
+
+  it('본사 · 아티스트 화면에 폰 기준 4칸 이상 격자가 없다', () => {
+    // 390px 에서 4칸이면 한 칸이 75px — 숫자는 들어가도 라벨이 잘려 무슨 수치인지 모른다.
+    // 관리자 패널(components/admin)은 운영자용 데스크톱 화면이라 이 규칙 밖이다.
+    const files = [
+      'src/pages/EnterpriseHqMePage.tsx',
+      'src/pages/EnterpriseHqOpsPage.tsx',
+      'src/pages/EnterpriseHqIntelPage.tsx',
+      'src/pages/EnterpriseHqNotificationsPage.tsx',
+      'src/pages/EnterpriseOpsStoresPage.tsx',
+      'src/pages/EnterpriseOpsStoreDetailPage.tsx',
+      'src/pages/FranchiseHqDashboardPage.tsx',
+      'src/pages/ArtistDashboardPage.tsx',
+      'src/pages/ArtistSettlementsPage.tsx',
+      'src/pages/ArtistContractPage.tsx',
+      'src/components/enterprise/EnterpriseHqMonthlySettlementsCard.tsx',
+    ];
+    const offenders: string[] = [];
+    for (const f of files) {
+      for (const m of repoFile(f).matchAll(/className=["`]([^"`]*)["`]/g)) {
+        // 접두사 없는(= 폰부터 적용되는) grid-cols-4 이상만 문제.
+        if (/(?:^|\s)grid-cols-(?:[4-9]|1[0-2])(?=\s|$)/.test(m[1])) {
+          offenders.push(`${f}: ${m[1].slice(0, 60)}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it.each([
+    ['src/pages/ProfilePage.tsx', '내 정보'],
+    ['src/pages/ChartPage.tsx', '차트'],
+  ])('%s (%s) 는 태블릿에서 폭을 잡는다', (file) => {
+    // 목록·설정형 화면은 폭을 안 잡으면 라벨(왼쪽)과 값/화살표(오른쪽)가
+    // 1000px 넘게 떨어져 한 줄로 안 읽힌다.
+    expect(repoFile(file)).toMatch(/lg:mx-auto lg:max-w-(3xl|4xl)/);
+  });
+
+  it('결제 폼이 태블릿에서 화면을 가로지르지 않는다', () => {
+    // 연락처 입력칸 하나가 1200px 을 가로지르면 어디에 무엇을 쓰는지 안 보인다.
+    expect(repoFile('src/pages/PricingPage.tsx')).toContain('lg:mx-auto lg:max-w-2xl');
+  });
+
+  it('자동 스케줄의 3개 시간대는 자리가 있을 때만 가로로 벌린다', () => {
+    // 오전·오후·저녁을 나란히 두면 하루 전체가 한 화면에 들어온다.
+    // 다만 한 칸에 시간 입력 2개 + 플리 선택 + 자동 버튼이 들어가야 한다.
+    //
+    // 예전에는 이 판단을 화면 폭(xl:grid-cols-3)으로 했다. 그런데 태블릿 2단
+    // 레이아웃에서 이 영역은 화면의 일부일 뿐이라, 화면이 1280px 여도 카드가
+    // 208px 이 되어 종료 시간 입력이 카드 밖으로 잘렸다. 화면이 아니라 영역의
+    // 실제 폭을 봐야 한다 — 자세한 검증은 slotGrid.test.ts.
+    const src = repoFile('src/components/BusinessScheduler.tsx');
+    expect(src).toContain('grid-cols-[repeat(auto-fit,minmax(min(21rem,100%),1fr))]');
+    expect(src).not.toContain('xl:grid-cols-3');
+  });
+
+  it('하단탭 마지막 칸이 전체 메뉴를 연다', () => {
+    // 앱에는 사이드바가 없다. 이 통로가 없으면 브랜드·결제·관리자 화면에 갈 방법이 없다.
+    const nav = repoFile('src/components/BottomNav.tsx');
+    expect(nav).toContain('NativeMoreSheet');
+    expect(nav).toContain("item.action === 'more'");
+  });
+});
+
+describe('앱에서의 로그인 · 결제 경로', () => {
+  it('우리 앱은 인앱 브라우저 차단 대상에서 제외된다', () => {
+    // 안드로이드 WebView UA 의 "; wv)" 때문에 우리 앱이 스스로를 차단해
+    // 앱으로는 Google 로그인이 아예 불가능했다.
+    expect(repoFile('src/lib/inAppBrowser.ts')).toContain('if (isNativeApp())');
+  });
+
+  it.each([
+    'src/pages/SubscriptionPage.tsx',
+    'src/pages/PricingPage.tsx',
+    'src/pages/EnterprisePayPage.tsx',
+  ])('%s 는 결제창을 openExternalUrl 로 연다', (file) => {
+    // 앱에서 window.location.href 로 결제창에 넘기면 WebView 가 통째로 나가버리고
+    // 돌아올 길이 없다. 카드사 앱을 띄우는 intent:// 스킴도 WebView 에서는 실패한다.
+    const src = repoFile(file);
+    expect(src).toContain('openExternalUrl(res.payurl');
+    expect(src).not.toContain('window.location.href = res.payurl');
+  });
+});
+
 describe('가상기기 실행 경로', () => {
   const pkgScripts = (JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> }).scripts;
 
   it('에뮬레이터 실행 스크립트가 npm script 로 연결돼 있다', () => {
     expect(pkgScripts['android:emu']).toContain('scripts/run-emulator.sh');
-    expect(pkgScripts['android:build']).toContain('assembleDebug');
+    expect(pkgScripts['android:build']).toContain('scripts/android-build.sh');
+    expect(repoFile('scripts/android-build.sh')).toContain('assembleDebug');
+  });
+
+  it('Gradle 을 돌리기 전에 쓸 수 있는 JDK 를 고른다', () => {
+    // Android Studio 2026 의 번들 JDK 는 25 라서 Gradle 8.11 이 못 읽는다
+    // ('Unsupported class file major version 69'). 두 진입점 모두 이 검사를 거쳐야 한다.
+    expect(repoFile('scripts/run-emulator.sh')).toContain('pick-jdk.sh');
+    expect(repoFile('scripts/android-build.sh')).toContain('pick-jdk.sh');
+  });
+
+  it('설치 대상 기기를 직접 넘긴다 (cap run 의 선택 프롬프트에서 멈추지 않게)', () => {
+    // 부팅된 에뮬레이터와 꺼져 있는 AVD 가 같이 잡히면 cap run 이 화살표 메뉴를 띄우고
+    // 멈춰서 앱이 아예 설치되지 않는다.
+    const sh = repoFile('scripts/run-emulator.sh');
+    expect(sh).toContain('--target "$DEVICE_ID"');
+    expect(sh).toContain('install_with_gradle');
   });
 
   it('라이브 리로드가 가상기기·실기기 양쪽에서 붙는다 (adb reverse + localhost)', () => {
@@ -134,9 +332,18 @@ describe('가상기기 실행 경로', () => {
     // 예전 검사는 '^VITE_SUPABASE_URL=https' 였는데, 템플릿의
     // your-project-ref.supabase.co 도 https 로 시작해서 그대로 통과했다.
     // 실제로 사용자 맥에서 "✓ .env 확인" 이 뜬 뒤 앱이 설정 화면만 보여줬다.
-    const sh = repoFile('scripts/run-emulator.sh');
+    const sh = repoFile('scripts/require-env.sh');
     expect(sh).toContain('your-project-ref');
     expect(sh).toContain('your-anon-key');
+  });
+
+  it('APK 빌드에도 같은 .env 검사가 걸린다', () => {
+    // android-build.sh 에는 이 검사가 없었다. .env 가 비어도 빌드는 성공하고 APK 도
+    // 나오는데, 기기에서 켜면 "Supabase 환경 변수가 설정되지 않았어요" 화면만 떴다.
+    // 빌드 몇 분을 쓰고 에뮬레이터를 켜서야 아는 게 최악이라 두 경로 모두에서 막는다.
+    for (const script of ['scripts/android-build.sh', 'scripts/run-emulator.sh']) {
+      expect(repoFile(script)).toContain('. scripts/require-env.sh');
+    }
   });
 
   it('Gradle 이 SDK 를 못 찾는 흔한 실패를 미리 막는다', () => {

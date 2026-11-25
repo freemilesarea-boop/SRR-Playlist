@@ -158,7 +158,7 @@ export default function ExplorePlaylistsPage() {
     <div className="space-y-5 px-4 pb-16 pt-6 sm:px-6 sm:pt-10 lg:px-8">
       <Link
         to="/"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-ink-mute hover:text-ink"
+        className="app-tap -ml-1 inline-flex items-center gap-1 px-1 text-xs font-semibold text-ink-mute hover:text-ink"
       >
         <ChevronLeft size={14} /> 홈으로
       </Link>

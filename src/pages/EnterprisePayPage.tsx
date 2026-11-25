@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Building2, Loader2, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { openExternalUrl } from '@/lib/externalNav';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 import { toast } from '@/store/toastStore';
 import { friendlyError } from '@/lib/errorMessages';
 import { formatKRW, normalizePhone } from '@/lib/paymentFormat';
@@ -33,7 +35,20 @@ export default function EnterprisePayPage() {
     setSubmitting(true);
     try {
       const res = await createEnterprisePayment(digits);
-      if (res.ok && res.payurl) { window.location.href = res.payurl; return; }
+      // 앱에서는 WebView 를 넘기면 돌아올 길이 없다 → 시스템 브라우저로 연다.
+      if (res.ok && res.payurl) {
+        // 앱에서는 외부 결제창을 열지 않는다(스토어 결제 정책 — purchaseGate.ts).
+        // 라우트에서 이미 막히지만, 화면을 재사용할 때를 대비한 최후 방어선이다.
+        if (!canShowPurchaseUi()) return;
+        await openExternalUrl(res.payurl, {
+          onReturn: () => {
+            // 앱: 결제창을 닫고 돌아왔다. 권한은 웹훅이 부여하므로 여기서는
+            // 서버 상태를 다시 읽어 화면만 갱신한다(반영에 몇 초 걸릴 수 있음).
+            void useAuthStore.getState().refreshProfile();
+          },
+        });
+        return;
+      }
       toast.error(res.reason || res.error || '결제를 시작하지 못했어요.');
     } catch (e) {
       toast.error(friendlyError(e, '결제 시작 실패'));
@@ -44,7 +59,7 @@ export default function EnterprisePayPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-8">
-      <Link to="/enterprise/me" className="mb-4 inline-flex items-center gap-1 text-sm text-ink-mute hover:text-ink">
+      <Link to="/enterprise/me" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-ink-mute hover:text-ink">
         <ArrowLeft size={14} /> 대시보드
       </Link>
 

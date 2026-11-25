@@ -293,7 +293,7 @@ export interface DesyncInput {
  *   **그 죽은 상태가 장시간 지속되지 않게** 하는 fail-safe 다.
  *
  * ★★ 판정의 핵심은 `paused` 다. 정상 정지 경로는 **엘리먼트도 함께 멈춘다**:
- *   playerStore.pause() / toggle() / setScheduleSuppression() 이 playing=false 로
+ *   playerStore.pause() / toggle() / 스케줄 억제 게이트가 playing=false 로
  *   바꾸면 Player 의 트랙 동기 effect 가 `audio.pause()` 를 호출한다(PLAYER_STOP).
  *   따라서 **사용자가 멈춘 경우와 스케줄 억제는 반드시 `paused === true`** 다.
  *   `playing === false` 인데 `paused === false` 는 정상 경로로는 나올 수 없는 모순이고,

@@ -1,7 +1,7 @@
 {
   "name": "srr-playlist",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,13 +24,24 @@
     "cap:android": "npm run cap:sync && cap open android",
     "cap:ios": "npm run cap:sync && cap open ios",
     "android:emu": "bash scripts/run-emulator.sh",
-    "android:build": "npm run build:no-lint && cap sync android && cd android && ./gradlew assembleDebug"
+    "android:build": "bash scripts/android-build.sh",
+    "push:doctor": "node scripts/push-doctor.mjs",
+    "android:log": "bash scripts/android-log.sh",
+    "android:korean": "bash scripts/android-korean.sh",
+    "android:paste": "bash scripts/android-paste.sh",
+    "icons": "node scripts/make-app-icons.mjs && capacitor-assets generate --android --ios",
+    "store-graphics": "node scripts/make-store-graphics.mjs",
+    "audio-probe": "bash scripts/android-audio-probe.sh",
+    "apk": "bash scripts/android-apk.sh",
+    "aab": "bash scripts/android-apk.sh --aab",
+    "keystore": "bash scripts/android-keystore.sh"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^7.1.0",
     "@capacitor/app": "^7.1.2",
     "@capacitor/browser": "^7.0.5",
     "@capacitor/core": "^7.6.8",
+    "@capacitor/haptics": "^7.0.5",
     "@capacitor/keyboard": "^7.0.6",
     "@capacitor/push-notifications": "^7.0.7",
     "@capacitor/splash-screen": "^7.0.5",
@@ -56,6 +67,7 @@
   },
   "devDependencies": {
     "@capacitor/android": "^7.6.8",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.6.8",
     "@capacitor/ios": "^7.6.8",
     "@eslint/js": "^10.0.1",

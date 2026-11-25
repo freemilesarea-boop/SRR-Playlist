@@ -445,7 +445,7 @@ export default function EnterpriseOperationsPanel() {
             const lastRunAt = paRuns[0]?.started_at ?? null;
             return (
               <>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <AdminStatCard label="최근 7일 실행" value={fmtNumber(total7d)}     tone="neutral" icon={<Activity size={12} />} />
                   <AdminStatCard label="성공"        value={fmtNumber(success7d)}   tone="success" icon={<CheckCircle2 size={12} />} />
                   <AdminStatCard label="실패"        value={fmtNumber(failed7d)}    tone={failed7d > 0 ? 'danger' : 'success'} icon={<AlertTriangle size={12} />} />
@@ -477,8 +477,8 @@ export default function EnterpriseOperationsPanel() {
           {storeHealth.length === 0 ? (
             <AdminEmpty title="이상 매장 없음" description="NOC store health 정상" />
           ) : (
-            <div className="max-h-[320px] overflow-y-auto">
-              <table className="w-full text-[11px]">
+            <div className="max-h-[320px] overflow-y-auto overflow-x-auto">
+              <table className="w-full text-[11px] min-w-[560px]">
                 <thead className="sticky top-0 bg-bg text-[10px] uppercase text-ink-dim">
                   <tr>
                     <th className="px-2 py-1 text-left">상태</th>

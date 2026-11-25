@@ -18,7 +18,7 @@ export default function LegalPageLayout({ title, subtitle, updatedAt, children }
       <div className="mx-auto w-full max-w-3xl px-6 py-10 sm:px-8 sm:py-14">
         <Link
           to="/"
-          className="inline-flex items-center gap-1 text-[12px] text-stone-500 transition hover:text-stone-900"
+          className="app-tap -ml-1 inline-flex items-center gap-1 px-1 text-[12px] text-stone-500 transition hover:text-stone-900"
         >
           <ArrowLeft size={12} /> 홈으로
         </Link>

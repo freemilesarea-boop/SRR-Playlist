@@ -93,8 +93,8 @@ export default function AbuseMonitorTab() {
             {loading ? '로딩 중…' : '후보 없음 (정책 임계값 이하)'}
           </p>
         ) : (
-          <div className="max-h-[500px] overflow-y-auto">
-            <table className="w-full text-left text-[11px]">
+          <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-left text-[11px] min-w-[640px]">
               <thead className="sticky top-0 bg-bg-card text-ink-dim">
                 <tr className="border-b border-line/10">
                   <th className="px-1.5 py-1">date_kst</th>
