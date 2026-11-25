@@ -35,7 +35,8 @@
     "audio-probe": "bash scripts/android-audio-probe.sh",
     "apk": "bash scripts/android-apk.sh",
     "aab": "bash scripts/android-apk.sh --aab",
-    "keystore": "bash scripts/android-keystore.sh"
+    "keystore": "bash scripts/android-keystore.sh",
+    "apple-secret": "node scripts/apple-client-secret.mjs"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^7.1.0",

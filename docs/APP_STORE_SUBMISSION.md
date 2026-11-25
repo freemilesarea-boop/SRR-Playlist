@@ -71,8 +71,11 @@ Supabase 대시보드 → Project Settings → API → Project URL 에서 확인
 **(4) Supabase 에 켜기** — Authentication → **Sign In / Providers** → **Apple**
 - Enable
 - Client IDs: `com.deudda.app.signin`
-- Secret Key: `.p8` · Key ID · Team ID · Services ID 로 만든 JWT.
-  Supabase 문서의 Apple 로그인 페이지에 있는 **secret 생성 도구**를 쓰면 된다.
+- Secret Key: `.p8` · Key ID · Team ID 로 만든 JWT. **이 Mac 에서 바로 만든다**(비밀키를 외부 사이트에 올리지 않는다):
+  ```bash
+  cd ~/Desktop/SRR-Playlist && npm run apple-secret -- --p8 ~/Downloads/AuthKey_XXXXXXXXXX.p8 --team <Team ID> --key <Key ID>
+  ```
+  출력된 긴 한 줄(`eyJ...`)을 그대로 붙여 넣는다. 만료일도 같이 출력된다.
 - Save
 
 > ⏰ **Apple secret 은 최대 6개월마다 만료된다.** 만료되면 Apple 로그인만 조용히 실패한다.
