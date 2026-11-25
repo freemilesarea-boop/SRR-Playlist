@@ -1,7 +1,7 @@
 // 네이티브 푸시 — 순수 로직 단위 테스트.
 // 알림 payload 는 서버에서 오는 값이므로 라우팅 경로 검증이 중요하다.
 import { describe, it, expect } from 'vitest';
-import { normalizePermission, safeInAppPath } from './nativePush';
+import { foregroundPushMessage, normalizePermission, safeInAppPath } from './nativePush';
 
 describe('normalizePermission', () => {
   it('Capacitor 권한 상태를 Web Push 어휘로 맞춘다', () => {
@@ -39,5 +39,24 @@ describe('safeInAppPath', () => {
     expect(safeInAppPath('')).toBe('/');
     expect(safeInAppPath(undefined as unknown as string)).toBe('/');
     expect(safeInAppPath(123 as unknown as string)).toBe('/');
+  });
+});
+
+describe('foregroundPushMessage', () => {
+  it('제목과 내용을 한 줄로 합친다', () => {
+    expect(foregroundPushMessage({ title: '공지', body: '점검 안내' })).toBe('공지 — 점검 안내');
+  });
+  it('한쪽만 있으면 그것만', () => {
+    expect(foregroundPushMessage({ title: '공지' })).toBe('공지');
+    expect(foregroundPushMessage({ body: ' 내용 ' })).toBe('내용');
+  });
+  it('둘 다 없으면 띄우지 않는다', () => {
+    expect(foregroundPushMessage({ title: '', body: null })).toBeNull();
+    expect(foregroundPushMessage(undefined)).toBeNull();
+  });
+  it('너무 길면 자른다', () => {
+    const msg = foregroundPushMessage({ title: 'a'.repeat(300) });
+    expect(msg?.length).toBe(120);
+    expect(msg?.endsWith('…')).toBe(true);
   });
 });

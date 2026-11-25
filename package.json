@@ -20,6 +20,7 @@
     "test": "vitest run",
     "cap:sync": "npm run build:no-lint && cap sync",
     "cap:copy": "cap copy",
+    "capacitor:copy:after": "node scripts/cap-strip-native-assets.mjs",
     "cap:android": "npm run cap:sync && cap open android",
     "cap:ios": "npm run cap:sync && cap open ios",
     "android:emu": "bash scripts/run-emulator.sh",

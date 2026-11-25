@@ -23,6 +23,7 @@
  */
 
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
+import { isNativeApp } from '@/lib/native';
 
 /**
  * 단일 스레드 ffmpeg-core (SharedArrayBuffer 불필요).
@@ -30,9 +31,15 @@ import type { FFmpeg } from '@ffmpeg/ffmpeg';
  * CSP/connect-src/모듈 import 문제를 원천 차단(전부 same-origin).
  */
 function ffmpegBase(): string {
+  // 앱(Capacitor)은 32MB 짜리 ffmpeg 를 번들에 넣지 않는다(scripts/cap-strip-native-assets.mjs).
+  // 업로드·재인코딩 화면에서 필요할 때만 운영 사이트의 같은 파일을 받는다(vercel.json 에서 CORS 허용).
+  if (isNativeApp()) return `${NATIVE_FFMPEG_ORIGIN}/ffmpeg`;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return `${origin}/ffmpeg`;
 }
+
+/** 앱에서 ffmpeg 를 받아 올 운영 사이트. */
+const NATIVE_FFMPEG_ORIGIN = 'https://www.deudda.com';
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;

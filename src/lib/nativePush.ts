@@ -116,18 +116,22 @@ export async function enableNativePush(): Promise<{ ok: boolean; token?: string;
     }
 
     const token = await new Promise<string>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error('registration_timeout')), 15_000);
+      // 이번 등록에만 쓰는 리스너 — 끝나면 바로 뗀다. (안 떼면 켜기를 누를 때마다,
+      // 앱을 열 때마다 하나씩 쌓여 오래 켜 두는 매장 기기에서 계속 늘어난다.)
+      const handles: Array<Promise<{ remove: () => Promise<void> }> | undefined> = [];
+      const timer = window.setTimeout(() => finish(() => reject(new Error('registration_timeout'))), 15_000);
       let settled = false;
-      const finish = (fn: () => void) => {
+      function finish(fn: () => void) {
         if (settled) return;
         settled = true;
         window.clearTimeout(timer);
+        for (const h of handles) void Promise.resolve(h).then((x) => x?.remove()).catch(() => { /* noop */ });
         fn();
-      };
-      void PushNotifications.addListener('registration', (t) => finish(() => resolve(t.value)));
-      void PushNotifications.addListener('registrationError', (e) =>
+      }
+      handles.push(PushNotifications.addListener('registration', (t) => finish(() => resolve(t.value))));
+      handles.push(PushNotifications.addListener('registrationError', (e) =>
         finish(() => reject(new Error(typeof e?.error === 'string' ? e.error : 'registration_error'))),
-      );
+      ));
       void PushNotifications.register();
     });
 
@@ -160,6 +164,15 @@ export async function disableNativePush(tokenArg: string | null): Promise<boolea
   }
 }
 
+/** 앱이 켜져 있을 때 받은 푸시 → 토스트 문구("제목 — 내용"). 보여 줄 내용이 없으면 null. */
+export function foregroundPushMessage(n: { title?: string | null; body?: string | null } | null | undefined): string | null {
+  const title = (n?.title ?? '').trim();
+  const body = (n?.body ?? '').trim();
+  const text = title && body ? `${title} — ${body}` : title || body;
+  if (!text) return null;
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text;
+}
+
 /**
  * 알림 탭 처리 — payload 의 url 로 앱 내부 라우팅.
  * App.tsx 에서 라우터 navigate 를 넘겨 한 번만 연결한다(웹에서는 no-op).
@@ -175,6 +188,12 @@ export async function initNativePushRouting(navigate: (path: string) => void): P
       const data = action.notification?.data as Record<string, unknown> | undefined;
       const url = typeof data?.url === 'string' ? data.url : '/';
       navigate(safeInAppPath(url));
+    });
+    // 앱을 보고 있을 때 온 푸시는 안드로이드가 알림창에 띄우지 않는다 → 앱 안 토스트로 보여 준다.
+    await PushNotifications.addListener('pushNotificationReceived', (n) => {
+      const msg = foregroundPushMessage(n);
+      if (!msg) return;
+      void import('@/store/toastStore').then(({ toast }) => toast.info(msg));
     });
   } catch {
     tapBound = false;

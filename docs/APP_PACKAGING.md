@@ -29,6 +29,15 @@
 
 > 클론 후 네이티브를 열기 전 **반드시** `npm run cap:sync`로 웹 자산을 채운다.
 
+> 📦 **앱에 넣지 않는 웹 자산**: `cap copy`/`cap sync` 직후 `capacitor:copy:after` 스크립트
+> (`scripts/cap-strip-native-assets.mjs`)가 앱 쪽 복사본에서 `ffmpeg/`(약 31MB)를 지운다.
+> 업로드 음원 변환에만 쓰이므로 앱은 필요할 때 `https://www.deudda.com/ffmpeg/` 에서 받는다
+> (`vercel.json` 이 `/ffmpeg/*` 에 CORS 허용). 웹 배포(`dist/`)는 그대로다.
+
+> 📱 **Android 15+ 화면 여백**: `targetSdk 35` 앱은 Android 15 이상에서 화면이 시스템 바 밑까지
+> 늘어난다. `capacitor.config.ts` 의 `android.adjustMarginsForEdgeToEdge: 'auto'` 가 그 기기에서만
+> WebView 에 상태바·내비게이션바 만큼 여백을 준다(여백 색 = `colors.xml` 의 `deudda_background`).
+
 ## 3. 로컬 개발 워크플로
 
 > 🖥️ **가상기기(에뮬레이터)에서 바로 확인하려면** → [`docs/EMULATOR_QA.md`](./EMULATOR_QA.md)

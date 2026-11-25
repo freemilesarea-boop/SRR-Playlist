@@ -21,6 +21,12 @@ const config: CapacitorConfig = {
   android: {
     // OAuth 딥링크/외부 링크가 기본 브라우저가 아닌 커스텀탭에서 열리도록 @capacitor/browser 사용.
     allowMixedContent: false,
+    // 웹 화면이 그려지기 전 WebView 기본 흰 배경이 번쩍이지 않게 앱 배경색으로 칠한다.
+    backgroundColor: '#0a0a0a',
+    // targetSdk 35 앱은 Android 15+ 에서 화면이 상태바·내비게이션바 밑까지 강제로 늘어난다
+    // (edge-to-edge). 'auto' 면 그 기기에서만 WebView 에 시스템 바 만큼 여백을 줘서
+    // 상단 메뉴·하단 플레이어가 가려지지 않게 한다. Android 14 이하는 그대로.
+    adjustMarginsForEdgeToEdge: 'auto',
   },
   plugins: {
     SplashScreen: {

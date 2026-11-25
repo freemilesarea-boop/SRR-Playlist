@@ -39,7 +39,7 @@ public class StorePlaybackService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String title = "매장 음악 재생 중";
-        String text = "앱을 닫아도 재생이 계속됩니다.";
+        String text = "화면을 끄거나 다른 앱을 써도 재생이 계속됩니다.";
         if (intent != null) {
             if (intent.getStringExtra(EXTRA_TITLE) != null) {
                 title = intent.getStringExtra(EXTRA_TITLE);
@@ -59,8 +59,20 @@ public class StorePlaybackService extends Service {
             startForeground(NOTIFICATION_ID, notification);
         }
 
-        // 시스템이 서비스를 종료해도 다시 살린다 — 무인 매장에서 재생이 끊기지 않도록.
-        return START_STICKY;
+        // START_NOT_STICKY — 소리는 WebView 가 내므로, 프로세스가 죽은 뒤 서비스만 되살아나면
+        // 아무것도 재생하지 않는데 "재생 중" 알림만 남는다. 재생은 앱이 다시 켜질 때 JS 가 start 한다.
+        return START_NOT_STICKY;
+    }
+
+    /**
+     * 최근 앱 목록에서 앱을 밀어서 닫으면 화면(WebView)이 사라져 음악이 멈춘다.
+     * 그때 "재생 중" 알림이 남아 있지 않도록 서비스도 함께 내린다.
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        stopForeground(true);
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
     }
 
     private void createChannel() {
@@ -102,7 +114,7 @@ public class StorePlaybackService extends Service {
         return builder
             .setContentTitle(title)
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .build();

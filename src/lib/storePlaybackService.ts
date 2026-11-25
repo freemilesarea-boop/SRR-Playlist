@@ -55,7 +55,7 @@ export async function syncBackgroundPlayback(desired: boolean, label?: { title?:
     if (desired) {
       await Native.start({
         title: label?.title ?? '매장 음악 재생 중',
-        text: label?.text ?? '앱을 닫아도 재생이 계속됩니다.',
+        text: label?.text ?? '화면을 끄거나 다른 앱을 써도 재생이 계속됩니다.',
       });
     } else {
       await Native.stop();

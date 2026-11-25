@@ -13,6 +13,8 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- 시스템 바 여백(Android 15+)과 첫 화면이 흰색으로 보이지 않게. -->
+        <item name="android:windowBackground">@color/deudda_background</item>
     </style>
 
 

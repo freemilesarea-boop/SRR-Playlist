@@ -152,8 +152,10 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     }
 
     // (2) per-reason cooldown
-    const last = lastByReasonRef.current.get(reason) ?? 0;
-    if (now - last < REASON_COOLDOWN_MS) {
+    // 처음 보는 reason 은 쿨다운 없음. (예전엔 기본값 0 이라 페이지가 열린 뒤 첫 1초 동안
+    // — performance.now() < 1000 — 모든 복구가 'cooldown' 으로 건너뛰어졌다.)
+    const last = lastByReasonRef.current.get(reason);
+    if (last !== undefined && now - last < REASON_COOLDOWN_MS) {
       pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: `cooldown ${Math.round(now - last)}ms`, sessionState });
       totalsRef.current.skippedCount += 1;
       audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'cooldown', sessionState });
