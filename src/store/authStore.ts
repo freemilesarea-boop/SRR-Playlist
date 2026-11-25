@@ -41,6 +41,8 @@ interface AuthState {
    */
   signInWithGoogle: () => Promise<NativeOAuthOutcome | null>;
   signInWithKakao: () => Promise<NativeOAuthOutcome | null>;
+  /** Sign in with Apple — iOS 앱 필수(App Store 지침 4.8). 흐름은 Google 과 같다. */
+  signInWithApple: () => Promise<NativeOAuthOutcome | null>;
   signOut: () => Promise<void>;
   /** 회원가입 인증 메일 재발송 — 메일 못 받았거나 만료된 경우 사용. */
   resendSignupEmail: (email: string) => Promise<void>;
@@ -275,6 +277,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw error;
+    return null;
+  },
+
+  signInWithApple: async () => {
+    // 이름·이메일만 요청한다. Apple 은 이름을 **첫 로그인에만** 준다(이후엔 비어 온다).
+    const appleScopes = 'name email';
+    if (isNativeApp()) {
+      const { nativeOAuthSignIn } = await import('@/lib/nativeAuth');
+      return await nativeOAuthSignIn('apple', appleScopes);
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: { redirectTo: `${window.location.origin}/auth/callback`, scopes: appleScopes },
     });
     if (error) throw error;
     return null;

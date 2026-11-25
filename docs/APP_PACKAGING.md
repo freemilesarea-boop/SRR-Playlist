@@ -113,8 +113,11 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
   ```
 
 ### iOS (App Store)
-- [ ] Apple Developer Program(연 $99)
-- [ ] App ID(`com.deudda.app`) + 프로비저닝 프로파일
+> 전체 절차는 [`APP_STORE_SUBMISSION.md`](./APP_STORE_SUBMISSION.md) — Apple 로그인 설정, 푸시 키,
+> Xcode 서명, App Store Connect 등록, 심사 메모까지.
+- [x] Apple Developer Program
+- [ ] App ID(`com.deudda.app`) — Sign In with Apple · Push Notifications 켜기
+- [ ] Apple 로그인(Services ID · 키 · Supabase Apple 제공자) — 지침 4.8 필수
 - [ ] Xcode → Archive → App Store Connect 업로드
 
 ## 6. OAuth(구글/카카오) 네이티브 연동 — **코드 배선 완료 ✅ / 대시보드 설정 필요**

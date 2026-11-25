@@ -103,7 +103,7 @@ export function isNativeOAuthPending(): boolean {
  * 이 경로를 쓰지 않는다).
  */
 export async function nativeOAuthSignIn(
-  provider: 'google' | 'kakao',
+  provider: 'google' | 'kakao' | 'apple',
   scopes?: string,
 ): Promise<NativeOAuthOutcome> {
   if (!isNativeApp()) return 'success';

@@ -138,6 +138,21 @@ describe('버전 단일 진실 원천', () => {
     for (const v of found) expect(v).toBe(pkgVersion);
   });
 
+  it('iOS 빌드 번호(CURRENT_PROJECT_VERSION)가 versionCode 와 같은 공식이다', () => {
+    // App Store Connect 는 같은 빌드 번호를 두 번 받지 않는다. 1 로 박혀 있으면 두 번째 업로드부터 거부된다.
+    const pbx = repoFile('ios/App/App.xcodeproj/project.pbxproj');
+    const [a, b, c] = pkgVersion.split('.').map(Number);
+    const found = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/g)].map((m) => m[1].trim());
+    expect(found.length).toBeGreaterThan(0);
+    for (const v of found) expect(v).toBe(String(a * 10000 + b * 100 + c));
+  });
+
+  it('npm version 이 iOS 버전도 같이 올린다', () => {
+    const pkg = JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.version).toContain('ios-sync-version.mjs');
+    expect(pkg.scripts['capacitor:copy:after']).toContain('ios-sync-version.mjs');
+  });
+
   it('apk 스크립트도 같은 곳에서 버전을 읽는다', () => {
     // build.gradle 만 바꾸고 스크립트를 놔두면 파일 이름이 deudda-0-debug.apk 가 된다.
     expect(repoFile('scripts/android-apk.sh')).toContain("require('./package.json').version");
