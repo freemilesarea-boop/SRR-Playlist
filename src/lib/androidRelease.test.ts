@@ -204,3 +204,19 @@ describe('플레이 SDK 요건', () => {
     expect(num('minSdkVersion')).toBeGreaterThanOrEqual(24);
   });
 });
+
+// Xcode 26 은 iOS 15.0 미만을 배포 대상으로 빌드하지 않는다 — 앱·Pods 타깃마다 오류가 난다.
+describe('iOS 최소 배포 버전', () => {
+  it('앱 타깃이 15.0 이상이다', () => {
+    const pbx = repoFile('ios/App/App.xcodeproj/project.pbxproj');
+    const found = [...pbx.matchAll(/IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);/g)].map((m) => Number(m[1]));
+    expect(found.length).toBeGreaterThan(0);
+    for (const v of found) expect(v).toBeGreaterThanOrEqual(15);
+  });
+
+  it('Podfile 이 플랫폼과 Pods 타깃을 15.0 으로 맞춘다', () => {
+    const podfile = repoFile('ios/App/Podfile');
+    expect(podfile).toContain("platform :ios, '15.0'");
+    expect(podfile).toContain("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'");
+  });
+});
