@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '@/store/playerStore';
-import { prefetchQueue, audioCacheStats, isCachedAudio, type AudioCacheStats } from '@/lib/audioCache';
+import {
+  prefetchQueue, audioCacheStats, isCachedAudio, audioCacheEnabled, purgeAudioCacheIfUnsupported,
+  type AudioCacheStats,
+} from '@/lib/audioCache';
 
 /**
  * 매장/브랜드 플레이어의 오프라인 선반입.
@@ -28,8 +31,13 @@ export function useAudioCachePrefetch(enabled: boolean, ahead = 5) {
   const [stats, setStats] = useState<AudioCacheStats | null>(null);
   const runningRef = useRef<AbortController | null>(null);
 
+  // iPhone/iPad 는 캐시를 쓰지 않는다 — 예전에 받아둔 곡이 있으면 한 번 비운다(재생 실패 원인·수 GB).
   useEffect(() => {
-    if (!enabled || queue.length === 0) return;
+    if (enabled && !audioCacheEnabled()) void purgeAudioCacheIfUnsupported();
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || queue.length === 0 || !audioCacheEnabled()) return;
 
     const ac = new AbortController();
     runningRef.current?.abort();
@@ -60,7 +68,7 @@ export function useAudioCachePrefetch(enabled: boolean, ahead = 5) {
 
   // 온라인 복귀 시 한 번 더 시도 — 오프라인 동안 못 받은 곡을 채운다.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !audioCacheEnabled()) return;
     const onOnline = () => {
       void (async () => {
         await prefetchQueue({ urls: queue.map((t) => t.audio_url), index, ahead, order });

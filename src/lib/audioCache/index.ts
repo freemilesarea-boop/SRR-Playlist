@@ -19,6 +19,7 @@ import {
   pickCachedFallbackIndex,
   pickEvictions,
   pickPrefetchTargets,
+  audioCacheSupportedOn,
   type AudioCacheEntry,
 } from './audioCachePolicy';
 import {
@@ -46,6 +47,28 @@ const MAX_LIVE_OBJECT_URLS = 4;
 const liveOrder: string[] = [];
 
 let inFlight = new Set<string>();
+
+/**
+ * 이 기기에서 오프라인 캐시를 쓰는지 — iPhone/iPad(WebKit)는 끈다(audioCacheSupportedOn 참고).
+ * 끄면 선반입·캐시 대체 재생을 하지 않고, 재생은 늘 원본 주소로 한다.
+ */
+export function audioCacheEnabled(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  return audioCacheSupportedOn({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints });
+}
+
+let purgedUnsupported = false;
+/**
+ * 캐시를 쓰지 않는 기기에 이전에 받아둔 곡이 남아 있으면 한 번 비운다(수 GB 일 수 있다).
+ * 실패해도 재생에는 영향 없다.
+ */
+export async function purgeAudioCacheIfUnsupported(): Promise<void> {
+  if (audioCacheEnabled() || purgedUnsupported) return;
+  purgedUnsupported = true;
+  try {
+    if (await cacheStoreReady()) await clearAudioCache();
+  } catch { /* noop */ }
+}
 let cachedUrls: Set<string> | null = null;
 
 /* ------------------------------------------------------------------ *
@@ -58,6 +81,7 @@ let cachedUrls: Set<string> | null = null;
  */
 export function playbackSrcFor(audioUrl: string | null | undefined): string {
   if (!audioUrl) return '';
+  if (!audioCacheEnabled()) return audioUrl;
   const objUrl = objectUrlByAudioUrl.get(audioUrl);
   if (!objUrl) return audioUrl;
   markLive(objUrl);
@@ -104,6 +128,7 @@ export async function prepareCachedFallback(opts: {
   index: number;
   order?: readonly number[] | null;
 }): Promise<number | null> {
+  if (!audioCacheEnabled()) return null;
   try {
     if (!cachedUrls && (await cacheStoreReady())) cachedUrls = await cachedUrlSet();
   } catch {
@@ -296,6 +321,7 @@ export async function prefetchQueue(opts: {
   fill?: boolean;
 }): Promise<number> {
   const { urls, index, ahead = DEFAULT_PREFETCH_AHEAD, signal, order, fill = false } = opts;
+  if (!audioCacheEnabled()) return 0;
   try {
     if (!(await cacheStoreReady())) return 0;
     requestPersistentStorage();
@@ -348,7 +374,7 @@ export interface AudioCacheStats {
 }
 
 export async function audioCacheStats(): Promise<AudioCacheStats> {
-  const available = await cacheStoreReady();
+  const available = audioCacheEnabled() && (await cacheStoreReady());
   if (!available) return { count: 0, bytes: 0, limitBytes: 0, available: false };
   const entries: AudioCacheEntry[] = await listEntries();
   return {
