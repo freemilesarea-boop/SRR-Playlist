@@ -220,3 +220,14 @@ describe('iOS 최소 배포 버전', () => {
     expect(podfile).toContain("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'");
   });
 });
+
+// Xcode 에서 고른 Team·Push 설정이 로컬에만 있으면 git 정리(stash) 한 번에 사라진다(2026-11-26 Archive 실패).
+describe('iOS 서명 설정이 저장소에 있다', () => {
+  const pbx = repoFile('ios/App/App.xcodeproj/project.pbxproj');
+  it('개발팀(Team)이 지정돼 있다', () => {
+    expect(pbx.match(/DEVELOPMENT_TEAM = 96H8J38M68;/g)?.length).toBe(2);
+  });
+  it('푸시 엔타이틀먼트 파일이 앱 타깃에 연결돼 있다', () => {
+    expect(pbx.match(/CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/g)?.length).toBe(2);
+  });
+});

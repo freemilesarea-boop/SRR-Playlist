@@ -344,7 +344,7 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
    supabase secrets set APNS_KEY_P8="$(cat AuthKey_XXXX.p8)" \
      APNS_KEY_ID=XXXXXXXXXX APNS_TEAM_ID=YYYYYYYYYY APNS_BUNDLE_ID=com.deudda.app
    # 개발(TestFlight 이전) 빌드로 테스트할 때만:
-   supabase secrets set APNS_ENV=sandbox   # + App.entitlements 를 development 로
+   supabase secrets set APNS_ENV=sandbox   # Xcode 에서 바로 실행한 개발 빌드로 푸시를 시험할 때만 (엔타이틀먼트는 이미 development, 배포 빌드는 Xcode 가 production 으로 바꾼다)
    ```
 
 > ⚠️ 실기기 테스트 필수 — 시뮬레이터는 APNs 토큰을 받지 못한다.

@@ -15,7 +15,8 @@ iOS 에서만 달라지는 것은 이 문서에 모았다. 안드로이드 쪽�
 | 앱 아이콘(1024) · 스플래시 · 이름 "듣다" · 번들 ID `com.deudda.app` | ✅ | `ios/App/App/Assets.xcassets`, `Info.plist` |
 | 버전 1.0.4 / 빌드 번호 10004 (package.json 에서 자동) | ✅ | `scripts/ios-sync-version.mjs` |
 | 백그라운드 재생(audio 모드 + AVAudioSession `.playback`) | ✅ | `Info.plist`, `AppDelegate.swift` |
-| 푸시(APNs) 토큰 콜백 · `aps-environment=production` | ✅ | `AppDelegate.swift`, `App.entitlements` |
+| 푸시(APNs) 토큰 콜백 · 엔타이틀먼트 연결(개발 빌드 development → 배포 시 Xcode 가 production 으로) | ✅ | `AppDelegate.swift`, `App.entitlements` |
+| 개발팀(Team `96H8J38M68`) · 엔타이틀먼트 경로를 프로젝트 파일에 저장 — git 정리로 사라지지 않음 | ✅ | `project.pbxproj` |
 | **Apple로 로그인** (iOS 에서 항상 표시 — 지침 4.8) | ✅ 코드 / ⬜ 설정(§2) | `src/lib/appleLogin.ts`, `LoginPage.tsx` |
 | 앱 안 결제 진입 전부 숨김 (지침 3.1.1) | ✅ | `src/lib/purchaseGate.ts` |
 | 앱 안 회원 탈퇴 (지침 5.1.1(v)) | ✅ | 내 정보 → 회원 탈퇴 |

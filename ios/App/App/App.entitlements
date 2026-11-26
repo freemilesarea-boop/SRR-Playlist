@@ -2,11 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- 푸시 알림(APNs). Xcode → Signing & Capabilities → + Push Notifications 를 추가하면
-	     이 파일이 타깃에 연결된다(CODE_SIGN_ENTITLEMENTS).
-	     development 빌드로 테스트할 때는 값을 development 로 바꾸고
-	     edge function 의 APNS_ENV=sandbox 로 맞춘다. -->
+	<!-- 푸시 알림(APNs). 프로젝트 설정 CODE_SIGN_ENTITLEMENTS 로 앱 타깃에 연결돼 있다.
+	     값은 Xcode 표준대로 development 로 둔다. Xcode 에서 바로 실행하는 개발 빌드는 개발용 서명이라
+	     production 이면 서명이 맞지 않아 빌드가 실패한다. Archive 후 App Store Connect 로 내보내면
+	     Xcode 가 배포용 서명으로 다시 서명하면서 production 으로 바뀐다 → TestFlight·App Store 빌드는 production.
+	     (서버 APNS_ENV 는 기본 production 그대로. Xcode 실행 빌드로 푸시를 시험할 때만 sandbox.) -->
 	<key>aps-environment</key>
-	<string>production</string>
+	<string>development</string>
 </dict>
 </plist>
