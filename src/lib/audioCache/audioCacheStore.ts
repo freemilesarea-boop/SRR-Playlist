@@ -110,7 +110,11 @@ export async function getAudioBlob(url: string): Promise<Blob | null> {
     const db = await openDb();
     const tx = db.transaction(STORE, 'readonly');
     const rec = await reqDone(tx.objectStore(STORE).get(url) as IDBRequest<AudioCacheRecord | undefined>);
-    return rec?.blob ?? null;
+    if (!rec?.blob) return null;
+    // 일부 브라우저는 IndexedDB 에서 꺼낸 블롭의 type 을 비워 돌려준다 — 형식을 모르는 blob: URL 은
+    // 재생기가 거부할 수 있으니 저장할 때 기록한 형식을 다시 붙인다.
+    if (!rec.blob.type && rec.contentType) return rec.blob.slice(0, rec.blob.size, rec.contentType);
+    return rec.blob;
   } catch {
     return null;
   }
