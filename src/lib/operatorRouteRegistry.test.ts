@@ -26,7 +26,7 @@ const KNOWN_ADMIN_TABS = new Set([
   'artist-tracks', 'track-review', 'qc-review', 'metadata-violations', 'deleted-tracks',
   'artist-contracts', 'artist-settlements', 'payout-intake', 'members', 'subscriptions',
   'payment-sync', 'revenue', 'support-inquiries', 'operation-logs', 'site-notices',
-  'enterprise-guides', 'notice-posts',
+  'enterprise-guides', 'notice-posts', 'content-reports',
 ]);
 
 describe('registry integrity', () => {
@@ -224,6 +224,7 @@ const PHASE1_ROUTES: Array<[string, string]> = [
   ['/ops/members/payments', 'payment-sync'],
   ['/ops/members/revenue', 'revenue'],
   ['/ops/system/inquiries', 'support-inquiries'],
+  ['/ops/system/content-reports', 'content-reports'],
   ['/ops/system/logs', 'operation-logs'],
   ['/ops/system/notices', 'site-notices'],
   ['/ops/system/enterprise-guides', 'enterprise-guides'],

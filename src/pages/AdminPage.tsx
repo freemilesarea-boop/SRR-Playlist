@@ -96,6 +96,7 @@ const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAudit
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const EnterpriseGuidesPanel = lazy(() => import('@/components/admin/EnterpriseGuidesPanel'));
 const NoticePostsPanel = lazy(() => import('@/components/admin/NoticePostsPanel'));
+const ContentReportsPanel = lazy(() => import('@/components/admin/ContentReportsPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 // 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
@@ -192,6 +193,7 @@ type Tab =
   | 'site-notices'
   | 'enterprise-guides'
   | 'notice-posts'
+  | 'content-reports'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -204,6 +206,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'brand-player', label: '브랜드 플레이어', icon: <StoreIcon size={14} />, superOnly: true },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
+  { key: 'content-reports', label: '신고 관리', icon: <Megaphone size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'member-broadcast', label: '회원 메일 발송', icon: <Mail size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
@@ -708,6 +711,7 @@ export default function AdminPage() {
           {tab === 'site-notices' && <SiteNoticesManagerPanel />}
           {tab === 'enterprise-guides' && <EnterpriseGuidesPanel />}
           {tab === 'notice-posts' && <NoticePostsPanel />}
+          {tab === 'content-reports' && <ContentReportsPanel />}
           {tab === 'artist-settlements' && <ArtistSettlementsList />}
           {tab === 'recommendation' && <RecommendationTester />}
           {tab === 'admins' && <AdminUsersList />}

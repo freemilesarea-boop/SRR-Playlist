@@ -16,6 +16,7 @@ import AutoCover from '@/components/AutoCover';
 import EmptyState from '@/components/common/EmptyState';
 import type { PlaylistRow } from '@/types/db';
 import { currentTimeSlot, timeSlotLabel } from '@/lib/format';
+import { useBlockStore } from '@/store/blockStore';
 
 type View =
   | 'recent' | 'time' | 'popular' | 'followers'
@@ -79,7 +80,9 @@ export default function ExplorePlaylistsPage() {
         setCounts(cnt);
         setCovers(cov);
       } else if (view === 'curator-made') {
-        const rows = await fetchCuratorMadePlaylists(60).catch(() => []);
+        const rows = (await fetchCuratorMadePlaylists(60).catch(() => []))
+          // 차단한 큐레이터의 플레이리스트는 뺀다(App Store 지침 1.2).
+          .filter((r) => !useBlockStore.getState().ids.has(r.curator_user_id));
         if (!alive) return;
         // CuratorMadePlaylist → PlaylistRow 형태로 매핑 (카드 호환)
         setPlaylists(rows.map((r) => ({

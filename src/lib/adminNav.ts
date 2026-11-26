@@ -108,7 +108,7 @@ export const GROUP_TREE: NavGroupNode[] = [
     group: '운영·설정',
     hint: '문의·로그·서비스 설정·권한',
     subgroups: [
-      { name: '운영', tabs: ['support-inquiries', 'operation-logs'] },
+      { name: '운영', tabs: ['support-inquiries', 'content-reports', 'operation-logs'] },
       // brand(로고)는 site-settings('사이트 설정')로 병합.
       { name: '설정', tabs: ['site-settings', 'site-notices', 'notice-posts', 'enterprise-guides', 'admins'] },
     ],

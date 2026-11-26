@@ -51,6 +51,7 @@ import EnterpriseStoreInfoCard from '@/components/profile/EnterpriseStoreInfoCar
 import EnterprisePaymentBanner from '@/components/enterprise/EnterprisePaymentBanner';
 import MultiOutputSection from '@/components/settings/MultiOutputSection';
 import AudioOutputSection from '@/components/settings/AudioOutputSection';
+import BlockedUsersSection from '@/components/moderation/BlockedUsersSection';
 import { useEnterpriseSelfRole } from '@/hooks/useEnterpriseSelfRole';
 import {
   usePlaybackSettingsStore,
@@ -425,6 +426,9 @@ export default function ProfilePage() {
       )}
 
       <PushNotificationToggle />
+
+      {/* 차단한 사용자 — 신고·차단(App Store 지침 1.2) */}
+      <BlockedUsersSection />
 
 
       {/* ── 문의 · 고객지원 ──────────────────────────────────── */}

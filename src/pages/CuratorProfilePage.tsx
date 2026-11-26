@@ -15,11 +15,17 @@ import { gradientStyle } from '@/lib/cover';
 import AutoCover from '@/components/AutoCover';
 import EmptyState from '@/components/common/EmptyState';
 import Skeleton from '@/components/common/Skeleton';
+import ReportButton from '@/components/moderation/ReportButton';
+import BlockButton from '@/components/moderation/BlockButton';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
+import BlockedNotice from '@/components/moderation/BlockedNotice';
 
 export default function CuratorProfilePage() {
   const { handle } = useParams<{ handle: string }>();
   const [profile, setProfile] = useState<CuratorProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  // 차단한 큐레이터의 프로필은 숨긴다(App Store 지침 1.2).
+  const blockedIds = useBlockedUsersLoader();
 
   useEffect(() => {
     if (!handle) return;
@@ -61,6 +67,10 @@ export default function CuratorProfilePage() {
         </Link>
       </div>
     );
+  }
+
+  if (blockedIds.has(profile.user_id)) {
+    return <BlockedNotice userId={profile.user_id} displayName={profile.display_name} onBack={() => window.history.back()} />;
   }
 
   return (
@@ -175,6 +185,10 @@ export default function CuratorProfilePage() {
             <Globe size={16} />
           </a>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <ReportButton targetType="curator" targetId={profile.user_id} targetName={`${profile.display_name} (@${profile.handle})`} />
+          <BlockButton userId={profile.user_id} displayName={profile.display_name} />
+        </div>
       </div>
 
       {/* 통계 카드 */}

@@ -21,6 +21,10 @@ import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
 import Skeleton from '@/components/common/Skeleton';
 import { toast } from '@/store/toastStore';
+import ReportButton from '@/components/moderation/ReportButton';
+import BlockButton from '@/components/moderation/BlockButton';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
+import BlockedNotice from '@/components/moderation/BlockedNotice';
 
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +41,8 @@ export default function PlaylistPage() {
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState<number>(0);
   const [curator, setCurator] = useState<Awaited<ReturnType<typeof fetchPlaylistCurator>>>(null);
+  // 큐레이터가 만든 플레이리스트는 다른 사용자가 만든 콘텐츠 — 차단·신고 대상(App Store 지침 1.2).
+  const blockedIds = useBlockedUsersLoader();
 
   // 대표 커버 — 포함 음원 중 첫 자켓 (없으면 undefined → thumbnail/그라데이션 fallback)
   const coverFromTracks = useMemo(
@@ -151,6 +157,10 @@ export default function PlaylistPage() {
   }
 
   const isAdmin = profile?.role === 'admin';
+
+  if (curator && blockedIds.has(curator.user_id)) {
+    return <BlockedNotice userId={curator.user_id} displayName={curator.display_name} onBack={() => window.history.back()} />;
+  }
 
   return (
     <div className="pb-8">
@@ -311,6 +321,12 @@ export default function PlaylistPage() {
             프로필 보기
           </span>
         </Link>
+      )}
+      {curator && (
+        <div className="mx-4 -mt-2 mb-4 flex justify-end gap-2 sm:mx-6">
+          <ReportButton targetType="playlist" targetId={playlist.id} targetName={playlist.title} />
+          <BlockButton userId={curator.user_id} displayName={curator.display_name} onBlocked={() => window.history.back()} />
+        </div>
       )}
 
       {/* Track list */}

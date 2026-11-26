@@ -30,6 +30,10 @@ import ErrorRetry from '@/components/common/ErrorRetry';
 import EmptyState from '@/components/common/EmptyState';
 import Skeleton from '@/components/common/Skeleton';
 import { withTimeout } from '@/lib/withTimeout';
+import ReportButton from '@/components/moderation/ReportButton';
+import BlockButton from '@/components/moderation/BlockButton';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
+import BlockedNotice from '@/components/moderation/BlockedNotice';
 
 type DetailTrack = TrackRow & { order_index: number };
 
@@ -42,6 +46,8 @@ export default function UserPlaylistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // 차단한 사용자의 플레이리스트는 숨긴다(App Store 지침 1.2).
+  const blockedIds = useBlockedUsersLoader();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -145,6 +151,10 @@ export default function UserPlaylistDetailPage() {
     );
   }
 
+  if (!data.is_owner && blockedIds.has(data.owner_user_id)) {
+    return <BlockedNotice userId={data.owner_user_id} displayName={data.creator_name} onBack={() => navigate(-1)} />;
+  }
+
   const hasPlayable = tracks.some((t) => isPlayableUrl(t.audio_url));
 
   return (
@@ -190,6 +200,12 @@ export default function UserPlaylistDetailPage() {
               </button>
             )}
           </div>
+          {!data.is_owner && (
+            <div className="flex flex-wrap items-center gap-2">
+              <ReportButton targetType="user_playlist" targetId={data.id} targetName={data.title} />
+              <BlockButton userId={data.owner_user_id} displayName={data.creator_name} onBlocked={() => navigate(-1)} />
+            </div>
+          )}
         </div>
       </div>
 

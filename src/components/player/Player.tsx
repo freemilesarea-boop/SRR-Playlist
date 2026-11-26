@@ -84,6 +84,7 @@ import TrackLikeButton from '@/components/TrackLikeButton';
 import BusinessExcludeButton from '@/components/player/BusinessExcludeButton';
 import ShareButton from '@/components/ShareButton';
 import AddToPlaylistButton from '@/components/AddToPlaylistButton';
+import ReportButton from '@/components/moderation/ReportButton';
 import { resolveMembership, PREVIEW_LIMIT_SECONDS } from '@/lib/membership';
 import {
   getBusinessTrialGate, startVerifiedBusinessTrial,
@@ -4082,6 +4083,8 @@ export default function Player() {
                   className="border-0 bg-white/10 backdrop-blur ring-white/15 text-white/90 hover:text-white"
                 />
                 <AddToPlaylistButton trackId={current.id} variant="player" />
+                {/* 음원 신고 (App Store 지침 1.2 — 아티스트가 올린 콘텐츠) */}
+                <ReportButton targetType="track" targetId={current.id} targetName={`${current.title}${current.artist ? ` — ${current.artist}` : ''}`} variant="player" />
                 {/* X6.72 — 매장 모드 1-click 제외 (business 플랜만, 클라이언트 가드는 컴포넌트 내부) */}
                 <BusinessExcludeButton trackId={current.id} variant="expanded" />
                 {!playable && (
