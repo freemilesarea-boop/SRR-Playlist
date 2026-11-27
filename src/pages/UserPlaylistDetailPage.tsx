@@ -34,12 +34,18 @@ import ReportButton from '@/components/moderation/ReportButton';
 import BlockButton from '@/components/moderation/BlockButton';
 import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
 import BlockedNotice from '@/components/moderation/BlockedNotice';
+import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
+import { playlistDetailErrorMessage } from '@/lib/playlistDetailError';
+
 
 type DetailTrack = TrackRow & { order_index: number };
 
 export default function UserPlaylistDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const session = useAuthStore((s) => s.session);
+  const isAuthReady = useAuthStore((s) => s.isAuthReady);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const [data, setData] = useState<UserPlaylistDetail | null>(null);
   const [tracks, setTracks] = useState<DetailTrack[]>([]);
@@ -55,6 +61,8 @@ export default function UserPlaylistDetailPage() {
   );
 
   async function load() {
+    // 회원 플레이리스트는 로그인한 사람만 볼 수 있다 — 로그인 전에는 서버를 부르지 않는다.
+    if (!session) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -67,13 +75,13 @@ export default function UserPlaylistDetailPage() {
         setTracks(d.tracks);
       }
     } catch (e) {
-      setError(errorMessage(e));
+      setError(playlistDetailErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
-  useFreshFetch(load, [id]);
+  useFreshFetch(load, [id, session?.user?.id]);
 
   function playAll(startId?: string) {
     const { playable } = filterPlayableTracks(tracks);
@@ -124,6 +132,26 @@ export default function UserPlaylistDetailPage() {
     }
   }
 
+  if (!isAuthReady) {
+    return (
+      <div className="px-4 py-6 sm:px-6">
+        <Skeleton.Row count={5} />
+      </div>
+    );
+  }
+  if (!session) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
+        <Lock size={32} className="text-ink-dim" />
+        <p className="text-sm font-medium">로그인하면 이 플레이리스트를 볼 수 있어요.</p>
+        <p className="text-xs text-ink-mute">회원이 만든 플레이리스트는 로그인한 회원에게만 보여요.</p>
+        <div className="mt-2 flex gap-2">
+          <button onClick={() => navigate(-1)} className="btn-ghost text-sm"><ArrowLeft size={14} /> 뒤로</button>
+          <button onClick={() => useGateStore.getState().open('login')} className="btn-primary text-sm">로그인</button>
+        </div>
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div className="px-4 py-6 sm:px-6">

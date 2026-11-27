@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // iOS: 이전 로그인 창 기록이 남아 있으면 Browser.open 이 "Unable to display URL" 로 거절한다
 // (2026-11-27 실기기). 열기 전에 반드시 close 로 정리하는지 고정한다.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
