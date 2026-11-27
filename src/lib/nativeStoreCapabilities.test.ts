@@ -389,3 +389,14 @@ describe('iOS 씬(Scene) 수명주기', () => {
     expect(scene).toContain('ApplicationDelegateProxy.shared.application');
   });
 });
+
+// 씬 수명주기에서는 Capacitor 7 의 presentVC 가 만드는 임시 창이 씬에 붙지 않아 보이지 않는다
+// (2026-11-27: Google/Apple 로그인 창이 "열렸는데 안 보임"). patch-package 로 고친다.
+describe('Capacitor iOS 임시 창 패치', () => {
+  it('패치 파일이 있고 설치 때마다 적용된다', () => {
+    const pkg = JSON.parse(repoFile('package.json')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.postinstall).toContain('patch-package');
+    const patch = repoFile('patches/@capacitor+ios+7.6.8.patch');
+    expect(patch).toContain('UIWindow(windowScene: scene)');
+  });
+});

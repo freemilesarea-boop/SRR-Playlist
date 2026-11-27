@@ -1,0 +1,20 @@
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/CapacitorBridge.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/CapacitorBridge.swift
+index 9caa218..f22320b 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/CapacitorBridge.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/CapacitorBridge.swift
+@@ -750,7 +750,14 @@ open class CapacitorBridge: NSObject, CAPBridgeProtocol {
+         if viewControllerToPresent.modalPresentationStyle == .popover {
+             self.viewController?.present(viewControllerToPresent, animated: flag, completion: completion)
+         } else {
+-            self.tmpWindow = UIWindow.init(frame: UIScreen.main.bounds)
++            // [듣다 patch] 씬(Scene) 수명주기 앱에서는 씬에 붙지 않은 창이 화면에 나타나지 않는다.
++            // 그대로 두면 Browser.open(로그인 창) 등이 "열렸는데 안 보이는" 상태가 된다(iOS 27 대응으로 씬 도입 후).
++            // 현재 화면의 씬이 있으면 거기에 붙여 만든다. patches/@capacitor+ios+*.patch 로 유지.
++            if let scene = self.viewController?.view.window?.windowScene {
++                self.tmpWindow = UIWindow(windowScene: scene)
++            } else {
++                self.tmpWindow = UIWindow.init(frame: UIScreen.main.bounds)
++            }
+             self.tmpWindow?.rootViewController = TmpViewController.init()
+             self.tmpWindow?.makeKeyAndVisible()
+             self.tmpWindow?.rootViewController?.present(viewControllerToPresent, animated: flag, completion: completion)
