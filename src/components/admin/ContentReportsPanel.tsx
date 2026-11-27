@@ -7,6 +7,7 @@ import {
 } from '@/lib/moderationApi';
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
+import { adminTones } from '@/lib/adminTones';
 
 const REASON_LABEL = Object.fromEntries(REPORT_REASONS.map((r) => [r.value, r.label])) as Record<string, string>;
 const STATUS_TABS: Array<{ key: ReportStatus | 'all'; label: string }> = [
@@ -76,7 +77,7 @@ export default function ContentReportsPanel() {
         신고는 24시간 안에 확인하는 것을 목표로 합니다(App Store 운영 기준). 같은 대상의 신고는 한 번에 함께 처리됩니다.
       </p>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className={`text-sm ${adminTones.danger.text}`}>{error}</p>}
       {rows === null ? (
         <p className="text-sm text-ink-mute">불러오는 중…</p>
       ) : rows.length === 0 ? (
@@ -89,7 +90,7 @@ export default function ContentReportsPanel() {
               <li key={r.id} className="space-y-2 rounded-2xl bg-bg-card p-4 ring-1 ring-line/10">
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="rounded-full bg-ink/5 px-2 py-0.5 font-semibold">{REPORT_TARGET_LABEL[r.target_type]}</span>
-                  <span className="rounded-full bg-red-500/10 px-2 py-0.5 font-semibold text-red-500">{REASON_LABEL[r.reason] ?? r.reason}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-semibold ${adminTones.danger.badge}`}>{REASON_LABEL[r.reason] ?? r.reason}</span>
                   {r.report_count > 1 && <span className="text-ink-mute">누적 신고 {r.report_count}건</span>}
                   <span className="ml-auto text-ink-dim">{new Date(r.created_at).toLocaleString('ko-KR')}</span>
                 </div>
@@ -115,7 +116,7 @@ export default function ContentReportsPanel() {
                   <div className="flex flex-wrap gap-2">
                     {r.target_type === 'user_playlist' && (
                       <button disabled={busyId === r.id} onClick={() => void resolve(r, 'actioned', true)}
-                        className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${adminTones.danger.buttonSolid}`}>
                         비공개로 돌리고 조치함
                       </button>
                     )}

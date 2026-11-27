@@ -6,6 +6,7 @@ import {
 } from '@/lib/billingAttentionApi';
 import { toast } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorMessage';
+import { adminTones } from '@/lib/adminTones';
 
 const BUCKETS: Array<{ key: ReturnType<typeof overdueBucket>; title: string; hint: string }> = [
   { key: 'recent', title: '최근 2주', hint: '재결제 실패일 가능성이 큽니다. PayApp에서 결제 여부를 먼저 확인해 주세요.' },
@@ -68,7 +69,7 @@ export default function BillingAttentionPanel() {
         새로 생긴 건은 매일 오전 10:37에 관리자 알림으로도 옵니다.
       </p>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className={`text-sm ${adminTones.danger.text}`}>{error}</p>}
       {rows === null ? (
         <p className="text-sm text-ink-mute">불러오는 중…</p>
       ) : rows.length === 0 ? (
@@ -86,7 +87,7 @@ export default function BillingAttentionPanel() {
                   <li key={r.subscription_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-bg-card p-3 ring-1 ring-line/10">
                     <span className="text-sm font-semibold">{r.display_name}</span>
                     <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs">{PLAN_LABEL[r.plan_type] ?? r.plan_type} · {r.price.toLocaleString('ko-KR')}원</span>
-                    <span className="text-xs text-red-500">{r.days_overdue}일 지남</span>
+                    <span className={`text-xs ${adminTones.danger.text}`}>{r.days_overdue}일 지남</span>
                     <span className="w-full text-xs text-ink-mute sm:w-auto">
                       기간 종료 {fmtDate(r.current_period_end)} · 마지막 결제 {fmtDate(r.last_paid_at)} · 마지막 PayApp 통보 {fmtDate(r.last_payapp_event_at)}
                     </span>
