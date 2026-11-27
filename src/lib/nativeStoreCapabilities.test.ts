@@ -365,3 +365,27 @@ describe('capacitor 의존성', () => {
     expect(pkg.dependencies['@capacitor/push-notifications']).toBeTruthy();
   });
 });
+
+// iOS 27 은 UIScene 수명주기를 안 쓰는 앱을 실행 직후 강제 종료한다
+// (2026-11-26 심사 충돌: _UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption).
+describe('iOS 씬(Scene) 수명주기', () => {
+  const plist = repoFile('ios/App/App/Info.plist');
+  const pbx = repoFile('ios/App/App.xcodeproj/project.pbxproj');
+  const scene = repoFile('ios/App/App/SceneDelegate.swift');
+
+  it('Info.plist 에 씬 매니페스트가 있고 SceneDelegate · Main 스토리보드를 가리킨다', () => {
+    expect(plist).toContain('<key>UIApplicationSceneManifest</key>');
+    expect(plist).toContain('$(PRODUCT_MODULE_NAME).SceneDelegate');
+    expect(plist).toMatch(/<key>UISceneStoryboardFile<\/key>\s*<string>Main<\/string>/);
+  });
+
+  it('SceneDelegate.swift 가 앱 타깃 빌드에 들어간다', () => {
+    expect(pbx).toContain('SceneDelegate.swift in Sources');
+  });
+
+  it('씬에서 받은 링크를 Capacitor 로 넘긴다 — 빠지면 OAuth 로그인이 앱으로 안 돌아온다', () => {
+    expect(scene).toContain('openURLContexts');
+    expect(scene).toContain('connectionOptions.urlContexts');
+    expect(scene).toContain('ApplicationDelegateProxy.shared.application');
+  });
+});
