@@ -101,7 +101,7 @@ export const GROUP_TREE: NavGroupNode[] = [
       { name: '아티스트 정산', tabs: ['artist-settlements', 'payout-intake'] },
       { name: '본사·매장 청구', tabs: ['enterprise-billing', 'enterprise-monthly-settlements', 'enterprise-settlement-center'] },
       // settlement-v2 는 streaming-v2('v2 관측')로 병합.
-      { name: '결제·매출', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'streaming-v2'] },
+      { name: '결제·매출', tabs: ['streaming', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'billing-attention', 'streaming-v2'] },
     ],
   },
   {

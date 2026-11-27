@@ -71,6 +71,7 @@ const UploadChecksPanel = lazy(() => import('@/components/admin/UploadChecksPane
 const ShadowV2Panel = lazy(() => import('@/components/admin/ShadowV2Panel'));
 const SiteConfigPanel = lazy(() => import('@/components/admin/SiteConfigPanel'));
 const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
+const BillingAttentionPanel = lazy(() => import('@/components/admin/BillingAttentionPanel'));
 const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
 const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
 const FreeTrialsPanel = lazy(() => import('@/components/admin/FreeTrialsPanel'));
@@ -166,6 +167,7 @@ type Tab =
   | 'subscriptions'
   | 'promotions'
   | 'payment-sync'
+  | 'billing-attention'
   | 'content'
   | 'auto-playlists'
   | 'artists'
@@ -238,6 +240,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'promotions', label: '프로모션', icon: <Ticket size={14} /> },
   { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
+  { key: 'billing-attention', label: '결제 확인 필요', icon: <CreditCard size={14} /> },
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
@@ -684,6 +687,7 @@ export default function AdminPage() {
           {tab === 'subscriptions' && <SubscriptionRequests />}
           {tab === 'promotions' && <PromotionCodes />}
           {tab === 'payment-sync' && <PaymentSyncTool />}
+          {tab === 'billing-attention' && <BillingAttentionPanel />}
           {tab === 'operation-logs' && <AdminOperationLogs />}
           {tab === 'content' && <ContentManagement />}
           {tab === 'auto-playlists' && <AutoPlaylistManager />}
