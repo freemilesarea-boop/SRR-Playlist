@@ -130,6 +130,16 @@ export async function nativeOAuthSignIn(
     pending = { settle: resolve, timeoutId, dismissId: null, deepLinkSeen: false };
   });
 
+  // iOS 브라우저 플러그인은 이전 로그인 창(SFSafariViewController)을 아직 열려 있다고 기억하면
+  // 새 창을 열지 않고 "Unable to display URL" 로 거절한다. 이전 창이 닫힐 때 그 신호가 빠지면
+  // (2026-11-27 실기기: 첫 시도 뒤 Google·Apple 로그인이 전부 거절) 앱을 껐다 켜기 전까지
+  // 로그인을 못 한다. 그래서 열기 전에 남은 창 기록을 먼저 정리한다 — 열린 창이 없으면 조용히 실패한다.
+  try {
+    await Browser.close();
+  } catch {
+    /* 열린 창 없음 — 정상 */
+  }
+
   try {
     await Browser.open({ url: data.url });
   } catch (err) {
