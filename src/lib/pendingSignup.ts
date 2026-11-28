@@ -16,9 +16,10 @@ const LS_KEY = 'srr-pending-signup';
 interface PendingProfile {
   account_type: 'individual' | 'business' | 'artist';
   full_name: string;
-  birth_date: string;
-  phone: string;
-  address: string;
+  /** 2026-11-28 — 가입 화면에서 받지 않는다(App Store 5.1.1). 예전 캐시 호환용. */
+  birth_date?: string;
+  phone?: string;
+  address?: string;
   signup_completed: true;
   artist_approval_status?: 'pending';
   // 0054 — 사업자 가입 시 영업인 코드 연결
@@ -36,10 +37,10 @@ interface PendingProfile {
 
 interface PendingArtistFields {
   real_name: string;
-  birth_date: string;
+  birth_date?: string;
   artist_name: string;
-  phone: string;
-  address: string;
+  phone?: string;
+  address?: string;
   email: string;
   approval_status: 'pending';
 }
