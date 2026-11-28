@@ -1,4 +1,5 @@
 import { recordPauseRequest } from '@/lib/playbackFlightRecorder';
+import { isNativeApp } from '@/lib/native';
 /**
  * audioOutput — Audio Output Device Manager (Phase 1)
  *
@@ -153,6 +154,9 @@ export function findPhysicalSibling(
  */
 export async function requestDeviceLabelPermission(): Promise<boolean> {
   if (typeof navigator === 'undefined') return false;
+  // 앱(iOS/Android)에서는 마이크를 요청하지 않는다 — 출력 장치 선택은 웹 전용이고,
+  // iOS 는 Info.plist 에 마이크 사용 문구가 없으면 요청 순간 앱을 종료한다(2026-11-28 카메라 충돌과 같은 유형).
+  if (isNativeApp()) return false;
   const md = (navigator as unknown as { mediaDevices?: { getUserMedia?: (c: MediaStreamConstraints) => Promise<MediaStream> } }).mediaDevices;
   if (typeof md?.getUserMedia !== 'function') return false;
   try {

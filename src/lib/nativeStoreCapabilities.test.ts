@@ -25,6 +25,22 @@ describe('iOS Info.plist', () => {
   it('OAuth 딥링크 스킴이 유지된다 (앱에서 구글/카카오 로그인)', () => {
     expect(plist).toContain('<string>com.deudda.app</string>');
   });
+
+  // 2026-11-28 App Store 심사 2.1.0 — 사진 올리기에서 '사진 찍기'를 누르자 앱이 종료됐다.
+  it('카메라·사진 보관함 사용 안내 문구가 있다 (없으면 iOS 가 앱을 종료한다)', () => {
+    for (const key of ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription']) {
+      const at = plist.indexOf(`<key>${key}</key>`);
+      expect(at, key).toBeGreaterThan(-1);
+      const value = plist.slice(at).match(/<string>([^<]*)<\/string>/)?.[1] ?? '';
+      expect(value.trim().length, key).toBeGreaterThan(10);
+    }
+  });
+
+  it('앱에서는 마이크를 요청하지 않는다 (마이크 문구가 없으므로)', () => {
+    const src = repoFile('src/lib/audioOutput.ts');
+    const fn = src.slice(src.indexOf('export async function requestDeviceLabelPermission'));
+    expect(fn.slice(0, fn.indexOf('getUserMedia'))).toContain('if (isNativeApp()) return false;');
+  });
 });
 
 describe('AndroidManifest.xml', () => {
