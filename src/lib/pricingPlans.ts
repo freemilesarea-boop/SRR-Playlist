@@ -90,12 +90,18 @@ export function storeMonthlyPrice(ctx: PricingContext | null): number {
   return typeof p === 'number' && p > 0 ? p : 6900;
 }
 
+export const ARTIST_STORE_CHECKOUT_BLOCKED =
+  '아티스트 계정은 매장 요금제가 아니라 아티스트 이용권을 결제해요. 아티스트 대시보드의 결제 카드에서 진행해 주세요.';
+
 /**
  * 이미 엔터프라이즈(본사/가맹)에 속한 회원에게는 단독 매장 결제를 권하지 않는다.
  * 요금이 이중으로 나가는 상황을 만들지 않기 위함 — 안내만 하고 결제 버튼은 감춘다.
  */
 export function storeCheckoutBlockedReason(ctx: PricingContext | null): string | null {
   if (!ctx?.signed_in) return null;
+  // 아티스트는 매장 요금제가 아니라 아티스트 이용권(대시보드 결제 카드)을 결제한다.
+  // 2026-11-28 — 아티스트가 여기서 매장 요금제를 결제해 계약서 발행이 막힌 일이 있었다.
+  if (ctx.account_type === 'artist') return ARTIST_STORE_CHECKOUT_BLOCKED;
   if (ctx.store) return `${ctx.store.enterprise_name} 가맹점으로 등록돼 있어요. 엔터프라이즈 가맹 요금이 적용됩니다.`;
   if (ctx.hq) return '엔터프라이즈 본사 계정이에요. 본사/가맹 요금제가 적용됩니다.';
   return null;
