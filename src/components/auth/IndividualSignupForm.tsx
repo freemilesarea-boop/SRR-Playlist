@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
-import { verifyIdentityNow, type IdentityVerificationResult } from '@/lib/identityVerification';
 import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 
@@ -16,39 +14,15 @@ export default function IndividualSignupForm({ onDone }: Props) {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [fullName, setFullName] = useState('');
-  const [birthDate, setBirthDate] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [identity, setIdentity] = useState<IdentityVerificationResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function validate(): string | null {
     if (!fullName.trim()) return '이름을 입력해주세요';
-    if (!birthDate) return '생년월일을 입력해주세요';
-    if (!/^[0-9\-+\s]+$/.test(phone) || phone.replace(/\D/g, '').length < 9) {
-      return '전화번호 형식이 올바르지 않아요';
-    }
-    if (!address.trim()) return '주소를 입력해주세요';
     if (!email.trim()) return '이메일을 입력해주세요';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 해요';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않아요';
-    if (!identity?.ok) return '본인인증을 완료해주세요';
     return null;
-  }
-
-  async function handleIdentityVerification() {
-    setVerifying(true);
-    try {
-      const res = await verifyIdentityNow({ name: fullName });
-      setIdentity(res);
-      if (res.ok) toast.success('본인인증이 완료됐어요 (MVP mock)');
-    } catch (e) {
-      toast.error(friendlyError(e, '본인인증 실패'));
-    } finally {
-      setVerifying(false);
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -66,9 +40,6 @@ export default function IndividualSignupForm({ onDone }: Props) {
       await signUpWithPassword(email.trim(), password, fullName.trim(), {
         account_type: 'individual',
         full_name: fullName.trim(),
-        birth_date: birthDate,
-        phone: phone.trim(),
-        address: address.trim(),
       });
       // 2) auth.users 가 생성된 후, public.users 가 trigger 로 자동 생성되거나
       //    이메일 인증 메일 발송. 이메일 인증 후 로그인 시점에 본인 정보 업데이트.
@@ -76,14 +47,6 @@ export default function IndividualSignupForm({ onDone }: Props) {
       const pendingProfile = {
         account_type: 'individual' as const,
         full_name: fullName.trim(),
-        birth_date: birthDate,
-        phone: phone.trim(),
-        address: address.trim(),
-        identity_verified: !!identity?.ok,
-        identity_provider: identity?.provider ?? null,
-        identity_verified_at: identity?.verified_at ?? null,
-        identity_ci: identity?.ci ?? null,
-        identity_di: identity?.di ?? null,
         signup_completed: true,
       };
       try {
@@ -123,50 +86,11 @@ export default function IndividualSignupForm({ onDone }: Props) {
     }
   }
 
-  const verified = !!identity?.ok;
-
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <Field label="이름 *">
         <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" className="input" />
       </Field>
-      <Field label="생년월일 *">
-        <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" />
-      </Field>
-      <Field label="전화번호 *">
-        <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="010-0000-0000" className="input" />
-      </Field>
-      <Field label="주소 *">
-        <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" className="input" />
-      </Field>
-
-      <Field label="본인인증 *" hint="주민등록번호는 저장하지 않습니다. 외부 인증기관 결과만 보관합니다.">
-        <button
-          type="button"
-          onClick={handleIdentityVerification}
-          disabled={verifying || verified}
-          className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-            verified
-              ? 'bg-emerald-500/25 text-slate-900 dark:text-emerald-100 ring-1 ring-emerald-400/50'
-              : 'bg-accent/20 text-accent ring-1 ring-accent/40 hover:bg-accent/25'
-          }`}
-        >
-          {verified ? <CheckCircle2 size={14} /> : <ShieldCheck size={14} />}
-          {verified
-            ? '본인인증 완료'
-            : verifying
-              ? '인증 중…'
-              : '본인인증 하기'}
-        </button>
-        {!verified && (
-          <p className="mt-1 text-[11px] text-ink-dim">
-            정식 본인인증은 NICE/KCB/토스/카카오 연동 예정입니다. (MVP: mock)
-          </p>
-        )}
-      </Field>
-
-      <hr className="border-line/10" />
-
       <Field label="이메일 *">
         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="input" />
       </Field>

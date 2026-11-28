@@ -566,7 +566,7 @@ export function PayoutAccountSection({
       ? '등록하신 계좌가 관리자 확인 중입니다. 평균 1영업일 이내 처리됩니다.'
       : status === 'rejected'
         ? '아래 사유를 확인하고 정확한 정보로 다시 등록해주세요.'
-        : '아티스트 음원 업로드 전, 정산받을 본인 명의 계좌를 등록해주세요. (MVP 는 관리자 수동 확인)';
+        : '아티스트 음원 업로드 전, 정산받을 본인 명의 계좌를 등록해주세요. 관리자가 확인한 뒤 승인해요.';
 
   const statusBadge =
     status === 'rejected'
