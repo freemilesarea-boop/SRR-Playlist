@@ -7,7 +7,8 @@
 // 않습니다. 공식 PayApp 라이브러리(ssut/payapp, BoxbillingPayApp 등) 및 PayApp
 // 매뉴얼 상 해당 endpoint 가 지원하는 cmd 는 다음으로 한정됨:
 //   - payrequest / paycancel / paycancelreq        (결제 요청/취소 계열)
-//   - rebillRegist / rebillPay / rebillStop        (정기결제 계열)
+//   - rebillRegist / rebillStart / rebillStop / rebillCancel  (정기결제 계열)
+//     (rebillPay 는 존재하지 않는 cmd 다 — 2026-11-01 실측으로 확인. docs/PAYMENT.md 참고)
 // `paymentList / payList / tradeList / list` 등 조회용 cmd 는 존재하지 않으며,
 // 이전 구현이 받아온 `errno=70040 "cmd을 가져오지 못했습니다"` 는 PayApp 이
 // 해당 cmd 를 알지 못한다는 정확한 신호였음.

@@ -35,3 +35,13 @@ pnpm-debug.log*
 # one-time local-run demo/QA account provisioning utilities (their own headers say "Do NOT commit")
 scripts/create-demo-accounts.mjs
 scripts/set-demo-account-passwords.mjs
+
+# 릴리스 서명 키 — 절대 커밋하지 않는다.
+# 이 키를 잃어버리면 같은 앱으로 업데이트를 영영 올릴 수 없다(Play 가 서명으로 앱을 식별한다).
+# 따로 안전한 곳에 백업해 둘 것.
+android/keystore.properties
+*.jks
+*.keystore
+
+# 실기기에 넣을 APK 산출물 (npm run apk)
+dist-apk/

@@ -1,5 +1,6 @@
 import type { TrackRow } from '@/types/db';
 import { isPlayableTrack, isPlayableUrl } from './audio';
+import { isTrackBlocked } from './failedTracks';
 
 /**
  * 트랙 재생 가능성 상태.
@@ -28,8 +29,10 @@ type PlayabilityFields = {
 };
 
 export function getTrackPlaybackState(
-  track: Pick<TrackRow, 'audio_url'> & PlayabilityFields,
+  track: Pick<TrackRow, 'audio_url'> & PlayabilityFields & { id?: string },
 ): TrackPlaybackState {
+  // 이 기기에서 반복해서 재생에 실패해 내려둔 음원 — 목록에서도 큐에서도 빠진다.
+  if (isTrackBlocked(track.id)) return 'error';
   if (isRemovedOrHidden(track)) return 'missing';
   if (isAudioHealthFailed(track)) return 'error';
   const url = track.audio_url;
@@ -75,8 +78,9 @@ export function filterPlayableTracks<T extends Pick<TrackRow, 'audio_url'>>(
   const playable: T[] = [];
   const dropped: T[] = [];
   for (const t of tracks) {
-    const fields = t as PlayabilityFields;
-    if (!isRemovedOrHidden(fields) && !isAudioHealthFailed(fields) && isPlayableUrl(t.audio_url)) {
+    // 판정은 getTrackPlaybackState 한 곳에서만 한다. 예전에는 여기서 같은 조건을
+    // 다시 적었는데, 제외 목록이 한쪽에만 반영되면서 갈라졌다.
+    if (getTrackPlaybackState(t as Parameters<typeof getTrackPlaybackState>[0]) === 'ready') {
       playable.push(t);
     } else {
       dropped.push(t);

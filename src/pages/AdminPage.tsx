@@ -71,6 +71,7 @@ const UploadChecksPanel = lazy(() => import('@/components/admin/UploadChecksPane
 const ShadowV2Panel = lazy(() => import('@/components/admin/ShadowV2Panel'));
 const SiteConfigPanel = lazy(() => import('@/components/admin/SiteConfigPanel'));
 const PaymentSyncTool = lazy(() => import('@/components/admin/PaymentSyncTool'));
+const BillingAttentionPanel = lazy(() => import('@/components/admin/BillingAttentionPanel'));
 const AdminOperationLogs = lazy(() => import('@/components/admin/AdminOperationLogs'));
 const SalesAgentsList = lazy(() => import('@/components/admin/SalesAgentsList'));
 const FreeTrialsPanel = lazy(() => import('@/components/admin/FreeTrialsPanel'));
@@ -96,6 +97,7 @@ const PlacementAuditPanel = lazy(() => import('@/components/admin/PlacementAudit
 const SiteNoticesManagerPanel = lazy(() => import('@/components/admin/SiteNoticesManagerPanel'));
 const EnterpriseGuidesPanel = lazy(() => import('@/components/admin/EnterpriseGuidesPanel'));
 const NoticePostsPanel = lazy(() => import('@/components/admin/NoticePostsPanel'));
+const ContentReportsPanel = lazy(() => import('@/components/admin/ContentReportsPanel'));
 const SalesPartnerApplications = lazy(() => import('@/components/admin/SalesPartnerApplications'));
 const FranchiseManagementPanel = lazy(() => import('@/components/admin/FranchiseManagementPanel'));
 // 관제 4화면(프랜차이즈 현황 / 매장 NOC / 시스템 운영 / 사업 현황) → '통합 관제' 한 탭.
@@ -165,6 +167,7 @@ type Tab =
   | 'subscriptions'
   | 'promotions'
   | 'payment-sync'
+  | 'billing-attention'
   | 'content'
   | 'auto-playlists'
   | 'artists'
@@ -192,6 +195,7 @@ type Tab =
   | 'site-notices'
   | 'enterprise-guides'
   | 'notice-posts'
+  | 'content-reports'
   | 'artist-settlements'
   | 'operation-logs'
   | 'admins'
@@ -204,6 +208,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={14} /> },
   { key: 'brand-player', label: '브랜드 플레이어', icon: <StoreIcon size={14} />, superOnly: true },
   { key: 'support-inquiries', label: '문의관리', icon: <MessageSquare size={14} /> },
+  { key: 'content-reports', label: '신고 관리', icon: <Megaphone size={14} /> },
   { key: 'members', label: '회원관리', icon: <Users size={14} /> },
   { key: 'member-broadcast', label: '회원 메일 발송', icon: <Mail size={14} /> },
   { key: 'curators', label: '큐레이터 관리', icon: <Users size={14} /> },
@@ -235,6 +240,7 @@ const TABS: Array<{ key: Tab; label: string; icon: React.ReactNode; superOnly?: 
   { key: 'subscriptions', label: '구독신청', icon: <CreditCard size={14} /> },
   { key: 'promotions', label: '프로모션', icon: <Ticket size={14} /> },
   { key: 'payment-sync', label: '결제 동기화', icon: <CreditCard size={14} /> },
+  { key: 'billing-attention', label: '결제 확인 필요', icon: <CreditCard size={14} /> },
   { key: 'operation-logs', label: '운영 로그', icon: <ScrollText size={14} /> },
   { key: 'content', label: '콘텐츠관리', icon: <Settings size={14} /> },
   { key: 'auto-playlists', label: '자동 플리/배치', icon: <Sparkles size={14} /> },
@@ -470,7 +476,7 @@ export default function AdminPage() {
   }, []);
 
   return (
-    <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
+    <div className="app-tap-area space-y-6 px-4 pb-8 pt-6 sm:px-6">
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-extrabold tracking-tight">관리자</h1>
@@ -527,7 +533,7 @@ export default function AdminPage() {
                   onClick={() => selectGroup(g)}
                   aria-current={isActive ? 'page' : undefined}
                   title={groupHint(g)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold tracking-wider transition ${
+                  className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-bold tracking-wider transition ${
                     isActive
                       ? 'bg-ink text-bg ring-1 ring-ink'
                       : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
@@ -550,7 +556,7 @@ export default function AdminPage() {
                     key={sg.name}
                     onClick={() => selectSubgroup(sg.name)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                    className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       isActive
                         ? 'bg-violet-500/25 text-slate-900 dark:text-violet-100 ring-1 ring-violet-400/50'
                         : 'bg-bg-soft text-ink-mute ring-1 ring-line/10 hover:text-ink hover:ring-line/20'
@@ -571,7 +577,7 @@ export default function AdminPage() {
                 key={t.key}
                 onClick={() => selectTab(t.key)}
                 aria-current={tab === t.key ? 'page' : undefined}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                className={`app-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                   tab === t.key
                     ? 'bg-accent text-black'
                     : 'bg-bg-card text-ink-mute hover:bg-bg-hover hover:text-ink'
@@ -584,7 +590,7 @@ export default function AdminPage() {
             {(hiddenAdvancedCount > 0 || showAdvanced) && (
               <button
                 onClick={() => setShowAdvanced((v) => !v)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-xs font-medium text-ink-mute ring-1 ring-line/15 transition hover:text-ink hover:ring-line/25"
+                className="app-tap inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-xs font-medium text-ink-mute ring-1 ring-line/15 transition hover:text-ink hover:ring-line/25"
                 aria-expanded={showAdvanced}
               >
                 {showAdvanced ? '간단히' : `고급 ${hiddenAdvancedCount}`}
@@ -597,7 +603,7 @@ export default function AdminPage() {
           {breadcrumbFor(tab, TABS.find((t) => t.key === tab)?.label ?? tab).map((c, i, arr) => (
             <li key={`${c.label}-${i}`} className="flex items-center gap-1">
               {c.tab && i < arr.length - 1 ? (
-                <button className="hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
+                <button className="app-tap px-3 hover:text-ink" onClick={() => selectTab(c.tab as Tab)}>
                   {c.label}
                 </button>
               ) : (
@@ -681,6 +687,7 @@ export default function AdminPage() {
           {tab === 'subscriptions' && <SubscriptionRequests />}
           {tab === 'promotions' && <PromotionCodes />}
           {tab === 'payment-sync' && <PaymentSyncTool />}
+          {tab === 'billing-attention' && <BillingAttentionPanel />}
           {tab === 'operation-logs' && <AdminOperationLogs />}
           {tab === 'content' && <ContentManagement />}
           {tab === 'auto-playlists' && <AutoPlaylistManager />}
@@ -708,6 +715,7 @@ export default function AdminPage() {
           {tab === 'site-notices' && <SiteNoticesManagerPanel />}
           {tab === 'enterprise-guides' && <EnterpriseGuidesPanel />}
           {tab === 'notice-posts' && <NoticePostsPanel />}
+          {tab === 'content-reports' && <ContentReportsPanel />}
           {tab === 'artist-settlements' && <ArtistSettlementsList />}
           {tab === 'recommendation' && <RecommendationTester />}
           {tab === 'admins' && <AdminUsersList />}

@@ -15,6 +15,7 @@
 import { useCallback, useRef } from 'react';
 import { audioDebugWarn } from '@/lib/audioDebug';
 import { recordPauseRequest, observePlay } from '@/lib/playbackFlightRecorder';
+import { isUserVisibleMediaError, logPlaybackDiag } from '@/lib/playbackDiag';
 import { toast } from '@/store/toastStore';
 import { usePlaybackHealthStore } from '@/store/playbackHealthStore';
 import { useBusinessStore } from '@/store/businessStore';
@@ -152,8 +153,10 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
     }
 
     // (2) per-reason cooldown
-    const last = lastByReasonRef.current.get(reason) ?? 0;
-    if (now - last < REASON_COOLDOWN_MS) {
+    // 처음 보는 reason 은 쿨다운 없음. (예전엔 기본값 0 이라 페이지가 열린 뒤 첫 1초 동안
+    // — performance.now() < 1000 — 모든 복구가 'cooldown' 으로 건너뛰어졌다.)
+    const last = lastByReasonRef.current.get(reason);
+    if (last !== undefined && now - last < REASON_COOLDOWN_MS) {
       pushHistory(historyRef, { ts: now, reason, outcome: 'skipped', detail: `cooldown ${Math.round(now - last)}ms`, sessionState });
       totalsRef.current.skippedCount += 1;
       audioDebugWarn('[audio:recovery:start]', { reason, detail, skipped: 'cooldown', sessionState });
@@ -348,10 +351,23 @@ export function useAudioRecoveryManager(ctx: RecoveryContext): RecoveryManagerHa
             if (shouldAttemptPlay()) {
               if (!(await tryPlay(active, 'play'))) outcome = 'failed';
             }
-          } else {
-            // DECODE / SRC_NOT_SUPPORTED / ABORTED — auto-skip 하지 않고 로그+toast
+          } else if (isUserVisibleMediaError(errCode)) {
+            // DECODE / SRC_NOT_SUPPORTED — 진짜 재생 불가. 알린다.
             outcome = 'failed';
             try { toast.warning('재생 오류가 발생했어요.'); } catch { /* silent */ }
+          } else {
+            // ABORTED(1) 와 코드 미상(0).
+            //
+            // ABORTED 는 로딩 중에 src 가 바뀌거나 load() 가 다시 불린 정상 신호다.
+            // 플레이리스트를 빠르게 갈아타면 반드시 난다 — 실패가 아니라 취소다.
+            // 여기서 토스트를 띄우면 멀쩡히 다음 곡이 재생되는 중에도 "재생 오류" 가
+            // 뜬다. 기록만 남기고 넘어간다.
+            parts.push('aborted-or-unknown;no-toast;');
+            logPlaybackDiag({
+              stage: 'media-error-benign',
+              audio: active,
+              extra: { errCode, codeName },
+            });
           }
           break;
         }

@@ -22,7 +22,7 @@ public class StorePlaybackServicePlugin extends Plugin {
     public void start(PluginCall call) {
         Intent intent = new Intent(getContext(), StorePlaybackService.class);
         intent.putExtra(StorePlaybackService.EXTRA_TITLE, call.getString("title", "매장 음악 재생 중"));
-        intent.putExtra(StorePlaybackService.EXTRA_TEXT, call.getString("text", "앱을 닫아도 재생이 계속됩니다."));
+        intent.putExtra(StorePlaybackService.EXTRA_TEXT, call.getString("text", "화면을 끄거나 다른 앱을 써도 재생이 계속됩니다."));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getContext().startForegroundService(intent);

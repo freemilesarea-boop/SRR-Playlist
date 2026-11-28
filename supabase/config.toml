@@ -33,6 +33,10 @@ additional_redirect_urls = [
   "https://deudda.com",
   "https://www.deudda.com",
   "http://localhost:5173",
+  # 네이티브 앱(iOS/Android) OAuth 복귀용 커스텀 스킴 딥링크.
+  # 이게 없으면 구글/카카오 인증은 성공하는데 앱으로 돌아오지 못하고 브라우저에 갇힌다.
+  # 값은 src/lib/nativeAuth.ts 의 NATIVE_OAUTH_REDIRECT 와 같아야 한다(테스트가 잡는다).
+  "com.deudda.app://auth/callback",
 ]
 
 [auth.email]

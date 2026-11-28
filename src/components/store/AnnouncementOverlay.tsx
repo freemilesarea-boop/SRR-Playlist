@@ -559,7 +559,7 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-black/30"
+          className="pointer-events-none fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-black/30"
         >
           <Volume2 size={12} className="animate-pulse" />
           {needsTap
@@ -569,7 +569,7 @@ export default function AnnouncementOverlay({ storeId, debug = false, controlBgm
       )}
 
       {debugEnabled() && error && (
-        <div className="fixed bottom-16 left-1/2 z-[120] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
+        <div className="pointer-events-none fixed bottom-16 left-1/2 z-[120] -translate-x-1/2 rounded bg-rose-500/25 px-3 py-1 text-[10px] text-slate-900 dark:text-rose-200">
           announcement poll error: {error}
         </div>
       )}

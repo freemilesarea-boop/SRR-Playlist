@@ -22,7 +22,7 @@ export default function OperatorLayout() {
   // 역할 신호 로딩 중에는 게이트 판단 보류 (깜빡임/오리다이렉트 방지).
   if (access.loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-ink-mute">
+      <div className="flex min-h-dvh items-center justify-center bg-bg text-ink-mute">
         <span className="text-sm">운영 콘솔 불러오는 중…</span>
       </div>
     );
@@ -40,7 +40,7 @@ export default function OperatorLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-bg pt-safe">
+    <div className="min-h-dvh bg-bg pt-safe">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line/10 bg-bg/95 pt-safe lg:flex">
         <OperatorSidebar ctx={ctx} />
@@ -56,7 +56,7 @@ export default function OperatorLayout() {
         >
           <Menu size={20} />
         </button>
-        <Link to="/ops" className="inline-flex items-center gap-2 text-sm font-extrabold text-ink">
+        <Link to="/ops" className="inline-flex min-h-11 items-center gap-2 text-sm font-extrabold text-ink">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
             <Home size={14} strokeWidth={2.4} />
           </span>

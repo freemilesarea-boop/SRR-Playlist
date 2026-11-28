@@ -30,18 +30,30 @@ import ErrorRetry from '@/components/common/ErrorRetry';
 import EmptyState from '@/components/common/EmptyState';
 import Skeleton from '@/components/common/Skeleton';
 import { withTimeout } from '@/lib/withTimeout';
+import ReportButton from '@/components/moderation/ReportButton';
+import BlockButton from '@/components/moderation/BlockButton';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
+import BlockedNotice from '@/components/moderation/BlockedNotice';
+import { useAuthStore } from '@/store/authStore';
+import { useGateStore } from '@/store/gateStore';
+import { playlistDetailErrorMessage } from '@/lib/playlistDetailError';
+
 
 type DetailTrack = TrackRow & { order_index: number };
 
 export default function UserPlaylistDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const session = useAuthStore((s) => s.session);
+  const isAuthReady = useAuthStore((s) => s.isAuthReady);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const [data, setData] = useState<UserPlaylistDetail | null>(null);
   const [tracks, setTracks] = useState<DetailTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // 차단한 사용자의 플레이리스트는 숨긴다(App Store 지침 1.2).
+  const blockedIds = useBlockedUsersLoader();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -49,6 +61,8 @@ export default function UserPlaylistDetailPage() {
   );
 
   async function load() {
+    // 회원 플레이리스트는 로그인한 사람만 볼 수 있다 — 로그인 전에는 서버를 부르지 않는다.
+    if (!session) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -61,13 +75,13 @@ export default function UserPlaylistDetailPage() {
         setTracks(d.tracks);
       }
     } catch (e) {
-      setError(errorMessage(e));
+      setError(playlistDetailErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
-  useFreshFetch(load, [id]);
+  useFreshFetch(load, [id, session?.user?.id]);
 
   function playAll(startId?: string) {
     const { playable } = filterPlayableTracks(tracks);
@@ -118,6 +132,26 @@ export default function UserPlaylistDetailPage() {
     }
   }
 
+  if (!isAuthReady) {
+    return (
+      <div className="px-4 py-6 sm:px-6">
+        <Skeleton.Row count={5} />
+      </div>
+    );
+  }
+  if (!session) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
+        <Lock size={32} className="text-ink-dim" />
+        <p className="text-sm font-medium">로그인하면 이 플레이리스트를 볼 수 있어요.</p>
+        <p className="text-xs text-ink-mute">회원이 만든 플레이리스트는 로그인한 회원에게만 보여요.</p>
+        <div className="mt-2 flex gap-2">
+          <button onClick={() => navigate(-1)} className="btn-ghost text-sm"><ArrowLeft size={14} /> 뒤로</button>
+          <button onClick={() => useGateStore.getState().open('login')} className="btn-primary text-sm">로그인</button>
+        </div>
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div className="px-4 py-6 sm:px-6">
@@ -143,6 +177,10 @@ export default function UserPlaylistDetailPage() {
         <button onClick={() => navigate(-1)} className="btn-ghost mt-2 text-sm"><ArrowLeft size={14} /> 뒤로</button>
       </div>
     );
+  }
+
+  if (!data.is_owner && blockedIds.has(data.owner_user_id)) {
+    return <BlockedNotice userId={data.owner_user_id} displayName={data.creator_name} onBack={() => navigate(-1)} />;
   }
 
   const hasPlayable = tracks.some((t) => isPlayableUrl(t.audio_url));
@@ -190,6 +228,12 @@ export default function UserPlaylistDetailPage() {
               </button>
             )}
           </div>
+          {!data.is_owner && (
+            <div className="flex flex-wrap items-center gap-2">
+              <ReportButton targetType="user_playlist" targetId={data.id} targetName={data.title} />
+              <BlockButton userId={data.owner_user_id} displayName={data.creator_name} onBlocked={() => navigate(-1)} />
+            </div>
+          )}
         </div>
       </div>
 

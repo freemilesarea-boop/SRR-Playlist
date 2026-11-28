@@ -28,6 +28,8 @@
  *     0395a_foo.sql + 0395b_bar.sql  → ✓ OK
  *   Legacy allowlist (이미 prod 반영, 절대 rename 금지):
  *     0068, 0214, 0388
+ *     0541~0548 — 출시 앱 브랜치(app-version-completion-check)와 기본 브랜치가 같은 번호를
+ *       따로 써서 생긴 쌍. 양쪽 모두 prod 반영 확인(2026-11-26). rename 금지.
  *   신규 prefix 는 반드시 최신 + 1 을 사용해 duplicate 를 예방.
  *
  * Usage:
@@ -151,7 +153,11 @@ function lintFile(filepath) {
 // ─────────────────────────────────────────────────────────────────
 // 이미 prod 에 반영된 3쌍은 rename 금지 → allowlist.
 // 새 collision 이 감지되면 exit 1 + PR 실패.
-const LEGACY_PREFIX_ALLOWLIST = new Set(['0068', '0214', '0388']);
+const LEGACY_PREFIX_ALLOWLIST = new Set([
+  '0068', '0214', '0388',
+  // 출시 앱 브랜치 합치기(2026-11)로 생긴 쌍 — 양쪽 모두 prod 반영됨.
+  '0541', '0542', '0543', '0544', '0545', '0546', '0547', '0548',
+]);
 
 /**
  * 파일명에서 앞부분 4자리 숫자 prefix 를 추출.

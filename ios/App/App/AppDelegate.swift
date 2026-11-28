@@ -5,6 +5,7 @@ import AVFoundation
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
+    // 씬 방식(SceneDelegate)이라 창은 SceneDelegate.window 가 갖는다. 이 값은 쓰지 않는다.
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {

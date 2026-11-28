@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
+import PurchaseUnavailable from '@/components/PurchaseUnavailable';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useTrackVisit } from '@/hooks/useTrackVisit';
 import { usePlayerStore } from '@/store/playerStore';
@@ -53,6 +55,7 @@ const PrivacyPage = lazyWithRetry(() => import('@/pages/legal/PrivacyPage'));
 const NoticePage = lazyWithRetry(() => import('@/pages/legal/NoticePage'));
 const NoticePostPage = lazyWithRetry(() => import('@/pages/legal/NoticePostPage'));
 const SupportPage = lazyWithRetry(() => import('@/pages/legal/SupportPage'));
+const AccountDeletionPage = lazyWithRetry(() => import('@/pages/legal/AccountDeletionPage'));
 const AuthCallbackPage = lazyWithRetry(() => import('@/pages/AuthCallbackPage'));
 const AuthResetPasswordPage = lazyWithRetry(() => import('@/pages/AuthResetPasswordPage'));
 const CuratorStudioPage = lazyWithRetry(() => import('@/pages/CuratorStudioPage'));
@@ -106,13 +109,22 @@ function RouteFallback() {
   );
 }
 
+/**
+ * 결제 화면 게이트 — 앱(네이티브)에서는 결제 화면 대신 안내를 보여준다.
+ * 구글/애플이 외부 결제 링크아웃을 금지하기 때문. 자세한 내용은 purchaseGate.ts.
+ */
+function RequireWebPurchase({ children }: { children: React.ReactNode }) {
+  if (!canShowPurchaseUi()) return <PurchaseUnavailable />;
+  return <>{children}</>;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const session = useAuthStore((s) => s.session);
   const isAuthReady = useAuthStore((s) => s.isAuthReady);
   // 세션 복원 전에는 절대 /login 으로 보내지 않고 로더 표시 (로그인 루프 방지)
   if (!isAuthReady) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 text-ink-mute">
         <LogoMark size={44} className="animate-pulse text-accent" />
         <p>불러오는 중…</p>
       </div>
@@ -302,6 +314,8 @@ export default function App() {
                 <Route path="/notice" element={<NoticePage />} />
                 <Route path="/notice/:no" element={<NoticePostPage />} />
                 <Route path="/support" element={<SupportPage />} />
+                {/* 구글 플레이 '데이터 삭제' 선언에 등록한 공개 URL — 로그인 뒤로 옮기면 안 된다. */}
+                <Route path="/account-deletion" element={<AccountDeletionPage />} />
                 <Route path="/service" element={<ServicePage />} />
                 <Route path="/service/preview" element={<ServicePreviewPage />} />
                 <Route path="/enterprise-guide" element={<EnterpriseGuideListPage />} />
@@ -325,7 +339,7 @@ export default function App() {
                 <Route path="/brand/announcer/:brandId" element={<RequireAuth><BrandAnnouncerPage /></RequireAuth>} />
                 <Route path="/library" element={<RequireAuth><LibraryPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth><SubscriptionPage /></RequireAuth>} />
-                <Route path="/pricing" element={<RequireAuth><PricingPage /></RequireAuth>} />
+                <Route path="/pricing" element={<RequireAuth><RequireWebPurchase><PricingPage /></RequireWebPurchase></RequireAuth>} />
                 <Route path="/business/register" element={<RequireAuth><BusinessRegisterPage /></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
                 <Route path="/curator/studio" element={<RequireAuth><CuratorStudioPage /></RequireAuth>} />
@@ -333,7 +347,7 @@ export default function App() {
                 <Route path="/sales" element={<RequireAuth><SalespersonDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/hq" element={<RequireAuth><FranchiseHqDashboardPage /></RequireAuth>} />
                 <Route path="/enterprise/me" element={<RequireAuth><EnterpriseHqMePage /></RequireAuth>} />
-                <Route path="/enterprise/pay" element={<RequireAuth><EnterprisePayPage /></RequireAuth>} />
+                <Route path="/enterprise/pay" element={<RequireAuth><RequireWebPurchase><EnterprisePayPage /></RequireWebPurchase></RequireAuth>} />
                 <Route path="/enterprise/pay/success" element={<RequireAuth><EnterprisePaySuccessPage /></RequireAuth>} />
                 <Route path="/enterprise/pay/fail" element={<RequireAuth><EnterprisePayFailPage /></RequireAuth>} />
                 <Route path="/enterprise/ops" element={<RequireAuth><EnterpriseHqOpsPage /></RequireAuth>} />
@@ -374,7 +388,7 @@ export default function App() {
 
 function AccountStatusLoader() {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 text-ink-mute">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 text-ink-mute">
       <LogoMark size={44} className="animate-pulse text-accent" />
       <p>불러오는 중…</p>
     </div>
@@ -383,7 +397,7 @@ function AccountStatusLoader() {
 
 function WithdrawnAccountScreen({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className="text-accent" />
       <p className="text-lg font-bold">이 계정은 회원 탈퇴 처리되었습니다.</p>
       <p className="text-sm text-ink-mute">
@@ -401,7 +415,7 @@ function WithdrawnAccountScreen({ onSignOut }: { onSignOut: () => void }) {
 
 function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <p className="text-lg font-bold">계정이 비활성화됐어요</p>
       <p className="text-sm text-ink-mute">
         운영자가 이 계정을 일시 비활성화했어요.<br />
@@ -420,7 +434,7 @@ function DisabledAccountScreen({ onSignOut }: { onSignOut: () => void }) {
 // 프로필 조회가 에러(네트워크 등)로 실패한 경우 — 절대 자동 signOut 하지 않고 재시도 제공.
 function ProfileErrorScreen({ onRetry, onSignOut }: { onRetry: () => void; onSignOut: () => Promise<void> }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className="text-accent" />
       <p className="text-lg font-bold">정보를 불러오지 못했어요</p>
       <p className="text-sm text-ink-mute">네트워크 상태를 확인하고 다시 시도해주세요.</p>
@@ -475,7 +489,7 @@ function ProfileBootstrapScreen({
   }, [userId, onReload]);
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
       <LogoMark size={40} className={exhausted ? 'text-accent' : 'animate-pulse text-accent'} />
       <p className="text-lg font-bold">계정을 준비하고 있어요</p>
       <p className="text-sm text-ink-mute">

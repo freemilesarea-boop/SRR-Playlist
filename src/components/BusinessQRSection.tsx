@@ -16,7 +16,7 @@ export default function BusinessQRSection({
   if (playlists.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10">
+    <section className="space-y-3 rounded-3xl bg-bg-card p-5 shadow-card ring-1 ring-line/10 lg:mx-auto lg:max-w-2xl">
       <div className="space-y-1">
         <h2 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
           <QrCode size={16} className="text-accent" /> 매장 QR 만들기

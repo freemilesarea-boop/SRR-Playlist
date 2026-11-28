@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles,
   Settings, KeyRound, ChevronDown, LogOut, ArrowLeft, Search,
-  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen, Megaphone,
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen, Megaphone, Flag,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -16,7 +16,7 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   Home, Store, Building2, Music, Activity, Wallet, Mic2, BarChart3, Sparkles, Settings, KeyRound,
   // PHASE 1-B 로 추가된 항목용 — 맵에 없으면 전부 Home 아이콘으로 보인다.
-  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen, Megaphone,
+  Users, CreditCard, ScrollText, Bell, MessageSquare, Trash2, AlertTriangle, FileSignature, BookOpen, Megaphone, Flag,
 };
 function iconFor(name: string): LucideIcon {
   return ICONS[name] ?? Home;
@@ -65,7 +65,7 @@ export default function OperatorSidebar({ ctx, onNavigate }: OperatorSidebarProp
     <div className="flex h-full flex-col bg-bg">
       {/* Brand / title */}
       <div className="px-5 pb-3 pt-5">
-        <Link to="/ops" onClick={onNavigate} className="group inline-flex items-center gap-2.5">
+        <Link to="/ops" onClick={onNavigate} className="group inline-flex min-h-11 items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
             <Home size={16} strokeWidth={2.4} />
           </span>

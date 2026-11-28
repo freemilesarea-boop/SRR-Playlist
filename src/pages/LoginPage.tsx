@@ -5,7 +5,15 @@ import Alert from '@/components/Alert';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isKakaoLoginEnabled } from '@/lib/kakao';
-import { detectInAppBrowser, isPwaStandalone, type InAppBrowserName } from '@/lib/inAppBrowser';
+import { isAppleLoginEnabled } from '@/lib/appleLogin';
+import { detectInAppBrowser, isPwaStandalone, needsExternalBrowserForGoogle, type InAppBrowserName } from '@/lib/inAppBrowser';
+import { isNativeApp } from '@/lib/native';
+import {
+  isBrowserOpenFailure,
+  nativeOAuthMessage,
+  NO_BROWSER_MESSAGE,
+  PROVIDER_BLOCKED_MESSAGE,
+} from '@/lib/oauthOutcome';
 import SignupTypeSelector, { type AccountType } from '@/components/auth/SignupTypeSelector';
 import IndividualSignupForm from '@/components/auth/IndividualSignupForm';
 import BusinessSignupForm from '@/components/auth/BusinessSignupForm';
@@ -41,7 +49,7 @@ function firstRouteFor(accountType: string | undefined | null): string {
 }
 
 export default function LoginPage() {
-  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, resendSignupEmail } = useAuthStore();
+  const { session, signInWithPassword, signInWithGoogle, signInWithKakao, signInWithApple, resendSignupEmail } = useAuthStore();
   const profile = useAuthStore((s) => s.profile);
   const isProfileReady = useAuthStore((s) => s.isProfileReady);
   const location = useLocation();
@@ -79,6 +87,7 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
+  const [appleBusy, setAppleBusy] = useState(false);
   // X6.33: PWA standalone 케이스도 같은 모달 흐름 사용 — isPwa flag 로 분기.
   const [inAppWarning, setInAppWarning] = useState<{
     label: string | null;
@@ -170,25 +179,43 @@ export default function LoginPage() {
     // 브라우저 UI 부재를 이유로 disallowed_useragent 로 차단. 동일 모달 노출.
     const det = detectInAppBrowser();
     const pwa = isPwaStandalone();
-    if (det.isInApp || pwa) {
+    // 우리 앱은 Google 로그인을 시스템 브라우저로 열므로 안내 없이 바로 진행한다.
+    if (needsExternalBrowserForGoogle({ native: isNativeApp(), inApp: det.isInApp, pwa })) {
       setInAppWarning({ label: det.label, name: det.name, isPwa: pwa });
       return;
     }
     setGoogleBusy(true);
     try {
-      await signInWithGoogle();
-      // redirectTo 로 페이지 이동되므로 도달 시점은 거의 없음
+      // 웹: redirectTo 로 페이지가 떠나므로 null 이 오거나 아예 도달하지 않는다.
+      // 앱: 시스템 브라우저 왕복이 끝날 때까지 기다렸다가 결말을 돌려준다.
+      const outcome = await signInWithGoogle();
+      if (outcome) setError(nativeOAuthMessage(outcome));
     } catch (err) {
       // raw provider 에러 노출 금지 — 사용자에게는 친절한 안내만.
       const raw = err instanceof Error ? err.message : '';
-      const friendly =
-        '앱 내 브라우저 또는 회사/학교 Google 계정에서는 로그인이 제한될 수 있습니다. ' +
-        'Chrome 또는 Safari에서 다시 시도하거나, 이메일로 가입/로그인해주세요.';
       // 진단용으로 콘솔에만 raw 흔적.
-       
+
       if (raw) console.warn('[google-oauth]', raw);
-      setError(friendly);
+      setError(isBrowserOpenFailure(raw) ? NO_BROWSER_MESSAGE : PROVIDER_BLOCKED_MESSAGE);
+    } finally {
+      // 예전에는 성공 경로에서 이걸 풀지 않았다. 웹은 페이지가 떠나니 티가 안 났지만
+      // 앱은 같은 화면에 남아서 버튼이 "Google 처리 중…" 으로 영구히 잠겼다.
       setGoogleBusy(false);
+    }
+  }
+
+  async function onAppleSignIn() {
+    setError(null);
+    setAppleBusy(true);
+    try {
+      const outcome = await signInWithApple();
+      if (outcome) setError(nativeOAuthMessage(outcome));
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : '';
+      if (raw) console.warn('[apple-oauth]', raw);
+      setError(isBrowserOpenFailure(raw) ? NO_BROWSER_MESSAGE : 'Apple 로그인을 완료하지 못했어요. 잠시 후 다시 시도하거나 이메일로 로그인해주세요.');
+    } finally {
+      setAppleBusy(false);
     }
   }
 
@@ -196,7 +223,8 @@ export default function LoginPage() {
     setError(null);
     setKakaoBusy(true);
     try {
-      await signInWithKakao();
+      const outcome = await signInWithKakao();
+      if (outcome) setError(nativeOAuthMessage(outcome));
     } catch (err) {
       const raw = err instanceof Error ? err.message : '';
       // Supabase 에서 카카오 provider 비활성화일 때 raw JSON 메시지가 노출되는 것 방지.
@@ -206,6 +234,8 @@ export default function LoginPage() {
       setError(friendly);
       const { toast } = await import('@/store/toastStore');
       toast.error(friendly);
+    } finally {
+      // 구글과 같은 이유 — 앱에서는 성공/취소 어느 쪽이든 이 화면에 남으므로 반드시 푼다.
       setKakaoBusy(false);
     }
   }
@@ -242,7 +272,7 @@ export default function LoginPage() {
   const showBackButton = mode !== 'signin';
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6 pt-safe pb-safe">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 pt-safe pb-safe">
       <div className="w-full max-w-md space-y-6 animate-fade-in py-10">
         <div className="space-y-2 text-center">
           <Logo size={56} className="mx-auto rounded-2xl" />
@@ -462,6 +492,31 @@ export default function LoginPage() {
                   <div className="h-px flex-1 bg-ink/10" />
                 </div>
 
+                {/* Sign in with Apple — iOS 앱 필수(App Store 지침 4.8). 애플 가이드에 맞춰
+                    검정 바탕 · 흰 로고, 다른 로그인 버튼과 같은 크기·위치 비중. */}
+                {isAppleLoginEnabled() && (
+                  <button
+                    type="button"
+                    onClick={onAppleSignIn}
+                    disabled={appleBusy}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-black px-4 py-3 text-sm font-semibold text-white shadow-card ring-1 ring-white/15 transition hover:bg-neutral-900 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+                    aria-label={mode === 'signin' ? 'Apple로 로그인' : 'Apple로 회원가입'}
+                  >
+                    {appleBusy ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <AppleLogo />
+                    )}
+                    <span>
+                      {appleBusy
+                        ? 'Apple 처리 중…'
+                        : mode === 'signin'
+                          ? 'Apple로 로그인'
+                          : 'Apple로 회원가입'}
+                    </span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={onGoogleSignIn}
@@ -561,6 +616,14 @@ export default function LoginPage() {
         />
       )}
     </div>
+  );
+}
+
+function AppleLogo() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 814 1000" aria-hidden="true" fill="currentColor">
+      <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z" />
+    </svg>
   );
 }
 

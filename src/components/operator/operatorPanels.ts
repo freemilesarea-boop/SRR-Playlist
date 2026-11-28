@@ -55,9 +55,11 @@ export const OPERATOR_PANELS: Record<string, OperatorPanel> = {
   'members': lazy(() => import('@/components/admin/MembersList')),
   'subscriptions': lazy(() => import('@/components/admin/SubscriptionRequests')),
   'payment-sync': lazy(() => import('@/components/admin/PaymentSyncTool')),
+  'billing-attention': lazy(() => import('@/components/admin/BillingAttentionPanel')),
   'revenue': lazy(() => import('@/components/admin/RevenueManagement')),
   // 시스템
   'support-inquiries': lazy(() => import('@/components/admin/SupportInquiriesPanel')),
+  'content-reports': lazy(() => import('@/components/admin/ContentReportsPanel')),
   'operation-logs': lazy(() => import('@/components/admin/AdminOperationLogs')),
   'site-notices': lazy(() => import('@/components/admin/SiteNoticesManagerPanel')),
   'enterprise-guides': lazy(() => import('@/components/admin/EnterpriseGuidesPanel')),

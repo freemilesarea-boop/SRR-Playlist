@@ -230,8 +230,8 @@ export default function EventQualityTab() {
                   </span>
                 ))}
             </div>
-            <div className="max-h-96 overflow-y-auto rounded bg-bg-deep">
-              <table className="w-full text-left text-[11px]">
+            <div className="max-h-96 overflow-y-auto overflow-x-auto rounded bg-bg-deep">
+              <table className="w-full text-left text-[11px] min-w-[640px]">
                 <thead className="sticky top-0 bg-bg-card">
                   <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
                     <th className="px-2 py-1.5">issue</th>
@@ -280,8 +280,8 @@ export default function EventQualityTab() {
         {errors.length === 0 ? (
           <p className="text-xs text-ink-dim">player_error 이벤트 없음.</p>
         ) : (
-          <div className="max-h-96 overflow-y-auto rounded bg-bg-deep">
-            <table className="w-full text-left text-[11px]">
+          <div className="max-h-96 overflow-y-auto overflow-x-auto rounded bg-bg-deep">
+            <table className="w-full text-left text-[11px] min-w-[560px]">
               <thead className="sticky top-0 bg-bg-card">
                 <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
                   <th className="px-2 py-1.5">시각</th>
@@ -372,8 +372,8 @@ export default function EventQualityTab() {
         )}
 
         {dualCompare.length > 0 && (
-          <div className="mt-3 max-h-96 overflow-y-auto rounded bg-bg-deep">
-            <table className="w-full text-left text-[11px]">
+          <div className="mt-3 max-h-96 overflow-y-auto overflow-x-auto rounded bg-bg-deep">
+            <table className="w-full text-left text-[11px] min-w-[760px]">
               <thead className="sticky top-0 bg-bg-card">
                 <tr className="border-b border-line/10 text-[10px] uppercase text-ink-dim">
                   <th className="px-2 py-1.5">곡</th>

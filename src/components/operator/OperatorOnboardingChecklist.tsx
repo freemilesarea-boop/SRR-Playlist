@@ -90,13 +90,13 @@ export default function OperatorOnboardingChecklist({ ctx }: OperatorOnboardingC
                 onClick={() => toggle(step.id)}
                 aria-pressed={checked}
                 aria-label={`${step.label} ${checked ? '완료 취소' : '완료 표시'}`}
-                className="flex h-6 w-6 flex-none items-center justify-center text-ink-mute hover:text-accent"
+                className="-m-2.5 flex h-11 w-11 flex-none items-center justify-center p-2.5 text-ink-mute hover:text-accent"
               >
                 {checked ? <CheckCircle2 size={18} className="text-accent" /> : <Circle size={18} />}
               </button>
               <Link
                 to={step.href}
-                className="group flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-bg-hover"
+                className="group flex min-h-11 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-bg-hover"
               >
                 <span className="flex-1">
                   <span className={`block text-sm font-medium ${checked ? 'text-ink-dim line-through' : 'text-ink'}`}>

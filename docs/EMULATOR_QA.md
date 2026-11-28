@@ -13,10 +13,16 @@
    - `Android SDK Platform 35`
    - `Android SDK Platform-Tools`
    - `Android Emulator`
-2. **Device Manager → Create Device**
+2. **JDK 21 설치** — Android Studio 가 들고 오는 JDK 는 버전이 너무 높아 Gradle 이 못 쓴다.
+   ```bash
+   brew install --cask temurin@21
+   ```
+   > 설치만 해두면 된다. 실행 스크립트가 알아서 찾아 쓴다.
+   > `JAVA_HOME` 을 직접 잡아둔 게 있어도 맞는 버전이 아니면 스크립트가 무시한다.
+3. **Device Manager → Create Device**
    - 권장: **Pixel 7 / API 34 이상**
    - 이미지는 **Google Play** 버전으로 (푸시까지 확인하려면 필수)
-3. 저장소 준비
+4. 저장소 준비
    ```bash
    npm ci
    cp .env.example .env     # VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 채우기
@@ -38,6 +44,7 @@ npm run android:emu -- --device  # USB 로 연결한 실제 태블릿에 설치
 
 가상기기가 꺼져 있으면 스크립트가 첫 번째 AVD 를 자동으로 켠다.
 `android/local.properties` 가 없으면 자동 생성한다(Gradle 의 `SDK location not found` 방지).
+설치 대상 기기도 스크립트가 직접 지정하므로 "Please choose a target device" 메뉴에서 멈추지 않는다.
 
 **백그라운드 재생·오프라인 캐시는 `--apk` 또는 `--device` 로 확인한다.**
 라이브 리로드는 PC 의 개발 서버에 의존하므로 "회선 차단" 상황을 재현할 수 없다.
@@ -45,22 +52,139 @@ npm run android:emu -- --device  # USB 로 연결한 실제 태블릿에 설치
 > 라이브 리로드는 `adb reverse` + `localhost` 를 쓴다. 흔히 쓰는 `10.0.2.2` 는
 > **표준 에뮬레이터에서만** 통해서 실제 매장 태블릿에서는 안 붙는다.
 
-### 매장 태블릿에 직접 넣기
+### 실기기(갤럭시 · 매장 태블릿)에 넣기
+
+USB 로 연결돼 있으면 이 한 줄이면 끝난다:
 
 ```bash
-# 태블릿: 설정 → 휴대전화 정보 → 빌드번호 7번 탭 → 개발자 옵션 → USB 디버깅 ON
-adb devices                      # 기기가 보이는지 확인 (허용 팝업 수락)
-npm run android:emu -- --device
+# 기기: 설정 → 휴대전화 정보 → 소프트웨어 정보 → 빌드번호 7번 탭
+#       → 개발자 옵션 → USB 디버깅 ON → 연결 후 '이 컴퓨터를 허용' 수락
+npm run apk -- --install
+```
+
+USB 가 없거나 폰만 따로 있을 때는 파일을 만들어서 옮긴다:
+
+```bash
+npm run apk
+```
+
+APK 가 `dist-apk/` 와 **바탕화면**에 함께 떨어진다. 그 파일을 폰으로 보내고
+(카톡 '나에게 보내기', 구글 드라이브, USB 로 `내 파일 > Download` 에 복사)
+폰에서 탭하면 설치된다. 처음엔 "이 출처의 앱 설치 허용" 을 한 번 켜야 한다.
+
+> **설치가 거부되면** 대개 이유는 하나다 — 서명이 다른 '듣다' 가 이미 깔려 있는 것.
+> 디버그 키와 릴리스 키는 서명이 달라서 서로 덮어쓸 수 없다. 폰에서 기존 앱을
+> 지우고 다시 설치하면 된다. (`--install` 은 이 경우를 알아서 처리한다)
+
+서명된 릴리스 빌드가 필요하면 키를 먼저 만든다 (한 번만):
+
+```bash
+npm run keystore             # 키 생성 + 지문/카카오 키 해시 출력
+npm run apk -- --release     # 서명된 APK
+npm run aab                  # Play 스토어 업로드용 .aab
 ```
 
 빌드만 따로 돌리려면:
 ```bash
-npm run android:build            # ./gradlew assembleDebug
+npm run android:build            # JDK 선택 → 웹 빌드 → cap sync → ./gradlew assembleDebug
 ```
+
+### 아이폰 · 아이패드에서 확인하기 (macOS + Xcode)
+
+```bash
+npm run cap:ios          # 웹 빌드 → cap sync → Xcode 가 열린다
+```
+
+**시뮬레이터** — 애플 개발자 계정 없이 된다. Xcode 위쪽 기기 목록에서 iPhone 이나
+iPad 를 고르고 ▶︎ 를 누른다. 백그라운드 재생·레이아웃은 여기서 다 확인되지만,
+**푸시는 시뮬레이터에서 확인할 수 없다**(APNs 토큰이 발급되지 않는다).
+
+**실기기** — 아이폰/아이패드를 USB 로 연결하고, 왼쪽 파일 목록에서 `App` 을 고른 뒤
+**Signing & Capabilities** 탭에서:
+
+1. `Automatically manage signing` 체크
+2. `Team` 에 본인 Apple ID 선택 (무료 계정도 된다 — 대신 서명이 7일마다 만료돼
+   그때 다시 빌드해야 한다)
+3. ▶︎ 로 실행
+4. 폰에서 **설정 → 일반 → VPN 및 기기 관리 → 개발자 앱 → 신뢰**
+
+> Bundle Identifier(`com.deudda.app`)는 그대로 두는 게 좋다. 바꾸면 구글·카카오
+> 콘솔에 등록된 iOS 번들 ID 와 어긋나서 **소셜 로그인만 막힌다** — 재생·화면은
+> 멀쩡해서 원인을 찾기 어렵다. "이미 사용 중인 번들 ID" 라고 나오면 그때만
+> 임시로 뒤에 글자를 붙이고, 로그인 확인은 원래 ID 로 다시 한다.
 
 ---
 
 ## 2. 확인 항목
+
+### 2-0. 앱 전용 화면 (웹과 달라야 하는 부분)
+
+앱은 웹과 같은 코드지만 화면 구성이 다르다. 태블릿을 매장에 걸어두고 손으로 쓰기 때문이다.
+
+1. 매장(business) 계정으로 로그인 → 앱을 껐다 다시 켠다
+   - ✅ 마케팅 홈이 아니라 **매장 화면**으로 바로 들어가야 한다
+     (틀던 곡이 남아 있으면 매장 플레이어, 처음이면 매장 대시보드)
+   - 브랜드가 연결된 태블릿이면 **브랜드 플레이어**로 들어간다
+2. 하단 탭 확인
+   - ✅ 첫 칸이 **매장** 이어야 한다 (웹은 홈이 첫 칸)
+   - ✅ 마지막 칸이 **더보기** 여야 한다
+   - ✅ 데스크톱 사이드바가 보이면 안 된다 — 태블릿은 폭이 1024px 을 넘어서
+     아무 조치를 안 하면 데스크톱 레이아웃이 뜬다
+3. **더보기** 를 눌러 전체 메뉴를 연다
+   - ✅ **브랜드** 가 있어야 한다 (앱에는 사이드바가 없어서 여기가 유일한 통로)
+   - ✅ 요금제 · 구독 관리 · 고객지원 · 약관 · 사업자 정보가 있어야 한다
+   - ✅ 관리자 계정이면 **관리자**, 본사 계정이면 **본사 대시보드** 가 보여야 한다
+4. 화면이 너무 넓게 퍼지지 않는지
+   - ✅ 본문이 화면 끝까지 늘어나지 않고 가운데로 모여야 한다 (최대 약 1200px)
+   - ✅ 가로 스크롤이 생기면 안 된다
+5. 푸시 알림이나 링크로 특정 화면(예: `/profile`)에 들어간 경우
+   - ✅ 매장 화면으로 튕기지 않고 그 화면에 머물러야 한다
+
+> 개인 감상용으로 앱을 깐 계정은 지금처럼 홈으로 들어가고 하단 탭도 홈이 첫 칸이다.
+> 기능을 뺀 게 아니라 순서만 매장 동선에 맞춘 것이라, 관리자·아티스트·영업 화면은
+> 주소로 들어가면 앱에서도 그대로 열린다.
+
+### 2-0-1. 기기별 확인 (태블릿 · 아이폰 · 갤럭시)
+
+같은 앱이 세 종류의 기기에서 돈다. 크기에 관한 것만 갈라진다.
+
+| | 폰 (아이폰 · 갤럭시, 390~430px) | 태블릿 (1280~2000px) |
+| --- | --- | --- |
+| 글자 | 기본(16px) | 17px — 세워두고 떨어져서 본다 |
+| 본문 폭 | 화면 그대로 | 최대 1200px, 가운데 정렬 |
+| 하단탭 높이 | 51px | 56px |
+| 매장 플레이어 | 세로 한 줄 | 커버 \| 정보·컨트롤 2단 |
+
+확인할 것:
+1. **폰** — 가로 스크롤이 생기면 안 된다. 글자가 잘리거나 버튼이 겹치면 안 된다.
+2. **아이폰** — 매장/브랜드 전체화면에서 상단 바가 **노치에 가리지 않아야** 하고,
+   하단 상태줄이 **홈 인디케이터에 가리지 않아야** 한다.
+3. **태블릿 가로** — 매장 플레이어에서 커버가 왼쪽, 곡 정보와 재생 버튼이 오른쪽에
+   나란히 있어야 한다 (세로로 쌓이면 커버가 작아지고 좌우가 텅 빈다).
+4. **브랜드 플레이어** — 더보기 → 브랜드 → 코드 입력 후
+   - ✅ 폰에서 상단 바의 버튼들이 겹치거나 잘리지 않아야 한다 (글자 없이 아이콘만 나오는 게 정상)
+   - ✅ 태블릿에서 하단 재생 버튼이 64px 로 커져 있어야 한다
+5. **결제 화면** — 더보기 → 요금제
+   - ✅ 태블릿에서 입력 폼이 화면을 가로지르지 않고 가운데로 모여야 한다
+   - ✅ 내 정보 · 차트도 마찬가지로 가운데로 모여야 한다 (라벨과 값이 양 끝으로 갈라지면 안 됨)
+   - ✅ 검색의 "빠른 카테고리" 는 폰에서 2칸 격자, 태블릿에서 글자 길이에 맞는 칩
+   - ✅ 아티스트 대시보드 · 정산 · 계약서도 태블릿에서 가운데로 모여야 한다
+   - ✅ 본사 "매장 현황" 타일은 폰에서 3칸, 태블릿에서 5칸 (폰에서 5칸이면 라벨이 잘린다)
+
+> 엔터프라이즈 본사 화면(본사 대시보드 · 관제 · 인텔 · 알림 · 매장 목록/상세)은
+> 이미 `max-w-6xl`/`max-w-3xl` 로 폭이 잡혀 있어 따로 손대지 않았다.
+
+7. **관리자 패널** — 더보기 → 관리자 (관리자 계정만)
+   - ✅ 폰에서 통계 타일이 2~3칸으로 접혀야 한다 (4칸 이상이면 라벨이 잘린다)
+   - ✅ 열이 많은 표는 **좌우로 밀어서** 볼 수 있어야 한다 (글자가 세로로 쌓이면 안 됨)
+   - ✅ 상단 탭 줄도 좌우로 밀린다 (원래부터 그렇다)
+
+> 관리자는 운영자용 데스크톱 화면이라 레이아웃을 다시 짜지 않았다.
+> 폰에서 **아예 못 읽는 두 가지**(눌린 통계 타일 · 눌린 표)만 고쳤다.
+6. **태블릿 · 자동 스케줄 운영** — 매장 → 자동 스케줄 운영을 펼쳤을 때
+   - ✅ 매장명 · 업종 · 영업 시작 · 영업 종료가 **한 줄**에 있어야 한다 (≥1024px)
+   - ✅ 오전 · 오후 · 저녁 카드가 **가로로 나란히** 있어야 한다 (≥1280px)
+     — 1024~1279px(아이패드 가로)에서는 세로로 쌓이는 게 정상이다
 
 ### 2-1. 백그라운드 재생 ★ 핵심
 
@@ -88,13 +212,29 @@ npm run android:build            # ./gradlew assembleDebug
 - 매장 플레이어 하단 **"화면 꺼짐 방지"** 가 `켜짐` 이면 정상
 - (에뮬레이터에서는 체감이 어렵다 — 표시만 확인)
 
-### 2-4. 푸시 (자격증명 설정 후에만)
+### 2-4. 푸시
 
-`google-services.json` 을 `android/app/` 에 넣고 Edge Secrets 를 설정한 뒤:
-1. 프로필 → 알림 켜기 → 권한 허용
-2. 테스트 알림 발송 → ✅ 수신 확인
+설정이 어디까지 됐는지는 이걸로 확인한다:
+```bash
+npm run push:doctor
+```
 
-미설정 상태에서는 알림 토글이 "쓸 수 없음"으로 표시되는 것이 정상이다.
+**앱(안드로이드)에서 푸시를 받으려면 세 가지가 다 있어야 한다.**
+
+| 무엇 | 어디서 | 어디에 |
+| --- | --- | --- |
+| `google-services.json` | Firebase 콘솔 → 프로젝트 설정 → 내 앱 → **Android 앱 추가**<br>패키지명은 반드시 `com.deudda.app` | `android/app/` 에 저장 |
+| `FCM_SERVICE_ACCOUNT_JSON` | 같은 Firebase 프로젝트 → 프로젝트 설정 → **서비스 계정** → 새 비공개 키 생성 (JSON) | Supabase → Edge Functions → **Secrets** 에 JSON **전체**를 한 값으로 |
+| 서버 코드 | 이미 배포됨 (`send-push` v5, FCM/APNs 지원) | — |
+
+넣은 뒤:
+1. `npm run push:doctor` → 전부 `[OK]`
+2. `npm run android:emu -- --apk` 로 다시 설치
+3. 앱에서 내 정보 → 알림 켜기 → 권한 허용
+4. **테스트 알림** → ✅ 수신 확인
+
+> `google-services.json` 이 없어도 **빌드는 성공한다**. 푸시만 비활성이다.
+> 웹(PWA) 푸시는 별도로 `VAPID_*` 세 개가 필요하다 — 앱 푸시와 독립이다.
 
 ---
 
@@ -108,11 +248,61 @@ npm run android:build            # ./gradlew assembleDebug
 | 라이브 리로드에서 화면이 안 뜸 | 방화벽이 5173 포트를 막는지 확인. `--apk` 모드로 우회 |
 | 백그라운드에서 음악이 끊김 | 상태바 알림 유무 확인 → 없으면 서비스 미시작 (logcat 확인) |
 | 빌드 실패 `SDK location not found` | `android/local.properties` 에 `sdk.dir=/path/to/Sdk` |
+| 빌드 실패 `Unsupported class file major version 69` | JDK 25 를 쓰고 있다. `brew install --cask temurin@21` 후 재실행 |
+| 빌드 실패 `invalid source release: 21` | JDK 17 이하를 쓰고 있다. 위와 같이 JDK 21 설치 |
+| `Please choose a target device` 에서 멈춤 | 스크립트 대신 `npx cap run` 을 직접 돌린 경우다. `npm run android:emu` 로 실행 |
+| 가상기기에서 키보드 입력이 안 됨 | AVD 의 `hw.keyboard` 가 꺼진 것. 스크립트가 자동으로 켜지만 **실행 중인 기기는 껐다 켜야** 반영된다 |
+| 앱 목록에 "듣다" 가 없음 | 설치가 안 된 것이다. `adb shell pm list packages \| grep deudda` 로 확인 후 `npm run android:emu -- --apk` 재실행 |
 
 로그 보기:
 ```bash
 adb logcat | grep -iE "deudda|StorePlaybackService|Capacitor"
 ```
+
+`adb` 가 PATH 에 없으면 전체 경로로 부른다 — macOS 기본 설치 위치는
+`~/Library/Android/sdk/platform-tools/adb` 다. `npm run android:log` 는 이 경로를
+알아서 찾는다.
+
+### 소리가 작게 들릴 때
+
+원인은 셋 중 하나다: 음원이 작거나, 플레이어가 볼륨을 깎거나, 기기/OS 가 깎거나.
+귀로는 구분이 안 되므로 앱에 들어 있는 레벨 진단을 켜서 숫자로 가른다. 평소에는
+꺼져 있다 — 파일을 한 번 더 디코딩하는 비용이 있어서 필요할 때만 켠다.
+
+앱(네이티브)에서 켜는 법 — 빌드할 때 플래그를 준다:
+```bash
+VITE_LEVEL_DIAG=1 npm run android:emu -- --apk
+```
+
+웹/PWA 는 주소 뒤에 `?levelDiag=1` 을 붙이거나, 콘솔에서
+`localStorage.setItem('deudda.levelDiag', '1')` 하면 다음 실행까지 유지된다.
+(`?audioDebug=1` 로 오디오 디버그를 켠 세션이면 따로 켤 필요 없다.)
+
+그다음 앱을 완전히 종료했다 다시 켜고 첫 곡을 재생한다. 진단은 **앱 실행당 한 번**,
+첫 곡에서만 돈다:
+```bash
+ADB=~/Library/Android/sdk/platform-tools/adb
+$ADB logcat -c
+$ADB shell am force-stop com.deudda.app
+$ADB logcat | grep -a 레벨진단
+```
+
+나오는 한 줄의 `[레벨진단:...]` 이 원인을 지목한다:
+
+| 판정 | 뜻 | 할 일 |
+| --- | --- | --- |
+| `source` | 음원 자체가 기준보다 조용하다 | 업로드 QC(라우드니스) 에서 걸러야 할 파일이다 |
+| `player` | 슬라이더와 `audio.volume` 이 어긋났다 | 앱 버그다. crossfade 가 중간에 끊긴 경우가 많다 |
+| `device-or-ok` | 앱은 원본 그대로 내보내고 있다 | 기기/OS 쪽이다 — 아래를 본다 |
+
+`device-or-ok` 인데도 다른 앱보다 작게 들린다면 앱이 깎는 게 아니다. 볼 곳은:
+
+* 미디어 볼륨이 최대인지 (안드로이드는 벨/미디어/알림 볼륨이 따로 논다)
+* 에뮬레이터는 호스트 출력 장치를 거치므로 실기기보다 작게 들리는 게 정상이다 —
+  레벨 비교는 반드시 실기기에서 한다
+* 비교 대상 앱(유튜브·스포티파이)은 재생할 때 **음량을 올리는 쪽으로** 정규화한다.
+  우리는 원본 레벨 그대로 내보낸다. 같은 −14 LUFS 음원이라도 저쪽이 더 크게 들릴 수
+  있고, 이건 기기 문제가 아니라 정책 차이다
 
 
 ---
@@ -134,9 +324,9 @@ npm run android:emu -- --device   # 매장 태블릿에 설치해서 실사용 �
 
 | 항목 | 필요한 것 |
 | --- | --- |
-| 서명 키 | `keytool` 로 keystore 생성 → `android/app` 서명 설정. **키는 커밋 금지** |
-| 앱 아이콘/스플래시 | `npm i -D @capacitor/assets` → `npx capacitor-assets generate` |
-| 릴리스 빌드 | Android Studio → Build → Generate Signed Bundle (`.aab`) |
+| 서명 키 | `npm run keystore` — 생성·배선·gitignore 까지 끝난다. 키와 비밀번호는 **반드시 따로 백업** |
+| 앱 아이콘/스플래시 | ✅ 완료 — 브랜드 마크로 생성됨. 로고가 바뀌면 `npm run icons` |
+| 릴리스 빌드 | `npm run aab` |
 | 개발자 계정 | Google Play Console (등록비 $25 1회) |
 | **포그라운드 서비스 신고** | 앱 콘텐츠 → 포그라운드 서비스 권한 → `mediaPlayback` 을 "매장 배경음악 재생" 으로 신고. **미신고 시 반려** |
 | 푸시(선택) | Firebase 프로젝트 → `google-services.json` 을 `android/app/` 에 저장 |
@@ -150,3 +340,208 @@ macOS + Xcode 필요. `npm run cap:ios` → Signing & Capabilities 에서
 APNs 키(.p8)는 Apple Developer → Keys 에서 발급.
 
 자세한 절차는 [`APP_PACKAGING.md`](./APP_PACKAGING.md) §5~§7.
+
+## 한글 입력
+
+기본 AVD 는 영어만 올라와 있다. 맥 키보드로 한글을 쳐도 들어가지 않는데,
+에뮬레이터가 조합된 글자가 아니라 키코드를 그대로 넘기기 때문이다. 회원가입,
+매장명, 담당자명처럼 한글이 필요한 화면은 이 상태로는 테스트가 불가능하다.
+
+```bash
+npm run android:korean
+```
+
+가상기기를 껐다가 한국어를 심어서 다시 켠다. 부팅 후에는 언어를 바꿀 수 없어서다 —
+Google Play 이미지는 adb root 를 막아둬 setprop 이 통하지 않는다. 대신 에뮬레이터의
+`-prop persist.sys.locale=ko-KR` 플래그로 부팅 시점에 심는다(root 불필요).
+시스템 언어에 한국어가 올라가면 Gboard 가 한글 자판을 같이 띄운다.
+
+`npm run android:emu` 도 같은 플래그로 띄우므로, 새로 켜는 기기는 처음부터 한국어다.
+이 스크립트는 **이미 영어로 켜져 있는 기기**를 바꿀 때만 필요하다.
+
+자판 없이 당장 입력해야 하면 **복사·붙여넣기**가 가장 빠르다. 맥에서 한글을
+복사한 뒤 입력란을 길게 눌러 붙여넣으면 된다(Android Studio 에뮬레이터는 맥
+클립보드를 공유한다. 안 되면 '...' → Settings → Clipboard sharing).
+
+`npm run android:emu` 는 설치 전에 언어를 확인해서, 한국어가 아니면 먼저 알려준다.
+
+## 앱 테스트 순서
+
+순서가 중요하다. 설치가 끝나기 전에 로그를 켜면, 설치가 앱을 죽이면서
+(`installPackageLI`) 그때까지의 테스트가 이전 빌드 기준이 되어 버린다.
+
+```bash
+npm run android:emu -- --apk    # ① 설치. "설치 확인" 이 나올 때까지 기다린다
+npm run android:log             # ② 그다음 다른 창에서
+```
+
+설치 단계에서 기기 점검 결과가 먼저 나온다. 브라우저·Play 서비스·한글이
+빠져 있으면 무엇이 안 되는지 그 자리에서 알려준다 — 앱 코드를 붙잡기 전에 본다.
+
+### 한글이 필요한 화면
+
+회원가입, 매장명, 담당자명 등. 자판을 설정했으면 그냥 치면 되고, 아니면:
+
+```bash
+npm run android:paste -- "쿠우쿠우 강남점"
+```
+
+맥 클립보드에 넣어준다. 기기에서 입력란을 길게 눌러 붙여넣기. 자판 설정보다
+빠르고, 이미지 종류와 무관하게 항상 된다. 인자 없이 실행하면 테스트용 값 목록이 나온다.
+
+### 화면별 확인 목록
+
+| 화면 | 보는 것 |
+|---|---|
+| 로그인 | 이메일 로그인, 구글 로그인(실패해도 이유가 화면에 떠야 함) |
+| 홈·검색·라이브러리 | 하단탭 이동, 넘침 없음 |
+| 더보기 | 브랜드·요금제·관리자·아티스트가 전부 보이는지, 사업자 정보 |
+| 매장 대시보드 | 시간대 스케줄러, 태블릿에서 2단 배치 |
+| 매장 플레이어 | 재생, 진행바가 움직이는지, 백그라운드 유지 |
+| 브랜드 플레이어 | 전체화면, 노치 안 잘림 |
+| 내 정보 | 알림 켜기 → 권한 → 테스트 알림 |
+| 관리자 | 폰 폭에서 표가 읽히는지 |
+
+### 재생이 `--:--` 에서 멈추면
+
+전체 길이를 못 읽은 것이다. 25초 기다린 뒤 로그를 보면 이유가 숫자로 찍힌다:
+
+```
+[audio] metadata timeout — ... {"readyState":0,"networkState":2,"currentSrc":"..."}
+```
+
+- `networkState: 3` → 소스를 못 찾음(URL·캐시)
+- `readyState: 0` + `networkState: 2` → 계속 받는 중(느리거나 디코딩 실패)
+- `currentSrc` 가 `blob:` → 오프라인 캐시가 깨짐
+
+---
+
+## 역할별 테스트 계정
+
+개인 계정만으로는 매장·아티스트·본사 화면을 열 수 없다. 역할 판정이 서버에서
+이뤄지기 때문이다(`isStoreAccount()` 는 `account_type` / `membership_tier` /
+`subscription_type` 셋을, 본사는 `enterprise_accounts.auth_user_id` 를 본다).
+아래 계정은 그 조건을 갖춰 운영 DB 에 만들어 둔 것이다.
+
+**비밀번호는 넷 다 `DeuddaQA!2026`.**
+
+| 역할 | 이메일 | 들어가는 화면 |
+|---|---|---|
+| 개인(무료) | `qa-user@deudda.test` | 홈·검색·라이브러리, 요금제 업그레이드 |
+| 매장 | `qa-store@deudda.test` | `/business` 대시보드, `/business/player` |
+| 아티스트 | `qa-artist@deudda.test` | `/artist` 대시보드, 계약, 정산 |
+| 본사(HQ) | `demohq@deudda.com` | `/enterprise/hq` 및 `/enterprise/*` 전체 |
+| 엔터프라이즈 매장 | `demoshop1@deudda.com` | 본사(Deudda 데모 본사) 소속 매장으로서의 `/business` · `/business/player` |
+
+`/enterprise/hq` 는 다른 게이트(`franchise_admins`)를 쓴다. 이 계정을 데모
+프랜차이즈(매장 3곳)의 `owner` 로 연결해뒀으므로 그대로 열린다 — 자세한 내용은
+`APP_RENDER_AUDIT.md` 참고.
+
+`@deudda.test` 는 예약된 TLD 라 실제로 메일이 나가지 않는다. 넷 다 이메일 인증을
+마친 상태로 만들었으므로 확인 메일을 기다릴 필요가 없다.
+
+### 엔터프라이즈 매장과 일반 매장의 차이
+
+`qa-store@deudda.test` 는 어디에도 속하지 않은 **단독 매장**이다. 본사 정책·공지·
+긴급방송이 내려오지 않으므로 그쪽 동작은 이 계정으로 테스트할 수 없다.
+
+`demoshop1@deudda.com` 은 `franchise_stores` 를 통해 "Deudda 데모 본사" 에 묶인
+**엔터프라이즈 소속 매장**이다. 본사가 `/enterprise/*` 에서 내리는 것들이 이 매장에
+실제로 도달하는지 확인하려면 이 계정을 써야 한다. 본사쪽은 `demohq@deudda.com` 으로
+로그인해서 조작하고, 매장쪽은 이 계정으로 확인하는 식이다.
+
+원래 이 계정은 로그인이 안 됐다 — `auth.identities` 행이 없었고(GoTrue 는 이메일
+로그인 시 이 테이블로 사용자를 찾는다) 등급도 free 였다. 셋 다 채워 넣었다:
+identities 행, `account_type`/`membership_tier`/`subscription_type` = business,
+비밀번호 `DeuddaQA!2026`. `business_profiles` 도 없어서 매장 대시보드가 첫 설정
+화면으로만 떴다 — "데모 매장 1"(카페, 09:00~22:00)로 만들어 뒀다.
+
+**같은 본사의 데모 매장 2·3(`demoshop2·3@deudda.com`)은 아직 손대지 않았다.**
+여러 매장을 동시에 보는 화면(본사 대시보드의 매장 목록·정책 일괄 배포)을 테스트할 때
+필요하면 같은 방식으로 열어주면 된다.
+
+> `루베르 콘텐츠 스튜디오` 의 `TEST_스튜디오오감_*` 5개도 엔터프라이즈 매장이지만
+> `account_type` 이 비어 있어 매장으로 인식되지 않는다. `카공시대` 소속 2개는
+> **실제 고객 계정이다 — 테스트에 쓰지 말 것.**
+
+### 브랜드 플레이어
+
+브랜드 플레이어는 계정이 아니라 **매장 코드**로 들어간다. 새로 만들 필요 없이
+기존 데모 본사를 쓰면 된다:
+
+```
+/brand → 매장 코드에  DEMO-ST-YSA5CP  입력 → 브랜드 "데모" 플레이어
+```
+
+### 각 계정이 실제로 무엇을 갖고 있나
+
+- **매장** — `business_profiles` 에 "큐에이 테스트 매장"(카페, 09:00~22:00)이 연결돼
+  있다. 시간대 스케줄은 **일부러 비워 뒀다** — 스케줄러로 직접 만드는 것이 매장
+  대시보드의 핵심 동작이라 비어 있어야 그걸 테스트할 수 있다.
+- **아티스트** — `artist_profiles` 가 `approved`, 계약은 `signed`. 그래서 승인 대기
+  화면이 아니라 정식 대시보드로 들어간다.
+- **본사** — 기존 "Deudda 데모 본사"에 이미 연결돼 있던 계정이다. `auth.identities`
+  행이 없어서 비밀번호가 맞아도 로그인이 안 되던 것을 고쳤다(GoTrue 는 이메일
+  로그인 시 `auth.identities` 로 사용자를 찾는다).
+
+### 확인한 것 / 확인 못 한 것
+
+SQL 로 확인한 것: 저장된 bcrypt 해시가 위 비밀번호와 일치하고, 넷 다 이메일 인증
+완료·차단 없음·`identities` 행 있음. 각 계정으로 가장해 RLS 를 그대로 태운 결과
+매장은 자기 매장만, 아티스트는 자기 프로필만 보이고, 본사만 `get_my_enterprise_role()`
+이 `is_hq=true` 를 돌려준다. 곡 1,554개·플레이리스트 17개가 양쪽에서 보인다.
+
+확인 못 한 것: **실제 HTTP 로그인**(그래서 위 토큰 NULL 문제를 기기에서야 발견했다). 개발 컨테이너의 네트워크 정책이 `supabase.co`
+로의 아웃바운드를 막아서 여기서는 토큰을 받아볼 수 없었다. 기기에서 직접 확인해야 한다.
+
+### SQL 로 계정을 만들 때 반드시 할 것 — 토큰 컬럼을 '' 로
+
+`auth.users` 에 SQL 로 행을 넣으면 `confirmation_token` · `recovery_token` ·
+`email_change` · `email_change_token_new` 같은 컬럼이 **NULL** 로 남는다. 스키마상
+nullable 이라 INSERT 는 통과한다. 그런데 GoTrue 는 이 컬럼들을 Go 의 `string` 으로
+읽기 때문에 NULL 을 만나면 `converting NULL to string is unsupported` 로 죽는다.
+
+결과는 **로그인 요청이 500** 이고, 앱에는 이렇게 보인다:
+
+> 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.
+
+비밀번호도 맞고 `identities` 행도 있는데 안 되므로, 계정 문제로 보이지 않아서 찾기 어렵다.
+실제 가입으로 만들어진 계정은 이 값들이 전부 빈 문자열 `''` 이다.
+
+```sql
+update auth.users set
+  confirmation_token         = coalesce(confirmation_token, ''),
+  recovery_token             = coalesce(recovery_token, ''),
+  email_change               = coalesce(email_change, ''),
+  email_change_token_new     = coalesce(email_change_token_new, ''),
+  email_change_token_current = coalesce(email_change_token_current, ''),
+  phone_change               = coalesce(phone_change, ''),
+  phone_change_token         = coalesce(phone_change_token, ''),
+  reauthentication_token     = coalesce(reauthentication_token, '')
+where id::text like 'da000000-0000-4000-8000-%';
+```
+
+`last_sign_in_at` 이 NULL 인 것은 정상이다 — 아직 로그인한 적이 없을 뿐이고,
+이 컬럼은 GoTrue 에서도 nullable 로 다룬다.
+
+### 다 쓰고 나서 지우기
+
+> ⛔ **플레이스토어 심사 중에는 지우지 말 것.** `qa-store@deudda.test` 를
+> Play Console 의 '로그인 세부정보'(구 앱 액세스)에 심사용 계정으로 등록해뒀다.
+> 심사원이 로그인하지 못하면 그 자리에서 반려된다. 앱이 정식 출시되고
+> Console 에서 그 계정을 내린 뒤에 지운다.
+
+
+테스트 계정은 id 가 `da000000-0000-4000-8000-…` 으로 시작한다. 이것만 지우면 된다
+(데모 본사 계정 `demohq@deudda.com` 은 원래 있던 데이터라 건드리지 않는다):
+
+```sql
+delete from auth.users where id::text like 'da000000-0000-4000-8000-%';
+```
+
+이 한 줄이면 된다. `public.users.id` 가 `auth.users` 를 `on delete cascade` 로
+참조하고(`users_id_fkey`), `business_profiles` · `artist_profiles` 는 다시
+`public.users` 를 같은 방식으로 참조하며, `auth.identities` 도 함께 지워진다.
+
+확인할 때 `information_schema` 는 쓰지 말 것 — auth 스키마에 대한 권한이 없으면
+외래키가 **없는 것처럼** 빈 결과를 돌려준다. `pg_constraint` 로 봐야 한다.

@@ -34,9 +34,18 @@ describe('shouldAutoSkipUnattended', () => {
     expect(shouldAutoSkipUnattended(input({ errorCode: MEDIA_ERR_SRC_NOT_SUPPORTED, retryCount: 0 }))).toBe(true);
   });
 
-  it('매장모드가 아니면 개입하지 않는다 (일반 사용자는 기존 동작 유지)', () => {
-    expect(shouldAutoSkipUnattended(input({ businessMode: false }))).toBe(false);
-    expect(shouldAutoSkipUnattended(input({ businessMode: false, errorCode: MEDIA_ERR_DECODE }))).toBe(false);
+  // 계약 변경(승인됨): 영구 오류는 모드와 무관하게 넘긴다.
+  // 이 기기에서 열리지 않는 파일 한 곡 때문에 805곡짜리 플레이리스트가 통째로
+  // 재생 불가로 보이던 문제 때문이다. 네트워크 소진은 여전히 매장 전용이다.
+  it('영구 오류는 일반 사용자에게도 넘긴다 — 한 곡이 목록 전체를 막으면 안 된다', () => {
+    expect(shouldAutoSkipUnattended(input({ businessMode: false, errorCode: MEDIA_ERR_DECODE }))).toBe(true);
+    expect(shouldAutoSkipUnattended(input({ businessMode: false, errorCode: MEDIA_ERR_SRC_NOT_SUPPORTED }))).toBe(true);
+  });
+
+  it('네트워크 소진 자동 스킵은 매장 전용이다 — 사람이 보고 있으면 재시도가 낫다', () => {
+    const exhausted = { errorCode: MEDIA_ERR_NETWORK, retryCount: 3, maxRetries: 3 };
+    expect(shouldAutoSkipUnattended(input({ ...exhausted, businessMode: false }))).toBe(false);
+    expect(shouldAutoSkipUnattended(input({ ...exhausted, businessMode: true }))).toBe(true);
   });
 
   it('사용자가 직접 멈춘 상태면 개입하지 않는다', () => {

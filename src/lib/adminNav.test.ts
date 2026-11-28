@@ -25,12 +25,12 @@ const EXISTING_TAB_KEYS = [
   'enterprise-announcements', 'enterprise-emergency', 'enterprise-noc', 'enterprise-command-center',
   'enterprise-operations', 'enterprise-settlement-center', 'brand-registry', 'enterprise-billing',
   'enterprise-contracts', 'franchise', 'sales-agents', 'sales-partners', 'free-trials', 'streaming',
-  'streaming-v2', 'settlement-v2', 'revenue', 'subscriptions', 'promotions', 'payment-sync',
+  'streaming-v2', 'settlement-v2', 'revenue', 'subscriptions', 'promotions', 'payment-sync', 'billing-attention',
   'operation-logs', 'content', 'auto-playlists', 'playlist-builder', 'artists', 'artist-contracts',
   'payout-verification', 'payout-intake', 'track-review', 'qc-review', 'artist-tracks', 'deleted-tracks',
   'audio-reencode', 'audio-diagnostics', 'audio-engine-diagnostics', 'metadata-violations', 'upload-audit',
   'ai-curation', 'clap-curation', 'ai-metadata', 'ai-taxonomy', 'ai-genre', 'ai-mood', 'ai-storetype',
-  'placement-audit', 'site-settings', 'site-notices', 'notice-posts', 'enterprise-guides', 'artist-settlements', 'recommendation',
+  'placement-audit', 'site-settings', 'site-notices', 'notice-posts', 'content-reports', 'enterprise-guides', 'artist-settlements', 'recommendation',
   'upload-integrity', 'brand', 'admins', 'hq-content-review',
 ];
 

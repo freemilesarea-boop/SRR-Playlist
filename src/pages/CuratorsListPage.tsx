@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, CheckCircle2, Users } from 'lucide-react';
 import { fetchFeaturedCurators, type FeaturedCurator } from '@/lib/curatorApi';
 import EmptyState from '@/components/common/EmptyState';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
 
 export default function CuratorsListPage() {
-  const [curators, setCurators] = useState<FeaturedCurator[]>([]);
+  const [allCurators, setCurators] = useState<FeaturedCurator[]>([]);
   const [loading, setLoading] = useState(true);
+  const blockedIds = useBlockedUsersLoader();
 
   useEffect(() => {
     let alive = true;
@@ -16,11 +18,14 @@ export default function CuratorsListPage() {
     return () => { alive = false; };
   }, []);
 
+  // 차단한 큐레이터는 목록에서 뺀다(App Store 지침 1.2).
+  const curators = allCurators.filter((c) => !blockedIds.has(c.user_id));
+
   return (
     <div className="space-y-5 px-4 pb-16 pt-6 sm:px-6 sm:pt-10 lg:px-8">
       <Link
         to="/"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-ink-mute hover:text-ink"
+        className="app-tap -ml-1 inline-flex items-center gap-1 px-1 text-xs font-semibold text-ink-mute hover:text-ink"
       >
         <ChevronLeft size={14} /> 홈으로
       </Link>

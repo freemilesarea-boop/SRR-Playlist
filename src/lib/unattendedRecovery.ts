@@ -36,15 +36,21 @@ export interface AutoSkipInput {
 }
 
 /**
- * 무인 자동 다음곡으로 넘겨야 하는가.
+ * 자동으로 다음 곡으로 넘겨야 하는가.
  *
- * 매장에서 가장 흔한 실패는 Wi-Fi 순간 끊김(NETWORK)인데, 기존 로직은 영구 오류만
- * 자동 스킵해서 정작 흔한 쪽에 무인 복구가 없었다. 재시도를 모두 소진한 네트워크
- * 오류도 포함한다.
+ * **영구 오류(DECODE/SRC_NOT_SUPPORTED)는 모드와 무관하게 넘긴다.**
+ * 이 기기에서 열리지 않는 파일은 몇 번을 다시 시도해도 열리지 않는다. 그런데
+ * 그 곡에서 멈춰버리면 플레이리스트 전체가 재생 불가로 보인다 — 실제로 한
+ * 곡(Android WebView 가 디코딩 못 하는 mp3) 때문에 805곡·448곡짜리 플레이리스트가
+ * 통째로 죽었다. 한 곡의 문제가 목록 전체의 문제가 되어서는 안 된다.
+ *
+ * 네트워크 소진(code=2)은 매장 무인 환경에서만 넘긴다. 사람이 보고 있으면
+ * 임의로 건너뛰기보다 그 자리에서 다시 시도하게 두는 편이 낫다.
  */
 export function shouldAutoSkipUnattended(i: AutoSkipInput): boolean {
-  if (!i.businessMode || !i.playing) return false;
+  if (!i.playing) return false;
   if (isPermanentMediaError(i.errorCode)) return true;
+  if (!i.businessMode) return false;
   return i.errorCode === MEDIA_ERR_NETWORK && i.retryCount >= i.maxRetries;
 }
 

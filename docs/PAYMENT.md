@@ -170,6 +170,39 @@ PayApp 의 매월 자동 결제는 같은 `var1=order_no` 로 콜백이 들어�
    - status=`paid`, subscription_id 동일
 4. 어느 경우든 subscription 의 `last_paid_at`, `current_period_start/end` 갱신
 
+### ⚠️ 가맹(엔터프라이즈) 경로는 같은 규칙을 따로 구현해야 한다
+
+가맹 결제는 `payapp-feedback` 이 아니라 `enterprise-payment-feedback` →
+`_apply_enterprise_payapp_event` 를 탄다. 위 2~3번의 mul_no 비교가 이쪽에는
+빠져 있어서 2026-11-01 에 사고가 났다.
+
+증상은 "돈은 들어왔는데 연체로 잡힌다" 였다. 2회차 통보가 `var1` 에 최초 주문번호를
+달고 오므로 주문이 조회되고, 그 주문은 이미 `paid` 라서
+
+```
+if v_order.status <> 'paid' then  -- 기간 갱신
+```
+
+가드에 막혀 기간 갱신이 통째로 건너뛰어졌다. 기간을 미는 정기결제 분기는 도달조차
+못 했다. 초회 결제만 정상이었기 때문에(주문이 `requested`) 2회차를 맞은 가맹 회원만
+터졌고, 그래서 늦게 발견됐다. 분당미금역점은 10/31 정상 결제 후 연체 링크를 받았고,
+김가희는 같은 회차를 실제로 두 번 결제했다.
+
+교정: 0546(회차 판정), 0547(재통보 멱등).
+
+**판정 키는 `mul_no` 하나뿐이다.** `rebill_no` 는 회차마다 같고 `var1` 도 같다.
+새 회차와 같은 승인건의 재통보를 가르는 값은 `mul_no` 밖에 없다. 그래서
+
+- `mul_no` 가 최초 주문과 다르면 → 새 회차
+- `entrebill_<mul_no>` 주문이 이미 있으면 → 재통보, **아무것도 바꾸지 않는다**
+
+두 번째 가드가 없으면 재통보 한 번에 기간이 한 달씩 공짜로 늘어난다(0547 에서 실측).
+
+기간은 `now()+1개월` 이 아니라 **직전 기간 끝 + 1개월** 로 잡는다. now() 기준이면
+결제가 하루라도 늦을 때마다 기간이 뒤로 밀려 PayApp 청구 주기와 어긋난다. 단
+결과가 과거가 되는 경우(통보가 매우 늦게 도착, 여러 회차 누락)에만 `now()+1개월` 로
+떨어뜨려 방금 받은 돈이 기간 0일이 되는 것을 막는다.
+
 ```sql
 -- 사용자의 결제 이력 (renewal 포함)
 select order_no, status, amount, payapp_mul_no, created_at
@@ -320,7 +353,44 @@ billingPayApp PHP 등) 및 매뉴얼이 일치하게 지원하는 cmd 는 다음
 | 분류 | cmd | 용도 |
 |---|---|---|
 | 결제 | `payrequest` / `paycancel` / `paycancelreq` | 결제 요청·취소 |
-| 정기결제 | `rebillRegist` / `rebillPay` / `rebillStop` | 정기결제 등록·즉시결제·해지 |
+| 정기결제 | `rebillRegist` / `rebillStart` / `rebillStop` / `rebillCancel` | 등록 · 승인 · 일시정지 · 해지 |
+| 등록결제(BILL) | `billPay` / `billDelete` | 저장된 카드 즉시 결제 · 삭제 (`encBill` 필요) |
+
+> ⚠️ **`rebillPay` 라는 cmd 는 존재하지 않는다.** 이전 판 표에 그렇게 적혀 있었고
+> 그 믿음 위에 소급 청구 디스패처가 만들어졌다. 실제로 호출하면 전건
+> `errno=70040 "cmd 값을 확인 하세요."` 로 거부된다(2026-11-01 실측, 47건 전건 거절).
+>
+> **등록된 `rebill_no` 에 임의 시점·임의 금액으로 결제를 일으키는 API 는 없다.**
+> `rebillStart` 는 "일시정지 → 승인" 상태 전환이고, 문서에 "승인된 정기결제
+> 요청건은 **다음 정기결제 주기에** 결제승인이 발생"이라고 명시돼 있다.
+> 정기결제 회차는 PayApp 이 스스로 돌린다. 밀린 회차를 받아야 하면
+> `payrequest` 로 개별 결제요청을 만들어 링크를 보내는 수밖에 없다.
+>
+> 즉시 결제가 가능한 `billPay` 는 정기결제(rebill) 가 아니라 등록결제(BILL)
+> 계열이고 `encBill` 이라는 별도 키가 필요하다 — 우리는 발급받은 적이 없다.
+> (문서상 등록결제 등록 API 자체가 "추후 이용 불가" 예정)
+
+### 관리 API 는 requestdate + hash 가 필수
+
+`rebillCancel` · `rebillStop` · `rebillStart` · `paycancel` · `paycancelreq` ·
+`billPay` · `billDelete` 는 아래 두 값을 요구한다.
+
+```
+requestdate : yyyymmddhhiiss  (PayApp 서버 시각 ±15분)
+hash        : sha256(userid + requestdate + requestkey)
+```
+
+`requestkey` 는 판매자 관리 사이트 "설정 > 연동 정보" 의 **결제 KEY** 로,
+연동 KEY(`linkkey`) 와 다른 값이다. 시크릿 이름은 `PAYAPP_REQUESTKEY`.
+
+⚠️ **`requestdate` 는 반드시 KST 로 찍어야 한다.** 엣지 런타임은 UTC 로 돌아서
+그대로 포맷하면 9시간이 어긋나 허용 창을 벗어나고 전건 거부된다.
+
+### REST 엔드포인트
+
+현행 문서 기준 `https://api.payapp.kr/oapi/v2` 다. 우리 코드의 기본값은 구버전
+`/oapi/apiLoad.html` 이며 아직 동작한다(별칭으로 보인다). 전환은 코드 수정 없이
+`PAYAPP_API_URL` 시크릿만 바꾸면 되고, 되돌리기도 같은 방법이다.
 
 → `paymentList` / `payList` / `tradeList` 등의 cmd 는 존재하지 않으며, 호출 시
 `errno=70040 "cmd을 가져오지 못했습니다"` 가 반환되는 것이 **정상 응답**. 따라서 결제

@@ -137,7 +137,9 @@ export default function ChartPage() {
   const currentTab = TABS.find((t) => t.key === tab)!;
 
   return (
-    <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6">
+    // 곡 목록 화면이다. 폭을 잡지 않으면 태블릿에서 곡명(왼쪽)과 재생수(오른쪽)가
+    // 1100px 떨어져 한 줄로 안 읽힌다.
+    <div className="space-y-6 px-4 pb-8 pt-6 sm:px-6 lg:mx-auto lg:max-w-4xl">
       {/* Hero */}
       <header className="space-y-2">
         <div className="flex items-center gap-2">

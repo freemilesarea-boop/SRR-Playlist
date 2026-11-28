@@ -33,6 +33,14 @@
 
         </activity>
 
+        <!-- 푸시(FCM) 알림 아이콘 — 지정하지 않으면 앱 아이콘이 흰 네모로 보인다. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/deudda_accent" />
+
         <!-- 매장 음악 백그라운드 재생 유지(소리는 WebView 가 낸다 — 이 서비스는 프로세스 보호용). -->
         <service
             android:name=".StorePlaybackService"

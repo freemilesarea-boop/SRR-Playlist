@@ -13,6 +13,8 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- 웹 화면이 뜨기 전 첫 화면이 흰색으로 보이지 않게. -->
+        <item name="android:windowBackground">@color/deudda_background</item>
     </style>
 
 

@@ -1,7 +1,7 @@
 // 네이티브 푸시 — 순수 로직 단위 테스트.
 // 알림 payload 는 서버에서 오는 값이므로 라우팅 경로 검증이 중요하다.
 import { describe, it, expect } from 'vitest';
-import { normalizePermission, safeInAppPath } from './nativePush';
+import { foregroundPushMessage, normalizePermission, safeInAppPath } from './nativePush';
 
 describe('normalizePermission', () => {
   it('Capacitor 권한 상태를 Web Push 어휘로 맞춘다', () => {
@@ -39,5 +39,72 @@ describe('safeInAppPath', () => {
     expect(safeInAppPath('')).toBe('/');
     expect(safeInAppPath(undefined as unknown as string)).toBe('/');
     expect(safeInAppPath(123 as unknown as string)).toBe('/');
+  });
+});
+
+describe('foregroundPushMessage', () => {
+  it('제목과 내용을 한 줄로 합친다', () => {
+    expect(foregroundPushMessage({ title: '공지', body: '점검 안내' })).toBe('공지 — 점검 안내');
+  });
+  it('한쪽만 있으면 그것만', () => {
+    expect(foregroundPushMessage({ title: '공지' })).toBe('공지');
+    expect(foregroundPushMessage({ body: ' 내용 ' })).toBe('내용');
+  });
+  it('둘 다 없으면 띄우지 않는다', () => {
+    expect(foregroundPushMessage({ title: '', body: null })).toBeNull();
+    expect(foregroundPushMessage(undefined)).toBeNull();
+  });
+  it('너무 길면 자른다', () => {
+    const msg = foregroundPushMessage({ title: 'a'.repeat(300) });
+    expect(msg?.length).toBe(120);
+    expect(msg?.endsWith('…')).toBe(true);
+  });
+});
+
+describe('플러그인 로더는 플러그인을 그대로 반환하면 안 된다', () => {
+  // 실제 앱에서 이걸로 푸시가 통째로 죽었다. logcat 에 남은 흔적:
+  //   Uncaught (in promise) Error: "PushNotifications.then()" is not implemented on android
+  //
+  // Capacitor 플러그인 프록시를 흉내낸다 — 어떤 속성을 읽어도 "네이티브 호출" 을
+  // 돌려주므로 `.then` 도 함수로 보이고, 그래서 thenable 로 오인된다.
+  function makePluginProxy(onNativeCall: (name: string) => void) {
+    return new Proxy(
+      {},
+      {
+        get(_t, prop: string) {
+          return (...args: unknown[]) => {
+            onNativeCall(prop);
+            // 안드로이드는 모르는 메서드를 거절한다.
+            if (prop === 'then') {
+              const reject = args[1];
+              if (typeof reject === 'function') {
+                reject(new Error(`"PushNotifications.${prop}()" is not implemented on android`));
+              }
+              return undefined;
+            }
+            return Promise.resolve();
+          };
+        },
+      },
+    );
+  }
+
+  it('async 함수가 플러그인을 그대로 반환하면 then() 이 네이티브로 새어나간다', async () => {
+    const calls: string[] = [];
+    const proxy = makePluginProxy((n) => calls.push(n));
+    const bad = async () => proxy;
+
+    await expect(bad()).rejects.toThrow(/then\(\)" is not implemented/);
+    expect(calls).toContain('then');
+  });
+
+  it('객체에 담아 반환하면 then() 이 호출되지 않는다 — 지금 쓰는 방식', async () => {
+    const calls: string[] = [];
+    const proxy = makePluginProxy((n) => calls.push(n));
+    const good = async () => ({ push: proxy });
+
+    const { push } = await good();
+    expect(push).toBe(proxy);
+    expect(calls).not.toContain('then');
   });
 });

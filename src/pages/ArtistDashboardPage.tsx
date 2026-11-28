@@ -159,7 +159,9 @@ export default function ArtistDashboardPage() {
   ];
 
   return (
-    <div className="space-y-4 px-4 pb-12 pt-6 sm:px-6">
+    // 정산 계좌 · 음원 업로드 폼과 곡 목록이 함께 있는 화면이다.
+    // 폭을 안 잡으면 태블릿에서 입력칸 하나가 1200px 을 가로지른다.
+    <div className="space-y-4 px-4 pb-12 pt-6 sm:px-6 lg:mx-auto lg:max-w-5xl">
       <header className="flex items-center gap-3">
         <Link to="/profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-card" aria-label="뒤로">
           <ArrowLeft size={18} />

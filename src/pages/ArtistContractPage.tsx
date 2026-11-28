@@ -159,7 +159,9 @@ export default function ArtistContractPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 pb-32 pt-6 sm:px-6 sm:pb-40">
+    // 계약서 화면 — 읽고 서명하는 문서다. 본문은 이미 max-w-prose 지만
+    // 상단 요약과 서명 영역이 화면 끝까지 늘어나 본문과 어긋나 보였다.
+    <div className="space-y-5 px-4 pb-32 pt-6 sm:px-6 sm:pb-40 lg:mx-auto lg:max-w-3xl">
       <header className="flex items-center gap-3">
         <Link
           to="/artist"

@@ -21,6 +21,10 @@ import { fetchPlaylistFollowCounts } from '@/lib/playlistFollowApi';
 import ShareButton from '@/components/ShareButton';
 import Skeleton from '@/components/common/Skeleton';
 import { toast } from '@/store/toastStore';
+import ReportButton from '@/components/moderation/ReportButton';
+import BlockButton from '@/components/moderation/BlockButton';
+import { useBlockedUsersLoader } from '@/hooks/useBlockedUsersLoader';
+import BlockedNotice from '@/components/moderation/BlockedNotice';
 
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +41,8 @@ export default function PlaylistPage() {
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState<number>(0);
   const [curator, setCurator] = useState<Awaited<ReturnType<typeof fetchPlaylistCurator>>>(null);
+  // 큐레이터가 만든 플레이리스트는 다른 사용자가 만든 콘텐츠 — 차단·신고 대상(App Store 지침 1.2).
+  const blockedIds = useBlockedUsersLoader();
 
   // 대표 커버 — 포함 음원 중 첫 자켓 (없으면 undefined → thumbnail/그라데이션 fallback)
   const coverFromTracks = useMemo(
@@ -151,6 +157,10 @@ export default function PlaylistPage() {
   }
 
   const isAdmin = profile?.role === 'admin';
+
+  if (curator && blockedIds.has(curator.user_id)) {
+    return <BlockedNotice userId={curator.user_id} displayName={curator.display_name} onBack={() => window.history.back()} />;
+  }
 
   return (
     <div className="pb-8">
@@ -312,6 +322,12 @@ export default function PlaylistPage() {
           </span>
         </Link>
       )}
+      {curator && (
+        <div className="mx-4 -mt-2 mb-4 flex justify-end gap-2 sm:mx-6">
+          <ReportButton targetType="playlist" targetId={playlist.id} targetName={playlist.title} />
+          <BlockButton userId={curator.user_id} displayName={curator.display_name} onBlocked={() => window.history.back()} />
+        </div>
+      )}
 
       {/* Track list */}
       <ul className="divide-y divide-line/10 px-4 sm:px-6">
@@ -345,9 +361,15 @@ export default function PlaylistPage() {
                   </span>
                 )}
               </div>
+              {/* 40px 썸네일인데 원본 커버를 그대로 받던 자리다.
+                  805곡짜리 플레이리스트면 수백 장이 한꺼번에 요청되고, 그게
+                  오디오와 **같은 호스트**라 음원이 뒤로 밀린다. 실기기에서
+                  메타데이터가 61초 걸린 원인이 이것이다(25초 타임아웃이 먼저 터져
+                  '포맷 오류' 로 보였다). AutoCover 는 표시 크기에 맞춰 받고
+                  lazy + decoding=async 로 띄운다. */}
               <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-bg-card">
                 {t.cover_url ? (
-                  <img src={t.cover_url} alt="" className="h-full w-full object-cover" />
+                  <AutoCover title={t.title} imageUrl={t.cover_url} size="sm" showInitial={false} />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-ink-dim">
                     <Music size={14} />

@@ -63,10 +63,26 @@ function platformOrNull(): 'ios' | 'android' | null {
   return p === 'ios' || p === 'android' ? p : null;
 }
 
-/** Capacitor 플러그인 동적 로드 — 웹 번들 초기 로드에 끼지 않도록. */
+/**
+ * Capacitor 플러그인 동적 로드 — 웹 번들 초기 로드에 끼지 않도록.
+ *
+ * 반드시 객체에 담아서 돌려준다. 플러그인을 async 함수에서 그대로 반환하면
+ * 앱에서 푸시가 통째로 죽는다. 이유는 이렇다:
+ *
+ *   Capacitor 플러그인은 Proxy 다. 어떤 속성을 읽든 "네이티브 메서드" 로 간주하고
+ *   호출을 넘긴다. 그래서 `.then` 도 함수처럼 보인다.
+ *   자바스크립트는 Promise 를 resolve 할 때 그 값이 thenable 이면 한 번 더 풀려고
+ *   `.then()` 을 부른다. 즉 `return mod.PushNotifications` 는
+ *   `PushNotifications.then()` 이라는 존재하지 않는 네이티브 호출이 되고,
+ *   안드로이드가 "not implemented" 로 거절한다.
+ *
+ * 증상이 고약하다 — 호출부가 전부 try/catch 로 감싸고 있어서 조용히 실패한다.
+ * 권한 조회는 'default' 를, 등록은 error 를 돌려주므로 화면상으로는 "아직 안 켰네"
+ * 와 구분이 안 된다. 서버 자격증명을 아무리 맞춰도 토큰 자체가 만들어지지 않는다.
+ */
 async function loadPlugin() {
   const mod = await import('@capacitor/push-notifications');
-  return mod.PushNotifications;
+  return { push: mod.PushNotifications };
 }
 
 /** Capacitor 의 권한 상태를 Web Push 어휘로 정규화. */
@@ -80,7 +96,7 @@ export function normalizePermission(receive: string): NativePushPermission {
 export async function checkNativePushPermission(): Promise<NativePushPermission> {
   if (!nativePushSupported()) return 'default';
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     const s = await PushNotifications.checkPermissions();
     return normalizePermission(s.receive);
   } catch {
@@ -108,7 +124,7 @@ async function saveToken(token: string): Promise<void> {
 export async function enableNativePush(): Promise<{ ok: boolean; token?: string; error?: string }> {
   if (!nativePushSupported()) return { ok: false, error: 'not_native' };
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
 
     const perm = await PushNotifications.requestPermissions();
     if (normalizePermission(perm.receive) !== 'granted') {
@@ -116,18 +132,22 @@ export async function enableNativePush(): Promise<{ ok: boolean; token?: string;
     }
 
     const token = await new Promise<string>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error('registration_timeout')), 15_000);
+      // 이번 등록에만 쓰는 리스너 — 끝나면 바로 뗀다. (안 떼면 켜기를 누를 때마다,
+      // 앱을 열 때마다 하나씩 쌓여 오래 켜 두는 매장 기기에서 계속 늘어난다.)
+      const handles: Array<Promise<{ remove: () => Promise<void> }> | undefined> = [];
+      const timer = window.setTimeout(() => finish(() => reject(new Error('registration_timeout'))), 15_000);
       let settled = false;
-      const finish = (fn: () => void) => {
+      function finish(fn: () => void) {
         if (settled) return;
         settled = true;
         window.clearTimeout(timer);
+        for (const h of handles) void Promise.resolve(h).then((x) => x?.remove()).catch(() => { /* noop */ });
         fn();
-      };
-      void PushNotifications.addListener('registration', (t) => finish(() => resolve(t.value)));
-      void PushNotifications.addListener('registrationError', (e) =>
+      }
+      handles.push(PushNotifications.addListener('registration', (t) => finish(() => resolve(t.value))));
+      handles.push(PushNotifications.addListener('registrationError', (e) =>
         finish(() => reject(new Error(typeof e?.error === 'string' ? e.error : 'registration_error'))),
-      );
+      ));
       void PushNotifications.register();
     });
 
@@ -151,13 +171,22 @@ export async function disableNativePush(tokenArg: string | null): Promise<boolea
       const { error } = await supabase.rpc('delete_device_push_token', { p_token: token });
       if (error) throw error;
     }
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     await PushNotifications.unregister();
     rememberToken(null);
     return true;
   } catch {
     return false;
   }
+}
+
+/** 앱이 켜져 있을 때 받은 푸시 → 토스트 문구("제목 — 내용"). 보여 줄 내용이 없으면 null. */
+export function foregroundPushMessage(n: { title?: string | null; body?: string | null } | null | undefined): string | null {
+  const title = (n?.title ?? '').trim();
+  const body = (n?.body ?? '').trim();
+  const text = title && body ? `${title} — ${body}` : title || body;
+  if (!text) return null;
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }
 
 /**
@@ -170,11 +199,17 @@ export async function initNativePushRouting(navigate: (path: string) => void): P
   if (!nativePushSupported() || tapBound) return;
   tapBound = true;
   try {
-    const PushNotifications = await loadPlugin();
+    const { push: PushNotifications } = await loadPlugin();
     await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const data = action.notification?.data as Record<string, unknown> | undefined;
       const url = typeof data?.url === 'string' ? data.url : '/';
       navigate(safeInAppPath(url));
+    });
+    // 앱을 보고 있을 때 온 푸시는 안드로이드가 알림창에 띄우지 않는다 → 앱 안 토스트로 보여 준다.
+    await PushNotifications.addListener('pushNotificationReceived', (n) => {
+      const msg = foregroundPushMessage(n);
+      if (!msg) return;
+      void import('@/store/toastStore').then(({ toast }) => toast.info(msg));
     });
   } catch {
     tapBound = false;

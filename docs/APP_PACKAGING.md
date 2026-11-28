@@ -29,6 +29,14 @@
 
 > 클론 후 네이티브를 열기 전 **반드시** `npm run cap:sync`로 웹 자산을 채운다.
 
+> 📦 **앱에 넣지 않는 웹 자산**: `cap copy`/`cap sync` 직후 `capacitor:copy:after` 스크립트
+> (`scripts/cap-strip-native-assets.mjs`)가 앱 쪽 복사본에서 `ffmpeg/`(약 31MB)를 지운다.
+> 업로드 음원 변환에만 쓰이므로 앱은 필요할 때 `https://www.deudda.com/ffmpeg/` 에서 받는다
+> (`vercel.json` 이 `/ffmpeg/*` 에 CORS 허용). 웹 배포(`dist/`)는 그대로다.
+
+> 📱 **시스템 바 여백**: 상태바·제스처바 여백은 CSS `env(safe-area-inset-*)` 로 처리한다(`index.css`).
+> `capacitor.config.ts` 의 `adjustMarginsForEdgeToEdge` 는 켜지 않는다 — 켜면 WebView 가 여백을 먹어 CSS 처리와 겹친다.
+
 ## 3. 로컬 개발 워크플로
 
 > 🖥️ **가상기기(에뮬레이터)에서 바로 확인하려면** → [`docs/EMULATOR_QA.md`](./EMULATOR_QA.md)
@@ -61,23 +69,55 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 ## 5. 스토어 제출 전 채워야 할 항목
 
 ### 공통
-- [ ] **앱 아이콘 / 스플래시** 생성: `@capacitor/assets` 권장
+- [x] **앱 아이콘 / 스플래시** — 완료. 로고가 바뀌면 다시 돌린다:
   ```bash
-  npm i -D @capacitor/assets
-  # resources/icon.png(1024²), resources/splash.png(2732²) 준비 후:
-  npx capacitor-assets generate
+  npm run icons
   ```
+  원본은 손으로 만든 PNG 가 아니라 `scripts/make-app-icons.mjs` 가 브랜드 마크
+  (`Logo.tsx` 의 Construction Sheet 좌표)에서 그려낸다. 그 스크립트가
+  `assets/*.png` 를 만들고, `capacitor-assets` 가 그걸 안드로이드·iOS 해상도로 펼친다.
+
+  | 원본 | 쓰임 |
+  | --- | --- |
+  | `icon-only.png` | iOS 앱 아이콘 · 안드로이드 구형(비-adaptive) 런처 아이콘 |
+  | `icon-background.png` / `icon-foreground.png` | 안드로이드 adaptive icon 두 레이어 |
+  | `splash.png` / `splash-dark.png` | 스플래시 라이트/다크 |
+
+  색은 보라 `#7B3FF2`(theme.css `--color-accent`)와 검정 `#0A0A0A`(theme-color) 두 개뿐이다.
+  PWA 아이콘(`public/pwa-*.png`)은 vite-plugin-pwa 가 따로 관리하므로 건드리지 않는다.
 - [ ] 개인정보처리방침 URL, 지원 URL (스토어 심사 필수)
-- [ ] 앱 버전/빌드번호 (`android` versionCode / `ios` CFBundleVersion)
+- [x] **앱 버전/빌드번호** — `package.json` 의 `version` 하나가 단일 진실 원천이다.
+  안드로이드 `versionCode`/`versionName`, iOS `MARKETING_VERSION` 이 여기서 나온다.
+  올릴 때는 `npm version patch`. 자세한 규칙은 [`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §2.
+- [ ] **결제 정책** — 앱에서는 결제 진입점을 감춘다(`src/lib/purchaseGate.ts`).
+  새 결제 화면을 만들면 반드시 `canShowPurchaseUi()` 로 감쌀 것.
+  [`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §1 참고.
 
 ### Android (Google Play)
-- [ ] Google Play Console 계정(등록비 $25 1회)
-- [ ] 릴리스 서명 키(keystore) 생성 → `android/app` 서명 설정, **키는 커밋 금지**
-- [ ] `.aab`(Android App Bundle) 빌드: Android Studio → Build → Generate Signed Bundle
+- [ ] Google Play Console 계정(등록비 $25 1회) — **조직 계정 권장**, 개인 계정은 정식 출시 전 테스터 12명×14일이 강제된다 ([`PLAY_SUBMISSION.md`](./PLAY_SUBMISSION.md) §4)
+- [ ] 릴리스 서명 키(keystore) 생성 — 배선은 끝나 있다. 키만 만들면 된다:
+  ```bash
+  npm run keystore
+  ```
+  키(`android/deudda-release.jks`)와 비밀번호(`android/keystore.properties`)는
+  `.gitignore` 에 있어 커밋되지 않는다. **이 둘을 잃으면 같은 앱으로 업데이트를
+  영영 올릴 수 없다** — Play 는 앱을 패키지 이름이 아니라 서명 키로 식별한다.
+  만든 직후 비밀번호 관리자와 외장 저장소 두 곳에 백업할 것.
+
+  스크립트가 SHA-1 · SHA-256 지문과 카카오 키 해시도 같이 뽑아준다. 카카오/구글
+  로그인과 Firebase 에 **릴리스 키 지문을 등록해야** 앱에서 로그인이 된다
+  (디버그 키로만 등록해두면 스토어 빌드에서 로그인이 깨진다).
+- [ ] `.aab`(Android App Bundle) 빌드:
+  ```bash
+  npm run aab        # android/app/build/outputs/bundle/release/app-release.aab
+  ```
 
 ### iOS (App Store)
-- [ ] Apple Developer Program(연 $99)
-- [ ] App ID(`com.deudda.app`) + 프로비저닝 프로파일
+> 전체 절차는 [`APP_STORE_SUBMISSION.md`](./APP_STORE_SUBMISSION.md) — Apple 로그인 설정, 푸시 키,
+> Xcode 서명, App Store Connect 등록, 심사 메모까지.
+- [x] Apple Developer Program
+- [ ] App ID(`com.deudda.app`) — Sign In with Apple · Push Notifications 켜기
+- [ ] Apple 로그인(Services ID · 키 · Supabase Apple 제공자) — 지침 4.8 필수
 - [ ] Xcode → Archive → App Store Connect 업로드
 
 ## 6. OAuth(구글/카카오) 네이티브 연동 — **코드 배선 완료 ✅ / 대시보드 설정 필요**
@@ -92,13 +132,21 @@ npx cap copy            # 자산만 빠르게 복사(플러그인 변경 없을 
 - **`src/lib/nativeAuth.ts`**
   - `nativeOAuthSignIn(provider, scopes?)`: `signInWithOAuth({ redirectTo: 딥링크, skipBrowserRedirect: true })` →
     `@capacitor/browser`로 시스템 브라우저 오픈.
-  - `initNativeAuthDeepLink(onResult)`: `@capacitor/app` `appUrlOpen` 리스너 → `?code=` 추출 →
-    `exchangeCodeForSession(code)` → 성공 시 `/auth/callback` 라우팅(웹과 동일한 첫 화면 분기).
+  - `initNativeAuthDeepLink(onResult)`: `@capacitor/app` `appUrlOpen` 리스너 →
+    `parseOAuthCallback(url)` 로 결과를 읽어 세션을 세운다. 우리 supabase 클라이언트는
+    `flowType` 을 지정하지 않아 **implicit** 이라 토큰이 **프래그먼트**(`#access_token=…`)로
+    온다. `?code=`(PKCE)도 같이 처리하므로 나중에 flowType 을 바꿔도 동작한다.
 - **`authStore.signInWithGoogle/Kakao`**: `isNativeApp()`이면 위 네이티브 경로, 아니면 기존 웹 경로.
 - **`App.tsx`**: 마운트 시 `initNativeAuthDeepLink`를 라우터 `navigate`에 연결(웹은 no-op).
 
 ### 출시 전 수동 설정 (대시보드 — 코드 아님)
-1. **Supabase** → Auth → URL Configuration → **Redirect URLs**에 `com.deudda.app://auth/callback` 추가.
+1. **Supabase** → Authentication → URL Configuration → **Redirect URLs** 에
+   `com.deudda.app://auth/callback` 추가. 저장소의 `supabase/config.toml`
+   (`[auth] additional_redirect_urls`)에는 들어 있지만 **그 파일만으로는 운영 프로젝트에
+   반영되지 않는다** — `supabase config push` 를 돌리거나 대시보드에서 직접 넣어야 한다.
+   빠지면 Supabase 가 딥링크 대신 Site URL 로 보내서 앱이 깨어나지 않고, 증상은 앱에서
+   `cancelled` 또는 `timeout` 으로만 보인다. 끝에 `/` 를 붙이면 다른 URL 이므로 정확히
+   이 값이어야 한다.
 2. **카카오** 개발자 콘솔: 플랫폼에 앱 등록(패키지명/번들ID) — Supabase 콜백은 그대로, 네이티브 앱 등록만.
 3. **구글**: OAuth 클라이언트의 authorized redirect는 **Supabase 콜백 URL** 그대로 사용(딥링크는 Supabase→앱 단계라 구글 콘솔 변경 불필요).
 
@@ -243,9 +291,42 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 
 **출시 전 수동 설정 (자격증명 — 코드 아님)**
 
-1. **Android**: Firebase 프로젝트 생성 → Android 앱(`com.deudda.app`) 등록 →
-   `google-services.json` 을 `android/app/` 에 저장.
-   Gradle 은 파일이 있을 때만 플러그인을 적용하므로, **없어도 빌드는 그대로 성공**한다(푸시만 비활성).
+1. **Android** — Firebase 프로젝트 만들기부터 (처음이면 이 순서대로)
+
+   FCM 은 무료 요금제(Spark)로 충분하다. 결제 등록 없이 된다.
+
+   **(1) 프로젝트 생성** — <https://console.firebase.google.com>
+   - `프로젝트 추가` → 이름 입력(예: `deudda`)
+   - 이름 아래에 **프로젝트 ID** 가 자동으로 생기는데 **나중에 못 바꾼다**. 확인하고 넘어간다.
+   - **Google 애널리틱스는 꺼도 된다** — 푸시에는 필요 없고 설정 단계만 늘어난다.
+   - `프로젝트 만들기` → 30초쯤 기다린다.
+
+   **(2) Android 앱 등록**
+   - 프로젝트 개요 옆 **톱니 → 프로젝트 설정 → 내 앱 → Android**
+   - **Android 패키지 이름에 정확히 `com.deudda.app`** 를 넣는다.
+     여기가 한 글자라도 다르면 빌드는 되는데 **알림만 조용히 안 온다**. 가장 흔한 실패다.
+   - 앱 닉네임은 선택. **디버그 서명 인증서(SHA-1)는 비워도 된다** —
+     푸시에는 필요 없다(네이티브 구글 로그인 SDK 를 쓸 때만 필요한데, 이 앱은
+     시스템 브라우저 방식이라 해당 없음).
+   - `앱 등록` → **`google-services.json` 다운로드** → `android/app/` 에 저장.
+   - 그다음 화면의 **Gradle 수정 안내는 건너뛴다** — Capacitor 플러그인이 이미 처리한다.
+     `다음 → 다음 → 콘솔로 이동`.
+
+   **(3) 서비스 계정 키 발급** (서버가 FCM 에 보낼 때 쓴다)
+   - **프로젝트 설정 → 서비스 계정 → `새 비공개 키 생성`** → JSON 다운로드
+   - ⚠️ **이건 비밀키다.** 저장소에 커밋하지 말고, 채팅·메신저에 붙여넣지 말 것.
+     유출되면 그 프로젝트로 아무나 알림을 보낼 수 있다.
+   - Supabase 대시보드 → **Edge Functions → Secrets** → 이름 `FCM_SERVICE_ACCOUNT_JSON`,
+     값에 **JSON 파일 내용 전체**를 그대로 붙여넣는다(줄바꿈·따옴표 손대지 말 것).
+
+   **(4) 확인**
+   ```bash
+   npm run push:doctor
+   ```
+
+   > `google-services.json` 이 없어도 **빌드는 그대로 성공**한다(푸시만 비활성).
+   > Gradle 이 파일이 있을 때만 플러그인을 적용하기 때문이다.
+
    > **반드시 `npm run cap:sync`(웹 빌드) 전에 넣는다.** 웹 번들도 빌드할 때 이 파일이 있는지 보고
    > Android 푸시 사용 여부를 정한다(`vite.config.ts` → `VITE_ANDROID_PUSH_READY`). 파일 없이 빌드하면
    > 앱은 알림 등록·허용 묻기를 아예 하지 않는다 — Firebase 없이 `PushNotifications.register()` 를 부르면
@@ -263,7 +344,7 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
    supabase secrets set APNS_KEY_P8="$(cat AuthKey_XXXX.p8)" \
      APNS_KEY_ID=XXXXXXXXXX APNS_TEAM_ID=YYYYYYYYYY APNS_BUNDLE_ID=com.deudda.app
    # 개발(TestFlight 이전) 빌드로 테스트할 때만:
-   supabase secrets set APNS_ENV=sandbox   # + App.entitlements 를 development 로
+   supabase secrets set APNS_ENV=sandbox   # Xcode 에서 바로 실행한 개발 빌드로 푸시를 시험할 때만 (엔타이틀먼트는 이미 development, 배포 빌드는 Xcode 가 production 으로 바꾼다)
    ```
 
 > ⚠️ 실기기 테스트 필수 — 시뮬레이터는 APNs 토큰을 받지 못한다.
@@ -296,7 +377,7 @@ Firebase pod 없이 동작하고 전송 경로가 짧다.
 - [ ] Play Console 포그라운드 서비스 타입 신고(mediaPlayback)
 - [ ] 실기기에서 매장 24시간 재생 검증(화면 잠금 · 백그라운드 · 야간 무인 · **회선 차단 재생**)
 - [ ] OAuth 대시보드 설정(Supabase Redirect URL, 카카오 앱 등록) + 실기기 테스트
-- [ ] 앱 아이콘/스플래시 에셋 생성
+- [x] 앱 아이콘/스플래시 에셋 생성 (`npm run icons`)
 - [ ] IAP/결제 정책 결정
 - [ ] 서명 키 생성 + 스토어 계정
 - [ ] 내부 테스트(TestFlight / Play 내부 테스트) → 심사 제출
