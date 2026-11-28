@@ -14,6 +14,9 @@ import { DEMO_PREMIUM_ACCOUNT_IDS } from './membership';
 
 export const ARTIST_BILLING_ERROR_CODE = 'ARTIST_BILLING_REQUIRED' as const;
 
+/** 미납 아티스트가 아티스트 관리에 들어오면 띄우는 문구(운영 지정, 2026-11-28). */
+export const ARTIST_UNPAID_NOTICE = '요금 미납으로 아티스트 음원 등록 및 정산을 받을 수 없습니다.';
+
 /** 유효 유료 플랜(구독 plan_type). 서버 SQL 과 동일 집합. */
 export const VALID_ARTIST_PLAN_TYPES: ReadonlySet<string> = new Set([
   'individual', 'business', 'artist_general', 'artist_student',
@@ -213,7 +216,19 @@ export function artistBillingBannerContent(
       ],
     };
   }
-  // unpaid / expired / invalid
+  // 2026-11-28 운영 결정 — 미납(unpaid/expired) 아티스트에게는 이 문구를 그대로 띄운다.
+  if (access.reason === 'unpaid' || access.reason === 'expired') {
+    return {
+      reason: access.reason,
+      title: ARTIST_UNPAID_NOTICE,
+      body: '미납 요금을 결제하면 음원 등록과 정산을 다시 이용할 수 있습니다. 이미 발매한 음원은 그대로 서비스됩니다.',
+      ctas: [
+        { label: '결제하기', to: '/subscription' },
+        { label: '고객지원', to: '/support' },
+      ],
+    };
+  }
+  // invalid
   return {
     reason: access.reason,
     title: '결제가 확인되지 않아 아티스트 기능이 제한되었습니다.',

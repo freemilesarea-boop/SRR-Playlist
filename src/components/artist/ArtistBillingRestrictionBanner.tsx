@@ -9,6 +9,7 @@ import {
   artistBillingBannerContent,
   type ArtistBillingAccessResult,
 } from '@/lib/artistBillingAccess';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 interface Props {
   access: ArtistBillingAccessResult | null;
@@ -33,7 +34,8 @@ export function ArtistBillingRestrictionBanner({ access }: Props) {
           <p className="mt-1 text-xs text-purple-200/80 sm:text-sm">{content.body}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {content.ctas.map((cta, i) => (
+          {/* 앱(iOS/Android)에서는 결제 화면으로 보내지 않는다(App Store 3.1.1) — 고객지원만 남긴다. */}
+          {content.ctas.filter((cta) => canShowPurchaseUi() || cta.to !== '/subscription').map((cta, i) => (
             <button
               key={cta.label}
               type="button"

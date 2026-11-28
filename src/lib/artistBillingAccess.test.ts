@@ -230,16 +230,16 @@ describe('artistBillingBannerContent — banner copy per status', () => {
     expect(c!.ctas.map((x) => x.label)).toEqual(['구독 다시 시작', '기존 음원 보기', '정산 내역 보기']);
   });
 
-  it('expired: 결제 미확인 문구 + 기존 음원 수정 + CTA(결제수단 등록/구독 확인/고객지원)', () => {
-    const c = artistBillingBannerContent(result({ isArtist: true, status: 'expired', reason: 'expired' }));
-    expect(c!.title).toContain('결제가 확인되지 않아');
-    expect(c!.body).toContain('기존 음원 수정');
-    expect(c!.ctas.map((x) => x.label)).toEqual(['결제수단 등록', '구독 확인', '고객지원']);
-    expect(c!.ctas.find((x) => x.label === '고객지원')!.to).toBe('/support');
+  it('expired·unpaid(미납): 운영 지정 문구 그대로 + 결제하기/고객지원', () => {
+    for (const reason of ['expired', 'unpaid'] as const) {
+      const c = artistBillingBannerContent(result({ isArtist: true, status: reason, reason }));
+      expect(c!.title).toBe('요금 미납으로 아티스트 음원 등록 및 정산을 받을 수 없습니다.');
+      expect(c!.ctas.map((x) => x.label)).toEqual(['결제하기', '고객지원']);
+      expect(c!.ctas[0].to).toBe('/subscription');
+    }
   });
 
-  it('unpaid & invalid: 결제 미확인 배너 표시', () => {
-    expect(artistBillingBannerContent(result({ isArtist: true, status: 'unpaid', reason: 'unpaid' }))!.title).toContain('결제가 확인되지 않아');
+  it('invalid: 결제 미확인 배너 표시', () => {
     expect(artistBillingBannerContent(result({ isArtist: true, status: 'invalid', reason: 'invalid' }))!.title).toContain('결제가 확인되지 않아');
   });
 
