@@ -21,6 +21,7 @@ import { reloadApp } from './lib/playbackGuard';
 import { installGlobalErrorTelemetry } from './lib/globalErrorTelemetry';
 import { installVolumeTrace, startVolumeTraceLogger } from './lib/volumeTrace';
 import { formatTimeline } from './lib/playbackDiag';
+import { reloadLosesAutoplay } from './lib/gestureReloadPolicy';
 
 // X6.26 — production 빌드 + srr-playlist.vercel.app 접속이면 www.deudda.com 으로
 // 즉시 replace redirect. createRoot / SW / Sentry 호출 이전에 실행해 부분 상태 누락 방지.
@@ -187,7 +188,10 @@ function requestReload(reason: string): void {
     crossfading: false,
     recovering: health.autoplayBlocked || health.subscriptionBlocked,
     online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-    autoplayTrusted: autoplayTrusted(),
+    // 아이폰·아이패드 웹은 새 문서마다 터치가 필요하다 — 이전 문서의 관측은 증거가 못 된다
+    // (2026-11-27 이루밍: 이 판단 없이 새로고침해 약 23시간 무음).
+    autoplayTrusted: autoplayTrusted() && !reloadLosesAutoplay(),
+    playbackIntent: usePlayerStore.getState().playing,
     deferredSince,
     staggerMs: deterministicStaggerMs(useAuthStore.getState().user?.id ?? ''),
     now: Date.now(),

@@ -103,6 +103,10 @@ import { probeAudioLevel, snapshotPlayerVolume, formatLevelReport, isLevelProbeE
 import { startBackgroundTicker } from '@/lib/backgroundTicker';
 import { noteAutoplayBlocked, noteAudiblePlayback } from '@/lib/autoplayRecovery';
 import { reloadApp, SELF_HEAL_RELOAD_KEY } from '@/lib/playbackGuard';
+import { reloadLosesAutoplay } from '@/lib/gestureReloadPolicy';
+
+/** 아이폰 웹: 페이지 재시작 전에 같은 문서 안 복구를 몇 바퀴 더 돌릴지. */
+const GESTURE_REWIND_LIMIT = 3;
 
 /** 자가치유 리로드 시각(부팅 루프 방지용). sessionStorage 라 탭이 닫히면 초기화된다. */
 // 자가치유 리로드와 원격 복구 리로드가 **같은 쿨다운 창**을 쓴다(playbackGuard 소유).
@@ -1837,6 +1841,10 @@ export default function Player() {
    * 실제로 재생 위치가 움직이면(= 소리가 났으면) 그때 0 으로 되돌린다.
    */
   const fruitlessSkipsRef = useRef(0);
+  /** 직전 틱에 자동재생이 막혀 있었는가 — 풀리는 순간 정지 시계를 되감는다. */
+  const wasAutoplayBlockedRef = useRef(false);
+  /** 아이폰 웹에서 페이지 재시작 대신 사다리를 되감은 횟수(소리가 나면 0). */
+  const gestureRewindsRef = useRef(0);
 
   /**
    * 서버 보고용 진행 기준점. 곡이 바뀌면 옮기되 **진행으로 세지 않는다.**
@@ -1981,7 +1989,27 @@ export default function Player() {
         }
       }
 
+      // 2026-11-28 이루밍 — 터치 대기가 풀리는 순간 정지 시계를 지금으로 옮긴다.
+      // 막혀 있던 시간(23시간)이 그대로 남아 있어서, 직원이 화면을 누르자마자
+      // 사다리가 곡 건너뛰기·페이지 재시작으로 직행했다("2~3초 나오고 끊긴다").
+      // 막힘은 정지가 아니다 — 터치로 풀렸으면 사다리를 처음부터 다시 센다.
+      const blockedNow = health.autoplayBlocked;
+      if (wasAutoplayBlockedRef.current && !blockedNow) {
+        stallProgressRef.current = { trackId, ct, ts: now };
+        stallLastActionRef.current = 'none';
+        stallRecoveryLevelRef.current = null;
+        fruitlessSkipsRef.current = 0;
+        hardResetDoneRef.current = false;
+        hardResetAtRef.current = null;
+        lastFreezeKindRef.current = 'NONE';
+        wasAutoplayBlockedRef.current = false;
+        return; // 이번 틱은 쉰다 — 아래 계산은 되감기 전 기준점(prog)을 쓴다.
+      }
+      wasAutoplayBlockedRef.current = blockedNow;
+      // 막혀 있는 동안 시계는 그대로 둔다 — gate_blocked 진단이 막힌 시간을 보여 준다.
+
       if (progressed || trackChanged) {
+        if (progressed) gestureRewindsRef.current = 0;
         // 실제로 소리가 났을 때만 헛skip 카운터를 푼다. 곡이 바뀐 것만으로는 풀지
         // 않는다 — skip 이 곡을 바꾸므로, 그러면 카운터가 영원히 0 에 머문다.
         if (progressed) {
@@ -2312,6 +2340,25 @@ export default function Player() {
           stalledSec, trackId, fruitlessSkips: fruitlessSkipsRef.current,
         });
         runHardResetRef.current();
+        return;
+      }
+
+      if (action === 'reload_page' && reloadLosesAutoplay() && gestureRewindsRef.current < GESTURE_REWIND_LIMIT) {
+        // 아이폰·아이패드 웹 — 페이지를 다시 띄우면 터치 전까지 무음이다(2026-11-27 이루밍 23시간).
+        // 같은 문서 안의 복구(nudge → reload → skip → hard_reset)를 처음부터 다시 돌린다.
+        // 그래도 안 살아나면 그때 재시작한다 — 그 뒤 터치 대기는 서버 알림(0570)이 잡는다.
+        gestureRewindsRef.current += 1;
+        stallProgressRef.current = { trackId, ct, ts: now };
+        stallLastActionRef.current = 'none';
+        stallRecoveryLevelRef.current = null;
+        fruitlessSkipsRef.current = 0;
+        hardResetDoneRef.current = false;
+        hardResetAtRef.current = null;
+        void logPlaybackDiagnostic('playback_stalled', {
+          reason: 'self_heal',
+          playerMode: 'store',
+          context: { kind: 'GESTURE_RELOAD_SUPPRESSED', stalledSec, trackId, rewinds: gestureRewindsRef.current },
+        });
         return;
       }
 

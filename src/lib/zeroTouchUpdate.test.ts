@@ -490,3 +490,15 @@ describe('§4 표식이 사라져도 reload <= 1 per build', () => {
     expect(() => markActivated('BUILD_X', hostile)).not.toThrow();
   });
 });
+
+describe('2026-11-28 아이폰 웹 — 신뢰가 없어도 재생 의도가 없으면 적용한다', () => {
+  it('재생 의도도 소리도 없으면(멈춰 둔 화면) 지금 적용한다', () => {
+    expect(decideUpdateActivation({ ...base, audioActive: false, autoplayTrusted: false, playbackIntent: false }))
+      .toEqual({ kind: 'activate', reason: 'audio_idle' });
+  });
+  it('곡 경계(소리는 잠깐 끊겼지만 재생 의도 있음)에서는 적용하지 않는다 — 이루밍 2026-11-27', () => {
+    expect(decideUpdateActivation({
+      ...base, audioActive: false, atTrackBoundary: true, autoplayTrusted: false, playbackIntent: true,
+    })).toEqual({ kind: 'wait', blocker: 'autoplay_not_trusted' });
+  });
+});

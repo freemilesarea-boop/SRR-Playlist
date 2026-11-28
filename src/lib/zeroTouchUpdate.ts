@@ -108,6 +108,11 @@ export interface UpdateDecisionInput {
    * false 면 리로드 후 자동재생이 막힐 것으로 보고 자동 활성화하지 않는다.
    */
   autoplayTrusted: boolean;
+  /**
+   * 재생 의도(playerStore.playing). 생략하면 모른다고 본다(기존 동작).
+   * 자동재생 신뢰가 없어도 **재생 의도가 없고 소리도 안 나면** 지금 새로고침해도 잃을 소리가 없다.
+   */
+  playbackIntent?: boolean;
   /** 처음 미룬 시각(ms). 아직 미룬 적 없으면 null. */
   deferredSince: number | null;
   /** 이 매장의 stagger 지연(ms). 0 이면 흩뿌리지 않는다. */
@@ -141,7 +146,12 @@ export function decideUpdateActivation(i: UpdateDecisionInput): UpdateDecision {
 
   // 자동재생 신뢰가 없으면 **상한을 넘겨도** 자동으로 리로드하지 않는다.
   // 무인 매장을 조용하게 만드는 것보다 옛 빌드로 도는 편이 낫다.
-  if (!i.autoplayTrusted) return { kind: 'wait', blocker: 'autoplay_not_trusted' };
+  if (!i.autoplayTrusted) {
+    // 2026-11-28 — 재생을 일부러 멈춘(또는 시작 전인) 문서는 지금 바꿔도 잃을 소리가 없다.
+    // 이 길이 없으면 아이폰 웹 플레이어는 앱을 다시 열 때까지 옛 빌드에 남는다.
+    if (i.playbackIntent === false && !i.audioActive) return { kind: 'activate', reason: 'audio_idle' };
+    return { kind: 'wait', blocker: 'autoplay_not_trusted' };
+  }
 
   // 여기서부터는 "적용해도 안전한 상태" 다. 언제 할지만 남았다.
   const safeNow = !i.audioActive || i.atTrackBoundary;
