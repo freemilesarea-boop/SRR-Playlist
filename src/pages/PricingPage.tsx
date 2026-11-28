@@ -229,7 +229,12 @@ function StorePanel({ ctx, price, defaultPhone }: {
       {state === 'active' ? (
         <Alert tone="success">이미 매장 요금제를 이용 중이에요. 결제 관리는 <Link to="/subscription" className="font-bold underline">구독 페이지</Link>에서 하실 수 있어요.</Alert>
       ) : blocked ? (
-        <Alert tone="info">{blocked}</Alert>
+        <Alert tone="info">
+          {blocked}
+          {ctx?.account_type === 'artist' && (
+            <> <Link to="/artist" className="font-bold underline">아티스트 대시보드로 가기</Link></>
+          )}
+        </Alert>
       ) : (
         <div className="space-y-3">
           {state === 'upgrade' && (

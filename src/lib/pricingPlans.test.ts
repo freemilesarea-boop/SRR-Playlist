@@ -54,6 +54,8 @@ describe('매장 가입 카드', () => {
       hq: { enterprise_account_id: 'x', enterprise_name: 'B', status: 'invited', join_code: 'DD-AAAAAA', billing_mode: 'per_store', billing_enabled: true, store_monthly_price: 6900, hq_monthly_price: null },
     }))).not.toBeNull();
     expect(storeCheckoutBlockedReason(ctx())).toBeNull();
+    // 아티스트는 매장 요금제를 결제하지 않는다(아티스트 이용권으로 안내)
+    expect(storeCheckoutBlockedReason(ctx({ account_type: 'artist' }))).toMatch(/아티스트 이용권/);
   });
 });
 
