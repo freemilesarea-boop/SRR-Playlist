@@ -44,3 +44,14 @@ describe('미완성 표시 (App Store 2.1.0)', () => {
     });
   }
 });
+
+describe('앱에서 요금 안내 숨김 (App Store 3.1.1)', () => {
+  it('아티스트 가입 화면의 요금은 canShowPurchaseUi 가 참일 때만 보인다', () => {
+    const src = read('components/auth/ArtistSignupForm.tsx');
+    expect(src).toContain('const showPrices = canShowPurchaseUi();');
+    // 금액 문자열은 모두 showPrices 삼항 안에만 있다.
+    const amounts = src.match(/[^\n]*[0-9],[0-9]{3}원[^\n]*/g) ?? [];
+    expect(amounts.length).toBeGreaterThan(0);
+    for (const line of amounts) expect(line, line.trim()).toContain('showPrices ?');
+  });
+});

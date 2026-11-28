@@ -6,6 +6,7 @@ import { verifySalesAgentCode, type VerifiedSalesAgent } from '@/lib/salesAgentA
 import { friendlyError } from '@/lib/errorMessages';
 import { toast } from '@/store/toastStore';
 import Alert, { inlineToneClass } from '@/components/Alert';
+import { canShowPurchaseUi } from '@/lib/purchaseGate';
 
 interface Props {
   onDone: (email: string) => void;
@@ -183,6 +184,9 @@ export default function ArtistSignupForm({ onDone }: Props) {
     }
   }
 
+  // 앱(iOS/Android)에서는 요금을 보여 주지 않는다 — 앱 밖 결제 가격 안내는 App Store 3.1.1 위반.
+  const showPrices = canShowPurchaseUi();
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="flex items-center gap-2 rounded-2xl bg-accent/5 p-3 ring-1 ring-accent/20">
@@ -211,7 +215,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
           icon={<Music2 size={14} />}
           title="일반 아티스트"
           highlight="PDWSFU"
-          price="월 6,900원"
+          price={showPrices ? '월 6,900원' : undefined}
           bullets={['월 5곡 유통', '최대 10일 내 발매', '기본 검수 · 정산', '플리/큐레이터 불가']}
           tone="zinc"
           active={salesAgent?.plan_type === 'general_artist'}
@@ -220,7 +224,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
           icon={<GraduationCap size={14} />}
           title="수강생 아티스트 PRO"
           highlight="수강생 전용"
-          price="월 4,900원"
+          price={showPrices ? '월 4,900원' : undefined}
           bullets={['월 50곡 유통', '플리 제작 가능', '큐레이터 신청 가능', '우선 검수', '수강생 전용 코드 필요']}
           tone="emerald"
           active={salesAgent?.plan_type === 'student_artist'}
@@ -275,7 +279,7 @@ export default function ArtistSignupForm({ onDone }: Props) {
               ✓ 일반 아티스트 가입 가능
             </p>
             <p className="mt-0.5 text-[10px] text-ink-mute">
-              월 6,900원 · 월 5곡 유통
+              {showPrices ? '월 6,900원 · 월 5곡 유통' : '월 5곡 유통'}
             </p>
           </div>
         )}
@@ -326,7 +330,8 @@ function PlanCompareCard({
   icon: React.ReactNode;
   title: string;
   highlight: string;
-  price: string;
+  /** 앱에서는 undefined — 가격 줄을 그리지 않는다. */
+  price?: string;
   bullets: string[];
   tone: 'zinc' | 'emerald';
   active: boolean;
@@ -348,7 +353,7 @@ function PlanCompareCard({
           {highlight}
         </span>
       </div>
-      <p className="mt-1 text-[11px] font-semibold text-ink">{price}</p>
+      {price && <p className="mt-1 text-[11px] font-semibold text-ink">{price}</p>}
       <ul className="mt-1.5 space-y-0.5">
         {bullets.map((b) => (
           <li key={b} className="text-[10px] text-ink-mute">· {b}</li>
