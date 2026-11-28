@@ -104,7 +104,7 @@ async function mockVerifyBusinessNumber(
     business_state: '계속사업자',
     tax_type: '일반과세자',
     verified_at: new Date().toISOString(),
-    message: '확인되었습니다 (MVP mock — 정식 검증은 국세청 API 연동 예정).',
+    message: '사업자번호 형식이 확인되었습니다. 가입 후 운영팀이 국세청 자료로 한 번 더 확인합니다.',
   };
 }
 

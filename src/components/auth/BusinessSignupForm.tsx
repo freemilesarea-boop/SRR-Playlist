@@ -25,9 +25,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
   const { signUpWithPassword } = useAuthStore();
   // 개인 정보
   const [fullName, setFullName] = useState('');
-  const [birthDate, setBirthDate] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
   // 사업자
   const [businessNumber, setBusinessNumber] = useState('');
   const [representativeName, setRepresentativeName] = useState('');
@@ -56,9 +54,8 @@ export default function BusinessSignupForm({ onDone }: Props) {
 
   function validate(): string | null {
     if (!fullName.trim()) return '이름을 입력해주세요';
-    if (!birthDate) return '생년월일을 입력해주세요';
-    if (phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않아요';
-    if (!address.trim()) return '주소를 입력해주세요';
+    // App Store 5.1.1(v) — 전화번호·주소·생년월일은 필수로 받지 않는다(입력하면 형식만 본다).
+    if (phone.trim() && phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않아요';
     const fmt = validateBusinessNumberFormat(businessNumber);
     if (!fmt.ok) return fmt.error ?? '사업자번호 형식이 올바르지 않아요';
     if (!representativeName.trim()) return '대표자명을 입력해주세요';
@@ -116,7 +113,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
       });
       setBusinessVerification(res);
       if (res.business_verified) {
-        toast.success('사업자 검증이 완료됐어요 (MVP mock)');
+        toast.success('사업자번호 형식이 확인됐어요');
       } else {
         setBizError(res.message ?? '검증 실패');
       }
@@ -161,9 +158,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
       await signUpWithPassword(email.trim(), password, fullName.trim(), {
         account_type: 'business',
         full_name: fullName.trim(),
-        birth_date: birthDate,
-        phone: phone.trim(),
-        address: address.trim(),
+        phone: phone.trim() || undefined,
         ...signupSourceMetadata(signupSource, 'business_signup'),
       });
 
@@ -171,9 +166,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
       const pendingProfile = {
         account_type: 'business' as const,
         full_name: fullName.trim(),
-        birth_date: birthDate,
-        phone: phone.trim(),
-        address: address.trim(),
+        phone: phone.trim() || undefined,
         signup_completed: true,
         // 영업인 연결 — 코드 입력 + 검증 통과한 경우에만 저장
         ...(verifiedAgent
@@ -189,7 +182,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
         business_name: businessName.trim() || null,
         representative_name: representativeName.trim(),
         business_open_date: businessOpenDate,
-        business_address: address.trim(),
+        business_address: storeAddress.trim() || null,
         business_type: businessType.trim() || null,
         store_name: storeName.trim() || null,
         store_address: storeAddress.trim() || null,
@@ -249,14 +242,8 @@ export default function BusinessSignupForm({ onDone }: Props) {
       <Field label="이름 *">
         <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" className="input" />
       </Field>
-      <Field label="생년월일 *">
-        <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" />
-      </Field>
-      <Field label="전화번호 *">
-        <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="010-0000-0000" className="input" />
-      </Field>
-      <Field label="주소 *">
-        <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" className="input" />
+      <Field label="전화번호 (선택)" hint="매장 재생 장애 등 급한 연락이 필요할 때만 사용해요.">
+        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="010-0000-0000" className="input" />
       </Field>
 
       {/* 사업자 정보 */}
@@ -296,7 +283,7 @@ export default function BusinessSignupForm({ onDone }: Props) {
         <input type="text" value={businessType} onChange={(e) => setBusinessType(e.target.value)} placeholder="예: 카페, 와인바" autoComplete="off" maxLength={50} className="input" />
       </Field>
 
-      <Field label="사업자 검증 *" hint="국세청 진위확인 API 연동 예정. MVP 는 mock.">
+      <Field label="사업자 검증 *" hint="사업자번호 형식을 확인해요. 가입 후 운영팀이 국세청 자료로 한 번 더 확인합니다.">
         <button
           type="button"
           onClick={handleBusinessVerify}

@@ -89,7 +89,8 @@ export default function EnterpriseHqSignupForm({
     if (!email.trim()) return '이메일을 입력해주세요.';
     if (password.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않습니다.';
-    if (phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않습니다.';
+    // App Store 5.1.1(v) — 전화번호는 필수로 받지 않는다. 입력하면 형식만 본다.
+    if (phone.trim() && phone.replace(/\D/g, '').length < 9) return '전화번호 형식이 올바르지 않습니다.';
     return null;
   }
 
@@ -117,7 +118,7 @@ export default function EnterpriseHqSignupForm({
       await signUpWithPassword(email.trim(), password, fullName.trim(), {
         account_type: 'individual',
         full_name: fullName.trim(),
-        phone: phone.trim(),
+        phone: phone.trim() || undefined,
       });
 
       // 3) 세션 존재 시 즉시 claim, 없으면 캐시 (이메일 인증 ON 환경)
@@ -215,9 +216,9 @@ export default function EnterpriseHqSignupForm({
           autoComplete="name"
         />
       </Field>
-      <Field label="전화번호 *">
+      <Field label="전화번호 (선택)">
         <input
-          type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}          placeholder="010-0000-0000"
+          type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}          placeholder="010-0000-0000"
           className="input"
           autoComplete="tel"
         />

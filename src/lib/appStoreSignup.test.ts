@@ -19,9 +19,20 @@ describe('회원가입 필수 항목 (App Store 5.1.1)', () => {
   }
 });
 
+describe('사업자 가입 (App Store 5.1.1(v) — 주소·전화번호 필수 금지)', () => {
+  it('BusinessSignupForm: 전화번호는 선택, 주소·생년월일 입력칸이 없다', () => {
+    const src = read('components/auth/BusinessSignupForm.tsx');
+    expect(src).not.toContain('전화번호 *');
+    expect(src).not.toContain('label="주소 *"');
+    expect(src).not.toContain('생년월일 *');
+    expect(src).toContain('전화번호 (선택)');
+  });
+});
+
 describe('미완성 표시 (App Store 2.1.0)', () => {
   const VISIBLE = [
     ...SIGNUP_FORMS,
+    'components/auth/BusinessSignupForm.tsx',
     'pages/ProfilePage.tsx',
     'components/artist/dashboard/parts.tsx',
   ];
