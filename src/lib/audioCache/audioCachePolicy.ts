@@ -222,3 +222,24 @@ export function audioSourceMatch(
     return 'unknown';
   }
 }
+
+/**
+ * 이 기기에서 오프라인 캐시(IndexedDB 블롭 → object URL 재생)를 써도 되는지.
+ *
+ * iPhone/iPad(WebKit — Safari·iOS Chrome·Google 앱·iOS 앱 WKWebView 모두 같은 엔진)에서는 쓰지 않는다.
+ * 2026-11-22·26 이루밍 브랜드 플레이어: IndexedDB 에서 꺼낸 블롭의 blob: URL 로 재생하면
+ * MEDIA_ERR_SRC_NOT_SUPPORTED 로 바로 실패하거나(readyState 0) 메타데이터가 끝내 오지 않아
+ * (META_TIMEOUT) 곡마다 건너뛰다 무음이 됐다 — 같은 파일을 원본 주소로 틀면 정상이다.
+ * 게다가 휴대폰에서 큐 전체(700곡 ≈ 수 GB)를 받아두는 것 자체가 저장공간·데이터 낭비다.
+ *
+ * iPadOS 13+ 는 데스크톱 Mac 으로 자신을 소개하므로(Macintosh UA) 터치 지원으로 가려낸다.
+ */
+export function audioCacheSupportedOn(env: {
+  userAgent: string;
+  maxTouchPoints?: number;
+}): boolean {
+  const ua = env.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return false;
+  if (/Macintosh/i.test(ua) && (env.maxTouchPoints ?? 0) > 1) return false; // iPadOS
+  return true;
+}
